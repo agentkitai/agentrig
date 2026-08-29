@@ -16,4 +16,5 @@ export * from "./ingest.js";
 export * from "./backend.js";
 export * from "./lore.js";
 export * from "./tools.js";
+export * from "./hooks.js";
 export * from "./dream/index.js";

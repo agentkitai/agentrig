@@ -6,7 +6,8 @@ import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provid
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
-import { SessionStore, contentHash } from "./session-store.js";
+import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
+import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -47,6 +48,11 @@ export interface AgentConfig {
    * The TUI (M7) plugs an interactive prompt in here.
    */
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
+  /** PLAN §2.7. Extension points; a failing or slow hook is reported and skipped, never fatal. */
+  hooks?: Hook[];
+  hookTimeoutMs?: number;
+  /** Wall clock for ALL `session_end` hooks together; they run after the work is done. */
+  sessionEndBudgetMs?: number;
   now?: () => number;
 }
 
@@ -61,7 +67,7 @@ export interface SessionSummary {
 
 export interface SessionControl {
   /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
-  steer(message: string, source?: "user" | "supervisor"): void;
+  steer(message: string, source?: "user" | "supervisor" | "hook"): void;
   pause(): void;
   resume(): void;
   abort(): void;
@@ -187,13 +193,15 @@ export function createAgent(config: AgentConfig): Agent {
 function runSession(config: AgentConfig, task: string, opts: { cwd?: string; resume?: string }): Session {
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
-  const resume = opts.resume;
+  // a resumed id is user input (`--resume <id>`) and becomes a filename; reject it here rather
+  // than letting it reach the filesystem or a session_end hook that builds a path from it
+  const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
   const id = resume ?? store.create();
   let cwd = opts.cwd ?? process.cwd();
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
-  const pendingSteers: Array<{ message: string; source: "user" | "supervisor" }> = [];
+  const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook" }> = [];
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   let replanReason: string | null = null;
   /** Refusals under the current gate, so a gate can never be permanent. */
@@ -222,6 +230,33 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
   // so the log's last event is always session.end.
   const emitFromTool = (payload: EventPayload): void => {
     if (!ended) void emit(payload);
+  };
+
+  /**
+   * Hook fan-out. Failures are surfaced as non-fatal `error` events so they are visible in the
+   * log and to the supervisor, rather than swallowed — a silently skipped hook looks exactly
+   * like a hook that decided to do nothing.
+   */
+  const hook = async (
+    point: HookPoint,
+    ctx: Omit<Parameters<typeof runHooks>[2], "signal">,
+  ): Promise<{ denied?: string; patches: unknown[]; injects: string[] }> => {
+    const hooks = config.hooks ?? [];
+    if (!hooks.some((h) => h.point === point)) return { patches: [], injects: [] };
+    return runHooks(
+      {
+        hooks,
+        signal: abortController.signal,
+        // one wall-clock budget for the whole point, so generous per-hook overrides cannot add up
+        totalTimeoutMs: point === "session_end" ? (config.sessionEndBudgetMs ?? 15 * 60_000) : 60_000,
+        ...(config.hookTimeoutMs === undefined ? {} : { timeoutMs: config.hookTimeoutMs }),
+        onError: (message) => {
+          if (!ended) void emit({ type: "error", message, fatal: false });
+        },
+      },
+      point,
+      { ...ctx, signal: abortController.signal },
+    );
   };
 
   /** Lets `control.abort()` win over a tool that ignores its signal. */
@@ -340,6 +375,28 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
         messages = [{ role: "user", content: [{ type: "text", text: task }] }];
       }
+
+      // user_prompt: a hook may refuse the task outright, rewrite it, or append to it
+      {
+        const h = await hook("user_prompt", { sessionId: id, cwd, turn: turns, prompt: task });
+        if (h.denied !== undefined) {
+          await emit({ type: "error", message: `task refused by hook: ${h.denied}`, fatal: true });
+          reason = "error";
+          return { id, reason, turns, usage: totals };
+        }
+        for (const bad of h.patches.filter((p) => typeof p !== "string")) {
+          await emit({
+            type: "error",
+            message: `user_prompt patch must be a string (got ${typeof bad}); ignoring`,
+            fatal: false,
+          });
+        }
+        // last string wins: two hooks each rewriting the task is a conflict, and the later
+        // registration is the more specific one by convention
+        const rewritten = h.patches.filter((p): p is string => typeof p === "string").at(-1);
+        const extra = [...(rewritten === undefined ? [] : [rewritten]), ...h.injects];
+        for (const text of extra) messages.push({ role: "user", content: [{ type: "text", text }] });
+      }
       system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
 
       loop: while (true) {
@@ -383,6 +440,29 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
             text = "";
           }
         };
+        {
+          // pre_model: last chance to adjust or refuse the request about to be billed
+          const h = await hook("pre_model", { sessionId: id, cwd, turn: turns, request: req });
+          if (h.denied !== undefined) {
+            await emit({ type: "error", message: `model request refused by hook: ${h.denied}`, fatal: false });
+            reason = "done";
+            break loop;
+          }
+          for (const patch of h.patches) {
+            if (patch !== null && typeof patch === "object" && "system" in patch && typeof patch.system === "string") {
+              req.system = patch.system;
+            } else {
+              // the only shape this point accepts; anything else is a plugin bug and silence
+              // would leave its author with no way to find out
+              await emit({
+                type: "error",
+                message: `pre_model patch must be { system: string }; ignoring`,
+                fatal: false,
+              });
+            }
+          }
+        }
+
         const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
         let usage: Usage = { input: 0, output: 0 };
         let stop: StopReason = "end_turn";
@@ -418,6 +498,18 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         }
 
         await emit({ type: "model.response", usage, stop });
+        {
+          // post_model: observe what came back; `inject` queues a follow-up user message
+          const h = await hook("post_model", {
+            sessionId: id,
+            cwd,
+            turn: turns,
+            response: { role: "assistant", content: [{ type: "text", text }] },
+          });
+          // attributed to `hook`, not `user`: the supervisor's reviewer grades trajectories off
+          // these events, and a hook nudge scored as a human correction is a lie in the log
+          for (const message of h.injects) pendingSteers.push({ message, source: "hook" });
+        }
         totals.input += usage.input;
         totals.output += usage.output;
         if (usage.cacheRead !== undefined) totals.cacheRead = (totals.cacheRead ?? 0) + usage.cacheRead;
@@ -486,7 +578,14 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
           compaction.shouldCompact({ tokens: contextTokens, window: provider.capabilities.contextWindow })
         ) {
           const before = estimateTokens(system, messages);
-          try {
+          // pre_compact: a hook may veto compaction (e.g. to snapshot the full history first).
+          // A veto is permanent for the session — re-asking every turn would call the hook on a
+          // hot path forever, and a hook that said no once means no.
+          const vetoed = await hook("pre_compact", { sessionId: id, cwd, turn: turns, messages });
+          if (vetoed.denied !== undefined) {
+            await emit({ type: "error", message: `compaction skipped by hook: ${vetoed.denied}`, fatal: false });
+            compactionExhausted = true;
+          } else try {
             // raced so control.abort() wins over a hung summarization call, same as tools
             const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal));
             const after = estimateTokens(system, compacted);
@@ -528,6 +627,17 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
       // must not clobber the previous good snapshot with its own mutations.
       if (resume === undefined || turnsThisRun > 0) await saveSnapshot();
       // a steer that never reached a turn boundary was not delivered — record that, don't lose it
+      // session_end: PLAN §3.2/§3.7 both hang off this — memory ingest and the dream trigger.
+      // It runs BEFORE `session.end` is written, so a hook can still append to the log; `ended`
+      // is not yet set for the same reason. Failures are reported, never fatal: a session that
+      // finished its work has finished it, whatever the ingest does afterwards.
+      await hook("session_end", {
+        sessionId: id,
+        cwd,
+        turn: turns,
+        summary: { id, reason, turns, usage: totals },
+      }).catch(() => ({ patches: [], injects: [] }));
+
       for (const s of pendingSteers.splice(0)) {
         await emit({
           type: "error",
@@ -535,6 +645,7 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
           fatal: false,
         }).catch(() => {});
       }
+
       ended = true;
       await emit({ type: "session.end", reason }).catch(() => {});
       await chain.catch(() => {});
@@ -591,7 +702,36 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
         return resultBlock(display, true);
       }
-      const input = parsed.data;
+      // pre_tool: sees the PARSED input, so a hook reasons about typed data rather than raw JSON.
+      // A `modify` patch is re-validated against the tool's own schema below — a hook is
+      // third-party code, so its patch is a proposal, not an instruction.
+      let input = parsed.data;
+      {
+        const h = await hook("pre_tool", {
+          sessionId: id,
+          cwd,
+          turn: turns,
+          tool: { name: tu.name, input },
+        });
+        if (h.denied !== undefined) {
+          // no `tool.call` — matching the permission-deny path exactly. A phantom call for
+          // something that never ran feeds the stall detector's productivity count and the loop
+          // detector's inputHash tally, so the two deny paths must look the same downstream.
+          await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+          return resultBlock(`blocked by hook: ${h.denied}`, true);
+        }
+        if (h.patches.length > 0) {
+          const merged = tool.inputSchema.safeParse(mergePatches(input, h.patches));
+          if (merged.success) input = merged.data;
+          else {
+            await emit({
+              type: "error",
+              message: `hook patch for ${tu.name} did not match its schema; using the original input`,
+              fatal: false,
+            });
+          }
+        }
+      }
 
       const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
       const declaredPaths = tool.paths?.(input);
@@ -626,7 +766,35 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         const r = await raceAbort(tool.execute(input, ctx));
         const ok = r.isError !== true;
         await emit({ type: "tool.result", id: tu.id, ok, display: r.display, durationMs: now() - t0 });
-        return resultBlock(r.display, !ok);
+
+        // post_tool: a hook may rewrite what the MODEL sees (redaction, summarising a huge
+        // output) or append to it. The `tool.result` event above is already written, so the log
+        // keeps what the tool actually returned — a hook can shape the conversation without
+        // being able to rewrite history.
+        const h = await hook("post_tool", {
+          sessionId: id,
+          cwd,
+          turn: turns,
+          tool: { name: tu.name, input },
+          // `display` is the string the model sees and the one a patch replaces; `output` is the
+          // tool's own value, which is very often not a string
+          result: { ok, display: r.display, output: r.output },
+        });
+        for (const bad of h.patches.filter((p) => typeof p !== "string")) {
+          await emit({
+            type: "error",
+            message: `post_tool patch for ${tu.name} must be a string (got ${typeof bad}); ignoring`,
+            fatal: false,
+          });
+        }
+        const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
+        const body = [replaced ?? r.display, ...h.injects].join("\n");
+        if (replaced !== undefined || h.injects.length > 0) {
+          // the log keeps what the tool returned; this records that a hook changed what the
+          // model consumed, so the two can never diverge unobserved
+          await emit({ type: "tool.result.patched", id: tu.id, by: "post_tool", display: body });
+        }
+        return resultBlock(body, !ok);
       } catch (err) {
         const display =
           abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"

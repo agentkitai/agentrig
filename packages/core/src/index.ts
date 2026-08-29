@@ -4,6 +4,7 @@ export * from "./provider.js";
 export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./permissions.js";
+export * from "./hooks.js";
 export * from "./agent.js";
 export * from "./compaction.js";
 export * from "./providers/anthropic.js";

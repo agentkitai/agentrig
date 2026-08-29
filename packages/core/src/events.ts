@@ -93,6 +93,12 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string() }),
   z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string() }),
   z.object({ type: z.literal("tool.result"), id: z.string(), ok: z.boolean(), display: z.string(), durationMs: z.number().int() }),
+  /**
+   * M7: a `post_tool` hook rewrote or appended to what the MODEL consumed. `tool.result` keeps
+   * what the tool actually returned, so without this the log and the model's conversation could
+   * diverge silently — and a hook could steer the model with text no observer ever saw.
+   */
+  z.object({ type: z.literal("tool.result.patched"), id: z.string(), by: z.string(), display: z.string() }),
   z.object({ type: z.literal("tool.denied"), id: z.string(), name: z.string() }),
   z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
@@ -101,7 +107,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("plan.updated"), items: z.array(PlanItem) }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({ type: z.literal("subagent.end"), id: z.string() }),
-  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor"]), message: z.string() }),
+  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string() }),
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
