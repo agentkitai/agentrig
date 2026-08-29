@@ -331,6 +331,46 @@ Four phases, each its own prompt so they can be tested independently: **orient**
 
 Apply modes: `review` (default: the report as a diff, accept/reject per change — review the artifact, not the plan) and `auto`. Triggers: `agentrig dream`; `session_end` hook when ≥ N sessions or ≥ T hours since the last dream; cron.
 
+### 3.8 Lore backend (optional)
+
+[Lore](https://github.com/agentkitai/lore) is AgentKit's cross-agent memory server: Postgres +
+pgvector, REST/MCP/SDKs, hooks for Claude Code/Cursor/Codex, knowledge graph, bi-temporal facts
+with supersession, contradiction detection, review queue, workspaces. It overlaps AgentRig memory
+on mechanics — capture at session end, prompt injection, contradiction handling, consolidation,
+provenance, private→shared promotion — but not on the thesis: Lore's unit is a *memory* (an
+embedded snippet in a database); the wiki's unit is a *page* (a synthesized, interlinked file the
+agent maintains and a human reads, with zero infrastructure).
+
+**Decision: the wiki is the source of truth; Lore is an optional backend behind a seam. The
+default stays no-infra.**
+
+```ts
+interface MemoryBackend {
+  id: string;
+  onIngest(facts: DistilledFact[], source: SourceRef): Promise<void>;
+  recall(query: string, k: number): Promise<BackendHit[]>;
+  promote(page: WikiPage): Promise<void>;
+  conflicts?(facts: DistilledFact[]): Promise<Conflict[]>;
+}
+```
+
+Lore adapter mapping:
+
+| AgentRig operation | Lore |
+|---|---|
+| ingest | `remember_observation` / `POST /v1/memories`, tagged `agentrig`, `project:<name>`, `page:<slug>`, `session:<id>` |
+| `memory_search` | index ∪ BM25 ∪ recall (`/v1/retrieve`) — union only, never a replacement |
+| promote to global | `promote_memory` (private→shared); global scope ↔ a Lore workspace |
+| dream contradiction pass | consults Lore `conflicts` when connected; the wiki lint still runs |
+| provenance | both ways: wiki fact lines carry `lore:<memory-id>`, Lore memories carry `agentrig:<repo>/<page>` metadata |
+| auto-retrieval | Lore's auto-retrieval hook plugs into the `user_prompt` hook point |
+
+Config: `LORE_API_URL`, `LORE_API_KEY`, `LORE_PROJECT`. Transport: Lore's REST API or the
+`lore-sdk` npm package. Backend failures are logged and never block ingest, query, or dream.
+
+Positioning: Lore is the shared memory service across agents and teams; AgentRig memory is the
+per-project compiled knowledge the harness maintains, which can sync into Lore.
+
 ---
 
 ## 4. `supervisor` — interfaces
@@ -422,6 +462,7 @@ Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | end-to-end task completion; start dogfooding on the repo itself |
 | 2 | OpenAI-compatible adapter, compaction, resume | provider abstraction is real; long sessions survive |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest (coverage plan, reserve/placeholder), `index.md` injection, index ∪ BM25 search, attempts ledger, pins | every session compounds into the wiki; retrieval works index-first |
+| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | the wiki syncs into shared cross-agent memory without changing the no-infra default |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | stalls and loops get caught at ~zero cost |
 | 5 | Dream = scheduled lint: contradictions, superseded claims, orphans, missing pages, new-wiki output + report, review/auto, promotion to global | the wiki stays trustworthy as it grows |
 | 6 | Supervisor v2: reviewer over trajectory + attempts ledger, rubric grader, force_replan | the AVO loop, generalized |
@@ -440,10 +481,10 @@ Exit criterion for each milestone: the harness is used to build the next milesto
 - Memory follows the LLM Wiki pattern; global is a separate wiki, not a label; index ∪ BM25 retrieval, embeddings pluggable; pins protect human edits; pages hold shape not volatile values
 - Supervisor heuristics first, LLM only on escalation
 - Dream = the wiki's lint pass, scheduled; output is a new directory + report; review mode default; single-session facts never promoted to global
+- Lore is an optional `MemoryBackend`, never the source of truth; AgentLens is a future sink for the event stream (observability), not a memory dependency
 
 ## 8. Open questions
 
 1. Sandboxing: none + allowlists for v1, Docker later — acceptable?
 2. Rollback: git-based checkpoints (`checkpoint_rollback`) require the workspace to be a repo; opt-in or assumed?
-3. Does anything in AgentLens or Lore already cover memory or observability here? Reuse vs. rebuild.
-4. Which repo to dogfood on after AgentRig itself.
+3. Which repo to dogfood on after AgentRig itself.
