@@ -31,12 +31,33 @@ function parseList(raw: string): string[] {
   if (!v.startsWith("[") || !v.endsWith("]")) return v === "" ? [] : [parseScalar(v)];
   const inner = v.slice(1, -1).trim();
   if (inner === "") return [];
-  return inner.split(",").map((s) => parseScalar(s)).filter((s) => s !== "");
+  // split on commas outside quotes, so a quoted item may itself contain a comma
+  const items: string[] = [];
+  let buf = "";
+  let quote: string | null = null;
+  for (const ch of inner) {
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      buf += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      buf += ch;
+    } else if (ch === ",") {
+      items.push(buf);
+      buf = "";
+    } else {
+      buf += ch;
+    }
+  }
+  items.push(buf);
+  return items.map((s) => parseScalar(s)).filter((s) => s !== "");
 }
 
 export interface ParsedPage {
   frontmatter: PageFrontmatter;
   body: string;
+  /** Frontmatter keys the schema doesn't know about, preserved so a human's additions survive. */
+  extra: Record<string, string>;
 }
 
 /** Throws on a malformed page — a corrupt wiki file should surface, not be silently half-read. */
@@ -51,21 +72,30 @@ export function parsePage(text: string, path = "<unknown>"): ParsedPage {
   const body = normalized.slice(end + FENCE.length + 2).replace(/^\n/, "");
 
   const raw: Record<string, unknown> = {};
+  const extra: Record<string, string> = {};
+  const known = new Set(["type", "slug", "aliases", "sources", "updated", "confidence"]);
   for (const line of head.split("\n")) {
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
     const colon = line.indexOf(":");
     if (colon === -1) continue;
     const key = line.slice(0, colon).trim();
     const value = line.slice(colon + 1);
-    raw[key] = key === "aliases" || key === "sources" ? parseList(value) : parseScalar(value);
+    if (known.has(key)) raw[key] = key === "aliases" || key === "sources" ? parseList(value) : parseScalar(value);
+    else extra[key] = parseScalar(value);
   }
   const parsed = FrontmatterSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`${path}: invalid frontmatter — ${parsed.error.issues[0]?.message ?? "unknown"}`);
-  return { frontmatter: parsed.data, body };
+  return { frontmatter: parsed.data, body, extra };
 }
 
-export function serializePage(frontmatter: PageFrontmatter, body: string): string {
-  const list = (xs: string[]) => `[${xs.join(", ")}]`;
+export function serializePage(
+  frontmatter: PageFrontmatter,
+  body: string,
+  extra: Record<string, string> = {},
+): string {
+  // quote any item that would otherwise be re-split on parse
+  const item = (x: string) => (/[,[\]"']/.test(x) ? JSON.stringify(x) : x);
+  const list = (xs: string[]) => `[${xs.map(item).join(", ")}]`;
   const head = [
     `type: ${frontmatter.type}`,
     `slug: ${frontmatter.slug}`,
@@ -73,6 +103,7 @@ export function serializePage(frontmatter: PageFrontmatter, body: string): strin
     `sources: ${list(frontmatter.sources)}`,
     `updated: ${frontmatter.updated}`,
     `confidence: ${frontmatter.confidence}`,
+    ...Object.entries(extra).map(([k, v]) => `${k}: ${v}`),
   ].join("\n");
   return `${FENCE}\n${head}\n${FENCE}\n\n${body.replace(/\s+$/, "")}\n`;
 }

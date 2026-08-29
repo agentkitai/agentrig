@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
-import { DEFAULT_ANTHROPIC_MODEL, runCommand, type RunOptions } from "./run.js";
+import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import {
   memoryIngest,
@@ -33,7 +33,7 @@ function withRunOptions(cmd: Command): Command {
     .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
     .option("--json", "emit raw event JSONL to stdout")
     .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
-    .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
     .option("--system <prompt>", "override the system prompt")
     .option(
       "--allow <rule>",
@@ -111,7 +111,7 @@ withRunOptions(
 
 sessions
   .command("ls")
-  .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
+  .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
   .action(async (opts: { root: string }) => {
     const store = new SessionStore({ root: opts.root });
     const refs = await store.list();
@@ -126,7 +126,7 @@ sessions
 
 sessions
   .command("show <id>")
-  .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
+  .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
   .option("--json", "raw JSONL instead of a timeline")
   .action(async (id: string, opts: { root: string; json?: boolean }) => {
     const store = new SessionStore({ root: opts.root });

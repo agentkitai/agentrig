@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AnyTool } from "@agentkitai/agentrig-core";
 import { pagePath, serializePage } from "./page.js";
 import { unionRetrieve } from "./search.js";
+import { applyPinChecks, readPins, recheckPins } from "./pins.js";
 import type { FileMemoryStore } from "./store.js";
 import type { FileRawStore } from "./raw.js";
 import type { Attempt } from "./types.js";
@@ -56,6 +57,18 @@ const AttemptInput = z.object({
 const IngestInput = z.object({
   path: z.string().min(1).describe("Path to a doc to copy into raw/docs and remember"),
 });
+
+/** Re-check pins attached to one page after it was rewritten. */
+async function pinConflictsFor(
+  store: FileMemoryStore,
+  path: string,
+): Promise<Array<{ claim: string; reason: string }>> {
+  const pins = (await readPins(store.root).catch(() => [])).filter((p) => p.page === path);
+  if (pins.length === 0) return [];
+  const checks = await recheckPins(store, pins);
+  await applyPinChecks(store.root, checks);
+  return checks.filter((c) => c.status !== "kept").map((c) => ({ claim: c.pin.claim, reason: c.reason }));
+}
 
 export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
   const { store } = opts;
@@ -123,6 +136,18 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
         status: "active",
         summary: input.body.split("\n")[0]?.replace(/^- \[\w+\]\s*/, "").slice(0, 120) ?? "",
       });
+      // a full-body replace is a regeneration: re-check any pin on this page so a human
+      // correction can't be reverted silently (PLAN §3.6)
+      const conflicts = await pinConflictsFor(store, path);
+      if (conflicts.length > 0) {
+        return {
+          output: { path, pinConflicts: conflicts },
+          display:
+            `wrote ${path}\nWARNING: ${conflicts.length} pinned human correction(s) no longer hold:\n` +
+            conflicts.map((c) => `  - ${c.claim} (${c.reason})`).join("\n"),
+          isError: true,
+        };
+      }
       return { output: { path }, display: `wrote ${path}` };
     },
   };
@@ -211,7 +236,9 @@ export async function indexInjection(store: FileMemoryStore, maxChars = 4000): P
   if (entries.length === 0) return "";
   const header = "## Project memory (index)\n\nPages you can open with memory_read, or search with memory_search:";
   const lines: string[] = [];
-  let size = 0;
+  // the cap bounds the whole injection, header and tail included
+  const tailReserve = 60;
+  let size = header.length + tailReserve;
   let omitted = 0;
   for (const e of entries) {
     const line = `- ${e.path} — ${e.summary}`;

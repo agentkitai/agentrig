@@ -93,11 +93,25 @@ describe("pins", () => {
     status: "active",
   };
 
-  it("claimSatisfied is reword-tolerant but not hallucination-tolerant", () => {
+  it("is reword-tolerant but fails closed on a dropped or flipped clause", () => {
     expect(claimSatisfied(pin.claim, "## Semantics\n- [stated] retries apply per request and not per batch")).toBe(true);
-    // one content word dropped in a rewording still counts
-    expect(claimSatisfied(pin.claim, "- [stated] retries apply per request")).toBe(true);
     expect(claimSatisfied(pin.claim, "- [stated] something else entirely about auth")).toBe(false);
+    // the negated half of the correction is gone: surfaced rather than assumed fine. A false
+    // "conflict" costs a human a glance; a false "kept" loses their correction silently.
+    expect(claimSatisfied(pin.claim, "- [stated] retries apply per request")).toBe(false);
+  });
+
+  it("detects a page rewritten to the OPPOSITE of the pinned claim", () => {
+    // the search tokenizer drops "not"/"never" as stopwords, which made these read as satisfied
+    expect(claimSatisfied(pin.claim, "- [stated] Retries do NOT apply per request; they apply per batch")).toBe(false);
+    expect(claimSatisfied("use postgres not sqlite", "we use sqlite not postgres")).toBe(false);
+    expect(claimSatisfied("never retry on 4xx", "we always retry on 4xx")).toBe(false);
+  });
+
+  it("requires a short claim to match in full", () => {
+    // with slack, a 2-token claim was satisfied by half of itself
+    expect(claimSatisfied("retry budget", "- [stated] the retry loop")).toBe(false);
+    expect(claimSatisfied("retry budget", "- [stated] the retry budget is per session")).toBe(true);
   });
 
   it("round-trips pins.json", async () => {

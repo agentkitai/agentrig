@@ -67,20 +67,74 @@ export interface PinCheck {
   reason: string;
 }
 
+const NEGATIONS = new Set([
+  "not", "no", "never", "without", "neither", "nor", "cannot", "cant", "isnt", "arent", "dont",
+  "doesnt", "didnt", "wont", "shouldnt", "n't",
+]);
+
+function normalizeWord(w: string): string {
+  return w.replace(/['']/g, "");
+}
+
 /**
- * Is the pinned claim still present in the page text? Deliberately fuzzy: the claim is an
- * intent, so a reworded-but-equivalent line should still count. Content words must all appear;
- * exact phrasing need not.
+ * Which of a text's content words fall inside a negation's scope. Scope is approximated by
+ * clause: a negation applies to the words after it, up to the next clause break. Crude, but it
+ * distinguishes "applies per request, not per batch" from "does not apply per request", which
+ * counting negations cannot.
+ *
+ * A term negated anywhere counts as negated — this biases toward reporting a conflict, which is
+ * the safe direction for a mechanism whose whole job is catching a reverted human correction.
+ */
+function polarity(text: string): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  const clauses = text.toLowerCase().split(/[,;.:!?\n]|\b(?:but|however|though|whereas)\b/);
+  for (const clause of clauses) {
+    let negated = false;
+    for (const word of clause.split(/[^a-z0-9_'’+#.-]+/)) {
+      const w = normalizeWord(word);
+      if (w === "") continue;
+      if (NEGATIONS.has(w)) {
+        negated = true;
+        continue;
+      }
+      for (const t of tokenize(w)) {
+        if (negated || !map.has(t)) map.set(t, negated || (map.get(t) ?? false));
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Is the pinned claim still present in the page text?
+ *
+ * Deliberately fuzzy on wording — the pin stores an intent, so a reworded line should still
+ * count. But NOT fuzzy on polarity: the search tokenizer drops "not"/"never" as stopwords, which
+ * made a page asserting the exact opposite of the pin read as satisfied. Since the entire point
+ * of a pin is to catch a regeneration that reverted a human's correction, a false "kept" is far
+ * worse than a false "conflict" — so a polarity mismatch fails closed.
  */
 export function claimSatisfied(claim: string, pageBody: string): boolean {
-  const claimTerms = new Set(tokenize(claim));
-  if (claimTerms.size === 0) return true;
+  const terms = new Set(tokenize(claim));
+  if (terms.size === 0) return true;
   const bodyTerms = new Set(tokenize(pageBody));
   let hits = 0;
-  for (const t of claimTerms) if (bodyTerms.has(t)) hits += 1;
-  // every content word present, allowing one to have been dropped in a rewording
-  return hits >= Math.max(1, claimTerms.size - 1);
+  for (const t of terms) if (bodyTerms.has(t)) hits += 1;
+  // a short claim must match in full; only a longer one gets slack for one reworded word
+  const required = terms.size <= 3 ? terms.size : terms.size - 1;
+  if (hits < required) return false;
+
+  const claimPolarity = polarity(claim);
+  const bodyPolarity = polarity(pageBody);
+  for (const t of terms) {
+    const inClaim = claimPolarity.get(t);
+    const inBody = bodyPolarity.get(t);
+    if (inClaim === undefined || inBody === undefined) continue;
+    if (inClaim !== inBody) return false; // the page negates what the claim asserts, or vice versa
+  }
+  return true;
 }
+
 
 /**
  * Re-check pins after a regeneration (PLAN §3.6):
@@ -119,11 +173,20 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
   return out;
 }
 
-/** Apply the re-check back to the stored pins so their status reflects the current wiki. */
+/**
+ * Apply the re-check back to the stored pins so their status reflects the current wiki.
+ * Merges by (page, claim) against the file rather than replacing it wholesale — a subset of
+ * checks must never delete the pins it didn't cover.
+ */
 export async function applyPinChecks(wikiRoot: string, checks: PinCheck[]): Promise<void> {
   const statusOf: Record<PinStatus, Pin["status"]> = { kept: "active", conflict: "conflict", orphaned: "orphaned" };
-  await writePins(
-    wikiRoot,
-    checks.map((c) => ({ ...c.pin, status: statusOf[c.status] })),
-  );
+  const current = await readPins(wikiRoot);
+  const merged = [...current];
+  for (const c of checks) {
+    const updated = { ...c.pin, status: statusOf[c.status] };
+    const i = merged.findIndex((p) => p.page === c.pin.page && p.claim === c.pin.claim);
+    if (i === -1) merged.push(updated);
+    else merged[i] = updated;
+  }
+  await writePins(wikiRoot, merged);
 }

@@ -77,9 +77,43 @@ describe("unionRetrieve — additive, never regresses below index-only", () => {
     expect(retry[0]!.via).toBe("both");
   });
 
-  it("index picks are never dropped by the k cutoff applied to BM25", () => {
-    const hits = unionRetrieve(entries, pages, "how retries work token issuance", 1);
-    // both index-matched pages survive even though k=1 bounds the BM25 side
-    expect(hits.filter((h) => h.via !== "bm25").length).toBeGreaterThanOrEqual(2);
+  it("ranks index-matched pages above pages only BM25 found", () => {
+    const hits = unionRetrieve(entries, pages, "how retries work token issuance", 8);
+    const firstBm25Only = hits.findIndex((h) => h.via === "bm25");
+    const lastIndexed = hits.map((h) => h.via !== "bm25").lastIndexOf(true);
+    if (firstBm25Only !== -1) expect(lastIndexed).toBeLessThan(firstBm25Only);
+  });
+
+  it("bounds the index side too, ranked by term overlap rather than truncated arbitrarily", () => {
+    // an unbounded index side made `k` meaningless: one shared common word dragged in every
+    // page whose summary mentioned it, flooding the model's context
+    const many: IndexEntry[] = Array.from({ length: 300 }, (_, i) => ({
+      slug: `p${i}`,
+      path: `concepts/p${i}.md`,
+      type: "concept",
+      status: "active",
+      summary: "the module does things",
+    }));
+    const manyPages = many.map((e) => ({
+      path: e.path,
+      frontmatter: { type: "concept" as const, slug: e.slug, aliases: [], sources: [], updated: "2026-08-29", confidence: "high" as const },
+      body: "- [stated] the module does things",
+      updatedAt: 0,
+    }));
+    expect(unionRetrieve(many, manyPages, "module", 8).length).toBeLessThanOrEqual(16);
+  });
+
+  it("prefers the page both index and BM25 matched over one only the index matched", () => {
+    const twoEntries: IndexEntry[] = [
+      { slug: "aaa", path: "concepts/aaa.md", type: "concept", status: "active", summary: "retries mentioned here" },
+      { slug: "bbb", path: "concepts/bbb.md", type: "concept", status: "active", summary: "retries mentioned here" },
+    ];
+    const twoPages = [
+      page("aaa", "- [stated] nothing much at all"),
+      page("bbb", "- [stated] a deep discussion of retries and retries and retries"),
+    ].map((p, i) => ({ ...p, path: twoEntries[i]!.path }));
+    const hits = unionRetrieve(twoEntries, twoPages, "retries", 8);
+    expect(hits[0]!.page.path).toBe("concepts/bbb.md");
+    expect(hits[0]!.via).toBe("both");
   });
 });

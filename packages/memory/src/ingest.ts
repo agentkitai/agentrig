@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { PAGE_DIR, pagePath, serializePage } from "./page.js";
+import { applyPinChecks, readPins, recheckPins } from "./pins.js";
 import type { FileMemoryStore } from "./store.js";
 import type { Attempt, PageType } from "./types.js";
 
@@ -41,10 +42,12 @@ export interface Span {
 export interface IngestResult {
   sessionId: string;
   /** Every span, and whether it was distilled or explicitly closed — the coverage guarantee. */
-  coverage: Array<{ spanId: string; from: number; to: number; outcome: "distilled" | "nothing-durable" }>;
+  coverage: Array<{ spanId: string; from: number; to: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
   pagesWritten: string[];
   pagesReserved: string[];
   factCount: number;
+  /** Pins on pages this ingest touched whose claim no longer holds (PLAN §3.6). */
+  pinConflicts: Array<{ page: string; claim: string; reason: string }>;
   /** True when this session was already ingested and the new log is a prefix-superset. */
   supersededPrevious: boolean;
   skipped: boolean;
@@ -108,26 +111,33 @@ export function eventsToTranscript(events: unknown[]): string {
  * enormous tool result can't produce a span that blows the context window.
  */
 export function planCoverage(transcript: string, maxChars = 6000): Span[] {
-  const lines = transcript.split("\n").filter((l) => l !== "");
+  // keep original line numbers so a coverage error names something a human can open
+  const all = transcript.split("\n");
+  const lines: Array<{ text: string; lineNo: number }> = [];
+  for (let i = 0; i < all.length; i++) {
+    if (all[i] !== "") lines.push({ text: all[i]!, lineNo: i });
+  }
   if (lines.length === 0) return [];
   const spans: Span[] = [];
-  let start = 0;
-  let buf: string[] = [];
+  let buf: Array<{ text: string; lineNo: number }> = [];
   let size = 0;
-  const flush = (end: number) => {
+  const flush = () => {
     if (buf.length === 0) return;
-    spans.push({ id: `span-${spans.length + 1}`, from: start, to: end, text: buf.join("\n") });
+    spans.push({
+      id: `span-${spans.length + 1}`,
+      from: buf[0]!.lineNo,
+      to: buf[buf.length - 1]!.lineNo,
+      text: buf.map((l) => l.text).join("\n"),
+    });
     buf = [];
     size = 0;
-    start = end + 1;
   };
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (size + line.length > maxChars && buf.length > 0) flush(i - 1);
+  for (const line of lines) {
+    if (size + line.text.length > maxChars && buf.length > 0) flush();
     buf.push(line);
-    size += line.length + 1;
+    size += line.text.length + 1;
   }
-  flush(lines.length - 1);
+  flush();
   return spans;
 }
 
@@ -146,10 +156,57 @@ async function completeJson(provider: ModelProvider, system: string, user: strin
 export function extractJson(text: string): unknown {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const candidate = (fenced?.[1] ?? text).trim();
-  const start = candidate.search(/[{[]/);
-  if (start === -1) throw new Error(`no JSON object in model response: ${candidate.slice(0, 200)}`);
-  const end = Math.max(candidate.lastIndexOf("}"), candidate.lastIndexOf("]"));
-  return JSON.parse(candidate.slice(start, end + 1));
+
+  /** Index just past a balanced JSON value starting at `from`, or -1. */
+  const balancedEnd = (from: number): number => {
+    const open = candidate[from];
+    const close = open === "{" ? "}" : open === "[" ? "]" : "";
+    if (close === "") return -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = from; i < candidate.length; i++) {
+      const ch = candidate[i]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === open) depth += 1;
+      else if (ch === close) {
+        depth -= 1;
+        if (depth === 0) return i + 1;
+      }
+    }
+    return -1;
+  };
+
+  // Scan for TOP-LEVEL balanced values only (skipping past each one rather than descending into
+  // it), then keep the richest. First-brace-to-last-brace slicing broke on a prose preamble, and
+  // taking the first balanced value would return the "{}" in "use {} for defaults"; comparing
+  // nested values would let a nested object outrank the real payload.
+  let best: { value: unknown; size: number } | null = null;
+  for (let i = 0; i < candidate.length; i++) {
+    if (candidate[i] !== "{" && candidate[i] !== "[") continue;
+    const end = balancedEnd(i);
+    if (end === -1) continue;
+    try {
+      const value: unknown = JSON.parse(candidate.slice(i, end));
+      const size = Array.isArray(value)
+        ? value.length
+        : typeof value === "object" && value !== null
+          ? Object.keys(value).length
+          : 0;
+      if (best === null || size > best.size) best = { value, size };
+    } catch {
+      // not valid JSON on its own; fall through
+    }
+    i = end - 1; // skip past this value so nested ones are not considered separately
+  }
+  if (best !== null) return best.value;
+  throw new Error(`no JSON object in model response: ${candidate.slice(0, 200)}`);
 }
 
 export interface IngestOptions {
@@ -213,17 +270,20 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
           factCount: 0,
           supersededPrevious: false,
           skipped: true,
+          pinConflicts: [],
         };
       }
       supersededPrevious = true;
     }
   }
 
+  const existingIndexSummary = (await store.index()).find((e) => e.slug === `session-${sessionId}`)?.summary;
   const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000);
   const coverage: IngestResult["coverage"] = [];
   const facts: DistilledFact[] = [];
   const summaries: string[] = [];
 
+  const emptyButNotClosed: string[] = [];
   for (const span of spans) {
     const attemptNote =
       opts.attempts === undefined || opts.attempts.length === 0
@@ -248,19 +308,47 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
         }`,
       );
     }
-    if (parsed.nothingDurable || parsed.facts.length === 0) {
+    // a summary is evidence the span held something; keep it whatever the branch below decides
+    if (parsed.summary !== "") summaries.push(parsed.summary);
+    if (parsed.nothingDurable) {
+      // the model explicitly closed this span — that is the coverage guarantee being met
       coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "nothing-durable" });
+      continue;
+    }
+    if (parsed.facts.length === 0) {
+      if (parsed.summary === "") {
+        // Nothing at all: no facts, no summary, and no explicit close. A truncated or degenerate
+        // reply looks exactly like this, and calling it "covered" is the silent hole the
+        // coverage plan exists to prevent — so fail at the end naming the span.
+        coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "empty" });
+        emptyButNotClosed.push(`${span.id} (lines ${span.from}-${span.to})`);
+        continue;
+      }
+      // a summary but no page-level facts is a real answer: the span was read and weighed
+      coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
       continue;
     }
     coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
     facts.push(...parsed.facts);
-    if (parsed.summary !== "") summaries.push(parsed.summary);
+  }
+
+  if (emptyButNotClosed.length > 0) {
+    throw new Error(
+      `ingest ${sessionId}: ${emptyButNotClosed.length} span(s) returned no facts without ` +
+        `explicitly reporting nothingDurable — coverage cannot be guaranteed: ${emptyButNotClosed.join(", ")}`,
+    );
   }
 
   // reserve every non-source page before writing, so concurrent ingests converge on one page
   const targets = new Map<string, { type: PageType; slug: string; facts: DistilledFact[] }>();
+  const sourceFacts: DistilledFact[] = [];
   for (const f of facts) {
-    if (f.pageType === "source") continue;
+    if (f.pageType === "source") {
+      // the model is told "source" is a legal pageType, so these must be written somewhere —
+      // they belong on this session's own page rather than being silently dropped
+      sourceFacts.push(f);
+      continue;
+    }
     const key = `${f.pageType}/${f.slug}`;
     const target = targets.get(key) ?? { type: f.pageType, slug: f.slug, facts: [] };
     target.facts.push(f);
@@ -275,9 +363,21 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const pagesWritten: string[] = [];
   const ref = `session:${sessionId}`;
 
-  // the source page: what happened, plus the capture marker used for prefix comparison
+  // The source page: what happened, plus the capture marker used for prefix comparison.
+  // Only a provably superseded capture may replace the previous body; otherwise merge, because
+  // a re-ingest of a *different* transcript must not delete narrative that is still unique.
+  const newLines = [
+    ...summaries.map((s) => `- [observed] ${s} (${ref})`),
+    ...sourceFacts.map((f) => `- [${f.tag}] ${f.text} (${ref})`),
+  ];
+  const priorSourceBody =
+    existing === null || supersededPrevious
+      ? ""
+      : existing.body.replace(/<!-- capture:prefix=[^>]*-->/g, "").trim();
+  const keptLines = priorSourceBody === "" ? [] : priorSourceBody.split("\n").filter((l) => l.trim() !== "");
+  const merged = [...keptLines, ...newLines.filter((l) => !keptLines.includes(l))];
   const sourceBody = [
-    ...(summaries.length === 0 ? ["- [observed] Session produced no durable findings."] : summaries.map((s) => `- [observed] ${s} (${ref})`)),
+    ...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
     "",
     `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
   ].join("\n");
@@ -299,7 +399,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     path: sourcePath,
     type: "source",
     status: "active",
-    summary: summaries[0] ?? "session with no durable findings",
+    summary: summaries[0] ?? existingIndexSummary ?? "session with no durable findings",
   });
 
   // entity/concept pages: append new fact lines, never rewriting what is already there
@@ -334,9 +434,21 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     });
   }
 
+  // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
+  // happened — not only when a human remembers to run `memory lint`
+  const touched = new Set(pagesWritten);
+  const allPins = await readPins(store.root).catch(() => []);
+  const relevant = allPins.filter((pin) => touched.has(pin.page));
+  const checks = relevant.length === 0 ? [] : await recheckPins(store, relevant);
+  if (checks.length > 0) await applyPinChecks(store.root, checks);
+  const pinConflicts = checks
+    .filter((c) => c.status !== "kept")
+    .map((c) => ({ page: c.pin.page, claim: c.pin.claim, reason: c.reason }));
+
   await store.appendLog(
     `## [${today}] ingest | ${ref} | ${facts.length} facts, ${pagesWritten.length} pages` +
-      `${supersededPrevious ? " (superseded an earlier capture)" : ""}`,
+      `${supersededPrevious ? " (superseded an earlier capture)" : ""}` +
+      `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
   );
 
   return {
@@ -347,6 +459,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     factCount: facts.length,
     supersededPrevious,
     skipped: false,
+    pinConflicts,
   };
 }
 

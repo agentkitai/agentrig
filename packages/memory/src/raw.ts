@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import type { Attempt, DocRef, RawStore, SessionLogRef } from "./types.js";
@@ -96,46 +97,91 @@ export class FileRawStore implements RawStore {
     const ext = /\.[^.]+$/.exec(original)?.[0] ?? "";
     const stem = ext === "" ? original : original.slice(0, -ext.length);
     let name = original;
+    // exclusive create inside the loop: a stat/write gap let two concurrent addDoc calls pick
+    // the same name and one silently overwrote a raw source
     for (let n = 2; ; n++) {
-      const candidate = join(this.dir("docs"), name);
-      const exists = await stat(candidate).then(() => true, () => false);
-      if (!exists) break;
-      name = `${stem}-${n}${ext}`;
+      try {
+        const dest = join(this.dir("docs"), name);
+        await writeFile(dest, contents, { flag: "wx" });
+        return { id: name.replace(/\.[^.]+$/, ""), path: dest, addedAt: this.now() };
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        name = `${stem}-${n}${ext}`;
+      }
     }
-    const dest = join(this.dir("docs"), name);
-    await writeFile(dest, contents);
-    return { id: name.replace(/\.[^.]+$/, ""), path: dest, addedAt: this.now() };
   }
 
-  /** Append one attempt to the ledger (PLAN §3.5). Immutable: one file per attempt. */
+  /**
+   * Append one attempt to the ledger (PLAN §3.5). Immutable: one file per attempt, and a
+   * duplicate id is refused. Written temp+rename so a crash mid-write cannot leave a torn file
+   * in a directory the rest of the system treats as trustworthy.
+   */
   async addAttempt(attempt: Attempt): Promise<void> {
     await mkdir(this.dir("attempts"), { recursive: true });
     const parsed = AttemptSchema.parse(attempt);
-    await writeFile(join(this.dir("attempts"), `${parsed.id}.json`), JSON.stringify(parsed, null, 2), {
-      encoding: "utf8",
-      flag: "wx",
-    });
+    const dest = join(this.dir("attempts"), `${parsed.id}.json`);
+    // claim the id exclusively first, so the rename below can't clobber another attempt
+    const claim = await writeFile(dest, "", { flag: "wx" }).then(
+      () => true,
+      (err: NodeJS.ErrnoException) => {
+        if (err.code === "EEXIST") throw new Error(`attempt ${parsed.id} already exists; the ledger is immutable`);
+        throw err;
+      },
+    );
+    if (!claim) return;
+    const tmp = `${dest}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(parsed, null, 2), "utf8");
+      await rename(tmp, dest);
+    } catch (err) {
+      await rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
   }
 
-  /** Attempts, oldest first; optionally only those for one session. */
+  /**
+   * Attempts, oldest first; optionally only those for one session. A corrupt entry in an
+   * immutable ledger is reported, never swallowed and never fatal — one torn file used to throw
+   * a raw SyntaxError and take down every ingest for the project.
+   */
   async attempts(sessionId?: string): Promise<Attempt[]> {
+    const { attempts } = await this.readAttempts(sessionId);
+    return attempts;
+  }
+
+  async readAttempts(sessionId?: string): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
     let names: string[];
     try {
       names = await readdir(this.dir("attempts"));
     } catch {
-      return [];
+      return { attempts: [], corrupt: [] };
     }
     const out: Attempt[] = [];
+    const corrupt: string[] = [];
     for (const name of names) {
       if (!name.endsWith(".json")) continue;
-      const text = await readFile(join(this.dir("attempts"), name), "utf8").catch(() => null);
-      if (text === null) continue;
-      const parsed = AttemptSchema.safeParse(JSON.parse(text));
-      if (!parsed.success) continue;
+      const path = join(this.dir("attempts"), name);
+      const text = await readFile(path, "utf8").catch(() => null);
+      if (text === null) {
+        corrupt.push(path);
+        continue;
+      }
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        corrupt.push(path);
+        continue;
+      }
+      const parsed = AttemptSchema.safeParse(json);
+      if (!parsed.success) {
+        corrupt.push(path);
+        continue;
+      }
       if (sessionId !== undefined && parsed.data.sessionId !== sessionId) continue;
       const { lesson, ...rest } = parsed.data;
       out.push(lesson === undefined ? rest : { ...rest, lesson });
     }
-    return out.sort((a, b) => a.ts - b.ts);
+    return { attempts: out.sort((a, b) => a.ts - b.ts), corrupt };
   }
 }

@@ -25,6 +25,28 @@ export function tokenize(text: string): string[] {
     .filter((t) => t.length > 1 && !STOPWORDS.has(t));
 }
 
+/**
+ * Tokens for indexing: the whole token plus its sub-parts, so a query for "auth" reaches
+ * `auth-module` and "retry" reaches `retry_policy`. Query-side tokenization stays exact — only
+ * the document side is expanded, so this adds recall without loosening what a query means.
+ */
+export function indexTokens(text: string): string[] {
+  const out: string[] = [];
+  for (const token of tokenize(text)) {
+    out.push(token);
+    if (!/[-_.]/.test(token)) continue;
+    for (const part of token.split(/[-_.]+/)) {
+      if (part.length > 1 && !STOPWORDS.has(part)) out.push(part);
+    }
+  }
+  return out;
+}
+
+/** Internal machinery (the ingest capture marker) must not be searchable or quotable. */
+function searchableBody(body: string): string {
+  return body.replace(/<!--[\s\S]*?-->/g, " ");
+}
+
 export interface SearchHit {
   page: WikiPage;
   score: number;
@@ -35,7 +57,7 @@ export interface SearchHit {
 export function snippetFor(page: WikiPage, queryTerms: Set<string>, max = 240): string {
   let best = "";
   let bestHits = -1;
-  for (const line of page.body.split("\n")) {
+  for (const line of searchableBody(page.body).split("\n")) {
     const trimmed = line.trim();
     if (trimmed === "") continue;
     const hits = tokenize(trimmed).filter((t) => queryTerms.has(t)).length;
@@ -44,7 +66,7 @@ export function snippetFor(page: WikiPage, queryTerms: Set<string>, max = 240): 
       best = trimmed;
     }
   }
-  if (best === "") best = page.body.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+  if (best === "") best = searchableBody(page.body).split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
   return best.length > max ? `${best.slice(0, max)}…` : best;
 }
 
@@ -56,8 +78,8 @@ export function bm25Search(pages: WikiPage[], query: string, k = 8): SearchHit[]
 
   // a page's searchable text includes its slug and aliases, so "auth" finds `auth-module`
   const docs = pages.map((page) => {
-    const text = `${page.frontmatter.slug} ${page.frontmatter.aliases.join(" ")} ${page.body}`;
-    const tokens = tokenize(text);
+    const text = `${page.frontmatter.slug} ${page.frontmatter.aliases.join(" ")} ${searchableBody(page.body)}`;
+    const tokens = indexTokens(text);
     const freq = new Map<string, number>();
     for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
     return { page, freq, length: tokens.length };
@@ -88,15 +110,22 @@ export function bm25Search(pages: WikiPage[], query: string, k = 8): SearchHit[]
     .slice(0, k);
 }
 
-/** Index rows whose slug, aliases, or summary match the query — the index-first selection. */
-export function selectFromIndex(entries: IndexEntry[], query: string): IndexEntry[] {
-  const terms = new Set(tokenize(query));
-  if (terms.size === 0) return [];
-  return entries.filter((e) => {
-    const hay = new Set(tokenize(`${e.slug} ${e.summary}`));
-    for (const t of terms) if (hay.has(t)) return true;
-    return false;
-  });
+/**
+ * Index rows matching the query, best first. Scored by how many distinct query terms the row
+ * carries: a single shared common word would otherwise drag in every page whose summary happens
+ * to mention it, which makes `k` meaningless and floods the model's context.
+ */
+export function selectFromIndex(entries: IndexEntry[], query: string, limit?: number): IndexEntry[] {
+  const terms = [...new Set(tokenize(query))];
+  if (terms.length === 0) return [];
+  const scored: Array<{ entry: IndexEntry; hits: number }> = [];
+  for (const e of entries) {
+    const hay = new Set(indexTokens(`${e.slug} ${e.summary}`));
+    const hits = terms.filter((t) => hay.has(t)).length;
+    if (hits > 0) scored.push({ entry: e, hits });
+  }
+  scored.sort((a, b) => (b.hits === a.hits ? a.entry.path.localeCompare(b.entry.path) : b.hits - a.hits));
+  return (limit === undefined ? scored : scored.slice(0, limit)).map((s) => s.entry);
 }
 
 export interface UnionHit extends SearchHit {
@@ -118,10 +147,11 @@ export function unionRetrieve(
   const queryTerms = new Set(tokenize(query));
   const out = new Map<string, UnionHit>();
 
-  for (const entry of selectFromIndex(entries, query)) {
+  // the index side is ranked and bounded too — unbounded, `k` would not be a bound at all
+  for (const entry of selectFromIndex(entries, query, k)) {
     const page = byPath.get(entry.path);
     if (page === undefined) continue;
-    out.set(page.path, { page, score: Number.POSITIVE_INFINITY, snippet: snippetFor(page, queryTerms), via: "index" });
+    out.set(page.path, { page, score: 0, snippet: snippetFor(page, queryTerms), via: "index" });
   }
   for (const hit of bm25Search(pages, query, k)) {
     const existing = out.get(hit.page.path);
@@ -129,9 +159,10 @@ export function unionRetrieve(
     else out.set(hit.page.path, { ...existing, score: hit.score, via: "both" });
   }
 
+  // index-matched pages outrank pure-BM25 ones (index-first), and within that band the page
+  // BM25 also liked ranks above one it did not
+  const rank = (h: UnionHit) => (h.via === "both" ? 0 : h.via === "index" ? 1 : 2);
   return [...out.values()].sort((a, b) => {
-    // index picks first (both counts as index), then BM25 by score
-    const rank = (h: UnionHit) => (h.via === "bm25" ? 1 : 0);
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
     if (a.score !== b.score) return b.score - a.score;
     return a.page.path.localeCompare(b.page.path);

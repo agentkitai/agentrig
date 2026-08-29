@@ -1,6 +1,6 @@
 import { appendFile, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PAGE_DIR, pagePath, parsePage, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
@@ -62,6 +62,8 @@ export class FileMemoryStore implements MemoryStore {
   readonly root: string;
   readonly scope: Scope;
   private readonly now: () => number;
+  /** In-process serialization of index read-modify-write. */
+  private indexChain: Promise<unknown> = Promise.resolve();
 
   constructor(opts: FileMemoryStoreOptions) {
     this.root = opts.root;
@@ -69,8 +71,59 @@ export class FileMemoryStore implements MemoryStore {
     this.now = opts.now ?? (() => Date.now());
   }
 
+  /**
+   * index.md is a read-modify-write, so concurrent ingests would otherwise lose each other's
+   * catalog rows outright — pages on disk with no index row are invisible to index-first
+   * retrieval forever. Mutations run one at a time in this process and hold an O_EXCL lock
+   * file across processes.
+   */
+  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = async (): Promise<T> => {
+      await mkdir(this.root, { recursive: true });
+      const lockPath = join(resolve(this.root), "index.md.lock");
+      const deadline = this.now() + 5000;
+      for (;;) {
+        try {
+          const handle = await open(lockPath, "wx");
+          await handle.close();
+          break;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+          // a crashed holder must not wedge the wiki forever
+          const age = await stat(lockPath).then((st) => Date.now() - st.mtimeMs, () => 0);
+          if (age > 10_000) {
+            await rm(lockPath, { force: true }).catch(() => {});
+            continue;
+          }
+          if (this.now() > deadline) throw new Error(`timed out waiting for ${lockPath}`);
+          await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
+        }
+      }
+      try {
+        return await fn();
+      } finally {
+        await rm(lockPath, { force: true }).catch(() => {});
+      }
+    };
+    const next = this.indexChain.then(run, run);
+    this.indexChain = next.catch(() => {});
+    return next;
+  }
+
+  /**
+   * Resolve a wiki-relative path, refusing anything that escapes the wiki root. `memory_read`
+   * takes a path straight from the model and declares no `paths()` (a wiki-relative path would
+   * wrongly satisfy a cwdOnly rule), so confinement has to live here — otherwise enabling the
+   * tool grants unconfined reads of any frontmatter-shaped file on the box.
+   */
   private abs(rel: string): string {
-    return join(this.root, rel);
+    const root = resolve(this.root);
+    const full = resolve(root, rel);
+    const inside = relative(root, full);
+    if (inside !== "" && (inside.startsWith("..") || isAbsolute(inside))) {
+      throw new Error(`path escapes the wiki root: ${rel}`);
+    }
+    return full;
   }
 
   private today(): string {
@@ -123,13 +176,15 @@ export class FileMemoryStore implements MemoryStore {
     await this.atomicWrite(INDEX_FILE, `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`);
   }
 
-  /** Insert or replace one index row, preserving everything else. */
+  /** Insert or replace one index row, preserving everything else. Serialized; see withIndexLock. */
   async upsertIndex(entry: IndexEntry): Promise<void> {
-    const entries = await this.index();
-    const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
-    if (i === -1) entries.push(entry);
-    else entries[i] = entry;
-    await this.writeIndex(entries);
+    await this.withIndexLock(async () => {
+      const entries = await this.index();
+      const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
+      if (i === -1) entries.push(entry);
+      else entries[i] = entry;
+      await this.writeIndex(entries);
+    });
   }
 
   async read(path: string): Promise<WikiPage | null> {
@@ -173,13 +228,18 @@ export class FileMemoryStore implements MemoryStore {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-        const existing = (await this.index()).find((e) => e.slug === slug && e.type === type);
-        if (existing !== undefined) {
-          await this.upsertIndex({
-            ...existing,
-            claimedBy: [...new Set([...(existing.claimedBy ?? []), claimant])],
-          });
-        }
+        await this.withIndexLock(async () => {
+          const entries = await this.index();
+          const i = entries.findIndex((e) => e.slug === slug && e.type === type);
+          if (i === -1) {
+            // page on disk with no catalog row (a crash between create and upsert, or a lost
+            // row): re-adopt it rather than leaving it invisible to index-first retrieval
+            entries.push({ slug, path: rel, type, status: "planned", summary: `(reserved by ${claimant})`, claimedBy: [claimant] });
+          } else {
+            entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
+          }
+          await this.writeIndex(entries);
+        });
         return "exists";
       }
       throw err;

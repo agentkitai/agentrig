@@ -197,6 +197,60 @@ account has credits.
 - Ingest is exercised with a scripted fake `ModelProvider`; as with M1/M2 the model call is one
   seam and the suite stays network-free.
 
+### M3 hardening (from the adversarial review)
+
+The review found three of the milestone's headline guarantees were not actually kept, and two
+defects that meant M3 did not run at all. All fixed, each with a regression test:
+
+- **`index.md` was a lost-update race.** `upsertIndex` is a read-modify-write; two concurrent
+  ingests deleted each other's catalog rows, leaving pages on disk permanently invisible to
+  index-first retrieval — the exact scenario `reserve` exists for. Index mutation is now
+  serialized in-process and behind an `index.md.lock` across processes (stale locks are broken
+  after 10s). `reserve` also re-adopts a page whose row went missing instead of returning
+  `exists` and leaving it orphaned.
+- **`memory ingest` could never find a session `run` wrote.** Sessions defaulted to
+  `.agentrig/sessions` while ingest reads `raw/sessions` per PLAN §3.1. The default is now
+  `.agentrig/raw/sessions`, so the run → ingest flow works out of the box.
+- **The memory tools were never registered.** `run --memory` injected an index telling the model
+  to call `memory_read`/`memory_search` while the agent only had the six built-ins. They are now
+  registered when `--memory` is set, with the read-class ones allowed by tool name (they are
+  confined to the wiki root by the store, which a `cwdOnly` rule cannot express).
+- **Source-typed facts were counted and written nowhere.** The prompt offers `pageType: "source"`
+  and the schema accepts it, but the target loop skipped them while every accounting surface
+  reported success. They now land on the session's own page.
+- **"Explicitly closed" was not enforced.** `nothingDurable || facts.length === 0` collapsed
+  "the model told me the span was empty" into "the model gave me nothing" — so a truncated reply
+  read as covered. Now: an explicit `nothingDurable` is coverage; facts are coverage; a summary
+  with no facts is coverage; and a reply with none of those throws, naming the span. Summaries
+  are recorded before the branch so one can never be discarded.
+- **A diverged re-ingest destroyed the source page.** The prefix check only decided skip-vs-not;
+  the source body was replaced unconditionally. It now merges unless the capture was provably
+  superseded, keeping PLAN §3.2's "unique content is never deleted" true.
+- **Pins could not see a reversal, and nothing re-checked them.** The search tokenizer drops
+  "not"/"never", so a page rewritten to the opposite claim read as `kept`. `claimSatisfied` now
+  compares clause-scoped negation polarity and requires short claims to match in full — biased
+  toward a false `conflict` over a false `kept`, since a silent loss is the failure pins exist to
+  prevent. `recheckPins` now runs on every regeneration (ingest and `memory_write`), surfacing
+  conflicts in the result rather than waiting for someone to run `memory lint`.
+- **`raw/` could be overwritten.** `addDoc` had a stat/write TOCTOU that let concurrent calls
+  clobber a source; it now creates exclusively and advances the suffix on `EEXIST`. Attempts are
+  written temp+rename, and one torn file is reported via `readAttempts().corrupt` instead of
+  throwing a raw `SyntaxError` that took down every ingest.
+- **`memory_read` escaped the wiki root.** `../` resolved straight out, and the tool declares no
+  `paths()` (a wiki-relative path would wrongly satisfy a `cwdOnly` rule), so enabling it granted
+  unconfined reads. The store now rejects any path escaping its root.
+- **Retrieval: `k` was not a bound.** Index picks were unbounded, so one common word could return
+  every page. The index side is now ranked by term overlap and capped at `k`. The honest
+  guarantee is therefore *"index-matched pages always outrank BM25-only ones, and the index side
+  is ranked rather than arbitrarily truncated"* — not "index picks are never dropped".
+- Smaller: `extractJson` scans top-level balanced values and keeps the richest (a `{}` in prose
+  used to win, and a nested object could outrank the payload); coverage spans report original
+  transcript line numbers; the capture marker is stripped from search text and snippets; hyphenated
+  slugs are indexed by their parts (`auth` finds `auth-module`) while queries stay exact;
+  frontmatter list items survive commas and unknown keys survive a rewrite; `indexInjection`'s cap
+  covers the header and tail; `applyPinChecks` merges instead of replacing; `memory search -k`
+  validates its argument; `memory show` reports a non-page instead of dumping a stack trace.
+
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
