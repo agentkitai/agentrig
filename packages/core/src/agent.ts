@@ -1,0 +1,375 @@
+import { zodToJsonSchema } from "zod-to-json-schema";
+import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
+import type { ContentBlock, Message } from "./messages.js";
+import type { ModelProvider, ModelRequest, ToolSpec } from "./provider.js";
+import type { PermissionPolicy } from "./permissions.js";
+import type { AnyTool, ToolContext } from "./tool.js";
+import { SessionStore, contentHash } from "./session-store.js";
+
+export interface Budget {
+  maxTurns?: number;
+  maxTokens?: number;
+  maxUsd?: number;
+  maxMinutes?: number;
+}
+
+/** USD per million tokens; required for `budget.maxUsd` to have any effect. */
+export interface Pricing {
+  inputUsdPerMTok: number;
+  outputUsdPerMTok: number;
+}
+
+export interface PromptContext {
+  task: string;
+  cwd: string;
+}
+
+export interface AgentConfig {
+  provider: ModelProvider;
+  tools: AnyTool[];
+  permissions: PermissionPolicy;
+  systemPrompt: string | ((ctx: PromptContext) => string);
+  /** Every event goes through this store; the session log is the source of truth. */
+  store: SessionStore;
+  budget?: Budget;
+  pricing?: Pricing;
+  /** max_tokens per model response (default 8192). */
+  maxTokensPerTurn?: number;
+  /**
+   * Resolves an `ask` permission decision. Headless default: deny.
+   * The TUI (M7) plugs an interactive prompt in here.
+   */
+  onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
+  now?: () => number;
+}
+
+export interface SessionSummary {
+  id: string;
+  reason: "done" | "aborted" | "error" | "budget";
+  turns: number;
+  usage: Usage;
+}
+
+export interface SessionControl {
+  steer(message: string): void;
+  pause(): void;
+  resume(): void;
+  abort(): void;
+}
+
+export interface Session {
+  id: string;
+  events: AsyncIterable<HarnessEvent>;
+  control: SessionControl;
+  done: Promise<SessionSummary>;
+}
+
+export interface Agent {
+  run(task: string, opts?: { cwd?: string }): Session;
+}
+
+export function toToolSpec(tool: AnyTool): ToolSpec {
+  const schema = zodToJsonSchema(tool.inputSchema, { $refStrategy: "none" }) as Record<string, unknown>;
+  delete schema.$schema;
+  return { name: tool.name, description: tool.description, inputSchema: schema };
+}
+
+/** Cheap request-size estimate for `model.request.tokensIn`; real usage lands in `model.response`. */
+function estimateTokens(system: string, messages: Message[]): number {
+  return Math.ceil((system.length + JSON.stringify(messages).length) / 4);
+}
+
+/** Buffers every event so late subscribers replay the whole session; supports many readers. */
+class EventStream {
+  private readonly buffer: HarnessEvent[] = [];
+  private closed = false;
+  private waiters: Array<() => void> = [];
+
+  push(e: HarnessEvent): void {
+    this.buffer.push(e);
+    this.wake();
+  }
+
+  close(): void {
+    this.closed = true;
+    this.wake();
+  }
+
+  private wake(): void {
+    for (const w of this.waiters.splice(0)) w();
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<HarnessEvent> {
+    let i = 0;
+    while (true) {
+      if (i < this.buffer.length) {
+        yield this.buffer[i++]!;
+        continue;
+      }
+      if (this.closed) return;
+      await new Promise<void>((r) => this.waiters.push(r));
+    }
+  }
+}
+
+class PauseGate {
+  private gate = Promise.resolve();
+  private release: (() => void) | null = null;
+
+  pause(): void {
+    if (this.release) return;
+    this.gate = new Promise<void>((r) => (this.release = r));
+  }
+
+  resume(): void {
+    this.release?.();
+    this.release = null;
+  }
+
+  wait(): Promise<void> {
+    return this.gate;
+  }
+}
+
+export function createAgent(config: AgentConfig): Agent {
+  return { run: (task, opts) => runSession(config, task, opts?.cwd ?? process.cwd()) };
+}
+
+function runSession(config: AgentConfig, task: string, cwd: string): Session {
+  const { store, provider } = config;
+  const now = config.now ?? (() => Date.now());
+  const id = store.create();
+  const stream = new EventStream();
+  const gate = new PauseGate();
+  const abortController = new AbortController();
+  const pendingSteers: string[] = [];
+
+  // All appends go through one promise chain so events written by tools (via ctx.emit)
+  // and by the loop land in the store — and in `seq` — in the order they were emitted.
+  let chain: Promise<unknown> = Promise.resolve();
+  const emit = (payload: EventPayload): Promise<HarnessEvent> => {
+    const p = chain.then(() => store.append(id, payload)).then((e) => {
+      stream.push(e);
+      return e;
+    });
+    chain = p.catch(() => {});
+    return p;
+  };
+
+  const done = (async (): Promise<SessionSummary> => {
+    const totals: Usage = { input: 0, output: 0 };
+    let turns = 0;
+    let usd = 0;
+    let reason: SessionSummary["reason"] = "done";
+
+    const toolsByName = new Map(config.tools.map((t) => [t.name, t]));
+    const toolSpecs = config.tools.map(toToolSpec);
+    const system =
+      typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+    const startedAt = now();
+
+    const budgetExceeded = (): string | null => {
+      const b = config.budget;
+      if (!b) return null;
+      if (b.maxTurns !== undefined && turns >= b.maxTurns) return `turn budget reached (${b.maxTurns})`;
+      if (b.maxTokens !== undefined && totals.input + totals.output >= b.maxTokens)
+        return `token budget reached (${b.maxTokens})`;
+      if (b.maxUsd !== undefined && usd >= b.maxUsd) return `USD budget reached ($${b.maxUsd})`;
+      if (b.maxMinutes !== undefined && now() - startedAt >= b.maxMinutes * 60_000)
+        return `time budget reached (${b.maxMinutes}m)`;
+      return null;
+    };
+
+    try {
+      await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
+      const messages: Message[] = [{ role: "user", content: [{ type: "text", text: task }] }];
+
+      loop: while (true) {
+        await gate.wait();
+        if (abortController.signal.aborted) {
+          reason = "aborted";
+          break;
+        }
+        const over = budgetExceeded();
+        if (over) {
+          reason = "budget";
+          await emit({ type: "error", message: over, fatal: false });
+          break;
+        }
+
+        for (const msg of pendingSteers.splice(0)) {
+          await emit({ type: "steer", source: "user", message: msg });
+          messages.push({ role: "user", content: [{ type: "text", text: msg }] });
+        }
+
+        turns += 1;
+        await emit({ type: "turn.start", n: turns });
+        await emit({ type: "model.request", tokensIn: estimateTokens(system, messages) });
+
+        const req: ModelRequest = {
+          system,
+          messages,
+          tools: toolSpecs,
+          maxTokens: config.maxTokensPerTurn ?? 8192,
+          cacheHints: { systemPrefix: true },
+        };
+
+        let text = "";
+        const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
+        let usage: Usage = { input: 0, output: 0 };
+        let stop: "end_turn" | "tool_use" | "max_tokens" | "error" = "end_turn";
+        try {
+          for await (const ev of provider.stream(req, abortController.signal)) {
+            switch (ev.type) {
+              case "text_delta":
+                text += ev.text;
+                await emit({ type: "model.delta", text: ev.text });
+                break;
+              case "tool_use":
+                toolUses.push(ev);
+                break;
+              case "usage":
+                usage = ev.usage;
+                break;
+              case "stop":
+                stop = ev.reason;
+                break;
+            }
+          }
+        } catch (err) {
+          if (abortController.signal.aborted) {
+            reason = "aborted";
+            await emit({ type: "turn.end", n: turns });
+            break;
+          }
+          throw err;
+        }
+
+        await emit({ type: "model.response", usage, stop });
+        totals.input += usage.input;
+        totals.output += usage.output;
+        if (usage.cacheRead !== undefined) totals.cacheRead = (totals.cacheRead ?? 0) + usage.cacheRead;
+        if (usage.cacheWrite !== undefined) totals.cacheWrite = (totals.cacheWrite ?? 0) + usage.cacheWrite;
+        if (config.pricing) {
+          usd +=
+            (usage.input * config.pricing.inputUsdPerMTok + usage.output * config.pricing.outputUsdPerMTok) / 1e6;
+        }
+
+        const assistantContent: ContentBlock[] = [];
+        if (text) assistantContent.push({ type: "text", text });
+        for (const tu of toolUses) assistantContent.push({ type: "tool_use", ...tu });
+        if (assistantContent.length > 0) messages.push({ role: "assistant", content: assistantContent });
+
+        if (stop === "error") {
+          reason = "error";
+          await emit({ type: "error", message: "provider reported an error stop", fatal: true });
+          await emit({ type: "turn.end", n: turns });
+          break;
+        }
+        if (stop === "max_tokens") {
+          await emit({
+            type: "error",
+            message: `response truncated at maxTokens (${req.maxTokens})`,
+            fatal: false,
+          });
+        }
+        if (stop !== "tool_use" || toolUses.length === 0) {
+          await emit({ type: "turn.end", n: turns });
+          break;
+        }
+
+        const results: ContentBlock[] = [];
+        for (const tu of toolUses) {
+          if (abortController.signal.aborted) {
+            reason = "aborted";
+            await emit({ type: "turn.end", n: turns });
+            break loop;
+          }
+          results.push(await runTool(tu));
+        }
+        messages.push({ role: "user", content: results });
+        await emit({ type: "turn.end", n: turns });
+      }
+    } catch (err) {
+      reason = "error";
+      const message = err instanceof Error ? err.message : String(err);
+      await emit({ type: "error", message, fatal: true }).catch(() => {});
+    } finally {
+      await emit({ type: "session.end", reason }).catch(() => {});
+      await chain.catch(() => {});
+      stream.close();
+    }
+    return { id, reason, turns, usage: totals };
+
+    async function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
+      const resultBlock = (content: string, isError: boolean): ContentBlock =>
+        isError
+          ? { type: "tool_result", toolUseId: tu.id, content, isError: true }
+          : { type: "tool_result", toolUseId: tu.id, content };
+
+      const tool = toolsByName.get(tu.name);
+      if (!tool) {
+        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+        await emit({ type: "tool.result", id: tu.id, ok: false, display: `unknown tool: ${tu.name}`, durationMs: 0 });
+        return resultBlock(`unknown tool: ${tu.name}`, true);
+      }
+
+      const parsed = tool.inputSchema.safeParse(tu.input);
+      if (!parsed.success) {
+        const display = `invalid input for ${tu.name}: ${parsed.error.message}`;
+        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
+        return resultBlock(display, true);
+      }
+      const input = parsed.data;
+
+      const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
+      const permReq: PermissionRequest = { tool: tu.name, input, class: permClass, cwd };
+      await emit({ type: "permission.request", req: permReq });
+      let decision = await config.permissions.decide(permReq);
+      await emit({ type: "permission.decision", d: decision });
+      if (decision === "ask") {
+        decision = config.onAsk ? await config.onAsk(permReq) : "deny";
+        await emit({ type: "permission.decision", d: decision });
+      }
+      if (decision === "deny") {
+        await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+        return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
+      }
+
+      await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });
+      const ctx: ToolContext = {
+        cwd,
+        sessionId: id,
+        emit: (payload) => void emit(payload),
+        signal: abortController.signal,
+      };
+      const t0 = now();
+      try {
+        const r = await tool.execute(input, ctx);
+        const ok = r.isError !== true;
+        await emit({ type: "tool.result", id: tu.id, ok, display: r.display, durationMs: now() - t0 });
+        return resultBlock(r.display, !ok);
+      } catch (err) {
+        const display = err instanceof Error ? err.message : String(err);
+        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
+        return resultBlock(display, true);
+      }
+    }
+  })();
+
+  return {
+    id,
+    events: stream,
+    control: {
+      steer: (message) => pendingSteers.push(message),
+      pause: () => gate.pause(),
+      resume: () => gate.resume(),
+      abort: () => {
+        abortController.abort();
+        gate.resume();
+      },
+    },
+    done,
+  };
+}

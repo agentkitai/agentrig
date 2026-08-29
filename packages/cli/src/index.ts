@@ -2,9 +2,30 @@
 import { Command } from "commander";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
+import { runCommand, type RunOptions } from "./run.js";
 
 const program = new Command();
 program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
+
+program
+  .command("run <task>")
+  .description("Run the agent on a task (headless; the interactive TUI lands in M7)")
+  .option("--headless", "no interactive prompts; `ask` permissions resolve to deny (currently always on)")
+  .option("--json", "emit raw event JSONL to stdout")
+  .option("-m, --model <model>", "Anthropic model id", process.env.AGENTRIG_MODEL ?? "claude-sonnet-5")
+  .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
+  .option("--system <prompt>", "override the system prompt")
+  .option("--allow <rule>", "allow a tool name or permission class (repeatable)", collect, [])
+  .option("--deny <rule>", "deny a tool name or permission class (repeatable)", collect, [])
+  .option("--max-turns <n>", "turn budget", "50")
+  .option("--max-tokens <n>", "token budget (input + output)")
+  .option("--max-minutes <n>", "wall-clock budget in minutes")
+  .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
+  .action(async (task: string, opts: RunOptions) => runCommand(task, opts));
+
+function collect(value: string, prev: string[]): string[] {
+  return [...prev, value];
+}
 
 const sessions = program.command("sessions").description("Inspect session event logs");
 
