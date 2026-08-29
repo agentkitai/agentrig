@@ -44,6 +44,15 @@ Current milestone: **M3**
 - Budgets are enforced at turn boundaries; `maxUsd` binds only when `pricing` is configured.
 - Deferred to their milestones, per build order: hooks, compaction, resume (M2), TUI (M7).
 
+## Exit-criterion debt: dogfooding
+
+PLAN §6's exit criterion ("the harness is used to build the next milestone") is **not yet met**:
+M1 and M2 were built without running the harness, because the dev environment has no model API
+key — only the replay tooling (`pnpm demo`, `sessions ls|show`) has been exercised for real.
+M3 must be built through `agentrig run` (worker sessions for real subtasks, resume and
+compaction under real load) once `ANTHROPIC_API_KEY` (or an OpenAI-compatible endpoint) is
+available in the environment.
+
 ## M2 notes
 
 - `OpenAICompatibleProvider` speaks Chat Completions streaming (OpenAI + local servers); one
