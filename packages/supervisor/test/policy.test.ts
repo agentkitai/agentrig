@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Signal } from "@agentkitai/agentrig-core";
-import { DEFAULT_LADDER, LadderPolicy, initialState, type SupervisorState } from "@agentkitai/agentrig-supervisor";
+import { DEFAULT_LADDER, LadderPolicy, initialState, signal, type SupervisorState } from "@agentkitai/agentrig-supervisor";
 
 const sig = (type: Signal["type"], confidence = 0.9): Signal => ({
   type,
@@ -101,5 +101,25 @@ describe("LadderPolicy", () => {
       expect(i.message.length).toBeGreaterThan(60);
       expect(i.message).not.toContain("undefined");
     }
+  });
+});
+
+describe("signal()", () => {
+  it("clamps confidence into the range the schema accepts", () => {
+    // the schema rejects anything outside [0,1], and a rejected record is a dropped signal —
+    // so a detector doing its own arithmetic must not be able to produce one
+    expect(signal("loop", 1.4, [], [0, 1]).confidence).toBe(1);
+    expect(signal("loop", -3, [], [0, 1]).confidence).toBe(0);
+    expect(signal("loop", 0.42, [], [0, 1]).confidence).toBe(0.42);
+  });
+
+  it("orders the window, so a detector cannot emit a backwards span", () => {
+    expect(signal("stall", 0.5, [], [9, 4]).window).toEqual([4, 9]);
+    expect(signal("stall", 0.5, [], [4, 9]).window).toEqual([4, 9]);
+  });
+
+  it("produces a signal the event schema accepts", async () => {
+    const { Signal } = await import("@agentkitai/agentrig-core");
+    expect(Signal.safeParse(signal("drift", 2, ["e"], [5, 1])).success).toBe(true);
   });
 });

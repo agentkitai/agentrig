@@ -4,6 +4,27 @@ import { initialState, reduce, type StateOptions, type SupervisorState } from ".
 import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js";
 import { defaultDetectors, type DefaultDetectorOptions } from "./detectors/index.js";
 
+export const DEFAULT_ESCALATE_TIMEOUT_MS = 60_000;
+
+/**
+ * Races `work` against a timer. The timer is unref'd so a pending escalation cannot by itself
+ * hold the process open, and cleared on the winning path so it does not leak per intervention.
+ */
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} did not answer within ${ms}ms`)), ms);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export interface AttachOptions extends StateOptions {
   detectors: Detector[];
   policy: Policy;
@@ -12,6 +33,14 @@ export interface AttachOptions extends StateOptions {
    * available at all — without a human on the other end the ladder skips straight to abort.
    */
   onEscalate?: (question: string) => void | Promise<void>;
+  /**
+   * How long to wait on `onEscalate` before giving up on it. The handler runs inside the event
+   * loop, so an unbounded wait does not merely delay one intervention — the observer stops
+   * consuming events, never reaches the `abort` rung, and the looping agent it was supposed to
+   * stop burns its whole budget. The natural handler (prompt a human) blocks until someone
+   * types, so this bound is the difference between a supervisor and a deadlock.
+   */
+  escalateTimeoutMs?: number;
   /** Reported rather than thrown: a detector that throws must not take the session with it. */
   onError?: (where: string, err: Error) => void;
 }
@@ -25,10 +54,13 @@ export interface AttachOptions extends StateOptions {
  *  - **It cannot break the session.** Every detector and policy call is wrapped; a throw is
  *    reported and the observer keeps going. The supervisor is an observer, and an observer that
  *    can kill what it observes is worse than no observer.
- *  - **It never blocks the loop.** It reads a replayed buffer of the event stream (core's
- *    `EventStream` hands every consumer its own cursor), so a slow detector delays interventions
- *    and nothing else. Guidance is queued through `steer()` and lands at the next turn boundary,
- *    which is the only point where injecting a message is coherent.
+ *  - **It never applies backpressure to the loop.** It reads a replayed buffer of the event
+ *    stream (core's `EventStream` hands every consumer its own cursor), so an observer that is
+ *    slow *asynchronously* delays interventions and nothing else. Note the limit of that
+ *    guarantee: the observer shares one JS thread with the agent, so a detector that burns CPU
+ *    does stall the run. Detectors are expected to be cheap — that is what "heuristic, LLM-free"
+ *    buys. Guidance is queued through `steer()` and lands at the next turn boundary, which is
+ *    the only point where injecting a message is coherent.
  *
  * `force_replan`, `run_grader` and `checkpoint_rollback` are recorded but not applied in M4 —
  * they need the pre-tool hook, a grader, and git checkpoints respectively. The default policy
@@ -92,7 +124,17 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
               session.control.steer(intervention.message, "supervisor");
               break;
             case "escalate":
-              await opts.onEscalate?.(intervention.question);
+              if (opts.onEscalate === undefined) {
+                // the policy reached a rung the harness cannot perform: say so rather than
+                // recording an intervention that quietly does nothing
+                report("apply", new Error("escalate was reached with no onEscalate handler; nobody was asked"));
+                break;
+              }
+              await withTimeout(
+                Promise.resolve(opts.onEscalate(intervention.question)),
+                opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
+                "onEscalate",
+              );
               break;
             case "abort":
               session.control.abort();
@@ -124,6 +166,7 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   ladder?: Omit<LadderOptions, "capabilities">;
   capabilities?: Capabilities;
   onEscalate?: (question: string) => void | Promise<void>;
+  escalateTimeoutMs?: number;
   onError?: (where: string, err: Error) => void;
   pricing?: StateOptions["pricing"];
   windowSize?: number;
@@ -134,12 +177,16 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
  * `escalate` rung enabled exactly when an `onEscalate` handler was supplied.
  */
 export function supervise(session: Session, opts: SuperviseOptions = {}): Detachable {
-  const capabilities: Capabilities = { escalate: opts.onEscalate !== undefined, ...(opts.capabilities ?? {}) };
+  // the handler's presence is ground truth for the escalate rung, so it is applied *after* any
+  // caller-declared capabilities rather than before — declaring `escalate: true` with no handler
+  // would otherwise buy a rung that silently does nothing
+  const capabilities: Capabilities = { ...(opts.capabilities ?? {}), escalate: opts.onEscalate !== undefined };
   const attachOpts: AttachOptions = {
     detectors: defaultDetectors(opts),
     policy: new LadderPolicy({ ...(opts.ladder ?? {}), capabilities }),
   };
   if (opts.onEscalate !== undefined) attachOpts.onEscalate = opts.onEscalate;
+  if (opts.escalateTimeoutMs !== undefined) attachOpts.escalateTimeoutMs = opts.escalateTimeoutMs;
   if (opts.onError !== undefined) attachOpts.onError = opts.onError;
   if (opts.pricing !== undefined) attachOpts.pricing = opts.pricing;
   if (opts.windowSize !== undefined) attachOpts.windowSize = opts.windowSize;

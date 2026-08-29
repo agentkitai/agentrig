@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Decision, EventPayload, HarnessEvent, Intervention, PermissionRequest, Signal, Usage } from "./events.js";
+import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
+import { SupervisorRecord } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -57,11 +58,6 @@ export interface SessionSummary {
   /** Set when the session failed before it could write any event (e.g. resume lock held). */
   error?: string;
 }
-
-/** The only payloads an out-of-band observer may append. Core stays unaware of what they mean. */
-export type SupervisorRecord =
-  | { type: "supervisor.signal"; signal: Signal }
-  | { type: "supervisor.intervention"; intervention: Intervention };
 
 export interface SessionControl {
   /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
@@ -590,7 +586,20 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         gate.resume();
       },
       record: (payload) => {
-        if (!ended) void emit(payload);
+        if (ended) return;
+        // validated, not trusted: `Detector` is a public interface, and one third-party detector
+        // returning confidence 1.4 or NaN would otherwise write a line the store can never read
+        // back. Dropped-and-reported beats a corrupted append-only log.
+        const parsed = SupervisorRecord.safeParse(payload);
+        if (!parsed.success) {
+          void emit({
+            type: "error",
+            message: `supervisor record rejected: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            fatal: false,
+          });
+          return;
+        }
+        void emit(parsed.data);
       },
     },
     done,

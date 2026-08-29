@@ -18,6 +18,10 @@ export interface StallOptions {
  * "No new tool kind" is the part that keeps this from firing on legitimate reading: a turn that
  * reaches for a tool it has not used before is exploring, even if it wrote nothing. A turn that
  * re-runs the same two tools and changes no file is spinning.
+ *
+ * The test-run branch only counts runs that are **still failing**, and resets whenever a file
+ * changes. An unchanged pass count on a *green* suite is the success condition — re-verifying
+ * that a refactor kept the suite green is the shape this would otherwise have called a stall.
  */
 export function stallDetector(opts: StallOptions = {}): Detector {
   const turnLimit = opts.turns ?? 3;
@@ -38,6 +42,9 @@ export function stallDetector(opts: StallOptions = {}): Detector {
 
       if (event.type === "file.changed") {
         changedThisTurn = true;
+        // work landed between two runs, so an identical count across them is not "stuck"
+        identicalRuns = 0;
+        lastCounts = null;
         return null;
       }
 
@@ -50,6 +57,12 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       if (event.type === "tool.result") {
         const counts = parseTestCounts(event.display);
         if (counts === null) return null;
+        if (counts.failed === 0) {
+          // a green suite repeating its count is confirmation, not a stall
+          identicalRuns = 0;
+          lastCounts = null;
+          return null;
+        }
         const key = `${counts.passed}/${counts.failed}`;
         identicalRuns = key === lastCounts ? identicalRuns + 1 : 1;
         lastCounts = key;

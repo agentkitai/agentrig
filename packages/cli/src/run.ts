@@ -103,15 +103,6 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
 }
 
 export async function runCommand(task: string, opts: RunOptions): Promise<void> {
-  let provider: ModelProvider;
-  try {
-    provider = buildProvider(opts);
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exitCode = 1;
-    return;
-  }
-
   let budget: Budget;
   let maxTokensPerTurn: number;
   let supervisorSoft: number;
@@ -138,6 +129,18 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     maxTokensPerTurn = positiveNumber("--max-tokens-per-turn", opts.maxTokensPerTurn);
     supervisorSoft = positiveNumber("--supervisor-soft", opts.supervisorSoft);
     if (supervisorSoft > 1) throw new Error(`--supervisor-soft is a fraction of the budget, got "${opts.supervisorSoft}"`);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Flags are validated *before* the provider is built: they are cheap, local checks, and a
+  // typo'd budget flag should say so rather than being masked by a missing-credential error
+  // from a provider the run was never going to reach.
+  let provider: ModelProvider;
+  try {
+    provider = buildProvider(opts);
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;
@@ -244,7 +247,19 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = summary.reason === "done" ? 0 : 1;
   } finally {
     process.removeListener("SIGINT", onSigint);
-    // let the observer drain what it has not seen yet before the process exits
-    await supervisor?.done;
+    // Let the observer drain what it has not seen yet — but bounded. If the render loop above
+    // exited early (EPIPE under `| head`, a throw in renderEvent) the session may still be
+    // running, and an unbounded join would hold the process for its whole remaining lifetime.
+    if (supervisor !== null) {
+      // On the normal path the stream has closed and this resolves immediately. detach() comes
+      // *after* the race, not before: detaching first would cut short the tail of events the
+      // observer still had buffered.
+      const timedOut = Symbol("timeout");
+      const raced = await Promise.race([
+        supervisor.done,
+        new Promise<symbol>((r) => setTimeout(() => r(timedOut), 2000).unref()),
+      ]);
+      if (raced === timedOut) supervisor.detach();
+    }
   }
 }

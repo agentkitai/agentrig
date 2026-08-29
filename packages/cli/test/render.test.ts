@@ -20,6 +20,42 @@ describe("renderEvent", () => {
     expect(line).toContain('"keep going"');
   });
 
+  it("renders supervisor.signal with its type, confidence and evidence", () => {
+    const e = HarnessEvent.parse({
+      seq: 14,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "supervisor.signal",
+      signal: { type: "loop", confidence: 0.83, evidence: ["called bash 3x", "inputHash=deadbeef"], window: [4, 9] },
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("loop");
+    expect(line).toContain("0.83");
+    expect(line).toContain("called bash 3x");
+    expect(line).toContain("inputHash=deadbeef");
+  });
+
+  it("renders supervisor.intervention for each kind the ladder can produce", () => {
+    const kinds = [
+      { type: "inject_guidance", message: "stop repeating yourself" },
+      { type: "force_replan" },
+      { type: "escalate", question: "how should this proceed?" },
+      { type: "abort", reason: "loop persisted" },
+    ];
+    for (const [i, intervention] of kinds.entries()) {
+      const e = HarnessEvent.parse({
+        seq: 20 + i,
+        sessionId: "abc",
+        ts: 1_700_000_000_000,
+        type: "supervisor.intervention",
+        intervention,
+      });
+      const line = renderEvent(e);
+      expect(line).toContain("supervisor.intervention");
+      expect(line).toContain(intervention.type);
+    }
+  });
+
   it("renders context.compact", () => {
     const e = HarnessEvent.parse({
       seq: 13,

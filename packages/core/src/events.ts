@@ -66,6 +66,19 @@ export const Intervention = z.discriminatedUnion("type", [
 ]);
 export type Intervention = z.infer<typeof Intervention>;
 
+/**
+ * The only payloads an out-of-band observer may append through `SessionControl.record`.
+ * Validated there: `serializeEvent` is a bare `JSON.stringify`, so an unvalidated payload (a
+ * detector emitting `confidence: 1.4`, or `NaN`, which stringifies to `null`) would write a line
+ * that `SessionStore.read` then refuses — permanently breaking `sessions show`, resume, and
+ * `memory ingest` for that session, with no repair path because `raw/` is immutable.
+ */
+export const SupervisorRecord = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
+  z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+]);
+export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
+
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),

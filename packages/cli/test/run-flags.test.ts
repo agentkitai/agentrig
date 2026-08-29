@@ -1,0 +1,93 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runCommand, type RunOptions } from "../src/run.ts";
+
+/**
+ * The supervisor CLI surface had no tests at all. These drive `runCommand` directly with no
+ * provider credentials, so every case fails fast at provider construction — which is exactly
+ * what makes them useful: a flag that fails *validation* reports its own message and never
+ * reaches the provider, so the two error paths are distinguishable.
+ */
+let root: string;
+let errors: string[];
+let logs: string[];
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "agentrig-cli-"));
+  errors = [];
+  logs = [];
+  vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => void errors.push(a.join(" ")));
+  vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.join(" ")));
+  process.exitCode = undefined;
+});
+afterEach(async () => {
+  vi.restoreAllMocks();
+  process.exitCode = undefined;
+  await rm(root, { recursive: true, force: true });
+});
+
+function opts(overrides: Partial<RunOptions> = {}): RunOptions {
+  return {
+    provider: "anthropic",
+    model: "m",
+    root,
+    headless: true,
+    maxTurns: "10",
+    maxTokensPerTurn: "1024",
+    supervisorSoft: "0.8",
+    ...overrides,
+  } as RunOptions;
+}
+
+const ranWithoutCredentials = (): boolean => errors.some((e) => /api key|API key|ANTHROPIC/i.test(e));
+
+describe("--supervisor-soft validation", () => {
+  it("accepts a fraction in (0, 1]", async () => {
+    for (const soft of ["0.5", "0.8", "1"]) {
+      errors = [];
+      await runCommand("t", opts({ supervise: true, supervisorSoft: soft }));
+      // it got past validation: the only complaint is the missing credential
+      expect(errors.some((e) => e.includes("--supervisor-soft"))).toBe(false);
+      expect(ranWithoutCredentials()).toBe(true);
+    }
+  });
+
+  it("rejects a fraction above 1, naming the flag", async () => {
+    await runCommand("t", opts({ supervise: true, supervisorSoft: "1.5" }));
+    expect(errors.some((e) => e.includes("--supervisor-soft") && e.includes("fraction"))).toBe(true);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("rejects zero, negatives and non-numbers", async () => {
+    for (const bad of ["0", "-1", "abc", "", " ", "NaN", "Infinity"]) {
+      errors = [];
+      await runCommand("t", opts({ supervise: true, supervisorSoft: bad }));
+      expect(errors.some((e) => e.includes("--supervisor-soft"))).toBe(true);
+      expect(process.exitCode).toBe(1);
+    }
+  });
+
+  it("is validated even when --supervise is off, so a typo is never silently carried", async () => {
+    await runCommand("t", opts({ supervisorSoft: "nope" }));
+    expect(errors.some((e) => e.includes("--supervisor-soft"))).toBe(true);
+  });
+});
+
+describe("budget flag validation still holds alongside the supervisor flags", () => {
+  it("rejects a non-positive --max-turns", async () => {
+    await runCommand("t", opts({ maxTurns: "0" }));
+    expect(errors.some((e) => e.includes("--max-turns"))).toBe(true);
+  });
+
+  it("requires --price-in and --price-out together", async () => {
+    await runCommand("t", opts({ priceIn: "3" }));
+    expect(errors.some((e) => e.includes("--price-in and --price-out"))).toBe(true);
+  });
+
+  it("requires pricing for --max-usd", async () => {
+    await runCommand("t", opts({ maxUsd: "5" }));
+    expect(errors.some((e) => e.includes("--max-usd requires"))).toBe(true);
+  });
+});

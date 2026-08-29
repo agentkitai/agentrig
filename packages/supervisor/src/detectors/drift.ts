@@ -6,19 +6,40 @@ import { signal } from "../types.js";
 export interface DriftOptions {
   /** Out-of-scope files before it fires. 1 is right for a tight plan, higher for a loose one. */
   strays?: number;
+  /** Distinct stray paths remembered, so a very long session stays bounded. */
+  maxReported?: number;
 }
 
 /**
  * True when `path` sits inside `scope`. A scope entry is either an exact path or a directory
  * prefix — `src/` (or `src`) covers `src/a/b.ts`. Deliberately not globs: a plan that has to
  * write `**` to name a directory invites scopes so broad drift can never fire.
+ *
+ * Any entry that normalizes to nothing — `.`, `""`, `/`, `./` — means "the whole repo" and
+ * matches everything. Getting this wrong is worse than it sounds: an earlier version left `"."`
+ * as a literal segment, so the most natural way to declare a repo-wide scope made *every* file a
+ * drift stray and walked the ladder to abort. `..` is resolved before comparing, so a path that
+ * climbs out of the scope is not counted as inside it.
  */
+function normalize(p: string): string {
+  const slashed = p.replace(/\\/g, "/");
+  const segments: string[] = [];
+  for (const seg of slashed.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") segments.pop();
+    else segments.push(seg);
+  }
+  return segments.join("/");
+}
+
 export function inScope(path: string, scope: string[]): boolean {
-  const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
-  const target = norm(path);
+  const target = normalize(path);
   return scope.some((entry) => {
-    const s = norm(entry);
-    return s === "" || target === s || target.startsWith(`${s}/`);
+    const s = normalize(entry);
+    // an entry that normalizes away (".", "", "/", "./") is repo-wide — NOT a scope that
+    // matches nothing, which is the bug this replaced
+    if (s === "") return true;
+    return target === s || target.startsWith(`${s}/`);
   });
 }
 
@@ -37,8 +58,9 @@ export function declaredScope(plan: PlanItem[]): string[] {
  */
 export function driftDetector(opts: DriftOptions = {}): Detector {
   const strays = opts.strays ?? 1;
+  const maxReported = opts.maxReported ?? 2048;
   const reported = new Set<string>();
-  let pending: string[] = [];
+  let pending: Array<{ path: string; seq: number }> = [];
 
   return {
     id: "drift",
@@ -49,15 +71,21 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
       if (inScope(event.path, scope) || reported.has(event.path)) return null;
 
       reported.add(event.path);
-      pending.push(event.path);
+      // bounded: a session touching tens of thousands of files must not grow this forever
+      while (reported.size > maxReported) {
+        const oldest = reported.values().next();
+        if (oldest.done === true) break;
+        reported.delete(oldest.value);
+      }
+      pending.push({ path: event.path, seq: event.seq });
       if (pending.length < strays) return null;
 
-      const paths = pending;
+      const strayed = pending;
       pending = [];
       return signal("drift", 0.6, [
-        `changed ${paths.join(", ")}, which no plan item declares`,
+        `changed ${strayed.map((p) => p.path).join(", ")}, which no plan item declares`,
         `declared scope: ${scope.join(", ")}`,
-      ], [state.recent[0]?.seq ?? event.seq, event.seq]);
+      ], [strayed[0]!.seq, event.seq]);
     },
   };
 }
