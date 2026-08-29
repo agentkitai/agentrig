@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
+import { basename } from "node:path";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { PAGE_DIR, pagePath, serializePage } from "./page.js";
 import { applyPinChecks, readPins, recheckPins } from "./pins.js";
+import { backendRef, type MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
 import type { Attempt, PageType } from "./types.js";
 
@@ -48,6 +50,8 @@ export interface IngestResult {
   factCount: number;
   /** Pins on pages this ingest touched whose claim no longer holds (PLAN §3.6). */
   pinConflicts: Array<{ page: string; claim: string; reason: string }>;
+  /** Contradictions an optional backend reported against these facts (PLAN §3.8). */
+  backendConflicts: Array<{ fact: string; existing: string; detail?: string }>;
   /** True when this session was already ingested and the new log is a prefix-superset. */
   supersededPrevious: boolean;
   skipped: boolean;
@@ -219,6 +223,10 @@ export interface IngestOptions {
   maxSpanChars?: number;
   maxTokens?: number;
   now?: () => number;
+  /** Optional sink (PLAN §3.8). Wrap with `tolerant()` — the wiki must never wait on it. */
+  backend?: MemoryBackend;
+  /** Project name for backend scoping; defaults to the wiki root's directory name. */
+  project?: string;
 }
 
 async function readEvents(logPath: string): Promise<unknown[]> {
@@ -271,6 +279,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
           supersededPrevious: false,
           skipped: true,
           pinConflicts: [],
+          backendConflicts: [],
         };
       }
       supersededPrevious = true;
@@ -434,6 +443,20 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     });
   }
 
+  // PLAN §3.8: an optional backend is a sink and an extra recall source, never the truth. It
+  // runs after the wiki is already written, so a slow or broken backend cannot lose a fact.
+  const backendConflicts: IngestResult["backendConflicts"] = [];
+  if (opts.backend !== undefined && facts.length > 0) {
+    const project = opts.project ?? (basename(store.root.replace(/\/(wiki)?$/, "")) || "default");
+    const sourceRef = { ref, project };
+    if (opts.backend.conflicts !== undefined) {
+      for (const c of await opts.backend.conflicts(facts)) {
+        backendConflicts.push(c.detail === undefined ? { fact: c.fact, existing: c.existing } : { fact: c.fact, existing: c.existing, detail: c.detail });
+      }
+    }
+    await opts.backend.onIngest(facts, sourceRef);
+  }
+
   // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
   // happened — not only when a human remembers to run `memory lint`
   const touched = new Set(pagesWritten);
@@ -460,6 +483,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     supersededPrevious,
     skipped: false,
     pinConflicts,
+    backendConflicts,
   };
 }
 

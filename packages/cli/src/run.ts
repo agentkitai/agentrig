@@ -18,6 +18,7 @@ import {
 import { renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { FileMemoryStore, FileRawStore, indexInjection, memoryTools } from "@agentkitai/agentrig-memory";
+import { openBackend } from "./memory.js";
 import { join } from "node:path";
 
 export { DEFAULT_ANTHROPIC_MODEL };
@@ -145,7 +146,12 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     memoryIndex = await indexInjection(memoryStore).catch(() => "");
     // the injected index tells the model to call memory_read/memory_search, so the tools have
     // to actually be registered — otherwise it is advertising tools that do not exist
-    memoryToolset = memoryTools({ store: memoryStore, raw: new FileRawStore({ root: opts.memory }) });
+    const backend = openBackend();
+    memoryToolset = memoryTools({
+      store: memoryStore,
+      raw: new FileRawStore({ root: opts.memory }),
+      ...(backend === null ? {} : { backend }),
+    });
   }
 
   const interactive = !opts.headless && process.stdin.isTTY === true;

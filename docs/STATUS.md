@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M3b**
+Current milestone: **M4**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -9,8 +9,8 @@ Current milestone: **M3b**
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
 | 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
-| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | next |
-| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
+| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
+| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | next |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | |
@@ -250,6 +250,26 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   frontmatter list items survive commas and unknown keys survive a rewrite; `indexInjection`'s cap
   covers the header and tail; `applyPinChecks` merges instead of replacing; `memory search -k`
   validates its argument; `memory show` reports a non-page instead of dumping a stack trace.
+
+## M3b notes
+
+- `MemoryBackend` is a sink and an *extra* recall source, never the truth and never a
+  dependency. With nothing configured there is no backend at all — `loreConfigFromEnv` returns
+  null unless both `LORE_API_URL` and `LORE_API_KEY` are set, so the no-infra default stands.
+- **A backend can never block or break the wiki.** `tolerant()` wraps one so every failure
+  becomes a reported no-op (writes drop, reads return empty), and the backend call in ingest runs
+  *after* the wiki is already written. A test asserts an exploding backend still leaves the
+  session fully ingested.
+- **Union, never replacement.** `withBackendRecall` appends backend hits after every local hit
+  and drops any that duplicate a page already returned, so enabling a backend can only add.
+  Backend page tags (`<pageType>/<slug>`) are normalized to wiki paths before comparing.
+- **Provenance both ways**: a Lore memory carries `metadata.agentrig = <project>/<type>/<slug>`
+  plus `agentrig` / `project:` / `session:` / `page:` tags, and backend-only hits surface to the
+  agent as `lore:<memory-id>` so a fact can be traced back.
+- Ingest reports `backendConflicts` from Lore's contradiction check alongside the wiki's own pin
+  conflicts; the wiki lint still runs regardless (the full dream pass is M5).
+- `promote` maps a wiki page to one shared-scope Lore memory (private→shared). Requests carry a
+  bounded timeout so a slow backend cannot stall the harness.
 
 ## Decided
 

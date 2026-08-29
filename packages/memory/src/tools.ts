@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AnyTool } from "@agentkitai/agentrig-core";
 import { pagePath, serializePage } from "./page.js";
-import { unionRetrieve } from "./search.js";
+import { unionRetrieve, withBackendRecall } from "./search.js";
+import type { MemoryBackend } from "./backend.js";
 import { applyPinChecks, readPins, recheckPins } from "./pins.js";
 import type { FileMemoryStore } from "./store.js";
 import type { FileRawStore } from "./raw.js";
@@ -21,6 +22,8 @@ export interface MemoryToolsOptions {
   raw?: FileRawStore;
   sessionId?: string;
   now?: () => number;
+  /** Optional backend whose recall is unioned in (PLAN §3.8). Wrap with `tolerant()`. */
+  backend?: MemoryBackend;
 }
 
 const SearchInput = z.object({
@@ -83,13 +86,23 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
     inputSchema: SearchInput,
     permission: "read",
     execute: async (input: z.infer<typeof SearchInput>) => {
-      const hits = unionRetrieve(await store.index(), await store.pages(), input.query, input.k ?? 8);
+      const k = input.k ?? 8;
+      const local = unionRetrieve(await store.index(), await store.pages(), input.query, k);
+      // backend recall is unioned in after the local result, never in place of it
+      const backendHits = opts.backend === undefined ? [] : await opts.backend.recall(input.query, k);
+      const hits = withBackendRecall(local, backendHits, opts.backend?.id ?? "backend");
       if (hits.length === 0) {
         return { output: [], display: `no memory matches for ${JSON.stringify(input.query)}` };
       }
       return {
-        output: hits.map((h) => ({ path: h.page.path, via: h.via, snippet: h.snippet })),
-        display: hits.map((h) => `${h.page.path} [${h.via}]\n  ${h.snippet}`).join("\n"),
+        output: hits.map((h) =>
+          h.via === "backend"
+            ? { ref: h.ref, via: h.via, snippet: h.text }
+            : { path: h.page.path, via: h.via, snippet: h.snippet },
+        ),
+        display: hits
+          .map((h) => (h.via === "backend" ? `${h.ref} [backend]\n  ${h.text}` : `${h.page.path} [${h.via}]\n  ${h.snippet}`))
+          .join("\n"),
       };
     },
   };

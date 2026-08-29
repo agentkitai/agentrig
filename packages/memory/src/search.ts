@@ -1,4 +1,5 @@
-import type { IndexEntry, WikiPage } from "./types.js";
+import { PAGE_DIR } from "./page.js";
+import type { IndexEntry, PageType, WikiPage } from "./types.js";
 
 /**
  * BM25 over page bodies (PLAN §3.2). No API key, no embeddings — an `Embedder` seam can add
@@ -131,6 +132,53 @@ export function selectFromIndex(entries: IndexEntry[], query: string, limit?: nu
 export interface UnionHit extends SearchHit {
   /** Why this page is in the result: index selection, BM25, or both. */
   via: "index" | "bm25" | "both";
+}
+
+/** Translate a backend's `<pageType>/<slug>` tag into the wiki path it corresponds to. */
+export function wikiPathForBackendPage(tag: string): string {
+  const slash = tag.lastIndexOf("/");
+  if (slash === -1) return tag;
+  const type = tag.slice(0, slash) as PageType;
+  const slug = tag.slice(slash + 1).replace(/\.md$/, "");
+  const dir = PAGE_DIR[type] ?? type;
+  return `${dir}/${slug}.md`;
+}
+
+/** A recall hit from an optional backend that maps to no local page (PLAN §3.8). */
+export interface BackendOnlyHit {
+  via: "backend";
+  /** Provenance ref, e.g. `lore:<memory-id>`. */
+  ref: string;
+  text: string;
+  score: number;
+  page?: string;
+}
+
+export type RetrievalHit = UnionHit | BackendOnlyHit;
+
+/**
+ * Fold optional backend recall into a local result set (PLAN §3.8): union only, never a
+ * replacement. A backend hit that names a page we already returned is dropped as a duplicate;
+ * one that names an unknown page is appended as backend-only, after every local hit — so
+ * enabling a backend can only add, never displace what the wiki itself found.
+ */
+export function withBackendRecall(
+  local: UnionHit[],
+  backendHits: Array<{ id: string; text: string; score: number; page?: string }>,
+  backendId: string,
+): RetrievalHit[] {
+  const seen = new Set(local.map((h) => h.page.path));
+  const extra: BackendOnlyHit[] = [];
+  for (const hit of backendHits) {
+    // a backend page tag is `<pageType>/<slug>` (e.g. concept/retry-policy) while a wiki path is
+    // `<dir>/<slug>.md` (concepts/retry-policy.md) — normalize before comparing
+    if (hit.page !== undefined && seen.has(wikiPathForBackendPage(hit.page))) continue;
+    const b: BackendOnlyHit = { via: "backend", ref: `${backendId}:${hit.id}`, text: hit.text, score: hit.score };
+    if (hit.page !== undefined) b.page = hit.page;
+    extra.push(b);
+  }
+  extra.sort((a, b) => b.score - a.score);
+  return [...local, ...extra];
 }
 
 /**

@@ -13,4 +13,6 @@ export * from "./search.js";
 export * from "./raw.js";
 export * from "./pins.js";
 export * from "./ingest.js";
+export * from "./backend.js";
+export * from "./lore.js";
 export * from "./tools.js";
