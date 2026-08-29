@@ -183,6 +183,62 @@ interface CompactionStrategy {
 
 v1: summarize-older-turns when past 70% of window, keep last N tool results verbatim. Emits `context.compact`.
 
+### 2.9 Subscription auth (experimental `openai-chatgpt` provider)
+
+**Context.** The default provider auth is bring-your-own-key/endpoint (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, or `--base-url` to any OpenAI-compatible server). A ChatGPT Plus/Pro
+subscription does **not** include API access; established third-party harnesses (OpenClaw,
+Hermes) instead reuse the subscription through the same "Sign in with ChatGPT" **device-code
+OAuth** flow that OpenAI's Codex CLI uses, then call a ChatGPT backend rather than
+`api.openai.com`. This unblocks dogfooding on an existing subscription and is a real
+"bring your subscription" feature.
+
+**Decision (M2.5), pending the spike.** Add an **experimental, opt-in** `openai-chatgpt`
+provider — never a default. It is gated behind an explicit `--provider openai-chatgpt` flag and
+documented as experimental. Guardrails, all locked regardless of spike outcome:
+
+- **OpenAI only.** Anthropic **explicitly prohibits** third-party use of Claude Pro/Max
+  credentials, so there is deliberately no Claude equivalent. The docs must say why the two
+  providers differ, rather than implying "bring any subscription."
+- **Honest identification, never impersonation-by-default.** See the client-identity note below.
+- **Undocumented backend.** The endpoint and protocol are reverse-engineered and unversioned;
+  the provider tracks them best-effort and is expected to break. It never becomes core auth.
+- **User's own account, eyes open.** OAuth is unsanctioned-but-not-known-prohibited for
+  third-party tools (gray area); each user opts in for their own account. AgentRig never ships
+  or logs subscription tokens; they live in the user's own config/env like any credential.
+
+**Spike verdict (2026-08-29, from the Apache-2.0 `openai/codex` source).**
+
+- **A new provider, not a variant of the M2 adapter.** The subscription-backed endpoint is
+  `POST https://chatgpt.com/backend-api/codex/responses` — the **Responses API**, not Chat
+  Completions. It requires `Authorization: Bearer <oauth access token>` plus an
+  `originator: codex_cli_rs` header, a Codex `User-Agent`, and `ChatGPT-Account-ID`. So it needs:
+  a Responses request/response mapper, SSE parsing, and a token-lifecycle manager (device-code
+  login against `auth.openai.com`, plus **refresh with rotation persisted to writable storage**).
+- **Client identity: AgentRig identifies itself.** The spike reported that the backend
+  whitelists `originator` and 403s non-Codex values, and the first implementation copied
+  `codex_cli_rs` on that basis. That was wrong: other third-party harnesses document sending
+  their *own* "attribution headers" (`originator`, `version`, `User-Agent`), i.e. they
+  self-identify, and nobody had tested whether an honest identifier is accepted. AgentRig
+  therefore sends `originator: agentrig`. If the endpoint restricts to first-party clients,
+  the resulting 403 is the correct answer to surface — claiming to be another vendor's client
+  to defeat an access control is not something the harness does by default, and not something
+  an autonomous agent should perform. The header is configurable for users who decide otherwise
+  on their own accounts.
+- **Effort:** medium — a new adapter (days to ~2 weeks); the token lifecycle and Responses
+  mapping are the real work, portable from Codex since it is Apache-2.0.
+- **Unattended cloud use:** a one-time device-code login yields a token bundle, but a *static*
+  capture dies at access-token expiry (~hours); durable runs need us to refresh the (rotating)
+  refresh token in writable storage with a single owner to avoid refresh races.
+- **ToS:** OpenAI is currently **silent** (no explicit prohibition found; tacit "use your
+  subscription wherever you like"); **Anthropic explicitly banned and server-side-enforced the
+  equivalent for Claude in Jan–Feb 2026** — the live precedent that a vendor flips from silence
+  to enforcement fast. This is a per-user, own-account judgment call, made with eyes open.
+
+Status: spike complete; **build-vs-defer is a human decision.** It does **not** shortcut
+dogfooding — a new adapter is days of work vs. minutes for metered credits — so it is a
+deliberate "bring your subscription" feature, not the way to unblock M3.
+
 ---
 
 ## 3. `memory` — an LLM Wiki the agent maintains about the project
@@ -468,6 +524,7 @@ Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | the spine works before any model call |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | end-to-end task completion; start dogfooding on the repo itself |
 | 2 | OpenAI-compatible adapter, compaction, resume | provider abstraction is real; long sessions survive |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (spike first — §2.9) | dogfood on an existing subscription instead of metered API credits; a real "bring your subscription" option |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest (coverage plan, reserve/placeholder), `index.md` injection, index ∪ BM25 search, attempts ledger, pins | every session compounds into the wiki; retrieval works index-first |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | the wiki syncs into shared cross-agent memory without changing the no-infra default |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | stalls and loops get caught at ~zero cost |
@@ -489,6 +546,7 @@ Exit criterion for each milestone: the harness is used to build the next milesto
 - Supervisor heuristics first, LLM only on escalation
 - Dream = the wiki's lint pass, scheduled; output is a new directory + report; review mode default; single-session facts never promoted to global
 - Lore is an optional `MemoryBackend`, never the source of truth; AgentLens is a future sink for the event stream (observability), not a memory dependency
+- Provider auth is bring-your-own-key/endpoint by default; `openai-chatgpt` subscription auth (§2.9) is experimental and opt-in, OpenAI-only (Anthropic prohibits the equivalent), and never core auth
 
 ## 8. Open questions
 

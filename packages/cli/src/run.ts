@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import {
   AnthropicProvider,
   OpenAICompatibleProvider,
+  OpenAIChatGPTProvider,
   createAgent,
   builtinTools,
   defaultRules,
@@ -62,7 +63,15 @@ function buildProvider(opts: RunOptions): ModelProvider {
       ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
     });
   }
-  throw new Error(`unknown provider "${opts.provider}" (anthropic | openai)`);
+  if (opts.provider === "openai-chatgpt") {
+    if (opts.modelExplicit !== true) {
+      throw new Error("--model is required with --provider openai-chatgpt (e.g. gpt-5.6-sol)");
+    }
+    // experimental subscription auth; tokens come from `agentrig login openai-chatgpt`
+    console.error("Warning: --provider openai-chatgpt is experimental and uses an undocumented ChatGPT backend.");
+    return new OpenAIChatGPTProvider({ model: opts.model });
+  }
+  throw new Error(`unknown provider "${opts.provider}" (anthropic | openai | openai-chatgpt)`);
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -178,8 +187,13 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   process.on("SIGINT", onSigint);
   try {
     for await (const e of session.events) {
-      if (opts.json) console.log(JSON.stringify(e));
-      else if (e.type !== "model.delta") console.log(renderEvent(e));
+      if (opts.json) {
+        console.log(JSON.stringify(e));
+        // machine consumers read stdout; humans tailing stderr still deserve fatal errors
+        if (e.type === "error" && e.fatal) console.error(`fatal: ${e.message}`);
+      } else if (e.type !== "model.delta") {
+        console.log(renderEvent(e));
+      }
     }
     const summary = await session.done;
     if (summary.error !== undefined) console.error(summary.error);

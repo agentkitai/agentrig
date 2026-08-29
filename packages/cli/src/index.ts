@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL, runCommand, type RunOptions } from "./run.js";
+import { loginCommand } from "./login.js";
 
 const program = new Command();
 program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
@@ -11,7 +12,11 @@ function withRunOptions(cmd: Command): Command {
   return cmd
     .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
     .option("--json", "emit raw event JSONL to stdout")
-    .option("-p, --provider <provider>", "model provider: anthropic | openai (OpenAI-compatible)", "anthropic")
+    .option(
+      "-p, --provider <provider>",
+      "model provider: anthropic | openai (OpenAI-compatible) | openai-chatgpt (experimental subscription auth)",
+      "anthropic",
+    )
     .option("-m, --model <model>", "model id", process.env.AGENTRIG_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
     .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)")
     .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
@@ -48,6 +53,12 @@ withRunOptions(
 function collect(value: string, prev: string[]): string[] {
   return [...prev, value];
 }
+
+program
+  .command("login <provider>")
+  .description("Sign in to a subscription provider (experimental: openai-chatgpt device-code OAuth)")
+  .option("--export", "print the stored token bundle (to seed AGENTRIG_OPENAI_CHATGPT_TOKEN) instead of signing in")
+  .action(async (provider: string, opts: { export?: boolean }) => loginCommand(provider, opts));
 
 const sessions = program.command("sessions").description("Inspect session event logs");
 

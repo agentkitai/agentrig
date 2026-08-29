@@ -8,4 +8,7 @@ export * from "./agent.js";
 export * from "./compaction.js";
 export * from "./providers/anthropic.js";
 export * from "./providers/openai.js";
+export * from "./providers/openai-chatgpt.js";
+export * from "./providers/openai-chatgpt-auth.js";
+export * from "./providers/retry.js";
 export * from "./tools/index.js";

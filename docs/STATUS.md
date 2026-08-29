@@ -7,6 +7,7 @@ Current milestone: **M3**
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | done (2026-08-29) |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
@@ -47,11 +48,14 @@ Current milestone: **M3**
 ## Exit-criterion debt: dogfooding
 
 PLAN §6's exit criterion ("the harness is used to build the next milestone") is **not yet met**:
-M1 and M2 were built without running the harness, because the dev environment has no model API
-key — only the replay tooling (`pnpm demo`, `sessions ls|show`) has been exercised for real.
-M3 must be built through `agentrig run` (worker sessions for real subtasks, resume and
-compaction under real load) once `ANTHROPIC_API_KEY` (or an OpenAI-compatible endpoint) is
-available in the environment.
+M1 and M2 were built without running the harness. Two live smoke attempts against
+`gpt-5.6-sol` (2026-08-29, reports on PR #2) got as far as real streaming requests: the first
+was blocked by the environment's network allowlist, the second by an exhausted OpenAI credit
+balance. Both validated the error path live — well-formed fatal `error` events carrying the
+provider's response verbatim, `session.end reason=error`, exit 1, clean log replay — and the
+second prompted retry/backoff in the adapters (below). M3 must be built through `agentrig run`
+(worker sessions for real subtasks, resume and compaction under real load) once the OpenAI
+account has credits.
 
 ## M2 notes
 
@@ -81,6 +85,78 @@ available in the environment.
   once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
   resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
   raising the budget.
+
+## Post-M2 hardening (from live smoke findings)
+
+- All three provider adapters (and the ChatGPT auth/refresh calls) retry transient HTTP failures (429 rate limits, 5xx, network errors) with
+  exponential backoff honoring `Retry-After`, capped at 3 retries / 30s, abort-aware; a 429
+  that is quota/billing exhaustion fails immediately (retrying can't help). `RetryPolicy` is
+  per-provider config.
+- Headless `--json` mode mirrors fatal error events to stderr so a human tailing the process
+  sees them without parsing the event stream.
+
+## M2.5 notes
+
+- `OpenAIChatGPTProvider` speaks the Responses API against
+  `chatgpt.com/backend-api/codex/responses` with self-identifying attribution headers
+  (`originator: agentrig`, own User-Agent — see §2.9), authed by the OAuth access token. Whether
+  the endpoint accepts a non-first-party originator is the open live question; a 403 there is a
+  real answer, not a thing to route around.
+  `OpenAIChatGPTAuth` owns the device-code login, an atomic token store (default
+  `~/.agentrig/openai-chatgpt-auth.json`, `AGENTRIG_OPENAI_CHATGPT_AUTH` to override), and
+  proactive + 401-forced refresh that persists refresh-token rotation. CLI:
+  `agentrig login openai-chatgpt` then `run --provider openai-chatgpt --model gpt-5.6-sol`.
+- **Not yet validated live.** The endpoint/headers/payload and the device-code and refresh JSON
+  field names are read from the Apache-2.0 openai/codex source and RFC-8628-style conventions;
+  everything is unit-tested with injected fetch (request mapping, SSE parsing, refresh/rotation,
+  expiry, device poll), but the first real `login` + `run` against OpenAI is the live check.
+  Expect small field-name fixes on first contact; the provider is experimental by design.
+- **Auth reuse for cloud/unattended runs.** Authorize once, then seed every session: run
+  `agentrig login openai-chatgpt` on any machine, `agentrig login openai-chatgpt --export` to
+  print the bundle, and set it as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the environment. A fresh
+  container with no token file reads that env var (AgentRig's own shape *or* a pasted Codex
+  `~/.codex/auth.json`), and within-session refresh still writes to the file. The interactive
+  browser approval is inherently human and one-time — the harness cannot and should not perform
+  it; the seed makes it a once-per-token step, not once-per-session.
+- Hardening from the M2.5 adversarial review: every token response is validated before it may
+  overwrite a stored credential (a drifted 200 fails loudly instead of writing `undefined` into
+  an unrecoverable loop — the endpoint is expected to drift, so this is the load-bearing check);
+  the token file is written via `O_EXCL` under a random temp name, so it can never follow a
+  planted symlink or inherit a loosened mode, and the temp is removed if the rename fails; a
+  corrupt token file falls through to the env seed with a one-time warning instead of bricking
+  the provider; the provider and all auth calls go through `fetchWithRetries`, and a refresh
+  failure distinguishes a rejected grant ("re-run login") from a transient outage
+  (`TransientAuthError`, credentials still good); quota-vs-rate-limit classification is
+  structured rather than substring-matched (a rate limit that merely links to a billing page is
+  retried, not hard-failed); `Retry-After` accepts the HTTP-date form; response bodies are
+  redacted before they enter an error message, since errors reach the session JSONL; an
+  unrecognised `incomplete_details.reason` surfaces as an `error` stop with `raw` rather than a
+  clean `end_turn`; a missing `call_id` gets a synthesized id so tool pairing holds; an opaque
+  (non-JWT) access token refreshes on age via `lastRefresh`.
+- **Reasoning replay.** Responses-API reasoning models emit `reasoning` items that must
+  accompany their `function_call` on the following request, and the unified `ContentBlock`
+  schema has nowhere to hold them — so the provider caches each response's raw items keyed by
+  call id and replays them verbatim (requesting `include: ["reasoning.encrypted_content"]`).
+  Without this, turn 2 of any tool-using conversation would 400. The cache is bounded and
+  per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
+  instead — acceptable for non-reasoning models, and the most likely first live failure to
+  watch for with a reasoning model.
+- **The device-code login cannot run headless (permanent, verified 2026-08-29).**
+  `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive bot challenge
+  (`cf-mitigated: challenge`, 403 with an HTML interstitial), so the flow needs a real browser
+  and never completes from a cloud container. Sign in on a machine with a browser, then
+  `login openai-chatgpt --export` and set the bundle as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the
+  environment's secrets (an existing Codex `~/.codex/auth.json` can be pasted directly). The
+  harness now names this condition instead of dumping the interstitial markup.
+- **Honest originator was NOT rejected pre-auth (verified).** An unauthenticated probe of
+  `chatgpt.com/backend-api/codex/responses` sending `originator: agentrig` returned **401
+  Unauthorized, not 403** — it cleared the edge and reached the application layer, refused only
+  for missing credentials. This disproves the spike's claim that a non-Codex originator is
+  filtered outright. It does **not** yet prove acceptance post-authentication; that remains the
+  open question for the first credentialed call.
+- Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
+  many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
+  static env seed sidesteps this only while the access token is still valid (~hours).
 
 ## Decided
 
