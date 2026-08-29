@@ -63,6 +63,7 @@ export type Intervention = z.infer<typeof Intervention>;
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
+  z.object({ type: z.literal("session.resume"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
   z.object({ type: z.literal("session.end"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
   z.object({ type: z.literal("turn.start"), n: z.number().int() }),
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),

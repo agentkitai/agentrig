@@ -1,13 +1,13 @@
 # Status
 
-Current milestone: **M2**
+Current milestone: **M3**
 
 | M | Deliverable | Status |
 |---|---|---|
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | done (2026-08-29) |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
-| 2 | OpenAI-compatible adapter, compaction, resume | next |
-| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | |
+| 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
+| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
@@ -43,6 +43,44 @@ Current milestone: **M2**
   `fetchFn`, so tests exercise the full SSE path with no network.
 - Budgets are enforced at turn boundaries; `maxUsd` binds only when `pricing` is configured.
 - Deferred to their milestones, per build order: hooks, compaction, resume (M2), TUI (M7).
+
+## Exit-criterion debt: dogfooding
+
+PLAN §6's exit criterion ("the harness is used to build the next milestone") is **not yet met**:
+M1 and M2 were built without running the harness, because the dev environment has no model API
+key — only the replay tooling (`pnpm demo`, `sessions ls|show`) has been exercised for real.
+M3 must be built through `agentrig run` (worker sessions for real subtasks, resume and
+compaction under real load) once `ANTHROPIC_API_KEY` (or an OpenAI-compatible endpoint) is
+available in the environment.
+
+## M2 notes
+
+- `OpenAICompatibleProvider` speaks Chat Completions streaming (OpenAI + local servers); one
+  unified user message fans out to individual `tool` role messages; `apiKey` is optional for
+  keyless local servers; same injectable `fetchFn` and truncated-tool-JSON guard as the
+  Anthropic adapter. New event type `session.resume` (zod variant + render case + tests).
+- Compaction defaults on: `summarizeOlderTurns()` fires past 70% of the provider's context
+  window, keeps the task message and the last N messages verbatim (boundary widened so no
+  tool_result is orphaned), and summarizes the middle via a direct provider call — that call is
+  not metered by the budget. Emits `context.compact`.
+- Resume: the loop writes a snapshot (`<id>.snapshot.json`, atomic overwrite) after every
+  completed turn and at session end; `run(task, {resume: id})` restores messages/turns/usage/usd
+  from it, appends to the same JSONL with contiguous `seq`, and emits `session.resume`. The log
+  stays the source of truth — the snapshot is a cache; resuming without one fails loudly.
+  CLI: `agentrig sessions resume <id> [task...]` and `run --resume <id>`; `--provider openai`
+  with `--base-url` for local servers.
+- Hardening from the M2 adversarial review: compaction is raced against abort and gets the
+  session signal (a hung or failing summarization call can no longer wedge or kill a session;
+  no-progress compaction warns once and stops retrying); snapshots synthesize error
+  tool_results for a trailing unanswered `tool_use` so interrupted sessions stay resumable, and
+  a resumed run that completed no turn never overwrites the prior snapshot; resume takes an
+  advisory `<id>.lock` so concurrent resumes fail loudly instead of corrupting the log's seq
+  order (a crashed holder's lock must be deleted by hand — the error names the path); the
+  OpenAI adapter sends `max_completion_tokens` against api.openai.com (`max_tokens` for other
+  base URLs, `maxTokensParam` to override); when a provider reports no usage the loop warns
+  once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
+  resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
+  raising the budget.
 
 ## Decided
 

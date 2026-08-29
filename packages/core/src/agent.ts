@@ -4,6 +4,7 @@ import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
+import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, contentHash } from "./session-store.js";
 
 export interface Budget {
@@ -33,6 +34,11 @@ export interface AgentConfig {
   store: SessionStore;
   budget?: Budget;
   pricing?: Pricing;
+  /**
+   * Defaults to `summarizeOlderTurns()` (PLAN §2.8). The summarization call goes straight to the
+   * provider and is not metered by the budget — its cost is the price of staying under the window.
+   */
+  compaction?: CompactionStrategy;
   /** max_tokens per model response (default 8192). */
   maxTokensPerTurn?: number;
   /**
@@ -48,6 +54,8 @@ export interface SessionSummary {
   reason: "done" | "aborted" | "error" | "budget";
   turns: number;
   usage: Usage;
+  /** Set when the session failed before it could write any event (e.g. resume lock held). */
+  error?: string;
 }
 
 export interface SessionControl {
@@ -66,7 +74,11 @@ export interface Session {
 }
 
 export interface Agent {
-  run(task: string, opts?: { cwd?: string }): Session;
+  /**
+   * `resume` continues an existing session from its snapshot: same id, same JSONL log
+   * (seq continues), prior messages restored, `task` appended as a fresh user message.
+   */
+  run(task: string, opts?: { cwd?: string; resume?: string }): Session;
 }
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
@@ -133,13 +145,15 @@ class PauseGate {
 }
 
 export function createAgent(config: AgentConfig): Agent {
-  return { run: (task, opts) => runSession(config, task, opts?.cwd ?? process.cwd()) };
+  return { run: (task, opts) => runSession(config, task, opts ?? {}) };
 }
 
-function runSession(config: AgentConfig, task: string, cwd: string): Session {
+function runSession(config: AgentConfig, task: string, opts: { cwd?: string; resume?: string }): Session {
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
-  const id = store.create();
+  const resume = opts.resume;
+  const id = resume ?? store.create();
+  let cwd = opts.cwd ?? process.cwd();
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
@@ -182,14 +196,73 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
   const done = (async (): Promise<SessionSummary> => {
     const totals: Usage = { input: 0, output: 0 };
     let turns = 0;
+    let turnsThisRun = 0;
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
     const toolsByName = new Map(config.tools.map((t) => [t.name, t]));
     const toolSpecs = config.tools.map(toToolSpec);
-    const system =
-      typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+    const compaction = config.compaction ?? summarizeOlderTurns();
     const startedAt = now();
+    let messages: Message[] = [];
+    let system = "";
+    let warnedNoUsage = false;
+    let compactionExhausted = false;
+
+    // Two concurrent resumes of one id would interleave appends and corrupt the log's seq
+    // order, so resume takes an advisory lock. On failure nothing may be appended (the other
+    // process owns the log) — the session reports the error through its summary only.
+    let releaseLock: (() => Promise<void>) | null = null;
+    if (resume !== undefined) {
+      try {
+        releaseLock = await store.acquireLock(id);
+      } catch (err) {
+        stream.close();
+        const message = err instanceof Error ? err.message : String(err);
+        return { id, reason: "error", turns: 0, usage: totals, error: message };
+      }
+    }
+
+    // A snapshot must always be resumable: a trailing assistant tool_use with no recorded
+    // result (max_tokens cut, abort mid-tools) would make both real APIs reject the resumed
+    // request, so synthesize error tool_results for whatever went unanswered.
+    const resumableMessages = (): Message[] => {
+      const last = messages.at(-1);
+      if (last === undefined || last.role !== "assistant") return messages;
+      const pending = last.content.filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use");
+      if (pending.length === 0) return messages;
+      return [
+        ...messages,
+        {
+          role: "user",
+          content: pending.map((tu) => ({
+            type: "tool_result" as const,
+            toolUseId: tu.id,
+            content: "[interrupted: the session ended before this tool ran to completion]",
+            isError: true,
+          })),
+        },
+      ];
+    };
+
+    // best-effort resume cache; the JSONL log stays the source of truth
+    const saveSnapshot = async (): Promise<void> => {
+      if (messages.length === 0) return;
+      try {
+        await store.writeSnapshot({
+          sessionId: id,
+          task,
+          cwd,
+          turns,
+          usage: { ...totals },
+          usd,
+          messages: resumableMessages(),
+          ts: now(),
+        });
+      } catch {
+        // a failed snapshot only makes the next resume impossible, never the session incorrect
+      }
+    };
 
     const budgetExceeded = (): string | null => {
       const b = config.budget;
@@ -204,8 +277,24 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
     };
 
     try {
-      await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
-      const messages: Message[] = [{ role: "user", content: [{ type: "text", text: task }] }];
+      if (resume !== undefined) {
+        const snap = await store.readSnapshot(id);
+        if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
+        cwd = opts.cwd ?? snap.cwd;
+        turns = snap.turns;
+        usd = snap.usd ?? 0;
+        totals.input = snap.usage.input;
+        totals.output = snap.usage.output;
+        if (snap.usage.cacheRead !== undefined) totals.cacheRead = snap.usage.cacheRead;
+        if (snap.usage.cacheWrite !== undefined) totals.cacheWrite = snap.usage.cacheWrite;
+        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model });
+        messages = snap.messages;
+        if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
+      } else {
+        await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
+        messages = [{ role: "user", content: [{ type: "text", text: task }] }];
+      }
+      system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
 
       loop: while (true) {
         await gate.wait();
@@ -226,6 +315,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
         }
 
         turns += 1;
+        turnsThisRun += 1;
         await emit({ type: "turn.start", n: turns });
         await emit({ type: "model.request", tokensIn: estimateTokens(system, messages) });
 
@@ -290,6 +380,15 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
           usd +=
             (usage.input * config.pricing.inputUsdPerMTok + usage.output * config.pricing.outputUsdPerMTok) / 1e6;
         }
+        if (usage.input + usage.output === 0 && stop !== "error" && !warnedNoUsage) {
+          // e.g. an OpenAI-compatible server ignoring stream_options: budgets can't bind on zeros
+          warnedNoUsage = true;
+          await emit({
+            type: "error",
+            message: "provider reported no token usage; token and USD budgets will not bind this session",
+            fatal: false,
+          });
+        }
 
         flushText();
         if (assistantContent.length > 0) messages.push({ role: "assistant", content: assistantContent });
@@ -332,13 +431,56 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
           results.push(await runTool(tu));
         }
         messages.push({ role: "user", content: results });
+
+        // Fall back to the estimate when the provider reports no usage, so compaction still
+        // fires for servers that never send a usage chunk.
+        const contextTokens = usage.input + usage.output || estimateTokens(system, messages);
+        if (
+          !compactionExhausted &&
+          compaction.shouldCompact({ tokens: contextTokens, window: provider.capabilities.contextWindow })
+        ) {
+          const before = estimateTokens(system, messages);
+          try {
+            // raced so control.abort() wins over a hung summarization call, same as tools
+            const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal));
+            const after = estimateTokens(system, compacted);
+            if (compacted !== messages && after < before * 0.9) {
+              messages = compacted;
+              await emit({ type: "context.compact", before, after });
+            } else {
+              // no progress possible (tail alone exceeds the window): warn once, stop retrying —
+              // a summarization call every turn that can't shrink anything is pure burn
+              if (compacted !== messages) messages = compacted;
+              compactionExhausted = true;
+              await emit({
+                type: "error",
+                message: "compaction could not reduce the context; continuing without it",
+                fatal: false,
+              });
+            }
+          } catch (err) {
+            if (abortController.signal.aborted) {
+              reason = "aborted";
+              await emit({ type: "turn.end", n: turns });
+              break;
+            }
+            // a failed optimization must not kill a healthy session
+            const message = err instanceof Error ? err.message : String(err);
+            await emit({ type: "error", message: `compaction failed: ${message}; continuing uncompacted`, fatal: false });
+          }
+        }
+
         await emit({ type: "turn.end", n: turns });
+        await saveSnapshot();
       }
     } catch (err) {
       reason = "error";
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      // A resumed run that never completed a turn (lock-free failure, immediate budget stop)
+      // must not clobber the previous good snapshot with its own mutations.
+      if (resume === undefined || turnsThisRun > 0) await saveSnapshot();
       // a steer that never reached a turn boundary was not delivered — record that, don't lose it
       for (const s of pendingSteers.splice(0)) {
         await emit({
@@ -350,6 +492,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
       ended = true;
       await emit({ type: "session.end", reason }).catch(() => {});
       await chain.catch(() => {});
+      await releaseLock?.().catch(() => {});
       stream.close();
     }
     return { id, reason, turns, usage: totals };

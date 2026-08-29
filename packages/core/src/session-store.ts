@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { appendFile, mkdir, readdir, stat } from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { type EventPayload, type HarnessEvent, parseEvent, serializeEvent } from "./events.js";
+import { z } from "zod";
+import { type EventPayload, type HarnessEvent, Usage, parseEvent, serializeEvent } from "./events.js";
+import { MessageSchema } from "./messages.js";
 
 export interface SessionRef {
   id: string;
@@ -11,6 +13,22 @@ export interface SessionRef {
   updatedAt: number;
   bytes: number;
 }
+
+/**
+ * Periodic snapshot of the message array for cheap resume. Unlike the JSONL event log
+ * it is overwritten in place — the log stays the source of truth; the snapshot is a cache.
+ */
+export const SessionSnapshot = z.object({
+  sessionId: z.string(),
+  task: z.string(),
+  cwd: z.string(),
+  turns: z.number().int().nonnegative(),
+  usage: Usage,
+  usd: z.number().nonnegative().optional(),
+  messages: z.array(MessageSchema),
+  ts: z.number().int(),
+});
+export type SessionSnapshot = z.infer<typeof SessionSnapshot>;
 
 export interface SessionStoreOptions {
   /** Directory that will contain `<id>.jsonl` files. Created on first write. */
@@ -48,6 +66,60 @@ export class SessionStore {
 
   pathFor(sessionId: string): string {
     return join(this.root, `${sessionId}.jsonl`);
+  }
+
+  snapshotPathFor(sessionId: string): string {
+    return join(this.root, `${sessionId}.snapshot.json`);
+  }
+
+  /** Overwrite the resume snapshot atomically (write temp, rename). */
+  async writeSnapshot(snapshot: SessionSnapshot): Promise<void> {
+    await mkdir(this.root, { recursive: true });
+    const path = this.snapshotPathFor(snapshot.sessionId);
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, JSON.stringify(SessionSnapshot.parse(snapshot)), "utf8");
+    await rename(tmp, path);
+  }
+
+  lockPathFor(sessionId: string): string {
+    return join(this.root, `${sessionId}.lock`);
+  }
+
+  /**
+   * Advisory per-session lock so two concurrent resumes can't interleave appends and corrupt
+   * the log's seq order. Throws when the lock is already held; returns the release function.
+   * A crashed holder leaves the file behind — the error names it so a human can remove it.
+   */
+  async acquireLock(sessionId: string): Promise<() => Promise<void>> {
+    await mkdir(this.root, { recursive: true });
+    const path = this.lockPathFor(sessionId);
+    try {
+      const handle = await open(path, "wx");
+      await handle.writeFile(`pid ${process.pid} at ${new Date().toISOString()}\n`, "utf8");
+      await handle.close();
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(
+          `session ${sessionId} is locked by another process; if that process is gone, delete ${path}`,
+        );
+      }
+      throw err;
+    }
+    return async () => {
+      await rm(path, { force: true });
+    };
+  }
+
+  /** Null when no snapshot exists; a corrupt snapshot throws rather than resuming from garbage. */
+  async readSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+    let text: string;
+    try {
+      text = await readFile(this.snapshotPathFor(sessionId), "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+    return SessionSnapshot.parse(JSON.parse(text));
   }
 
   /** Stamp the envelope and append. Returns the stored event. */

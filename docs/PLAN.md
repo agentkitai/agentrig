@@ -177,7 +177,7 @@ interface Hook { point: HookPoint; handler(ctx: HookContext): Promise<HookResult
 ```ts
 interface CompactionStrategy {
   shouldCompact(usage: { tokens: number; window: number }): boolean;
-  compact(messages: Message[], provider: ModelProvider): Promise<Message[]>;
+  compact(messages: Message[], provider: ModelProvider, signal?: AbortSignal): Promise<Message[]>;
 }
 ```
 
@@ -195,6 +195,8 @@ Follows Karpathy's LLM Wiki pattern (gist `442a6bf555914893e9891c11519de94f`): t
 .agentrig/
   raw/                       # immutable — the agent reads, never writes
     sessions/<id>.jsonl      #   event logs, append-only (written by core)
+                             #   (<id>.snapshot.json / <id>.lock are core's mutable resume cache
+                             #    and lock, NOT raw sources — ingest ignores them)
     attempts/<id>.json       #   attempts ledger extracted at session_end (3.5)
     docs/                    #   user-dropped sources: specs, ADRs, vendor docs, papers
   wiki/                      # LLM-owned — the human reads, the agent writes
