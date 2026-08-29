@@ -183,6 +183,36 @@ interface CompactionStrategy {
 
 v1: summarize-older-turns when past 70% of window, keep last N tool results verbatim. Emits `context.compact`.
 
+### 2.9 Subscription auth (experimental `openai-chatgpt` provider)
+
+**Context.** The default provider auth is bring-your-own-key/endpoint (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, or `--base-url` to any OpenAI-compatible server). A ChatGPT Plus/Pro
+subscription does **not** include API access; established third-party harnesses (OpenClaw,
+Hermes) instead reuse the subscription through the same "Sign in with ChatGPT" **device-code
+OAuth** flow that OpenAI's Codex CLI uses, then call a ChatGPT backend rather than
+`api.openai.com`. This unblocks dogfooding on an existing subscription and is a real
+"bring your subscription" feature.
+
+**Decision (M2.5), pending the spike.** Add an **experimental, opt-in** `openai-chatgpt`
+provider — never a default. It is gated behind an explicit `--provider openai-chatgpt` flag and
+documented as experimental. Guardrails, all locked regardless of spike outcome:
+
+- **OpenAI only.** Anthropic **explicitly prohibits** third-party use of Claude Pro/Max
+  credentials, so there is deliberately no Claude equivalent. The docs must say why the two
+  providers differ, rather than implying "bring any subscription."
+- **Undocumented backend.** The endpoint and protocol are reverse-engineered and unversioned;
+  the provider tracks them best-effort and is expected to break. It never becomes core auth.
+- **User's own account, eyes open.** OAuth is unsanctioned-but-not-known-prohibited for
+  third-party tools (gray area); each user opts in for their own account. AgentRig never ships
+  or logs subscription tokens; they live in the user's own config/env like any credential.
+
+**Spike first (no adapter code until it reports).** Open question the spike answers: does the
+subscription-backed endpoint speak Chat Completions (reuse the M2 `OpenAICompatibleProvider`
+with a different base URL + bearer) or a bespoke/"Responses" protocol (a new provider)? Plus:
+device-code flow + token storage/refresh, which models are reachable, and whether a
+one-time-captured token can power unattended cloud sessions. If the spike finds it intractable
+or too unstable, M2.5 is dropped and metered API keys remain the only OpenAI path.
+
 ---
 
 ## 3. `memory` — an LLM Wiki the agent maintains about the project
@@ -468,6 +498,7 @@ Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | the spine works before any model call |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | end-to-end task completion; start dogfooding on the repo itself |
 | 2 | OpenAI-compatible adapter, compaction, resume | provider abstraction is real; long sessions survive |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (spike first — §2.9) | dogfood on an existing subscription instead of metered API credits; a real "bring your subscription" option |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest (coverage plan, reserve/placeholder), `index.md` injection, index ∪ BM25 search, attempts ledger, pins | every session compounds into the wiki; retrieval works index-first |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | the wiki syncs into shared cross-agent memory without changing the no-infra default |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | stalls and loops get caught at ~zero cost |
@@ -489,6 +520,7 @@ Exit criterion for each milestone: the harness is used to build the next milesto
 - Supervisor heuristics first, LLM only on escalation
 - Dream = the wiki's lint pass, scheduled; output is a new directory + report; review mode default; single-session facts never promoted to global
 - Lore is an optional `MemoryBackend`, never the source of truth; AgentLens is a future sink for the event stream (observability), not a memory dependency
+- Provider auth is bring-your-own-key/endpoint by default; `openai-chatgpt` subscription auth (§2.9) is experimental and opt-in, OpenAI-only (Anthropic prohibits the equivalent), and never core auth
 
 ## 8. Open questions
 
