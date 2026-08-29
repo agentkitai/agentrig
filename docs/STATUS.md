@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M5**
+Current milestone: **M6**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -11,8 +11,8 @@ Current milestone: **M5**
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
-| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | next |
-| 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
+| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
+| 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | next |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | |
 
 ## M0 notes
@@ -388,6 +388,60 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
 - **Caveat: `drift` cannot fire today in practice.** Nothing emits `plan.updated` yet — there is no
   planning tool until M7 — so the detector is correct and tested but dormant until something
   declares a plan.
+
+## M5 notes
+
+- **The input is never touched, by construction rather than by discipline.** The dream is only
+  ever handed a *copy* (`copyWiki`), and `fingerprint()` — a content hash of every file, path
+  sorted — lets a test prove the original came out byte-identical. A dream that mutated its input
+  would be unreviewable: the thing you are reviewing would already have happened. Review is the
+  default mode for the same reason; `--auto` is opt-in.
+- **Most of the dream costs nothing.** The structural half (orphans, missing pages, index drift,
+  stale file refs, relative dates, unsourced facts, unfilled placeholders) is derivable from the
+  wiki's own text, so it runs with no model call. Only `consolidate` — contradictions, superseded
+  claims, merges, removals — needs judgment and therefore tokens. That split is what makes
+  `agentrig memory lint` free enough to run on every session end, and it is why `--structural-only`
+  does not require a credential at all.
+- **`memory lint` is now the real thing.** PLAN §5 defines it as "a dry-run dream report, no output
+  store", so it runs the actual dream in structural-only mode and deletes the copy. It used to be
+  a stub that only re-checked pins.
+- **Promotion is a structural gate, not a prompt instruction.** PLAN says twice that nothing
+  derived from a single session may be promoted, so the rule is enforced by counting *distinct*
+  `session:` refs from frontmatter and fact-line provenance — a model cannot argue past it, and one
+  session cited five times still counts as one. The floor cannot be lowered below two even by a
+  caller passing `minSessions: 1`. A low-confidence page is held back even with enough sessions.
+  The reasoning: one session's conclusion may be true only of that branch, that machine, that
+  afternoon; corroboration across two independent sessions is the cheapest proxy for "this
+  generalizes", and it is the difference between a global wiki worth consulting and one that
+  accumulates noise.
+- **Model findings are filtered against reality.** A consolidation naming a page the wiki does not
+  have would send the apply step at a file that does not exist, so `dropUnknownPages` discards it;
+  a "merge" of fewer than two pages is likewise dropped. The report has to be actionable.
+- **A failed consolidation costs the consolidation, not the dream.** `extractJson` *throws* on a
+  response with no JSON in it, so it is guarded separately from the schema check — a model that
+  answers in prose leaves the structural findings intact and sets `consolidationError`.
+- **`--auto` keeps the previous wiki beside the new one** as `wiki.before-dream-<stamp>` rather
+  than deleting it. A dream is a bulk LLM rewrite of the agent's memory; undo has to be a directory
+  rename, not a restore from a report. It refuses to overwrite an existing backup, refuses to apply
+  a wiki onto itself, and restores the original if the second rename fails. It copies-then-swaps
+  rather than renaming twice because the dream's output normally lives in the OS temp dir, which is
+  often a different filesystem — `rename()` cannot cross one.
+- Each phase is a separately exported function, per PLAN §3.7's "each its own prompt so they can be
+  tested independently" — a test drives one phase with a scripted provider without standing up a
+  whole dream. `orient` and `prune`/`rebuildIndex` turned out to need no model at all.
+- **Caveat: `consolidate` sees a bounded slice of the wiki** (24k chars of page text by default,
+  truncated at a page boundary). On a large wiki the later pages are simply not considered for
+  contradictions this run. Chunking across several calls is the obvious fix and is not done here.
+- **Caveat: the four phases are one model call, not four.** PLAN says each phase gets its own
+  prompt; only `consolidate` currently needs one, so that is the only prompt that exists. The
+  others are exported and testable but model-free, which is a simplification of the spec rather
+  than a full implementation of it.
+- **Caveat: nothing schedules the dream yet.** `agentrig dream` is the manual trigger; the
+  `session_end` hook and cron triggers PLAN §3.7 names need the hooks surface, which is M7.
+- **Caveat: promotion proposals are reported, never performed.** Even with `--auto`, a promotion is
+  listed in the report and nothing is written to the global wiki — and with no global wiki attached
+  the list is empty by construction. Actually writing across scopes is deliberately left until
+  there is a global wiki to write into.
 
 ## Decided
 

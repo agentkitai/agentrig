@@ -145,7 +145,8 @@ export function planCoverage(transcript: string, maxChars = 6000): Span[] {
   return spans;
 }
 
-async function completeJson(provider: ModelProvider, system: string, user: string, maxTokens: number): Promise<string> {
+/** Shared with the dream (M5): one non-streaming JSON completion, no tools. */
+export async function completeJson(provider: ModelProvider, system: string, user: string, maxTokens: number): Promise<string> {
   let text = "";
   for await (const ev of provider.stream(
     { system, messages: [{ role: "user", content: [{ type: "text", text: user }] }], tools: [], maxTokens },

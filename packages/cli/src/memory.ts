@@ -1,14 +1,15 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import {
   FileMemoryStore,
   FileRawStore,
   LoreBackend,
   SCHEMA_MD,
+  findingCount,
   ingestSession,
   loreConfigFromEnv,
-  readPins,
-  recheckPins,
+  renderReport,
+  runDream,
   tolerant,
   unionRetrieve,
   withBackendRecall,
@@ -210,20 +211,29 @@ export async function memoryPromote(path: string, opts: MemoryOptions): Promise<
 export async function memoryLint(opts: MemoryOptions): Promise<void> {
   const { wiki } = layout(opts.dir);
   const store = await openStore(opts.dir);
-  const pins = await readPins(wiki);
-  const checks = await recheckPins(store, pins);
-  const planned = (await store.index()).filter((e) => e.status === "planned");
 
-  console.log(`pins: ${checks.length}`);
-  for (const c of checks) console.log(`  [${c.status}] ${c.pin.page} — ${c.reason}`);
-  if (planned.length > 0) {
-    console.log(`\nreserved but never filled: ${planned.length}`);
-    for (const p of planned) console.log(`  ${p.path} (claimed by ${(p.claimedBy ?? []).join(", ")})`);
-  }
-  const conflicts = checks.filter((c) => c.status === "conflict").length;
-  if (conflicts > 0) {
-    console.log(`\n${conflicts} pin(s) contradicted by the current wiki — review before regenerating.`);
+  // PLAN §5: `lint` is a dry-run dream report with no output store. It is the structural-only
+  // pass, so it costs nothing and can run on every session end.
+  const result = await runDream({
+    wiki: store,
+    raw: new FileRawStore({ root: opts.dir }),
+    provider: undefined as never, // never reached: structuralOnly short-circuits before any call
+    structuralOnly: true,
+    cwd: process.cwd(),
+  });
+
+  console.log(renderReport(result.report, {
+    structural: result.structural,
+    promotionRejected: result.promotionRejected,
+  }));
+
+  // a dry run leaves nothing behind
+  await rm(result.outputRoot, { recursive: true, force: true }).catch(() => {});
+  void wiki;
+
+  const findings = findingCount(result.report, result.structural);
+  if (findings > 0) {
+    console.log(`${findings} finding(s). \`agentrig dream\` writes a corrected wiki you can review.`);
     process.exitCode = 1;
   }
-  console.log("\n(full dream lint — contradictions, superseded claims, orphans — lands in M5)");
 }

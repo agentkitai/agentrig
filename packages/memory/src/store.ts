@@ -14,8 +14,8 @@ import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types
  * converge on one page instead of forking near-duplicate slugs.
  */
 
-const INDEX_FILE = "index.md";
-const LOG_FILE = "log.md";
+export const INDEX_FILE = "index.md";
+export const LOG_FILE = "log.md";
 export const OVERVIEW_FILE = "overview.md";
 const INDEX_HEADER = `# Index
 

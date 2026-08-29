@@ -4,6 +4,7 @@ import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
+import { dreamCommand, type DreamOptions } from "./dream.js";
 import {
   memoryIngest,
   memoryInit,
@@ -97,7 +98,7 @@ memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search
 memoryDir(memory.command("promote <path>").description("Promote a wiki page to the backend's shared scope")).action(
   async (path: string, opts: { dir: string }) => memoryPromote(path, opts),
 );
-memoryDir(memory.command("lint").description("Dry-run dream report (M3: pin re-check and unfilled reservations)")).action(
+memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store")).action(
   async (opts: { dir: string }) => memoryLint(opts),
 );
 withProviderOptions(
@@ -105,6 +106,20 @@ withProviderOptions(
 ).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) =>
   memoryIngest(sessionId, { ...opts, modelExplicit: modelExplicit(cmd) }),
 );
+
+// PLAN §5: agentrig dream [--review|--auto] [--scope project|global] [--since <n>]
+withProviderOptions(
+  program
+    .command("dream")
+    .description("Scheduled lint: writes a NEW wiki plus a change report; your wiki is untouched unless --auto"),
+)
+  .option("-d, --dir <dir>", "memory directory", ".agentrig")
+  .option("--review", "report only, leave the dreamt wiki on disk for inspection (default)")
+  .option("--auto", "apply the dreamt wiki, keeping the previous one beside it")
+  .option("--scope <scope>", "project | global", "project")
+  .option("--since <n>", "cap on raw sessions scanned")
+  .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
+  .action(async (opts: DreamOptions, cmd: Command) => dreamCommand({ ...opts, modelExplicit: modelExplicit(cmd) }));
 
 const sessions = program.command("sessions").description("Inspect session event logs");
 
