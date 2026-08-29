@@ -47,11 +47,14 @@ Current milestone: **M3**
 ## Exit-criterion debt: dogfooding
 
 PLAN §6's exit criterion ("the harness is used to build the next milestone") is **not yet met**:
-M1 and M2 were built without running the harness, because the dev environment has no model API
-key — only the replay tooling (`pnpm demo`, `sessions ls|show`) has been exercised for real.
-M3 must be built through `agentrig run` (worker sessions for real subtasks, resume and
-compaction under real load) once `ANTHROPIC_API_KEY` (or an OpenAI-compatible endpoint) is
-available in the environment.
+M1 and M2 were built without running the harness. Two live smoke attempts against
+`gpt-5.6-sol` (2026-08-29, reports on PR #2) got as far as real streaming requests: the first
+was blocked by the environment's network allowlist, the second by an exhausted OpenAI credit
+balance. Both validated the error path live — well-formed fatal `error` events carrying the
+provider's response verbatim, `session.end reason=error`, exit 1, clean log replay — and the
+second prompted retry/backoff in the adapters (below). M3 must be built through `agentrig run`
+(worker sessions for real subtasks, resume and compaction under real load) once the OpenAI
+account has credits.
 
 ## M2 notes
 
@@ -81,6 +84,15 @@ available in the environment.
   once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
   resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
   raising the budget.
+
+## Post-M2 hardening (from live smoke findings)
+
+- Both adapters retry transient HTTP failures (429 rate limits, 5xx, network errors) with
+  exponential backoff honoring `Retry-After`, capped at 3 retries / 30s, abort-aware; a 429
+  that is quota/billing exhaustion fails immediately (retrying can't help). `RetryPolicy` is
+  per-provider config.
+- Headless `--json` mode mirrors fatal error events to stderr so a human tailing the process
+  sees them without parsing the event stream.
 
 ## Decided
 

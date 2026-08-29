@@ -1,6 +1,7 @@
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
+import { fetchWithRetries, type RetryPolicy } from "./retry.js";
 
 /**
  * Anthropic Messages API adapter. Speaks the streaming REST API directly (no vendor SDK),
@@ -14,6 +15,8 @@ export interface AnthropicProviderOptions {
   baseUrl?: string;
   contextWindow?: number;
   fetchFn?: typeof fetch;
+  /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
+  retry?: RetryPolicy;
 }
 
 const API_VERSION = "2023-06-01";
@@ -175,12 +178,14 @@ export class AnthropicProvider implements ModelProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
+  private readonly retry: RetryPolicy | undefined;
 
   constructor(opts: AnthropicProviderOptions) {
     this.apiKey = opts.apiKey;
     this.model = opts.model;
     this.baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
+    this.retry = opts.retry;
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -190,20 +195,23 @@ export class AnthropicProvider implements ModelProvider {
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
-    const res = await this.fetchFn(`${this.baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": API_VERSION,
+    const res = await fetchWithRetries(
+      this.fetchFn,
+      "anthropic",
+      `${this.baseUrl}/v1/messages`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": API_VERSION,
+        },
+        body: JSON.stringify(toAnthropicRequest(req, this.model)),
       },
-      body: JSON.stringify(toAnthropicRequest(req, this.model)),
       signal,
-    });
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`anthropic: HTTP ${res.status} ${detail.slice(0, 500)}`);
-    }
+      this.retry ?? {},
+    );
+    if (!res.body) throw new Error("anthropic: empty response body");
     yield* parseAnthropicSse(res.body);
   }
 }

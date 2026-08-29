@@ -178,8 +178,13 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   process.on("SIGINT", onSigint);
   try {
     for await (const e of session.events) {
-      if (opts.json) console.log(JSON.stringify(e));
-      else if (e.type !== "model.delta") console.log(renderEvent(e));
+      if (opts.json) {
+        console.log(JSON.stringify(e));
+        // machine consumers read stdout; humans tailing stderr still deserve fatal errors
+        if (e.type === "error" && e.fatal) console.error(`fatal: ${e.message}`);
+      } else if (e.type !== "model.delta") {
+        console.log(renderEvent(e));
+      }
     }
     const summary = await session.done;
     if (summary.error !== undefined) console.error(summary.error);

@@ -1,6 +1,7 @@
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
+import { fetchWithRetries, type RetryPolicy } from "./retry.js";
 
 /**
  * OpenAI-compatible Chat Completions adapter: OpenAI itself plus most local servers
@@ -21,6 +22,8 @@ export interface OpenAIProviderOptions {
    * `max_tokens` for other base URLs (what most local servers still expect).
    */
   maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
+  retry?: RetryPolicy;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -208,6 +211,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly maxTokensParam: "max_tokens" | "max_completion_tokens";
+  private readonly retry: RetryPolicy | undefined;
 
   constructor(opts: OpenAIProviderOptions) {
     this.model = opts.model;
@@ -216,6 +220,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.fetchFn = opts.fetchFn ?? fetch;
     this.maxTokensParam =
       opts.maxTokensParam ?? (this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens");
+    this.retry = opts.retry;
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -227,16 +232,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey !== undefined) headers.authorization = `Bearer ${this.apiKey}`;
-    const res = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
+    const res = await fetchWithRetries(
+      this.fetchFn,
+      "openai-compatible",
+      `${this.baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
+      },
       signal,
-    });
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`openai-compatible: HTTP ${res.status} ${detail.slice(0, 500)}`);
-    }
+      this.retry ?? {},
+    );
+    if (!res.body) throw new Error("openai-compatible: empty response body");
     yield* parseOpenAISse(res.body);
   }
 }
