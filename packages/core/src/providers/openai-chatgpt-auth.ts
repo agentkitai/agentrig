@@ -40,6 +40,39 @@ export function defaultAuthPath(): string {
   return process.env.AGENTRIG_OPENAI_CHATGPT_AUTH ?? join(homedir(), ".agentrig", "openai-chatgpt-auth.json");
 }
 
+/** Env var carrying a token bundle so ephemeral cloud sessions can auth without re-login. */
+export const TOKEN_ENV_VAR = "AGENTRIG_OPENAI_CHATGPT_TOKEN";
+
+/**
+ * Parse a token bundle from an env-var string. Accepts AgentRig's own shape
+ * (`{ accessToken, refreshToken, ... }`) and Codex's `auth.json` shape
+ * (`{ tokens: { access_token, refresh_token, id_token, account_id } }`), so a user who is
+ * already logged into Codex can paste `~/.codex/auth.json` directly.
+ */
+export function tokensFromEnvValue(raw: string): ChatGPTTokens | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (obj === null || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  if (typeof o.accessToken === "string") {
+    const parsed = ChatGPTTokens.safeParse(o);
+    return parsed.success ? parsed.data : null;
+  }
+  const t = (typeof o.tokens === "object" && o.tokens !== null ? o.tokens : o) as Record<string, unknown>;
+  if (typeof t.access_token !== "string") return null;
+  const tokens: ChatGPTTokens = {
+    accessToken: t.access_token,
+    refreshToken: typeof t.refresh_token === "string" ? t.refresh_token : "",
+  };
+  if (typeof t.id_token === "string") tokens.idToken = t.id_token;
+  if (typeof t.account_id === "string") tokens.accountId = t.account_id;
+  return tokens;
+}
+
 /** Atomic (temp+rename) JSON token store; a corrupt file throws rather than silently re-authing. */
 export class FileTokenStore implements TokenStore {
   constructor(private readonly path: string = defaultAuthPath()) {}
@@ -60,6 +93,30 @@ export class FileTokenStore implements TokenStore {
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, JSON.stringify(ChatGPTTokens.parse(tokens)), { encoding: "utf8", mode: 0o600 });
     await rename(tmp, this.path);
+  }
+}
+
+/**
+ * Reads the file store first (the live, rotated state within a session), falling back to a
+ * token bundle in the environment (`AGENTRIG_OPENAI_CHATGPT_TOKEN`) so a fresh cloud container
+ * can auth from a one-time seed. Writes (refresh rotation) always go to the writable file.
+ */
+export class EnvSeededTokenStore implements TokenStore {
+  constructor(
+    private readonly file: TokenStore = new FileTokenStore(),
+    private readonly env: NodeJS.ProcessEnv = process.env,
+    private readonly envVar: string = TOKEN_ENV_VAR,
+  ) {}
+
+  async read(): Promise<ChatGPTTokens | null> {
+    const fromFile = await this.file.read();
+    if (fromFile !== null) return fromFile;
+    const raw = this.env[this.envVar];
+    return raw ? tokensFromEnvValue(raw) : null;
+  }
+
+  async write(tokens: ChatGPTTokens): Promise<void> {
+    await this.file.write(tokens);
   }
 }
 
@@ -120,12 +177,17 @@ export class OpenAIChatGPTAuth {
   private inFlight: Promise<ChatGPTTokens> | null = null;
 
   constructor(opts: OpenAIChatGPTAuthOptions = {}) {
-    this.store = opts.store ?? new FileTokenStore();
+    this.store = opts.store ?? new EnvSeededTokenStore();
     this.clientId = opts.clientId ?? CHATGPT_CLIENT_ID;
     this.authBaseUrl = (opts.authBaseUrl ?? AUTH_BASE_URL).replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
     this.now = opts.now ?? (() => Date.now());
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  }
+
+  /** The stored token bundle, for exporting to seed another environment; null if not signed in. */
+  async exportTokens(): Promise<ChatGPTTokens | null> {
+    return this.store.read();
   }
 
   /** Start the device-code flow: returns the code/URL to show the user plus a completion poller. */
@@ -185,7 +247,7 @@ export class OpenAIChatGPTAuth {
       lastRefresh: this.now(),
       ...(idToken !== undefined ? { idToken } : {}),
     };
-    const accountId = accountIdFromIdToken(idToken) ?? previous?.accountId;
+    const accountId = accountIdFromIdToken(idToken) ?? accountIdFromIdToken(tokens.accessToken) ?? previous?.accountId;
     if (accountId !== undefined) tokens.accountId = accountId;
     await this.store.write(tokens);
     return tokens;
@@ -200,12 +262,15 @@ export class OpenAIChatGPTAuth {
     if (tokens === null) {
       throw new Error("not signed in to ChatGPT; run `agentrig login openai-chatgpt` first");
     }
+    // the account id may only be present in a JWT (esp. for an env-seeded bundle)
+    const accountOf = (t: ChatGPTTokens) =>
+      t.accountId ?? accountIdFromIdToken(t.idToken) ?? accountIdFromIdToken(t.accessToken);
     const exp = accessTokenExpiry(tokens.accessToken);
     const stale = force || (exp !== null && exp - this.now() < REFRESH_SKEW_MS);
-    if (!stale) return { accessToken: tokens.accessToken, accountId: tokens.accountId };
+    if (!stale) return { accessToken: tokens.accessToken, accountId: accountOf(tokens) };
     if (this.inFlight === null) this.inFlight = this.refresh(tokens).finally(() => (this.inFlight = null));
     const refreshed = await this.inFlight;
-    return { accessToken: refreshed.accessToken, accountId: refreshed.accountId };
+    return { accessToken: refreshed.accessToken, accountId: accountOf(refreshed) };
   }
 
   private async refresh(previous: ChatGPTTokens): Promise<ChatGPTTokens> {

@@ -109,8 +109,16 @@ account has credits.
   everything is unit-tested with injected fetch (request mapping, SSE parsing, refresh/rotation,
   expiry, device poll), but the first real `login` + `run` against OpenAI is the live check.
   Expect small field-name fixes on first contact; the provider is experimental by design.
+- **Auth reuse for cloud/unattended runs.** Authorize once, then seed every session: run
+  `agentrig login openai-chatgpt` on any machine, `agentrig login openai-chatgpt --export` to
+  print the bundle, and set it as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the environment. A fresh
+  container with no token file reads that env var (AgentRig's own shape *or* a pasted Codex
+  `~/.codex/auth.json`), and within-session refresh still writes to the file. The interactive
+  browser approval is inherently human and one-time — the harness cannot and should not perform
+  it; the seed makes it a once-per-token step, not once-per-session.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
-  many resumed/parallel worker sessions on one token can race on refresh-token rotation.
+  many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
+  static env seed sidesteps this only while the access token is still valid (~hours).
 
 ## Decided
 

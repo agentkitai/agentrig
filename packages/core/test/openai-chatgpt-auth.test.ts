@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { OpenAIChatGPTAuth, decodeJwtClaims, type ChatGPTTokens, type TokenStore } from "@agentkitai/agentrig-core";
+import {
+  EnvSeededTokenStore,
+  OpenAIChatGPTAuth,
+  decodeJwtClaims,
+  tokensFromEnvValue,
+  type ChatGPTTokens,
+  type TokenStore,
+} from "@agentkitai/agentrig-core";
 
 /** Build a fake JWT with the given payload claims (signature is never checked). */
 function jwt(claims: Record<string, unknown>): string {
@@ -70,7 +77,50 @@ describe("OpenAIChatGPTAuth device login", () => {
   });
 });
 
+describe("tokensFromEnvValue", () => {
+  it("parses AgentRig's native bundle shape", () => {
+    const raw = JSON.stringify({ accessToken: "a", refreshToken: "r", accountId: "acct_1" });
+    expect(tokensFromEnvValue(raw)).toMatchObject({ accessToken: "a", refreshToken: "r", accountId: "acct_1" });
+  });
+
+  it("parses Codex's auth.json shape (tokens: { access_token, ... })", () => {
+    const raw = JSON.stringify({ tokens: { access_token: "a", refresh_token: "r", id_token: "i", account_id: "acct_2" } });
+    expect(tokensFromEnvValue(raw)).toEqual({ accessToken: "a", refreshToken: "r", idToken: "i", accountId: "acct_2" });
+  });
+
+  it("returns null for junk", () => {
+    expect(tokensFromEnvValue("not json")).toBeNull();
+    expect(tokensFromEnvValue(JSON.stringify({ nope: 1 }))).toBeNull();
+  });
+});
+
+describe("EnvSeededTokenStore", () => {
+  it("falls back to the env var when the file is empty, and writes go to the file", async () => {
+    const file = new MemoryStore(null);
+    const env = { AGENTRIG_OPENAI_CHATGPT_TOKEN: JSON.stringify({ tokens: { access_token: "seed", refresh_token: "r" } }) };
+    const store = new EnvSeededTokenStore(file, env);
+    expect((await store.read())?.accessToken).toBe("seed");
+
+    await store.write({ accessToken: "rotated", refreshToken: "r2" });
+    expect(file.tokens?.accessToken).toBe("rotated");
+    // file now wins over the env seed
+    expect((await store.read())?.accessToken).toBe("rotated");
+  });
+
+  it("returns null when neither file nor env has tokens", async () => {
+    expect(await new EnvSeededTokenStore(new MemoryStore(null), {}).read()).toBeNull();
+  });
+});
+
 describe("OpenAIChatGPTAuth.getAccessToken", () => {
+  it("derives the account id from the access-token JWT when not stored", async () => {
+    let now = 1_500_000;
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 3600, "acct_from_jwt"), refreshToken: "r" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn: async () => new Response("{}"), now: () => now });
+    expect((await auth.getAccessToken()).accountId).toBe("acct_from_jwt");
+  });
+
+
   it("returns the stored token when it is not near expiry", async () => {
     let now = 2_000_000;
     let refreshes = 0;

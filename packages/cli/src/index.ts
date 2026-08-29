@@ -57,7 +57,8 @@ function collect(value: string, prev: string[]): string[] {
 program
   .command("login <provider>")
   .description("Sign in to a subscription provider (experimental: openai-chatgpt device-code OAuth)")
-  .action(async (provider: string) => loginCommand(provider));
+  .option("--export", "print the stored token bundle (to seed AGENTRIG_OPENAI_CHATGPT_TOKEN) instead of signing in")
+  .action(async (provider: string, opts: { export?: boolean }) => loginCommand(provider, opts));
 
 const sessions = program.command("sessions").description("Inspect session event logs");
 
