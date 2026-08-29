@@ -39,6 +39,10 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
         return { output: [], display: `invalid regex: ${(err as Error).message}`, isError: true };
       }
       const cwd = resolveIn(ctx.cwd, input.path ?? ".");
+      const cwdStat = await stat(cwd).catch(() => null);
+      if (!cwdStat?.isDirectory()) {
+        return { output: [], display: `not a directory: ${input.path ?? "."}`, isError: true };
+      }
       const matches: GrepMatch[] = [];
       let truncated = false;
       files: for await (const p of fsGlob(input.glob ?? "**/*", {

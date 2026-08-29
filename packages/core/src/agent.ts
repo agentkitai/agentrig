@@ -147,6 +147,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
   // All appends go through one promise chain so events written by tools (via ctx.emit)
   // and by the loop land in the store — and in `seq` — in the order they were emitted.
   let chain: Promise<unknown> = Promise.resolve();
+  let ended = false;
   const emit = (payload: EventPayload): Promise<HarnessEvent> => {
     const p = chain.then(() => store.append(id, payload)).then((e) => {
       stream.push(e);
@@ -154,6 +155,27 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
     });
     chain = p.catch(() => {});
     return p;
+  };
+
+  // A tool the abort race orphaned may still emit after session.end; those events are dropped
+  // so the log's last event is always session.end.
+  const emitFromTool = (payload: EventPayload): void => {
+    if (!ended) void emit(payload);
+  };
+
+  /** Lets `control.abort()` win over a tool that ignores its signal. */
+  const raceAbort = <T>(work: Promise<T>): Promise<T> => {
+    const signal = abortController.signal;
+    if (signal.aborted) {
+      work.catch(() => {});
+      return Promise.reject(new DOMException("aborted", "AbortError"));
+    }
+    return new Promise<T>((res, rej) => {
+      const onAbort = () => rej(new DOMException("aborted", "AbortError"));
+      signal.addEventListener("abort", onAbort, { once: true });
+      work.then(res, rej).finally(() => signal.removeEventListener("abort", onAbort));
+      work.catch(() => {});
+    });
   };
 
   const done = (async (): Promise<SessionSummary> => {
@@ -214,7 +236,16 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
           cacheHints: { systemPrefix: true },
         };
 
+        // Assistant content is assembled in stream order so the history replayed to the
+        // model matches what it actually said (text and tool_use blocks can interleave).
+        const assistantContent: ContentBlock[] = [];
         let text = "";
+        const flushText = () => {
+          if (text !== "") {
+            assistantContent.push({ type: "text", text });
+            text = "";
+          }
+        };
         const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
         let usage: Usage = { input: 0, output: 0 };
         let stop: "end_turn" | "tool_use" | "max_tokens" | "error" = "end_turn";
@@ -226,6 +257,8 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
                 await emit({ type: "model.delta", text: ev.text });
                 break;
               case "tool_use":
+                flushText();
+                assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input });
                 toolUses.push(ev);
                 break;
               case "usage":
@@ -255,9 +288,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
             (usage.input * config.pricing.inputUsdPerMTok + usage.output * config.pricing.outputUsdPerMTok) / 1e6;
         }
 
-        const assistantContent: ContentBlock[] = [];
-        if (text) assistantContent.push({ type: "text", text });
-        for (const tu of toolUses) assistantContent.push({ type: "tool_use", ...tu });
+        flushText();
         if (assistantContent.length > 0) messages.push({ role: "assistant", content: assistantContent });
 
         if (stop === "error") {
@@ -295,6 +326,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      ended = true;
       await emit({ type: "session.end", reason }).catch(() => {});
       await chain.catch(() => {});
       stream.close();
@@ -341,17 +373,22 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
       const ctx: ToolContext = {
         cwd,
         sessionId: id,
-        emit: (payload) => void emit(payload),
+        emit: emitFromTool,
         signal: abortController.signal,
       };
       const t0 = now();
       try {
-        const r = await tool.execute(input, ctx);
+        const r = await raceAbort(tool.execute(input, ctx));
         const ok = r.isError !== true;
         await emit({ type: "tool.result", id: tu.id, ok, display: r.display, durationMs: now() - t0 });
         return resultBlock(r.display, !ok);
       } catch (err) {
-        const display = err instanceof Error ? err.message : String(err);
+        const display =
+          abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
+            ? "aborted"
+            : err instanceof Error
+              ? err.message
+              : String(err);
         await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
         return resultBlock(display, true);
       }

@@ -60,6 +60,34 @@ describe("bash", () => {
     const r = await bashTool().execute({ command: "ls" }, ctx);
     expect(r.display).toContain("here.txt");
   });
+
+  it("timeout kills the whole process group and returns promptly despite surviving children", async () => {
+    const t0 = Date.now();
+    const r = await bashTool().execute({ command: "echo started; (sleep 30 &); sleep 60", timeoutMs: 500 }, ctx);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(r.isError).toBe(true);
+    expect(r.output.timedOut).toBe(true);
+    expect(r.display).toContain("started");
+    expect(r.display).toContain("timed out");
+  }, 10_000);
+
+  it("refuses to start when the signal is already aborted", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const r = await bashTool().execute({ command: "echo nope" }, { ...ctx, signal: ac.signal });
+    expect(r.isError).toBe(true);
+    expect(r.display).toContain("aborted");
+  });
+
+  it("abort kills a running command promptly", async () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 100);
+    const t0 = Date.now();
+    const r = await bashTool().execute({ command: "sleep 30" }, { ...ctx, signal: ac.signal });
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(r.isError).toBe(true);
+    expect(r.display).toContain("session aborted");
+  }, 10_000);
 });
 
 describe("read_file", () => {
@@ -136,6 +164,12 @@ describe("glob", () => {
     expect(r.isError).toBeUndefined();
     expect(r.display).toContain("no files match");
   });
+
+  it("errors on a nonexistent search directory instead of reporting zero matches", async () => {
+    const r = await globTool().execute({ pattern: "**/*.ts", path: "no-such-dir" }, ctx);
+    expect(r.isError).toBe(true);
+    expect(r.display).toContain("not a directory");
+  });
 });
 
 describe("grep", () => {
@@ -160,5 +194,11 @@ describe("grep", () => {
     const r = await grepTool().execute({ pattern: "(" }, ctx);
     expect(r.isError).toBe(true);
     expect(r.display).toContain("invalid regex");
+  });
+
+  it("errors on a nonexistent search directory", async () => {
+    const r = await grepTool().execute({ pattern: "x", path: "no-such-dir" }, ctx);
+    expect(r.isError).toBe(true);
+    expect(r.display).toContain("not a directory");
   });
 });

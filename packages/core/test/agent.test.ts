@@ -259,6 +259,81 @@ describe("agent loop", () => {
     ]);
   });
 
+  it("abort wins over a tool that ignores its signal", async () => {
+    const hangingTool: AnyTool = {
+      name: "hang",
+      description: "never resolves",
+      inputSchema: z.object({}),
+      permission: "read",
+      execute: () => new Promise(() => {}),
+    };
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "hang", input: {} }, usage(1, 1), stop("tool_use")],
+    ]);
+    const session = createAgent(makeConfig(provider, { tools: [hangingTool] })).run("t");
+    setTimeout(() => session.control.abort(), 50);
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    expect(events.find((e) => e.type === "tool.result")).toMatchObject({ id: "t1", ok: false, display: "aborted" });
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "aborted" });
+  });
+
+  it("events a tool emits via ctx.emit land in order through the loop", async () => {
+    const emitter: AnyTool = {
+      name: "toucher",
+      description: "emits file.changed",
+      inputSchema: z.object({}),
+      permission: "write",
+      execute: async (_input, ctx) => {
+        ctx.emit({ type: "file.changed", path: "x.txt", op: "create", contentHash: "abcd" });
+        return { output: null, display: "touched" };
+      },
+    };
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "toucher", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      tools: [emitter],
+      permissions: new RulePolicy([{ class: "write", decision: "allow" }]),
+    });
+    const session = createAgent(config).run("t");
+    const events = await collect(session);
+
+    const types = events.map((e) => e.type);
+    const call = types.indexOf("tool.call");
+    expect(types.slice(call, call + 3)).toEqual(["tool.call", "file.changed", "tool.result"]);
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i));
+    expect(await config.store.readAll("sess1")).toEqual(events);
+  });
+
+  it("preserves the stream order of interleaved text and tool_use blocks", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "text_delta", text: "before " },
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } },
+        { type: "text_delta", text: "after" },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    await collect(session);
+    await session.done;
+
+    expect(provider.requests[1]!.messages[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "text", text: "before " },
+        { type: "tool_use", id: "t1", name: "echo" },
+        { type: "text", text: "after" },
+      ],
+    });
+  });
+
   it("abort ends the session with reason aborted", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

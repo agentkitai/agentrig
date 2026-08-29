@@ -106,12 +106,19 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
       }
       case "content_block_stop": {
         if (pendingTool) {
-          yield {
-            type: "tool_use",
-            id: pendingTool.id,
-            name: pendingTool.name,
-            input: pendingTool.json.trim() === "" ? {} : JSON.parse(pendingTool.json),
-          };
+          // The accumulated JSON can be truncated (max_tokens mid-tool-input) or garbage.
+          // Never throw here — that would kill the session before the buffered usage/stop
+          // events flow; an empty input lets the loop's schema validation report it instead.
+          let input: unknown = {};
+          const raw = pendingTool.json.trim();
+          if (raw !== "") {
+            try {
+              input = JSON.parse(raw);
+            } catch {
+              input = {};
+            }
+          }
+          yield { type: "tool_use", id: pendingTool.id, name: pendingTool.name, input };
           pendingTool = null;
         }
         break;

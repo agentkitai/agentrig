@@ -43,6 +43,14 @@ function defaultSystemPrompt(cwd: string): string {
   ].join("\n");
 }
 
+function positiveNumber(flag: string, value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${flag} must be a positive number, got "${value}"`);
+  }
+  return n;
+}
+
 export async function runCommand(task: string, opts: RunOptions): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -51,9 +59,18 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     return;
   }
 
-  const budget: Budget = { maxTurns: Number(opts.maxTurns) };
-  if (opts.maxTokens !== undefined) budget.maxTokens = Number(opts.maxTokens);
-  if (opts.maxMinutes !== undefined) budget.maxMinutes = Number(opts.maxMinutes);
+  let budget: Budget;
+  let maxTokensPerTurn: number;
+  try {
+    budget = { maxTurns: positiveNumber("--max-turns", opts.maxTurns) };
+    if (opts.maxTokens !== undefined) budget.maxTokens = positiveNumber("--max-tokens", opts.maxTokens);
+    if (opts.maxMinutes !== undefined) budget.maxMinutes = positiveNumber("--max-minutes", opts.maxMinutes);
+    maxTokensPerTurn = positiveNumber("--max-tokens-per-turn", opts.maxTokensPerTurn);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exitCode = 1;
+    return;
+  }
 
   const cwd = process.cwd();
   const agent = createAgent({
@@ -64,7 +81,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     systemPrompt: opts.system ?? defaultSystemPrompt(cwd),
     store: new SessionStore({ root: opts.root }),
     budget,
-    maxTokensPerTurn: Number(opts.maxTokensPerTurn),
+    maxTokensPerTurn,
   });
 
   const session: Session = agent.run(task, { cwd });

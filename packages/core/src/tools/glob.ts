@@ -1,4 +1,4 @@
-import { glob as fsGlob } from "node:fs/promises";
+import { glob as fsGlob, stat } from "node:fs/promises";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { resolveIn } from "./shared.js";
@@ -25,6 +25,11 @@ export function globTool(): Tool<GlobInput, string[]> {
     permission: "read",
     async execute(input, ctx): Promise<ToolResult<string[]>> {
       const cwd = resolveIn(ctx.cwd, input.path ?? ".");
+      const s = await stat(cwd).catch(() => null);
+      if (!s?.isDirectory()) {
+        // distinguish a typo'd path from a genuinely empty result
+        return { output: [], display: `not a directory: ${input.path ?? "."}`, isError: true };
+      }
       const matches: string[] = [];
       let truncated = false;
       for await (const p of fsGlob(input.pattern, { cwd, exclude: (name) => isExcludedPath(String(name)) })) {

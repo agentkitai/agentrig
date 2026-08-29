@@ -92,6 +92,25 @@ describe("parseAnthropicSse", () => {
     expect(events.at(-1)).toEqual({ type: "stop", reason: "end_turn" });
   });
 
+  it("does not throw on truncated tool-input JSON (max_tokens mid-tool-call)", async () => {
+    async function* truncated() {
+      yield sse([
+        ["message_start", { type: "message_start", message: { usage: { input_tokens: 4 } } }],
+        ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "tu1", name: "bash", input: {} } }],
+        ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"comma' } }],
+        ["content_block_stop", { type: "content_block_stop", index: 0 }],
+        ["message_delta", { type: "message_delta", delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 2 } }],
+        ["message_stop", { type: "message_stop" }],
+      ]);
+    }
+    const events = await collect(parseAnthropicSse(truncated()));
+    expect(events).toEqual([
+      { type: "tool_use", id: "tu1", name: "bash", input: {} },
+      { type: "usage", usage: { input: 4, output: 2 } },
+      { type: "stop", reason: "max_tokens" },
+    ]);
+  });
+
   it("throws on an error event", async () => {
     async function* one() {
       yield sse([["error", { type: "error", error: { type: "overloaded_error", message: "busy" } }]]);
