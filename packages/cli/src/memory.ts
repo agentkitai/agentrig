@@ -1,13 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   FileMemoryStore,
   FileRawStore,
+  LoreBackend,
   SCHEMA_MD,
   ingestSession,
+  loreConfigFromEnv,
   readPins,
   recheckPins,
+  tolerant,
   unionRetrieve,
+  withBackendRecall,
+  type MemoryBackend,
 } from "@agentkitai/agentrig-memory";
 import { buildProvider, type ProviderOptions } from "./provider.js";
 
@@ -23,6 +28,30 @@ export interface MemoryOptions {
 /** `.agentrig` layout (PLAN §3.1): raw/ beside wiki/ beside SCHEMA.md. */
 export function layout(dir: string) {
   return { root: dir, wiki: join(dir, "wiki"), schema: join(dir, "SCHEMA.md") };
+}
+
+/**
+ * The optional Lore backend (PLAN §3.8), or null when unconfigured — the no-infra default.
+ * Always wrapped so a backend failure is reported and then ignored.
+ */
+export function openBackend(): MemoryBackend | null {
+  if (loreConfigFromEnv() === null) return null;
+  try {
+    return tolerant(new LoreBackend(), backendError);
+  } catch (err) {
+    // a misconfigured OPTIONAL backend must not take down the harness
+    console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
+    return null;
+  }
+}
+
+export function backendError(op: string, err: Error): void {
+  console.error(`lore ${op} failed (continuing): ${err.message}`);
+}
+
+/** Project name for backend scoping and provenance — the repo, not the memory directory. */
+export function projectName(): string {
+  return basename(resolve(process.cwd())) || "default";
 }
 
 async function openStore(dir: string): Promise<FileMemoryStore> {
@@ -83,12 +112,17 @@ export async function memorySearch(query: string, opts: MemoryOptions & { k?: st
     }
   }
   const store = await openStore(opts.dir);
-  const hits = unionRetrieve(await store.index(), await store.pages(), query, k);
+  const local = unionRetrieve(await store.index(), await store.pages(), query, k);
+  const backend = openBackend();
+  const hits = withBackendRecall(local, backend === null ? [] : await backend.recall(query, k), backend?.id ?? "backend", k);
   if (hits.length === 0) {
     console.log(`no matches for ${JSON.stringify(query)}`);
     return;
   }
-  for (const h of hits) console.log(`${h.page.path} [${h.via}]\n  ${h.snippet}`);
+  for (const h of hits) {
+    if (h.via === "backend") console.log(`${h.ref} [backend]\n  ${h.text}`);
+    else console.log(`${h.page.path} [${h.via}]\n  ${h.snippet}`);
+  }
 }
 
 export type MemoryIngestOptions = MemoryOptions & ProviderOptions;
@@ -114,7 +148,17 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
   const { attempts, corrupt } = await raw.readAttempts(sessionId);
   for (const path of corrupt) console.error(`warning: unreadable attempt file, skipped: ${path}`);
-  const result = await ingestSession({ store, provider, sessionId, logPath: session.path, attempts });
+  const backend = openBackend();
+  const result = await ingestSession({
+    store,
+    provider,
+    sessionId,
+    logPath: session.path,
+    attempts,
+    project: projectName(),
+    onBackendError: backendError,
+    ...(backend === null ? {} : { backend, checkBackendConflicts: true }),
+  });
   if (result.skipped) {
     console.log(`session ${sessionId} already ingested and unchanged; nothing to do`);
     return;
@@ -126,11 +170,40 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
       (result.supersededPrevious ? "\n  superseded an earlier capture of this session" : ""),
   );
   for (const p of result.pagesWritten) console.log(`  ${p}`);
+  if (result.backendConflicts.length > 0) {
+    console.error(`\n${result.backendConflicts.length} contradiction(s) reported by the backend:`);
+    for (const c of result.backendConflicts) console.error(`  "${c.fact}" vs existing "${c.existing}"`);
+  }
   if (result.pinConflicts.length > 0) {
     console.error(`\n${result.pinConflicts.length} pinned human correction(s) no longer hold:`);
     for (const c of result.pinConflicts) console.error(`  ${c.page}: ${c.claim} — ${c.reason}`);
     process.exitCode = 1;
   }
+}
+
+/** Promote one wiki page to the backend's shared scope (PLAN §3.8, private→shared). */
+export async function memoryPromote(path: string, opts: MemoryOptions): Promise<void> {
+  const backend = openBackend();
+  if (backend === null) {
+    console.error("no memory backend configured (set LORE_API_URL and LORE_API_KEY)");
+    process.exitCode = 1;
+    return;
+  }
+  let page;
+  try {
+    page = await (await openStore(opts.dir)).read(path);
+  } catch (err) {
+    console.error(`not a wiki page: ${path} — ${(err as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (page === null) {
+    console.error(`no such page: ${path}`);
+    process.exitCode = 1;
+    return;
+  }
+  await backend.promote(page);
+  console.log(`promoted ${page.path} to ${backend.id} shared scope`);
 }
 
 /** `lint` = a dry-run dream report. M3 ships the pin re-check; M5 adds the rest. */
