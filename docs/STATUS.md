@@ -25,5 +25,4 @@ Current milestone: **M1**
 1. Sandboxing: none + allowlists for v1, Docker later
 2. Git-based checkpoint rollback: opt-in or assumed
 3. Overlap with AgentLens / Lore
-4. Name and npm scope
-5. Dogfood repo after the harness itself
+4. Dogfood repo after AgentRig itself

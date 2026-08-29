@@ -1,10 +1,10 @@
 /**
- * @harness/memory — LLM Wiki memory. See docs/PLAN.md §3.
+ * @agentkitai/agentrig-memory — LLM Wiki memory. See docs/PLAN.md §3.
  *
  * M0: interfaces only. Implementation lands in M3 (ingest, index ∪ BM25 query, pins)
  * and M5 (dream = scheduled lint). Nothing here may import core internals beyond types.
  */
-import type { ModelProvider } from "@harness/core";
+import type { ModelProvider } from "@agentkitai/agentrig-core";
 
 export type Scope = "project" | "global";
 export type PageType = "entity" | "concept" | "source" | "analysis";

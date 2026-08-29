@@ -1,5 +1,5 @@
 {
-  "name": "@harness/cli",
+  "name": "@agentkitai/agentrig-cli",
   "version": "0.0.0",
   "private": true,
   "description": "Thin CLI over the SDK",
@@ -24,13 +24,13 @@
     "demo": "tsx src/demo.ts"
   },
   "dependencies": {
-    "@harness/core": "workspace:*",
-    "@harness/memory": "workspace:*",
-    "@harness/supervisor": "workspace:*",
+    "@agentkitai/agentrig-core": "workspace:*",
+    "@agentkitai/agentrig-memory": "workspace:*",
+    "@agentkitai/agentrig-supervisor": "workspace:*",
     "commander": "^12.1.0"
   },
   "bin": {
-    "harness": "./dist/index.js"
+    "agentrig": "./dist/index.js"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

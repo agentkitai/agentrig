@@ -1,6 +1,6 @@
 node_modules/
 dist/
 *.tsbuildinfo
-.harness/
+.agentrig/
 .env
 .DS_Store

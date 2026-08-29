@@ -1,5 +1,6 @@
-# Agentic Harness — Architecture & Build Order
+# AgentRig — Architecture & Build Order
 
+**Name:** AgentRig, published as `@agentkitai/agentrig-{core,memory,supervisor,cli}`.
 **Shape:** SDK core + thin CLI, TypeScript monorepo, four packages.
 **Differentiators:** built-in supervisor loop (from AVO) and a dreaming memory system (from Anthropic's Managed Agents / Claude Code Auto Dream).
 **Non-goals for v1:** competing with Claude Code/Codex on TUI polish; evolutionary search; multi-tenant hosting.
@@ -154,7 +155,7 @@ interface Session {
 interface Agent { run(task: string, opts?: { cwd?: string; resume?: string }): Session }
 ```
 
-Session persistence: one JSONL file per session under `.harness/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
+Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
 ### 2.7 Hooks
 
@@ -186,7 +187,7 @@ Follows Karpathy's LLM Wiki pattern (gist `442a6bf555914893e9891c11519de94f`): t
 ### 3.1 Three layers
 
 ```
-.harness/
+.agentrig/
   raw/                       # immutable — the agent reads, never writes
     sessions/<id>.jsonl      #   event logs, append-only (written by core)
     attempts/<id>.json       #   attempts ledger extracted at session_end (3.5)
@@ -201,14 +202,14 @@ Follows Karpathy's LLM Wiki pattern (gist `442a6bf555914893e9891c11519de94f`): t
     analyses/<slug>.md       #   filed answers: comparisons, investigations, root-cause writeups
     pins.json                #   human corrections that must survive regeneration (3.6)
   SCHEMA.md                  # the schema: page formats, naming, ingest/query/lint workflows. Co-evolves with use.
-~/.harness/                  # global scope: same shape — its own raw/, wiki/, SCHEMA.md
+~/.agentrig/                  # global scope: same shape — its own raw/, wiki/, SCHEMA.md
 ```
 
 Global is a **separate wiki**, not a label on project pages. Teams running the pattern at scale found audience labels drift and leak; compiling separately is the only reliable guarantee. Promotion to global = ingesting a project wiki page as a *source* into the global wiki, with provenance back to the project.
 
 ### 3.2 Operations
 
-**Ingest** — triggered by the `session_end` hook, or `harness memory ingest <path>` for docs. Plan → reserve → generate → integrate:
+**Ingest** — triggered by the `session_end` hook, or `agentrig memory ingest <path>` for docs. Plan → reserve → generate → integrate:
 
 1. Read the source under a *coverage plan*: bounded spans, each either inspected or explicitly closed as "nothing durable here", so a long session can't silently lose its middle when context runs out.
 2. Propose page targets (create vs. update). Reserve them in `index.md` as `status: planned` placeholders using an atomic conditional write, with the LLM call *outside* any lock. Two concurrent sessions then converge on one `auth-module` page instead of forking `auth` vs `auth-module`.
@@ -328,7 +329,7 @@ interface Dreamer { dream(input: DreamInput): Promise<DreamResult> }
 
 Four phases, each its own prompt so they can be tested independently: **orient** (read `index.md`, `overview.md`, `SCHEMA.md`) → **gather signal** (scan raw sources since last dream: corrections, decisions, recurring errors, repeated workarounds, attempts with lessons) → **consolidate** (the lint fixes above, with provenance) → **prune & index** (rebuild `index.md` lean, demote verbose entries to pages, re-check pins).
 
-Apply modes: `review` (default: the report as a diff, accept/reject per change — review the artifact, not the plan) and `auto`. Triggers: `harness dream`; `session_end` hook when ≥ N sessions or ≥ T hours since the last dream; cron.
+Apply modes: `review` (default: the report as a diff, accept/reject per change — review the artifact, not the plan) and `auto`. Triggers: `agentrig dream`; `session_end` hook when ≥ N sessions or ≥ T hours since the last dream; cron.
 
 ---
 
@@ -402,12 +403,12 @@ It consumes `session.events`, emits `supervisor.signal` / `supervisor.interventi
 
 ## 5. `cli`
 
-- `harness` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
-- `harness run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
-- `harness dream [--review|--auto] [--scope project|global] [--since <n>]`
-- `harness sessions ls|show <id>|resume <id>`
-- `harness memory ls|show|search <q>|ingest <path>|lint` (`lint` = a dry-run dream report, no output store)
-- Config: `harness.config.ts` (provider, model, tools, permission rules, budget, supervisor thresholds) + `.harness/` state dir
+- `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
+- `agentrig run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
+- `agentrig dream [--review|--auto] [--scope project|global] [--since <n>]`
+- `agentrig sessions ls|show <id>|resume <id>`
+- `agentrig memory ls|show|search <q>|ingest <path>|lint` (`lint` = a dry-run dream report, no output store)
+- Config: `agentrig.config.ts` (provider, model, tools, permission rules, budget, supervisor thresholds) + `.agentrig/` state dir
 
 Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-only logic, it belongs in a package instead.
 
@@ -445,5 +446,4 @@ Exit criterion for each milestone: the harness is used to build the next milesto
 1. Sandboxing: none + allowlists for v1, Docker later — acceptable?
 2. Rollback: git-based checkpoints (`checkpoint_rollback`) require the workspace to be a repo; opt-in or assumed?
 3. Does anything in AgentLens or Lore already cover memory or observability here? Reuse vs. rebuild.
-4. Name for the harness / npm scope.
-5. Which repo to dogfood on after the harness itself.
+4. Which repo to dogfood on after AgentRig itself.

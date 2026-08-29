@@ -12,9 +12,9 @@ export default defineConfig({
     // Tests import workspace packages by name and resolve straight to source,
     // so no build step is needed before `pnpm test`.
     alias: {
-      "@harness/core": pkg("core"),
-      "@harness/memory": pkg("memory"),
-      "@harness/supervisor": pkg("supervisor"),
+      "@agentkitai/agentrig-core": pkg("core"),
+      "@agentkitai/agentrig-memory": pkg("memory"),
+      "@agentkitai/agentrig-supervisor": pkg("supervisor"),
     },
   },
 });

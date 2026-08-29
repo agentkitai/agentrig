@@ -1,4 +1,4 @@
-# harness — agentic harness with a built-in supervisor loop and LLM Wiki memory
+# AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory
 
 Read `docs/PLAN.md` before doing anything. It is the spec: package interfaces, the event schema,
 the memory design, the supervisor design, and the milestone order. `docs/STATUS.md` says which
@@ -11,7 +11,7 @@ pnpm install          # pnpm 11; build scripts are allowlisted in pnpm-workspace
 pnpm build            # tsc per package, topological order
 pnpm test             # vitest; tests import workspace packages by name, resolved to src (no build needed)
 pnpm typecheck
-pnpm demo             # writes a synthetic session under packages/cli/.harness/sessions and replays it
+pnpm demo             # writes a synthetic session under packages/cli/.agentrig/sessions and replays it
 node packages/cli/dist/index.js sessions ls|show <id>
 ```
 
@@ -35,7 +35,7 @@ docs/STATUS.md       milestone tracker — update it when you finish or change s
 - Providers map to/from the unified `Message`/`ContentBlock` schema. Core never sees a vendor payload.
 - Strict TypeScript, ESM, `verbatimModuleSyntax`. zod for anything that crosses a process or file boundary.
 - Tests live in `packages/<pkg>/test/*.test.ts` and import from `@harness/<pkg>`.
-- Package names `@harness/*` are placeholders; packages are `private` until the scope is chosen.
+- Packages publish under the `@agentkitai` scope as `agentrig-<pkg>`; they stay `private` until M1 is usable.
 - Keep the CLI thin. If a command needs logic, that logic belongs in a package.
 - Prefer small PRs that complete one row of the milestone table over sweeping changes.
 

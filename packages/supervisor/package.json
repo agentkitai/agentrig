@@ -1,5 +1,5 @@
 {
-  "name": "@harness/supervisor",
+  "name": "@agentkitai/agentrig-supervisor",
   "version": "0.0.0",
   "private": true,
   "description": "Out-of-band supervisor: detectors, policy ladder, interventions, reviewer, grader",
@@ -13,5 +13,5 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "@harness/core": "workspace:*" }
+  "dependencies": { "@agentkitai/agentrig-core": "workspace:*" }
 }

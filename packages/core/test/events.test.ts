@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HarnessEvent, parseEvent, serializeEvent } from "@harness/core";
+import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
   it("round-trips a tool.call event through JSONL", () => {

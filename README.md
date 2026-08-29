@@ -1,4 +1,4 @@
-# harness
+# AgentRig
 
 An agentic coding harness — SDK core plus a thin CLI — with two things most harnesses don't have built in:
 

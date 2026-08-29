@@ -20,13 +20,13 @@ importers:
 
   packages/cli:
     dependencies:
-      '@harness/core':
+      '@agentkitai/agentrig-core':
         specifier: workspace:*
         version: link:../core
-      '@harness/memory':
+      '@agentkitai/agentrig-memory':
         specifier: workspace:*
         version: link:../memory
-      '@harness/supervisor':
+      '@agentkitai/agentrig-supervisor':
         specifier: workspace:*
         version: link:../supervisor
       commander:
@@ -45,7 +45,7 @@ importers:
 
   packages/memory:
     dependencies:
-      '@harness/core':
+      '@agentkitai/agentrig-core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -54,7 +54,7 @@ importers:
 
   packages/supervisor:
     dependencies:
-      '@harness/core':
+      '@agentkitai/agentrig-core':
         specifier: workspace:*
         version: link:../core
 

@@ -1,5 +1,5 @@
 {
-  "name": "@harness/core",
+  "name": "@agentkitai/agentrig-core",
   "version": "0.0.0",
   "private": true,
   "description": "Agent loop, tool runtime, permissions, sessions, providers — the event-sourced spine",

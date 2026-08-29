@@ -1,10 +1,10 @@
 /**
- * @harness/supervisor — out-of-band observer over the event stream. See docs/PLAN.md §4.
+ * @agentkitai/agentrig-supervisor — out-of-band observer over the event stream. See docs/PLAN.md §4.
  *
  * M0: interfaces only. Heuristic detectors + policy ladder land in M4; reviewer + grader in M6.
  * Depends only on core's event types.
  */
-import type { HarnessEvent, Intervention, Signal } from "@harness/core";
+import type { HarnessEvent, Intervention, Signal } from "@agentkitai/agentrig-core";
 
 export type { Signal, Intervention };
 

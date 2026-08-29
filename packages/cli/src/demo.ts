@@ -2,10 +2,10 @@
  * Writes a synthetic session — including the kind of loop the supervisor will need to
  * catch in M4 — then replays it. `pnpm demo`.
  */
-import { SessionStore, contentHash } from "@harness/core";
+import { SessionStore, contentHash } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 
-const store = new SessionStore({ root: ".harness/sessions" });
+const store = new SessionStore({ root: ".agentrig/sessions" });
 const id = store.create();
 const emit = (p: Parameters<SessionStore["append"]>[1]) => store.append(id, p);
 

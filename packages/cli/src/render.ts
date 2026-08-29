@@ -1,4 +1,4 @@
-import type { HarnessEvent } from "@harness/core";
+import type { HarnessEvent } from "@agentkitai/agentrig-core";
 
 /** One line per event. Kept dumb on purpose: the TUI (M7) replaces this. */
 export function renderEvent(e: HarnessEvent): string {

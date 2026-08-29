@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SessionStore, contentHash } from "@harness/core";
+import { SessionStore, contentHash } from "@agentkitai/agentrig-core";
 
 let root: string;
 beforeEach(async () => {
