@@ -85,6 +85,12 @@ export interface SessionControl {
   requirePlan(reason: string): void;
   /** True while a `requirePlan` gate is up. */
   planRequired(): boolean;
+  /**
+   * Whether this session has a tool that can satisfy a plan gate. A supervisor must not raise a
+   * gate a session can never clear — that turns a rung meant to catch a stuck loop into a
+   * permanent deadlock, which is strictly worse than the loop.
+   */
+  canRequirePlan(): boolean;
 }
 
 export interface Session {
@@ -165,6 +171,15 @@ class PauseGate {
   }
 }
 
+/** The tool that satisfies a replan gate. Named once so core and the gate cannot drift apart. */
+export const PLAN_TOOL = "update_plan";
+
+/**
+ * Refusals before a replan gate releases itself. Small on purpose: the gate exists to interrupt,
+ * not to stop. If two refusals have not produced a plan, a third will not either.
+ */
+export const MAX_REPLAN_REFUSALS = 2;
+
 export function createAgent(config: AgentConfig): Agent {
   return { run: (task, opts) => runSession(config, task, opts ?? {}) };
 }
@@ -181,6 +196,9 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" }> = [];
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   let replanReason: string | null = null;
+  /** Refusals under the current gate, so a gate can never be permanent. */
+  let replanRefusals = 0;
+  const hasPlanTool = config.tools.some((t) => t.name === PLAN_TOOL);
 
   // All appends go through one promise chain so events written by tools (via ctx.emit)
   // and by the loop land in the store — and in `seq` — in the order they were emitted.
@@ -188,7 +206,10 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
   let ended = false;
   const emit = (payload: EventPayload): Promise<HarnessEvent> => {
     // a plan landing satisfies the gate, no matter which tool or path produced it
-    if (payload.type === "plan.updated") replanReason = null;
+    if (payload.type === "plan.updated") {
+      replanReason = null;
+      replanRefusals = 0;
+    }
     const p = chain.then(() => store.append(id, payload)).then((e) => {
       stream.push(e);
       return e;
@@ -535,14 +556,32 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         return resultBlock(`unknown tool: ${tu.name}`, true);
       }
 
-      // the replan gate: everything except planning is refused while it is up
-      if (replanReason !== null && tu.name !== "update_plan") {
-        const display =
-          `blocked: the supervisor requires a fresh plan before more tool calls (${replanReason}). ` +
-          `Call update_plan with your revised plan, then continue.`;
-        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
-        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
-        return resultBlock(display, true);
+      // The replan gate: everything except planning is refused while it is up — but it is
+      // self-limiting. A gate that could never be released (no `update_plan` in the tool list,
+      // an agent that will not call it, permissions that deny it) would burn the whole budget on
+      // refusals, which is a worse failure than whatever the supervisor was trying to catch. So
+      // it opens itself after MAX_REPLAN_REFUSALS and says why.
+      if (replanReason !== null && tu.name !== PLAN_TOOL) {
+        replanRefusals += 1;
+        if (replanRefusals > MAX_REPLAN_REFUSALS || !hasPlanTool) {
+          const why = hasPlanTool
+            ? `after ${replanRefusals - 1} refusals`
+            : `this session has no ${PLAN_TOOL} tool, so the gate could never be satisfied`;
+          await emit({
+            type: "error",
+            message: `replan gate released ${why}; continuing without a fresh plan`,
+            fatal: false,
+          });
+          replanReason = null;
+          replanRefusals = 0;
+        } else {
+          const display =
+            `blocked: the supervisor requires a fresh plan before more tool calls (${replanReason}). ` +
+            `Call ${PLAN_TOOL} with your revised plan, then continue.`;
+          await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+          await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
+          return resultBlock(display, true);
+        }
       }
 
       const parsed = tool.inputSchema.safeParse(tu.input);
@@ -614,8 +653,10 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
       },
       requirePlan: (reason) => {
         replanReason = reason;
+        replanRefusals = 0;
       },
       planRequired: () => replanReason !== null,
+      canRequirePlan: () => hasPlanTool,
       record: (payload) => {
         if (ended) return;
         // validated, not trusted: `Detector` is a public interface, and one third-party detector

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { EventPayload, HarnessEvent, ModelEvent, ModelProvider, ModelRequest } from "@agentkitai/agentrig-core";
 import {
+  GradeSchema,
   RubricGrader,
   TrajectoryReviewer,
   condenseTrajectory,
   extractJson,
+  extractJsonCandidates,
+  lastValid,
   renderAttempts,
   type Attempt,
 } from "@agentkitai/agentrig-supervisor";
@@ -83,7 +86,8 @@ describe("TrajectoryReviewer", () => {
     );
     await new TrajectoryReviewer({ provider, maxPromptChars: 3000 }).review({ task: "t", trajectory });
     const prompt = promptOf(provider);
-    expect(prompt.length).toBeLessThan(4000);
+    // the truncation marker counts against the budget, or maxPromptChars would not be a bound
+    expect(prompt.length).toBeLessThanOrEqual(3000);
     // what it just did matters more than how it opened
     expect(prompt).toContain("step-399");
     expect(prompt).not.toContain("step-0-");
@@ -147,6 +151,46 @@ describe("RubricGrader", () => {
     expect(out.gaps).toHaveLength(2);
   });
 
+  it("FAILS CLOSED across every malformed shape", async () => {
+    for (const bad of [
+      "looks good to me!",
+      '{"pass":"yes"}',
+      '{"gaps":[]}',
+      "null",
+      '[{"pass":true}]',
+      "",
+    ]) {
+      const out = await new RubricGrader({ provider: scripted(bad) }).grade({
+        rubric: "r",
+        artifacts,
+        trajectory: [],
+      });
+      expect(out.pass).toBe(false);
+    }
+  });
+
+  it("does NOT certify the work on an echoed format example", async () => {
+    // taking the first balanced object meant the model's own schema echo won, and the supervisor
+    // silently steered nothing — PLAN §4.3 calls this worse than having no grader at all
+    const provider = scripted(
+      'Reply shape: {"pass": true, "gaps": []}\nMy verdict: {"pass": false, "gaps": ["no tests added"]}',
+    );
+    const out = await new RubricGrader({ provider }).grade({ rubric: "r", artifacts, trajectory: [] });
+    expect(out.pass).toBe(false);
+    expect(out.gaps).toEqual(["no tests added"]);
+  });
+
+  it("counts unread artifacts against the budget too", async () => {
+    const provider = scripted(JSON.stringify({ pass: true, gaps: [] }));
+    await new RubricGrader({ provider, maxArtifactChars: 200 }).grade({
+      rubric: "r",
+      artifacts: Array.from({ length: 500 }, (_, i) => ({ path: `some/long/path/to/file-${i}.ts` })),
+      trajectory: [],
+    });
+    // N named-but-unread paths used to grow the prompt without limit
+    expect(promptOf(provider).length).toBeLessThan(2000);
+  });
+
   it("FAILS CLOSED when its own response cannot be parsed", async () => {
     // defaulting to pass would mean a broken grader silently certifies everything, which is
     // strictly worse than having no grader at all
@@ -187,6 +231,7 @@ describe("extractJson", () => {
     expect(extractJson("no json here")).toBeNull();
     expect(extractJson("")).toBeNull();
     expect(extractJson("{ broken")).toBeNull();
+    expect(extractJson('{"unterminated": "string')).toBeNull();
   });
 
   it("finds a balanced object inside surrounding prose", () => {
@@ -198,5 +243,48 @@ describe("extractJson", () => {
       guidance: "use {} carefully",
       directions: [],
     });
+  });
+
+  it("is not defeated by brackets in the prose before the payload", () => {
+    // returning at the FIRST balanced value consumed `[see below]`, failed to parse it, and
+    // discarded the whole reply
+    expect(extractJsonCandidates('Note [see below]. {"pass":false,"gaps":["g"]}')).toContainEqual({
+      pass: false,
+      gaps: ["g"],
+    });
+  });
+
+  it("does not let an empty object in the prose win", () => {
+    const found = extractJsonCandidates('Use {} for defaults.\n{"pass":false,"gaps":["g"]}');
+    expect(found).toContainEqual({ pass: false, gaps: ["g"] });
+  });
+
+  it("scans top-level values only, so a nested object is not a separate candidate", () => {
+    const found = extractJsonCandidates('{"outer":{"inner":1}}');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toEqual({ outer: { inner: 1 } });
+  });
+
+  it("handles a top-level array", () => {
+    expect(extractJson('[{"a":1},{"b":2}]')).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+});
+
+describe("lastValid", () => {
+  const grade = (v: unknown) => GradeSchema.safeParse(v);
+
+  it("takes the LAST schema-valid object, not the first", () => {
+    // a model echoing the format, or thinking aloud, puts its real verdict at the end
+    const text = 'Format: {"pass": true, "gaps": []}\n{"pass": false, "gaps": ["missing tests"]}';
+    expect(lastValid(text, grade)).toEqual({ pass: false, gaps: ["missing tests"] });
+  });
+
+  it("skips trailing objects that do not satisfy the schema", () => {
+    const text = '{"pass":false,"gaps":["real"]}\n{"note":"not a verdict"}';
+    expect(lastValid(text, grade)).toEqual({ pass: false, gaps: ["real"] });
+  });
+
+  it("returns null when nothing validates", () => {
+    expect(lastValid('{"note":"nope"}', grade)).toBeNull();
   });
 });

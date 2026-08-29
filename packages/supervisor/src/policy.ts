@@ -3,9 +3,9 @@ import type { Policy, SignalType } from "./types.js";
 import type { SupervisorState } from "./state.js";
 
 /** The rungs a signal type climbs. `run_reviewer` is M6's; it is listed so the ladder is whole. */
-export type Rung = "inject_guidance" | "force_replan" | "run_reviewer" | "escalate" | "abort";
+export type Rung = "inject_guidance" | "force_replan" | "run_reviewer" | "run_grader" | "escalate" | "abort";
 
-export const DEFAULT_LADDER: Rung[] = ["inject_guidance", "force_replan", "run_reviewer", "escalate", "abort"];
+export const DEFAULT_LADDER: Rung[] = ["inject_guidance", "force_replan", "run_reviewer", "run_grader", "escalate", "abort"];
 
 /**
  * What the harness can actually *do* right now. A rung whose capability is missing is skipped,
@@ -17,6 +17,7 @@ export const DEFAULT_LADDER: Rung[] = ["inject_guidance", "force_replan", "run_r
 export interface Capabilities {
   forceReplan?: boolean;
   reviewer?: boolean;
+  grader?: boolean;
   escalate?: boolean;
   abort?: boolean;
 }
@@ -31,6 +32,13 @@ export interface LadderOptions {
   maxInterventions?: number;
   /** Overrides the guidance text for a signal type. */
   guidance?: Partial<Record<SignalType, string>>;
+  /**
+   * The rubric `run_grader` checks against. Without one the rung has nothing to grade, so it is
+   * skipped even when a grader is attached.
+   */
+  rubric?: string;
+  /** Replaces the rung order outright. */
+  ladder?: Rung[];
 }
 
 const GUIDANCE: Record<SignalType, string> = {
@@ -60,11 +68,15 @@ export class LadderPolicy implements Policy {
   private readonly lastTurn = new Map<SignalType, number>();
   private issued = 0;
 
+  private readonly rubric: string | undefined;
+
   constructor(opts: LadderOptions = {}) {
     const caps = opts.capabilities ?? {};
-    this.rungs = DEFAULT_LADDER.filter((r) => {
+    this.rubric = opts.rubric;
+    this.rungs = (opts.ladder ?? DEFAULT_LADDER).filter((r) => {
       if (r === "force_replan") return caps.forceReplan === true;
       if (r === "run_reviewer") return caps.reviewer === true;
+      if (r === "run_grader") return caps.grader === true && opts.rubric !== undefined;
       if (r === "escalate") return caps.escalate === true;
       if (r === "abort") return caps.abort !== false;
       return true;
@@ -107,6 +119,9 @@ export class LadderPolicy implements Policy {
         return { type: "force_replan" };
       case "run_reviewer":
         return { type: "run_reviewer", reason: `${s.type}: ${why}` };
+      case "run_grader":
+        // filtered out when no rubric exists, so this is only reached with one
+        return this.rubric === undefined ? null : { type: "run_grader", rubric: this.rubric };
       case "escalate":
         return { type: "escalate", question: `The supervisor detected ${s.type}: ${why}. How should the agent proceed?` };
       case "abort":

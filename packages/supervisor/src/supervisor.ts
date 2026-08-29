@@ -14,7 +14,7 @@ export const DEFAULT_REVIEW_TIMEOUT_MS = 90_000;
  * Races `work` against a timer. The timer is unref'd so a pending escalation cannot by itself
  * hold the process open, and cleared on the winning path so it does not leak per intervention.
  */
-async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T | undefined> {
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -55,6 +55,8 @@ export interface AttachOptions extends StateOptions {
   grader?: Grader;
   /** The task under review, needed for reviewer prompts. */
   task?: string;
+  /** The wiki digest the agent is working from, passed through to the reviewer. */
+  memoryIndex?: string;
   /** Read lazily when the reviewer runs — the ledger is on disk and usually not needed. */
   attempts?: () => Promise<Attempt[]> | Attempt[];
   /** Files the grader should judge. Called only when a grade is actually requested. */
@@ -82,10 +84,10 @@ export interface AttachOptions extends StateOptions {
  *    buys. Guidance is queued through `steer()` and lands at the next turn boundary, which is
  *    the only point where injecting a message is coherent.
  *
- * `force_replan`, `run_grader` and `checkpoint_rollback` are recorded but not applied in M4 —
- * they need the pre-tool hook, a grader, and git checkpoints respectively. The default policy
- * will not produce them unless the matching capability is declared, so in practice they do not
- * appear; a hand-written policy that emits one gets an `onError` report rather than silence.
+ * As of M6 every rung is applied except `checkpoint_rollback`, which needs git checkpoints that
+ * nothing creates yet. The default policy will not produce a rung unless its capability is
+ * derived as available, and a hand-written policy that emits an unserviceable one gets an
+ * `onError` report rather than silence.
  */
 export function attach(session: Session, opts: AttachOptions): Detachable {
   const state = initialState();
@@ -166,9 +168,9 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
               // plan lands. This is why the rung sits above inject_guidance — guidance can be
               // ignored, a gate cannot.
               session.control.requirePlan(
-                intervention.type === "force_replan" && signals[0] !== undefined
+                signals.length === 1 && signals[0] !== undefined
                   ? `${signals[0].type}: ${signals[0].evidence[0] ?? ""}`
-                  : "the supervisor asked for a fresh plan",
+                  : `the supervisor asked for a fresh plan (${signals.map((s) => s.type).join(", ")})`,
               );
               break;
             case "run_reviewer": {
@@ -177,15 +179,19 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 break;
               }
               const review = await withTimeout(
-                opts.reviewer.review({
-                  task: opts.task ?? "(task not supplied to the supervisor)",
-                  trajectory: state.recent,
-                  attempts: opts.attempts === undefined ? [] : await opts.attempts(),
-                }),
+                // the loader is INSIDE the timeout: a hanging attempts read would wedge the
+                // observer exactly as a hanging reviewer would
+                (async () =>
+                  opts.reviewer!.review({
+                    task: opts.task ?? "(task not supplied to the supervisor)",
+                    trajectory: state.recent,
+                    attempts: opts.attempts === undefined ? [] : await opts.attempts(),
+                    ...(opts.memoryIndex === undefined ? {} : { memoryIndex: opts.memoryIndex }),
+                  }))(),
                 opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
                 "reviewer",
               );
-              if (review === undefined || review.guidance.trim() === "") break;
+              if (review.guidance.trim() === "") break;
               // the reviewer's product is guidance, so it lands through the same `steer` channel
               // as inject_guidance — a better message, not a different mechanism
               const options =
@@ -203,13 +209,17 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 report("apply", new Error("run_grader was reached with no grader attached; nothing was graded"));
                 break;
               }
-              const artifacts = opts.artifacts === undefined ? [] : await opts.artifacts();
               const grade = await withTimeout(
-                opts.grader.grade({ rubric: active.rubric, artifacts, trajectory: state.recent }),
+                (async () =>
+                  opts.grader!.grade({
+                    rubric: active.rubric,
+                    artifacts: opts.artifacts === undefined ? [] : await opts.artifacts(),
+                    trajectory: state.recent,
+                  }))(),
                 opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
                 "grader",
               );
-              if (grade !== undefined && !grade.pass && grade.gaps.length > 0) {
+              if (!grade.pass && grade.gaps.length > 0) {
                 session.control.steer(
                   `[supervisor: grader] The work does not yet meet the rubric:\n` +
                     grade.gaps.map((g) => `- ${g}`).join("\n"),
@@ -243,12 +253,15 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
 
 export interface SuperviseOptions extends DefaultDetectorOptions {
   ladder?: Omit<LadderOptions, "capabilities">;
+  /** Rubric for the `run_grader` rung; without it the rung stays unreachable. */
+  rubric?: string;
   capabilities?: Capabilities;
   onEscalate?: (question: string) => void | Promise<void>;
   escalateTimeoutMs?: number;
   reviewer?: Reviewer;
   grader?: Grader;
   task?: string;
+  memoryIndex?: string;
   attempts?: () => Promise<Attempt[]> | Attempt[];
   artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
   reviewTimeoutMs?: number;
@@ -272,17 +285,32 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
     ...(opts.capabilities ?? {}),
     escalate: opts.onEscalate !== undefined,
     reviewer: opts.reviewer !== undefined,
-    // force_replan needs no collaborator — core's replan gate is always available
-    forceReplan: opts.capabilities?.forceReplan ?? true,
+    grader: opts.grader !== undefined,
+    // `force_replan` DOES need a collaborator: the session must have a tool that can satisfy the
+    // gate. Asserting otherwise meant raising a gate on a session that could never clear it, so
+    // the ladder walked to abort — or, with abort disabled, the run burned its whole budget being
+    // refused. A rung that can wedge the loop is worse than the loop it was catching.
+    forceReplan: session.control.canRequirePlan(),
   };
+  if (opts.capabilities?.forceReplan === true && !session.control.canRequirePlan()) {
+    opts.onError?.(
+      "capabilities",
+      new Error("force_replan was requested but this session has no update_plan tool; the rung is disabled"),
+    );
+  }
   const attachOpts: AttachOptions = {
     detectors: defaultDetectors(opts),
-    policy: new LadderPolicy({ ...(opts.ladder ?? {}), capabilities }),
+    policy: new LadderPolicy({
+      ...(opts.ladder ?? {}),
+      capabilities,
+      ...(opts.rubric === undefined ? {} : { rubric: opts.rubric }),
+    }),
   };
   if (opts.onEscalate !== undefined) attachOpts.onEscalate = opts.onEscalate;
   if (opts.reviewer !== undefined) attachOpts.reviewer = opts.reviewer;
   if (opts.grader !== undefined) attachOpts.grader = opts.grader;
   if (opts.task !== undefined) attachOpts.task = opts.task;
+  if (opts.memoryIndex !== undefined) attachOpts.memoryIndex = opts.memoryIndex;
   if (opts.attempts !== undefined) attachOpts.attempts = opts.attempts;
   if (opts.artifacts !== undefined) attachOpts.artifacts = opts.artifacts;
   if (opts.reviewTimeoutMs !== undefined) attachOpts.reviewTimeoutMs = opts.reviewTimeoutMs;

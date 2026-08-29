@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { HarnessEvent, ModelProvider } from "@agentkitai/agentrig-core";
-import { complete, condenseTrajectory, extractJson } from "./reviewer.js";
+import { complete, condenseTrajectory, lastValid } from "./reviewer.js";
 
 /**
  * PLAN §4.3. The grader is the Outcomes piece: a written rubric checked by a *separate*
@@ -71,7 +71,11 @@ export class RubricGrader implements Grader {
     const rendered: string[] = [];
     for (const a of input.artifacts) {
       if (a.content === undefined) {
-        rendered.push(`--- ${a.path}\n(not read)`);
+        const line = `--- ${a.path}\n(not read)`;
+        // still costs budget: N named-but-unread paths would otherwise grow the prompt unbounded
+        if (line.length > budget) break;
+        rendered.push(line);
+        budget -= line.length;
         continue;
       }
       const block = `--- ${a.path}\n${a.content}`;
@@ -90,12 +94,14 @@ export class RubricGrader implements Grader {
     ].join("\n\n");
 
     const text = await complete(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1000);
-    const parsed = GradeSchema.safeParse(extractJson(text));
-    if (!parsed.success) {
+    // last valid, not first: a model echoing the format or thinking aloud puts its real verdict
+    // at the end, and taking the first silently certified the work on an echoed `pass: true`
+    const parsed = lastValid(text, (v) => GradeSchema.safeParse(v));
+    if (parsed === null) {
       // An unparseable grader must fail closed. Defaulting to pass would mean a broken grader
       // silently certifies everything, which is worse than having no grader at all.
       return { pass: false, gaps: ["the grader's response could not be parsed"] };
     }
-    return parsed.data;
+    return parsed;
   }
 }

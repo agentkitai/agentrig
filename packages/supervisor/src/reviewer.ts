@@ -139,13 +139,19 @@ export class TrajectoryReviewer implements Reviewer {
     ].filter((p) => p !== "");
     let user = parts.join("\n\n");
     if (user.length > maxPromptChars) {
-      // keep the TAIL: what the agent just did matters more than how it opened
-      user = `…(earlier context truncated)\n${user.slice(user.length - maxPromptChars)}`;
+      // keep the TAIL: what the agent just did matters more than how it opened. The marker
+      // counts against the budget, or `maxPromptChars` would not actually bound the prompt.
+      const marker = "…(earlier context truncated)\n";
+      let cut = user.length - Math.max(0, maxPromptChars - marker.length);
+      // never cut between a surrogate pair
+      const code = user.charCodeAt(cut);
+      if (code >= 0xdc00 && code <= 0xdfff) cut += 1;
+      user = `${marker}${user.slice(cut)}`;
     }
 
     const text = await complete(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1500);
-    const parsed = ReviewSchema.safeParse(extractJson(text));
-    if (!parsed.success) {
+    const parsed = lastValid(text, (v) => ReviewSchema.safeParse(v));
+    if (parsed === null) {
       // a reviewer that cannot be parsed must not become a crash in the supervisor; the ladder
       // simply gets no useful guidance and moves on
       return {
@@ -154,7 +160,7 @@ export class TrajectoryReviewer implements Reviewer {
         guidance: "",
       };
     }
-    return parsed.data;
+    return parsed;
   }
 }
 
@@ -175,35 +181,81 @@ export async function complete(
   return text;
 }
 
-/** Tolerates fenced JSON; returns null rather than throwing, so a bad reply is never fatal. */
-export function extractJson(text: string): unknown {
+/**
+ * Tolerates fenced JSON; returns null rather than throwing, so a bad reply is never fatal.
+ *
+ * Scans **top-level** values and returns them all, in order. Returning at the first balanced
+ * value — which an earlier version did — loses to two shapes a model produces constantly:
+ * `Note [see below]. {"pass":false}` (the prose bracket is consumed, `JSON.parse` fails, the
+ * whole reply is discarded) and `Use {} for defaults.\n{"pass":false}` (the empty object wins).
+ *
+ * `memory/src/ingest.ts` has a sibling implementation; the repo rule forbidding
+ * `supervisor → memory` justifies duplicating the code, not diverging from it. Keep them in
+ * step.
+ */
+export function extractJsonCandidates(text: string): unknown[] {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const candidate = (fenced?.[1] ?? text).trim();
-  const start = candidate.search(/[{[]/);
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < candidate.length; i += 1) {
-    const ch = candidate[i]!;
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === "{" || ch === "[") depth += 1;
-    else if (ch === "}" || ch === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        try {
-          return JSON.parse(candidate.slice(start, i + 1));
-        } catch {
-          return null;
-        }
+  const out: unknown[] = [];
+
+  /** Index just past a balanced JSON value starting at `from`, or -1. */
+  const balancedEnd = (from: number): number => {
+    const open = candidate[from];
+    const close = open === "{" ? "}" : open === "[" ? "]" : "";
+    if (close === "") return -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = from; i < candidate.length; i += 1) {
+      const ch = candidate[i]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === "{" || ch === "[") depth += 1;
+      else if (ch === "}" || ch === "]") {
+        depth -= 1;
+        if (depth === 0) return i + 1;
       }
     }
+    return -1;
+  };
+
+  for (let i = 0; i < candidate.length; i += 1) {
+    const ch = candidate[i];
+    if (ch !== "{" && ch !== "[") continue;
+    const end = balancedEnd(i);
+    if (end === -1) continue;
+    try {
+      out.push(JSON.parse(candidate.slice(i, end)));
+    } catch {
+      // not valid JSON after all; fall through and keep scanning
+    }
+    // skip past this value: a nested object must not be considered a top-level candidate
+    i = end - 1;
+  }
+  return out;
+}
+
+/** The first top-level value, for callers that just want "the JSON in this reply". */
+export function extractJson(text: string): unknown {
+  return extractJsonCandidates(text)[0] ?? null;
+}
+
+/**
+ * The **last** candidate that satisfies `schema`. Last, not first, because a model that echoes
+ * the format (`Format: {"pass":true,...}`) or thinks aloud before committing puts its real answer
+ * at the end — and taking the first meant a grader returned the echoed `pass: true` and silently
+ * certified the work. That is the exact failure PLAN §4.3 calls worse than no grader at all.
+ */
+export function lastValid<T>(text: string, parse: (v: unknown) => { success: true; data: T } | { success: false }): T | null {
+  const candidates = extractJsonCandidates(text);
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    const r = parse(candidates[i]);
+    if (r.success) return r.data;
   }
   return null;
 }

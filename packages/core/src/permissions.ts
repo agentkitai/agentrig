@@ -47,5 +47,18 @@ export class RulePolicy implements PermissionPolicy {
   }
 }
 
-/** Reads inside the cwd are safe; everything else escalates to `ask` (which headless mode resolves to deny). */
-export const defaultRules: PermissionRule[] = [{ class: "read", cwdOnly: true, decision: "allow" }];
+/**
+ * Reads inside the cwd are safe; everything else escalates to `ask` (which headless mode resolves
+ * to deny).
+ *
+ * `update_plan` is allowed by name and must come first. It declares `read` but touches no path,
+ * and the `cwdOnly` rule below is skipped whenever `req.paths` is undefined — so under the plain
+ * defaults it fell through to `ask` and headless denied it. That is not a cosmetic gap: the
+ * supervisor's `force_replan` gate (PLAN §4.2) refuses every tool until a fresh plan lands, so a
+ * denied `update_plan` is a gate nothing can ever clear. Interactively it was just as wrong the
+ * other way — a prompt on every plan revision, for a call that reads and writes nothing.
+ */
+export const defaultRules: PermissionRule[] = [
+  { tool: "update_plan", decision: "allow" },
+  { class: "read", cwdOnly: true, decision: "allow" },
+];

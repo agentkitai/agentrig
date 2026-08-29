@@ -506,6 +506,19 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   emitted in the same turn — so a cooperative agent loses one tool call, not a turn. This is
   exactly why the rung sits above `inject_guidance` on the ladder: guidance can be ignored, a gate
   cannot.
+- **A gate can never be permanent, and is never raised where it cannot be satisfied.** Both halves
+  were needed, and the first cut had neither. `update_plan` declares `read` and touches no path,
+  and the default read rule is `cwdOnly` — which `RulePolicy` skips when a call declares no paths
+  — so under the harness's *own* defaults it fell through to `ask` and headless denied it: a gate
+  nothing could ever clear. `defaultRules` now allows it by name. Separately, `supervise()`
+  asserted the `forceReplan` capability unconditionally on the grounds that the gate "needs no
+  collaborator"; it does — the session's tool list must contain `update_plan`. It is now derived
+  from `control.canRequirePlan()`, and a caller asking for the rung on a session that cannot serve
+  it gets an `onError` report. As a belt-and-braces third measure the gate releases itself after
+  `MAX_REPLAN_REFUSALS` (2) with an `error` event saying so, and immediately when the session has
+  no plan tool at all. Without these, `agentrig run --headless --supervise --supervisor-no-abort`
+  was a live deadlock: 34 of 40 turns refused by a gate nothing could clear, ending on `budget`.
+  A supervisor rung that can wedge the loop is strictly worse than the loop it was catching.
 - **The reviewer proposes several directions, not one.** A supervisor that hands back a single
   instruction has replaced the agent's judgement with its own on the strength of one sample.
   Candidates keep the decision where the context is, and make the guidance falsifiable — an agent
@@ -539,7 +552,15 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   differently-aligned reviewer model is the obvious next step and is not wired.
 - **Caveat: `artifacts` is caller-supplied.** The supervisor does not infer which files to grade
   from `file.changed`; the CLI passes none today, so `run_grader` grades the trajectory alone
-  unless a caller supplies them through the SDK.
+  unless a caller supplies them through the SDK. The CLI also supplies no rubric, so the rung
+  stays unreachable from `agentrig run` — reachable from the SDK, and honest about it, rather than
+  advertised and dead.
+- **Caveat: the reviewer sees the last 400 events condensed to 120**, not "the whole trajectory"
+  as PLAN §4.3 words it. The bound is what keeps a stuck session's trajectory from growing the
+  prompt without limit; the tail is kept because what the agent just did matters more than how it
+  opened.
+- **Caveat: a replan gate does not survive `--resume`.** It lives in session state, so resuming
+  silently drops a pending requirement.
 - **Caveat: `checkpoint_rollback` is still the one unimplemented rung.** It needs git checkpoints,
   which nothing creates yet, and the default policy never emits it.
 

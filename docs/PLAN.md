@@ -525,7 +525,10 @@ than no grader at all.
 
 `force_replan` needs `plan.updated`, which needs something to emit it: the `update_plan` built-in
 tool (M6). `SessionControl.requirePlan(reason)` then makes the loop refuse every tool except
-`update_plan` until a fresh plan lands. That gate is why the rung outranks `inject_guidance` —
+`update_plan` until a fresh plan lands. Two safeguards are part of the design rather than
+afterthoughts, because a gate that cannot be cleared is worse than the loop it interrupts: the
+rung is offered only when the session actually has a plan tool (`control.canRequirePlan()`), and
+the gate releases itself after a couple of refusals with an `error` explaining why. That gate is why the rung outranks `inject_guidance` —
 guidance can be ignored and a gate cannot — and it is also what makes §4.1's `drift` detector
 reachable, since it compares `file.changed` against the plan's declared `scope`.
 

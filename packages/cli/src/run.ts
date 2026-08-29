@@ -218,10 +218,12 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
           ...(opts.supervisorReview === true
             ? {
                 reviewer: new TrajectoryReviewer({ provider }),
+                // the wiki digest the agent itself is working from, so the reviewer diagnoses
+                // against what the agent knows rather than guessing at it
+                ...(memoryIndex === "" ? {} : { memoryIndex }),
                 grader: new RubricGrader({ provider }),
                 attempts: async () => {
                   if (opts.memory === undefined) return [];
-                  const { FileRawStore } = await import("@agentkitai/agentrig-memory");
                   return (await new FileRawStore({ root: opts.memory }).readAttempts()).attempts;
                 },
               }

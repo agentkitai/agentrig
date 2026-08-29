@@ -5,8 +5,10 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createAgent,
+
   RulePolicy,
   SessionStore,
+  updatePlanTool,
   type AnyTool,
   type HarnessEvent,
   type Intervention,
@@ -640,5 +642,104 @@ describe("M6: the LLM-backed rungs and force_replan", () => {
     await sup.done;
     await session.done;
     expect(errors.some((e) => e.includes("no reviewer attached"))).toBe(true);
+  });
+});
+
+describe("force_replan — the rung this milestone made real", () => {
+  /** A session whose tools include update_plan, so a gate can actually be satisfied. */
+  function planningRun(provider: ModelProvider, maxTurns = 40): Session {
+    return createAgent({
+      provider,
+      tools: [spinTool(), updatePlanTool()],
+      // permissive: this block is about the GATE. That `update_plan` survives the harness's own
+      // defaultRules is proved in core's agent.test.ts, where the permission layer is the subject.
+      permissions: new RulePolicy([
+        { class: "read", decision: "allow" },
+        { tool: "update_plan", decision: "allow" },
+      ]),
+      systemPrompt: "test",
+      store: new SessionStore({ root }),
+      budget: { maxTurns },
+      maxTokensPerTurn: 100,
+    }).run("spin", { cwd: root });
+  }
+
+  it("raises a real gate on the session, naming the signal that caused it", async () => {
+    const session = planningRun(new LoopingProvider());
+    const sup = attach(session, {
+      detectors: [loopDetector({ repeats: 3 })],
+      policy: {
+        decide: (signals) => (signals.length > 0 ? [{ type: "force_replan" }] : []),
+      },
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const blocked = events.filter(
+      (e) => e.type === "tool.result" && (e as { display: string }).display.startsWith("blocked:"),
+    ) as Array<{ display: string }>;
+    expect(blocked.length).toBeGreaterThan(0);
+    expect(blocked[0]!.display).toContain("loop:");
+    expect(blocked[0]!.display).toContain("update_plan");
+  });
+
+  it("is NOT offered on a session with no update_plan tool — and says so", async () => {
+    // raising a gate a session can never clear turns a rung meant to interrupt a loop into a
+    // permanent deadlock: 34 of 40 turns refused, ending on `budget`
+    const errors: string[] = [];
+    const session = run(new LoopingProvider(), 40); // run() builds tools WITHOUT update_plan
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { forceReplan: true, abort: false },
+      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const kinds = events
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds).not.toContain("force_replan");
+    expect(errors.some((e) => e.includes("no update_plan tool"))).toBe(true);
+  });
+
+  it("IS offered when the session can satisfy it", async () => {
+    const session = planningRun(new LoopingProvider());
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: false },
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const kinds = events
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds).toContain("force_replan");
+  });
+
+  it("a supervised session with --supervisor-no-abort still terminates rather than deadlocking", async () => {
+    // the shipped-config deadlock: gate up, abort disabled, nothing able to clear it
+    const session = run(new LoopingProvider(), 12);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: false },
+    });
+    const events = await drain(session);
+    await sup.done;
+    const summary = await session.done;
+
+    const blocked = events.filter(
+      (e) => e.type === "tool.result" && (e as { display: string }).display.startsWith("blocked:"),
+    );
+    // whatever else happens, the run must not spend itself being refused
+    expect(blocked.length).toBeLessThanOrEqual(2);
+    expect(["done", "budget"]).toContain(summary.reason);
   });
 });
