@@ -1,105 +1,12 @@
 /**
  * @agentkitai/agentrig-memory — LLM Wiki memory. See docs/PLAN.md §3.
  *
- * M0: interfaces only. Implementation lands in M3 (ingest, index ∪ BM25 query, pins)
- * and M5 (dream = scheduled lint). Nothing here may import core internals beyond types.
+ * M3 in progress. Landed so far: shared types, the page format (frontmatter parse/serialize,
+ * fact lines, wikilinks), the file-backed wiki store with atomic slug reservation, and
+ * index ∪ BM25 retrieval. Still to come this milestone: raw store, attempts ledger, pins,
+ * session ingest, and the agent-facing memory tools. M5 adds the dream (scheduled lint).
  */
-import type { ModelProvider } from "@agentkitai/agentrig-core";
-
-export type Scope = "project" | "global";
-export type PageType = "entity" | "concept" | "source" | "analysis";
-export type FactTag = "stated" | "observed" | "inferred";
-
-export interface PageFrontmatter {
-  type: PageType;
-  slug: string;
-  aliases: string[];
-  sources: string[]; // "session:<id>" | "doc:<id>"
-  updated: string;   // ISO date
-  confidence: "high" | "medium" | "low";
-}
-
-export interface WikiPage {
-  path: string;
-  frontmatter: PageFrontmatter;
-  body: string;
-  updatedAt: number;
-}
-
-export interface IndexEntry {
-  slug: string;
-  path: string;
-  type: PageType;
-  summary: string;
-  status: "planned" | "active";
-  claimedBy?: string[];
-}
-
-export interface MemoryStore {
-  root: string;
-  scope: Scope;
-  index(): Promise<IndexEntry[]>;
-  read(path: string): Promise<WikiPage | null>;
-  write(path: string, page: Omit<WikiPage, "updatedAt">): Promise<void>;
-  /** Atomic placeholder reservation so concurrent ingests converge on one page. */
-  reserve(slug: string, claimant: string): Promise<"created" | "exists">;
-  appendLog(entry: string): Promise<void>;
-  search(query: string, k?: number): Promise<Array<{ page: WikiPage; score: number; snippet: string }>>;
-}
-
-export interface SessionLogRef { id: string; path: string; updatedAt: number }
-export interface DocRef { id: string; path: string; addedAt: number }
-
-export interface RawStore {
-  sessions(since?: number): Promise<SessionLogRef[]>;
-  docs(): Promise<DocRef[]>;
-  addDoc(path: string): Promise<DocRef>;
-}
-
-export interface Attempt {
-  id: string;
-  sessionId: string;
-  ts: number;
-  hypothesis: string;
-  actions: string;
-  outcome: "success" | "failed" | "abandoned" | "reverted";
-  evidence: string[];
-  lesson?: string;
-}
-
-export interface Pin {
-  page: string;
-  kind: "correction" | "addition" | "deletion";
-  claim: string;
-  anchor: string; // section heading, not line numbers
-  provenance: "human";
-  created: string;
-  status: "active" | "conflict" | "orphaned";
-}
-
-export interface DreamInput {
-  wiki: MemoryStore;
-  raw: RawStore;
-  globalWiki?: MemoryStore;
-  provider: ModelProvider;
-}
-
-export interface DreamReport {
-  contradictions: Array<{ pages: string[]; claims: string[]; resolution: string }>;
-  superseded: Array<{ page: string; old: string; new: string; source: string }>;
-  orphans: string[];
-  missingPages: Array<{ concept: string; mentionedIn: string[] }>;
-  merged: Array<{ from: string[]; to: string }>;
-  removed: Array<{ page: string; line: string; reason: string }>;
-  promoted: Array<{ from: string; toGlobal: string; evidence: string[] }>;
-  pinsAffected: Array<{ pin: string; status: "kept" | "conflict" | "orphaned" }>;
-}
-
-export interface DreamResult {
-  outputRoot: string; // a NEW wiki directory; input untouched
-  report: DreamReport;
-}
-
-export interface Dreamer {
-  dream(input: DreamInput): Promise<DreamResult>;
-}
+export * from "./types.js";
+export * from "./page.js";
+export * from "./store.js";
+export * from "./search.js";
