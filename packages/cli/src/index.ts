@@ -9,6 +9,7 @@ import {
   memoryInit,
   memoryLint,
   memoryLs,
+  memoryPromote,
   memorySearch,
   memoryShow,
   type MemoryIngestOptions,
@@ -90,6 +91,9 @@ memoryDir(memory.command("show <path>").description("Print one wiki page")).acti
 memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search over the wiki"))
   .option("-k, --k <n>", "max results", "8")
   .action(async (query: string[], opts: { dir: string; k?: string }) => memorySearch(query.join(" "), opts));
+memoryDir(memory.command("promote <path>").description("Promote a wiki page to the backend's shared scope")).action(
+  async (path: string, opts: { dir: string }) => memoryPromote(path, opts),
+);
 memoryDir(memory.command("lint").description("Dry-run dream report (M3: pin re-check and unfilled reservations)")).action(
   async (opts: { dir: string }) => memoryLint(opts),
 );

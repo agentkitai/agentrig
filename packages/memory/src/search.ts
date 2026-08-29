@@ -166,6 +166,7 @@ export function withBackendRecall(
   local: UnionHit[],
   backendHits: Array<{ id: string; text: string; score: number; page?: string }>,
   backendId: string,
+  k = 8,
 ): RetrievalHit[] {
   const seen = new Set(local.map((h) => h.page.path));
   const extra: BackendOnlyHit[] = [];
@@ -178,7 +179,9 @@ export function withBackendRecall(
     extra.push(b);
   }
   extra.sort((a, b) => b.score - a.score);
-  return [...local, ...extra];
+  // the backend is asked for k and never trusted with it: an enabled backend must not be able to
+  // flood the model's context, which would make the tool's own k cap meaningless
+  return [...local, ...extra.slice(0, Math.max(0, k))];
 }
 
 /**

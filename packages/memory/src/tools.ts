@@ -90,14 +90,14 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
       const local = unionRetrieve(await store.index(), await store.pages(), input.query, k);
       // backend recall is unioned in after the local result, never in place of it
       const backendHits = opts.backend === undefined ? [] : await opts.backend.recall(input.query, k);
-      const hits = withBackendRecall(local, backendHits, opts.backend?.id ?? "backend");
+      const hits = withBackendRecall(local, backendHits, opts.backend?.id ?? "backend", k);
       if (hits.length === 0) {
         return { output: [], display: `no memory matches for ${JSON.stringify(input.query)}` };
       }
       return {
         output: hits.map((h) =>
           h.via === "backend"
-            ? { ref: h.ref, via: h.via, snippet: h.text }
+            ? { ref: h.ref, via: h.via, snippet: h.text, ...(h.page === undefined ? {} : { page: h.page }) }
             : { path: h.page.path, via: h.via, snippet: h.snippet },
         ),
         display: hits

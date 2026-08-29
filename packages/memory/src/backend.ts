@@ -37,12 +37,28 @@ export interface Conflict {
   detail?: string;
 }
 
+/** What a backend stored for one fact, so the wiki can record provenance back to it. */
+export interface BackendAck {
+  factText: string;
+  memoryId: string;
+}
+
 export interface MemoryBackend {
   id: string;
-  onIngest(facts: DistilledFact[], source: SourceRef): Promise<void>;
+  /** Returns the ids assigned to each fact, for the `lore:<memory-id>` half of provenance. */
+  onIngest(facts: DistilledFact[], source: SourceRef): Promise<BackendAck[]>;
   recall(query: string, k: number): Promise<BackendHit[]>;
   promote(page: WikiPage): Promise<void>;
   conflicts?(facts: DistilledFact[]): Promise<Conflict[]>;
+}
+
+export interface TolerantOptions {
+  /**
+   * Abandon a call after this long (default 15s). Guarding rejections is not enough: a backend
+   * whose promise never settles would otherwise block ingest and search forever, which is the
+   * exact opposite of what this wrapper promises.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -50,18 +66,40 @@ export interface MemoryBackend {
  * reads become empty. `onError` sees what happened, so a CLI can print it and a dream can log
  * it — silent-but-visible rather than silent-and-lost.
  */
-export function tolerant(backend: MemoryBackend, onError: (op: string, err: Error) => void): MemoryBackend {
-  const guard = async <T>(op: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+export function tolerant(
+  backend: MemoryBackend,
+  onError: (op: string, err: Error) => void,
+  opts: TolerantOptions = {},
+): MemoryBackend {
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  // a throwing logger must not become the failure it was reporting
+  const report = (op: string, err: Error) => {
     try {
-      return await fn();
+      onError(op, err);
+    } catch {
+      // e.g. EPIPE from console.error when stdout is piped to `head`
+    }
+  };
+  const guard = async <T>(op: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        fn(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
     } catch (err) {
-      onError(op, err instanceof Error ? err : new Error(String(err)));
+      report(op, err instanceof Error ? err : new Error(String(err)));
       return fallback;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   };
   const wrapped: MemoryBackend = {
     id: backend.id,
-    onIngest: (facts, source) => guard("onIngest", () => backend.onIngest(facts, source), undefined),
+    onIngest: (facts, source) => guard("onIngest", () => backend.onIngest(facts, source), []),
     recall: (query, k) => guard("recall", () => backend.recall(query, k), []),
     promote: (page) => guard("promote", () => backend.promote(page), undefined),
   };

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -176,7 +176,7 @@ describe("tolerant() — a backend can never block or break the wiki", () => {
   it("turns every failure into a reported no-op", async () => {
     const errors: string[] = [];
     const safe = tolerant(exploding, (op, err) => errors.push(`${op}: ${err.message}`));
-    await expect(safe.onIngest([], { ref: "r", project: "p" })).resolves.toBeUndefined();
+    await expect(safe.onIngest([], { ref: "r", project: "p" })).resolves.toEqual([]);
     await expect(safe.recall("q", 3)).resolves.toEqual([]);
     await expect(safe.promote({} as WikiPage)).resolves.toBeUndefined();
     await expect(safe.conflicts!([])).resolves.toEqual([]);
@@ -185,15 +185,40 @@ describe("tolerant() — a backend can never block or break the wiki", () => {
   });
 
   it("omits conflicts when the wrapped backend has none", () => {
-    const minimal: MemoryBackend = { id: "m", onIngest: async () => {}, recall: async () => [], promote: async () => {} };
+    const minimal: MemoryBackend = { id: "m", onIngest: async () => [], recall: async () => [], promote: async () => {} };
     expect(tolerant(minimal, () => {}).conflicts).toBeUndefined();
   });
 
-  it("an exploding backend does not stop a session being ingested into the wiki", async () => {
+  it("a throwing onError does not become the failure it was reporting", async () => {
+    const safe = tolerant(exploding, () => {
+      throw new Error("logger blew up"); // e.g. EPIPE from console.error under `| head`
+    });
+    await expect(safe.recall("q", 3)).resolves.toEqual([]);
+  });
+
+  it("times out a backend that hangs instead of blocking forever", async () => {
+    const hanging: MemoryBackend = {
+      id: "hang",
+      onIngest: () => new Promise(() => {}),
+      recall: () => new Promise(() => {}),
+      promote: () => new Promise(() => {}),
+    };
+    const errors: string[] = [];
+    const safe = tolerant(hanging, (op, err) => errors.push(`${op}: ${err.message}`), { timeoutMs: 50 });
+    const t0 = Date.now();
+    expect(await safe.recall("q", 3)).toEqual([]);
+    expect(await safe.onIngest([], { ref: "r", project: "p" })).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(errors.every((e) => e.includes("timed out"))).toBe(true);
+  });
+});
+
+describe("the wiki is finished before the backend is consulted", () => {
+  async function ingestWith(backend: MemoryBackend | undefined, extra: Record<string, unknown> = {}) {
     await mkdir(join(root, "raw", "sessions"), { recursive: true });
     const logPath = join(root, "raw", "sessions", "s1.jsonl");
     await writeFile(logPath, JSON.stringify({ type: "session.start", task: "t", cwd: "/w" }) + "\n");
-    const result = await ingestSession({
+    return ingestSession({
       store,
       provider: reply({
         nothingDurable: false,
@@ -203,10 +228,79 @@ describe("tolerant() — a backend can never block or break the wiki", () => {
       sessionId: "s1",
       logPath,
       now: at,
-      backend: tolerant(exploding, () => {}),
+      ...(backend === undefined ? {} : { backend }),
+      ...extra,
     });
+  }
+
+  it("the page, the log entry, and the pin re-check all precede onIngest", async () => {
+    let logAtCallTime = "";
+    let pageAtCallTime = false;
+    const observer: MemoryBackend = {
+      id: "obs",
+      onIngest: async () => {
+        pageAtCallTime = (await store.read("concepts/retry-policy.md")) !== null;
+        logAtCallTime = await readFile(join(store.root, "log.md"), "utf8");
+        return [];
+      },
+      recall: async () => [],
+      promote: async () => {},
+    };
+    await ingestWith(observer);
+    // this is the ordering guarantee: moving the backend call earlier makes these fail
+    expect(pageAtCallTime).toBe(true);
+    expect(logAtCallTime).toContain("ingest | session:s1");
+  });
+
+  it("an UNWRAPPED throwing backend still leaves the wiki complete", async () => {
+    // deliberately NOT wrapped in tolerant(): ingestSession must contain the blast itself
+    const throwing: MemoryBackend = {
+      id: "boom",
+      onIngest: async () => {
+        throw new Error("backend down");
+      },
+      recall: async () => {
+        throw new Error("backend down");
+      },
+      promote: async () => {
+        throw new Error("backend down");
+      },
+    };
+    const result = await ingestWith(throwing);
     expect(result.factCount).toBe(1);
     expect((await store.read("concepts/retry-policy.md"))!.body).toContain("per request");
+    expect(await readFile(join(store.root, "log.md"), "utf8")).toContain("ingest | session:s1");
+  });
+
+  it("writes lore:<memory-id> provenance onto the fact lines it stored", async () => {
+    const acking: MemoryBackend = {
+      id: "lore",
+      onIngest: async (facts) => facts.map((f, i) => ({ factText: f.text, memoryId: `m${i}` })),
+      recall: async () => [],
+      promote: async () => {},
+    };
+    await ingestWith(acking);
+    const body = (await store.read("concepts/retry-policy.md"))!.body;
+    expect(body).toContain("(session:s1, lore:m0)");
+  });
+
+  it("skips the contradiction check unless asked (PLAN §3.8 assigns it to the dream)", async () => {
+    let checks = 0;
+    const counting: MemoryBackend = {
+      id: "c",
+      onIngest: async () => [],
+      recall: async () => [],
+      promote: async () => {},
+      conflicts: async () => {
+        checks += 1;
+        return [];
+      },
+    };
+    await ingestWith(counting);
+    expect(checks).toBe(0);
+    await rm(join(store.root, "sources"), { recursive: true, force: true });
+    await ingestWith(counting, { checkBackendConflicts: true });
+    expect(checks).toBe(1);
   });
 });
 
@@ -239,6 +333,17 @@ describe("withBackendRecall — union only, never a replacement", () => {
     expect(withBackendRecall(local, [], "lore")).toEqual(local);
   });
 
+  it("bounds the total result even when the backend ignores k", () => {
+    const flood = hits(Array.from({ length: 10_000 }, (_, i) => ({ id: `m${i}`, score: i })));
+    expect(withBackendRecall(local, flood, "lore", 8).length).toBeLessThanOrEqual(9);
+  });
+
+  it("a malformed page tag can never drop a local hit", () => {
+    const garbled = hits([{ page: "" }, { page: "no-slash" }, { page: "unknown/type" }, { page: "concepts/" }]);
+    const out = withBackendRecall(local, garbled, "lore", 20);
+    expect(out.filter((h) => h.via !== "backend")).toEqual(local);
+  });
+
   it("orders backend-only hits by score", () => {
     const out = withBackendRecall([], hits([{ id: "a", score: 0.2 }, { id: "b", score: 0.8 }]), "lore");
     expect(out.map((h) => (h.via === "backend" ? h.ref : ""))).toEqual(["lore:b", "lore:a"]);
@@ -254,7 +359,7 @@ describe("memory_search with a backend", () => {
     });
     const backend: MemoryBackend = {
       id: "lore",
-      onIngest: async () => {},
+      onIngest: async () => [],
       recall: async () => [{ id: "m1", text: "a memory only lore has", score: 0.9 }],
       promote: async () => {},
     };

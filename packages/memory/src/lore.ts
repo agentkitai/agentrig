@@ -1,5 +1,6 @@
+import { z } from "zod";
 import { serializePage } from "./page.js";
-import type { BackendHit, Conflict, MemoryBackend, SourceRef } from "./backend.js";
+import type { BackendAck, BackendHit, Conflict, MemoryBackend, SourceRef } from "./backend.js";
 import type { DistilledFact } from "./ingest.js";
 import type { WikiPage } from "./types.js";
 
@@ -37,6 +38,43 @@ export function loreConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LoreCon
 
 type JsonObject = Record<string, unknown>;
 
+/**
+ * Response shapes are validated per row, not per envelope: a real server returning one null or
+ * malformed row must not discard every valid row alongside it.
+ */
+const RecallRow = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  memory_id: z.union([z.string(), z.number()]).optional(),
+  content: z.string().optional(),
+  text: z.string().optional(),
+  score: z.coerce.number().optional(),
+  tags: z.array(z.union([z.string(), z.number()])).optional(),
+});
+
+const ConflictRow = z.object({
+  fact: z.string(),
+  existing: z.string(),
+  existing_id: z.union([z.string(), z.number()]).optional(),
+  id: z.union([z.string(), z.number()]).optional(),
+  detail: z.string().optional(),
+});
+
+const AckRow = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  memory_id: z.union([z.string(), z.number()]).optional(),
+  content: z.string().optional(),
+  text: z.string().optional(),
+});
+
+function rowsOf(data: unknown, ...keys: string[]): unknown[] {
+  if (data === null || typeof data !== "object") return [];
+  const obj = data as JsonObject;
+  for (const key of keys) {
+    if (Array.isArray(obj[key])) return obj[key] as unknown[];
+  }
+  return [];
+}
+
 /** Tags every memory carries, so AgentRig-authored content is identifiable and scoped in Lore. */
 export function tagsFor(source: SourceRef, fact?: DistilledFact): string[] {
   const tags = ["agentrig", `project:${source.project}`, source.ref];
@@ -54,7 +92,11 @@ export class LoreBackend implements MemoryBackend {
   private readonly timeoutMs: number;
 
   constructor(opts: LoreBackendOptions = {}) {
-    const env = loreConfigFromEnv();
+    // only consult the environment for values the caller did not supply, so an explicitly
+    // constructed backend is not perturbed by ambient LORE_* vars
+    const env = opts.apiUrl === undefined || opts.apiKey === undefined || opts.project === undefined
+      ? loreConfigFromEnv()
+      : null;
     this.apiUrl = (opts.apiUrl ?? env?.apiUrl ?? "").replace(/\/$/, "");
     this.apiKey = opts.apiKey ?? env?.apiKey ?? "";
     this.project = opts.project ?? env?.project ?? "default";
@@ -87,9 +129,9 @@ export class LoreBackend implements MemoryBackend {
   }
 
   /** Push distilled facts as Lore memories, tagged so they can be traced back to the wiki. */
-  async onIngest(facts: DistilledFact[], source: SourceRef): Promise<void> {
-    if (facts.length === 0) return;
-    await this.request("/v1/memories", {
+  async onIngest(facts: DistilledFact[], source: SourceRef): Promise<BackendAck[]> {
+    if (facts.length === 0) return [];
+    const data = await this.request("/v1/memories", {
       project: this.project,
       memories: facts.map((f) => ({
         content: f.text,
@@ -102,35 +144,52 @@ export class LoreBackend implements MemoryBackend {
         },
       })),
     });
+    // ids come back so the wiki can record `lore:<memory-id>` on the fact lines it just wrote
+    const acks: BackendAck[] = [];
+    for (const raw of rowsOf(data, "memories", "results", "created")) {
+      const row = AckRow.safeParse(raw);
+      if (!row.success) continue;
+      const memoryId = String(row.data.id ?? row.data.memory_id ?? "");
+      const factText = row.data.content ?? row.data.text ?? "";
+      if (memoryId !== "" && factText !== "") acks.push({ factText, memoryId });
+    }
+    return acks;
   }
 
   /** Extra recall, unioned with index ∪ BM25 by the caller — never a replacement. */
   async recall(query: string, k: number): Promise<BackendHit[]> {
     const data = await this.request("/v1/retrieve", { project: this.project, query, limit: k });
-    const rows = Array.isArray(data.memories) ? data.memories : Array.isArray(data.results) ? data.results : [];
-    return (rows as JsonObject[])
-      .map((row): BackendHit | null => {
-        const text = typeof row.content === "string" ? row.content : typeof row.text === "string" ? row.text : null;
-        if (text === null) return null;
-        const id = String(row.id ?? row.memory_id ?? "");
-        const tags = Array.isArray(row.tags) ? row.tags.map(String) : [];
-        const pageTag = tags.find((t) => t.startsWith("page:"));
-        const hit: BackendHit = { id, text, score: typeof row.score === "number" ? row.score : 0 };
-        if (pageTag !== undefined) hit.page = pageTag.slice("page:".length);
-        return hit;
-      })
-      .filter((h): h is BackendHit => h !== null);
+    const hits: BackendHit[] = [];
+    for (const raw of rowsOf(data, "memories", "results")) {
+      const row = RecallRow.safeParse(raw);
+      if (!row.success) continue; // one bad row must not discard the rest
+      const text = row.data.content ?? row.data.text;
+      if (text === undefined) continue;
+      const tags = (row.data.tags ?? []).map(String);
+      const pageTag = tags.find((t) => t.startsWith("page:"));
+      const hit: BackendHit = {
+        id: String(row.data.id ?? row.data.memory_id ?? ""),
+        text,
+        score: row.data.score ?? 0,
+      };
+      if (pageTag !== undefined) hit.page = pageTag.slice("page:".length);
+      hits.push(hit);
+    }
+    // the server is asked for `limit`, but never trusted with the bound
+    return hits.slice(0, k);
   }
 
   /** Promotion to global scope: private → shared, the wiki page carried across as one memory. */
   async promote(page: WikiPage): Promise<void> {
+    const pageRef = `${page.frontmatter.type}/${page.frontmatter.slug}`;
     await this.request("/v1/memories/promote", {
       project: this.project,
       scope: "shared",
       memory: {
         content: serializePage(page.frontmatter, page.body),
-        tags: ["agentrig", `project:${this.project}`, `page:${page.frontmatter.type}/${page.frontmatter.slug}`],
-        metadata: { agentrig: `${this.project}/${page.path}` },
+        tags: ["agentrig", `project:${this.project}`, `page:${pageRef}`],
+        // same namespace onIngest uses, so a promoted page and its facts are traceable together
+        metadata: { agentrig: `${this.project}/${pageRef}` },
       },
     });
   }
@@ -142,16 +201,18 @@ export class LoreBackend implements MemoryBackend {
       project: this.project,
       facts: facts.map((f) => ({ content: f.text, tags: [`page:${f.pageType}/${f.slug}`] })),
     });
-    const rows = Array.isArray(data.conflicts) ? (data.conflicts as JsonObject[]) : [];
-    return rows
-      .map((row): Conflict | null => {
-        const fact = typeof row.fact === "string" ? row.fact : null;
-        const existing = typeof row.existing === "string" ? row.existing : null;
-        if (fact === null || existing === null) return null;
-        const conflict: Conflict = { fact, existing, existingId: String(row.existing_id ?? row.id ?? "") };
-        if (typeof row.detail === "string") conflict.detail = row.detail;
-        return conflict;
-      })
-      .filter((c): c is Conflict => c !== null);
+    const out: Conflict[] = [];
+    for (const raw of rowsOf(data, "conflicts")) {
+      const row = ConflictRow.safeParse(raw);
+      if (!row.success) continue;
+      const conflict: Conflict = {
+        fact: row.data.fact,
+        existing: row.data.existing,
+        existingId: String(row.data.existing_id ?? row.data.id ?? ""),
+      };
+      if (row.data.detail !== undefined) conflict.detail = row.data.detail;
+      out.push(conflict);
+    }
+    return out;
   }
 }

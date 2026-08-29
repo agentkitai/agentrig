@@ -256,20 +256,34 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
 - `MemoryBackend` is a sink and an *extra* recall source, never the truth and never a
   dependency. With nothing configured there is no backend at all — `loreConfigFromEnv` returns
   null unless both `LORE_API_URL` and `LORE_API_KEY` are set, so the no-infra default stands.
-- **A backend can never block or break the wiki.** `tolerant()` wraps one so every failure
-  becomes a reported no-op (writes drop, reads return empty), and the backend call in ingest runs
-  *after* the wiki is already written. A test asserts an exploding backend still leaves the
-  session fully ingested.
+- **A backend can never block or break the wiki.** The backend block is genuinely the *last*
+  thing `ingestSession` does — after page writes, after the pin re-check, after `appendLog` — and
+  it is wrapped internally in `tolerant()` regardless of what the caller passed, so a raw
+  (unwrapped) backend that throws still leaves a fully ingested session. `tolerant()` also
+  imposes a timeout (default 15s) so a hanging backend cannot stall ingest, and guards `onError`
+  itself so a throwing logger (EPIPE under `| head`) does not become the failure it was
+  reporting. The ordering test observes the wiki *from inside* `onIngest` rather than asserting
+  after the fact — the earlier version passed even with the call moved to the top.
 - **Union, never replacement.** `withBackendRecall` appends backend hits after every local hit
-  and drops any that duplicate a page already returned, so enabling a backend can only add.
-  Backend page tags (`<pageType>/<slug>`) are normalized to wiki paths before comparing.
-- **Provenance both ways**: a Lore memory carries `metadata.agentrig = <project>/<type>/<slug>`
-  plus `agentrig` / `project:` / `session:` / `page:` tags, and backend-only hits surface to the
-  agent as `lore:<memory-id>` so a fact can be traced back.
-- Ingest reports `backendConflicts` from Lore's contradiction check alongside the wiki's own pin
-  conflicts; the wiki lint still runs regardless (the full dream pass is M5).
-- `promote` maps a wiki page to one shared-scope Lore memory (private→shared). Requests carry a
-  bounded timeout so a slow backend cannot stall the harness.
+  and drops any that duplicate a page already returned, so enabling a backend can only add. It
+  enforces `k` itself, and `LoreBackend.recall` also slices to `k` (Lore's `limit` is advisory).
+  Backend page tags (`<pageType>/<slug>`) are normalized to wiki paths before comparing, and
+  backend-only hits carry a synthesized `page` so a caller never has to special-case them.
+- **Provenance both ways, and it is written down.** A Lore memory carries
+  `metadata.agentrig = <project>/<type>/<slug>` plus `agentrig` / `project:` / `session:` /
+  `page:` tags; on the wiki side `annotateProvenance()` rewrites the stored fact lines to
+  `(session:s1, lore:m0)` from the `BackendAck[]` that `onIngest` returns, so the memory id is
+  durable in the page rather than only visible on a later recall. `promote` uses the same
+  provenance namespace as ingest so the two do not diverge.
+- Lore's contradiction check is **opt-in** (`checkBackendConflicts`) rather than a per-ingest
+  round trip; when on, `backendConflicts` is reported alongside the wiki's own pin conflicts. The
+  wiki lint runs regardless (the full dream pass is M5).
+- `promote` maps a wiki page to one shared-scope Lore memory (private→shared), exposed as
+  `agentrig memory promote <path>`. `openBackend()` is try/caught in the CLI so a malformed
+  `LORE_API_URL` degrades to no backend instead of crashing `run`. The project name defaults to
+  `basename(resolve(process.cwd()))` when `LORE_PROJECT` is unset.
+- Lore responses are parsed **per row** with zod: one malformed row is dropped with a report
+  rather than failing the whole recall.
 
 ## Decided
 

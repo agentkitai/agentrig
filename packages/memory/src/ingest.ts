@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { PAGE_DIR, pagePath, serializePage } from "./page.js";
 import { applyPinChecks, readPins, recheckPins } from "./pins.js";
-import { backendRef, type MemoryBackend } from "./backend.js";
+import { tolerant, type MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
 import type { Attempt, PageType } from "./types.js";
 
@@ -223,10 +223,18 @@ export interface IngestOptions {
   maxSpanChars?: number;
   maxTokens?: number;
   now?: () => number;
-  /** Optional sink (PLAN §3.8). Wrap with `tolerant()` — the wiki must never wait on it. */
+  /**
+   * Optional sink (PLAN §3.8). Wrapped in `tolerant()` internally — the guarantee that a
+   * backend cannot break an ingest must not depend on the caller remembering to wrap it.
+   */
   backend?: MemoryBackend;
-  /** Project name for backend scoping; defaults to the wiki root's directory name. */
+  /** Project name for backend scoping and provenance; defaults to the working directory's name. */
   project?: string;
+  /** Ask the backend for contradictions during ingest. Off by default: PLAN §3.8 assigns the
+   *  contradiction pass to the dream (M5), and each check is another round trip. */
+  checkBackendConflicts?: boolean;
+  /** Reported when a tolerated backend call fails; defaults to silence. */
+  onBackendError?: (op: string, err: Error) => void;
 }
 
 async function readEvents(logPath: string): Promise<unknown[]> {
@@ -443,20 +451,6 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     });
   }
 
-  // PLAN §3.8: an optional backend is a sink and an extra recall source, never the truth. It
-  // runs after the wiki is already written, so a slow or broken backend cannot lose a fact.
-  const backendConflicts: IngestResult["backendConflicts"] = [];
-  if (opts.backend !== undefined && facts.length > 0) {
-    const project = opts.project ?? (basename(store.root.replace(/\/(wiki)?$/, "")) || "default");
-    const sourceRef = { ref, project };
-    if (opts.backend.conflicts !== undefined) {
-      for (const c of await opts.backend.conflicts(facts)) {
-        backendConflicts.push(c.detail === undefined ? { fact: c.fact, existing: c.existing } : { fact: c.fact, existing: c.existing, detail: c.detail });
-      }
-    }
-    await opts.backend.onIngest(facts, sourceRef);
-  }
-
   // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
   // happened — not only when a human remembers to run `memory lint`
   const touched = new Set(pagesWritten);
@@ -474,6 +468,28 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
       `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
   );
 
+  // PLAN §3.8: the backend runs LAST — after every page, the pin re-check, and the log entry —
+  // so no backend outcome, including an unwrapped throw, can leave the wiki half-written.
+  const backendConflicts: IngestResult["backendConflicts"] = [];
+  if (opts.backend !== undefined && facts.length > 0) {
+    const backend = tolerant(opts.backend, opts.onBackendError ?? (() => {}));
+    const project = opts.project ?? (basename(resolve(process.cwd())) || "default");
+    if (opts.checkBackendConflicts === true && backend.conflicts !== undefined) {
+      for (const c of await backend.conflicts(facts)) {
+        backendConflicts.push(
+          c.detail === undefined
+            ? { fact: c.fact, existing: c.existing }
+            : { fact: c.fact, existing: c.existing, detail: c.detail },
+        );
+      }
+    }
+    const acks = await backend.onIngest(facts, { ref, project });
+    // provenance the wiki's way: annotate the fact lines we just wrote with their memory ids
+    if (acks.length > 0) {
+      await annotateProvenance(store, targets, acks, opts.backend.id, ref);
+    }
+  }
+
   return {
     sessionId,
     coverage,
@@ -485,6 +501,41 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     pinConflicts,
     backendConflicts,
   };
+}
+
+/**
+ * Append `(lore:<memory-id>)` to the fact lines a backend just stored (PLAN §3.8's first
+ * provenance direction). Best-effort by design: it runs after everything else, and a failure
+ * leaves the wiki correct, just without the cross-reference.
+ */
+async function annotateProvenance(
+  store: FileMemoryStore,
+  targets: Map<string, { type: PageType; slug: string; facts: DistilledFact[] }>,
+  acks: Array<{ factText: string; memoryId: string }>,
+  backendId: string,
+  ref: string,
+): Promise<void> {
+  const idByText = new Map(acks.map((a) => [a.factText, a.memoryId]));
+  for (const t of targets.values()) {
+    const path = pagePath(t.type, t.slug);
+    try {
+      const page = await store.read(path);
+      if (page === null) continue;
+      let body = page.body;
+      let changed = false;
+      for (const fact of t.facts) {
+        const memoryId = idByText.get(fact.text);
+        if (memoryId === undefined) continue;
+        const line = `- [${fact.tag}] ${fact.text} (${ref})`;
+        if (!body.includes(line)) continue;
+        body = body.replace(line, `${line.slice(0, -1)}, ${backendId}:${memoryId})`);
+        changed = true;
+      }
+      if (changed) await store.write(path, { path, frontmatter: page.frontmatter, body });
+    } catch {
+      // provenance is an annotation, never a reason to fail an ingest that already succeeded
+    }
+  }
 }
 
 /** The schema doc the wiki ships with (PLAN §3.1); co-evolves with use. */
