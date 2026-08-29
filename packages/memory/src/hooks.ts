@@ -1,0 +1,137 @@
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import type { Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
+import { FileMemoryStore } from "./store.js";
+import { FileRawStore } from "./raw.js";
+import { ingestSession } from "./ingest.js";
+import { lastDreamAt, runDream } from "./dream/dream.js";
+import { findingCount } from "./dream/report.js";
+import type { MemoryBackend } from "./backend.js";
+
+/**
+ * The `session_end` integrations PLAN §3.2 and §3.7 both specify and which M3 and M5 each left
+ * as a caveat: "triggered by the `session_end` hook" (ingest) and "`session_end` hook when ≥ N
+ * sessions or ≥ T hours since the last dream".
+ *
+ * Both are deliberately **advisory**. A session that finished its work has finished it; a failed
+ * ingest or a failed dream must not change that, and must not make the harness feel slower than
+ * it is. So both report through `onError` and return `continue` regardless.
+ */
+
+export interface SessionEndIngestOptions {
+  /** `.agentrig` directory. */
+  dir: string;
+  provider: ModelProvider;
+  backend?: MemoryBackend;
+  onError?: (err: Error) => void;
+  onDone?: (summary: string) => void;
+}
+
+/** Distils the session that just ended into the wiki. */
+export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
+  return {
+    point: "session_end",
+    id: "memory:ingest",
+    // ingest is a multi-call distillation over a whole transcript; the default 30s is too tight
+    timeoutMs: 10 * 60_000,
+    handler: async (ctx: HookContext): Promise<HookResult> => {
+      try {
+        const logPath = join(opts.dir, "raw", "sessions", `${ctx.sessionId}.jsonl`);
+        // a session that never wrote a log (an immediate error) has nothing to distil
+        const exists = await stat(logPath).then(
+          () => true,
+          () => false,
+        );
+        if (!exists) return { action: "continue" };
+
+        const store = new FileMemoryStore({ root: join(opts.dir, "wiki") });
+        await store.init();
+        const result = await ingestSession({
+          store,
+          provider: opts.provider,
+          sessionId: ctx.sessionId,
+          logPath,
+          ...(opts.backend === undefined ? {} : { backend: opts.backend }),
+        });
+        opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)`);
+      } catch (err) {
+        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+      return { action: "continue" };
+    },
+  };
+}
+
+export interface DreamTriggerOptions {
+  dir: string;
+  provider?: ModelProvider;
+  /** Sessions ingested since the last dream before one is due. PLAN §3.7's "≥ N sessions". */
+  everySessions?: number;
+  /** Hours since the last dream before one is due. PLAN §3.7's "≥ T hours". */
+  everyHours?: number;
+  /**
+   * Whether a triggered dream applies itself. Default false, matching PLAN §1.5: review is the
+   * default because a dream is a bulk rewrite of the agent's memory. An automatic dream that
+   * applied itself would be the least reviewable thing in the system.
+   */
+  auto?: boolean;
+  /** Skip the model-backed consolidation, keeping the trigger free. */
+  structuralOnly?: boolean;
+  onError?: (err: Error) => void;
+  onDone?: (summary: string) => void;
+  now?: () => number;
+}
+
+/**
+ * PLAN §3.7's scheduled trigger. Returns `continue` always — a dream is maintenance, and
+ * maintenance must never be able to fail a session that succeeded.
+ */
+export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
+  const everySessions = opts.everySessions ?? 10;
+  const everyHours = opts.everyHours ?? 24;
+  const now = opts.now ?? (() => Date.now());
+
+  return {
+    point: "session_end",
+    id: "memory:dream",
+    timeoutMs: 15 * 60_000,
+    handler: async (): Promise<HookResult> => {
+      try {
+        const wikiRoot = join(opts.dir, "wiki");
+        const since = await lastDreamAt(wikiRoot);
+        const raw = new FileRawStore({ root: opts.dir });
+        const sessionsSince = (await raw.sessions(since)).length;
+        const hoursSince = since === undefined ? Infinity : (now() - since) / 3_600_000;
+
+        if (sessionsSince < everySessions && hoursSince < everyHours) return { action: "continue" };
+
+        const store = new FileMemoryStore({ root: wikiRoot });
+        await store.init();
+        const result = await runDream({
+          wiki: store,
+          raw,
+          ...(opts.provider === undefined ? {} : { provider: opts.provider }),
+          ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
+          now,
+        });
+
+        const findings = findingCount(result.report, result.structural);
+        if (opts.auto === true) {
+          const { applyDream } = await import("./dream/copy.js");
+          const backup = await applyDream(wikiRoot, result.outputRoot, String(now()));
+          await result.workspace.dispose().catch(() => {});
+          opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
+        } else {
+          opts.onDone?.(
+            findings === 0
+              ? `dream ran clean; nothing to review (${result.outputRoot})`
+              : `dream found ${findings} thing(s) to review: agentrig dream --review, or inspect ${result.outputRoot}`,
+          );
+        }
+      } catch (err) {
+        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+      return { action: "continue" };
+    },
+  };
+}

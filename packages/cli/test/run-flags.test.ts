@@ -37,6 +37,8 @@ function opts(overrides: Partial<RunOptions> = {}): RunOptions {
     maxTurns: "10",
     maxTokensPerTurn: "1024",
     supervisorSoft: "0.8",
+    dreamEverySessions: "10",
+    dreamEveryHours: "24",
     ...overrides,
   } as RunOptions;
 }
@@ -72,6 +74,25 @@ describe("--supervisor-soft validation", () => {
   it("is validated even when --supervise is off, so a typo is never silently carried", async () => {
     await runCommand("t", opts({ supervisorSoft: "nope" }));
     expect(errors.some((e) => e.includes("--supervisor-soft"))).toBe(true);
+  });
+});
+
+describe("session_end hook flag validation", () => {
+  it("rejects a non-positive --dream-every-sessions", async () => {
+    await runCommand("t", opts({ dreamEverySessions: "0" }));
+    expect(errors.some((e) => e.includes("--dream-every-sessions"))).toBe(true);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("rejects a non-numeric --dream-every-hours", async () => {
+    await runCommand("t", opts({ dreamEveryHours: "soon" }));
+    expect(errors.some((e) => e.includes("--dream-every-hours"))).toBe(true);
+  });
+
+  it("accepts sensible cadences", async () => {
+    await runCommand("t", opts({ dreamEverySessions: "5", dreamEveryHours: "12" }));
+    expect(errors.some((e) => e.includes("--dream-every"))).toBe(false);
+    expect(ranWithoutCredentials()).toBe(true);
   });
 });
 

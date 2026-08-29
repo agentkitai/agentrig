@@ -172,6 +172,13 @@ interface Hook { point: HookPoint; handler(ctx: HookContext): Promise<HookResult
 
 `memory`'s session-end extraction and `supervisor`'s steering both land through hooks + `session.control`, not through special-casing in the loop.
 
+Three properties make the surface safe to extend through, all of them the difference between a
+hook system and a footgun: a handler that **throws** is reported and skipped, a handler that
+**hangs** is timed out, and a `modify` patch is **re-validated** against the schema it is patching
+before it is applied. A hook is third-party code, so its patch is a proposal rather than an
+instruction. Each point declares which actions it accepts — `session_end` takes only `continue`,
+because the session is already over — and the first `deny` stops the chain.
+
 ### 2.8 Context management
 
 ```ts

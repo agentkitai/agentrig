@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks done (2026-08-29); TUI, MCP, subagents, skills next |
 
 ## M0 notes
 
@@ -563,6 +563,60 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   silently drops a pending requirement.
 - **Caveat: `checkpoint_rollback` is still the one unimplemented rung.** It needs git checkpoints,
   which nothing creates yet, and the default policy never emits it.
+
+## M7 notes — hooks (the first row)
+
+M7 is the one milestone PLAN deliberately leaves unordered ("in whatever order dogfooding
+demands"), so it ships as several PRs rather than one. **Hooks went first because three earlier
+milestones left caveats explicitly waiting on them**: M3's session-end ingest, M5's dream trigger,
+and M3b's Lore auto-retrieval. Two of those three are now closed.
+
+- **Seven points, wired where the loop can actually act on them**: `user_prompt`, `pre_model`,
+  `post_model`, `pre_tool`, `post_tool`, `pre_compact`, `session_end`.
+- **Not every action means something at every point**, so each point declares which it accepts and
+  anything else is reported and ignored rather than silently dropped. `session_end` accepts only
+  `continue` — the session is already over, so a denial there would be a lie.
+- **A hook cannot break the session.** Every handler is wrapped; a throw becomes a non-fatal
+  `error` event and is treated as `continue`. An extension point that can kill the thing it
+  extends is worse than no extension point.
+- **A hook cannot hang the session.** Each handler is raced against a timeout (30s default,
+  per-hook override). This is the M4/M6 lesson applied ahead of time rather than after a review
+  finds it: `session_end` hooks do real work — ingest is a multi-call distillation — and are the
+  most likely to be slow, so they carry their own generous overrides.
+- **A `modify` patch is validated before it is applied.** A `pre_tool` patch is re-parsed against
+  the tool's *own* zod schema, and a patch that fails is reported with the original input used
+  instead. A hook is third-party code; its patch is a proposal, not an instruction.
+- **`pre_tool` sees the parsed input**, not raw JSON, so a hook reasons about typed data. It runs
+  before the permission check, so a hook denial and a permission denial produce the same
+  `tool.denied` event.
+- **`post_tool` can rewrite what the *model* sees without rewriting the log.** The `tool.result`
+  event is already written when the hook runs, so a hook can redact or summarise for the
+  conversation while the log keeps what the tool actually returned. A hook shapes the
+  conversation; it cannot rewrite history.
+- **The first `deny` wins and stops the chain.** Asking the remaining hooks to weigh in on
+  something already refused is meaningless. `modify` and `inject` accumulate, so two hooks can
+  each contribute.
+- **`session_end` runs before `session.end` is written**, so a hook can still append to the log —
+  which is exactly what ingest needs. `session.end` remains the last line.
+- **Both memory hooks are advisory.** `ingestOnSessionEnd` and `dreamOnSessionEnd` report through
+  `onError` and return `continue` regardless. A session that finished its work has finished it;
+  a failed ingest must not change that.
+- **The dream trigger reports, it does not apply.** PLAN §1.5 makes review the default, and an
+  automatic dream that applied itself would be the least reviewable thing in the system. `auto`
+  exists but is off.
+- CLI: `--ingest-on-end`, `--dream-on-end`, `--dream-every-sessions`, `--dream-every-hours`. Both
+  are opt-in: ingest costs tokens, and a harness that silently spends them on every exit would be
+  the wrong default.
+- **Caveat: `pre_model`'s `modify` only patches the system prompt.** Patching messages or tools
+  wholesale needs a validated patch shape that does not exist yet, and an unvalidated one is the
+  M6 lesson repeated.
+- **Caveat: a `pre_compact` veto is permanent for the session.** Re-asking every turn would put a
+  hook on a hot path forever; a hook that said no once means no.
+- **Caveat: hooks are constructed in code, not configured.** PLAN §5's `agentrig.config.ts` would
+  let a project register hooks declaratively; the CLI wires the two memory hooks behind flags and
+  everything else is SDK-only.
+- **Still open in M7**: the Ink TUI, the MCP client, subagents, and skills. Lore's auto-retrieval
+  (M3b's caveat) now has a `user_prompt` point to attach to but is not wired.
 
 ## Decided
 

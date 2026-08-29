@@ -8,6 +8,7 @@ import {
   PermissionClass,
   type AnyTool,
   type Budget,
+  type Hook,
   type Decision,
   type ModelProvider,
   type PermissionRequest,
@@ -17,7 +18,14 @@ import {
 } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
-import { FileMemoryStore, FileRawStore, indexInjection, memoryTools } from "@agentkitai/agentrig-memory";
+import {
+  dreamOnSessionEnd,
+  FileMemoryStore,
+  FileRawStore,
+  indexInjection,
+  ingestOnSessionEnd,
+  memoryTools,
+} from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
 import { RubricGrader, supervise, TrajectoryReviewer } from "@agentkitai/agentrig-supervisor";
 import { join } from "node:path";
@@ -51,6 +59,10 @@ export interface RunOptions extends ProviderOptions {
   supervisorNoAbort?: boolean;
   supervisorSoft: string;
   supervisorReview?: boolean;
+  ingestOnEnd?: boolean;
+  dreamOnEnd?: boolean;
+  dreamEverySessions: string;
+  dreamEveryHours: string;
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -107,6 +119,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let budget: Budget;
   let maxTokensPerTurn: number;
   let supervisorSoft: number;
+  let dreamEverySessions: number;
+  let dreamEveryHours: number;
   let pricing: Pricing | undefined;
   try {
     budget = { maxTurns: positiveNumber("--max-turns", opts.maxTurns) };
@@ -129,6 +143,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     }
     maxTokensPerTurn = positiveNumber("--max-tokens-per-turn", opts.maxTokensPerTurn);
     supervisorSoft = positiveNumber("--supervisor-soft", opts.supervisorSoft);
+    dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
+    dreamEveryHours = positiveNumber("--dream-every-hours", opts.dreamEveryHours);
     if (supervisorSoft > 1) throw new Error(`--supervisor-soft is a fraction of the budget, got "${opts.supervisorSoft}"`);
   } catch (err) {
     console.error((err as Error).message);
@@ -165,6 +181,35 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     });
   }
 
+  // PLAN §2.7/§3.2/§3.7: the session_end hooks are what make a session compound into the wiki
+  // rather than evaporate. Opt-in because ingest costs tokens; the dream trigger defaults to
+  // review mode because §1.5 makes an unreviewed bulk rewrite of memory the wrong default.
+  const hooks: Hook[] = [];
+  if (opts.memory !== undefined && opts.ingestOnEnd === true) {
+    const backend = openBackend();
+    hooks.push(
+      ingestOnSessionEnd({
+        dir: opts.memory,
+        provider,
+        ...(backend === null ? {} : { backend }),
+        onError: (err) => console.error(`memory ingest failed (session still succeeded): ${err.message}`),
+        onDone: (summary) => console.error(`memory: ${summary}`),
+      }),
+    );
+  }
+  if (opts.memory !== undefined && opts.dreamOnEnd === true) {
+    hooks.push(
+      dreamOnSessionEnd({
+        dir: opts.memory,
+        provider,
+        everySessions: dreamEverySessions,
+        everyHours: dreamEveryHours,
+        onError: (err) => console.error(`dream failed (session still succeeded): ${err.message}`),
+        onDone: (summary) => console.error(`dream: ${summary}`),
+      }),
+    );
+  }
+
   const interactive = !opts.headless && process.stdin.isTTY === true;
   const agent = createAgent({
     provider,
@@ -187,6 +232,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     systemPrompt: (ctx) =>
       [opts.system ?? defaultSystemPrompt(ctx.cwd), memoryIndex].filter((s) => s !== "").join("\n\n"),
     store: new SessionStore({ root: opts.root }),
+    ...(hooks.length === 0 ? {} : { hooks }),
     budget,
     ...(pricing === undefined ? {} : { pricing }),
     maxTokensPerTurn,
