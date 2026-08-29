@@ -4,21 +4,35 @@ import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
+import {
+  memoryIngest,
+  memoryInit,
+  memoryLint,
+  memoryLs,
+  memorySearch,
+  memoryShow,
+  type MemoryIngestOptions,
+} from "./memory.js";
 
 const program = new Command();
 program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
 
-function withRunOptions(cmd: Command): Command {
+function withProviderOptions(cmd: Command): Command {
   return cmd
-    .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
-    .option("--json", "emit raw event JSONL to stdout")
     .option(
       "-p, --provider <provider>",
       "model provider: anthropic | openai (OpenAI-compatible) | openai-chatgpt (experimental subscription auth)",
       "anthropic",
     )
     .option("-m, --model <model>", "model id", process.env.AGENTRIG_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
-    .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)")
+    .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)");
+}
+
+function withRunOptions(cmd: Command): Command {
+  return withProviderOptions(cmd)
+    .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
+    .option("--json", "emit raw event JSONL to stdout")
+    .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
     .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
     .option("--system <prompt>", "override the system prompt")
     .option(
@@ -59,6 +73,31 @@ program
   .description("Sign in to a subscription provider (experimental: openai-chatgpt device-code OAuth)")
   .option("--export", "print the stored token bundle (to seed AGENTRIG_OPENAI_CHATGPT_TOKEN) instead of signing in")
   .action(async (provider: string, opts: { export?: boolean }) => loginCommand(provider, opts));
+
+const memory = program.command("memory").description("Inspect and maintain the LLM Wiki memory");
+const memoryDir = (cmd: Command): Command =>
+  cmd.option("-d, --dir <dir>", "memory directory", ".agentrig");
+
+memoryDir(memory.command("init").description("Create the .agentrig raw/ + wiki/ layout and SCHEMA.md")).action(
+  async (opts: { dir: string }) => memoryInit(opts),
+);
+memoryDir(memory.command("ls").description("List every wiki page from index.md")).action(
+  async (opts: { dir: string }) => memoryLs(opts),
+);
+memoryDir(memory.command("show <path>").description("Print one wiki page")).action(
+  async (path: string, opts: { dir: string }) => memoryShow(path, opts),
+);
+memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search over the wiki"))
+  .option("-k, --k <n>", "max results", "8")
+  .action(async (query: string[], opts: { dir: string; k?: string }) => memorySearch(query.join(" "), opts));
+memoryDir(memory.command("lint").description("Dry-run dream report (M3: pin re-check and unfilled reservations)")).action(
+  async (opts: { dir: string }) => memoryLint(opts),
+);
+withProviderOptions(
+  memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
+).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) =>
+  memoryIngest(sessionId, { ...opts, modelExplicit: modelExplicit(cmd) }),
+);
 
 const sessions = program.command("sessions").description("Inspect session event logs");
 

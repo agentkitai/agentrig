@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M3**
+Current milestone: **M3b**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -8,8 +8,8 @@ Current milestone: **M3**
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
 | 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
-| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
-| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
+| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
+| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | next |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
@@ -157,6 +157,45 @@ account has credits.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
   many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
   static env seed sidesteps this only while the access token is still valid (~hours).
+
+## M3 notes
+
+- **Wiki on disk, no database.** `FileMemoryStore` over plain markdown: `index.md` is the
+  catalog *and* the reservation ledger, `log.md` the append-only chronology, pages under
+  `sources/ entities/ concepts/ analyses/`. Frontmatter is a deliberately tiny hand-rolled
+  subset (scalars + inline lists) so the wiki needs no YAML dependency and stays human-diffable;
+  a malformed page throws rather than being half-read. Index rows escape `|` and parse on
+  unescaped pipes only — a summary containing a pipe used to corrupt the row.
+- **Reservation is an O_EXCL page placeholder.** `reserve(slug, claimant, type)` creates the
+  page atomically; a second claimant gets `exists` and is appended to `claimedBy` rather than
+  overwriting the first. The LLM call happens outside the claim, per PLAN §3.2.
+- **Retrieval is additive by construction.** `unionRetrieve` returns index-selected pages ∪ BM25
+  top-k, and index picks are never subject to the BM25 `k` cutoff — so recall cannot regress
+  below index-only. Hits carry `via: index | bm25 | both`. BM25 searches slug and aliases as well
+  as the body, so "auth" finds `auth-module`.
+- **Coverage is enforced, not hoped for.** Ingest splits the transcript into character-bounded
+  spans (so one huge tool result can't blow the window) and every span must return either facts
+  or an explicit `nothingDurable`. A span the model fails to distill throws and names the line
+  range — a silent coverage hole is the failure this exists to prevent. `model.delta` events are
+  dropped from the transcript as noise; tool calls, results, file changes, errors and steers are kept.
+- **Duplicate captures** are settled by prefix comparison against a `capture:prefix` marker in
+  the source page: a re-ingest of identical content is skipped, a grown transcript supersedes the
+  earlier capture, and existing fact lines are never duplicated on re-ingest.
+- **`raw/` is immutable in practice, not just in doctrine.** Attempts are one immutable file each
+  (a duplicate id is refused), `addDoc` never overwrites (name collisions get a numeric suffix),
+  and `isSessionLog` excludes core's `*.snapshot.json` / `*.lock` working files.
+- **Pins store the claim, not a diff**, so re-application survives rewording; `claimSatisfied`
+  tolerates one dropped content word. A contradicted pin becomes `conflict` and is surfaced —
+  never silently dropped — and a missing anchor becomes `orphaned`.
+- **Index injection is bounded.** The catalog rides in the system prompt (`run --memory <dir>`);
+  past the cap the tail becomes "…and N more pages; use memory_search", so a large wiki degrades
+  to search rather than eating the context window.
+- CLI: `agentrig memory init|ls|show|search|ingest|lint`. `lint` currently reports the pin
+  re-check and unfilled reservations; the full dream lint is M5. Provider construction was
+  extracted to `provider.ts` so `run`, `sessions resume`, and `memory ingest` share it and the
+  CLI stays thin.
+- Ingest is exercised with a scripted fake `ModelProvider`; as with M1/M2 the model call is one
+  seam and the suite stays network-free.
 
 ## Decided
 

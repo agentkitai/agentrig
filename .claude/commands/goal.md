@@ -1,14 +1,23 @@
 ---
-description: Work a milestone end to end — fresh branch from main, implement, green tests, PR, adversarial review, fix everything, merge
-argument-hint: "[milestone or task; defaults to the current milestone in docs/STATUS.md]"
+description: Work the implementation plan milestone by milestone — fresh branch from main, implement, green tests, PR, adversarial review, fix everything, merge, repeat
+argument-hint: "[optional: a single milestone or task; default is to work every remaining milestone in order]"
 ---
 
 Work the following goal to completion using the full flow below: **$ARGUMENTS**
 
-If no goal was given, take the next unfinished milestone row from `docs/STATUS.md`.
+**If no goal was given, work every unfinished milestone in `docs/STATUS.md`, one at a time, in
+order, until they are all done.** Run the full nine-step flow for each milestone separately —
+one milestone, one PR, one review, one merge — then return to step 1 for the next. Do not batch
+milestones into a single branch or PR, and do not pull a later milestone's work forward into an
+earlier one.
 
-Read `CLAUDE.md`, `docs/PLAN.md`, and `docs/STATUS.md` first. `PLAN.md` is the spec; work only
-the current milestone — do not pull later milestones forward.
+Between milestones, report in one short paragraph what landed and what is next, then keep going
+without waiting to be asked. Stop early only for the reasons in step 9, or if a milestone is
+genuinely blocked — in which case say so once, skip to the next milestone that is not blocked,
+and note the skipped one at the end.
+
+Read `CLAUDE.md`, `docs/PLAN.md`, and `docs/STATUS.md` first. `PLAN.md` is the spec; while
+working a milestone, work only that milestone.
 
 ## The flow — every step, every time
 
@@ -61,9 +70,10 @@ fail against the old code. If a finding is genuinely wrong, say why rather than 
 it. Re-run the full green check and push. Update the PR body if the review invalidated anything
 it claims.
 
-### 9. Merge, then continue
+### 9. Merge, then continue to the next milestone
 Merge once CI (if any) is green, the review findings are resolved, and the head is mergeable.
-Then restart the branch from the new main and take the next milestone.
+Then go back to step 1 — restart the branch from the new main and take the next unfinished
+milestone — and repeat until the plan is complete.
 
 **Stop and ask instead of merging** if the review surfaces something architecturally significant,
 if a fix would widen the milestone's scope, or if a decision is genuinely the user's to make.

@@ -38,7 +38,8 @@ function serializeEntry(e: IndexEntry): string {
 
 function parseEntry(line: string): IndexEntry | null {
   if (!line.trim().startsWith("|")) return null;
-  const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+  // split on unescaped pipes only, so a summary containing "a | b" survives the round trip
+  const cells = line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim());
   if (cells.length < 5) return null;
   const [slug, path, type, statusCell, ...rest] = cells;
   if (slug === undefined || slug === "slug" || slug.startsWith("---")) return null;
@@ -49,7 +50,7 @@ function parseEntry(line: string): IndexEntry | null {
     path,
     type: type as PageType,
     status: statusCell.startsWith("planned") ? "planned" : "active",
-    summary: rest.join(" | ").replace(/\\\|/g, "|"),
+    summary: rest.join("|").replace(/\\\|/g, "|"),
   };
   if (claimMatch !== null) {
     entry.claimedBy = claimMatch[1]!.split(",").map((s) => s.trim()).filter((s) => s !== "");
