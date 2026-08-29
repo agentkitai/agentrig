@@ -1,4 +1,4 @@
-import { appendFile, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PAGE_DIR, pagePath, parsePage, serializePage } from "./page.js";
@@ -14,8 +14,8 @@ import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types
  * converge on one page instead of forking near-duplicate slugs.
  */
 
-const INDEX_FILE = "index.md";
-const LOG_FILE = "log.md";
+export const INDEX_FILE = "index.md";
+export const LOG_FILE = "log.md";
 export const OVERVIEW_FILE = "overview.md";
 const INDEX_HEADER = `# Index
 
@@ -256,8 +256,12 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   async appendLog(entry: string): Promise<void> {
-    await mkdir(this.root, { recursive: true });
-    await appendFile(this.abs(LOG_FILE), entry.endsWith("\n") ? entry : `${entry}\n`, "utf8");
+    // read-modify-atomicWrite rather than appendFile: appendFile follows a symlink, which let a
+    // dream's log line write through a symlinked log.md into the wiki it was supposed to be
+    // copying. Every other writer here already goes through atomicWrite.
+    const line = entry.endsWith("\n") ? entry : `${entry}\n`;
+    const existing = await readFile(this.abs(LOG_FILE), "utf8").catch(() => "");
+    await this.atomicWrite(LOG_FILE, existing + line);
   }
 
   /** Every page on disk, for search and lint. */

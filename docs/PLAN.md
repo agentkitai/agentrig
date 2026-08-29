@@ -282,6 +282,11 @@ Duplicate captures (`session_end` firing twice on a growing transcript) are dete
 
 **Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
 
+**Promotion is structural.** "Never promote anything derived from a single session" is enforced
+by counting distinct `session:` refs in a page's frontmatter and fact-line provenance, not by
+asking the model to respect it — one session's conclusion may be true only of that branch, that
+machine, that afternoon.
+
 **Lint = dream.** The scheduled dream runs the pattern's lint pass offline on a copy of the wiki: contradictions between pages, claims superseded by newer sources, orphan pages, concepts mentioned but lacking a page, missing cross-links, relative dates → absolute, references to files that no longer exist, index rebuilt lean. Output is a new `wiki/` directory plus a change report; the input is untouched; review or auto apply; promotion proposals to global. Never promote anything derived from a single session.
 
 ### 3.3 Page format
@@ -393,6 +398,16 @@ interface Dreamer { dream(input: DreamInput): Promise<DreamResult> }
 Four phases, each its own prompt so they can be tested independently: **orient** (read `index.md`, `overview.md`, `SCHEMA.md`) → **gather signal** (scan raw sources since last dream: corrections, decisions, recurring errors, repeated workarounds, attempts with lessons) → **consolidate** (the lint fixes above, with provenance) → **prune & index** (rebuild `index.md` lean, demote verbose entries to pages, re-check pins).
 
 Apply modes: `review` (default: the report as a diff, accept/reject per change — review the artifact, not the plan) and `auto`. Triggers: `agentrig dream`; `session_end` hook when ≥ N sessions or ≥ T hours since the last dream; cron.
+
+The phases split by *cost*, not just by prompt: `orient`, `gather signal` and `prune & index` are
+derivable from the wiki's own text and run with **no model call**, leaving `consolidate` as the
+only phase that spends tokens. That is what lets the structural pass be free enough to run on
+every session end (`agentrig memory lint` is exactly this pass, with the output copy discarded),
+and it is why `--structural-only` needs no credential.
+
+`auto` keeps the replaced wiki beside the new one as `wiki.before-dream-<stamp>`: a dream is a
+bulk LLM rewrite of the agent's memory, so undo must be a directory rename rather than a restore
+from a report.
 
 ### 3.8 Lore backend (optional)
 
