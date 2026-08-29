@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SessionStore, contentHash } from "@agentkitai/agentrig-core";
+import { assertSessionId, isValidSessionId, SessionStore, contentHash } from "@agentkitai/agentrig-core";
 
 let root: string;
 beforeEach(async () => {
@@ -112,5 +112,37 @@ describe("contentHash", () => {
     expect(contentHash({ a: 1 })).toBe(contentHash({ a: 1 }));
     expect(contentHash({ a: 1 })).not.toBe(contentHash({ a: 2 }));
     expect(contentHash("x")).toHaveLength(16);
+  });
+});
+
+describe("session ids cannot escape the sessions directory", () => {
+  it("rejects traversal, separators and empties", () => {
+    for (const bad of [
+      "../../etc/passwd",
+      "../escape",
+      "a/b",
+      "a\\b",
+      "",
+      ".",
+      "..",
+      "with space",
+      "x".repeat(129),
+    ]) {
+      expect(isValidSessionId(bad)).toBe(false);
+      expect(() => assertSessionId(bad)).toThrow(/invalid session id/);
+    }
+  });
+
+  it("accepts what create() produces, and ordinary ids", () => {
+    for (const good of ["a1b2c3d4", "session_1", "my-session", "A".repeat(128)]) {
+      expect(isValidSessionId(good)).toBe(true);
+    }
+  });
+
+  it("every path builder refuses a traversing id", async () => {
+    const store = new SessionStore({ root });
+    expect(() => store.pathFor("../evil")).toThrow(/invalid session id/);
+    expect(() => store.snapshotPathFor("../evil")).toThrow(/invalid session id/);
+    expect(() => store.lockPathFor("../evil")).toThrow(/invalid session id/);
   });
 });

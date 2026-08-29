@@ -400,10 +400,20 @@ describe("a failed dream does not leak its temp copy", () => {
   it("disposes the workspace when a phase throws", async () => {
     await page("concepts/a.md", "- [stated] alpha (session:s1)\n");
     await writeFile(join(wikiRoot, "pins.json"), "{not json", "utf8");
-    const before = (await readdir(tmpdir())).filter((d) => d.startsWith("agentrig-dream-")).length;
-    await expect(runDream(dreamOpts(scripted({}), { structuralOnly: true }))).rejects.toThrow();
-    const after = (await readdir(tmpdir())).filter((d) => d.startsWith("agentrig-dream-")).length;
-    expect(after).toBe(before);
+
+    // an explicit outputRoot inside THIS test's directory: counting `agentrig-dream-*` in the
+    // shared tmpdir counted dirs other test files were creating and removing in parallel, which
+    // made this flaky roughly one run in fifteen
+    const outputRoot = join(root, "dream-out");
+    await expect(
+      runDream(dreamOpts(scripted({}), { structuralOnly: true, outputRoot })),
+    ).rejects.toThrow();
+
+    const survived = await access(outputRoot).then(
+      () => true,
+      () => false,
+    );
+    expect(survived).toBe(false);
   });
 });
 

@@ -579,20 +579,47 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **A hook cannot break the session.** Every handler is wrapped; a throw becomes a non-fatal
   `error` event and is treated as `continue`. An extension point that can kill the thing it
   extends is worse than no extension point.
-- **A hook cannot hang the session.** Each handler is raced against a timeout (30s default,
-  per-hook override). This is the M4/M6 lesson applied ahead of time rather than after a review
-  finds it: `session_end` hooks do real work — ingest is a multi-call distillation — and are the
-  most likely to be slow, so they carry their own generous overrides.
+- **A hook influences the session through its return value or not at all.** Each handler gets a
+  *copy* of everything mutable it can see. Without this the whole validation story was theatre:
+  `ctx.request.messages` **was** the live message array, so a handler returning `continue` — no
+  patch, nothing to validate — could push messages the model then saw with zero events in the log,
+  and a `pre_compact` hook, at a point that accepts no `modify` at all, could empty the history and
+  send the next request with `messages: []`. Replaying the JSONL would have reconstructed a
+  conversation that never happened.
+- **A hook cannot hang the session — including after the work is done.** Each handler is raced
+  against a timeout (30s default, per-hook override), *and* each point has one wall-clock budget
+  for the whole chain. Per-hook overrides alone were not enough: ingest (10 min) and dream (15
+  min) run sequentially at `session_end`, so a wedged network call in either could hold
+  `session.done` for 25 minutes with Ctrl-C unable to shorten it. The timeout now also aborts a
+  controller the handler can observe, and the runner races the session's abort signal — a race
+  that merely abandons a promise leaves the work running.
 - **A `modify` patch is validated before it is applied.** A `pre_tool` patch is re-parsed against
   the tool's *own* zod schema, and a patch that fails is reported with the original input used
   instead. A hook is third-party code; its patch is a proposal, not an instruction.
 - **`pre_tool` sees the parsed input**, not raw JSON, so a hook reasons about typed data. It runs
   before the permission check, so a hook denial and a permission denial produce the same
   `tool.denied` event.
-- **`post_tool` can rewrite what the *model* sees without rewriting the log.** The `tool.result`
-  event is already written when the hook runs, so a hook can redact or summarise for the
-  conversation while the log keeps what the tool actually returned. A hook shapes the
-  conversation; it cannot rewrite history.
+- **`post_tool` can rewrite what the *model* sees without rewriting the log** — and that
+  divergence is itself recorded. The `tool.result` event keeps what the tool returned, and a new
+  `tool.result.patched` event records that a hook changed what the model consumed. Without it the
+  asymmetry ran the wrong way: a hook could inject text into the tool result the model read that
+  appeared in neither the log nor anything the supervisor sees, steering the model unobserved.
+  "A hook shapes the conversation, it cannot rewrite history" was true but understated — it could
+  write *future* history invisibly.
+- **A hook nudge is attributed to the hook.** `post_model` injects were logged as
+  `steer source: "user"`, and the supervisor's reviewer grades trajectories off those events — so
+  a hook nudge was being scored as a human correction. `steer.source` gains `"hook"` (added to the
+  enum, not repurposed).
+- **Wrong-shaped `modify` patches are reported at every point**, not just `pre_tool`. Three
+  mutually incompatible patch shapes hide behind one `patch: unknown` — a bare string
+  (`user_prompt`, `post_tool`, last-string-wins), `{system: string}` (`pre_model`), and a shallow
+  object merged into the tool input (`pre_tool`). A plugin author with the wrong shape used to get
+  silence at three of the four.
+- **`HookContext.result` carries `display` as well as `output`.** It was typed
+  `{ok, output: string}`, but six of the eight builtins return a non-string `output` (bash returns
+  `{exitCode, stdout, stderr}`); a redaction hook written against the declared type crashed on
+  `.replace` and was reported as a generic hook failure — the worst outcome for a redaction hook.
+  Worse, `output` was not even the string a patch replaces. Now `{ok, display, output: unknown}`.
 - **The first `deny` wins and stops the chain.** Asking the remaining hooks to weigh in on
   something already refused is meaningless. `modify` and `inject` accumulate, so two hooks can
   each contribute.
@@ -601,6 +628,21 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Both memory hooks are advisory.** `ingestOnSessionEnd` and `dreamOnSessionEnd` report through
   `onError` and return `continue` regardless. A session that finished its work has finished it;
   a failed ingest must not change that.
+- **A session id is validated where it is created, because it becomes a filename.** `--resume
+  <id>` puts a user-controlled string there and nothing checked it, so
+  `--resume '../../../home/user/notes' --ingest-on-end` made the ingest hook read a `.jsonl`
+  anywhere on disk, send it to the model, and distil it into the agent's *persistent* memory —
+  exfiltration and memory poisoning at once, durable in a wiki every future session reads through
+  `index.md` injection. `SessionStore` now rejects anything but `[A-Za-z0-9_-]{1,128}` at
+  `create()` and in every path builder, and the ingest hook re-checks containment itself rather
+  than trusting a caller upstream to have done the right thing.
+- **The dream trigger stamps the LIVE wiki, not just the copy.** The stamp answers "when was a
+  dream last run", not "last applied" — writing it only into the output copy meant review mode
+  never advanced it, so once the threshold was crossed it stayed crossed: `--dream-on-end` ran a
+  full consolidate-phase dream on **every** session end forever, leaking a wiki copy to `/tmp`
+  each time and making both cadence flags inert. A never-dreamt wiki is also no longer treated as
+  instantly overdue, and a clean review-mode dream disposes its copy instead of keeping one
+  nobody asked for. `--dream-structural-only` makes the unattended trigger free.
 - **The dream trigger reports, it does not apply.** PLAN §1.5 makes review the default, and an
   automatic dream that applied itself would be the least reviewable thing in the system. `auto`
   exists but is off.
@@ -612,6 +654,8 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   M6 lesson repeated.
 - **Caveat: a `pre_compact` veto is permanent for the session.** Re-asking every turn would put a
   hook on a hot path forever; a hook that said no once means no.
+- **Caveat: `session_end` hooks still run sequentially.** They cannot deny, so running them
+  concurrently would be sound and faster; the group budget bounds the damage in the meantime.
 - **Caveat: hooks are constructed in code, not configured.** PLAN §5's `agentrig.config.ts` would
   let a project register hooks declaratively; the CLI wires the two memory hooks behind flags and
   everything else is SDK-only.

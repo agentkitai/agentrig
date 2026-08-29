@@ -45,6 +45,29 @@ export interface SessionStoreOptions {
  * - A file is never rewritten. Compaction, resume, and dreams all read; only `append` writes.
  * - `read` validates every line; a corrupt line throws rather than being skipped.
  */
+/**
+ * A session id becomes a filename, so it must not be able to leave the sessions directory.
+ * `--resume <id>` puts a user-controlled string here, and unvalidated it read and WROTE arbitrary
+ * paths: `--resume '../../../home/user/notes'` made the session-end ingest hook read a file
+ * outside `.agentrig`, feed it to the model, and distil it into the agent's persistent memory —
+ * exfiltration and memory poisoning in one. Validated at the source rather than at each caller,
+ * because there is no safe way for a caller to know it needed to.
+ */
+const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+export function isValidSessionId(id: string): boolean {
+  return SESSION_ID.test(id);
+}
+
+export function assertSessionId(id: string): string {
+  if (!isValidSessionId(id)) {
+    throw new Error(
+      `invalid session id ${JSON.stringify(id)}: expected 1-128 characters of [A-Za-z0-9_-]`,
+    );
+  }
+  return id;
+}
+
 export class SessionStore {
   readonly root: string;
   private readonly now: () => number;
@@ -59,16 +82,18 @@ export class SessionStore {
 
   /** Create a session id. Nothing is written until the first append. */
   create(): string {
-    const id = this.newId();
+    const id = assertSessionId(this.newId());
     this.seqs.set(id, 0);
     return id;
   }
 
   pathFor(sessionId: string): string {
+    assertSessionId(sessionId);
     return join(this.root, `${sessionId}.jsonl`);
   }
 
   snapshotPathFor(sessionId: string): string {
+    assertSessionId(sessionId);
     return join(this.root, `${sessionId}.snapshot.json`);
   }
 
@@ -82,6 +107,7 @@ export class SessionStore {
   }
 
   lockPathFor(sessionId: string): string {
+    assertSessionId(sessionId);
     return join(this.root, `${sessionId}.lock`);
   }
 

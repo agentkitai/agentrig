@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
 import { FileMemoryStore } from "./store.js";
 import { FileRawStore } from "./raw.js";
@@ -36,7 +36,14 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
     timeoutMs: 10 * 60_000,
     handler: async (ctx: HookContext): Promise<HookResult> => {
       try {
-        const logPath = join(opts.dir, "raw", "sessions", `${ctx.sessionId}.jsonl`);
+        // defence in depth: core validates session ids, but this hook builds a path from one and
+        // must not depend on a caller upstream having done the right thing
+        const sessionDir = resolve(join(opts.dir, "raw", "sessions"));
+        const logPath = resolve(join(sessionDir, `${ctx.sessionId}.jsonl`));
+        if (logPath !== sessionDir && !logPath.startsWith(sessionDir + sep)) {
+          opts.onError?.(new Error(`refusing to ingest a session log outside ${sessionDir}: ${ctx.sessionId}`));
+          return { action: "continue" };
+        }
         // a session that never wrote a log (an immediate error) has nothing to distil
         const exists = await stat(logPath).then(
           () => true,
@@ -44,6 +51,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
         );
         if (!exists) return { action: "continue" };
 
+        if (ctx.signal.aborted) return { action: "continue" };
         const store = new FileMemoryStore({ root: join(opts.dir, "wiki") });
         await store.init();
         const result = await ingestSession({
@@ -75,7 +83,10 @@ export interface DreamTriggerOptions {
    * applied itself would be the least reviewable thing in the system.
    */
   auto?: boolean;
-  /** Skip the model-backed consolidation, keeping the trigger free. */
+  /**
+   * Skip the model-backed consolidation, keeping the trigger free. The scheduled trigger is
+   * unattended, so this is the safer setting for it — see the CLI's `--dream-structural-only`.
+   */
   structuralOnly?: boolean;
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
@@ -101,7 +112,10 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         const since = await lastDreamAt(wikiRoot);
         const raw = new FileRawStore({ root: opts.dir });
         const sessionsSince = (await raw.sessions(since)).length;
-        const hoursSince = since === undefined ? Infinity : (now() - since) / 3_600_000;
+        // A wiki that has never been dreamt is NOT immediately overdue — treating it that way
+        // made the first session end trigger a full dream regardless of the configured cadence.
+        // The session count is the honest signal for a fresh wiki.
+        const hoursSince = since === undefined ? 0 : (now() - since) / 3_600_000;
 
         if (sessionsSince < everySessions && hoursSince < everyHours) return { action: "continue" };
 
@@ -117,15 +131,23 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
 
         const findings = findingCount(result.report, result.structural);
         if (opts.auto === true) {
-          const { applyDream } = await import("./dream/copy.js");
-          const backup = await applyDream(wikiRoot, result.outputRoot, String(now()));
+          try {
+            const { applyDream } = await import("./dream/copy.js");
+            const stamp = `${now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const backup = await applyDream(wikiRoot, result.outputRoot, stamp);
+            opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
+          } finally {
+            // the copy is disposed even when applying threw, or a failed apply leaks it
+            await result.workspace.dispose().catch(() => {});
+          }
+        } else if (findings === 0) {
+          // nothing to look at, so nothing to keep: a clean dream that left a full wiki copy in
+          // /tmp on every trigger is how an unattended maintenance task fills a disk
           await result.workspace.dispose().catch(() => {});
-          opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
+          opts.onDone?.("dream ran clean; nothing to review");
         } else {
           opts.onDone?.(
-            findings === 0
-              ? `dream ran clean; nothing to review (${result.outputRoot})`
-              : `dream found ${findings} thing(s) to review: agentrig dream --review, or inspect ${result.outputRoot}`,
+            `dream found ${findings} thing(s) to review: agentrig dream --review, or inspect ${result.outputRoot}`,
           );
         }
       } catch (err) {

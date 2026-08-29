@@ -199,6 +199,12 @@ async function dreamInto(
       `${report.missingPages.length} missing page(s)`,
   );
   await markDreamed(workspace.outputRoot, now());
+  // ALSO stamp the live wiki. The stamp answers "when was a dream last run", not "last
+  // applied" — writing it only into the copy meant review mode never advanced it, so a
+  // scheduled trigger stayed permanently due and re-dreamt on every single session end,
+  // spending consolidate-phase tokens and leaking a wiki copy each time. This is the one
+  // write a dream makes to its input, and it is metadata about the dream, not wiki content.
+  await markDreamed(opts.wiki.root, now()).catch(() => {});
 
   return {
     outputRoot: workspace.outputRoot,

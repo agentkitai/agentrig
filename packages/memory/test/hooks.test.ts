@@ -95,6 +95,8 @@ describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
     });
     // continue, always: a session that finished its work has finished it
     expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+    // ...but the failure is REPORTED, not swallowed
+    expect(errors).toHaveLength(1);
   });
 
   it("carries a generous timeout — ingest is a multi-call distillation, not a callback", async () => {
@@ -109,18 +111,24 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     await markDreamed(join(dir, "wiki"), Date.now());
     await writeLog("s1");
     const done: string[] = [];
+    const errors: Error[] = [];
     const hook = dreamOnSessionEnd({
       dir,
+      // `exploding` throws if the model is reached, so "didn't fire" is distinguishable from
+      // "fired and crashed" — the earlier version could not tell those apart
+      provider: exploding,
       everySessions: 10,
       everyHours: 24,
       onDone: (s) => done.push(s),
+      onError: (e) => errors.push(e),
     });
     expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
     expect(done).toEqual([]);
+    expect(errors).toEqual([]);
   });
 
   it("fires once enough sessions have accumulated", async () => {
-    await markDreamed(join(dir, "wiki"), 0);
+    await markDreamed(join(dir, "wiki"), 1);
     for (const id of ["a", "b", "c"]) await writeLog(id);
     const done: string[] = [];
     const hook = dreamOnSessionEnd({
@@ -135,7 +143,7 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
   });
 
   it("fires on the hour threshold even with few sessions", async () => {
-    await markDreamed(join(dir, "wiki"), 0);
+    await markDreamed(join(dir, "wiki"), 1);
     await writeLog("a");
     const done: string[] = [];
     const hook = dreamOnSessionEnd({
@@ -151,7 +159,7 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
   });
 
   it("REPORTS rather than applies by default — PLAN §1.5 makes review the default", async () => {
-    await markDreamed(join(dir, "wiki"), 0);
+    await markDreamed(join(dir, "wiki"), 1);
     const store = new FileMemoryStore({ root: join(dir, "wiki") });
     await store.write("concepts/a.md", {
       path: "concepts/a.md",
@@ -176,7 +184,7 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
   });
 
   it("applies only when explicitly asked, keeping the previous wiki", async () => {
-    await markDreamed(join(dir, "wiki"), 0);
+    await markDreamed(join(dir, "wiki"), 1);
     for (const id of ["a", "b"]) await writeLog(id);
     const done: string[] = [];
     const hook = dreamOnSessionEnd({
@@ -188,18 +196,51 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
   });
 
   it("stays free without a provider — structural only, no model call", async () => {
-    await markDreamed(join(dir, "wiki"), 0);
+    await markDreamed(join(dir, "wiki"), 1);
     for (const id of ["a", "b"]) await writeLog(id);
     const hook = dreamOnSessionEnd({ dir, provider: exploding, everySessions: 1, everyHours: 1, structuralOnly: true });
     expect(await hook.handler(ctx("b"))).toEqual({ action: "continue" });
   });
 
   it("a failed dream never changes the session's outcome", async () => {
+    await writeLog("a");
+    await writeLog("b");
     await rm(join(dir, "wiki"), { recursive: true, force: true });
     await writeFile(join(dir, "wiki"), "not a directory", "utf8");
     const errors: Error[] = [];
-    const hook = dreamOnSessionEnd({ dir, everySessions: 1, everyHours: 1, onError: (e) => errors.push(e) });
+    const hook = dreamOnSessionEnd({
+      dir, everySessions: 1, everyHours: 1, structuralOnly: true, onError: (e) => errors.push(e),
+    });
     expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the ingest hook cannot be pointed outside .agentrig", () => {
+  it("refuses a traversing session id rather than reading and distilling an arbitrary file", async () => {
+    // `--resume '../../../home/user/notes'` made this read a file outside .agentrig, feed it to
+    // the model, and distil it into the agent's persistent memory
+    // written inside this test's own temp dir but OUTSIDE raw/sessions, so nothing shared is
+    // touched and the traversal is still real
+    await writeFile(
+      join(dir, "secret.jsonl"),
+      JSON.stringify({ type: "session.start", task: "SECRET", cwd: "/w" }) + "\n",
+      "utf8",
+    );
+    const errors: Error[] = [];
+    const hook = ingestOnSessionEnd({
+      dir,
+      // exploding: proving the model is never reached is the point
+      provider: exploding,
+      onError: (e) => errors.push(e),
+    });
+
+    expect(await hook.handler(ctx("../../secret"))).toEqual({ action: "continue" });
+    expect(errors.some((e) => e.message.includes("refusing to ingest"))).toBe(true);
+  });
+
+  it("core refuses such an id long before the hook ever sees it", async () => {
+    const { assertSessionId } = await import("@agentkitai/agentrig-core");
+    expect(() => assertSessionId("../../secret")).toThrow(/invalid session id/);
   });
 });

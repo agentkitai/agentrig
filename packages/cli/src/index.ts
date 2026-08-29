@@ -61,7 +61,8 @@ function withRunOptions(cmd: Command): Command {
     .option("--ingest-on-end", "distil this session into the wiki when it finishes (PLAN §3.2); costs tokens")
     .option("--dream-on-end", "run the scheduled dream when one is due (PLAN §3.7); reports, never applies")
     .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
-    .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24");
+    .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
+    .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens");
 }
 
 // AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice

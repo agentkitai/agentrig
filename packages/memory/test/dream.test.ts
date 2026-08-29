@@ -219,12 +219,23 @@ describe("applyDream", () => {
 });
 
 describe("last-dream marker", () => {
-  it("is written into the dreamt wiki so the next dream knows where to start", async () => {
+  it("is written into BOTH the dreamt wiki and the live one", async () => {
+    // The stamp answers "when was a dream last run", not "last applied". Writing it only into
+    // the copy meant review mode never advanced it, so a scheduled trigger stayed permanently
+    // due and re-dreamt on every session end — spending tokens and leaking a copy each time.
     await page("concepts/a.md", "- [stated] alpha (session:s1)\n");
     const result = await runDream(dreamOpts(exploding, { structuralOnly: true }));
     expect(await lastDreamAt(result.outputRoot)).toBe(1_700_000_000_000);
-    // and not into the input
-    expect(await lastDreamAt(wikiRoot)).toBeUndefined();
+    expect(await lastDreamAt(wikiRoot)).toBe(1_700_000_000_000);
+    await result.workspace.dispose();
+  });
+
+  it("the stamp is metadata, so it does not count as modifying the input's content", async () => {
+    await page("concepts/a.md", "- [stated] alpha (session:s1)\n");
+    const before = await fingerprint(wikiRoot);
+    const result = await runDream(dreamOpts(exploding, { structuralOnly: true }));
+    // §1.5 is about wiki CONTENT; the dream's own bookkeeping is excluded from the fingerprint
+    expect(await fingerprint(wikiRoot)).toBe(before);
     await result.workspace.dispose();
   });
 });

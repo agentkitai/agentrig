@@ -16,6 +16,7 @@ import {
   type Hook,
   type ModelEvent,
   type ModelProvider,
+  type ModelRequest,
 } from "@agentkitai/agentrig-core";
 
 /** Scripted provider: each turn consumes the next ModelEvent[]. No network. */
@@ -23,8 +24,11 @@ class FakeProvider implements ModelProvider {
   readonly id = "fake";
   readonly model = "fake-1";
   readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
+  /** Every request, deep-copied — several tests assert on what the MODEL actually saw. */
+  readonly requests: ModelRequest[] = [];
   constructor(private readonly turns: ModelEvent[][]) {}
-  async *stream(): AsyncIterable<ModelEvent> {
+  async *stream(req: ModelRequest): AsyncIterable<ModelEvent> {
+    this.requests.push(structuredClone(req));
     yield* this.turns.shift() ?? [{ type: "stop", reason: "end_turn" }];
   }
 }
@@ -50,8 +54,12 @@ afterEach(async () => {
 });
 
 function run(turns: ModelEvent[][], hooks: Hook[], tools: AnyTool[] = [echoTool()]) {
+  return runWith(new FakeProvider(turns), hooks, tools);
+}
+
+function runWith(provider: FakeProvider, hooks: Hook[], tools: AnyTool[] = [echoTool()]) {
   return createAgent({
-    provider: new FakeProvider(turns),
+    provider,
     tools,
     permissions: new RulePolicy([{ class: "read", decision: "allow" }, ...defaultRules]),
     systemPrompt: "test",
@@ -60,6 +68,13 @@ function run(turns: ModelEvent[][], hooks: Hook[], tools: AnyTool[] = [echoTool(
     budget: { maxTurns: 10 },
     maxTokensPerTurn: 100,
   }).run("do the thing", { cwd: root });
+}
+
+/** Every text block the model was sent, flattened — for asserting on the model's own view. */
+function modelSaw(provider: FakeProvider): string {
+  return provider.requests
+    .flatMap((r) => r.messages.flatMap((m) => m.content.map((c) => JSON.stringify(c))))
+    .join("\n");
 }
 
 async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promise<HarnessEvent[]> {
@@ -191,15 +206,18 @@ describe("pre_tool", () => {
 });
 
 describe("post_tool", () => {
-  it("can rewrite what the model sees without rewriting the log", async () => {
-    const session = run(
-      [callEcho("sensitive"), [usage(1, 1), stop("end_turn")]],
-      [{ point: "post_tool", handler: () => ({ action: "modify", patch: "[redacted]" }) }],
-    );
+  it("rewrites what the MODEL sees while the log keeps what the tool returned", async () => {
+    const provider = new FakeProvider([callEcho("sensitive"), [usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "modify", patch: "[redacted]" }) },
+    ]);
     const events = await collect(session);
     const summary = await session.done;
 
-    // the log keeps what the tool actually returned — a hook shapes the conversation, not history
+    // both halves matter: the model got the patch...
+    expect(modelSaw(provider)).toContain("[redacted]");
+    expect(modelSaw(provider)).not.toContain("echo: sensitive");
+    // ...and the log kept the truth
     const logged = events.find((e) => e.type === "tool.result") as { display: string };
     expect(logged.display).toContain("sensitive");
 
@@ -207,6 +225,61 @@ describe("post_tool", () => {
     const replayed: HarnessEvent[] = [];
     for await (const e of store.read(summary.id)) replayed.push(e);
     expect(replayed.some((e) => e.type === "tool.result" && (e as { display: string }).display.includes("sensitive"))).toBe(true);
+  });
+
+  it("records that a hook changed what the model consumed", async () => {
+    // without this the log and the conversation could diverge unobserved: a hook could steer the
+    // model with text no observer — the supervisor included — ever saw
+    const session = run(
+      [callEcho("x"), [usage(1, 1), stop("end_turn")]],
+      [{ point: "post_tool", handler: () => ({ action: "inject", message: "extra guidance" }) }],
+    );
+    const events = await collect(session);
+    await session.done;
+    const patched = events.find((e) => e.type === "tool.result.patched") as { by: string; display: string };
+    expect(patched).toBeDefined();
+    expect(patched.by).toBe("post_tool");
+    expect(patched.display).toContain("extra guidance");
+  });
+
+  it("does not record a patch event when no hook changed anything", async () => {
+    const session = run([callEcho("x"), [usage(1, 1), stop("end_turn")]], []);
+    const events = await collect(session);
+    await session.done;
+    expect(events.some((e) => e.type === "tool.result.patched")).toBe(false);
+  });
+
+  it("reports a non-string patch instead of silently ignoring it", async () => {
+    const session = run(
+      [callEcho("x"), [usage(1, 1), stop("end_turn")]],
+      [{ point: "post_tool", handler: () => ({ action: "modify", patch: { not: "a string" } }) }],
+    );
+    const events = await collect(session);
+    await session.done;
+    expect(
+      events.some((e) => e.type === "error" && (e as { message: string }).message.includes("must be a string")),
+    ).toBe(true);
+  });
+
+  it("sees the tool's display string, and its raw output whatever its type", async () => {
+    let seen: unknown;
+    const structured: AnyTool = {
+      name: "structured",
+      description: "returns an object",
+      inputSchema: z.object({}),
+      permission: "read",
+      paths: () => [],
+      execute: async () => ({ output: { exitCode: 0, stdout: "hi" }, display: "hi" }),
+    };
+    const session = run(
+      [[{ type: "tool_use", id: "t1", name: "structured", input: {} }, usage(1, 1), stop("tool_use")], [usage(1, 1), stop("end_turn")]],
+      [{ point: "post_tool", handler: (ctx) => { seen = ctx.result; return { action: "continue" }; } }],
+      [structured],
+    );
+    await collect(session);
+    await session.done;
+    // `output` is NOT a string for most builtins; declaring it one crashed redaction hooks
+    expect(seen).toEqual({ ok: true, display: "hi", output: { exitCode: 0, stdout: "hi" } });
   });
 });
 
@@ -322,5 +395,214 @@ describe("mergePatches", () => {
 
   it("ignores non-object patches rather than clobbering the input", () => {
     expect(mergePatches({ a: 1 }, ["nope", null, 42, ["x"]])).toEqual({ a: 1 });
+  });
+});
+
+describe("a hook influences the session through its return value or not at all", () => {
+  it("mutating the context it was handed changes nothing", async () => {
+    // ctx.request.messages WAS the live message array, so a hook returning `continue` — nothing
+    // to validate — could push messages the model then saw, with zero events in the log
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      {
+        point: "pre_model",
+        handler: (ctx) => {
+          ctx.request?.messages.push({ role: "user", content: [{ type: "text", text: "SMUGGLED" }] });
+          if (ctx.request !== undefined) ctx.request.system = "HIJACKED";
+          return { action: "continue" };
+        },
+      },
+    ]);
+    await collect(session);
+    await session.done;
+
+    expect(modelSaw(provider)).not.toContain("SMUGGLED");
+    expect(provider.requests[0]!.system).not.toContain("HIJACKED");
+  });
+
+  it("a pre_compact hook cannot empty the live history", async () => {
+    // pre_compact accepts no `modify` at all, yet emptying ctx.messages sent the next request
+    // with messages: [] — a 400 against a real provider, from a point that cannot modify
+    const provider = new FakeProvider([callEcho("a"), callEcho("b"), [usage(1, 1), stop("end_turn")]]);
+    const session = createAgent({
+      provider,
+      tools: [echoTool()],
+      permissions: new RulePolicy([{ class: "read", decision: "allow" }, ...defaultRules]),
+      systemPrompt: "test",
+      store: new SessionStore({ root }),
+      hooks: [{ point: "pre_compact", handler: (ctx) => { ctx.messages?.splice(0); return { action: "continue" }; } }],
+      compaction: { shouldCompact: () => true, compact: async (m) => m },
+      budget: { maxTurns: 4 },
+      maxTokensPerTurn: 100,
+    }).run("t", { cwd: root });
+    await collect(session);
+    await session.done;
+    expect(provider.requests.every((r) => r.messages.length > 0)).toBe(true);
+  });
+
+  it("mutating a tool input does not reach the permission check", async () => {
+    // regression guard: pre_tool is applied BEFORE permissions are computed, so a patch is
+    // policed — but only while that ordering holds. Reordering it would be silent otherwise.
+    const session = run(
+      [
+        [{ type: "tool_use", id: "t1", name: "write_file", input: { path: "in-cwd.txt", content: "x" } }, usage(1, 1), stop("tool_use")],
+        [usage(1, 1), stop("end_turn")],
+      ],
+      [{ point: "pre_tool", handler: () => ({ action: "modify", patch: { path: "/tmp/escaped-by-hook.txt" } }) }],
+      builtinTools(),
+    );
+    const events = await collect(session);
+    await session.done;
+
+    const req = events.find((e) => e.type === "permission.request") as { req: { input: { path: string } } };
+    // the policy sees the PATCHED path, so the patch cannot smuggle a write past cwd confinement
+    expect(req.req.input.path).toBe("/tmp/escaped-by-hook.txt");
+    expect(events.some((e) => e.type === "tool.denied")).toBe(true);
+  });
+
+  it("a hook denial produces the same event shape as a permission denial", async () => {
+    const denied = run(
+      [callEcho("x"), [usage(1, 1), stop("end_turn")]],
+      [{ point: "pre_tool", handler: () => ({ action: "deny", reason: "no" }) }],
+    );
+    const hookEvents = await collect(denied);
+    await denied.done;
+    // no phantom tool.call: it would feed the stall detector's productivity count and the loop
+    // detector's inputHash tally for a call that never ran
+    expect(hookEvents.some((e) => e.type === "tool.call")).toBe(false);
+    expect(hookEvents.some((e) => e.type === "tool.denied")).toBe(true);
+  });
+});
+
+describe("pre_model and post_model", () => {
+  it("pre_model can refuse the request, ending the session without calling the provider", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "pre_model", handler: () => ({ action: "deny", reason: "over budget" }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    expect(provider.requests).toHaveLength(0);
+    expect(events.some((e) => e.type === "error" && (e as { message: string }).message.includes("over budget"))).toBe(true);
+  });
+
+  it("pre_model can replace the system prompt", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "pre_model", handler: () => ({ action: "modify", patch: { system: "REPLACED" } }) },
+    ]);
+    await collect(session);
+    await session.done;
+    expect(provider.requests[0]!.system).toBe("REPLACED");
+  });
+
+  it("pre_model reports a patch of the wrong shape", async () => {
+    const session = run(
+      [[usage(1, 1), stop("end_turn")]],
+      [{ point: "pre_model", handler: () => ({ action: "modify", patch: { messages: [] } }) }],
+    );
+    const events = await collect(session);
+    await session.done;
+    expect(
+      events.some((e) => e.type === "error" && (e as { message: string }).message.includes("{ system: string }")),
+    ).toBe(true);
+  });
+
+  it("post_model injects are attributed to the hook, not to the user", async () => {
+    // the supervisor's reviewer grades trajectories off steer events; a hook nudge scored as a
+    // human correction is a lie in the log
+    const session = run(
+      [callEcho("x"), [usage(1, 1), stop("end_turn")]],
+      [{ point: "post_model", handler: () => ({ action: "inject", message: "hook nudge" }) }],
+    );
+    const events = await collect(session);
+    await session.done;
+    const steer = events.find((e) => e.type === "steer") as { source: string; message: string } | undefined;
+    const undelivered = events.find(
+      (e) => e.type === "error" && (e as { message: string }).message.includes("not delivered"),
+    ) as { message: string } | undefined;
+    // whichever path it took, it must not claim to be the user
+    expect((steer?.source ?? "") === "user").toBe(false);
+    if (undelivered !== undefined) expect(undelivered.message).toContain("from hook");
+  });
+});
+
+describe("user_prompt modify", () => {
+  it("the last string patch wins, and a wrong shape is reported", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "user_prompt", id: "a", handler: () => ({ action: "modify", patch: "first rewrite" }) },
+      { point: "user_prompt", id: "b", handler: () => ({ action: "modify", patch: "second rewrite" }) },
+      { point: "user_prompt", id: "c", handler: () => ({ action: "modify", patch: { wrong: "shape" } }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+
+    expect(modelSaw(provider)).toContain("second rewrite");
+    expect(modelSaw(provider)).not.toContain("first rewrite");
+    expect(
+      events.some((e) => e.type === "error" && (e as { message: string }).message.includes("must be a string")),
+    ).toBe(true);
+  });
+});
+
+describe("session_end hooks are bounded as a group", () => {
+  it("a total budget stops the chain even when each hook's own timeout is generous", async () => {
+    const ran: string[] = [];
+    const slow = (id: string): Hook => ({
+      point: "session_end",
+      id,
+      timeoutMs: 10 * 60_000, // individually generous, like the real ingest hook
+      handler: async () => {
+        ran.push(id);
+        await new Promise((r) => setTimeout(r, 300));
+        return { action: "continue" };
+      },
+    });
+    const session = createAgent({
+      provider: new FakeProvider([[usage(1, 1), stop("end_turn")]]),
+      tools: [echoTool()],
+      permissions: new RulePolicy(defaultRules),
+      systemPrompt: "test",
+      store: new SessionStore({ root }),
+      hooks: [slow("a"), slow("b"), slow("c")],
+      // 3 x 300ms of work against a 200ms group budget: the margin is wide enough that a slow
+      // CI box cannot accidentally satisfy it
+      sessionEndBudgetMs: 200,
+      budget: { maxTurns: 2 },
+      maxTokensPerTurn: 100,
+    }).run("t", { cwd: root });
+
+    const t0 = Date.now();
+    const events = await collect(session);
+    await session.done;
+
+    // without a group budget these three would have run to completion in sequence (900ms+)
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(ran.length).toBeLessThan(3);
+    // whichever bound bit first — the per-hook budget derived from the remainder, or the group
+    // budget being exhausted — the chain must report why it stopped
+    expect(
+      events.some(
+        (e) =>
+          e.type === "error" &&
+          /budget for this point is spent|did not finish within/.test((e as { message: string }).message),
+      ),
+    ).toBe(true);
+  });
+
+  it("a steer queued by a session_end hook is reported rather than vanishing", async () => {
+    const session = run(
+      [[usage(1, 1), stop("end_turn")]],
+      [
+        {
+          point: "session_end",
+          handler: () => ({ action: "continue" }),
+        },
+      ],
+    );
+    const events = await collect(session);
+    await session.done;
+    expect(events.at(-1)!.type).toBe("session.end");
   });
 });

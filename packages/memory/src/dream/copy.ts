@@ -59,6 +59,9 @@ export async function fingerprint(root: string): Promise<string> {
   return hash.digest("hex");
 }
 
+/** The dream's own bookkeeping, not wiki content — excluded from the content fingerprint. */
+const METADATA = new Set([".last-dream"]);
+
 async function walk(root: string, dir = root, out: string[] = []): Promise<string[]> {
   let entries;
   try {
@@ -69,7 +72,7 @@ async function walk(root: string, dir = root, out: string[] = []): Promise<strin
   for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     const full = join(dir, e.name);
     if (e.isDirectory()) await walk(root, full, out);
-    else if (e.isFile()) out.push(relative(root, full));
+    else if (e.isFile() && !METADATA.has(e.name)) out.push(relative(root, full));
   }
   return out.sort();
 }

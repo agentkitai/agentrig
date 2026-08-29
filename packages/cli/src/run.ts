@@ -63,6 +63,7 @@ export interface RunOptions extends ProviderOptions {
   dreamOnEnd?: boolean;
   dreamEverySessions: string;
   dreamEveryHours: string;
+  dreamStructuralOnly?: boolean;
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -185,6 +186,9 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   // rather than evaporate. Opt-in because ingest costs tokens; the dream trigger defaults to
   // review mode because §1.5 makes an unreviewed bulk rewrite of memory the wrong default.
   const hooks: Hook[] = [];
+  if (opts.memory === undefined && (opts.ingestOnEnd === true || opts.dreamOnEnd === true)) {
+    console.error("--ingest-on-end/--dream-on-end need --memory; no session_end hook was registered");
+  }
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend();
     hooks.push(
@@ -204,6 +208,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
         provider,
         everySessions: dreamEverySessions,
         everyHours: dreamEveryHours,
+        ...(opts.dreamStructuralOnly === true ? { structuralOnly: true } : {}),
         onError: (err) => console.error(`dream failed (session still succeeded): ${err.message}`),
         onDone: (summary) => console.error(`dream: ${summary}`),
       }),
