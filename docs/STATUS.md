@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks done (2026-08-29); TUI, MCP, subagents, skills next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI done (2026-08-29); MCP, subagents, skills next |
 
 ## M0 notes
 
@@ -661,6 +661,39 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   everything else is SDK-only.
 - **Still open in M7**: the Ink TUI, the MCP client, subagents, and skills. Lore's auto-retrieval
   (M3b's caveat) now has a `user_prompt` point to attach to but is not wired.
+
+## M7 notes — the TUI (second row)
+
+- **The TUI is layout; a headless `TuiController` is everything else.** A terminal UI is close to
+  untestable, so every decision — what a line says, when a permission prompt appears, what a slash
+  command does — lives in a class a test drives without a screen. `app.tsx` has no logic in it,
+  which is why it needs no test and why the 27 tests here are worth something.
+- **Slash-command parsing is a pure function** with a test asserting that *every* command
+  `/help` advertises actually parses. A help list that drifts from the parser is the classic way
+  a TUI lies to its user.
+- **A typo is reported, not sent to the model.** Someone who typed `/memroy` meant to run a
+  command; spending a turn on it as a prompt is the least useful possible response. Unknown
+  commands print the help so the answer is always in reach.
+- **The permission prompt is a promise bridged to UI state.** `controller.ask` is the agent's
+  `onAsk`; it parks a resolver in state, the view renders it, and a keypress resolves it. While a
+  prompt is up it takes the keyboard entirely — answering it is the only useful thing to do.
+- **`/abort` answers a pending prompt as well as aborting.** Without that the loop would sit
+  waiting for an answer nobody is going to give, and the session would never end.
+- **The line buffer is bounded** (500 by default). An unattended terminal running a long session
+  must not grow without limit.
+- `/memory` and `/dream` are **injected**, not imported, so the controller stays free of stores
+  and a test can drive them without a wiki. When they are not wired the TUI says so rather than
+  failing silently.
+- **Caveat: the input line is a minimal reader** — printable characters, backspace, enter. No
+  history, no cursor movement, no paste handling. Enough to use, not yet pleasant.
+- **Caveat: `model.delta` is dropped rather than streamed.** Rendering per-token deltas as lines
+  would drown everything else; showing them as a live-updating block is the obvious improvement
+  and is not done.
+- **Caveat: the TUI does not attach the supervisor.** `/supervisor` shows signals from the event
+  stream, so it stays empty unless something else attached one.
+- **Caveat: no test renders the React tree.** `ink-testing-library` is installed but unused — the
+  controller split means there is nothing in the view worth asserting on, and a snapshot test of
+  terminal output would break on every cosmetic change.
 
 ## Decided
 

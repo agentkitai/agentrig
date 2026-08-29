@@ -5,6 +5,7 @@ import { renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
+import { startTui, type TuiOptions } from "./tui/start.js";
 import {
   memoryIngest,
   memoryInit,
@@ -166,5 +167,14 @@ sessions
       console.log(opts.json ? JSON.stringify(e) : renderEvent(e));
     }
   });
+
+// PLAN §5: bare `agentrig` is the interactive TUI. Registered as the default so the subcommands
+// above still win when one is named.
+withProviderOptions(program)
+  .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+  .option("--memory <dir>", "memory directory whose index is injected", ".agentrig")
+  .option("--max-turns <n>", "turn budget per task", "50")
+  .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
+  .action(async (opts: TuiOptions, cmd: Command) => startTui({ ...opts, modelExplicit: modelExplicit(cmd) }));
 
 program.parseAsync(process.argv);
