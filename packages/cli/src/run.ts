@@ -19,7 +19,7 @@ import { renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { FileMemoryStore, FileRawStore, indexInjection, memoryTools } from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
-import { supervise } from "@agentkitai/agentrig-supervisor";
+import { RubricGrader, supervise, TrajectoryReviewer } from "@agentkitai/agentrig-supervisor";
 import { join } from "node:path";
 
 export { DEFAULT_ANTHROPIC_MODEL };
@@ -50,6 +50,7 @@ export interface RunOptions extends ProviderOptions {
   supervise?: boolean;
   supervisorNoAbort?: boolean;
   supervisorSoft: string;
+  supervisorReview?: boolean;
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -211,6 +212,22 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             ...(budget.maxMinutes === undefined ? {} : { maxMinutes: budget.maxMinutes }),
           },
           capabilities: { abort: opts.supervisorNoAbort !== true },
+          task,
+          // PLAN §4.3: the LLM-backed rungs cost tokens, so they are opt-in. Without them the
+          // ladder is still the free M4 one — detectors and guidance — rather than nothing.
+          ...(opts.supervisorReview === true
+            ? {
+                reviewer: new TrajectoryReviewer({ provider }),
+                // the wiki digest the agent itself is working from, so the reviewer diagnoses
+                // against what the agent knows rather than guessing at it
+                ...(memoryIndex === "" ? {} : { memoryIndex }),
+                grader: new RubricGrader({ provider }),
+                attempts: async () => {
+                  if (opts.memory === undefined) return [];
+                  return (await new FileRawStore({ root: opts.memory }).readAttempts()).attempts;
+                },
+              }
+            : {}),
           ...(pricing === undefined ? {} : { pricing }),
           // there is no human in a headless run, so `escalate` stays unavailable and the ladder
           // goes guidance → abort; interactively the question is put on stderr

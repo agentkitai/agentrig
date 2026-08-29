@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M6**
+Current milestone: **M7**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -12,8 +12,8 @@ Current milestone: **M6**
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
-| 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | next |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | |
+| 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | next |
 
 ## M0 notes
 
@@ -492,6 +492,77 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   finding count and the exit code.
 - A failed dream disposes its temp copy. `memory lint` runs on every session end, so leaking a
   full wiki copy per failure — one malformed `pins.json` is enough — would quietly fill the disk.
+
+## M6 notes
+
+- **`update_plan` had to exist first.** Two supervisor pieces were specified against
+  `plan.updated` and neither could work, because nothing in the harness ever emitted one: `drift`
+  (§4.1) compares `file.changed` against the plan's declared `scope`, and `force_replan` (§4.2)
+  requires a fresh plan before more tool calls. Both shipped dormant in M4. Adding the tool
+  activates both — M4's drift detector is live for the first time.
+- **`force_replan` is a real gate, not a message.** `SessionControl.requirePlan(reason)` makes the
+  loop refuse every tool except `update_plan`, with the reason passed through so the model is told
+  *why* and what to do rather than just failing. It clears the moment a plan lands — including one
+  emitted in the same turn — so a cooperative agent loses one tool call, not a turn. This is
+  exactly why the rung sits above `inject_guidance` on the ladder: guidance can be ignored, a gate
+  cannot.
+- **A gate can never be permanent, and is never raised where it cannot be satisfied.** Both halves
+  were needed, and the first cut had neither. `update_plan` declares `read` and touches no path,
+  and the default read rule is `cwdOnly` — which `RulePolicy` skips when a call declares no paths
+  — so under the harness's *own* defaults it fell through to `ask` and headless denied it: a gate
+  nothing could ever clear. `defaultRules` now allows it by name. Separately, `supervise()`
+  asserted the `forceReplan` capability unconditionally on the grounds that the gate "needs no
+  collaborator"; it does — the session's tool list must contain `update_plan`. It is now derived
+  from `control.canRequirePlan()`, and a caller asking for the rung on a session that cannot serve
+  it gets an `onError` report. As a belt-and-braces third measure the gate releases itself after
+  `MAX_REPLAN_REFUSALS` (2) with an `error` event saying so, and immediately when the session has
+  no plan tool at all. Without these, `agentrig run --headless --supervise --supervisor-no-abort`
+  was a live deadlock: 34 of 40 turns refused by a gate nothing could clear, ending on `budget`.
+  A supervisor rung that can wedge the loop is strictly worse than the loop it was catching.
+- **The reviewer proposes several directions, not one.** A supervisor that hands back a single
+  instruction has replaced the agent's judgement with its own on the strength of one sample.
+  Candidates keep the decision where the context is, and make the guidance falsifiable — an agent
+  can look at three options and recognise that none of them fit. The prompt is also explicit that
+  re-suggesting something the attempts ledger already records as failed is the least useful
+  possible answer.
+- **The reviewer reads the attempts ledger, which is the piece AVO lacked.** Reviewing a
+  trajectory alone means re-deriving what was already tried; the ledger says it outright.
+- **The grader fails closed.** An unparseable grader response returns `pass: false` with the parse
+  failure as the gap. Defaulting to pass would mean a broken grader silently certifies everything,
+  which is strictly worse than having no grader at all. The reviewer, by contrast, degrades to
+  empty guidance — a reviewer that says nothing costs a rung; a grader that says "yes" costs the
+  whole point of grading.
+- **The grader is told to grade artifacts, not narration.** "If the trajectory claims something
+  the files do not show, that is a gap, not a pass" is in the system prompt, because the failure
+  mode of self-assessment is reading your own output charitably.
+- **`run_reviewer` became a real `Intervention` variant** rather than the `run_grader`
+  placeholder M4 used for that rung. Additive to the discriminated union, with a zod round-trip
+  test and a `renderEvent` case, per the repo rule. `renderEvent` now prints an intervention's
+  payload instead of `JSON.stringify`-ing it at the reader.
+- **Capabilities are derived from what was actually supplied**, applied after any caller-declared
+  ones — the M4 review's lesson about `escalate`. Declaring a rung whose machinery is absent buys
+  an intervention that silently does nothing; reaching one now reports through `onError`.
+  `forceReplan` defaults on because core's gate needs no collaborator.
+- Both LLM rungs are bounded by the same timeout mechanism as `escalate` (90s default): they run
+  inside the observer's event loop, and an unbounded one would stop it consuming events — the
+  M4 review's critical finding, which applies verbatim to any blocking rung.
+- CLI: `--supervisor-review` opts into the LLM-backed rungs. They cost tokens, so the default
+  stays the free M4 ladder — detectors and guidance — rather than nothing.
+- **Caveat: the reviewer and grader share the session's provider and model.** A cheaper or
+  differently-aligned reviewer model is the obvious next step and is not wired.
+- **Caveat: `artifacts` is caller-supplied.** The supervisor does not infer which files to grade
+  from `file.changed`; the CLI passes none today, so `run_grader` grades the trajectory alone
+  unless a caller supplies them through the SDK. The CLI also supplies no rubric, so the rung
+  stays unreachable from `agentrig run` — reachable from the SDK, and honest about it, rather than
+  advertised and dead.
+- **Caveat: the reviewer sees the last 400 events condensed to 120**, not "the whole trajectory"
+  as PLAN §4.3 words it. The bound is what keeps a stuck session's trajectory from growing the
+  prompt without limit; the tail is kept because what the agent just did matters more than how it
+  opened.
+- **Caveat: a replan gate does not survive `--resume`.** It lives in session state, so resuming
+  silently drops a pending requirement.
+- **Caveat: `checkpoint_rollback` is still the one unimplemented rung.** It needs git checkpoints,
+  which nothing creates yet, and the default policy never emits it.
 
 ## Decided
 

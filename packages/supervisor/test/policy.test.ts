@@ -40,11 +40,52 @@ describe("LadderPolicy", () => {
   it("runs the whole ladder when every capability is present", () => {
     const p = new LadderPolicy({
       cooldownTurns: 0,
-      capabilities: { forceReplan: true, reviewer: true, escalate: true, abort: true },
+      capabilities: { forceReplan: true, reviewer: true, grader: true, escalate: true, abort: true },
+      rubric: "the suite must pass",
     });
-    const types = [0, 1, 2, 3].map((t) => p.decide([sig("drift")], state(t))[0]!.type);
-    expect(types).toEqual(["inject_guidance", "force_replan", "run_grader", "escalate"]);
-    expect(DEFAULT_LADDER).toHaveLength(5);
+    const types = [0, 1, 2, 3, 4, 5].map((t) => p.decide([sig("drift")], state(t))[0]!.type);
+    expect(types).toEqual([
+      "inject_guidance",
+      "force_replan",
+      "run_reviewer",
+      "run_grader",
+      "escalate",
+      "abort",
+    ]);
+    expect(DEFAULT_LADDER).toHaveLength(6);
+  });
+
+  it("run_grader is unreachable without a rubric, even with a grader attached", () => {
+    // the rung had no place on the ladder at all in the first cut, so the CLI's grader was
+    // dead code: a user could opt in, pay nothing, and get no grading
+    const noRubric = new LadderPolicy({ cooldownTurns: 0, capabilities: { grader: true, abort: false } });
+    const types = [0, 1, 2].map((t) => noRubric.decide([sig("loop")], state(t))[0]!.type);
+    expect(types).not.toContain("run_grader");
+
+    const withRubric = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { grader: true, abort: false },
+      rubric: "r",
+    });
+    const got = [0, 1, 2].map((t) => withRubric.decide([sig("loop")], state(t))[0]!.type);
+    expect(got).toContain("run_grader");
+  });
+
+  it("carries the rubric into the intervention it builds", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { grader: true, abort: false },
+      rubric: "every public function has a test",
+    });
+    p.decide([sig("loop")], state(0));
+    const graded = p.decide([sig("loop")], state(1))[0] as { type: string; rubric: string };
+    expect(graded.type).toBe("run_grader");
+    expect(graded.rubric).toBe("every public function has a test");
+  });
+
+  it("a caller can replace the rung order outright", () => {
+    const p = new LadderPolicy({ cooldownTurns: 0, ladder: ["abort"], capabilities: { abort: true } });
+    expect(p.decide([sig("loop")], state(0))[0]!.type).toBe("abort");
   });
 
   it("never aborts when the abort capability is withheld", () => {

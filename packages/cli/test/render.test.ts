@@ -39,6 +39,8 @@ describe("renderEvent", () => {
     const kinds = [
       { type: "inject_guidance", message: "stop repeating yourself" },
       { type: "force_replan" },
+      { type: "run_reviewer", reason: "loop: same call 3x" },
+      { type: "run_grader", rubric: "the suite must pass" },
       { type: "escalate", question: "how should this proceed?" },
       { type: "abort", reason: "loop persisted" },
     ];
@@ -54,6 +56,35 @@ describe("renderEvent", () => {
       expect(line).toContain("supervisor.intervention");
       expect(line).toContain(intervention.type);
     }
+  });
+
+  it("shows an intervention's payload rather than dumping raw JSON at the reader", () => {
+    const e = HarnessEvent.parse({
+      seq: 30,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "supervisor.intervention",
+      intervention: { type: "run_reviewer", reason: "loop: called bash with identical input 3 times" },
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("called bash with identical input 3 times");
+    expect(line).not.toContain('{"type"');
+  });
+
+  it("renders update_plan's plan.updated with each step's status", () => {
+    const e = HarnessEvent.parse({
+      seq: 31,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "plan.updated",
+      items: [
+        { id: "1", text: "wire the reviewer", status: "done", scope: ["packages/supervisor/src"] },
+        { id: "2", text: "write the tests", status: "in_progress" },
+      ],
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("done:wire the reviewer");
+    expect(line).toContain("in_progress:write the tests");
   });
 
   it("renders context.compact", () => {

@@ -5,8 +5,10 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createAgent,
+
   RulePolicy,
   SessionStore,
+  updatePlanTool,
   type AnyTool,
   type HarnessEvent,
   type Intervention,
@@ -22,8 +24,11 @@ import {
   LadderPolicy,
   loopDetector,
   reduce,
+  RubricGrader,
   supervise,
+  TrajectoryReviewer,
   type Detector,
+  type Reviewer,
 } from "@agentkitai/agentrig-supervisor";
 
 /** Repeats the same tool call forever, which is exactly what `loop` exists to catch. No network. */
@@ -515,5 +520,226 @@ describe("review regressions", () => {
     for await (const e of store.read(summary.id)) read.push(e);
     expect(read.at(-1)!.type).toBe("session.end");
     expect(read.some((e) => e.type === "supervisor.intervention")).toBe(false);
+  });
+});
+
+describe("M6: the LLM-backed rungs and force_replan", () => {
+  const reviewerReply = {
+    diagnosis: "it is retrying an operation that cannot succeed",
+    directions: ["read the error", "try a different tool"],
+    guidance: "Stop repeating that call and read the failure first.",
+  };
+
+  function replying(body: unknown): ModelProvider {
+    return {
+      id: "fake",
+      model: "fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        yield { type: "text_delta", text: JSON.stringify(body) };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+  }
+
+  it("run_reviewer steers the reviewer's guidance and its candidate directions", async () => {
+    const session = run(new LoopingProvider(), 40);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      task: "spin forever",
+      reviewer: new TrajectoryReviewer({ provider: replying(reviewerReply) }),
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const steers = events.filter((e) => e.type === "steer").map((e) => (e as { message: string }).message);
+    const fromReviewer = steers.find((m) => m.includes("[supervisor: reviewer]"));
+    expect(fromReviewer).toBeDefined();
+    expect(fromReviewer).toContain("retrying an operation that cannot succeed");
+    expect(fromReviewer).toContain("Candidate directions:");
+    expect(fromReviewer).toContain("try a different tool");
+    // and the decision itself is in the log
+    const kinds = events
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds).toContain("run_reviewer");
+  });
+
+  it("attaching a reviewer makes the rung reachable; without one it is skipped", async () => {
+    const withoutReviewer = run(new LoopingProvider(), 40);
+    const s1 = supervise(withoutReviewer, { loop: { repeats: 3 }, ladder: { cooldownTurns: 1 } });
+    const e1 = await drain(withoutReviewer);
+    await s1.done;
+    await withoutReviewer.done;
+    const kinds1 = e1
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds1).not.toContain("run_reviewer");
+  });
+
+  it("a reviewer that hangs cannot wedge the observer", async () => {
+    const hanging: Reviewer = { review: () => new Promise(() => {}) };
+    const errors: string[] = [];
+    const session = run(new LoopingProvider(), 40);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      reviewer: hanging,
+      reviewTimeoutMs: 50,
+      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+    });
+    await drain(session);
+    await sup.done;
+    const summary = await session.done;
+    expect(summary.reason).toBe("aborted");
+    expect(errors.some((e) => e.includes("did not answer within"))).toBe(true);
+  });
+
+  it("run_grader steers the gaps when the work fails the rubric", async () => {
+    const session = run(new LoopingProvider(), 40);
+    const sup = attach(session, {
+      detectors: [loopDetector({ repeats: 2 })],
+      policy: {
+        decide: (signals) =>
+          signals.length > 0 ? [{ type: "run_grader", rubric: "the suite must pass" }] : [],
+      },
+      grader: new RubricGrader({ provider: replying({ pass: false, gaps: ["no test was added"] }) }),
+      artifacts: async () => [{ path: "src/a.ts", content: "x" }],
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+    const steers = events.filter((e) => e.type === "steer").map((e) => (e as { message: string }).message);
+    expect(steers.some((m) => m.includes("[supervisor: grader]") && m.includes("no test was added"))).toBe(true);
+  });
+
+  it("a passing grade steers nothing", async () => {
+    const session = run(new LoopingProvider(), 40);
+    const sup = attach(session, {
+      detectors: [loopDetector({ repeats: 2 })],
+      policy: {
+        decide: (signals) => (signals.length > 0 ? [{ type: "run_grader", rubric: "r" }] : []),
+      },
+      grader: new RubricGrader({ provider: replying({ pass: true, gaps: [] }) }),
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+    expect(events.filter((e) => e.type === "steer")).toHaveLength(0);
+  });
+
+  it("a rung whose machinery is absent is reported, not silently skipped", async () => {
+    const errors: string[] = [];
+    const session = run(new LoopingProvider(4), 40);
+    const sup = attach(session, {
+      detectors: [loopDetector({ repeats: 2 })],
+      policy: { decide: (s) => (s.length > 0 ? [{ type: "run_reviewer", reason: "loop" }] : []) },
+      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+    });
+    await drain(session);
+    await sup.done;
+    await session.done;
+    expect(errors.some((e) => e.includes("no reviewer attached"))).toBe(true);
+  });
+});
+
+describe("force_replan — the rung this milestone made real", () => {
+  /** A session whose tools include update_plan, so a gate can actually be satisfied. */
+  function planningRun(provider: ModelProvider, maxTurns = 40): Session {
+    return createAgent({
+      provider,
+      tools: [spinTool(), updatePlanTool()],
+      // permissive: this block is about the GATE. That `update_plan` survives the harness's own
+      // defaultRules is proved in core's agent.test.ts, where the permission layer is the subject.
+      permissions: new RulePolicy([
+        { class: "read", decision: "allow" },
+        { tool: "update_plan", decision: "allow" },
+      ]),
+      systemPrompt: "test",
+      store: new SessionStore({ root }),
+      budget: { maxTurns },
+      maxTokensPerTurn: 100,
+    }).run("spin", { cwd: root });
+  }
+
+  it("raises a real gate on the session, naming the signal that caused it", async () => {
+    const session = planningRun(new LoopingProvider());
+    const sup = attach(session, {
+      detectors: [loopDetector({ repeats: 3 })],
+      policy: {
+        decide: (signals) => (signals.length > 0 ? [{ type: "force_replan" }] : []),
+      },
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const blocked = events.filter(
+      (e) => e.type === "tool.result" && (e as { display: string }).display.startsWith("blocked:"),
+    ) as Array<{ display: string }>;
+    expect(blocked.length).toBeGreaterThan(0);
+    expect(blocked[0]!.display).toContain("loop:");
+    expect(blocked[0]!.display).toContain("update_plan");
+  });
+
+  it("is NOT offered on a session with no update_plan tool — and says so", async () => {
+    // raising a gate a session can never clear turns a rung meant to interrupt a loop into a
+    // permanent deadlock: 34 of 40 turns refused, ending on `budget`
+    const errors: string[] = [];
+    const session = run(new LoopingProvider(), 40); // run() builds tools WITHOUT update_plan
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { forceReplan: true, abort: false },
+      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const kinds = events
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds).not.toContain("force_replan");
+    expect(errors.some((e) => e.includes("no update_plan tool"))).toBe(true);
+  });
+
+  it("IS offered when the session can satisfy it", async () => {
+    const session = planningRun(new LoopingProvider());
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: false },
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const kinds = events
+      .filter((e) => e.type === "supervisor.intervention")
+      .map((e) => (e as { intervention: Intervention }).intervention.type);
+    expect(kinds).toContain("force_replan");
+  });
+
+  it("a supervised session with --supervisor-no-abort still terminates rather than deadlocking", async () => {
+    // the shipped-config deadlock: gate up, abort disabled, nothing able to clear it
+    const session = run(new LoopingProvider(), 12);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: false },
+    });
+    const events = await drain(session);
+    await sup.done;
+    const summary = await session.done;
+
+    const blocked = events.filter(
+      (e) => e.type === "tool.result" && (e as { display: string }).display.startsWith("blocked:"),
+    );
+    // whatever else happens, the run must not spend itself being refused
+    expect(blocked.length).toBeLessThanOrEqual(2);
+    expect(["done", "budget"]).toContain(summary.reason);
   });
 });

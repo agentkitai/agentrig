@@ -66,6 +66,17 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(iv))).toEqual(iv);
   });
 
+  it("round-trips the M6 run_reviewer intervention", () => {
+    const e = HarnessEvent.parse({
+      seq: 44,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "supervisor.intervention",
+      intervention: { type: "run_reviewer", reason: "loop: same call 3x" },
+    });
+    expect(parseEvent(serializeEvent(e))).toEqual(e);
+  });
+
   it("rejects a signal whose confidence is out of range", () => {
     expect(() =>
       parseEvent(

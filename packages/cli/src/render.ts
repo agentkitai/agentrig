@@ -26,7 +26,18 @@ export function renderEvent(e: HarnessEvent): string {
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
-    case "supervisor.intervention": return `${p} ${JSON.stringify(e.intervention)}`;
+    case "supervisor.intervention": {
+      const i = e.intervention;
+      const detail =
+        i.type === "inject_guidance" ? i.message
+        : i.type === "escalate" ? i.question
+        : i.type === "abort" ? i.reason
+        : i.type === "run_reviewer" ? i.reason
+        : i.type === "run_grader" ? i.rubric
+        : i.type === "checkpoint_rollback" ? `to seq ${i.toSeq}`
+        : "";
+      return `${p} ${i.type}${detail === "" ? "" : `: ${detail.replace(/\s+/g, " ").slice(0, 200)}`}`;
+    }
     case "error": return `${p} fatal=${e.fatal} ${e.message}`;
   }
 }

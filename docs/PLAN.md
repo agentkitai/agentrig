@@ -514,6 +514,24 @@ interface Grader {
 
 The reviewer is the AVO piece: review the whole trajectory (plus the attempts ledger, which AVO lacked), propose several candidate directions, hand back guidance. The grader is the Outcomes piece: a written rubric checked by a separate evaluator, which stands in for the objective score AVO had.
 
+Several directions, not one, is the substantive part: a supervisor that returns a single
+instruction has replaced the agent's judgement with its own on one sample, where candidates keep
+the decision where the context is and let the agent recognise when none of them fit.
+
+The two degrade in opposite directions on a malformed response, deliberately. The reviewer
+returns empty guidance — a reviewer that says nothing merely costs a rung. The grader returns
+`pass: false` — a grader that defaults to "yes" silently certifies everything, which is worse
+than no grader at all.
+
+`force_replan` needs `plan.updated`, which needs something to emit it: the `update_plan` built-in
+tool (M6). `SessionControl.requirePlan(reason)` then makes the loop refuse every tool except
+`update_plan` until a fresh plan lands. Two safeguards are part of the design rather than
+afterthoughts, because a gate that cannot be cleared is worse than the loop it interrupts: the
+rung is offered only when the session actually has a plan tool (`control.canRequirePlan()`), and
+the gate releases itself after a couple of refusals with an `error` explaining why. That gate is why the rung outranks `inject_guidance` —
+guidance can be ignored and a gate cannot — and it is also what makes §4.1's `drift` detector
+reachable, since it compares `file.changed` against the plan's declared `scope`.
+
 ### 4.4 Attachment
 
 ```ts
