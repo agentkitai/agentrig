@@ -1,0 +1,128 @@
+import { describe, expect, it } from "vitest";
+import { OpenAIChatGPTAuth, decodeJwtClaims, type ChatGPTTokens, type TokenStore } from "@agentkitai/agentrig-core";
+
+/** Build a fake JWT with the given payload claims (signature is never checked). */
+function jwt(claims: Record<string, unknown>): string {
+  const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  return `${b64({ alg: "none" })}.${b64(claims)}.sig`;
+}
+
+class MemoryStore implements TokenStore {
+  constructor(public tokens: ChatGPTTokens | null = null) {}
+  async read() {
+    return this.tokens;
+  }
+  async write(t: ChatGPTTokens) {
+    this.tokens = t;
+  }
+}
+
+const accessJwt = (expSec: number, account = "acct_1") =>
+  jwt({ exp: expSec, chatgpt_account_id: account });
+
+describe("decodeJwtClaims", () => {
+  it("decodes the payload segment and tolerates junk", () => {
+    expect(decodeJwtClaims(jwt({ a: 1 }))).toEqual({ a: 1 });
+    expect(decodeJwtClaims("not-a-jwt")).toBeNull();
+  });
+});
+
+describe("OpenAIChatGPTAuth device login", () => {
+  it("requests a user code and polls until authorized, persisting tokens", async () => {
+    const calls: string[] = [];
+    let now = 1_000_000;
+    let poll = 0;
+    const fetchFn: typeof fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.endsWith("/deviceauth/usercode")) {
+        return new Response(JSON.stringify({ device_code: "dev", user_code: "WXYZ", verification_uri: "https://x/device", interval: 1, expires_in: 900 }), { status: 200 });
+      }
+      // first poll pending, second authorized
+      if (poll++ === 0) return new Response(JSON.stringify({ error: "authorization_pending" }), { status: 400 });
+      return new Response(
+        JSON.stringify({ access_token: accessJwt(now / 1000 + 3600), refresh_token: "r1", id_token: jwt({ chatgpt_account_id: "acct_9" }) }),
+        { status: 200 },
+      );
+    };
+    const store = new MemoryStore();
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, sleep: async () => {} });
+
+    const login = await auth.startDeviceLogin();
+    expect(login.userCode).toBe("WXYZ");
+    expect(login.verificationUri).toBe("https://x/device");
+    const tokens = await login.complete();
+
+    expect(tokens.refreshToken).toBe("r1");
+    expect(tokens.accountId).toBe("acct_9");
+    expect(store.tokens?.accessToken).toContain(".");
+    expect(calls.filter((c) => c.endsWith("/deviceauth/token"))).toHaveLength(2);
+  });
+
+  it("throws a clear error on device denial", async () => {
+    const fetchFn: typeof fetch = async (url) =>
+      String(url).endsWith("/usercode")
+        ? new Response(JSON.stringify({ device_code: "d", user_code: "C", interval: 1, expires_in: 900 }), { status: 200 })
+        : new Response(JSON.stringify({ error: "access_denied" }), { status: 400 });
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {} });
+    const login = await auth.startDeviceLogin();
+    await expect(login.complete()).rejects.toThrow(/access_denied/);
+  });
+});
+
+describe("OpenAIChatGPTAuth.getAccessToken", () => {
+  it("returns the stored token when it is not near expiry", async () => {
+    let now = 2_000_000;
+    let refreshes = 0;
+    const fetchFn: typeof fetch = async () => {
+      refreshes++;
+      return new Response("{}", { status: 200 });
+    };
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 3600), refreshToken: "r", accountId: "acct_1" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const got = await auth.getAccessToken();
+    expect(got.accountId).toBe("acct_1");
+    expect(refreshes).toBe(0);
+  });
+
+  it("refreshes a near-expiry token and persists the rotated refresh token", async () => {
+    let now = 3_000_000;
+    const fetchFn: typeof fetch = async (url, init) => {
+      expect(String(url)).toContain("/oauth/token");
+      expect(JSON.parse(String(init!.body)).grant_type).toBe("refresh_token");
+      return new Response(
+        JSON.stringify({ access_token: accessJwt(now / 1000 + 3600, "acct_2"), refresh_token: "r2-rotated", id_token: jwt({ chatgpt_account_id: "acct_2" }) }),
+        { status: 200 },
+      );
+    };
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r1", accountId: "acct_2" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const got = await auth.getAccessToken();
+
+    expect(got.accountId).toBe("acct_2");
+    expect(store.tokens?.refreshToken).toBe("r2-rotated"); // rotation persisted
+  });
+
+  it("keeps the old refresh token when the refresh response omits a new one", async () => {
+    let now = 4_000_000;
+    const fetchFn: typeof fetch = async () =>
+      new Response(JSON.stringify({ access_token: accessJwt(now / 1000 + 3600) }), { status: 200 });
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "keep-me" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    await auth.getAccessToken();
+    expect(store.tokens?.refreshToken).toBe("keep-me");
+  });
+
+  it("throws when not signed in", async () => {
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(null), fetchFn: async () => new Response("{}") });
+    await expect(auth.getAccessToken()).rejects.toThrow(/not signed in/);
+  });
+
+  it("surfaces a refresh failure with a re-login hint", async () => {
+    let now = 5_000_000;
+    const fetchFn: typeof fetch = async () => new Response("nope", { status: 400 });
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    await expect(auth.getAccessToken()).rejects.toThrow(/login openai-chatgpt/);
+  });
+});

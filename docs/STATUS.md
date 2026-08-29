@@ -7,7 +7,7 @@ Current milestone: **M3**
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | done (2026-08-29) |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
-| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | spike done — new Responses-API adapter needed; build-vs-defer pending |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
@@ -94,6 +94,23 @@ account has credits.
   per-provider config.
 - Headless `--json` mode mirrors fatal error events to stderr so a human tailing the process
   sees them without parsing the event stream.
+
+## M2.5 notes
+
+- `OpenAIChatGPTProvider` speaks the Responses API against
+  `chatgpt.com/backend-api/codex/responses` with Codex's headers (`originator: codex_cli_rs`
+  impersonation, per the accepted §2.9 decision), authed by the OAuth access token.
+  `OpenAIChatGPTAuth` owns the device-code login, an atomic token store (default
+  `~/.agentrig/openai-chatgpt-auth.json`, `AGENTRIG_OPENAI_CHATGPT_AUTH` to override), and
+  proactive + 401-forced refresh that persists refresh-token rotation. CLI:
+  `agentrig login openai-chatgpt` then `run --provider openai-chatgpt --model gpt-5.6-sol`.
+- **Not yet validated live.** The endpoint/headers/payload and the device-code and refresh JSON
+  field names are read from the Apache-2.0 openai/codex source and RFC-8628-style conventions;
+  everything is unit-tested with injected fetch (request mapping, SSE parsing, refresh/rotation,
+  expiry, device poll), but the first real `login` + `run` against OpenAI is the live check.
+  Expect small field-name fixes on first contact; the provider is experimental by design.
+- Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
+  many resumed/parallel worker sessions on one token can race on refresh-token rotation.
 
 ## Decided
 
