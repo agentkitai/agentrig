@@ -1,31 +1,13 @@
 /**
  * @agentkitai/agentrig-supervisor — out-of-band observer over the event stream. See docs/PLAN.md §4.
  *
- * M0: interfaces only. Heuristic detectors + policy ladder land in M4; reviewer + grader in M6.
+ * M4: the six heuristic detectors, the escalating policy ladder, and `attach`. The LLM-backed
+ * reviewer and grader (§4.3) are M6; the ladder already has rungs for them, gated on capability.
  * Depends only on core's event types.
  */
-import type { HarnessEvent, Intervention, Signal } from "@agentkitai/agentrig-core";
-
-export type { Signal, Intervention };
-
-export interface SupervisorState {
-  /** Rolling window of recent events; detectors decide how much they need. */
-  recent: HarnessEvent[];
-  turns: number;
-  filesChanged: number;
-  toolErrors: number;
-  lastInterventionSeq: number | null;
-}
-
-export interface Detector {
-  id: string;
-  observe(event: HarnessEvent, state: SupervisorState): Signal | null;
-}
-
-export interface Policy {
-  decide(signals: Signal[], state: SupervisorState): Intervention[];
-}
-
-export interface Detachable {
-  detach(): void;
-}
+export * from "./types.js";
+export * from "./state.js";
+export * from "./test-output.js";
+export * from "./detectors/index.js";
+export * from "./policy.js";
+export * from "./supervisor.js";

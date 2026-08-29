@@ -19,6 +19,7 @@ import { renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { FileMemoryStore, FileRawStore, indexInjection, memoryTools } from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
+import { supervise } from "@agentkitai/agentrig-supervisor";
 import { join } from "node:path";
 
 export { DEFAULT_ANTHROPIC_MODEL };
@@ -46,6 +47,9 @@ export interface RunOptions extends ProviderOptions {
   priceOut?: string;
   maxTokensPerTurn: string;
   memory?: string;
+  supervise?: boolean;
+  supervisorNoAbort?: boolean;
+  supervisorSoft: string;
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -99,17 +103,9 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
 }
 
 export async function runCommand(task: string, opts: RunOptions): Promise<void> {
-  let provider: ModelProvider;
-  try {
-    provider = buildProvider(opts);
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exitCode = 1;
-    return;
-  }
-
   let budget: Budget;
   let maxTokensPerTurn: number;
+  let supervisorSoft: number;
   let pricing: Pricing | undefined;
   try {
     budget = { maxTurns: positiveNumber("--max-turns", opts.maxTurns) };
@@ -131,6 +127,20 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
       budget.maxUsd = positiveNumber("--max-usd", opts.maxUsd);
     }
     maxTokensPerTurn = positiveNumber("--max-tokens-per-turn", opts.maxTokensPerTurn);
+    supervisorSoft = positiveNumber("--supervisor-soft", opts.supervisorSoft);
+    if (supervisorSoft > 1) throw new Error(`--supervisor-soft is a fraction of the budget, got "${opts.supervisorSoft}"`);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Flags are validated *before* the provider is built: they are cheap, local checks, and a
+  // typo'd budget flag should say so rather than being masked by a missing-credential error
+  // from a provider the run was never going to reach.
+  let provider: ModelProvider;
+  try {
+    provider = buildProvider(opts);
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;
@@ -187,6 +197,33 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     task,
     opts.resume === undefined ? { cwd: process.cwd() } : { resume: opts.resume },
   );
+  // PLAN §4.4: an out-of-band observer over the same event stream. It reads its own cursor over
+  // core's replayed buffer, so attaching it never slows the loop down.
+  const supervisor =
+    opts.supervise !== true
+      ? null
+      : supervise(session, {
+          budget: {
+            soft: supervisorSoft,
+            ...(budget.maxTurns === undefined ? {} : { maxTurns: budget.maxTurns }),
+            ...(budget.maxTokens === undefined ? {} : { maxTokens: budget.maxTokens }),
+            ...(budget.maxUsd === undefined ? {} : { maxUsd: budget.maxUsd }),
+            ...(budget.maxMinutes === undefined ? {} : { maxMinutes: budget.maxMinutes }),
+          },
+          capabilities: { abort: opts.supervisorNoAbort !== true },
+          ...(pricing === undefined ? {} : { pricing }),
+          // there is no human in a headless run, so `escalate` stays unavailable and the ladder
+          // goes guidance → abort; interactively the question is put on stderr
+          ...(interactive
+            ? {
+                onEscalate: (question: string) => {
+                  console.error(`supervisor escalation: ${question}`);
+                },
+              }
+            : {}),
+          onError: (where, err) => console.error(`supervisor ${where}: ${err.message}`),
+        });
+
   const onSigint = () => session.control.abort();
   process.on("SIGINT", onSigint);
   try {
@@ -210,5 +247,19 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = summary.reason === "done" ? 0 : 1;
   } finally {
     process.removeListener("SIGINT", onSigint);
+    // Let the observer drain what it has not seen yet — but bounded. If the render loop above
+    // exited early (EPIPE under `| head`, a throw in renderEvent) the session may still be
+    // running, and an unbounded join would hold the process for its whole remaining lifetime.
+    if (supervisor !== null) {
+      // On the normal path the stream has closed and this resolves immediately. detach() comes
+      // *after* the race, not before: detaching first would cut short the tail of events the
+      // observer still had buffered.
+      const timedOut = Symbol("timeout");
+      const raced = await Promise.race([
+        supervisor.done,
+        new Promise<symbol>((r) => setTimeout(() => r(timedOut), 2000).unref()),
+      ]);
+      if (raced === timedOut) supervisor.detach();
+    }
   }
 }

@@ -723,3 +723,36 @@ describe("toToolSpec", () => {
     expect(spec.inputSchema.$schema).toBeUndefined();
   });
 });
+
+describe("SessionControl.record", () => {
+  it("appends a supervisor event through the same chain, sharing one seq order", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = createAgent(makeConfig(provider)).run("t", { cwd: root });
+    session.control.record({
+      type: "supervisor.signal",
+      signal: { type: "loop", confidence: 0.9, evidence: ["e"], window: [0, 1] },
+    });
+    const events = await collect(session);
+    await session.done;
+
+    const recorded = events.filter((e) => e.type === "supervisor.signal");
+    expect(recorded).toHaveLength(1);
+    // it goes through store.append like everything else: no seq collision, no gap
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i));
+  });
+
+  it("is dropped after the session has ended, so session.end stays the last line", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = createAgent(makeConfig(provider)).run("t", { cwd: root });
+    await collect(session);
+    const summary = await session.done;
+
+    session.control.record({ type: "supervisor.intervention", intervention: { type: "force_replan" } });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const lines = (await readFile(join(root, `${summary.id}.jsonl`), "utf8")).trim().split("\n");
+    const parsed = lines.map((l) => JSON.parse(l) as HarnessEvent);
+    expect(parsed.at(-1)!.type).toBe("session.end");
+    expect(parsed.some((e) => e.type === "supervisor.intervention")).toBe(false);
+  });
+});

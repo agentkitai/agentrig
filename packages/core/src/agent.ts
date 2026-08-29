@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
+import { SupervisorRecord } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -64,6 +65,13 @@ export interface SessionControl {
   pause(): void;
   resume(): void;
   abort(): void;
+  /**
+   * Lets the supervisor (PLAN §4.4) write its reasoning into the same log, through the same
+   * append chain, so `seq` order stays a single total order. Deliberately narrow: an observer
+   * cannot forge a `tool.call` or a `session.end`. Dropped after the session has ended, so
+   * `session.end` is always the last line.
+   */
+  record(payload: SupervisorRecord): void;
 }
 
 export interface Session {
@@ -576,6 +584,22 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
       abort: () => {
         abortController.abort();
         gate.resume();
+      },
+      record: (payload) => {
+        if (ended) return;
+        // validated, not trusted: `Detector` is a public interface, and one third-party detector
+        // returning confidence 1.4 or NaN would otherwise write a line the store can never read
+        // back. Dropped-and-reported beats a corrupted append-only log.
+        const parsed = SupervisorRecord.safeParse(payload);
+        if (!parsed.success) {
+          void emit({
+            type: "error",
+            message: `supervisor record rejected: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            fatal: false,
+          });
+          return;
+        }
+        void emit(parsed.data);
       },
     },
     done,

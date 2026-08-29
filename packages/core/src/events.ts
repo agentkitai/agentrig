@@ -38,6 +38,12 @@ export const PlanItem = z.object({
   id: z.string(),
   text: z.string(),
   status: z.enum(["pending", "in_progress", "done", "dropped"]),
+  /**
+   * Paths or path prefixes this item is allowed to touch. The supervisor's `drift` detector
+   * (PLAN §4.1) needs a declared scope to compare `file.changed` against; with no scope on any
+   * item, drift cannot fire. A trailing `/` (or a bare directory) matches everything beneath it.
+   */
+  scope: z.array(z.string()).optional(),
 });
 export type PlanItem = z.infer<typeof PlanItem>;
 
@@ -59,6 +65,19 @@ export const Intervention = z.discriminatedUnion("type", [
   z.object({ type: z.literal("abort"), reason: z.string() }),
 ]);
 export type Intervention = z.infer<typeof Intervention>;
+
+/**
+ * The only payloads an out-of-band observer may append through `SessionControl.record`.
+ * Validated there: `serializeEvent` is a bare `JSON.stringify`, so an unvalidated payload (a
+ * detector emitting `confidence: 1.4`, or `NaN`, which stringifies to `null`) would write a line
+ * that `SessionStore.read` then refuses — permanently breaking `sessions show`, resume, and
+ * `memory ingest` for that session, with no repair path because `raw/` is immutable.
+ */
+export const SupervisorRecord = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
+  z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+]);
+export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
 
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [

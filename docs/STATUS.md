@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M4**
+Current milestone: **M5**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -10,8 +10,8 @@ Current milestone: **M4**
 | 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
-| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | next |
-| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
+| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
+| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | next |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | |
 
@@ -284,6 +284,110 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   `basename(resolve(process.cwd()))` when `LORE_PROJECT` is unset.
 - Lore responses are parsed **per row** with zod: one malformed row is dropped with a report
   rather than failing the whole recall.
+
+## M4 notes
+
+- **Two additive core changes** were needed and nothing else. `SessionControl.record()` lets the
+  supervisor append `supervisor.signal` / `supervisor.intervention` through core's *single* append
+  chain, so `seq` remains one total order over the agent's events and the observer's — a second
+  writer would have raced the chain and corrupted that order. It is deliberately narrow (those two
+  payloads only) so an observer cannot forge a `tool.call` or a `session.end`, and it drops records
+  after the session ends so `session.end` stays the log's last line. `PlanItem.scope?: string[]`
+  gives the `drift` detector something to compare against; nothing carried a declared scope before.
+- **Fanning out the event stream needed no change at all.** Core's `EventStream` buffers and
+  replays from position 0 for each `[Symbol.asyncIterator]` call, so the CLI and the supervisor
+  each get their own cursor over the same events. The observer therefore applies no backpressure
+  to the loop: an observer that is slow *asynchronously* delays interventions and nothing else.
+  The limit of that guarantee is worth stating plainly — the observer shares one JS thread with
+  the agent, so a detector that burns CPU **does** stall the run. `EventStream` decouples
+  backpressure, not CPU. Detectors are expected to be cheap; that is what "heuristic, LLM-free"
+  buys.
+- **The ladder skips rungs it cannot perform rather than parking on them.** One definition
+  (`inject_guidance → force_replan → run_reviewer → escalate → abort`) is filtered by declared
+  capabilities, so in M4 it collapses to guidance → abort and deepens by itself when M6 attaches a
+  reviewer and M7 lands the pre-tool hook. The important case is `escalate`: it is available only
+  when an `onEscalate` handler exists, because a headless run has no human and a ladder that
+  stopped there would leave a looping agent to burn its whole budget.
+- **A signal suppressed by cooldown does not advance the rung.** Otherwise a noisy detector would
+  silently climb to `abort` while every intervention was being thrown away — the session would die
+  from interventions it never actually received.
+- **The supervisor cannot break the session.** Every detector, policy and apply call is wrapped;
+  a throw is reported through `onError` and the observer continues. `onError` itself is guarded, so
+  a throwing logger does not become the failure it was reporting. Tests drive an exploding
+  detector, an exploding policy and an exploding logger and assert the session still finishes
+  `done`.
+- **`onEscalate` is bounded (60s by default).** It runs inside the event loop, so an unbounded
+  wait did not merely delay one intervention — the observer stopped consuming events, never
+  reached the `abort` rung, and the looping agent it existed to stop burned its whole budget. The
+  natural handler (prompt a human) blocks until someone types, so this bound is the difference
+  between a supervisor and a deadlock. Reaching `escalate` with no handler is reported through
+  `onError` rather than recorded as an intervention that quietly does nothing, and `supervise()`
+  derives the capability from the handler's presence so declaring it without one cannot buy a
+  dead rung.
+- **`record()` validates before appending.** `Detector` is a public interface and `signal()`'s
+  clamping is optional, so a third-party detector can hand back `confidence: 1.4` — or `NaN`,
+  which `JSON.stringify` writes as `null`. `serializeEvent` is a bare stringify, so either would
+  write a line `SessionStore.read` then refuses forever, breaking `sessions show`, resume and
+  `memory ingest` for that session with no repair path because `raw/` is immutable. Invalid
+  records are dropped and reported as a non-fatal `error` event instead.
+- **Pass counts come from scraped test output**, because no event carries one and two detectors
+  (`stall`, `test_regression`) are specified in terms of it. Every pattern is **anchored on
+  something only a test runner prints** (`Tests`, `Tests:`, `test result:`, pytest's `=` rule, a
+  count at the start of a mocha line, go's `--- PASS:`). The first version scanned for a bare
+  `/(\d+)\s+passed/` anywhere and defaulted the missing half to zero, so `rsync: 3 failed to
+  transfer` read as a completed run with *zero passes* — `test_regression` scored that as losing
+  the whole suite and the ladder escalated to `abort`. A half-match on prose must return `null`,
+  never a zero.
+- **`test_regression` fires only on a *drop* against the best count seen, in a comparable run.**
+  Two things it must not mistake for a regression: a **subset run** (327 → 120 after "run
+  everything, then iterate on one package" — the most common agent workflow there is), so a run is
+  only compared when its `total` is at least the best total seen; and a **newly written failing
+  test** (added failures with no lost passes), so failures alone are never the trigger.
+- **`loop` clears its tallies on real progress.** A file changing to content it has not held
+  before means the session moved, so the repeat counters reset. Without this, re-reading one spec
+  file between edits — textbook agent behaviour, three identical `read_file` inputs — read as a
+  loop, and a session writing a new file every turn was aborted at turn 6 with five files of
+  genuine progress behind it. "Going in circles" has to mean circles, not repetition. The same
+  reset applies to the repeated-error rule: three different assertion failures with edits in
+  between are debugging, three identical failures with no edit are a loop.
+- **`loop` fingerprints errors before comparing them**: durations, hex ids, pids and temp paths
+  differ on every run and would otherwise make one tight loop look like a stream of distinct
+  errors. The duration rule is `\b`-anchored so it cannot fire inside an identifier (`p5s` is not
+  five seconds), and the hex rule requires a digit so ordinary words like `deadbeef` do not
+  collapse into each other. Edit→revert thrash is `file.changed.contentHash` returning to a value
+  the path held *earlier* and differing from what it holds now — rewriting the same content is a
+  no-op write, not a revert — tallied per file, with both the per-path history and the tracked-path
+  set bounded.
+- **`stall` treats a turn that reaches for a tool it has not used before as productive**, even if
+  it wrote nothing — otherwise reading and exploring would count as spinning. Its test-run branch
+  counts only runs that are **still failing** and resets whenever a file changes: an unchanged
+  pass count on a *green* suite is the success condition, and re-verifying that a refactor kept
+  the suite green is exactly the shape this would otherwise have called a stall.
+- `drift` is v1 as specified: a literal path-prefix comparison, no model in the loop. Scope entries
+  are exact paths or directory prefixes, not globs, on the grounds that a plan forced to write `**`
+  will declare a scope so broad drift can never fire. Both sides are normalized before comparing —
+  `\` becomes `/`, `..` is resolved so a path climbing out of the scope is not counted as inside
+  it, and an entry that normalizes away (`.`, `""`, `/`, `./`) means **the whole repo**. That last
+  case matters: leaving `"."` as a literal segment made the most natural way to declare a repo-wide
+  scope turn *every* file into a stray. The LLM-judged, sampled version is M6.
+- `force_replan`, `run_grader` and `checkpoint_rollback` are recorded but **not applied** — they
+  need the pre-tool hook (M7), a grader (M6) and git checkpoints respectively. The default policy
+  will not emit them unless the capability is declared; a hand-written policy that does gets an
+  `onError` report rather than silence.
+- CLI: `--supervise`, `--supervisor-no-abort`, `--supervisor-soft <fraction>`. The soft budget
+  thresholds are derived from the same `--max-*` flags core enforces as hard limits, so the two can
+  never disagree. Flag validation now runs **before** the provider is built: a typo'd budget flag
+  should say so rather than be masked by a missing-credential error from a provider the run was
+  never going to reach. The `finally` join on the observer is bounded (2s, then `detach()`) so an
+  early exit from the render loop — EPIPE under `| head` — cannot hold the process for the
+  session's whole remaining lifetime.
+- **Caveat: the supervisor reacts one event behind.** It observes asynchronously, so between the
+  event that triggers a signal and the steer landing, the agent may take another action. `steer` is
+  queued to the next turn boundary anyway (the only coherent injection point), so this is inherent
+  to an out-of-band observer rather than a fixable lag.
+- **Caveat: `drift` cannot fire today in practice.** Nothing emits `plan.updated` yet — there is no
+  planning tool until M7 — so the detector is correct and tested but dormant until something
+  declares a plan.
 
 ## Decided
 
