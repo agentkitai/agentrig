@@ -1,7 +1,9 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
 
 /**
  * Token lifecycle for the experimental `openai-chatgpt` provider (PLAN §2.9): the "Sign in with
@@ -10,19 +12,23 @@ import { z } from "zod";
  *
  * These constants and the request shapes are read from the Apache-2.0 openai/codex source. They
  * talk to undocumented OpenAI endpoints and are expected to drift; this whole provider is
- * experimental and opt-in, never core auth. The `originator` header (in the provider) impersonates
- * the Codex client to pass a server-side whitelist — an accepted cost of the M2.5 decision.
+ * experimental and opt-in, never core auth. Because drift is expected, every server response is
+ * validated before it is allowed to overwrite a stored credential — a malformed 200 must fail
+ * loudly, never corrupt the store.
  */
 
 /** Public OAuth client id Codex ships (not a secret). */
 export const CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_BASE_URL = "https://auth.openai.com";
 const OAUTH_SCOPES = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 /** Refresh once the access token is within this window of expiry. */
 const REFRESH_SKEW_MS = 5 * 60_000;
+/** Fallback for an opaque (non-JWT) access token, which carries no readable expiry. */
+const OPAQUE_TOKEN_MAX_AGE_MS = 45 * 60_000;
 
 export const ChatGPTTokens = z.object({
-  accessToken: z.string(),
+  accessToken: z.string().min(1),
   refreshToken: z.string(),
   idToken: z.string().optional(),
   accountId: z.string().optional(),
@@ -48,6 +54,9 @@ export const TOKEN_ENV_VAR = "AGENTRIG_OPENAI_CHATGPT_TOKEN";
  * (`{ accessToken, refreshToken, ... }`) and Codex's `auth.json` shape
  * (`{ tokens: { access_token, refresh_token, id_token, account_id } }`), so a user who is
  * already logged into Codex can paste `~/.codex/auth.json` directly.
+ *
+ * A bundle without a usable refresh token is rejected: it would authenticate until the access
+ * token expires and then fail with a misleading error, which is worse than refusing it up front.
  */
 export function tokensFromEnvValue(raw: string): ChatGPTTokens | null {
   let obj: unknown;
@@ -56,24 +65,41 @@ export function tokensFromEnvValue(raw: string): ChatGPTTokens | null {
   } catch {
     return null;
   }
-  if (obj === null || typeof obj !== "object") return null;
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return null;
   const o = obj as Record<string, unknown>;
   if (typeof o.accessToken === "string") {
     const parsed = ChatGPTTokens.safeParse(o);
-    return parsed.success ? parsed.data : null;
+    return parsed.success && parsed.data.refreshToken !== "" ? parsed.data : null;
   }
-  const t = (typeof o.tokens === "object" && o.tokens !== null ? o.tokens : o) as Record<string, unknown>;
-  if (typeof t.access_token !== "string") return null;
-  const tokens: ChatGPTTokens = {
-    accessToken: t.access_token,
-    refreshToken: typeof t.refresh_token === "string" ? t.refresh_token : "",
-  };
+  const nested = o.tokens;
+  const t = (typeof nested === "object" && nested !== null && !Array.isArray(nested) ? nested : o) as Record<
+    string,
+    unknown
+  >;
+  if (typeof t.access_token !== "string" || t.access_token === "") return null;
+  if (typeof t.refresh_token !== "string" || t.refresh_token === "") return null;
+  const tokens: ChatGPTTokens = { accessToken: t.access_token, refreshToken: t.refresh_token };
   if (typeof t.id_token === "string") tokens.idToken = t.id_token;
   if (typeof t.account_id === "string") tokens.accountId = t.account_id;
   return tokens;
 }
 
-/** Atomic (temp+rename) JSON token store; a corrupt file throws rather than silently re-authing. */
+/** Thrown when the stored token file exists but cannot be parsed. */
+export class CorruptTokenFileError extends Error {
+  constructor(readonly path: string, cause: unknown) {
+    super(
+      `openai-chatgpt: token file ${path} is unreadable (${cause instanceof Error ? cause.message : String(cause)}); ` +
+        "delete it and re-run `agentrig login openai-chatgpt`",
+    );
+    this.name = "CorruptTokenFileError";
+  }
+}
+
+/**
+ * Atomic JSON token store. The temp file is created with O_EXCL under a random name so it can
+ * never follow a pre-existing symlink or inherit a loosened mode, and it is removed if the
+ * rename fails rather than left on disk holding a live credential.
+ */
 export class FileTokenStore implements TokenStore {
   constructor(private readonly path: string = defaultAuthPath()) {}
 
@@ -85,14 +111,30 @@ export class FileTokenStore implements TokenStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    return ChatGPTTokens.parse(JSON.parse(text));
+    try {
+      return ChatGPTTokens.parse(JSON.parse(text));
+    } catch (err) {
+      throw new CorruptTokenFileError(this.path, err);
+    }
   }
 
   async write(tokens: ChatGPTTokens): Promise<void> {
-    await mkdir(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.tmp`;
-    await writeFile(tmp, JSON.stringify(ChatGPTTokens.parse(tokens)), { encoding: "utf8", mode: 0o600 });
-    await rename(tmp, this.path);
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+    const tmp = `${this.path}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      // "wx" is O_CREAT|O_EXCL: refuses an existing path, so it cannot follow a planted symlink
+      const handle = await open(tmp, "wx", 0o600);
+      try {
+        await handle.writeFile(JSON.stringify(ChatGPTTokens.parse(tokens)), "utf8");
+        await handle.chmod(0o600);
+      } finally {
+        await handle.close();
+      }
+      await rename(tmp, this.path);
+    } catch (err) {
+      await rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
   }
 }
 
@@ -100,19 +142,39 @@ export class FileTokenStore implements TokenStore {
  * Reads the file store first (the live, rotated state within a session), falling back to a
  * token bundle in the environment (`AGENTRIG_OPENAI_CHATGPT_TOKEN`) so a fresh cloud container
  * can auth from a one-time seed. Writes (refresh rotation) always go to the writable file.
+ *
+ * A corrupt file falls through to the env seed rather than bricking the provider — recovering
+ * from a damaged store is exactly what the seed exists for.
  */
 export class EnvSeededTokenStore implements TokenStore {
+  private warned = false;
+
   constructor(
     private readonly file: TokenStore = new FileTokenStore(),
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly envVar: string = TOKEN_ENV_VAR,
+    private readonly warn: (message: string) => void = (m) => console.error(m),
   ) {}
 
-  async read(): Promise<ChatGPTTokens | null> {
-    const fromFile = await this.file.read();
-    if (fromFile !== null) return fromFile;
+  private seeded(): ChatGPTTokens | null {
     const raw = this.env[this.envVar];
     return raw ? tokensFromEnvValue(raw) : null;
+  }
+
+  async read(): Promise<ChatGPTTokens | null> {
+    try {
+      const fromFile = await this.file.read();
+      if (fromFile !== null) return fromFile;
+    } catch (err) {
+      const seed = this.seeded();
+      if (seed === null) throw err;
+      if (!this.warned) {
+        this.warned = true;
+        this.warn(`${(err as Error).message}\nFalling back to ${this.envVar}.`);
+      }
+      return seed;
+    }
+    return this.seeded();
   }
 
   async write(tokens: ChatGPTTokens): Promise<void> {
@@ -160,6 +222,16 @@ export interface OpenAIChatGPTAuthOptions {
   now?: () => number;
   /** Injectable for tests so device-code polling doesn't actually wait. */
   sleep?: (ms: number) => Promise<void>;
+  /** Backoff for transient failures reaching the auth host. */
+  retry?: RetryPolicy;
+}
+
+/** A transient failure reaching the auth host — the stored credentials are still fine. */
+export class TransientAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransientAuthError";
+  }
 }
 
 /**
@@ -174,6 +246,7 @@ export class OpenAIChatGPTAuth {
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly retry: RetryPolicy;
   private inFlight: Promise<ChatGPTTokens> | null = null;
 
   constructor(opts: OpenAIChatGPTAuthOptions = {}) {
@@ -183,6 +256,7 @@ export class OpenAIChatGPTAuth {
     this.fetchFn = opts.fetchFn ?? fetch;
     this.now = opts.now ?? (() => Date.now());
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.retry = opts.retry ?? {};
   }
 
   /** The stored token bundle, for exporting to seed another environment; null if not signed in. */
@@ -192,16 +266,23 @@ export class OpenAIChatGPTAuth {
 
   /** Start the device-code flow: returns the code/URL to show the user plus a completion poller. */
   async startDeviceLogin(): Promise<DeviceLogin> {
-    const res = await this.fetchFn(`${this.authBaseUrl}/deviceauth/usercode`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_id: this.clientId, scope: OAUTH_SCOPES }),
-    });
-    if (!res.ok) {
-      throw new Error(`openai-chatgpt device login: HTTP ${res.status} ${(await res.text().catch(() => "")).slice(0, 300)}`);
+    const res = await fetchWithRetries(
+      this.fetchFn,
+      "openai-chatgpt device login",
+      `${this.authBaseUrl}/deviceauth/usercode`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: this.clientId, scope: OAUTH_SCOPES }),
+      },
+      new AbortController().signal,
+      this.retry,
+    );
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const deviceCode = typeof data.device_code === "string" ? data.device_code : "";
+    if (deviceCode === "") {
+      throw new Error("openai-chatgpt device login: response carried no device_code");
     }
-    const data = (await res.json()) as Record<string, unknown>;
-    const deviceCode = String(data.device_code ?? "");
     const interval = Number(data.interval ?? 5);
     const expiresInSec = Number(data.expires_in ?? 900);
     return {
@@ -219,7 +300,7 @@ export class OpenAIChatGPTAuth {
       const res = await this.fetchFn(`${this.authBaseUrl}/deviceauth/token`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ client_id: this.clientId, device_code: deviceCode }),
+        body: JSON.stringify({ client_id: this.clientId, device_code: deviceCode, grant_type: DEVICE_GRANT_TYPE }),
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (res.ok && typeof data.access_token === "string") {
@@ -230,6 +311,8 @@ export class OpenAIChatGPTAuth {
         // keep waiting
       } else if (err === "slow_down") {
         intervalMs += 5000;
+      } else if (res.status >= 500) {
+        // transient upstream blip; keep polling rather than aborting the login
       } else {
         throw new Error(`openai-chatgpt device login failed: ${err || `HTTP ${res.status}`}`);
       }
@@ -238,16 +321,37 @@ export class OpenAIChatGPTAuth {
     throw new Error("openai-chatgpt device login timed out; run `agentrig login openai-chatgpt` again");
   }
 
+  /**
+   * Validate a token response before it is allowed to replace a stored credential. The endpoint
+   * is undocumented and expected to drift; a 200 whose shape we don't recognise must fail loudly
+   * rather than write `undefined` over a working bundle (which would be unrecoverable).
+   */
   private async persist(raw: Record<string, unknown>, previous?: ChatGPTTokens): Promise<ChatGPTTokens> {
+    const accessToken = raw.access_token;
+    if (typeof accessToken !== "string" || accessToken === "") {
+      throw new Error(
+        "openai-chatgpt: token response carried no access_token (the endpoint may have changed); " +
+          "stored credentials were left untouched — re-run `agentrig login openai-chatgpt` if this persists",
+      );
+    }
     // refresh responses may omit an unchanged field; fall back to the previous value
+    const refreshToken = typeof raw.refresh_token === "string" && raw.refresh_token !== ""
+      ? raw.refresh_token
+      : (previous?.refreshToken ?? "");
+    if (refreshToken === "") {
+      throw new Error(
+        "openai-chatgpt: token response carried no refresh_token and none was stored; " +
+          "re-run `agentrig login openai-chatgpt`",
+      );
+    }
     const idToken = typeof raw.id_token === "string" ? raw.id_token : previous?.idToken;
     const tokens: ChatGPTTokens = {
-      accessToken: String(raw.access_token),
-      refreshToken: typeof raw.refresh_token === "string" ? raw.refresh_token : (previous?.refreshToken ?? ""),
+      accessToken,
+      refreshToken,
       lastRefresh: this.now(),
       ...(idToken !== undefined ? { idToken } : {}),
     };
-    const accountId = accountIdFromIdToken(idToken) ?? accountIdFromIdToken(tokens.accessToken) ?? previous?.accountId;
+    const accountId = accountIdFromIdToken(idToken) ?? accountIdFromIdToken(accessToken) ?? previous?.accountId;
     if (accountId !== undefined) tokens.accountId = accountId;
     await this.store.write(tokens);
     return tokens;
@@ -266,7 +370,10 @@ export class OpenAIChatGPTAuth {
     const accountOf = (t: ChatGPTTokens) =>
       t.accountId ?? accountIdFromIdToken(t.idToken) ?? accountIdFromIdToken(t.accessToken);
     const exp = accessTokenExpiry(tokens.accessToken);
-    const stale = force || (exp !== null && exp - this.now() < REFRESH_SKEW_MS);
+    const stale = force || (exp === null
+      // an opaque token carries no expiry: fall back to age since the last refresh
+      ? this.now() - (tokens.lastRefresh ?? 0) > OPAQUE_TOKEN_MAX_AGE_MS
+      : exp - this.now() < REFRESH_SKEW_MS);
     if (!stale) return { accessToken: tokens.accessToken, accountId: accountOf(tokens) };
     if (this.inFlight === null) this.inFlight = this.refresh(tokens).finally(() => (this.inFlight = null));
     const refreshed = await this.inFlight;
@@ -274,20 +381,41 @@ export class OpenAIChatGPTAuth {
   }
 
   private async refresh(previous: ChatGPTTokens): Promise<ChatGPTTokens> {
-    const res = await this.fetchFn(`${this.authBaseUrl}/oauth/token`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        client_id: this.clientId,
-        refresh_token: previous.refreshToken,
-      }),
+    // RFC 6749 §4.1.3 mandates form encoding at the token endpoint
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: this.clientId,
+      refresh_token: previous.refreshToken,
     });
-    if (!res.ok) {
+    let res: Response;
+    try {
+      res = await fetchWithRetries(
+        this.fetchFn,
+        "openai-chatgpt token refresh",
+        `${this.authBaseUrl}/oauth/token`,
+        { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body.toString() },
+        new AbortController().signal,
+        this.retry,
+      );
+    } catch (err) {
+      // retries are exhausted: a 4xx means the grant is bad, anything else is transient and the
+      // stored credentials are still good — don't tell the user to re-authenticate for a blip
+      const message = err instanceof Error ? err.message : String(err);
+      const status = /HTTP (\d{3})/.exec(message)?.[1];
+      if (status !== undefined && Number(status) >= 400 && Number(status) < 500) {
+        throw new Error(`openai-chatgpt token refresh rejected (HTTP ${status}); re-run \`agentrig login openai-chatgpt\``);
+      }
+      throw new TransientAuthError(`openai-chatgpt token refresh temporarily failed: ${message}`);
+    }
+    let raw: Record<string, unknown>;
+    try {
+      raw = (await res.json()) as Record<string, unknown>;
+    } catch (err) {
       throw new Error(
-        `openai-chatgpt token refresh failed: HTTP ${res.status}; re-run \`agentrig login openai-chatgpt\``,
+        `openai-chatgpt: token refresh returned an unreadable body (${errorDetail(String(err), 200)}); ` +
+          "stored credentials were left untouched",
       );
     }
-    return this.persist((await res.json()) as Record<string, unknown>, previous);
+    return this.persist(raw, previous);
   }
 }

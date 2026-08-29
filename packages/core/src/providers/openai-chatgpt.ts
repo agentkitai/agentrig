@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { OpenAIChatGPTAuth, type OpenAIChatGPTAuthOptions } from "./openai-chatgpt-auth.js";
+import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
 
 /**
  * Experimental `openai-chatgpt` provider (PLAN §2.9): reuses a ChatGPT subscription via the same
@@ -22,38 +24,70 @@ export interface OpenAIChatGPTProviderOptions {
   fetchFn?: typeof fetch;
   /** Sent as the Codex client version in the User-Agent; see the impersonation note above. */
   codexVersion?: string;
+  retry?: RetryPolicy;
 }
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const ORIGINATOR = "codex_cli_rs";
+const DEFAULT_CODEX_VERSION = "0.56.0";
+/** Cap on cached raw response items (reasoning replay); oldest groups are evicted first. */
+const MAX_CACHED_GROUPS = 64;
 
 type JsonObject = Record<string, unknown>;
 
-function textOf(blocks: ContentBlock[]): string {
-  return blocks
-    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+/** Ordered raw output items of one response, replayed verbatim on the following request. */
+interface RawItemGroup {
+  id: string;
+  items: JsonObject[];
 }
 
-/** Map unified messages to the Responses API `input[]` items. */
-export function toResponsesInput(messages: Message[]): JsonObject[] {
+function reconstructFunctionCall(b: Extract<ContentBlock, { type: "tool_use" }>): JsonObject {
+  return { type: "function_call", call_id: b.id, name: b.name, arguments: JSON.stringify(b.input ?? {}) };
+}
+
+/**
+ * Map unified messages to the Responses API `input[]` items.
+ *
+ * `rawGroups` lets the provider replay a previous response's items verbatim (reasoning models
+ * emit `reasoning` items that must accompany their `function_call` on the next request, and the
+ * unified ContentBlock schema has nowhere to hold them). Without a cached group the function
+ * call is reconstructed, which is correct for non-reasoning models.
+ */
+export function toResponsesInput(messages: Message[], rawGroups?: Map<string, RawItemGroup>): JsonObject[] {
   const input: JsonObject[] = [];
+  const emitted = new Set<string>();
   for (const m of messages) {
     if (m.role === "assistant") {
-      const text = textOf(m.content);
-      if (text !== "") input.push({ type: "message", role: "assistant", content: [{ type: "output_text", text }] });
+      // preserve stream order: text and tool calls can interleave
+      let pending = "";
+      const flush = () => {
+        if (pending !== "") {
+          input.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: pending }] });
+          pending = "";
+        }
+      };
       for (const b of m.content) {
-        if (b.type === "tool_use") {
-          input.push({ type: "function_call", call_id: b.id, name: b.name, arguments: JSON.stringify(b.input ?? {}) });
+        if (b.type === "text") {
+          pending += b.text;
+          continue;
+        }
+        if (b.type !== "tool_use") continue;
+        flush();
+        const group = rawGroups?.get(b.id);
+        if (group === undefined) {
+          input.push(reconstructFunctionCall(b));
+        } else if (!emitted.has(group.id)) {
+          emitted.add(group.id);
+          input.push(...group.items);
         }
       }
+      flush();
       continue;
     }
     // user: tool results become function_call_output items; text/images become a message
     for (const b of m.content) {
       if (b.type === "tool_result") {
-        const out = typeof b.content === "string" ? b.content : textOf(b.content);
+        const out = typeof b.content === "string" ? b.content : describeBlocks(b.content);
         input.push({ type: "function_call_output", call_id: b.toolUseId, output: out });
       }
     }
@@ -67,13 +101,28 @@ export function toResponsesInput(messages: Message[]): JsonObject[] {
   return input;
 }
 
-export function toResponsesRequest(req: ModelRequest, model: string): JsonObject {
+/** Tool results are plain text here; note non-text blocks rather than dropping them silently. */
+function describeBlocks(blocks: ContentBlock[]): string {
+  return blocks
+    .map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[image omitted]" : ""))
+    .filter((s) => s !== "")
+    .join("\n");
+}
+
+export function toResponsesRequest(
+  req: ModelRequest,
+  model: string,
+  rawGroups?: Map<string, RawItemGroup>,
+): JsonObject {
   const body: JsonObject = {
     model,
     instructions: req.system,
-    input: toResponsesInput(req.messages),
+    input: toResponsesInput(req.messages, rawGroups),
     stream: true,
     store: false,
+    // reasoning models require their reasoning items on the following request; ask for the
+    // encrypted form so they can be replayed without server-side storage
+    include: ["reasoning.encrypted_content"],
     max_output_tokens: req.maxTokens,
   };
   if (req.tools.length > 0) {
@@ -89,14 +138,35 @@ export function toResponsesRequest(req: ModelRequest, model: string): JsonObject
   return body;
 }
 
+/** Map an `incomplete_details.reason` onto the unified stop reason, keeping unknowns visible. */
+function mapIncompleteReason(reason: unknown): { reason: StopReason; raw?: string } {
+  switch (reason) {
+    case "max_output_tokens":
+      return { reason: "max_tokens" };
+    case "content_filter":
+      return { reason: "refusal" };
+    default:
+      return { reason: "error", raw: String(reason ?? "incomplete") };
+  }
+}
+
+export interface ParseResponsesOptions {
+  /** Receives every raw output item, so the provider can replay reasoning items next turn. */
+  onRawItem?: (item: JsonObject) => void;
+}
+
 /** Parse the Responses API SSE stream into ModelEvents (text live; tool_use on item done; usage+stop at end). */
-export async function* parseResponsesSse(body: AsyncIterable<Uint8Array | string>): AsyncIterable<ModelEvent> {
+export async function* parseResponsesSse(
+  body: AsyncIterable<Uint8Array | string>,
+  opts: ParseResponsesOptions = {},
+): AsyncIterable<ModelEvent> {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage: Usage | null = null;
   let sawToolUse = false;
   let sawRefusal = false;
   let stop: StopReason | null = null;
+  let stopRaw: string | undefined;
 
   const readUsage = (u: JsonObject | undefined): Usage | null => {
     if (!u || typeof u.input_tokens !== "number" || typeof u.output_tokens !== "number") return null;
@@ -117,7 +187,9 @@ export async function* parseResponsesSse(body: AsyncIterable<Uint8Array | string
         break;
       case "response.output_item.done": {
         const item = data.item as JsonObject | undefined;
-        if (item?.type === "function_call") {
+        if (item === undefined) break;
+        opts.onRawItem?.(item);
+        if (item.type === "function_call") {
           sawToolUse = true;
           let parsed: unknown = {};
           const args = typeof item.arguments === "string" ? item.arguments : "";
@@ -128,13 +200,15 @@ export async function* parseResponsesSse(body: AsyncIterable<Uint8Array | string
               parsed = {};
             }
           }
+          const id = String(item.call_id ?? item.id ?? "");
           yield {
             type: "tool_use",
-            id: String(item.call_id ?? item.id ?? ""),
+            // an id is required for one-to-one tool_use/tool_result pairing in the loop
+            id: id === "" ? `call_${randomUUID().slice(0, 8)}` : id,
             name: String(item.name ?? ""),
             input: parsed,
           };
-        } else if (item?.type === "message") {
+        } else if (item.type === "message") {
           const content = (item.content as JsonObject[] | undefined) ?? [];
           if (content.some((c) => c.type === "refusal")) sawRefusal = true;
         }
@@ -144,17 +218,20 @@ export async function* parseResponsesSse(body: AsyncIterable<Uint8Array | string
       case "response.incomplete": {
         const response = data.response as JsonObject | undefined;
         usage = readUsage(response?.usage as JsonObject | undefined) ?? usage;
-        const reason = (response?.incomplete_details as JsonObject | undefined)?.reason;
-        if (reason === "max_output_tokens") stop = "max_tokens";
+        if (data.type === "response.incomplete") {
+          const mapped = mapIncompleteReason((response?.incomplete_details as JsonObject | undefined)?.reason);
+          stop = mapped.reason;
+          stopRaw = mapped.raw;
+        }
         break;
       }
       case "response.failed": {
         const err = (data.response as JsonObject | undefined)?.error as JsonObject | undefined;
-        throw new Error(`openai-chatgpt stream failed: ${String(err?.message ?? err?.code ?? "unknown")}`);
+        throw new Error(`openai-chatgpt stream failed: ${errorDetail(String(err?.message ?? err?.code ?? "unknown"), 300)}`);
       }
       case "error": {
         const err = data.error as JsonObject | undefined;
-        throw new Error(`openai-chatgpt stream error: ${String(err?.message ?? JSON.stringify(data))}`);
+        throw new Error(`openai-chatgpt stream error: ${errorDetail(String(err?.message ?? JSON.stringify(data)), 300)}`);
       }
     }
   };
@@ -180,7 +257,7 @@ export async function* parseResponsesSse(body: AsyncIterable<Uint8Array | string
 
   yield { type: "usage", usage: usage ?? { input: 0, output: 0 } };
   const finalStop: StopReason = stop ?? (sawToolUse ? "tool_use" : sawRefusal ? "refusal" : "end_turn");
-  yield { type: "stop", reason: finalStop };
+  yield stopRaw === undefined ? { type: "stop", reason: finalStop } : { type: "stop", reason: finalStop, raw: stopRaw };
 }
 
 export class OpenAIChatGPTProvider implements ModelProvider {
@@ -191,13 +268,18 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly codexVersion: string;
+  private readonly retry: RetryPolicy;
+  private readonly sessionId = randomUUID();
+  /** call_id -> the raw item group of the response that produced it (for reasoning replay). */
+  private readonly rawGroups = new Map<string, RawItemGroup>();
 
   constructor(opts: OpenAIChatGPTProviderOptions) {
     this.model = opts.model;
     this.auth = opts.auth ?? new OpenAIChatGPTAuth(opts.authOptions ?? {});
     this.baseUrl = (opts.baseUrl ?? CHATGPT_BASE_URL).replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
-    this.codexVersion = opts.codexVersion ?? "0.0.0";
+    this.codexVersion = opts.codexVersion ?? DEFAULT_CODEX_VERSION;
+    this.retry = opts.retry ?? {};
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -206,7 +288,8 @@ export class OpenAIChatGPTProvider implements ModelProvider {
     };
   }
 
-  private async post(req: ModelRequest, signal: AbortSignal, force: boolean): Promise<Response> {
+  /** Build the authed request; `force` refreshes the access token first. */
+  private async request(req: ModelRequest, force: boolean): Promise<{ url: string; init: RequestInit }> {
     const { accessToken, accountId } = await this.auth.getAccessToken(force);
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -214,28 +297,59 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       authorization: `Bearer ${accessToken}`,
       // impersonates the Codex client to pass the backend originator whitelist (PLAN §2.9)
       originator: ORIGINATOR,
-      "user-agent": `${ORIGINATOR}/${this.codexVersion} (agentrig)`,
+      "user-agent": `${ORIGINATOR}/${this.codexVersion} (${process.platform}; ${process.arch})`,
+      "openai-beta": "responses=experimental",
+      session_id: this.sessionId,
     };
     if (accountId !== undefined) headers["chatgpt-account-id"] = accountId;
-    return this.fetchFn(`${this.baseUrl}/responses`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(toResponsesRequest(req, this.model)),
-      signal,
-    });
+    return {
+      url: `${this.baseUrl}/responses`,
+      init: {
+        method: "POST",
+        headers,
+        body: JSON.stringify(toResponsesRequest(req, this.model, this.rawGroups)),
+      },
+    };
+  }
+
+  /** Record one response's raw items so the next request can replay them verbatim. */
+  private cacheRawItems(items: JsonObject[]): void {
+    const callIds = items
+      .filter((i) => i.type === "function_call")
+      .map((i) => String(i.call_id ?? i.id ?? ""))
+      .filter((id) => id !== "");
+    if (callIds.length === 0) return;
+    const group: RawItemGroup = { id: randomUUID(), items };
+    for (const id of callIds) this.rawGroups.set(id, group);
+    while (this.rawGroups.size > MAX_CACHED_GROUPS) {
+      const oldest = this.rawGroups.keys().next();
+      if (oldest.done === true) break;
+      this.rawGroups.delete(oldest.value);
+    }
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
-    let res = await this.post(req, signal, false);
-    // a 401 usually means the access token expired between refresh checks: force one refresh + retry
-    if (res.status === 401) {
-      await res.body?.cancel().catch(() => {});
-      res = await this.post(req, signal, true);
+    // fetchWithRetries covers transient failures (429/5xx/network); the 401 retry below is a
+    // separate token-expiry recovery, since it must re-mint the Authorization header.
+    const attempt = async (force: boolean): Promise<Response> => {
+      const { url, init } = await this.request(req, force);
+      return fetchWithRetries(this.fetchFn, "openai-chatgpt", url, init, signal, this.retry);
+    };
+
+    let res: Response;
+    try {
+      res = await attempt(false);
+    } catch (err) {
+      if (!(err instanceof Error) || !/HTTP 401/.test(err.message)) throw err;
+      res = await attempt(true);
     }
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`openai-chatgpt: HTTP ${res.status} ${detail.slice(0, 500)}`);
+    if (!res.body) throw new Error("openai-chatgpt: empty response body");
+
+    const items: JsonObject[] = [];
+    try {
+      yield* parseResponsesSse(res.body, { onRawItem: (item) => items.push(item) });
+    } finally {
+      this.cacheRawItems(items);
     }
-    yield* parseResponsesSse(res.body);
   }
 }

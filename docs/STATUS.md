@@ -88,7 +88,7 @@ account has credits.
 
 ## Post-M2 hardening (from live smoke findings)
 
-- Both adapters retry transient HTTP failures (429 rate limits, 5xx, network errors) with
+- All three provider adapters (and the ChatGPT auth/refresh calls) retry transient HTTP failures (429 rate limits, 5xx, network errors) with
   exponential backoff honoring `Retry-After`, capped at 3 retries / 30s, abort-aware; a 429
   that is quota/billing exhaustion fails immediately (retrying can't help). `RetryPolicy` is
   per-provider config.
@@ -116,6 +116,29 @@ account has credits.
   `~/.codex/auth.json`), and within-session refresh still writes to the file. The interactive
   browser approval is inherently human and one-time — the harness cannot and should not perform
   it; the seed makes it a once-per-token step, not once-per-session.
+- Hardening from the M2.5 adversarial review: every token response is validated before it may
+  overwrite a stored credential (a drifted 200 fails loudly instead of writing `undefined` into
+  an unrecoverable loop — the endpoint is expected to drift, so this is the load-bearing check);
+  the token file is written via `O_EXCL` under a random temp name, so it can never follow a
+  planted symlink or inherit a loosened mode, and the temp is removed if the rename fails; a
+  corrupt token file falls through to the env seed with a one-time warning instead of bricking
+  the provider; the provider and all auth calls go through `fetchWithRetries`, and a refresh
+  failure distinguishes a rejected grant ("re-run login") from a transient outage
+  (`TransientAuthError`, credentials still good); quota-vs-rate-limit classification is
+  structured rather than substring-matched (a rate limit that merely links to a billing page is
+  retried, not hard-failed); `Retry-After` accepts the HTTP-date form; response bodies are
+  redacted before they enter an error message, since errors reach the session JSONL; an
+  unrecognised `incomplete_details.reason` surfaces as an `error` stop with `raw` rather than a
+  clean `end_turn`; a missing `call_id` gets a synthesized id so tool pairing holds; an opaque
+  (non-JWT) access token refreshes on age via `lastRefresh`.
+- **Reasoning replay.** Responses-API reasoning models emit `reasoning` items that must
+  accompany their `function_call` on the following request, and the unified `ContentBlock`
+  schema has nowhere to hold them — so the provider caches each response's raw items keyed by
+  call id and replays them verbatim (requesting `include: ["reasoning.encrypted_content"]`).
+  Without this, turn 2 of any tool-using conversation would 400. The cache is bounded and
+  per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
+  instead — acceptable for non-reasoning models, and the most likely first live failure to
+  watch for with a reasoning model.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
   many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
   static env seed sidesteps this only while the access token is still valid (~hours).

@@ -71,7 +71,7 @@ describe("OpenAIChatGPTAuth device login", () => {
       String(url).endsWith("/usercode")
         ? new Response(JSON.stringify({ device_code: "d", user_code: "C", interval: 1, expires_in: 900 }), { status: 200 })
         : new Response(JSON.stringify({ error: "access_denied" }), { status: 400 });
-    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {} });
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {}, retry: { sleep: async () => {} } });
     const login = await auth.startDeviceLogin();
     await expect(login.complete()).rejects.toThrow(/access_denied/);
   });
@@ -129,7 +129,7 @@ describe("OpenAIChatGPTAuth.getAccessToken", () => {
       return new Response("{}", { status: 200 });
     };
     const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 3600), refreshToken: "r", accountId: "acct_1" });
-    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
     const got = await auth.getAccessToken();
     expect(got.accountId).toBe("acct_1");
     expect(refreshes).toBe(0);
@@ -139,14 +139,17 @@ describe("OpenAIChatGPTAuth.getAccessToken", () => {
     let now = 3_000_000;
     const fetchFn: typeof fetch = async (url, init) => {
       expect(String(url)).toContain("/oauth/token");
-      expect(JSON.parse(String(init!.body)).grant_type).toBe("refresh_token");
+      expect((init!.headers as Record<string, string>)["content-type"]).toBe("application/x-www-form-urlencoded");
+      const form = new URLSearchParams(String(init!.body));
+      expect(form.get("grant_type")).toBe("refresh_token");
+      expect(form.get("refresh_token")).toBe("r1");
       return new Response(
         JSON.stringify({ access_token: accessJwt(now / 1000 + 3600, "acct_2"), refresh_token: "r2-rotated", id_token: jwt({ chatgpt_account_id: "acct_2" }) }),
         { status: 200 },
       );
     };
     const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r1", accountId: "acct_2" });
-    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
     const got = await auth.getAccessToken();
 
     expect(got.accountId).toBe("acct_2");
@@ -158,13 +161,13 @@ describe("OpenAIChatGPTAuth.getAccessToken", () => {
     const fetchFn: typeof fetch = async () =>
       new Response(JSON.stringify({ access_token: accessJwt(now / 1000 + 3600) }), { status: 200 });
     const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "keep-me" });
-    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
     await auth.getAccessToken();
     expect(store.tokens?.refreshToken).toBe("keep-me");
   });
 
   it("throws when not signed in", async () => {
-    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(null), fetchFn: async () => new Response("{}") });
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(null), fetchFn: async () => new Response("{}"), retry: { sleep: async () => {} } });
     await expect(auth.getAccessToken()).rejects.toThrow(/not signed in/);
   });
 
@@ -172,7 +175,124 @@ describe("OpenAIChatGPTAuth.getAccessToken", () => {
     let now = 5_000_000;
     const fetchFn: typeof fetch = async () => new Response("nope", { status: 400 });
     const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r" });
-    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
     await expect(auth.getAccessToken()).rejects.toThrow(/login openai-chatgpt/);
+  });
+});
+
+describe("refresh-response validation (drift must not corrupt the store)", () => {
+  it("rejects a 200 whose shape we don't recognise, leaving stored tokens untouched", async () => {
+    let now = 6_000_000;
+    const good: ChatGPTTokens = { accessToken: accessJwt(now / 1000 + 60), refreshToken: "GOOD-REFRESH" };
+    const store = new MemoryStore({ ...good });
+    // field-name drift: the server returns camelCase, which we don't read
+    const fetchFn: typeof fetch = async () => new Response(JSON.stringify({ accessToken: "new" }), { status: 200 });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
+
+    await expect(auth.getAccessToken()).rejects.toThrow(/carried no access_token/);
+    expect(store.tokens).toEqual(good); // credential store intact
+  });
+
+  it("rejects a 200 with an unreadable body without touching the store", async () => {
+    let now = 6_500_000;
+    const good: ChatGPTTokens = { accessToken: accessJwt(now / 1000 + 60), refreshToken: "GOOD" };
+    const store = new MemoryStore({ ...good });
+    const fetchFn: typeof fetch = async () => new Response("<html>proxy</html>", { status: 200 });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
+    await expect(auth.getAccessToken()).rejects.toThrow(/unreadable body/);
+    expect(store.tokens).toEqual(good);
+  });
+
+  it("distinguishes a rejected grant from a transient auth outage", async () => {
+    let now = 7_000_000;
+    const store = () => new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r" });
+    const rejecting: typeof fetch = async () => new Response("bad grant", { status: 400 });
+    await expect(
+      new OpenAIChatGPTAuth({ store: store(), fetchFn: rejecting, now: () => now, retry: { sleep: async () => {} } }).getAccessToken(),
+    ).rejects.toThrow(/re-run `agentrig login openai-chatgpt`/);
+
+    const flaky: typeof fetch = async () => new Response("gateway", { status: 503 });
+    const err = await new OpenAIChatGPTAuth({ store: store(), fetchFn: flaky, now: () => now, retry: { sleep: async () => {} } })
+      .getAccessToken()
+      .catch((e: Error) => e);
+    expect((err as Error).name).toBe("TransientAuthError");
+    expect((err as Error).message).not.toMatch(/re-run/); // credentials are fine; don't misdirect
+  });
+
+  it("retries a transient refresh failure and then succeeds", async () => {
+    let now = 7_500_000;
+    let calls = 0;
+    const fetchFn: typeof fetch = async () => {
+      calls += 1;
+      if (calls === 1) return new Response("blip", { status: 503 });
+      return new Response(JSON.stringify({ access_token: accessJwt(now / 1000 + 3600), refresh_token: "r2" }), { status: 200 });
+    };
+    const store = new MemoryStore({ accessToken: accessJwt(now / 1000 + 60), refreshToken: "r1" });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
+    await auth.getAccessToken();
+    expect(calls).toBe(2);
+    expect(store.tokens?.refreshToken).toBe("r2");
+  });
+});
+
+describe("opaque (non-JWT) access tokens", () => {
+  it("refreshes on age when there is no readable expiry", async () => {
+    let now = 8_000_000;
+    let refreshes = 0;
+    const fetchFn: typeof fetch = async () => {
+      refreshes += 1;
+      return new Response(JSON.stringify({ access_token: "opaque-2", refresh_token: "r" }), { status: 200 });
+    };
+    // lastRefresh is an hour old and the token carries no exp -> must refresh
+    const store = new MemoryStore({ accessToken: "opaque-1", refreshToken: "r", lastRefresh: now - 60 * 60_000 });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
+    expect((await auth.getAccessToken()).accessToken).toBe("opaque-2");
+    expect(refreshes).toBe(1);
+  });
+
+  it("does not refresh a recently minted opaque token", async () => {
+    let now = 8_500_000;
+    let refreshes = 0;
+    const fetchFn: typeof fetch = async () => {
+      refreshes += 1;
+      return new Response("{}", { status: 200 });
+    };
+    const store = new MemoryStore({ accessToken: "opaque", refreshToken: "r", lastRefresh: now - 60_000 });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
+    await auth.getAccessToken();
+    expect(refreshes).toBe(0);
+  });
+});
+
+describe("device login hardening", () => {
+  it("fails fast when the usercode response carries no device_code", async () => {
+    const fetchFn: typeof fetch = async () => new Response(JSON.stringify({ user_code: "ABCD" }), { status: 200 });
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, retry: { sleep: async () => {} } });
+    await expect(auth.startDeviceLogin()).rejects.toThrow(/no device_code/);
+  });
+
+  it("sends the RFC 8628 grant_type when polling", async () => {
+    const bodies: string[] = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      if (String(url).endsWith("/usercode")) {
+        return new Response(JSON.stringify({ device_code: "d", user_code: "C", interval: 0, expires_in: 900 }), { status: 200 });
+      }
+      bodies.push(String(init!.body));
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r" }), { status: 200 });
+    };
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {}, retry: { sleep: async () => {} } });
+    await (await auth.startDeviceLogin()).complete();
+    expect(JSON.parse(bodies[0]!).grant_type).toBe("urn:ietf:params:oauth:grant-type:device_code");
+  });
+});
+
+describe("env seed validation", () => {
+  it("rejects a bundle with no usable refresh token in either shape", () => {
+    expect(tokensFromEnvValue(JSON.stringify({ tokens: { access_token: "a" } }))).toBeNull();
+    expect(tokensFromEnvValue(JSON.stringify({ accessToken: "a", refreshToken: "" }))).toBeNull();
+    expect(tokensFromEnvValue(JSON.stringify({ tokens: null, access_token: "a", refresh_token: "r" }))).toMatchObject({
+      accessToken: "a",
+    });
+    expect(tokensFromEnvValue(JSON.stringify([1, 2]))).toBeNull();
   });
 });

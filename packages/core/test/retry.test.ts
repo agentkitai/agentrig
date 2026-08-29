@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { AnthropicProvider, fetchWithRetries, type ModelEvent, type ModelRequest } from "@agentkitai/agentrig-core";
+import {
+  AnthropicProvider,
+  fetchWithRetries,
+  isQuotaExhaustion,
+  parseRetryAfter,
+  redactSecrets,
+  type ModelEvent,
+  type ModelRequest,
+} from "@agentkitai/agentrig-core";
 
 const req = (): ModelRequest => ({ system: "s", messages: [], tools: [], maxTokens: 10 });
 const instantSleep = async () => {};
@@ -114,5 +122,91 @@ describe("provider integration", () => {
     for await (const e of provider.stream(req(), new AbortController().signal)) events.push(e);
     expect(n).toBe(2);
     expect(events.at(-1)).toEqual({ type: "stop", reason: "end_turn" });
+  });
+});
+
+describe("isQuotaExhaustion", () => {
+  it("does not misread a plain rate limit that merely links to a billing page", () => {
+    const rateLimit = JSON.stringify({
+      error: {
+        message: "Rate limit reached for gpt-4o. Please see https://platform.openai.com/account/billing for details.",
+        type: "rate_limit_error",
+        code: "rate_limit_exceeded",
+      },
+    });
+    expect(isQuotaExhaustion(rateLimit)).toBe(false);
+  });
+
+  it("detects real quota exhaustion by structured code and by phrase", () => {
+    expect(isQuotaExhaustion(JSON.stringify({ error: { code: "insufficient_quota", message: "no credits" } }))).toBe(true);
+    expect(isQuotaExhaustion(JSON.stringify({ error: { type: "insufficient_quota" } }))).toBe(true);
+    expect(isQuotaExhaustion("You exceeded your current quota, please check your plan.")).toBe(true);
+    expect(isQuotaExhaustion("Your credit balance is too low to access the API")).toBe(true);
+  });
+
+  it("a billing-linking rate limit is retried, not hard-failed", async () => {
+    const body = JSON.stringify({ error: { message: "Rate limit reached, see /account/billing", code: "rate_limit_exceeded" } });
+    let n = 0;
+    const fetchFn = (async () => {
+      n += 1;
+      return n === 1 ? new Response(body, { status: 429 }) : new Response("ok", { status: 200 });
+    }) as typeof fetch;
+    const res = await fetchWithRetries(fetchFn, "t", "http://x", {}, new AbortController().signal, {
+      sleep: async () => {},
+    });
+    expect(res.status).toBe(200);
+    expect(n).toBe(2);
+  });
+});
+
+describe("parseRetryAfter", () => {
+  it("accepts delay-seconds and HTTP-date forms", () => {
+    const now = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
+    expect(parseRetryAfter("7", now)).toBe(7000);
+    expect(parseRetryAfter("Wed, 21 Oct 2015 07:30:00 GMT", now)).toBe(120_000);
+    expect(parseRetryAfter("Wed, 21 Oct 2015 07:00:00 GMT", now)).toBe(0); // past date clamps
+    expect(parseRetryAfter(null, now)).toBeNull();
+    expect(parseRetryAfter("garbage", now)).toBeNull();
+  });
+
+  it("honors an HTTP-date Retry-After in the backoff", async () => {
+    const delays: number[] = [];
+    const future = new Date(Date.now() + 12_000).toUTCString();
+    let n = 0;
+    const fetchFn = (async () => {
+      n += 1;
+      return n === 1
+        ? new Response("slow", { status: 503, headers: { "retry-after": future } })
+        : new Response("ok", { status: 200 });
+    }) as typeof fetch;
+    await fetchWithRetries(fetchFn, "t", "http://x", {}, new AbortController().signal, {
+      baseDelayMs: 100,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+    });
+    expect(delays[0]).toBeGreaterThan(9000); // used the date, not the 100ms base
+  });
+});
+
+describe("credential redaction in error messages", () => {
+  it("strips bearer tokens, JWTs, api keys, and token JSON fields", () => {
+    const dirty =
+      'Authorization: Bearer sk-abcdefghijklmnop {"access_token":"eyJhbGciOi.eyJzdWIiOiJ4.sig","refresh_token":"rt-secret"}';
+    const clean = redactSecrets(dirty);
+    expect(clean).not.toContain("sk-abcdefghijklmnop");
+    expect(clean).not.toContain("rt-secret");
+    expect(clean).not.toContain("eyJzdWIiOiJ4");
+    expect(clean).toContain("[redacted");
+  });
+
+  it("keeps a server-echoed credential out of the thrown error", async () => {
+    const echoed = 'Unauthorized for Bearer eyJhbGciOi.eyJzdWIiOiJ4.sig';
+    const fetchFn = (async () => new Response(echoed, { status: 403 })) as typeof fetch;
+    const err = await fetchWithRetries(fetchFn, "t", "http://x", {}, new AbortController().signal, {
+      sleep: async () => {},
+    }).catch((e: Error) => e);
+    expect((err as Error).message).toContain("HTTP 403");
+    expect((err as Error).message).not.toContain("eyJzdWIiOiJ4");
   });
 });

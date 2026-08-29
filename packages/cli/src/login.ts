@@ -17,25 +17,25 @@ export async function loginCommand(provider: string, opts: { export?: boolean } 
 
   const auth = new OpenAIChatGPTAuth();
 
-  if (opts.export) {
-    const tokens = await auth.exportTokens();
-    if (tokens === null) {
-      console.error("not signed in; run `agentrig login openai-chatgpt` first");
-      process.exitCode = 1;
+  try {
+    if (opts.export) {
+      const tokens = await auth.exportTokens();
+      if (tokens === null) {
+        console.error("not signed in; run `agentrig login openai-chatgpt` first");
+        process.exitCode = 1;
+        return;
+      }
+      // the bundle IS a credential — only stdout, so it can be piped/copied deliberately
+      console.log(JSON.stringify(tokens));
+      console.error(`\nSet this as ${TOKEN_ENV_VAR} in your environment to reuse it in cloud sessions.`);
       return;
     }
-    // the bundle IS a credential — only stdout, so it can be piped/copied deliberately
-    console.log(JSON.stringify(tokens));
-    console.error(`\nSet this as ${TOKEN_ENV_VAR} in your environment to reuse it in cloud sessions.`);
-    return;
-  }
 
-  console.error(
-    "Experimental: reuses your ChatGPT subscription via the same undocumented backend Codex uses.\n" +
-      "OpenAI has not sanctioned this for third-party tools; use your own account at your own risk.\n",
-  );
+    console.error(
+      "Experimental: reuses your ChatGPT subscription via the same undocumented backend Codex uses.\n" +
+        "OpenAI has not sanctioned this for third-party tools; use your own account at your own risk.\n",
+    );
 
-  try {
     const login = await auth.startDeviceLogin();
     console.error(`To sign in, open:\n  ${login.verificationUri}`);
     console.error(`and enter the code:  ${login.userCode}`);

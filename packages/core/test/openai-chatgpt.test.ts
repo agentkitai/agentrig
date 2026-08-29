@@ -170,7 +170,7 @@ describe("OpenAIChatGPTProvider.stream", () => {
       return new Response(sse([{ type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } }]), { status: 200 });
     };
     const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now });
-    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn });
+    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
     const events = await collect(provider.stream(baseReq, new AbortController().signal));
 
     expect(posts).toBe(2);
@@ -181,7 +181,138 @@ describe("OpenAIChatGPTProvider.stream", () => {
   it("throws with the body on a non-401 HTTP error", async () => {
     const auth = new OpenAIChatGPTAuth({ store: new MemoryStore({ accessToken: futureJwt(), refreshToken: "r" }) });
     const fetchFn: typeof fetch = async () => new Response("rate limited", { status: 429 });
-    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn });
+    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
     await expect(collect(provider.stream(baseReq, new AbortController().signal))).rejects.toThrow(/HTTP 429/);
+  });
+});
+
+describe("stop-reason fidelity (M1 invariant: unknowns must surface)", () => {
+  it("surfaces a non-max_output_tokens incomplete reason as an error stop with raw", async () => {
+    async function* s() {
+      yield sse([
+        { type: "response.output_text.delta", delta: "partial" },
+        { type: "response.incomplete", response: { incomplete_details: { reason: "content_filter" }, usage: { input_tokens: 1, output_tokens: 1 } } },
+      ]);
+    }
+    expect((await collect(parseResponsesSse(s()))).at(-1)).toEqual({ type: "stop", reason: "refusal" });
+  });
+
+  it("never reports an unknown incomplete reason as a clean end_turn", async () => {
+    async function* s() {
+      yield sse([
+        { type: "response.incomplete", response: { incomplete_details: { reason: "some_future_reason" }, usage: { input_tokens: 1, output_tokens: 1 } } },
+      ]);
+    }
+    expect((await collect(parseResponsesSse(s()))).at(-1)).toEqual({
+      type: "stop",
+      reason: "error",
+      raw: "some_future_reason",
+    });
+  });
+
+  it("treats an incomplete with no reason as an error, not a completion", async () => {
+    async function* s() {
+      yield sse([{ type: "response.incomplete", response: { usage: { input_tokens: 1, output_tokens: 1 } } }]);
+    }
+    expect((await collect(parseResponsesSse(s()))).at(-1)).toMatchObject({ type: "stop", reason: "error" });
+  });
+});
+
+describe("tool-call id hygiene", () => {
+  it("synthesizes distinct ids when the server omits call_id, preserving pairing", async () => {
+    async function* s() {
+      yield sse([
+        { type: "response.output_item.done", item: { type: "function_call", name: "bash", arguments: "{}" } },
+        { type: "response.output_item.done", item: { type: "function_call", name: "grep", arguments: "{}" } },
+        { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+      ]);
+    }
+    const events = await collect(parseResponsesSse(s()));
+    const ids = events.filter((e) => e.type === "tool_use").map((e) => e.id);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe("");
+    expect(ids[0]).not.toBe(ids[1]); // two indistinguishable ids would break tool pairing
+  });
+
+  it("emits both calls for parallel tool use", async () => {
+    async function* s() {
+      yield sse([
+        { type: "response.output_item.done", item: { type: "function_call", call_id: "a", name: "bash", arguments: "{}" } },
+        { type: "response.output_item.done", item: { type: "function_call", call_id: "b", name: "grep", arguments: "{}" } },
+        { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+      ]);
+    }
+    expect((await collect(parseResponsesSse(s()))).filter((e) => e.type === "tool_use").map((e) => e.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("input mapping fidelity", () => {
+  it("preserves interleaved text/tool order in assistant history", () => {
+    const body = toResponsesRequest(
+      {
+        ...baseReq,
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "before " },
+              { type: "tool_use", id: "t1", name: "bash", input: {} },
+              { type: "text", text: "after" },
+            ],
+          },
+        ],
+      },
+      "m",
+    ) as { input: Array<Record<string, unknown>> };
+    expect(body.input.map((i) => i.type)).toEqual(["message", "function_call", "message"]);
+  });
+
+  it("asks for encrypted reasoning content so it can be replayed", () => {
+    expect((toResponsesRequest(baseReq, "m") as Record<string, unknown>).include).toEqual([
+      "reasoning.encrypted_content",
+    ]);
+  });
+});
+
+describe("reasoning replay (the live risk for turn 2 of a tool conversation)", () => {
+  it("replays the previous response's reasoning items alongside its function call", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const streamWithReasoning = sse([
+      { type: "response.output_item.done", item: { type: "reasoning", id: "rs_1", encrypted_content: "ENC" } },
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "fc_9", name: "bash", arguments: "{}" } },
+      { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+    ]);
+    const fetchFn: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init!.body)) as Record<string, unknown>);
+      return new Response(streamWithReasoning, { status: 200 });
+    };
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore({ accessToken: futureJwt(), refreshToken: "r" }) });
+    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
+
+    // turn 1: the model asks for a tool
+    await collect(provider.stream({ ...baseReq, messages: [{ role: "user", content: [{ type: "text", text: "go" }] }] }, new AbortController().signal));
+
+    // turn 2: history carries the tool_use + its result, as the agent loop builds it
+    await collect(
+      provider.stream(
+        {
+          ...baseReq,
+          messages: [
+            { role: "user", content: [{ type: "text", text: "go" }] },
+            { role: "assistant", content: [{ type: "tool_use", id: "fc_9", name: "bash", input: {} }] },
+            { role: "user", content: [{ type: "tool_result", toolUseId: "fc_9", content: "out" }] },
+          ],
+        },
+        new AbortController().signal,
+      ),
+    );
+
+    const input = bodies[1]!.input as Array<Record<string, unknown>>;
+    // the reasoning item must accompany its function_call, and appear exactly once
+    expect(input.filter((i) => i.type === "reasoning")).toHaveLength(1);
+    expect(input.find((i) => i.type === "reasoning")).toMatchObject({ id: "rs_1", encrypted_content: "ENC" });
+    const order = input.map((i) => i.type);
+    expect(order.indexOf("reasoning")).toBeLessThan(order.indexOf("function_call"));
+    expect(input.filter((i) => i.type === "function_call")).toHaveLength(1);
   });
 });
