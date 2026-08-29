@@ -10,9 +10,15 @@ import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
  * backend Codex talks to — `POST https://chatgpt.com/backend-api/codex/responses`, the Responses
  * API (NOT Chat Completions). Auth is the OAuth access token from `agentrig login openai-chatgpt`.
  *
- * The `originator: codex_cli_rs` header impersonates the Codex client to pass a server-side
- * whitelist (a non-Codex value returns 403). Endpoint, headers, and payload are undocumented and
- * read from the Apache-2.0 openai/codex source; they may drift without notice. Opt-in only.
+ * AgentRig identifies itself honestly: `originator: agentrig` plus its own User-Agent, the same
+ * attribution-header approach other third-party harnesses document. If the backend restricts the
+ * originator to first-party clients this returns 403 — that is the correct outcome to surface,
+ * not something to defeat by claiming to be another vendor's client. `originator` is
+ * configurable for users who choose differently on their own accounts; AgentRig never ships a
+ * default that misrepresents what software is calling.
+ *
+ * Endpoint, headers, and payload are undocumented and read from the Apache-2.0 openai/codex
+ * source; they may drift without notice. Opt-in only.
  */
 
 export interface OpenAIChatGPTProviderOptions {
@@ -22,14 +28,20 @@ export interface OpenAIChatGPTProviderOptions {
   baseUrl?: string;
   contextWindow?: number;
   fetchFn?: typeof fetch;
-  /** Sent as the Codex client version in the User-Agent; see the impersonation note above. */
-  codexVersion?: string;
+  /**
+   * Client identifier sent as the `originator` header. Defaults to AgentRig's own name — the
+   * honest value. Override only if you have decided, for your own account, to present a
+   * different client identity to the endpoint.
+   */
+  originator?: string;
+  /** Version reported in the User-Agent. */
+  clientVersion?: string;
   retry?: RetryPolicy;
 }
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
-const ORIGINATOR = "codex_cli_rs";
-const DEFAULT_CODEX_VERSION = "0.56.0";
+/** Honest self-identification; see the impersonation note above. */
+const DEFAULT_ORIGINATOR = "agentrig";
 /** Cap on cached raw response items (reasoning replay); oldest groups are evicted first. */
 const MAX_CACHED_GROUPS = 64;
 
@@ -267,7 +279,8 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   private readonly auth: OpenAIChatGPTAuth;
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
-  private readonly codexVersion: string;
+  private readonly originator: string;
+  private readonly clientVersion: string;
   private readonly retry: RetryPolicy;
   private readonly sessionId = randomUUID();
   /** call_id -> the raw item group of the response that produced it (for reasoning replay). */
@@ -278,7 +291,8 @@ export class OpenAIChatGPTProvider implements ModelProvider {
     this.auth = opts.auth ?? new OpenAIChatGPTAuth(opts.authOptions ?? {});
     this.baseUrl = (opts.baseUrl ?? CHATGPT_BASE_URL).replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
-    this.codexVersion = opts.codexVersion ?? DEFAULT_CODEX_VERSION;
+    this.originator = opts.originator ?? DEFAULT_ORIGINATOR;
+    this.clientVersion = opts.clientVersion ?? "0.0.0";
     this.retry = opts.retry ?? {};
     this.capabilities = {
       tools: true,
@@ -295,9 +309,9 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       "content-type": "application/json",
       accept: "text/event-stream",
       authorization: `Bearer ${accessToken}`,
-      // impersonates the Codex client to pass the backend originator whitelist (PLAN §2.9)
-      originator: ORIGINATOR,
-      "user-agent": `${ORIGINATOR}/${this.codexVersion} (${process.platform}; ${process.arch})`,
+      // self-identifying attribution headers (PLAN §2.9): AgentRig says who it actually is
+      originator: this.originator,
+      "user-agent": `${this.originator}/${this.clientVersion} (${process.platform}; ${process.arch})`,
       "openai-beta": "responses=experimental",
       session_id: this.sessionId,
     };

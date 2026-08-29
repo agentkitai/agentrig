@@ -146,9 +146,11 @@ describe("OpenAIChatGPTProvider.stream", () => {
     expect(captured!.url).toBe("https://chatgpt.com/backend-api/codex/responses");
     const headers = captured!.init.headers as Record<string, string>;
     expect(headers.authorization).toMatch(/^Bearer /);
-    expect(headers.originator).toBe("codex_cli_rs");
+    // AgentRig identifies itself; it must not claim to be another vendor's client
+    expect(headers.originator).toBe("agentrig");
     expect(headers["chatgpt-account-id"]).toBe("acct_7");
-    expect(headers["user-agent"]).toContain("codex_cli_rs/");
+    expect(headers["user-agent"]).toContain("agentrig/");
+    expect(JSON.stringify(headers)).not.toContain("codex_cli_rs");
     expect(events.at(-1)).toEqual({ type: "stop", reason: "tool_use" });
   });
 

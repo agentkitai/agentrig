@@ -98,8 +98,10 @@ account has credits.
 ## M2.5 notes
 
 - `OpenAIChatGPTProvider` speaks the Responses API against
-  `chatgpt.com/backend-api/codex/responses` with Codex's headers (`originator: codex_cli_rs`
-  impersonation, per the accepted §2.9 decision), authed by the OAuth access token.
+  `chatgpt.com/backend-api/codex/responses` with self-identifying attribution headers
+  (`originator: agentrig`, own User-Agent — see §2.9), authed by the OAuth access token. Whether
+  the endpoint accepts a non-first-party originator is the open live question; a 403 there is a
+  real answer, not a thing to route around.
   `OpenAIChatGPTAuth` owns the device-code login, an atomic token store (default
   `~/.agentrig/openai-chatgpt-auth.json`, `AGENTRIG_OPENAI_CHATGPT_AUTH` to override), and
   proactive + 401-forced refresh that persists refresh-token rotation. CLI:

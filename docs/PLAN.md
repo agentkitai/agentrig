@@ -200,6 +200,7 @@ documented as experimental. Guardrails, all locked regardless of spike outcome:
 - **OpenAI only.** Anthropic **explicitly prohibits** third-party use of Claude Pro/Max
   credentials, so there is deliberately no Claude equivalent. The docs must say why the two
   providers differ, rather than implying "bring any subscription."
+- **Honest identification, never impersonation-by-default.** See the client-identity note below.
 - **Undocumented backend.** The endpoint and protocol are reverse-engineered and unversioned;
   the provider tracks them best-effort and is expected to break. It never becomes core auth.
 - **User's own account, eyes open.** OAuth is unsanctioned-but-not-known-prohibited for
@@ -214,10 +215,16 @@ documented as experimental. Guardrails, all locked regardless of spike outcome:
   `originator: codex_cli_rs` header, a Codex `User-Agent`, and `ChatGPT-Account-ID`. So it needs:
   a Responses request/response mapper, SSE parsing, and a token-lifecycle manager (device-code
   login against `auth.openai.com`, plus **refresh with rotation persisted to writable storage**).
-- **It requires impersonating Codex.** The backend whitelists `originator`; a non-Codex value
-  returns 403 (this is what broke third-party clients historically). Sending `codex_cli_rs`
-  means claiming to be OpenAI's first-party client — the part most exposed to being read as
-  circumvention, and the gate most likely to be tightened.
+- **Client identity: AgentRig identifies itself.** The spike reported that the backend
+  whitelists `originator` and 403s non-Codex values, and the first implementation copied
+  `codex_cli_rs` on that basis. That was wrong: other third-party harnesses document sending
+  their *own* "attribution headers" (`originator`, `version`, `User-Agent`), i.e. they
+  self-identify, and nobody had tested whether an honest identifier is accepted. AgentRig
+  therefore sends `originator: agentrig`. If the endpoint restricts to first-party clients,
+  the resulting 403 is the correct answer to surface — claiming to be another vendor's client
+  to defeat an access control is not something the harness does by default, and not something
+  an autonomous agent should perform. The header is configurable for users who decide otherwise
+  on their own accounts.
 - **Effort:** medium — a new adapter (days to ~2 weeks); the token lifecycle and Responses
   mapping are the real work, portable from Codex since it is Apache-2.0.
 - **Unattended cloud use:** a one-time device-code login yields a token bundle, but a *static*
