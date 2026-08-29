@@ -23,8 +23,17 @@ Current milestone: **M2**
 
 ## M1 notes
 
-- `agentrig run "<task>" --headless --json` works end to end; `ask` resolves to deny headless
-  (`AgentConfig.onAsk` is where the M7 TUI plugs an interactive prompt in).
+- `agentrig run "<task>" --headless --json` works end to end; `ask` resolves to deny headless.
+  Without `--headless` on a TTY, `ask` prompts on stderr via `AgentConfig.onAsk` (the same seam
+  the M7 TUI will use).
+- Tools declare `paths()`; `cwdOnly` permission rules confine file tools to the project.
+  `--allow write` is cwd-confined; `--allow write:anywhere` lifts it. bash declares no paths and
+  cannot be confined — `--allow exec` is all-or-nothing.
+- Stop reasons: `refusal` ends the session `done` with a non-fatal error event; a final response
+  truncated at `max_tokens` ends it `reason: error` (CLI exit 1); unknown provider stop reasons
+  surface verbatim via `raw` in the fatal error message.
+- `steer()` takes an optional source (`user` default; the M4 supervisor passes its own); a steer
+  still queued when the session ends is recorded as a non-fatal error, never silently dropped.
 - Every event — including `file.changed` emitted from inside tools — goes through
   `SessionStore.append` on one promise chain, so `seq` order is emission order and
   `session.events` replays identically to the on-disk log.

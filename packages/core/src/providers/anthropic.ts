@@ -1,5 +1,5 @@
 import type { ContentBlock, Message } from "../messages.js";
-import type { ModelEvent, ModelProvider, ModelRequest } from "../provider.js";
+import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 
 /**
@@ -57,17 +57,19 @@ function toAnthropicBlock(b: ContentBlock): JsonObject {
   }
 }
 
-function mapStopReason(reason: unknown): "end_turn" | "tool_use" | "max_tokens" | "error" {
+function mapStopReason(reason: unknown): { reason: StopReason; raw?: string } {
   switch (reason) {
     case "end_turn":
     case "stop_sequence":
-      return "end_turn";
+      return { reason: "end_turn" };
     case "tool_use":
-      return "tool_use";
+      return { reason: "tool_use" };
     case "max_tokens":
-      return "max_tokens";
+      return { reason: "max_tokens" };
+    case "refusal":
+      return { reason: "refusal" };
     default:
-      return "error";
+      return { reason: "error", raw: String(reason) };
   }
 }
 
@@ -160,7 +162,10 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
   if (cacheRead !== undefined) usage.cacheRead = cacheRead;
   if (cacheWrite !== undefined) usage.cacheWrite = cacheWrite;
   yield { type: "usage", usage };
-  yield { type: "stop", reason: mapStopReason(stopReason) };
+  const mapped = mapStopReason(stopReason);
+  yield mapped.raw === undefined
+    ? { type: "stop", reason: mapped.reason }
+    : { type: "stop", reason: mapped.reason, raw: mapped.raw };
 }
 
 export class AnthropicProvider implements ModelProvider {

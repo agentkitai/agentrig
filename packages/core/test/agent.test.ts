@@ -1,13 +1,15 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  builtinTools,
   createAgent,
   RulePolicy,
   SessionStore,
   toToolSpec,
+  type Session,
   type AgentConfig,
   type AnyTool,
   type HarnessEvent,
@@ -332,6 +334,123 @@ describe("agent loop", () => {
         { type: "text", text: "after" },
       ],
     });
+  });
+
+  it("keeps tool_use/tool_result pairing one-to-one across a mixed allowed+denied batch", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "a" } },
+        { type: "tool_use", id: "t2", name: "blocked", input: { text: "b" } },
+        { type: "tool_use", id: "t3", name: "echo", input: { text: "c" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const blocked: AnyTool = { ...echoTool(), name: "blocked" };
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: [echoTool(), blocked],
+        permissions: new RulePolicy([
+          { tool: "blocked", decision: "deny" },
+          { class: "read", decision: "allow" },
+        ]),
+      }),
+    ).run("t");
+    await collect(session);
+    await session.done;
+
+    expect(provider.requests[1]!.messages.at(-1)!.content).toMatchObject([
+      { type: "tool_result", toolUseId: "t1", content: "echo: a" },
+      { type: "tool_result", toolUseId: "t2", isError: true },
+      { type: "tool_result", toolUseId: "t3", content: "echo: c" },
+    ]);
+  });
+
+  it("confines cwdOnly-allowed writes to the working directory", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "write_file", input: { path: "inside.txt", content: "ok" } },
+        { type: "tool_use", id: "t2", name: "write_file", input: { path: "../escape.txt", content: "nope" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const inner = join(root, "project");
+    await mkdir(inner, { recursive: true });
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: builtinTools(),
+        permissions: new RulePolicy([{ class: "write", cwdOnly: true, decision: "allow" }]),
+      }),
+    ).run("t", { cwd: inner });
+    const events = await collect(session);
+
+    expect(events.some((e) => e.type === "tool.result" && e.id === "t1" && e.ok)).toBe(true);
+    expect(events.some((e) => e.type === "tool.denied" && e.id === "t2")).toBe(true);
+    expect(await readFile(join(inner, "inside.txt"), "utf8")).toBe("ok");
+    await expect(readFile(join(root, "escape.txt"), "utf8")).rejects.toThrow();
+  });
+
+  it("ends with reason error when the final response is truncated at max_tokens", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "cut off mid-" }, usage(1, 1), stop("max_tokens")]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && !e.fatal && /truncated at maxTokens/.test(e.message))).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "error" });
+  });
+
+  it("treats refusal as a completed session with a non-fatal marker", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "I can't help with that." }, usage(1, 1), { type: "stop", reason: "refusal" }]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("done");
+    expect(events.some((e) => e.type === "error" && !e.fatal && /refused/.test(e.message))).toBe(true);
+  });
+
+  it("carries the raw stop reason into the fatal error for unknown stops", async () => {
+    const provider = new FakeProvider([[usage(1, 1), { type: "stop", reason: "error", raw: "pause_turn" }]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    expect((await session.done).reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && e.fatal && /pause_turn/.test(e.message))).toBe(true);
+  });
+
+  it("records a supervisor steer source, and an undelivered steer as a non-fatal error", async () => {
+    const delivered = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    const s1 = createAgent(makeConfig(delivered)).run("t");
+    s1.control.steer("focus on tests", "supervisor");
+    const deliveredEvents = await collect(s1);
+    expect(deliveredEvents.find((e) => e.type === "steer")).toMatchObject({
+      source: "supervisor",
+      message: "focus on tests",
+    });
+
+    // a steer issued mid-turn that never reaches a turn boundary is recorded, not lost
+    let s2!: Session;
+    const lateProvider: ModelProvider = {
+      id: "late",
+      model: "late-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        s2.control.steer("too late", "supervisor");
+        yield usage(1, 1);
+        yield stop("end_turn");
+      },
+    };
+    s2 = createAgent(makeConfig(lateProvider)).run("t");
+    const lateEvents = await collect(s2);
+    expect(lateEvents.some((e) => e.type === "steer")).toBe(false);
+    const dropped = lateEvents.find((e) => e.type === "error" && /not delivered/.test(e.message));
+    expect(dropped).toMatchObject({ fatal: false });
+    expect(dropped!.message).toContain("too late");
+    expect(lateEvents.at(-1)).toMatchObject({ type: "session.end" });
   });
 
   it("abort ends the session with reason aborted", async () => {

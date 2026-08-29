@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { RulePolicy, defaultRules, type PermissionRequest } from "@agentkitai/agentrig-core";
 
-const req = (tool: string, cls: PermissionRequest["class"]): PermissionRequest => ({
+const req = (tool: string, cls: PermissionRequest["class"], paths?: string[]): PermissionRequest => ({
   tool,
   input: {},
   class: cls,
   cwd: "/w",
+  ...(paths === undefined ? {} : { paths }),
 });
 
 describe("RulePolicy", () => {
@@ -29,14 +30,31 @@ describe("RulePolicy", () => {
     expect(await policy.decide(req("fetch", "network"))).toBe("deny");
   });
 
-  it("falls back to ask by default", async () => {
+  it("default rules allow cwd-confined reads and fall back to ask", async () => {
     const policy = new RulePolicy(defaultRules);
-    expect(await policy.decide(req("read_file", "read"))).toBe("allow");
+    expect(await policy.decide(req("read_file", "read", ["a.txt"]))).toBe("allow");
+    expect(await policy.decide(req("read_file", "read", ["/etc/passwd"]))).toBe("ask");
+    expect(await policy.decide(req("read_file", "read"))).toBe("ask");
     expect(await policy.decide(req("bash", "exec"))).toBe("ask");
   });
 
   it("honors a custom fallback", async () => {
     const policy = new RulePolicy([], "deny");
     expect(await policy.decide(req("bash", "exec"))).toBe("deny");
+  });
+
+  it("cwdOnly rules match only paths inside the cwd", async () => {
+    const policy = new RulePolicy([{ class: "write", cwdOnly: true, decision: "allow" }]);
+    expect(await policy.decide(req("write_file", "write", ["a.txt"]))).toBe("allow");
+    expect(await policy.decide(req("write_file", "write", ["sub/dir/a.txt", "."]))).toBe("allow");
+    expect(await policy.decide(req("write_file", "write", ["/w/inside.txt"]))).toBe("allow");
+    expect(await policy.decide(req("write_file", "write", ["../escape.txt"]))).toBe("ask");
+    expect(await policy.decide(req("write_file", "write", ["/etc/passwd"]))).toBe("ask");
+    expect(await policy.decide(req("write_file", "write", ["a.txt", "../also-escapes"]))).toBe("ask");
+  });
+
+  it("cwdOnly rules never match a tool that declares no paths", async () => {
+    const policy = new RulePolicy([{ class: "exec", cwdOnly: true, decision: "allow" }]);
+    expect(await policy.decide(req("bash", "exec"))).toBe("ask");
   });
 });

@@ -63,7 +63,7 @@ type ModelEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'usage'; input: number; output: number; cacheRead?: number; cacheWrite?: number }
-  | { type: 'stop'; reason: 'end_turn' | 'tool_use' | 'max_tokens' | 'error' };
+  | { type: 'stop'; reason: 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal' | 'error'; raw?: string };
 
 interface ModelProvider {
   id: string;                          // 'anthropic' | 'openai' | 'gemini' | 'ollama' | ...
@@ -86,6 +86,7 @@ interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;            // JSON Schema derived for ToolSpec
   permission: PermissionClass | ((input: I) => PermissionClass);
+  paths?(input: I): string[];           // declared touched paths; enables cwd-confined policy rules
   execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
 }
 
@@ -103,7 +104,11 @@ type Decision = 'allow' | 'deny' | 'ask';
 interface PermissionPolicy { decide(req: PermissionRequest): Promise<Decision> }
 ```
 
-v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Sandboxing (Docker/OS-level) is deferred; the policy interface is where it plugs in.
+v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
+`cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so
+file tools are confined to the project by default (bash declares no paths and cannot be confined
+this way — its rules are all-or-nothing). Sandboxing (Docker/OS-level) is deferred; the policy
+interface is where it plugs in.
 
 ### 2.5 The event spine
 

@@ -17,6 +17,7 @@ export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: num
     description: "Create or overwrite a file with the given content. Parent directories are created.",
     inputSchema: WriteFileInput,
     permission: "write",
+    paths: (input) => [input.path],
     async execute(input, ctx): Promise<ToolResult<{ path: string; bytes: number }>> {
       const path = resolveIn(ctx.cwd, input.path);
       const existed = await stat(path).then(() => true, () => false);

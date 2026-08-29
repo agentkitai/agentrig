@@ -17,6 +17,7 @@ export function readFileTool(): Tool<ReadFileInput, string> {
       "Read a text file. Returns numbered lines; use offset/limit to page through large files.",
     inputSchema: ReadFileInput,
     permission: "read",
+    paths: (input) => [input.path],
     async execute(input, ctx): Promise<ToolResult<string>> {
       const path = resolveIn(ctx.cwd, input.path);
       let text: string;

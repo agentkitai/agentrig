@@ -31,6 +31,7 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
       "Binary and very large files, node_modules, and .git are skipped.",
     inputSchema: GrepInput,
     permission: "read",
+    paths: (input) => [input.path ?? "."],
     async execute(input, ctx): Promise<ToolResult<GrepMatch[]>> {
       let re: RegExp;
       try {

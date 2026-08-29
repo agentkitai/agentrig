@@ -29,6 +29,8 @@ export const PermissionRequest = z.object({
   input: z.unknown(),
   class: PermissionClass,
   cwd: z.string(),
+  /** Filesystem paths the call touches, as declared by the tool's `paths()`; absent when the tool declares none. */
+  paths: z.array(z.string()).optional(),
 });
 export type PermissionRequest = z.infer<typeof PermissionRequest>;
 

@@ -25,6 +25,12 @@ export interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;
   permission: PermissionClass | ((input: I) => PermissionClass);
+  /**
+   * The filesystem paths a call would touch (raw, as given — relative paths are resolved
+   * against the session cwd by the policy). Lets policies confine a tool to the working
+   * directory (`cwdOnly` rules). A tool without this cannot be path-confined (e.g. bash).
+   */
+  paths?(input: I): string[];
   execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
 }
 

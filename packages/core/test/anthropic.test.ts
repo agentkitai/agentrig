@@ -84,6 +84,23 @@ describe("parseAnthropicSse", () => {
     ]);
   });
 
+  it("maps refusal through and carries unknown stop reasons in raw", async () => {
+    const delta = (stopReason: string) =>
+      sse([["message_delta", { type: "message_delta", delta: { stop_reason: stopReason }, usage: { output_tokens: 1 } }]]);
+    async function* refusal() {
+      yield delta("refusal");
+    }
+    async function* unknown() {
+      yield delta("pause_turn");
+    }
+    expect((await collect(parseAnthropicSse(refusal()))).at(-1)).toEqual({ type: "stop", reason: "refusal" });
+    expect((await collect(parseAnthropicSse(unknown()))).at(-1)).toEqual({
+      type: "stop",
+      reason: "error",
+      raw: "pause_turn",
+    });
+  });
+
   it("maps stop_sequence to end_turn", async () => {
     async function* one() {
       yield sse([["message_delta", { type: "message_delta", delta: { stop_reason: "stop_sequence" }, usage: { output_tokens: 1 } }]]);

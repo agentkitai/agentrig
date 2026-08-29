@@ -1,7 +1,7 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
-import type { ModelProvider, ModelRequest, ToolSpec } from "./provider.js";
+import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { SessionStore, contentHash } from "./session-store.js";
@@ -51,7 +51,8 @@ export interface SessionSummary {
 }
 
 export interface SessionControl {
-  steer(message: string): void;
+  /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
+  steer(message: string, source?: "user" | "supervisor"): void;
   pause(): void;
   resume(): void;
   abort(): void;
@@ -142,7 +143,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
-  const pendingSteers: string[] = [];
+  const pendingSteers: Array<{ message: string; source: "user" | "supervisor" }> = [];
 
   // All appends go through one promise chain so events written by tools (via ctx.emit)
   // and by the loop land in the store — and in `seq` — in the order they were emitted.
@@ -219,9 +220,9 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
           break;
         }
 
-        for (const msg of pendingSteers.splice(0)) {
-          await emit({ type: "steer", source: "user", message: msg });
-          messages.push({ role: "user", content: [{ type: "text", text: msg }] });
+        for (const s of pendingSteers.splice(0)) {
+          await emit({ type: "steer", source: s.source, message: s.message });
+          messages.push({ role: "user", content: [{ type: "text", text: s.message }] });
         }
 
         turns += 1;
@@ -248,7 +249,8 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
         };
         const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
         let usage: Usage = { input: 0, output: 0 };
-        let stop: "end_turn" | "tool_use" | "max_tokens" | "error" = "end_turn";
+        let stop: StopReason = "end_turn";
+        let stopRaw: string | undefined;
         try {
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
@@ -266,6 +268,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
                 break;
               case "stop":
                 stop = ev.reason;
+                stopRaw = ev.raw;
                 break;
             }
           }
@@ -293,18 +296,28 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
 
         if (stop === "error") {
           reason = "error";
-          await emit({ type: "error", message: "provider reported an error stop", fatal: true });
+          await emit({
+            type: "error",
+            message: `provider reported an error stop${stopRaw === undefined ? "" : ` (stop_reason: ${stopRaw})`}`,
+            fatal: true,
+          });
+          await emit({ type: "turn.end", n: turns });
+          break;
+        }
+        if (stop === "refusal") {
+          // the refusal is the model's answer — the session completed, but mark it in the log
+          await emit({ type: "error", message: "model refused to continue (stop_reason: refusal)", fatal: false });
           await emit({ type: "turn.end", n: turns });
           break;
         }
         if (stop === "max_tokens") {
-          await emit({
-            type: "error",
-            message: `response truncated at maxTokens (${req.maxTokens})`,
-            fatal: false,
-          });
+          // an answer cut off mid-thought is an incomplete session, not a completed one
+          reason = "error";
+          await emit({ type: "error", message: `response truncated at maxTokens (${req.maxTokens})`, fatal: false });
+          await emit({ type: "turn.end", n: turns });
+          break;
         }
-        if (stop !== "tool_use" || toolUses.length === 0) {
+        if (toolUses.length === 0) {
           await emit({ type: "turn.end", n: turns });
           break;
         }
@@ -326,6 +339,14 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      // a steer that never reached a turn boundary was not delivered — record that, don't lose it
+      for (const s of pendingSteers.splice(0)) {
+        await emit({
+          type: "error",
+          message: `steer from ${s.source} not delivered (session ended): ${s.message}`,
+          fatal: false,
+        }).catch(() => {});
+      }
       ended = true;
       await emit({ type: "session.end", reason }).catch(() => {});
       await chain.catch(() => {});
@@ -356,7 +377,14 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
       const input = parsed.data;
 
       const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
-      const permReq: PermissionRequest = { tool: tu.name, input, class: permClass, cwd };
+      const declaredPaths = tool.paths?.(input);
+      const permReq: PermissionRequest = {
+        tool: tu.name,
+        input,
+        class: permClass,
+        cwd,
+        ...(declaredPaths === undefined ? {} : { paths: declaredPaths }),
+      };
       await emit({ type: "permission.request", req: permReq });
       let decision = await config.permissions.decide(permReq);
       await emit({ type: "permission.decision", d: decision });
@@ -399,7 +427,7 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
     id,
     events: stream,
     control: {
-      steer: (message) => pendingSteers.push(message),
+      steer: (message, source = "user") => pendingSteers.push({ message, source }),
       pause: () => gate.pause(),
       resume: () => gate.resume(),
       abort: () => {

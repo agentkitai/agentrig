@@ -23,6 +23,7 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
       "Search-and-replace in a file. oldText must match exactly once unless replaceAll is set.",
     inputSchema: EditFileInput,
     permission: "write",
+    paths: (input) => [input.path],
     async execute(input, ctx): Promise<ToolResult<{ path: string; replacements: number }>> {
       const path = resolveIn(ctx.cwd, input.path);
       const rel = relative(ctx.cwd, path) || path;
