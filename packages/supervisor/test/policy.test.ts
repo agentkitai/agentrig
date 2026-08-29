@@ -43,7 +43,7 @@ describe("LadderPolicy", () => {
       capabilities: { forceReplan: true, reviewer: true, escalate: true, abort: true },
     });
     const types = [0, 1, 2, 3].map((t) => p.decide([sig("drift")], state(t))[0]!.type);
-    expect(types).toEqual(["inject_guidance", "force_replan", "run_grader", "escalate"]);
+    expect(types).toEqual(["inject_guidance", "force_replan", "run_reviewer", "escalate"]);
     expect(DEFAULT_LADDER).toHaveLength(5);
   });
 

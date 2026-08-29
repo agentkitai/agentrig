@@ -106,8 +106,7 @@ export class LadderPolicy implements Policy {
       case "force_replan":
         return { type: "force_replan" };
       case "run_reviewer":
-        // M6 turns this into a real reviewer pass; until then the rung is filtered out entirely
-        return { type: "run_grader", rubric: `Did the agent resolve the ${s.type} condition? Evidence: ${why}` };
+        return { type: "run_reviewer", reason: `${s.type}: ${why}` };
       case "escalate":
         return { type: "escalate", question: `The supervisor detected ${s.type}: ${why}. How should the agent proceed?` };
       case "abort":

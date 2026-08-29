@@ -10,6 +10,7 @@ import {
   SessionStore,
   summarizeOlderTurns,
   toToolSpec,
+  updatePlanTool,
   type Session,
   type AgentConfig,
   type AnyTool,
@@ -754,5 +755,135 @@ describe("SessionControl.record", () => {
     const parsed = lines.map((l) => JSON.parse(l) as HarnessEvent);
     expect(parsed.at(-1)!.type).toBe("session.end");
     expect(parsed.some((e) => e.type === "supervisor.intervention")).toBe(false);
+  });
+});
+
+describe("the replan gate (PLAN §4.2 force_replan)", () => {
+  /** Calls `echo`, then whatever the script says, so a gate can be observed mid-session. */
+  class ToolingProvider implements ModelProvider {
+    readonly id = "fake";
+    readonly model = "fake-1";
+    readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
+    turns = 0;
+    constructor(private readonly script: Array<{ name: string; input: unknown }>) {}
+    async *stream(): AsyncIterable<ModelEvent> {
+      const step = this.script[this.turns++];
+      if (step === undefined) {
+        yield stop("end_turn");
+        return;
+      }
+      yield { type: "tool_use", id: `t${this.turns}`, name: step.name, input: step.input };
+      yield usage(1, 1);
+      yield stop("tool_use");
+    }
+  }
+
+  const withPlanTool = (provider: ModelProvider, session?: undefined) =>
+    createAgent(
+      makeConfig(provider, {
+        tools: [echoTool(), updatePlanTool()],
+        permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+      }),
+    );
+
+  it("blocks every tool except update_plan while the gate is up", async () => {
+    const provider = new ToolingProvider([
+      { name: "echo", input: { text: "one" } },
+      { name: "echo", input: { text: "two" } },
+    ]);
+    const session = withPlanTool(provider).run("t", { cwd: root });
+    session.control.requirePlan("loop: same call 3x");
+    expect(session.control.planRequired()).toBe(true);
+
+    const events = await collect(session);
+    await session.done;
+
+    const results = events.filter((e) => e.type === "tool.result");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((r) => !(r as { ok: boolean }).ok)).toBe(true);
+    expect((results[0] as { display: string }).display).toContain("requires a fresh plan");
+    // the reason is passed through so the model is told WHY, not just refused
+    expect((results[0] as { display: string }).display).toContain("same call 3x");
+  });
+
+  it("update_plan itself is never blocked, and clears the gate", async () => {
+    const provider = new ToolingProvider([
+      { name: "update_plan", input: { items: [{ id: "1", text: "do the thing", status: "in_progress" }] } },
+      { name: "echo", input: { text: "now allowed" } },
+    ]);
+    const session = withPlanTool(provider).run("t", { cwd: root });
+    session.control.requirePlan("stalled");
+
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.some((e) => e.type === "plan.updated")).toBe(true);
+    expect(session.control.planRequired()).toBe(false);
+    // the call after the plan went through
+    const echo = events.find((e) => e.type === "tool.result" && (e as { display: string }).display.includes("now allowed"));
+    expect(echo).toBeDefined();
+    expect((echo as { ok: boolean }).ok).toBe(true);
+  });
+
+  it("does nothing at all when no gate was raised", async () => {
+    const provider = new ToolingProvider([{ name: "echo", input: { text: "fine" } }]);
+    const session = withPlanTool(provider).run("t", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+    expect(session.control.planRequired()).toBe(false);
+    expect(events.filter((e) => e.type === "tool.result").every((r) => (r as { ok: boolean }).ok)).toBe(true);
+  });
+
+  it("a blocked call is still recorded as a tool.call, so the trajectory is honest", async () => {
+    const provider = new ToolingProvider([{ name: "echo", input: { text: "blocked" } }]);
+    const session = withPlanTool(provider).run("t", { cwd: root });
+    session.control.requirePlan("x");
+    const events = await collect(session);
+    await session.done;
+    expect(events.filter((e) => e.type === "tool.call")).toHaveLength(1);
+  });
+});
+
+describe("update_plan", () => {
+  it("emits plan.updated carrying the declared scope, which drift needs", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "update_plan", input: {
+          items: [{ id: "1", text: "wire it", status: "in_progress", scope: ["packages/core/src"] }],
+        } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: [updatePlanTool()],
+        permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+      }),
+    ).run("t", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const plan = events.find((e) => e.type === "plan.updated") as { items: Array<{ scope?: string[] }> } | undefined;
+    expect(plan).toBeDefined();
+    expect(plan!.items[0]!.scope).toEqual(["packages/core/src"]);
+  });
+
+  it("rejects an empty plan rather than recording one", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "update_plan", input: { items: [] } }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: [updatePlanTool()],
+        permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+      }),
+    ).run("t", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+    expect(events.some((e) => e.type === "plan.updated")).toBe(false);
+    expect(events.some((e) => e.type === "tool.result" && !(e as { ok: boolean }).ok)).toBe(true);
   });
 });

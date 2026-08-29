@@ -72,6 +72,19 @@ export interface SessionControl {
    * `session.end` is always the last line.
    */
   record(payload: SupervisorRecord): void;
+  /**
+   * PLAN §4.2's `force_replan`: block further tool calls until the agent produces a fresh
+   * `plan.updated`. Every tool except `update_plan` is denied with `reason` as the explanation,
+   * so the model is told *why* and what to do about it rather than just failing.
+   *
+   * The gate clears the moment a plan lands — including a plan emitted in the same turn — so a
+   * cooperative agent loses one tool call, not a turn. An uncooperative one keeps being denied,
+   * which is the point: `force_replan` sits above `inject_guidance` on the ladder precisely
+   * because guidance can be ignored and this cannot.
+   */
+  requirePlan(reason: string): void;
+  /** True while a `requirePlan` gate is up. */
+  planRequired(): boolean;
 }
 
 export interface Session {
@@ -166,12 +179,16 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
   const gate = new PauseGate();
   const abortController = new AbortController();
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" }> = [];
+  /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
+  let replanReason: string | null = null;
 
   // All appends go through one promise chain so events written by tools (via ctx.emit)
   // and by the loop land in the store — and in `seq` — in the order they were emitted.
   let chain: Promise<unknown> = Promise.resolve();
   let ended = false;
   const emit = (payload: EventPayload): Promise<HarnessEvent> => {
+    // a plan landing satisfies the gate, no matter which tool or path produced it
+    if (payload.type === "plan.updated") replanReason = null;
     const p = chain.then(() => store.append(id, payload)).then((e) => {
       stream.push(e);
       return e;
@@ -518,6 +535,16 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         return resultBlock(`unknown tool: ${tu.name}`, true);
       }
 
+      // the replan gate: everything except planning is refused while it is up
+      if (replanReason !== null && tu.name !== "update_plan") {
+        const display =
+          `blocked: the supervisor requires a fresh plan before more tool calls (${replanReason}). ` +
+          `Call update_plan with your revised plan, then continue.`;
+        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
+        return resultBlock(display, true);
+      }
+
       const parsed = tool.inputSchema.safeParse(tu.input);
       if (!parsed.success) {
         const display = `invalid input for ${tu.name}: ${parsed.error.message}`;
@@ -585,6 +612,10 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
         abortController.abort();
         gate.resume();
       },
+      requirePlan: (reason) => {
+        replanReason = reason;
+      },
+      planRequired: () => replanReason !== null,
       record: (payload) => {
         if (ended) return;
         // validated, not trusted: `Detector` is a public interface, and one third-party detector

@@ -60,6 +60,8 @@ export const Intervention = z.discriminatedUnion("type", [
   z.object({ type: z.literal("inject_guidance"), message: z.string() }),
   z.object({ type: z.literal("force_replan") }),
   z.object({ type: z.literal("run_grader"), rubric: z.string() }),
+  /** M6: hand the trajectory + attempts ledger to a reviewer and steer its guidance. */
+  z.object({ type: z.literal("run_reviewer"), reason: z.string() }),
   z.object({ type: z.literal("checkpoint_rollback"), toSeq: z.number().int() }),
   z.object({ type: z.literal("escalate"), question: z.string() }),
   z.object({ type: z.literal("abort"), reason: z.string() }),

@@ -3,8 +3,12 @@ import type { Detachable, Detector, Policy } from "./types.js";
 import { initialState, reduce, type StateOptions, type SupervisorState } from "./state.js";
 import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js";
 import { defaultDetectors, type DefaultDetectorOptions } from "./detectors/index.js";
+import type { Attempt, Reviewer } from "./reviewer.js";
+import type { Grader } from "./grader.js";
 
 export const DEFAULT_ESCALATE_TIMEOUT_MS = 60_000;
+/** An LLM-backed rung is bounded like any other blocking call in the observer's loop. */
+export const DEFAULT_REVIEW_TIMEOUT_MS = 90_000;
 
 /**
  * Races `work` against a timer. The timer is unref'd so a pending escalation cannot by itself
@@ -41,6 +45,22 @@ export interface AttachOptions extends StateOptions {
    * types, so this bound is the difference between a supervisor and a deadlock.
    */
   escalateTimeoutMs?: number;
+  /**
+   * PLAN §4.3/§4.4. Supplying a reviewer makes the `run_reviewer` rung reachable; its guidance
+   * is steered into the session the same way `inject_guidance` is, so the rung is "a *better*
+   * message", not a different mechanism.
+   */
+  reviewer?: Reviewer;
+  /** Supplying a grader makes `run_grader` reachable. A failing grade becomes guidance. */
+  grader?: Grader;
+  /** The task under review, needed for reviewer prompts. */
+  task?: string;
+  /** Read lazily when the reviewer runs — the ledger is on disk and usually not needed. */
+  attempts?: () => Promise<Attempt[]> | Attempt[];
+  /** Files the grader should judge. Called only when a grade is actually requested. */
+  artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
+  /** Bounds an LLM-backed rung the same way `escalate` is bounded. */
+  reviewTimeoutMs?: number;
   /** Reported rather than thrown: a detector that throws must not take the session with it. */
   onError?: (where: string, err: Error) => void;
 }
@@ -117,11 +137,13 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
 
       for (const intervention of interventions) {
         if (detached || state.ended) break;
+
         session.control.record({ type: "supervisor.intervention", intervention });
+        const active = intervention;
         try {
-          switch (intervention.type) {
+          switch (active.type) {
             case "inject_guidance":
-              session.control.steer(intervention.message, "supervisor");
+              session.control.steer(active.message, "supervisor");
               break;
             case "escalate":
               if (opts.onEscalate === undefined) {
@@ -131,7 +153,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 break;
               }
               await withTimeout(
-                Promise.resolve(opts.onEscalate(intervention.question)),
+                Promise.resolve(opts.onEscalate(active.question)),
                 opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
                 "onEscalate",
               );
@@ -139,14 +161,71 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
             case "abort":
               session.control.abort();
               break;
+            case "force_replan":
+              // real as of M6: the loop refuses every tool except `update_plan` until a fresh
+              // plan lands. This is why the rung sits above inject_guidance — guidance can be
+              // ignored, a gate cannot.
+              session.control.requirePlan(
+                intervention.type === "force_replan" && signals[0] !== undefined
+                  ? `${signals[0].type}: ${signals[0].evidence[0] ?? ""}`
+                  : "the supervisor asked for a fresh plan",
+              );
+              break;
+            case "run_reviewer": {
+              if (opts.reviewer === undefined) {
+                report("apply", new Error("run_reviewer was reached with no reviewer attached; nothing was reviewed"));
+                break;
+              }
+              const review = await withTimeout(
+                opts.reviewer.review({
+                  task: opts.task ?? "(task not supplied to the supervisor)",
+                  trajectory: state.recent,
+                  attempts: opts.attempts === undefined ? [] : await opts.attempts(),
+                }),
+                opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
+                "reviewer",
+              );
+              if (review === undefined || review.guidance.trim() === "") break;
+              // the reviewer's product is guidance, so it lands through the same `steer` channel
+              // as inject_guidance — a better message, not a different mechanism
+              const options =
+                review.directions.length === 0
+                  ? ""
+                  : `\n\nCandidate directions:\n${review.directions.map((d) => `- ${d}`).join("\n")}`;
+              session.control.steer(
+                `[supervisor: reviewer] ${review.diagnosis}\n\n${review.guidance}${options}`,
+                "supervisor",
+              );
+              break;
+            }
+            case "run_grader": {
+              if (opts.grader === undefined) {
+                report("apply", new Error("run_grader was reached with no grader attached; nothing was graded"));
+                break;
+              }
+              const artifacts = opts.artifacts === undefined ? [] : await opts.artifacts();
+              const grade = await withTimeout(
+                opts.grader.grade({ rubric: active.rubric, artifacts, trajectory: state.recent }),
+                opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
+                "grader",
+              );
+              if (grade !== undefined && !grade.pass && grade.gaps.length > 0) {
+                session.control.steer(
+                  `[supervisor: grader] The work does not yet meet the rubric:\n` +
+                    grade.gaps.map((g) => `- ${g}`).join("\n"),
+                  "supervisor",
+                );
+              }
+              break;
+            }
             default:
               report(
                 "apply",
-                new Error(`intervention "${intervention.type}" is recorded but not applied until a later milestone`),
+                new Error(`intervention "${active.type}" is recorded but not applied until a later milestone`),
               );
           }
         } catch (err) {
-          report(`apply:${intervention.type}`, err);
+          report(`apply:${active.type}`, err);
         }
       }
     }
@@ -167,6 +246,12 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   capabilities?: Capabilities;
   onEscalate?: (question: string) => void | Promise<void>;
   escalateTimeoutMs?: number;
+  reviewer?: Reviewer;
+  grader?: Grader;
+  task?: string;
+  attempts?: () => Promise<Attempt[]> | Attempt[];
+  artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
+  reviewTimeoutMs?: number;
   onError?: (where: string, err: Error) => void;
   pricing?: StateOptions["pricing"];
   windowSize?: number;
@@ -180,12 +265,27 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
   // the handler's presence is ground truth for the escalate rung, so it is applied *after* any
   // caller-declared capabilities rather than before — declaring `escalate: true` with no handler
   // would otherwise buy a rung that silently does nothing
-  const capabilities: Capabilities = { ...(opts.capabilities ?? {}), escalate: opts.onEscalate !== undefined };
+  // Capabilities are derived from what was actually supplied, applied AFTER any caller-declared
+  // ones: declaring a rung whose machinery is absent buys an intervention that silently does
+  // nothing, which is the failure mode the M4 review caught for `escalate`.
+  const capabilities: Capabilities = {
+    ...(opts.capabilities ?? {}),
+    escalate: opts.onEscalate !== undefined,
+    reviewer: opts.reviewer !== undefined,
+    // force_replan needs no collaborator — core's replan gate is always available
+    forceReplan: opts.capabilities?.forceReplan ?? true,
+  };
   const attachOpts: AttachOptions = {
     detectors: defaultDetectors(opts),
     policy: new LadderPolicy({ ...(opts.ladder ?? {}), capabilities }),
   };
   if (opts.onEscalate !== undefined) attachOpts.onEscalate = opts.onEscalate;
+  if (opts.reviewer !== undefined) attachOpts.reviewer = opts.reviewer;
+  if (opts.grader !== undefined) attachOpts.grader = opts.grader;
+  if (opts.task !== undefined) attachOpts.task = opts.task;
+  if (opts.attempts !== undefined) attachOpts.attempts = opts.attempts;
+  if (opts.artifacts !== undefined) attachOpts.artifacts = opts.artifacts;
+  if (opts.reviewTimeoutMs !== undefined) attachOpts.reviewTimeoutMs = opts.reviewTimeoutMs;
   if (opts.escalateTimeoutMs !== undefined) attachOpts.escalateTimeoutMs = opts.escalateTimeoutMs;
   if (opts.onError !== undefined) attachOpts.onError = opts.onError;
   if (opts.pricing !== undefined) attachOpts.pricing = opts.pricing;
