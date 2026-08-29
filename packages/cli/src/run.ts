@@ -1,14 +1,12 @@
 import { createInterface } from "node:readline/promises";
 import {
-  AnthropicProvider,
-  OpenAICompatibleProvider,
-  OpenAIChatGPTProvider,
   createAgent,
   builtinTools,
   defaultRules,
   RulePolicy,
   SessionStore,
   PermissionClass,
+  type AnyTool,
   type Budget,
   type Decision,
   type ModelProvider,
@@ -18,16 +16,23 @@ import {
   type Session,
 } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
+import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
+import { FileMemoryStore, FileRawStore, indexInjection, memoryTools } from "@agentkitai/agentrig-memory";
+import { join } from "node:path";
 
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+export { DEFAULT_ANTHROPIC_MODEL };
 
-export interface RunOptions {
+/**
+ * PLAN §3.1: session logs are a raw memory source, so they live under `raw/sessions/` where
+ * ingest looks for them. They used to be written to `.agentrig/sessions`, which memory ingest
+ * could never find — the run → ingest flow was broken out of the box.
+ */
+export const DEFAULT_SESSIONS_DIR = ".agentrig/raw/sessions";
+
+export interface RunOptions extends ProviderOptions {
   root: string;
   json?: boolean;
   headless?: boolean;
-  provider: string;
-  model: string;
-  baseUrl?: string;
   resume?: string;
   system?: string;
   allow?: string[];
@@ -39,39 +44,7 @@ export interface RunOptions {
   priceIn?: string;
   priceOut?: string;
   maxTokensPerTurn: string;
-  /** True when the model came from --model or AGENTRIG_MODEL rather than the built-in default. */
-  modelExplicit?: boolean;
-}
-
-function buildProvider(opts: RunOptions): ModelProvider {
-  if (opts.provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    return new AnthropicProvider({ apiKey, model: opts.model });
-  }
-  if (opts.provider === "openai") {
-    if (opts.modelExplicit !== true) {
-      throw new Error("--model is required with --provider openai");
-    }
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey && opts.baseUrl === undefined) {
-      throw new Error("OPENAI_API_KEY is not set (or pass --base-url for a local server)");
-    }
-    return new OpenAICompatibleProvider({
-      model: opts.model,
-      ...(apiKey ? { apiKey } : {}),
-      ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
-    });
-  }
-  if (opts.provider === "openai-chatgpt") {
-    if (opts.modelExplicit !== true) {
-      throw new Error("--model is required with --provider openai-chatgpt (e.g. gpt-5.6-sol)");
-    }
-    // experimental subscription auth; tokens come from `agentrig login openai-chatgpt`
-    console.error("Warning: --provider openai-chatgpt is experimental and uses an undocumented ChatGPT backend.");
-    return new OpenAIChatGPTProvider({ model: opts.model });
-  }
-  throw new Error(`unknown provider "${opts.provider}" (anthropic | openai | openai-chatgpt)`);
+  memory?: string;
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -163,14 +136,39 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     return;
   }
 
+  // index-first retrieval (PLAN §3.2): the wiki catalog rides in the system prompt, and the
+  // agent opens only what it needs via memory_search / memory_read.
+  let memoryIndex = "";
+  let memoryToolset: AnyTool[] = [];
+  if (opts.memory !== undefined) {
+    const memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
+    memoryIndex = await indexInjection(memoryStore).catch(() => "");
+    // the injected index tells the model to call memory_read/memory_search, so the tools have
+    // to actually be registered — otherwise it is advertising tools that do not exist
+    memoryToolset = memoryTools({ store: memoryStore, raw: new FileRawStore({ root: opts.memory }) });
+  }
+
   const interactive = !opts.headless && process.stdin.isTTY === true;
   const agent = createAgent({
     provider,
-    tools: builtinTools(),
+    tools: [...builtinTools(), ...memoryToolset],
     // deny rules first so an explicit deny always wins; `ask` prompts when interactive, else denies.
-    permissions: new RulePolicy([...toRules(opts.deny, "deny"), ...toRules(opts.allow, "allow"), ...defaultRules]),
+    permissions: new RulePolicy([
+      ...toRules(opts.deny, "deny"),
+      ...toRules(opts.allow, "allow"),
+      // memory reads are confined to the wiki root by the store itself, not by cwd, so they
+      // cannot be expressed as a cwdOnly rule; allow them by tool name instead
+      ...(memoryToolset.length === 0
+        ? []
+        : [
+            { tool: "memory_search", decision: "allow" as const },
+            { tool: "memory_read", decision: "allow" as const },
+          ]),
+      ...defaultRules,
+    ]),
     // a function so a resumed session gets its snapshot's cwd, not this process's
-    systemPrompt: (ctx) => opts.system ?? defaultSystemPrompt(ctx.cwd),
+    systemPrompt: (ctx) =>
+      [opts.system ?? defaultSystemPrompt(ctx.cwd), memoryIndex].filter((s) => s !== "").join("\n\n"),
     store: new SessionStore({ root: opts.root }),
     budget,
     ...(pricing === undefined ? {} : { pricing }),

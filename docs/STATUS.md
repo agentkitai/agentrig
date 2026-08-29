@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M3**
+Current milestone: **M3b**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -8,8 +8,8 @@ Current milestone: **M3**
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
 | 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
-| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
-| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
+| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
+| 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | next |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
@@ -157,6 +157,99 @@ account has credits.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
   many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
   static env seed sidesteps this only while the access token is still valid (~hours).
+
+## M3 notes
+
+- **Wiki on disk, no database.** `FileMemoryStore` over plain markdown: `index.md` is the
+  catalog *and* the reservation ledger, `log.md` the append-only chronology, pages under
+  `sources/ entities/ concepts/ analyses/`. Frontmatter is a deliberately tiny hand-rolled
+  subset (scalars + inline lists) so the wiki needs no YAML dependency and stays human-diffable;
+  a malformed page throws rather than being half-read. Index rows escape `|` and parse on
+  unescaped pipes only — a summary containing a pipe used to corrupt the row.
+- **Reservation is an O_EXCL page placeholder.** `reserve(slug, claimant, type)` creates the
+  page atomically; a second claimant gets `exists` and is appended to `claimedBy` rather than
+  overwriting the first. The LLM call happens outside the claim, per PLAN §3.2.
+- **Retrieval is additive by construction.** `unionRetrieve` returns index-selected pages ∪ BM25
+  top-k, and index picks are never subject to the BM25 `k` cutoff — so recall cannot regress
+  below index-only. Hits carry `via: index | bm25 | both`. BM25 searches slug and aliases as well
+  as the body, so "auth" finds `auth-module`.
+- **Coverage is enforced, not hoped for.** Ingest splits the transcript into character-bounded
+  spans (so one huge tool result can't blow the window) and every span must return either facts
+  or an explicit `nothingDurable`. A span the model fails to distill throws and names the line
+  range — a silent coverage hole is the failure this exists to prevent. `model.delta` events are
+  dropped from the transcript as noise; tool calls, results, file changes, errors and steers are kept.
+- **Duplicate captures** are settled by prefix comparison against a `capture:prefix` marker in
+  the source page: a re-ingest of identical content is skipped, a grown transcript supersedes the
+  earlier capture, and existing fact lines are never duplicated on re-ingest.
+- **`raw/` is immutable in practice, not just in doctrine.** Attempts are one immutable file each
+  (a duplicate id is refused), `addDoc` never overwrites (name collisions get a numeric suffix),
+  and `isSessionLog` excludes core's `*.snapshot.json` / `*.lock` working files.
+- **Pins store the claim, not a diff**, so re-application survives rewording; `claimSatisfied`
+  tolerates one dropped content word. A contradicted pin becomes `conflict` and is surfaced —
+  never silently dropped — and a missing anchor becomes `orphaned`.
+- **Index injection is bounded.** The catalog rides in the system prompt (`run --memory <dir>`);
+  past the cap the tail becomes "…and N more pages; use memory_search", so a large wiki degrades
+  to search rather than eating the context window.
+- CLI: `agentrig memory init|ls|show|search|ingest|lint`. `lint` currently reports the pin
+  re-check and unfilled reservations; the full dream lint is M5. Provider construction was
+  extracted to `provider.ts` so `run`, `sessions resume`, and `memory ingest` share it and the
+  CLI stays thin.
+- Ingest is exercised with a scripted fake `ModelProvider`; as with M1/M2 the model call is one
+  seam and the suite stays network-free.
+
+### M3 hardening (from the adversarial review)
+
+The review found three of the milestone's headline guarantees were not actually kept, and two
+defects that meant M3 did not run at all. All fixed, each with a regression test:
+
+- **`index.md` was a lost-update race.** `upsertIndex` is a read-modify-write; two concurrent
+  ingests deleted each other's catalog rows, leaving pages on disk permanently invisible to
+  index-first retrieval — the exact scenario `reserve` exists for. Index mutation is now
+  serialized in-process and behind an `index.md.lock` across processes (stale locks are broken
+  after 10s). `reserve` also re-adopts a page whose row went missing instead of returning
+  `exists` and leaving it orphaned.
+- **`memory ingest` could never find a session `run` wrote.** Sessions defaulted to
+  `.agentrig/sessions` while ingest reads `raw/sessions` per PLAN §3.1. The default is now
+  `.agentrig/raw/sessions`, so the run → ingest flow works out of the box.
+- **The memory tools were never registered.** `run --memory` injected an index telling the model
+  to call `memory_read`/`memory_search` while the agent only had the six built-ins. They are now
+  registered when `--memory` is set, with the read-class ones allowed by tool name (they are
+  confined to the wiki root by the store, which a `cwdOnly` rule cannot express).
+- **Source-typed facts were counted and written nowhere.** The prompt offers `pageType: "source"`
+  and the schema accepts it, but the target loop skipped them while every accounting surface
+  reported success. They now land on the session's own page.
+- **"Explicitly closed" was not enforced.** `nothingDurable || facts.length === 0` collapsed
+  "the model told me the span was empty" into "the model gave me nothing" — so a truncated reply
+  read as covered. Now: an explicit `nothingDurable` is coverage; facts are coverage; a summary
+  with no facts is coverage; and a reply with none of those throws, naming the span. Summaries
+  are recorded before the branch so one can never be discarded.
+- **A diverged re-ingest destroyed the source page.** The prefix check only decided skip-vs-not;
+  the source body was replaced unconditionally. It now merges unless the capture was provably
+  superseded, keeping PLAN §3.2's "unique content is never deleted" true.
+- **Pins could not see a reversal, and nothing re-checked them.** The search tokenizer drops
+  "not"/"never", so a page rewritten to the opposite claim read as `kept`. `claimSatisfied` now
+  compares clause-scoped negation polarity and requires short claims to match in full — biased
+  toward a false `conflict` over a false `kept`, since a silent loss is the failure pins exist to
+  prevent. `recheckPins` now runs on every regeneration (ingest and `memory_write`), surfacing
+  conflicts in the result rather than waiting for someone to run `memory lint`.
+- **`raw/` could be overwritten.** `addDoc` had a stat/write TOCTOU that let concurrent calls
+  clobber a source; it now creates exclusively and advances the suffix on `EEXIST`. Attempts are
+  written temp+rename, and one torn file is reported via `readAttempts().corrupt` instead of
+  throwing a raw `SyntaxError` that took down every ingest.
+- **`memory_read` escaped the wiki root.** `../` resolved straight out, and the tool declares no
+  `paths()` (a wiki-relative path would wrongly satisfy a `cwdOnly` rule), so enabling it granted
+  unconfined reads. The store now rejects any path escaping its root.
+- **Retrieval: `k` was not a bound.** Index picks were unbounded, so one common word could return
+  every page. The index side is now ranked by term overlap and capped at `k`. The honest
+  guarantee is therefore *"index-matched pages always outrank BM25-only ones, and the index side
+  is ranked rather than arbitrarily truncated"* — not "index picks are never dropped".
+- Smaller: `extractJson` scans top-level balanced values and keeps the richest (a `{}` in prose
+  used to win, and a nested object could outrank the payload); coverage spans report original
+  transcript line numbers; the capture marker is stripped from search text and snippets; hyphenated
+  slugs are indexed by their parts (`auth` finds `auth-module`) while queries stay exact;
+  frontmatter list items survive commas and unknown keys survive a rewrite; `indexInjection`'s cap
+  covers the header and tail; `applyPinChecks` merges instead of replacing; `memory search -k`
+  validates its argument; `memory show` reports a non-page instead of dumping a stack trace.
 
 ## Decided
 
