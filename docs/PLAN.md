@@ -206,12 +206,31 @@ documented as experimental. Guardrails, all locked regardless of spike outcome:
   third-party tools (gray area); each user opts in for their own account. AgentRig never ships
   or logs subscription tokens; they live in the user's own config/env like any credential.
 
-**Spike first (no adapter code until it reports).** Open question the spike answers: does the
-subscription-backed endpoint speak Chat Completions (reuse the M2 `OpenAICompatibleProvider`
-with a different base URL + bearer) or a bespoke/"Responses" protocol (a new provider)? Plus:
-device-code flow + token storage/refresh, which models are reachable, and whether a
-one-time-captured token can power unattended cloud sessions. If the spike finds it intractable
-or too unstable, M2.5 is dropped and metered API keys remain the only OpenAI path.
+**Spike verdict (2026-08-29, from the Apache-2.0 `openai/codex` source).**
+
+- **A new provider, not a variant of the M2 adapter.** The subscription-backed endpoint is
+  `POST https://chatgpt.com/backend-api/codex/responses` — the **Responses API**, not Chat
+  Completions. It requires `Authorization: Bearer <oauth access token>` plus an
+  `originator: codex_cli_rs` header, a Codex `User-Agent`, and `ChatGPT-Account-ID`. So it needs:
+  a Responses request/response mapper, SSE parsing, and a token-lifecycle manager (device-code
+  login against `auth.openai.com`, plus **refresh with rotation persisted to writable storage**).
+- **It requires impersonating Codex.** The backend whitelists `originator`; a non-Codex value
+  returns 403 (this is what broke third-party clients historically). Sending `codex_cli_rs`
+  means claiming to be OpenAI's first-party client — the part most exposed to being read as
+  circumvention, and the gate most likely to be tightened.
+- **Effort:** medium — a new adapter (days to ~2 weeks); the token lifecycle and Responses
+  mapping are the real work, portable from Codex since it is Apache-2.0.
+- **Unattended cloud use:** a one-time device-code login yields a token bundle, but a *static*
+  capture dies at access-token expiry (~hours); durable runs need us to refresh the (rotating)
+  refresh token in writable storage with a single owner to avoid refresh races.
+- **ToS:** OpenAI is currently **silent** (no explicit prohibition found; tacit "use your
+  subscription wherever you like"); **Anthropic explicitly banned and server-side-enforced the
+  equivalent for Claude in Jan–Feb 2026** — the live precedent that a vendor flips from silence
+  to enforcement fast. This is a per-user, own-account judgment call, made with eyes open.
+
+Status: spike complete; **build-vs-defer is a human decision.** It does **not** shortcut
+dogfooding — a new adapter is days of work vs. minutes for metered credits — so it is a
+deliberate "bring your subscription" feature, not the way to unblock M3.
 
 ---
 

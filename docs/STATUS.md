@@ -7,7 +7,7 @@ Current milestone: **M3**
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | done (2026-08-29) |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
-| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | spike in progress |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | spike done — new Responses-API adapter needed; build-vs-defer pending |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | next |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | |
