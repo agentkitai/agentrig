@@ -88,6 +88,15 @@ describe("snapshots", () => {
     expect(await store.readSnapshot("s9")).toEqual(snapshot);
   });
 
+  it("advisory lock: second acquire fails until released", async () => {
+    const store = new SessionStore({ root });
+    const release = await store.acquireLock("s11");
+    await expect(store.acquireLock("s11")).rejects.toThrow(/locked by another process/);
+    await release();
+    const again = await store.acquireLock("s11");
+    await again();
+  });
+
   it("keeps snapshots out of the session listing", async () => {
     const store = new SessionStore({ root, newId: () => "s10" });
     const id = store.create();

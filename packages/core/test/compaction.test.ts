@@ -66,6 +66,28 @@ describe("summarizeOlderTurns", () => {
     expect(tail).toEqual(turn(3));
   });
 
+  it("returns the input unchanged when the summary comes back empty", async () => {
+    const messages: Message[] = [user("task"), ...turn(1), ...turn(2), ...turn(3), ...turn(4), ...turn(5)];
+    const s = summarizeOlderTurns({ keepLastMessages: 2 });
+    expect(await s.compact(messages, summaryProvider(""))).toBe(messages);
+  });
+
+  it("passes the session signal through to the summarization call", async () => {
+    let seen: AbortSignal | null = null;
+    const provider = summaryProvider();
+    const wrapped: ModelProvider = {
+      ...provider,
+      stream(req, signal) {
+        seen = signal;
+        return provider.stream(req, signal);
+      },
+    };
+    const messages: Message[] = [user("task"), ...turn(1), ...turn(2), ...turn(3), ...turn(4), ...turn(5)];
+    const ac = new AbortController();
+    await summarizeOlderTurns({ keepLastMessages: 2 }).compact(messages, wrapped, ac.signal);
+    expect(seen).toBe(ac.signal);
+  });
+
   it("returns short conversations unchanged without calling the provider", async () => {
     const provider = summaryProvider();
     const messages: Message[] = [user("task"), ...turn(1)];

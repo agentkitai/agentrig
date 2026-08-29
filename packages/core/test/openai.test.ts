@@ -48,6 +48,15 @@ describe("toOpenAIRequest", () => {
     ]);
   });
 
+  it("uses max_completion_tokens by default and max_tokens when asked", () => {
+    const modern = toOpenAIRequest(baseReq, "m") as Record<string, unknown>;
+    expect(modern.max_completion_tokens).toBe(1024);
+    expect(modern.max_tokens).toBeUndefined();
+    const legacy = toOpenAIRequest(baseReq, "m", "max_tokens") as Record<string, unknown>;
+    expect(legacy.max_tokens).toBe(1024);
+    expect(legacy.max_completion_tokens).toBeUndefined();
+  });
+
   it("maps an assistant message with only tool calls to null content", () => {
     const body = toOpenAIRequest(
       {
@@ -108,6 +117,18 @@ describe("parseOpenAISse", () => {
     });
   });
 
+  it("does not duplicate the function name when a proxy resends it every chunk", async () => {
+    async function* resent() {
+      yield sse([
+        { choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "bash", arguments: '{"a"' } }] } }] },
+        { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "bash", arguments: ":1}" } }] } }] },
+        { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+      ]);
+    }
+    const events = await collect(parseOpenAISse(resent()));
+    expect(events[0]).toEqual({ type: "tool_use", id: "c1", name: "bash", input: { a: 1 } });
+  });
+
   it("guards truncated tool-call JSON instead of throwing", async () => {
     async function* truncated() {
       yield sse([
@@ -143,7 +164,20 @@ describe("OpenAICompatibleProvider.stream", () => {
 
     expect(captured!.url).toBe("https://api.openai.com/v1/chat/completions");
     expect((captured!.init.headers as Record<string, string>).authorization).toBe("Bearer sk-k");
+    expect(JSON.parse(String(captured!.init.body)).max_completion_tokens).toBe(1024);
     expect(events.at(-1)).toEqual({ type: "stop", reason: "tool_use" });
+  });
+
+  it("sends max_tokens to non-OpenAI base URLs", async () => {
+    let body = "";
+    const fetchFn: typeof fetch = async (_url, init) => {
+      body = String(init!.body);
+      return new Response(sse([{ choices: [{ delta: { content: "hi" }, finish_reason: "stop" }] }]), { status: 200 });
+    };
+    const provider = new OpenAICompatibleProvider({ model: "local", baseUrl: "http://localhost:11434/v1", fetchFn });
+    await collect(provider.stream(baseReq, new AbortController().signal));
+    expect(JSON.parse(body).max_tokens).toBe(1024);
+    expect(JSON.parse(body).max_completion_tokens).toBeUndefined();
   });
 
   it("omits the auth header for keyless local servers", async () => {

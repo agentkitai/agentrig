@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
-import { runCommand, type RunOptions } from "./run.js";
+import { DEFAULT_ANTHROPIC_MODEL, runCommand, type RunOptions } from "./run.js";
 
 const program = new Command();
 program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
@@ -12,7 +12,7 @@ function withRunOptions(cmd: Command): Command {
     .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
     .option("--json", "emit raw event JSONL to stdout")
     .option("-p, --provider <provider>", "model provider: anthropic | openai (OpenAI-compatible)", "anthropic")
-    .option("-m, --model <model>", "model id", process.env.AGENTRIG_MODEL ?? "claude-sonnet-5")
+    .option("-m, --model <model>", "model id", process.env.AGENTRIG_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
     .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)")
     .option("-r, --root <dir>", "sessions directory", ".agentrig/sessions")
     .option("--system <prompt>", "override the system prompt")
@@ -32,11 +32,18 @@ function withRunOptions(cmd: Command): Command {
     .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192");
 }
 
+// AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice
+function modelExplicit(cmd: Command): boolean {
+  return cmd.getOptionValueSource("model") !== "default" || process.env.AGENTRIG_MODEL !== undefined;
+}
+
 withRunOptions(
   program.command("run <task>").description("Run the agent on a task (headless; the interactive TUI lands in M7)"),
 )
   .option("--resume <id>", "continue an existing session from its snapshot")
-  .action(async (task: string, opts: RunOptions) => runCommand(task, opts));
+  .action(async (task: string, opts: RunOptions, cmd: Command) =>
+    runCommand(task, { ...opts, modelExplicit: modelExplicit(cmd) }),
+  );
 
 function collect(value: string, prev: string[]): string[] {
   return [...prev, value];
@@ -48,8 +55,8 @@ withRunOptions(
   sessions
     .command("resume <id> [task...]")
     .description("Continue a session from its snapshot; the task becomes the next user message"),
-).action(async (id: string, taskWords: string[], opts: RunOptions) =>
-  runCommand(taskWords.join(" ") || "Continue the task.", { ...opts, resume: id }),
+).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) =>
+  runCommand(taskWords.join(" ") || "Continue the task.", { ...opts, resume: id, modelExplicit: modelExplicit(cmd) }),
 );
 
 sessions

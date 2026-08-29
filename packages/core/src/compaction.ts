@@ -3,7 +3,8 @@ import type { ModelProvider } from "./provider.js";
 
 export interface CompactionStrategy {
   shouldCompact(usage: { tokens: number; window: number }): boolean;
-  compact(messages: Message[], provider: ModelProvider): Promise<Message[]>;
+  /** `signal` is the session's abort signal — a strategy must stop summarizing when it fires. */
+  compact(messages: Message[], provider: ModelProvider, signal?: AbortSignal): Promise<Message[]>;
 }
 
 export interface SummarizeOptions {
@@ -53,7 +54,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
   return {
     shouldCompact: ({ tokens, window }) => tokens > threshold * window,
 
-    async compact(messages, provider) {
+    async compact(messages, provider, signal) {
       let cut = messages.length - keep;
       // never orphan a tool_result: pull the boundary back until the kept tail doesn't
       // start with results whose tool_use would be summarized away
@@ -71,10 +72,12 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
           tools: [],
           maxTokens: maxSummaryTokens,
         },
-        new AbortController().signal,
+        signal ?? new AbortController().signal,
       )) {
         if (ev.type === "text_delta") summary += ev.text;
       }
+      // an empty summary (refusal, degenerate stream) must not replace real history with nothing
+      if (summary.trim() === "") return messages;
 
       return [
         messages[0]!,

@@ -64,11 +64,23 @@ available in the environment.
   tool_result is orphaned), and summarizes the middle via a direct provider call — that call is
   not metered by the budget. Emits `context.compact`.
 - Resume: the loop writes a snapshot (`<id>.snapshot.json`, atomic overwrite) after every
-  completed turn and at session end; `run(task, {resume: id})` restores messages/turns/usage
+  completed turn and at session end; `run(task, {resume: id})` restores messages/turns/usage/usd
   from it, appends to the same JSONL with contiguous `seq`, and emits `session.resume`. The log
   stays the source of truth — the snapshot is a cache; resuming without one fails loudly.
   CLI: `agentrig sessions resume <id> [task...]` and `run --resume <id>`; `--provider openai`
   with `--base-url` for local servers.
+- Hardening from the M2 adversarial review: compaction is raced against abort and gets the
+  session signal (a hung or failing summarization call can no longer wedge or kill a session;
+  no-progress compaction warns once and stops retrying); snapshots synthesize error
+  tool_results for a trailing unanswered `tool_use` so interrupted sessions stay resumable, and
+  a resumed run that completed no turn never overwrites the prior snapshot; resume takes an
+  advisory `<id>.lock` so concurrent resumes fail loudly instead of corrupting the log's seq
+  order (a crashed holder's lock must be deleted by hand — the error names the path); the
+  OpenAI adapter sends `max_completion_tokens` against api.openai.com (`max_tokens` for other
+  base URLs, `maxTokensParam` to override); when a provider reports no usage the loop warns
+  once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
+  resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
+  raising the budget.
 
 ## Decided
 

@@ -38,6 +38,8 @@ export interface RunOptions {
   priceIn?: string;
   priceOut?: string;
   maxTokensPerTurn: string;
+  /** True when the model came from --model or AGENTRIG_MODEL rather than the built-in default. */
+  modelExplicit?: boolean;
 }
 
 function buildProvider(opts: RunOptions): ModelProvider {
@@ -47,7 +49,7 @@ function buildProvider(opts: RunOptions): ModelProvider {
     return new AnthropicProvider({ apiKey, model: opts.model });
   }
   if (opts.provider === "openai") {
-    if (opts.model === DEFAULT_ANTHROPIC_MODEL) {
+    if (opts.modelExplicit !== true) {
       throw new Error("--model is required with --provider openai");
     }
     const apiKey = process.env.OPENAI_API_KEY;
@@ -180,6 +182,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
       else if (e.type !== "model.delta") console.log(renderEvent(e));
     }
     const summary = await session.done;
+    if (summary.error !== undefined) console.error(summary.error);
     if (!opts.json) {
       console.log(
         `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +

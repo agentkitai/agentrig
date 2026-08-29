@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { z } from "zod";
@@ -24,6 +24,7 @@ export const SessionSnapshot = z.object({
   cwd: z.string(),
   turns: z.number().int().nonnegative(),
   usage: Usage,
+  usd: z.number().nonnegative().optional(),
   messages: z.array(MessageSchema),
   ts: z.number().int(),
 });
@@ -78,6 +79,35 @@ export class SessionStore {
     const tmp = `${path}.tmp`;
     await writeFile(tmp, JSON.stringify(SessionSnapshot.parse(snapshot)), "utf8");
     await rename(tmp, path);
+  }
+
+  lockPathFor(sessionId: string): string {
+    return join(this.root, `${sessionId}.lock`);
+  }
+
+  /**
+   * Advisory per-session lock so two concurrent resumes can't interleave appends and corrupt
+   * the log's seq order. Throws when the lock is already held; returns the release function.
+   * A crashed holder leaves the file behind — the error names it so a human can remove it.
+   */
+  async acquireLock(sessionId: string): Promise<() => Promise<void>> {
+    await mkdir(this.root, { recursive: true });
+    const path = this.lockPathFor(sessionId);
+    try {
+      const handle = await open(path, "wx");
+      await handle.writeFile(`pid ${process.pid} at ${new Date().toISOString()}\n`, "utf8");
+      await handle.close();
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(
+          `session ${sessionId} is locked by another process; if that process is gone, delete ${path}`,
+        );
+      }
+      throw err;
+    }
+    return async () => {
+      await rm(path, { force: true });
+    };
   }
 
   /** Null when no snapshot exists; a corrupt snapshot throws rather than resuming from garbage. */

@@ -15,6 +15,12 @@ export interface OpenAIProviderOptions {
   baseUrl?: string;
   contextWindow?: number;
   fetchFn?: typeof fetch;
+  /**
+   * Which request key carries the token cap. OpenAI deprecated `max_tokens` and current
+   * models reject it, so the default is `max_completion_tokens` against api.openai.com and
+   * `max_tokens` for other base URLs (what most local servers still expect).
+   */
+  maxTokensParam?: "max_tokens" | "max_completion_tokens";
 }
 
 type JsonObject = Record<string, unknown>;
@@ -28,12 +34,16 @@ function toolResultText(content: string | ContentBlock[]): string {
     .join("\n");
 }
 
-export function toOpenAIRequest(req: ModelRequest, model: string): JsonObject {
+export function toOpenAIRequest(
+  req: ModelRequest,
+  model: string,
+  maxTokensParam: "max_tokens" | "max_completion_tokens" = "max_completion_tokens",
+): JsonObject {
   const messages: JsonObject[] = [{ role: "system", content: req.system }];
   for (const m of req.messages) messages.push(...toOpenAIMessages(m));
   const body: JsonObject = {
     model,
-    max_tokens: req.maxTokens,
+    [maxTokensParam]: req.maxTokens,
     messages,
     stream: true,
     stream_options: { include_usage: true },
@@ -58,7 +68,7 @@ function toOpenAIMessages(m: Message): JsonObject[] {
       .join("");
     const toolCalls = m.content
       .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
-      .map((b) => ({ id: b.id, type: "function", function: { name: b.name, arguments: JSON.stringify(b.input) } }));
+      .map((b) => ({ id: b.id, type: "function", function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) } }));
     const msg: JsonObject = { role: "assistant", content: text === "" ? null : text };
     if (toolCalls.length > 0) msg.tool_calls = toolCalls;
     out.push(msg);
@@ -120,11 +130,20 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
         events.push({ type: "text_delta", text: delta.content });
       }
       for (const tc of (delta?.tool_calls as JsonObject[] | undefined) ?? []) {
-        const index = Number(tc.index ?? 0);
+        // conforming servers always send index; without it, route by id, else to the latest call
+        let index: number;
+        if (typeof tc.index === "number") index = tc.index;
+        else if (typeof tc.id === "string" && tc.id !== "") {
+          const byId = [...toolCalls.entries()].find(([, e]) => e.id === tc.id);
+          index = byId === undefined ? toolCalls.size : byId[0];
+        } else {
+          index = toolCalls.size === 0 ? 0 : Math.max(...toolCalls.keys());
+        }
         const entry = toolCalls.get(index) ?? { id: "", name: "", args: "" };
         if (typeof tc.id === "string" && tc.id !== "") entry.id = tc.id;
         const fn = tc.function as JsonObject | undefined;
-        if (typeof fn?.name === "string") entry.name += fn.name;
+        // assign, don't concatenate: some proxies resend the full name in every chunk
+        if (typeof fn?.name === "string" && fn.name !== "" && entry.name === "") entry.name = fn.name;
         if (typeof fn?.arguments === "string") entry.args += fn.arguments;
         toolCalls.set(index, entry);
       }
@@ -188,12 +207,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
+  private readonly maxTokensParam: "max_tokens" | "max_completion_tokens";
 
   constructor(opts: OpenAIProviderOptions) {
     this.model = opts.model;
     this.apiKey = opts.apiKey;
     this.baseUrl = (opts.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
+    this.maxTokensParam =
+      opts.maxTokensParam ?? (this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens");
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -208,7 +230,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const res = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(toOpenAIRequest(req, this.model)),
+      body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
       signal,
     });
     if (!res.ok || !res.body) {
