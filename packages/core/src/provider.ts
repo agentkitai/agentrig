@@ -17,11 +17,14 @@ export interface ModelRequest {
   cacheHints?: { systemPrefix?: boolean };
 }
 
+export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";
+
 export type ModelEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "usage"; usage: Usage }
-  | { type: "stop"; reason: "end_turn" | "tool_use" | "max_tokens" | "error" };
+  /** `raw` carries the provider's verbatim stop reason when it doesn't map cleanly. */
+  | { type: "stop"; reason: StopReason; raw?: string };
 
 export interface ModelProvider {
   id: string;

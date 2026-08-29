@@ -3,3 +3,7 @@ export * from "./messages.js";
 export * from "./provider.js";
 export * from "./tool.js";
 export * from "./session-store.js";
+export * from "./permissions.js";
+export * from "./agent.js";
+export * from "./providers/anthropic.js";
+export * from "./tools/index.js";

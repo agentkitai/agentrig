@@ -1,0 +1,491 @@
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { z } from "zod";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  builtinTools,
+  createAgent,
+  RulePolicy,
+  SessionStore,
+  toToolSpec,
+  type Session,
+  type AgentConfig,
+  type AnyTool,
+  type HarnessEvent,
+  type ModelEvent,
+  type ModelProvider,
+  type ModelRequest,
+} from "@agentkitai/agentrig-core";
+
+/** Scripted provider: each run() turn consumes the next ModelEvent[] — no network anywhere. */
+class FakeProvider implements ModelProvider {
+  readonly id = "fake";
+  readonly model = "fake-1";
+  readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
+  readonly requests: ModelRequest[] = [];
+  constructor(private readonly turns: ModelEvent[][]) {}
+  async *stream(req: ModelRequest, _signal: AbortSignal): AsyncIterable<ModelEvent> {
+    this.requests.push(structuredClone(req));
+    const turn = this.turns.shift();
+    if (!turn) throw new Error("FakeProvider: no scripted turn left");
+    yield* turn;
+  }
+}
+
+const echoTool = (): AnyTool => ({
+  name: "echo",
+  description: "echo text back",
+  inputSchema: z.object({ text: z.string() }),
+  permission: "read",
+  execute: async (input: { text: string }) => ({ output: input.text, display: `echo: ${input.text}` }),
+});
+
+const usage = (input: number, output: number): ModelEvent => ({ type: "usage", usage: { input, output } });
+const stop = (reason: "end_turn" | "tool_use" | "max_tokens" | "error"): ModelEvent => ({ type: "stop", reason });
+
+let root: string;
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "agentrig-agent-"));
+});
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+function makeConfig(provider: ModelProvider, overrides: Partial<AgentConfig> = {}): AgentConfig {
+  let t = 1000;
+  return {
+    provider,
+    tools: [echoTool()],
+    permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+    systemPrompt: "test system",
+    store: new SessionStore({ root, now: () => t, newId: () => "sess1" }),
+    now: () => t++,
+    ...overrides,
+  };
+}
+
+async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promise<HarnessEvent[]> {
+  const out: HarnessEvent[] = [];
+  for await (const e of session.events) out.push(e);
+  return out;
+}
+
+describe("agent loop", () => {
+  it("runs a tool turn then finishes, with every event in the session store", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "text_delta", text: "let me " },
+        { type: "text_delta", text: "check" },
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } },
+        usage(10, 5),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "done" }, usage(20, 3), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider);
+    const session = createAgent(config).run("say hi", { cwd: "/w" });
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(events.map((e) => e.type)).toEqual([
+      "session.start",
+      "turn.start",
+      "model.request",
+      "model.delta",
+      "model.delta",
+      "model.response",
+      "permission.request",
+      "permission.decision",
+      "tool.call",
+      "tool.result",
+      "turn.end",
+      "turn.start",
+      "model.request",
+      "model.delta",
+      "model.response",
+      "turn.end",
+      "session.end",
+    ]);
+    expect(events[0]).toMatchObject({ task: "say hi", provider: "fake", model: "fake-1", cwd: "/w" });
+    expect(events.find((e) => e.type === "tool.result")).toMatchObject({ id: "t1", ok: true, display: "echo: hi" });
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "done" });
+    expect(summary).toMatchObject({ id: "sess1", reason: "done", turns: 2, usage: { input: 30, output: 8 } });
+
+    // the store is the source of truth: the log replays identically to what subscribers saw
+    expect(await config.store.readAll("sess1")).toEqual(events);
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i));
+
+    // the second model request carries the assistant tool_use and our tool_result back
+    expect(provider.requests[1]!.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "say hi" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "let me check" },
+          { type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } },
+        ],
+      },
+      { role: "user", content: [{ type: "tool_result", toolUseId: "t1", content: "echo: hi" }] },
+    ]);
+    expect(provider.requests[0]!.system).toBe("test system");
+  });
+
+  it("denies by policy: tool.denied event, error tool_result to the model", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(
+      makeConfig(provider, { permissions: new RulePolicy([{ tool: "echo", decision: "deny" }]) }),
+    ).run("t");
+    const events = await collect(session);
+
+    expect(events.some((e) => e.type === "tool.denied" && e.name === "echo")).toBe(true);
+    expect(events.some((e) => e.type === "tool.call")).toBe(false);
+    expect(provider.requests[1]!.messages.at(-1)!.content[0]).toMatchObject({
+      type: "tool_result",
+      toolUseId: "t1",
+      isError: true,
+    });
+    expect((await session.done).reason).toBe("done");
+  });
+
+  it("resolves ask through onAsk, defaulting to deny headless", async () => {
+    const script = (): ModelEvent[][] => [
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "x" } }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ];
+    const askPolicy = new RulePolicy([]); // everything falls through to ask
+
+    const headless = createAgent(makeConfig(new FakeProvider(script()), { permissions: askPolicy })).run("t");
+    const headlessEvents = await collect(headless);
+    const decisions = headlessEvents.filter((e) => e.type === "permission.decision").map((e) => e.d);
+    expect(decisions).toEqual(["ask", "deny"]);
+    expect(headlessEvents.some((e) => e.type === "tool.denied")).toBe(true);
+
+    const interactive = createAgent(
+      makeConfig(new FakeProvider(script()), { permissions: askPolicy, onAsk: async () => "allow" }),
+    ).run("t");
+    const interactiveEvents = await collect(interactive);
+    expect(interactiveEvents.filter((e) => e.type === "permission.decision").map((e) => e.d)).toEqual([
+      "ask",
+      "allow",
+    ]);
+    expect(interactiveEvents.some((e) => e.type === "tool.result" && e.ok)).toBe(true);
+  });
+
+  it("enforces the turn budget", async () => {
+    const alwaysToolUse = Array.from({ length: 5 }, (): ModelEvent[] => [
+      { type: "tool_use", id: "t", name: "echo", input: { text: "x" } },
+      usage(1, 1),
+      stop("tool_use"),
+    ]);
+    const session = createAgent(makeConfig(new FakeProvider(alwaysToolUse), { budget: { maxTurns: 2 } })).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("budget");
+    expect(summary.turns).toBe(2);
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "budget" });
+    expect(events.some((e) => e.type === "error" && !e.fatal && /turn budget/.test(e.message))).toBe(true);
+  });
+
+  it("enforces the token budget", async () => {
+    const alwaysToolUse = Array.from({ length: 5 }, (): ModelEvent[] => [
+      { type: "tool_use", id: "t", name: "echo", input: { text: "x" } },
+      usage(600, 100),
+      stop("tool_use"),
+    ]);
+    const session = createAgent(makeConfig(new FakeProvider(alwaysToolUse), { budget: { maxTokens: 1000 } })).run("t");
+    await collect(session);
+    const summary = await session.done;
+    expect(summary.reason).toBe("budget");
+    expect(summary.turns).toBe(2); // 700 tokens after turn 1 < 1000; 1400 after turn 2 trips it
+  });
+
+  it("surfaces provider failures as a fatal error and ends the session", async () => {
+    const provider: ModelProvider = {
+      id: "boom",
+      model: "boom-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        throw new Error("connection refused");
+      },
+    };
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && e.fatal && /connection refused/.test(e.message))).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "error" });
+  });
+
+  it("reports unknown tools and invalid input back to the model without executing", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "missing", input: {} },
+        { type: "tool_use", id: "t2", name: "echo", input: { wrong: 1 } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+
+    const results = events.filter((e) => e.type === "tool.result");
+    expect(results).toMatchObject([
+      { id: "t1", ok: false, display: "unknown tool: missing" },
+      { id: "t2", ok: false },
+    ]);
+    expect(results[1]!.display).toContain("invalid input");
+    const fedBack = provider.requests[1]!.messages.at(-1)!.content;
+    expect(fedBack).toMatchObject([
+      { type: "tool_result", toolUseId: "t1", isError: true },
+      { type: "tool_result", toolUseId: "t2", isError: true },
+    ]);
+  });
+
+  it("injects steer messages at the next turn boundary", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    session.control.steer("also check the README");
+    const events = await collect(session);
+
+    expect(events.some((e) => e.type === "steer" && e.message === "also check the README")).toBe(true);
+    expect(provider.requests[0]!.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "t" }] },
+      { role: "user", content: [{ type: "text", text: "also check the README" }] },
+    ]);
+  });
+
+  it("abort wins over a tool that ignores its signal", async () => {
+    const hangingTool: AnyTool = {
+      name: "hang",
+      description: "never resolves",
+      inputSchema: z.object({}),
+      permission: "read",
+      execute: () => new Promise(() => {}),
+    };
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "hang", input: {} }, usage(1, 1), stop("tool_use")],
+    ]);
+    const session = createAgent(makeConfig(provider, { tools: [hangingTool] })).run("t");
+    setTimeout(() => session.control.abort(), 50);
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    expect(events.find((e) => e.type === "tool.result")).toMatchObject({ id: "t1", ok: false, display: "aborted" });
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "aborted" });
+  });
+
+  it("events a tool emits via ctx.emit land in order through the loop", async () => {
+    const emitter: AnyTool = {
+      name: "toucher",
+      description: "emits file.changed",
+      inputSchema: z.object({}),
+      permission: "write",
+      execute: async (_input, ctx) => {
+        ctx.emit({ type: "file.changed", path: "x.txt", op: "create", contentHash: "abcd" });
+        return { output: null, display: "touched" };
+      },
+    };
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "toucher", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      tools: [emitter],
+      permissions: new RulePolicy([{ class: "write", decision: "allow" }]),
+    });
+    const session = createAgent(config).run("t");
+    const events = await collect(session);
+
+    const types = events.map((e) => e.type);
+    const call = types.indexOf("tool.call");
+    expect(types.slice(call, call + 3)).toEqual(["tool.call", "file.changed", "tool.result"]);
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i));
+    expect(await config.store.readAll("sess1")).toEqual(events);
+  });
+
+  it("preserves the stream order of interleaved text and tool_use blocks", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "text_delta", text: "before " },
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } },
+        { type: "text_delta", text: "after" },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    await collect(session);
+    await session.done;
+
+    expect(provider.requests[1]!.messages[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "text", text: "before " },
+        { type: "tool_use", id: "t1", name: "echo" },
+        { type: "text", text: "after" },
+      ],
+    });
+  });
+
+  it("keeps tool_use/tool_result pairing one-to-one across a mixed allowed+denied batch", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "a" } },
+        { type: "tool_use", id: "t2", name: "blocked", input: { text: "b" } },
+        { type: "tool_use", id: "t3", name: "echo", input: { text: "c" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const blocked: AnyTool = { ...echoTool(), name: "blocked" };
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: [echoTool(), blocked],
+        permissions: new RulePolicy([
+          { tool: "blocked", decision: "deny" },
+          { class: "read", decision: "allow" },
+        ]),
+      }),
+    ).run("t");
+    await collect(session);
+    await session.done;
+
+    expect(provider.requests[1]!.messages.at(-1)!.content).toMatchObject([
+      { type: "tool_result", toolUseId: "t1", content: "echo: a" },
+      { type: "tool_result", toolUseId: "t2", isError: true },
+      { type: "tool_result", toolUseId: "t3", content: "echo: c" },
+    ]);
+  });
+
+  it("confines cwdOnly-allowed writes to the working directory", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "t1", name: "write_file", input: { path: "inside.txt", content: "ok" } },
+        { type: "tool_use", id: "t2", name: "write_file", input: { path: "../escape.txt", content: "nope" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const inner = join(root, "project");
+    await mkdir(inner, { recursive: true });
+    const session = createAgent(
+      makeConfig(provider, {
+        tools: builtinTools(),
+        permissions: new RulePolicy([{ class: "write", cwdOnly: true, decision: "allow" }]),
+      }),
+    ).run("t", { cwd: inner });
+    const events = await collect(session);
+
+    expect(events.some((e) => e.type === "tool.result" && e.id === "t1" && e.ok)).toBe(true);
+    expect(events.some((e) => e.type === "tool.denied" && e.id === "t2")).toBe(true);
+    expect(await readFile(join(inner, "inside.txt"), "utf8")).toBe("ok");
+    await expect(readFile(join(root, "escape.txt"), "utf8")).rejects.toThrow();
+  });
+
+  it("ends with reason error when the final response is truncated at max_tokens", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "cut off mid-" }, usage(1, 1), stop("max_tokens")]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && !e.fatal && /truncated at maxTokens/.test(e.message))).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "error" });
+  });
+
+  it("treats refusal as a completed session with a non-fatal marker", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "I can't help with that." }, usage(1, 1), { type: "stop", reason: "refusal" }]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("done");
+    expect(events.some((e) => e.type === "error" && !e.fatal && /refused/.test(e.message))).toBe(true);
+  });
+
+  it("carries the raw stop reason into the fatal error for unknown stops", async () => {
+    const provider = new FakeProvider([[usage(1, 1), { type: "stop", reason: "error", raw: "pause_turn" }]]);
+    const session = createAgent(makeConfig(provider)).run("t");
+    const events = await collect(session);
+    expect((await session.done).reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && e.fatal && /pause_turn/.test(e.message))).toBe(true);
+  });
+
+  it("records a supervisor steer source, and an undelivered steer as a non-fatal error", async () => {
+    const delivered = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    const s1 = createAgent(makeConfig(delivered)).run("t");
+    s1.control.steer("focus on tests", "supervisor");
+    const deliveredEvents = await collect(s1);
+    expect(deliveredEvents.find((e) => e.type === "steer")).toMatchObject({
+      source: "supervisor",
+      message: "focus on tests",
+    });
+
+    // a steer issued mid-turn that never reaches a turn boundary is recorded, not lost
+    let s2!: Session;
+    const lateProvider: ModelProvider = {
+      id: "late",
+      model: "late-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        s2.control.steer("too late", "supervisor");
+        yield usage(1, 1);
+        yield stop("end_turn");
+      },
+    };
+    s2 = createAgent(makeConfig(lateProvider)).run("t");
+    const lateEvents = await collect(s2);
+    expect(lateEvents.some((e) => e.type === "steer")).toBe(false);
+    const dropped = lateEvents.find((e) => e.type === "error" && /not delivered/.test(e.message));
+    expect(dropped).toMatchObject({ fatal: false });
+    expect(dropped!.message).toContain("too late");
+    expect(lateEvents.at(-1)).toMatchObject({ type: "session.end" });
+  });
+
+  it("abort ends the session with reason aborted", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const provider: ModelProvider = {
+      id: "slow",
+      model: "slow-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1000 },
+      async *stream(_req, signal): AsyncIterable<ModelEvent> {
+        yield { type: "text_delta", text: "thinking" };
+        await gate;
+        if (signal.aborted) throw new Error("aborted");
+        yield stop("end_turn");
+      },
+    };
+    const session = createAgent(makeConfig(provider)).run("t");
+    setTimeout(() => {
+      session.control.abort();
+      release();
+    }, 10);
+    await collect(session);
+    expect((await session.done).reason).toBe("aborted");
+  });
+});
+
+describe("toToolSpec", () => {
+  it("derives a JSON Schema object from the zod schema", () => {
+    const spec = toToolSpec(echoTool());
+    expect(spec.name).toBe("echo");
+    expect(spec.inputSchema).toMatchObject({
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    });
+    expect(spec.inputSchema.$schema).toBeUndefined();
+  });
+});
