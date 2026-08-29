@@ -141,6 +141,19 @@ account has credits.
   per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
   instead — acceptable for non-reasoning models, and the most likely first live failure to
   watch for with a reasoning model.
+- **The device-code login cannot run headless (permanent, verified 2026-08-29).**
+  `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive bot challenge
+  (`cf-mitigated: challenge`, 403 with an HTML interstitial), so the flow needs a real browser
+  and never completes from a cloud container. Sign in on a machine with a browser, then
+  `login openai-chatgpt --export` and set the bundle as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the
+  environment's secrets (an existing Codex `~/.codex/auth.json` can be pasted directly). The
+  harness now names this condition instead of dumping the interstitial markup.
+- **Honest originator was NOT rejected pre-auth (verified).** An unauthenticated probe of
+  `chatgpt.com/backend-api/codex/responses` sending `originator: agentrig` returned **401
+  Unauthorized, not 403** — it cleared the edge and reached the application layer, refused only
+  for missing credentials. This disproves the spike's claim that a non-Codex originator is
+  filtered outright. It does **not** yet prove acceptance post-authentication; that remains the
+  open question for the first credentialed call.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
   many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
   static env seed sidesteps this only while the access token is still valid (~hours).

@@ -36,6 +36,26 @@ export function errorDetail(body: string, max = 500): string {
 }
 
 /**
+ * An edge bot-challenge (Cloudflare Turnstile and friends) answers with an HTML interstitial,
+ * not an API error. Dumping 500 chars of markup tells an operator nothing, so name the actual
+ * condition: these need a real browser and will never succeed from a headless container.
+ */
+export function describeEdgeChallenge(res: Response, body: string): string | null {
+  const mitigated = res.headers.get("cf-mitigated");
+  const server = res.headers.get("server") ?? "";
+  const contentType = res.headers.get("content-type") ?? "";
+  const looksHtml = contentType.includes("text/html") || /^\s*<(!doctype|html)/i.test(body);
+  if (mitigated === null && !(looksHtml && /cloudflare/i.test(server))) return null;
+  const ray = res.headers.get("cf-ray");
+  return (
+    "edge bot challenge, not an API error " +
+    `(server=${server || "unknown"}${mitigated === null ? "" : `, cf-mitigated=${mitigated}`}` +
+    `${ray === null ? "" : `, cf-ray=${ray}`}). ` +
+    "This endpoint requires an interactive browser and cannot be completed from a headless environment."
+  );
+}
+
+/**
  * "Out of money" 429s never succeed on retry, but a plain rate limit does — and rate-limit
  * bodies often link to a billing page, so a bare substring match would misclassify them.
  * Prefer the structured error code, and fall back only to phrases that can't appear incidentally.
@@ -113,7 +133,8 @@ export async function fetchWithRetries(
     const retryable =
       RETRYABLE_STATUSES.has(res.status) && !(res.status === 429 && isQuotaExhaustion(body));
     if (!retryable || attempt >= maxRetries) {
-      throw new Error(`${label}: HTTP ${res.status} ${errorDetail(body)}${suffix}`);
+      const challenge = describeEdgeChallenge(res, body);
+      throw new Error(`${label}: HTTP ${res.status} ${challenge ?? errorDetail(body)}${suffix}`);
     }
     const retryAfter = parseRetryAfter(res.headers.get("retry-after"), Date.now());
     const delay = retryAfter ?? baseDelayMs * 2 ** attempt;

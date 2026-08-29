@@ -210,3 +210,35 @@ describe("credential redaction in error messages", () => {
     expect((err as Error).message).not.toContain("eyJzdWIiOiJ4");
   });
 });
+
+describe("edge bot challenges are named, not dumped as markup", () => {
+  it("reports a Cloudflare challenge instead of 500 chars of HTML", async () => {
+    const html = "<!DOCTYPE html><html><head><title>Just a moment...</title>" + "<div>".repeat(200);
+    const fetchFn = (async () =>
+      new Response(html, {
+        status: 403,
+        headers: { "cf-mitigated": "challenge", server: "cloudflare", "cf-ray": "abc123", "content-type": "text/html" },
+      })) as typeof fetch;
+    const err = (await fetchWithRetries(fetchFn, "t", "http://x", {}, new AbortController().signal, {
+      sleep: async () => {},
+    }).catch((e: Error) => e)) as Error;
+
+    expect(err.message).toContain("edge bot challenge");
+    expect(err.message).toContain("cf-mitigated=challenge");
+    expect(err.message).toContain("headless");
+    expect(err.message).not.toContain("<div>"); // no markup wall
+  });
+
+  it("leaves ordinary API error bodies alone", async () => {
+    const fetchFn = (async () =>
+      new Response('{"error":{"message":"bad request"}}', {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+    const err = (await fetchWithRetries(fetchFn, "t", "http://x", {}, new AbortController().signal, {
+      sleep: async () => {},
+    }).catch((e: Error) => e)) as Error;
+    expect(err.message).toContain("bad request");
+    expect(err.message).not.toContain("edge bot challenge");
+  });
+});
