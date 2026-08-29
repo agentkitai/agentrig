@@ -115,13 +115,18 @@ describe("dreams never modify their input (PLAN §1.5)", () => {
       dreamOpts(
         scripted({
           contradictions: [],
-          superseded: [{ page: "concepts/a.md", old: "alpha", new: "alpha prime", source: "session:s9" }],
+          superseded: [
+            { page: "concepts/a.md", old: "- [stated] alpha (session:s1)", new: "alpha prime", source: "session:s9" },
+          ],
           merged: [],
           removed: [],
         }),
       ),
     );
     expect(result.report.superseded).toHaveLength(1);
+    // the annotation is IN the output page, not merely in the report
+    const body = (await readFile(join(result.outputRoot, "concepts", "a.md"), "utf8"));
+    expect(body).toContain("superseded by \"alpha prime\" (session:s9)");
     expect(await readFile(join(result.outputRoot, "index.md"), "utf8")).toContain("concepts/a.md");
     await result.workspace.dispose();
   });
@@ -162,7 +167,7 @@ describe("consolidation findings are filtered against reality", () => {
           contradictions: [{ pages: ["concepts/a.md", "concepts/ghost.md"], claims: ["x"], resolution: "y" }],
           superseded: [{ page: "concepts/ghost.md", old: "a", new: "b", source: "s" }],
           merged: [{ from: ["concepts/ghost.md", "concepts/a.md"], to: "concepts/a.md" }],
-          removed: [{ page: "concepts/a.md", line: "alpha", reason: "dup" }],
+          removed: [{ page: "concepts/a.md", line: "- [stated] alpha (session:s1)", reason: "dup" }],
         }),
       ),
     );

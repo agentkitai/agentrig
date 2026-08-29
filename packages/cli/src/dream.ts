@@ -19,17 +19,38 @@ export interface DreamOptions extends ProviderOptions {
   auto?: boolean;
   review?: boolean;
   scope: string;
+  global?: string;
   since?: string;
   structuralOnly?: boolean;
-  keep?: boolean;
   modelExplicit?: boolean;
 }
 
 export async function dreamCommand(opts: DreamOptions): Promise<void> {
+  let sinceCap: number | undefined;
+  if (opts.since !== undefined) {
+    sinceCap = Number(opts.since);
+    if (!Number.isInteger(sinceCap) || sinceCap <= 0) {
+      // Number("abc") is NaN and slice(0, NaN) silently yields nothing, so an unvalidated
+      // --since quietly turned the dream into a no-op
+      console.error(`--since must be a positive integer, got "${opts.since}"`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const scope = opts.scope === "global" ? "global" : "project";
   const wikiRoot = join(opts.dir, "wiki");
   const wiki = new FileMemoryStore({ root: wikiRoot, scope });
   await wiki.init();
+
+  // Promotion proposals need somewhere to propose *to*. Without a global wiki the report's
+  // promotion section could never render, which made "promotion to global" look implemented
+  // when nothing could reach it.
+  let globalWiki: FileMemoryStore | undefined;
+  if (opts.global !== undefined) {
+    globalWiki = new FileMemoryStore({ root: join(opts.global, "wiki"), scope: "global" });
+    await globalWiki.init();
+  }
 
   // `auto` is opt-in: PLAN §1.5 makes review the default because a dream is a bulk LLM rewrite
   // of the agent's memory, and the artifact has to be inspectable before it becomes the truth
@@ -48,19 +69,28 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   const result = await runDream({
     wiki,
     raw: new FileRawStore({ root: opts.dir }),
-    // the provider is only reached when structuralOnly is false, which is exactly when it is set
-    provider: provider as NonNullable<typeof provider>,
+    ...(globalWiki === undefined ? {} : { globalWiki }),
+    ...(provider === undefined ? {} : { provider }),
     cwd: process.cwd(),
     ...(opts.structuralOnly === true ? { structuralOnly: true } : {}),
-    ...(opts.since === undefined ? {} : { maxSessions: Number(opts.since) }),
+    ...(sinceCap === undefined ? {} : { maxSessions: sinceCap }),
     onPhase: (p) => console.error(`… ${p}`),
   });
 
   let applied = false;
   let backup: string | undefined;
   if (auto) {
-    backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()));
-    applied = true;
+    try {
+      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()));
+      applied = true;
+    } catch (err) {
+      // applyDream's message names the directory the wiki is actually in when a restore failed;
+      // it is the only thing that will tell the user, so it must not be swallowed here
+      console.error(`\n${(err as Error).message}`);
+      console.error(`the dreamt wiki is still at ${result.outputRoot}`);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   console.log(
@@ -73,10 +103,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   );
   if (backup !== undefined) console.log(`previous wiki kept at ${backup}`);
 
-  if (applied || opts.keep !== true) {
-    // in review mode the copy is the whole deliverable, so it is kept unless applied
-    if (applied) await rm(result.outputRoot, { recursive: true, force: true }).catch(() => {});
-  }
+  // in review mode the copy IS the deliverable, so it is kept for inspection; once applied it
+  // has been copied into place and the temp copy is redundant
+  if (applied) await result.workspace.dispose().catch(() => {});
   if (!applied) {
     console.log(`\nto accept: agentrig dream --auto   |   to discard: rm -rf ${result.outputRoot}`);
   }

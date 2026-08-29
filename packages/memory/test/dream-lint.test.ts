@@ -98,11 +98,29 @@ describe("structuralLint: missing pages", () => {
 });
 
 describe("structuralLint: index drift", () => {
-  it("reports rows whose page is gone and pages the index never lists", async () => {
+  it("reports rows whose page is gone", async () => {
     const pages = [page("concepts/a.md", "x")];
     const f = await structuralLint(pages, [entry("concepts/ghost.md")]);
     expect(f.indexDrift.danglingRows).toEqual(["concepts/ghost.md"]);
-    expect(f.indexDrift.unlisted).toEqual(["concepts/a.md"]);
+  });
+
+  it("reports an unlisted page once, not as both unlisted and an orphan", async () => {
+    // every orphan is by definition unlisted; counting it twice inflated the CLI's finding
+    // count and its exit code for the most common case
+    const pages = [page("concepts/a.md", "x")];
+    const f = await structuralLint(pages, []);
+    expect(f.orphans).toEqual(["concepts/a.md"]);
+    expect(f.indexDrift.unlisted).toEqual([]);
+  });
+
+  it("a linked-but-unlisted page is unlisted without being an orphan", async () => {
+    const pages = [
+      page("concepts/a.md", "- [stated] see [[b]] (session:s1)\n"),
+      page("concepts/b.md", "- [stated] beta (session:s1)\n"),
+    ];
+    const f = await structuralLint(pages, [entry("concepts/a.md")]);
+    expect(f.orphans).toEqual([]);
+    expect(f.indexDrift.unlisted).toEqual(["concepts/b.md"]);
   });
 
   it("reports reserved-but-never-filled placeholders", async () => {

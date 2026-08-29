@@ -44,8 +44,14 @@ export function sessionEvidence(page: WikiPage): string[] {
     if (m !== null) sessions.add(`session:${m[1]!.trim()}`);
   }
   for (const fact of factLines(page.body)) {
-    for (const m of fact.text.matchAll(/session:([A-Za-z0-9._-]+)/g)) {
-      sessions.add(`session:${m[1]!}`);
+    // ONLY the parsed `(…)` provenance group counts. Free-scanning the line text let any prose
+    // containing "session:" corroborate itself — a CI log URL like
+    // `https://ci/logs/session:9f3a1b`, or a sentence mentioning another session — so a page
+    // backed by exactly one session promoted itself to global. The model writes the page body,
+    // so anything derived from the body's free text is something the model can talk its way past.
+    for (const ref of fact.refs) {
+      const m = /^session:([A-Za-z0-9._-]+)$/.exec(ref.trim());
+      if (m !== null) sessions.add(`session:${m[1]!}`);
     }
   }
   return [...sessions].sort();

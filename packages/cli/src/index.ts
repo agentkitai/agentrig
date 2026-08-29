@@ -117,6 +117,7 @@ withProviderOptions(
   .option("--review", "report only, leave the dreamt wiki on disk for inspection (default)")
   .option("--auto", "apply the dreamt wiki, keeping the previous one beside it")
   .option("--scope <scope>", "project | global", "project")
+  .option("--global <dir>", "global memory directory; enables promotion proposals")
   .option("--since <n>", "cap on raw sessions scanned")
   .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
   .action(async (opts: DreamOptions, cmd: Command) => dreamCommand({ ...opts, modelExplicit: modelExplicit(cmd) }));

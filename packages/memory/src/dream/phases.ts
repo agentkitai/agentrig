@@ -135,6 +135,9 @@ export interface ConsolidateOptions {
   maxTokens?: number;
   /** Characters of page text sent; the dream must stay bounded on a large wiki. */
   maxPageChars?: number;
+  /** Signals sent, and their total characters — the attempts ledger grows without bound. */
+  maxSignals?: number;
+  maxSignalChars?: number;
   /** A failed consolidation is reported, never thrown — the structural findings still stand. */
   onError?: (err: Error) => void;
 }
@@ -153,6 +156,22 @@ export async function consolidate(opts: ConsolidateOptions): Promise<Consolidati
     budget -= block.length;
   }
 
+  // signals are bounded too. They come from the attempts ledger, which grows for the life of the
+  // project — 400 attempts with long lessons built a 212k-char prompt against a 24k page budget,
+  // which is neither cheap nor schedulable. Best-corroborated first, since those are the ones
+  // worth spending context on.
+  const maxSignals = opts.maxSignals ?? 40;
+  const maxSignalChars = opts.maxSignalChars ?? 6000;
+  const ranked = [...opts.signals].sort((a, b) => b.sources.length - a.sources.length);
+  const signalLines: string[] = [];
+  let signalBudget = maxSignalChars;
+  for (const s of ranked.slice(0, maxSignals)) {
+    const line = `- [${s.kind}] ${s.text.slice(0, 400)} (${s.sources.slice(0, 8).join(", ")})`;
+    if (line.length > signalBudget) break;
+    signalLines.push(line);
+    signalBudget -= line.length;
+  }
+
   const user = [
     opts.orientation.summary,
     "",
@@ -160,9 +179,7 @@ export async function consolidate(opts: ConsolidateOptions): Promise<Consolidati
     rendered.join("\n\n"),
     "",
     "# Signals from recent sessions",
-    opts.signals.length === 0
-      ? "(none)"
-      : opts.signals.map((s) => `- [${s.kind}] ${s.text} (${s.sources.join(", ")})`).join("\n"),
+    signalLines.length === 0 ? "(none)" : signalLines.join("\n"),
   ].join("\n");
 
   const empty: Consolidation = { contradictions: [], superseded: [], merged: [], removed: [] };
@@ -195,7 +212,7 @@ export function dropUnknownPages(c: Consolidation, pages: WikiPage[]): Consolida
   return {
     contradictions: c.contradictions.filter((x) => x.pages.every((p) => known.has(p))),
     superseded: c.superseded.filter((x) => known.has(x.page)),
-    merged: c.merged.filter((x) => x.from.every((p) => known.has(p)) && x.from.length >= 2),
+    merged: c.merged.filter((x) => known.has(x.to) && x.from.every((p) => known.has(p)) && x.from.length >= 2),
     removed: c.removed.filter((x) => known.has(x.page)),
   };
 }
@@ -211,15 +228,23 @@ export function rebuildIndex(pages: WikiPage[], previous: IndexEntry[], maxSumma
   const prior = new Map(previous.map((e) => [e.path, e]));
   return pages
     .map((p) => {
-      const first = factLines(p.body)[0]?.text ?? prior.get(p.path)?.summary ?? "";
+      const facts = factLines(p.body);
+      const was = prior.get(p.path);
+      // A reservation that was never filled must stay `planned` and keep its claim. Stamping
+      // every row `active` destroyed the ledger PLAN §3.1 depends on: the `unfilled` lint check
+      // could never fire again after one dream, and `index.md` — injected into every system
+      // prompt — began advertising placeholders as real pages.
+      const stillAPlaceholder = was?.status === "planned" && facts.length === 0;
+      const first = facts[0]?.text ?? was?.summary ?? "";
       const summary = first.replace(/\s+/g, " ").trim().slice(0, maxSummary);
       const entry: IndexEntry = {
         slug: p.frontmatter.slug,
         path: p.path,
         type: p.frontmatter.type,
         summary,
-        status: "active",
+        status: stillAPlaceholder ? "planned" : "active",
       };
+      if (stillAPlaceholder && was?.claimedBy !== undefined) entry.claimedBy = was.claimedBy;
       return entry;
     })
     .sort((a, b) => a.path.localeCompare(b.path));

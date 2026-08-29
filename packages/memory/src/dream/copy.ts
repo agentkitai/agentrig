@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
@@ -20,11 +20,22 @@ export interface DreamWorkspace {
   dispose(): Promise<void>;
 }
 
-/** Copies a wiki into a fresh directory the dream owns. */
+/**
+ * Copies a wiki into a fresh directory the dream owns.
+ *
+ * `dereference: true` is load-bearing, not incidental. Copying symlinks *as symlinks* left a hole
+ * straight through the §1.5 invariant: `appendLog` was the one writer not using tmp+rename, so a
+ * symlinked `log.md` in the copy wrote into the original wiki. Dereferencing means the copy is
+ * plain files all the way down and nothing the dream writes can reach back out.
+ */
 export async function copyWiki(sourceRoot: string, destRoot?: string): Promise<DreamWorkspace> {
   const outputRoot = destRoot ?? (await mkdtemp(join(tmpdir(), "agentrig-dream-")));
   await mkdir(outputRoot, { recursive: true });
-  await cp(sourceRoot, outputRoot, { recursive: true, force: true, dereference: false });
+  // resolve a symlinked wiki root first: cp() refuses to copy a link over the directory we just
+  // made, which failed an ordinary setup (`.agentrig/wiki` symlinked elsewhere) with an opaque
+  // ERR_FS_CP_NON_DIR_TO_DIR
+  const src = await realpath(sourceRoot).catch(() => sourceRoot);
+  await cp(src, outputRoot, { recursive: true, force: true, dereference: true });
   return {
     outputRoot,
     dispose: async () => {
@@ -86,7 +97,17 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
     await rename(staged, src);
   } catch (err) {
     // put the original back rather than leaving the agent with no memory at all
-    await rename(backup, src).catch(() => {});
+    try {
+      await rename(backup, src);
+    } catch (restoreErr) {
+      // The wiki is NOT where the user expects it. Saying "could not move staged into place"
+      // here would be actively misleading — the message has to name the directory their memory
+      // is actually sitting in, because nothing else will tell them.
+      throw new Error(
+        `applyDream failed AND could not restore the original. Your wiki is at ${backup} — ` +
+          `move it back to ${src}. (apply: ${(err as Error).message}; restore: ${(restoreErr as Error).message})`,
+      );
+    }
     await rm(staged, { recursive: true, force: true }).catch(() => {});
     throw err;
   }

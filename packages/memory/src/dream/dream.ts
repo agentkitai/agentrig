@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
+import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
 import { FileMemoryStore, OVERVIEW_FILE } from "../store.js";
 import { readPins, recheckPins, applyPinChecks } from "../pins.js";
 import { copyWiki, type DreamWorkspace } from "./copy.js";
@@ -14,11 +14,18 @@ import {
   type Signal,
 } from "./phases.js";
 import { selectForPromotion, type PromotionRejection } from "./promote.js";
+import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
 
-export interface DreamOptions extends DreamInput {
+export interface DreamOptions extends Omit<DreamInput, "provider"> {
+  /**
+   * Optional: a structural-only dream never reaches a model. Typed optional rather than passed
+   * as `undefined as never` so that anyone later adding a model call to `orient` or `prune`
+   * gets a type error instead of a runtime TypeError.
+   */
+  provider?: DreamInput["provider"];
   /** Where the new wiki goes. Defaults to a fresh temp directory the caller disposes. */
   outputRoot?: string;
   /** Cap on raw sessions scanned, per PLAN §3.7. */
@@ -38,6 +45,9 @@ export interface DreamOptions extends DreamInput {
 export interface FullDreamResult extends DreamResult {
   /** Set when the model-backed pass failed; the structural findings are still complete. */
   consolidationError?: string;
+  /** What was actually written to the output wiki — the report is built from this, not from
+   *  what the model proposed, so it can never claim a change that did not land. */
+  applied: AppliedChanges;
   structural: StructuralFindings;
   signals: Signal[];
   promotionRejected: PromotionRejection[];
@@ -71,6 +81,22 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   const now = opts.now ?? (() => Date.now());
   const phase = (p: string): void => opts.onPhase?.(p);
   const workspace = await copyWiki(opts.wiki.root, opts.outputRoot);
+  try {
+    return await dreamInto(workspace, opts, now, phase);
+  } catch (err) {
+    // `memory lint` runs on every session end, so leaking a full wiki copy per failure (a
+    // malformed pins.json is enough) would quietly fill the disk
+    await workspace.dispose().catch(() => {});
+    throw err;
+  }
+}
+
+async function dreamInto(
+  workspace: DreamWorkspace,
+  opts: DreamOptions,
+  now: () => number,
+  phase: (p: string) => void,
+): Promise<FullDreamResult> {
   // concretely a FileMemoryStore, not the MemoryStore interface: the dream needs `pages()` and
   // `writeIndex()`, which are implementation surface rather than part of the read/write contract
   const out = new FileMemoryStore({ root: workspace.outputRoot, scope: opts.wiki.scope });
@@ -87,9 +113,15 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   const since = await lastDreamAt(opts.wiki.root);
   const maxSessions = opts.maxSessions ?? 100;
   const sessions = (await opts.raw.sessions(since)).slice(0, maxSessions);
-  const attempts = "readAttempts" in opts.raw
-    ? (await (opts.raw as { readAttempts: () => Promise<{ attempts: never[] }> }).readAttempts()).attempts
-    : [];
+  const allAttempts: Attempt[] =
+    "readAttempts" in opts.raw
+      ? (await (opts.raw as { readAttempts: () => Promise<{ attempts: Attempt[] }> }).readAttempts()).attempts
+      : [];
+  // `since` has to actually filter something. It previously reached only a log line: attempts —
+  // the material signals are built from — were read unfiltered and uncapped, so `.last-dream`
+  // and `--since` changed nothing about what the dream considered.
+  const scoped = since === undefined ? allAttempts : allAttempts.filter((a) => a.ts > since);
+  const attempts = scoped.slice(-maxSessions * 10);
   const signals = gatherFromAttempts(attempts);
 
   // ---- structural lint (free, no model)
@@ -101,7 +133,7 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   phase("consolidate");
   let consolidationError: string | undefined;
   const consolidation: Consolidation =
-    opts.structuralOnly === true || pages.length === 0
+    opts.structuralOnly === true || pages.length === 0 || opts.provider === undefined
       ? { contradictions: [], superseded: [], merged: [], removed: [] }
       : await consolidate({
           provider: opts.provider,
@@ -114,9 +146,20 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
           },
         });
 
+  // ---- apply: edit the dreamt pages. Without this the "corrected wiki" would be identical to
+  // the input and the report would describe changes nobody made.
+  phase("apply");
+  const applied = await applyConsolidation(out, consolidation, {
+    today: new Date(now()).toISOString().slice(0, 10),
+    structural,
+  });
+
   // ---- phase 4: prune & index, then re-check pins against the dreamt text
   phase("prune");
-  await out.writeIndex(rebuildIndex(pages, index));
+  // re-read: applyConsolidation rewrote bodies and deleted merged-away pages, and the index has
+  // to describe the wiki as it now stands rather than as it was found
+  const finalPages = (await out.pages()).filter((p) => p.path !== OVERVIEW_FILE);
+  await out.writeIndex(rebuildIndex(finalPages, index));
   const pins = await readPins(workspace.outputRoot);
   const pinChecks = await recheckPins(out, pins);
   await applyPinChecks(workspace.outputRoot, pinChecks);
@@ -129,13 +172,23 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   // with no global wiki attached there is nowhere to promote *to*, so propose nothing
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
+  // built from `applied`, never from `consolidation`: the report describes the artifact
+  const mergedInto = new Map<string, string[]>();
+  for (const m of applied.mergedPages) mergedInto.set(m.into, [...(mergedInto.get(m.into) ?? []), m.from]);
+
   const report: DreamReport = {
     contradictions: consolidation.contradictions,
-    superseded: consolidation.superseded,
+    superseded: applied.supersededMarked.map((s) => {
+      const found = consolidation.superseded.find((x) => x.page === s.page && x.old === s.old);
+      return { page: s.page, old: s.old, new: found?.new ?? "", source: found?.source ?? "" };
+    }),
     orphans: structural.orphans,
     missingPages: structural.missingPages,
-    merged: consolidation.merged,
-    removed: consolidation.removed,
+    merged: [...mergedInto.entries()].map(([to, from]) => ({ from: [...from, to], to })),
+    removed: applied.removedLines.map((r) => {
+      const found = consolidation.removed.find((x) => x.page === r.page);
+      return { page: r.page, line: r.line, reason: found?.reason ?? "" };
+    }),
     promoted,
     pinsAffected: pinChecks.map((c) => ({ pin: `${c.pin.page}: ${c.pin.claim}`, status: c.status })),
   };
@@ -151,6 +204,7 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
     outputRoot: workspace.outputRoot,
     report,
     ...(consolidationError === undefined ? {} : { consolidationError }),
+    applied,
     structural,
     signals,
     promotionRejected: rejected,

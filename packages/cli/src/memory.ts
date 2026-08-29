@@ -214,21 +214,23 @@ export async function memoryLint(opts: MemoryOptions): Promise<void> {
 
   // PLAN §5: `lint` is a dry-run dream report with no output store. It is the structural-only
   // pass, so it costs nothing and can run on every session end.
+  // no provider at all: structural-only needs no model, so `lint` must not need a credential
   const result = await runDream({
     wiki: store,
     raw: new FileRawStore({ root: opts.dir }),
-    provider: undefined as never, // never reached: structuralOnly short-circuits before any call
     structuralOnly: true,
     cwd: process.cwd(),
   });
 
-  console.log(renderReport(result.report, {
-    structural: result.structural,
-    promotionRejected: result.promotionRejected,
-  }));
-
-  // a dry run leaves nothing behind
-  await rm(result.outputRoot, { recursive: true, force: true }).catch(() => {});
+  try {
+    console.log(renderReport(result.report, {
+      structural: result.structural,
+      promotionRejected: result.promotionRejected,
+    }));
+  } finally {
+    // a dry run leaves nothing behind, even if rendering threw
+    await result.workspace.dispose().catch(() => {});
+  }
   void wiki;
 
   const findings = findingCount(result.report, result.structural);
