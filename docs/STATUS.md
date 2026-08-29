@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M4**
+Current milestone: **M5**
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -10,8 +10,8 @@ Current milestone: **M4**
 | 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
-| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | next |
-| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | |
+| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
+| 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | next |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | |
 
@@ -284,6 +284,65 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   `basename(resolve(process.cwd()))` when `LORE_PROJECT` is unset.
 - Lore responses are parsed **per row** with zod: one malformed row is dropped with a report
   rather than failing the whole recall.
+
+## M4 notes
+
+- **Two additive core changes** were needed and nothing else. `SessionControl.record()` lets the
+  supervisor append `supervisor.signal` / `supervisor.intervention` through core's *single* append
+  chain, so `seq` remains one total order over the agent's events and the observer's — a second
+  writer would have raced the chain and corrupted that order. It is deliberately narrow (those two
+  payloads only) so an observer cannot forge a `tool.call` or a `session.end`, and it drops records
+  after the session ends so `session.end` stays the log's last line. `PlanItem.scope?: string[]`
+  gives the `drift` detector something to compare against; nothing carried a declared scope before.
+- **Fanning out the event stream needed no change at all.** Core's `EventStream` buffers and
+  replays from position 0 for each `[Symbol.asyncIterator]` call, so the CLI and the supervisor
+  each get their own cursor over the same events. The observer therefore cannot slow the loop
+  down: a slow detector delays interventions and nothing else.
+- **The ladder skips rungs it cannot perform rather than parking on them.** One definition
+  (`inject_guidance → force_replan → run_reviewer → escalate → abort`) is filtered by declared
+  capabilities, so in M4 it collapses to guidance → abort and deepens by itself when M6 attaches a
+  reviewer and M7 lands the pre-tool hook. The important case is `escalate`: it is available only
+  when an `onEscalate` handler exists, because a headless run has no human and a ladder that
+  stopped there would leave a looping agent to burn its whole budget.
+- **A signal suppressed by cooldown does not advance the rung.** Otherwise a noisy detector would
+  silently climb to `abort` while every intervention was being thrown away — the session would die
+  from interventions it never actually received.
+- **The supervisor cannot break the session.** Every detector, policy and apply call is wrapped;
+  a throw is reported through `onError` and the observer continues. `onError` itself is guarded, so
+  a throwing logger does not become the failure it was reporting. Tests drive an exploding
+  detector, an exploding policy and an exploding logger and assert the session still finishes
+  `done`.
+- **Pass counts come from scraped test output**, because no event carries one and two detectors
+  (`stall`, `test_regression`) are specified in terms of it. `parseTestCounts` covers vitest, jest,
+  pytest, mocha and `go test`; anything else returns `null`, and every caller treats `null` as "not
+  a test run" rather than as zero — a misread that invented a 0 would fire `test_regression` on
+  every `ls`.
+- **`test_regression` fires only on a *drop* against the best count seen.** A run that adds
+  failures while keeping every pass (a newly written test that does not pass yet) is ordinary
+  progress, so failures alone are not the trigger.
+- **`loop` fingerprints errors before comparing them**: durations, hex ids, pids and temp paths
+  differ on every run and would otherwise make one tight loop look like a stream of distinct
+  errors. Edit→revert thrash is detected from `file.changed.contentHash` returning to a value that
+  path already had, tallied per file.
+- **`stall` treats a turn that reaches for a tool it has not used before as productive**, even if
+  it wrote nothing — otherwise reading and exploring would count as spinning.
+- `drift` is v1 as specified: a literal path-prefix comparison, no model in the loop. Scope entries
+  are exact paths or directory prefixes, not globs, on the grounds that a plan forced to write `**`
+  will declare a scope so broad drift can never fire. The LLM-judged, sampled version is M6.
+- `force_replan`, `run_grader` and `checkpoint_rollback` are recorded but **not applied** — they
+  need the pre-tool hook (M7), a grader (M6) and git checkpoints respectively. The default policy
+  will not emit them unless the capability is declared; a hand-written policy that does gets an
+  `onError` report rather than silence.
+- CLI: `--supervise`, `--supervisor-no-abort`, `--supervisor-soft <fraction>`. The soft budget
+  thresholds are derived from the same `--max-*` flags core enforces as hard limits, so the two can
+  never disagree.
+- **Caveat: the supervisor reacts one event behind.** It observes asynchronously, so between the
+  event that triggers a signal and the steer landing, the agent may take another action. `steer` is
+  queued to the next turn boundary anyway (the only coherent injection point), so this is inherent
+  to an out-of-band observer rather than a fixable lag.
+- **Caveat: `drift` cannot fire today in practice.** Nothing emits `plan.updated` yet — there is no
+  planning tool until M7 — so the detector is correct and tested but dormant until something
+  declares a plan.
 
 ## Decided
 

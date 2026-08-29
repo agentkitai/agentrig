@@ -468,7 +468,7 @@ type Intervention =
   | { type: 'inject_guidance'; message: string }        // steer at next turn boundary
   | { type: 'force_replan' }                             // require a fresh plan.updated before more tool calls
   | { type: 'run_grader'; rubric: string }               // Outcomes-style check
-  | { type: 'checkpoint_rollback'; toEvent: number }     // git-based, opt-in
+  | { type: 'checkpoint_rollback'; toSeq: number }       // git-based, opt-in
   | { type: 'escalate'; question: string }               // ask the human
   | { type: 'abort'; reason: string };
 
@@ -476,6 +476,13 @@ interface Policy { decide(signals: Signal[], state: SupervisorState): Interventi
 ```
 
 Default ladder (per signal type, escalating on repeat): inject_guidance → force_replan → run reviewer → escalate → abort. Cooldowns prevent nagging every turn.
+
+A rung is **skipped when the harness cannot perform it** rather than parked on, so one ladder
+definition is correct at every milestone: in M4 (no reviewer, no pre-tool hook, and no human in a
+headless run) it collapses to inject_guidance → abort, and it deepens on its own as M6 attaches a
+reviewer and M7 lands the hook. `escalate` is available exactly when an `onEscalate` handler was
+supplied — a headless run must never stop on a question nobody will answer. A signal held back by
+its cooldown does not advance the rung, so suppression can never walk a session into `abort`.
 
 ### 4.3 Reviewer & grader (LLM-backed, invoked only by policy)
 
@@ -501,6 +508,21 @@ interface Supervisor {
 ```
 
 It consumes `session.events`, emits `supervisor.signal` / `supervisor.intervention` back into the log, and applies interventions through `session.control.steer()` and the `pre_tool` hook (for `force_replan`).
+
+Two mechanics this needs from core, both added in M4 and both additive:
+
+- **`SessionControl.record(payload)`** — the supervisor's own events go through core's single
+  append chain, so `seq` stays one total order over the agent's events and the observer's. It
+  accepts only `supervisor.signal` / `supervisor.intervention`: an observer must not be able to
+  forge a `tool.call` or a `session.end`. Records after the session has ended are dropped, so
+  `session.end` is always the log's last line.
+- **`PlanItem.scope?: string[]`** — the `drift` detector compares `file.changed` against the
+  plan's declared scope, which nothing carried before. With no item declaring a scope the
+  detector is silent, so drift is opt-in by the agent's own plan rather than by config.
+
+`Detachable` also carries `done: Promise<void>` so a shutdown path can join the observer instead
+of racing it. The observer never blocks the loop: core's `EventStream` gives every consumer its
+own cursor over a replayed buffer, so a slow detector delays interventions and nothing else.
 
 ---
 

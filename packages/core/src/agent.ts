@@ -1,5 +1,5 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
+import type { Decision, EventPayload, HarnessEvent, Intervention, PermissionRequest, Signal, Usage } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -58,12 +58,24 @@ export interface SessionSummary {
   error?: string;
 }
 
+/** The only payloads an out-of-band observer may append. Core stays unaware of what they mean. */
+export type SupervisorRecord =
+  | { type: "supervisor.signal"; signal: Signal }
+  | { type: "supervisor.intervention"; intervention: Intervention };
+
 export interface SessionControl {
   /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
   steer(message: string, source?: "user" | "supervisor"): void;
   pause(): void;
   resume(): void;
   abort(): void;
+  /**
+   * Lets the supervisor (PLAN §4.4) write its reasoning into the same log, through the same
+   * append chain, so `seq` order stays a single total order. Deliberately narrow: an observer
+   * cannot forge a `tool.call` or a `session.end`. Dropped after the session has ended, so
+   * `session.end` is always the last line.
+   */
+  record(payload: SupervisorRecord): void;
 }
 
 export interface Session {
@@ -576,6 +588,9 @@ function runSession(config: AgentConfig, task: string, opts: { cwd?: string; res
       abort: () => {
         abortController.abort();
         gate.resume();
+      },
+      record: (payload) => {
+        if (!ended) void emit(payload);
       },
     },
     done,

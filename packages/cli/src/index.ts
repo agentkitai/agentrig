@@ -49,7 +49,10 @@ function withRunOptions(cmd: Command): Command {
     .option("--max-usd <n>", "USD budget; requires --price-in/--price-out")
     .option("--price-in <usd>", "input price in USD per million tokens")
     .option("--price-out <usd>", "output price in USD per million tokens")
-    .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192");
+    .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
+    .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
+    .option("--supervisor-no-abort", "let the supervisor steer and escalate but never abort the session")
+    .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8");
 }
 
 // AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice

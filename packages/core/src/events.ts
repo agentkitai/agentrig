@@ -38,6 +38,12 @@ export const PlanItem = z.object({
   id: z.string(),
   text: z.string(),
   status: z.enum(["pending", "in_progress", "done", "dropped"]),
+  /**
+   * Paths or path prefixes this item is allowed to touch. The supervisor's `drift` detector
+   * (PLAN §4.1) needs a declared scope to compare `file.changed` against; with no scope on any
+   * item, drift cannot fire. A trailing `/` (or a bare directory) matches everything beneath it.
+   */
+  scope: z.array(z.string()).optional(),
 });
 export type PlanItem = z.infer<typeof PlanItem>;
 
