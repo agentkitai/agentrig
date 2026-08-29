@@ -1,0 +1,449 @@
+# Agentic Harness — Architecture & Build Order
+
+**Shape:** SDK core + thin CLI, TypeScript monorepo, four packages.
+**Differentiators:** built-in supervisor loop (from AVO) and a dreaming memory system (from Anthropic's Managed Agents / Claude Code Auto Dream).
+**Non-goals for v1:** competing with Claude Code/Codex on TUI polish; evolutionary search; multi-tenant hosting.
+
+---
+
+## 0. Design principles
+
+1. **Event-sourced spine.** Every session is an append-only log of typed events. The CLI renders it, the supervisor watches it, the dream reads it, resume replays it. This single decision is what lets `memory` and `supervisor` be standalone packages: they depend on the event schema, not on the loop.
+2. **Provider adapters normalize to one internal schema.** Core never sees an Anthropic or OpenAI payload. Two adapters from day one so the abstraction is real, not aspirational.
+3. **Memory is an LLM Wiki.** Karpathy's pattern: immutable raw sources (sessions, docs) → an interlinked markdown wiki the agent owns → a schema doc that makes it a disciplined maintainer. Ingest / query / lint as the only operations. Inspectable, git-diffable, human-editable.
+4. **Supervisor is out-of-band and cheap by default.** Heuristic detectors run on every event at ~zero cost; an LLM reviewer is invoked only when the policy escalates. It never blocks the loop; it steers at turn boundaries.
+5. **Dreams never modify their input.** A dream produces a *new* store plus a change report. Default apply mode is review.
+
+---
+
+## 1. Package layout
+
+```
+packages/
+  core/         agent loop, tool runtime, permissions, compaction, sessions, providers
+  memory/       store format, scopes, retrieval, session-end extraction, dream
+  supervisor/   detectors, policy ladder, interventions, reviewer, grader
+  cli/          Ink TUI + headless commands over core's event stream
+```
+
+Dependency direction: `cli → supervisor, memory → core`. `memory` and `supervisor` depend only on `core`'s event/type definitions (consider splitting those into `core/types` or a tiny `protocol` package if that dependency gets heavy).
+
+Tooling: pnpm workspaces, ESM, Node 22+, TypeScript strict, vitest, zod (schemas → JSON Schema for tool specs), changesets for publishing.
+
+---
+
+## 2. `core` — interfaces
+
+### 2.1 Unified message schema
+
+```ts
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; toolUseId: string; content: string | ContentBlock[]; isError?: boolean }
+  | { type: 'image'; mediaType: string; data: string };
+
+interface Message { role: 'user' | 'assistant'; content: ContentBlock[] }
+```
+
+### 2.2 Provider adapter
+
+```ts
+interface ModelRequest {
+  system: string;
+  messages: Message[];
+  tools: ToolSpec[];
+  maxTokens: number;
+  temperature?: number;
+  cacheHints?: { systemPrefix?: boolean };
+}
+
+type ModelEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'usage'; input: number; output: number; cacheRead?: number; cacheWrite?: number }
+  | { type: 'stop'; reason: 'end_turn' | 'tool_use' | 'max_tokens' | 'error' };
+
+interface ModelProvider {
+  id: string;                          // 'anthropic' | 'openai' | 'gemini' | 'ollama' | ...
+  model: string;
+  capabilities: { tools: boolean; parallelTools: boolean; caching: boolean; contextWindow: number };
+  stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
+  countTokens?(req: ModelRequest): Promise<number>;
+}
+```
+
+Ship `anthropic` and `openai-compatible` (covers OpenAI, most local servers) in M2. Others are community/adapter work.
+
+### 2.3 Tools
+
+```ts
+type PermissionClass = 'read' | 'write' | 'exec' | 'network';
+
+interface Tool<I = unknown, O = unknown> {
+  name: string;
+  description: string;
+  inputSchema: z.ZodType<I>;            // JSON Schema derived for ToolSpec
+  permission: PermissionClass | ((input: I) => PermissionClass);
+  execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
+}
+
+interface ToolContext { cwd: string; sessionId: string; emit(e: HarnessEvent): void; signal: AbortSignal }
+interface ToolResult<O> { output: O; display: string; truncated?: boolean }
+```
+
+Built-ins for v1: `bash`, `read_file`, `edit_file` (search/replace), `write_file`, `glob`, `grep`. Memory tools come from `memory` and are registered like any other tool.
+
+### 2.4 Permissions
+
+```ts
+interface PermissionRequest { tool: string; input: unknown; class: PermissionClass; cwd: string }
+type Decision = 'allow' | 'deny' | 'ask';
+interface PermissionPolicy { decide(req: PermissionRequest): Promise<Decision> }
+```
+
+v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Sandboxing (Docker/OS-level) is deferred; the policy interface is where it plugs in.
+
+### 2.5 The event spine
+
+```ts
+type HarnessEvent =
+  | { type: 'session.start'; id: string; task: string; cwd: string; provider: string; ts: number }
+  | { type: 'session.end'; reason: 'done' | 'aborted' | 'error' | 'budget'; ts: number }
+  | { type: 'turn.start'; n: number } | { type: 'turn.end'; n: number }
+  | { type: 'model.request'; tokensIn: number }
+  | { type: 'model.delta'; text: string }
+  | { type: 'model.response'; usage: Usage; stop: string }
+  | { type: 'tool.call'; id: string; name: string; input: unknown; inputHash: string }
+  | { type: 'tool.result'; id: string; ok: boolean; display: string; durationMs: number }
+  | { type: 'tool.denied'; id: string; name: string }
+  | { type: 'file.changed'; path: string; op: 'create' | 'edit' | 'delete'; contentHash: string }
+  | { type: 'permission.request'; req: PermissionRequest } | { type: 'permission.decision'; d: Decision }
+  | { type: 'context.compact'; before: number; after: number }
+  | { type: 'plan.updated'; items: PlanItem[] }
+  | { type: 'subagent.spawn'; id: string; task: string } | { type: 'subagent.end'; id: string }
+  | { type: 'steer'; source: 'user' | 'supervisor'; message: string }
+  | { type: 'memory.note'; scope: 'project' | 'global'; path: string }
+  | { type: 'supervisor.signal'; signal: Signal }
+  | { type: 'supervisor.intervention'; intervention: Intervention }
+  | { type: 'error'; message: string; fatal: boolean };
+```
+
+`inputHash` on `tool.call` and `contentHash` on `file.changed` exist specifically so loop/stall detectors are cheap string comparisons.
+
+### 2.6 Agent + session
+
+```ts
+interface AgentConfig {
+  provider: ModelProvider;
+  tools: Tool[];
+  permissions: PermissionPolicy;
+  hooks?: Hook[];
+  systemPrompt: string | ((ctx: PromptContext) => string);   // memory index is injected here
+  budget?: { maxTurns?: number; maxTokens?: number; maxUsd?: number; maxMinutes?: number };
+  compaction?: CompactionStrategy;
+}
+
+interface Session {
+  id: string;
+  events: AsyncIterable<HarnessEvent>;
+  control: { steer(msg: string): void; pause(): void; resume(): void; abort(): void };
+  done: Promise<SessionSummary>;
+}
+
+interface Agent { run(task: string, opts?: { cwd?: string; resume?: string }): Session }
+```
+
+Session persistence: one JSONL file per session under `.harness/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
+
+### 2.7 Hooks
+
+```ts
+type HookPoint = 'user_prompt' | 'pre_model' | 'post_model' | 'pre_tool' | 'post_tool' | 'pre_compact' | 'session_end';
+type HookResult = { action: 'continue' } | { action: 'deny'; reason: string } | { action: 'modify'; patch: unknown } | { action: 'inject'; message: string };
+interface Hook { point: HookPoint; handler(ctx: HookContext): Promise<HookResult> }
+```
+
+`memory`'s session-end extraction and `supervisor`'s steering both land through hooks + `session.control`, not through special-casing in the loop.
+
+### 2.8 Context management
+
+```ts
+interface CompactionStrategy {
+  shouldCompact(usage: { tokens: number; window: number }): boolean;
+  compact(messages: Message[], provider: ModelProvider): Promise<Message[]>;
+}
+```
+
+v1: summarize-older-turns when past 70% of window, keep last N tool results verbatim. Emits `context.compact`.
+
+---
+
+## 3. `memory` — an LLM Wiki the agent maintains about the project
+
+Follows Karpathy's LLM Wiki pattern (gist `442a6bf555914893e9891c11519de94f`): three layers (immutable raw sources → LLM-owned wiki → schema doc), three operations (ingest, query, lint), `index.md` + `log.md`, search as an optional tool. The harness's twist: **sessions are the primary raw source.** Every session is ingested into the wiki the way an article would be, and the dream is the pattern's lint pass, scheduled.
+
+### 3.1 Three layers
+
+```
+.harness/
+  raw/                       # immutable — the agent reads, never writes
+    sessions/<id>.jsonl      #   event logs, append-only (written by core)
+    attempts/<id>.json       #   attempts ledger extracted at session_end (3.5)
+    docs/                    #   user-dropped sources: specs, ADRs, vendor docs, papers
+  wiki/                      # LLM-owned — the human reads, the agent writes
+    index.md                 #   catalog: every page, one-line summary, category. Read first on every query.
+    log.md                   #   append-only chronology, parseable prefix: "## [2026-08-29] ingest | session 8f2a"
+    overview.md              #   current synthesis of the project as the agent understands it
+    sources/<id>.md          #   one page per ingested session or doc: what happened, what was learned
+    entities/<slug>.md       #   modules, services, tools, commands, external systems, people
+    concepts/<slug>.md       #   conventions, architecture decisions, recurring patterns, gotchas
+    analyses/<slug>.md       #   filed answers: comparisons, investigations, root-cause writeups
+    pins.json                #   human corrections that must survive regeneration (3.6)
+  SCHEMA.md                  # the schema: page formats, naming, ingest/query/lint workflows. Co-evolves with use.
+~/.harness/                  # global scope: same shape — its own raw/, wiki/, SCHEMA.md
+```
+
+Global is a **separate wiki**, not a label on project pages. Teams running the pattern at scale found audience labels drift and leak; compiling separately is the only reliable guarantee. Promotion to global = ingesting a project wiki page as a *source* into the global wiki, with provenance back to the project.
+
+### 3.2 Operations
+
+**Ingest** — triggered by the `session_end` hook, or `harness memory ingest <path>` for docs. Plan → reserve → generate → integrate:
+
+1. Read the source under a *coverage plan*: bounded spans, each either inspected or explicitly closed as "nothing durable here", so a long session can't silently lose its middle when context runs out.
+2. Propose page targets (create vs. update). Reserve them in `index.md` as `status: planned` placeholders using an atomic conditional write, with the LLM call *outside* any lock. Two concurrent sessions then converge on one `auth-module` page instead of forking `auth` vs `auth-module`.
+3. Write the `sources/` page, update touched `entities/` and `concepts/` pages, update `index.md`, append to `log.md`. A single session may touch 5–15 pages.
+
+Duplicate captures (`session_end` firing twice on a growing transcript) are detected by prefix comparison; only provably superseded snapshots are dropped — unique content is never deleted.
+
+**Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
+
+**Lint = dream.** The scheduled dream runs the pattern's lint pass offline on a copy of the wiki: contradictions between pages, claims superseded by newer sources, orphan pages, concepts mentioned but lacking a page, missing cross-links, relative dates → absolute, references to files that no longer exist, index rebuilt lean. Output is a new `wiki/` directory plus a change report; the input is untouched; review or auto apply; promotion proposals to global. Never promote anything derived from a single session.
+
+### 3.3 Page format
+
+```markdown
+---
+type: entity | concept | source | analysis
+slug: auth-module
+aliases: [auth, AuthService]
+sources: [session:8f2a, doc:adr-012]
+updated: 2026-08-29
+confidence: high | medium | low
+---
+- [stated] ... (session:8f2a)
+- [observed] ... (session:9c11)
+- [inferred] ... (dream:2026-08-28, from session:8f2a, session:9c11)
+```
+
+`[[wikilinks]]` between pages. Every fact line carries a tag and a source ref. **Shape, not value:** pages describe contracts, decisions, and reasons; they never copy volatile state (a SHA, a line count, a current version) — that is read live from the repo. Historical narrative ("v0.3 shipped with X") is the exception.
+
+### 3.4 Store interface and tools
+
+```ts
+interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number }
+
+interface MemoryStore {
+  root: string;
+  scope: 'project' | 'global';
+  index(): Promise<IndexEntry[]>;                                  // parsed index.md
+  read(path: string): Promise<WikiPage | null>;
+  write(path: string, page: Omit<WikiPage, 'updatedAt'>): Promise<void>;
+  reserve(slug: string, claimant: string): Promise<'created' | 'exists'>;   // atomic placeholder
+  appendLog(entry: string): Promise<void>;
+  search(query: string, k?: number): Promise<Array<{ page: WikiPage; score: number; snippet: string }>>;
+}
+
+interface RawStore {  // append-only
+  sessions(since?: number): Promise<SessionLogRef[]>;
+  docs(): Promise<DocRef[]>;
+  addDoc(path: string): Promise<DocRef>;
+}
+```
+
+Tools exposed to the agent:
+
+- `memory_search(query)` — index ∪ BM25, progressive disclosure
+- `memory_read(path)`
+- `memory_write(path, page)` — wiki only; `raw/` is not writable by the agent
+- `memory_file_analysis(slug, body)` — file an answer back into `analyses/`
+- `attempt_log(attempt)` — record a direction while it's fresh (lands in `raw/attempts/`)
+- `memory_ingest(path)` — ingest a doc the user pointed at
+
+An `Embedder` interface exists for optional vector search later; BM25 is the default and needs no API key.
+
+### 3.5 Attempts ledger (the "every attempt incl. failures" requirement)
+
+```ts
+interface Attempt {
+  id: string; sessionId: string; ts: number;
+  hypothesis: string;            // what the agent was trying
+  actions: string;               // 1–3 line summary
+  outcome: 'success' | 'failed' | 'abandoned' | 'reverted';
+  evidence: string[];            // event refs / error snippets / test output
+  lesson?: string;               // filled by the agent, or by the dream
+}
+```
+
+Lives in `raw/attempts/` (immutable). Ingest distills it into the session's `sources/` page and into `concepts/` when a lesson generalizes. This ledger is the supervisor reviewer's primary input.
+
+### 3.6 Pins — human corrections survive regeneration
+
+The sharp edge of "the LLM maintains everything": the next ingest of a related source regenerates a page and silently reverts a fix you made by hand. A pin records the *intent*, not the diff:
+
+```json
+{ "page": "concepts/retry-policy", "kind": "correction",
+  "claim": "Retries apply per request, not per batch",
+  "anchor": "## Semantics", "provenance": "human", "status": "active" }
+```
+
+After any regeneration, pins are re-checked against the new page text: still satisfied → keep; contradicted by a *newer source* → surface to the human instead of dropping; anchor section gone → flag orphaned. Storing the claim rather than a text diff is what lets re-application survive rewording.
+
+### 3.7 Dream interface
+
+```ts
+interface DreamInput {
+  wiki: MemoryStore;                  // read-only
+  raw: RawStore;                      // sessions/docs since last dream (cap ~100 sessions)
+  globalWiki?: MemoryStore;           // for promotion proposals
+  provider: ModelProvider;
+}
+
+interface DreamResult {
+  outputRoot: string;                 // a NEW wiki/ directory; input untouched
+  report: {
+    contradictions: Array<{ pages: string[]; claims: string[]; resolution: string }>;
+    superseded: Array<{ page: string; old: string; new: string; source: string }>;
+    orphans: string[];
+    missingPages: Array<{ concept: string; mentionedIn: string[] }>;
+    merged: Array<{ from: string[]; to: string }>;
+    removed: Array<{ page: string; line: string; reason: string }>;
+    promoted: Array<{ from: string; toGlobal: string; evidence: string[] }>;
+    pinsAffected: Array<{ pin: string; status: 'kept' | 'conflict' | 'orphaned' }>;
+  };
+}
+
+interface Dreamer { dream(input: DreamInput): Promise<DreamResult> }
+```
+
+Four phases, each its own prompt so they can be tested independently: **orient** (read `index.md`, `overview.md`, `SCHEMA.md`) → **gather signal** (scan raw sources since last dream: corrections, decisions, recurring errors, repeated workarounds, attempts with lessons) → **consolidate** (the lint fixes above, with provenance) → **prune & index** (rebuild `index.md` lean, demote verbose entries to pages, re-check pins).
+
+Apply modes: `review` (default: the report as a diff, accept/reject per change — review the artifact, not the plan) and `auto`. Triggers: `harness dream`; `session_end` hook when ≥ N sessions or ≥ T hours since the last dream; cron.
+
+---
+
+## 4. `supervisor` — interfaces
+
+### 4.1 Signals & detectors (heuristic, LLM-free)
+
+```ts
+type SignalType = 'loop' | 'stall' | 'error_burst' | 'drift' | 'budget' | 'test_regression';
+interface Signal { type: SignalType; confidence: number; evidence: string[]; window: [number, number] }
+
+interface Detector {
+  id: string;
+  observe(event: HarnessEvent, state: SupervisorState): Signal | null;
+}
+```
+
+v1 detectors:
+
+| Detector | Fires when |
+|---|---|
+| `loop` | same `tool.call.inputHash` ≥ k in window; same error substring ≥ k; edit→revert pairs on one file ≥ 2 |
+| `stall` | N consecutive turns with no `file.changed` and no new tool kind; or ≥ k test runs with unchanged pass count |
+| `error_burst` | tool error rate over last M calls above threshold |
+| `budget` | turns / tokens / USD / minutes past soft threshold (hard threshold is core's job) |
+| `test_regression` | pass count drops vs. best seen this session |
+| `drift` | files touched outside the plan's declared scope (v2: LLM-judged, sampled) |
+
+### 4.2 Policy ladder & interventions
+
+```ts
+type Intervention =
+  | { type: 'inject_guidance'; message: string }        // steer at next turn boundary
+  | { type: 'force_replan' }                             // require a fresh plan.updated before more tool calls
+  | { type: 'run_grader'; rubric: string }               // Outcomes-style check
+  | { type: 'checkpoint_rollback'; toEvent: number }     // git-based, opt-in
+  | { type: 'escalate'; question: string }               // ask the human
+  | { type: 'abort'; reason: string };
+
+interface Policy { decide(signals: Signal[], state: SupervisorState): Intervention[] }
+```
+
+Default ladder (per signal type, escalating on repeat): inject_guidance → force_replan → run reviewer → escalate → abort. Cooldowns prevent nagging every turn.
+
+### 4.3 Reviewer & grader (LLM-backed, invoked only by policy)
+
+```ts
+interface Reviewer {
+  review(input: { task: string; trajectory: HarnessEvent[]; attempts: Attempt[]; memory: MemoryStore })
+    : Promise<{ diagnosis: string; directions: string[]; guidance: string }>;
+}
+interface Grader {
+  grade(input: { rubric: string; artifacts: FileRef[]; trajectory: HarnessEvent[] })
+    : Promise<{ pass: boolean; gaps: string[] }>;
+}
+```
+
+The reviewer is the AVO piece: review the whole trajectory (plus the attempts ledger, which AVO lacked), propose several candidate directions, hand back guidance. The grader is the Outcomes piece: a written rubric checked by a separate evaluator, which stands in for the objective score AVO had.
+
+### 4.4 Attachment
+
+```ts
+interface Supervisor {
+  attach(session: Session, opts: { detectors: Detector[]; policy: Policy; reviewer?: Reviewer; grader?: Grader }): Detachable;
+}
+```
+
+It consumes `session.events`, emits `supervisor.signal` / `supervisor.intervention` back into the log, and applies interventions through `session.control.steer()` and the `pre_tool` hook (for `force_replan`).
+
+---
+
+## 5. `cli`
+
+- `harness` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
+- `harness run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
+- `harness dream [--review|--auto] [--scope project|global] [--since <n>]`
+- `harness sessions ls|show <id>|resume <id>`
+- `harness memory ls|show|search <q>|ingest <path>|lint` (`lint` = a dry-run dream report, no output store)
+- Config: `harness.config.ts` (provider, model, tools, permission rules, budget, supervisor thresholds) + `.harness/` state dir
+
+Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-only logic, it belongs in a package instead.
+
+---
+
+## 6. Build order
+
+| M | Deliverable | Proves |
+|---|---|---|
+| 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | the spine works before any model call |
+| 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | end-to-end task completion; start dogfooding on the repo itself |
+| 2 | OpenAI-compatible adapter, compaction, resume | provider abstraction is real; long sessions survive |
+| 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest (coverage plan, reserve/placeholder), `index.md` injection, index ∪ BM25 search, attempts ledger, pins | every session compounds into the wiki; retrieval works index-first |
+| 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | stalls and loops get caught at ~zero cost |
+| 5 | Dream = scheduled lint: contradictions, superseded claims, orphans, missing pages, new-wiki output + report, review/auto, promotion to global | the wiki stays trustworthy as it grows |
+| 6 | Supervisor v2: reviewer over trajectory + attempts ledger, rubric grader, force_replan | the AVO loop, generalized |
+| 7 | TUI, hooks API surface, MCP client, subagents, skills — in whatever order dogfooding demands | table stakes, driven by real need |
+
+Exit criterion for each milestone: the harness is used to build the next milestone.
+
+---
+
+## 7. Decisions locked (defaults, change if you disagree)
+
+- TypeScript / pnpm workspaces / ESM / vitest / zod
+- Node: develop on 24 (Active LTS); `engines: >=22` as the floor until 22 reaches EOL (Apr 2027); adopt 26 once it goes LTS (Oct 2026)
+- Own neutral message schema; adapters map outward
+- JSONL event log per session; snapshots for resume
+- Memory follows the LLM Wiki pattern; global is a separate wiki, not a label; index ∪ BM25 retrieval, embeddings pluggable; pins protect human edits; pages hold shape not volatile values
+- Supervisor heuristics first, LLM only on escalation
+- Dream = the wiki's lint pass, scheduled; output is a new directory + report; review mode default; single-session facts never promoted to global
+
+## 8. Open questions
+
+1. Sandboxing: none + allowlists for v1, Docker later — acceptable?
+2. Rollback: git-based checkpoints (`checkpoint_rollback`) require the workspace to be a repo; opt-in or assumed?
+3. Does anything in AgentLens or Lore already cover memory or observability here? Reuse vs. rebuild.
+4. Name for the harness / npm scope.
+5. Which repo to dogfood on after the harness itself.

@@ -1,0 +1,17 @@
+{
+  "name": "@harness/supervisor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Out-of-band supervisor: detectors, policy ladder, interventions, reviewer, grader",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "@harness/core": "workspace:*" }
+}

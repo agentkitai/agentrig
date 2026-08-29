@@ -1,0 +1,38 @@
+{
+  "name": "@harness/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Thin CLI over the SDK",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo": "tsx src/demo.ts"
+  },
+  "dependencies": {
+    "@harness/core": "workspace:*",
+    "@harness/memory": "workspace:*",
+    "@harness/supervisor": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "bin": {
+    "harness": "./dist/index.js"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

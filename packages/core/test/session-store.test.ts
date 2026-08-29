@@ -1,0 +1,70 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SessionStore, contentHash } from "@harness/core";
+
+let root: string;
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "harness-"));
+});
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+describe("SessionStore", () => {
+  it("stamps seq in order and replays identically", async () => {
+    let t = 1000;
+    const store = new SessionStore({ root, now: () => t++, newId: () => "s1" });
+    const id = store.create();
+    await store.append(id, { type: "session.start", task: "hello", cwd: "/w", provider: "fake", model: "m" });
+    await store.append(id, { type: "turn.start", n: 1 });
+    await store.append(id, { type: "tool.call", id: "t1", name: "bash", input: { cmd: "ls" }, inputHash: contentHash({ cmd: "ls" }) });
+    await store.append(id, { type: "session.end", reason: "done" });
+
+    const events = await store.readAll(id);
+    expect(events.map((e) => e.seq)).toEqual([0, 1, 2, 3]);
+    expect(events.map((e) => e.ts)).toEqual([1000, 1001, 1002, 1003]);
+    expect(events[2]).toMatchObject({ type: "tool.call", sessionId: "s1", name: "bash" });
+  });
+
+  it("recovers seq from disk when a new store instance resumes a session", async () => {
+    const a = new SessionStore({ root, newId: () => "s2" });
+    const id = a.create();
+    await a.append(id, { type: "turn.start", n: 1 });
+    await a.append(id, { type: "turn.end", n: 1 });
+
+    const b = new SessionStore({ root });
+    const resumed = await b.append(id, { type: "turn.start", n: 2 });
+    expect(resumed.seq).toBe(2);
+  });
+
+  it("lists sessions newest first", async () => {
+    let t = 0;
+    const store = new SessionStore({ root, now: () => t++ });
+    const first = store.create();
+    await store.append(first, { type: "turn.start", n: 1 });
+    await new Promise((r) => setTimeout(r, 10));
+    const second = store.create();
+    await store.append(second, { type: "turn.start", n: 1 });
+    const refs = await store.list();
+    expect(refs.map((r) => r.id)).toEqual([second, first]);
+  });
+
+  it("fails loudly on a gap in seq", async () => {
+    const store = new SessionStore({ root, newId: () => "s3" });
+    const id = store.create();
+    await store.append(id, { type: "turn.start", n: 1 });
+    const { appendFile } = await import("node:fs/promises");
+    await appendFile(store.pathFor(id), JSON.stringify({ seq: 5, sessionId: id, ts: 1, type: "turn.end", n: 1 }) + "\n");
+    await expect(store.readAll(id)).rejects.toThrow(/expected seq 1, got 5/);
+  });
+});
+
+describe("contentHash", () => {
+  it("is stable for equal inputs and differs otherwise", () => {
+    expect(contentHash({ a: 1 })).toBe(contentHash({ a: 1 }));
+    expect(contentHash({ a: 1 })).not.toBe(contentHash({ a: 2 }));
+    expect(contentHash("x")).toHaveLength(16);
+  });
+});

@@ -1,0 +1,120 @@
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { appendFile, mkdir, readdir, stat } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { join } from "node:path";
+import { type EventPayload, type HarnessEvent, parseEvent, serializeEvent } from "./events.js";
+
+export interface SessionRef {
+  id: string;
+  path: string;
+  updatedAt: number;
+  bytes: number;
+}
+
+export interface SessionStoreOptions {
+  /** Directory that will contain `<id>.jsonl` files. Created on first write. */
+  root: string;
+  now?: () => number;
+  newId?: () => string;
+}
+
+/**
+ * Append-only JSONL, one file per session.
+ *
+ * Invariants:
+ * - Events are written in `seq` order with no gaps.
+ * - A file is never rewritten. Compaction, resume, and dreams all read; only `append` writes.
+ * - `read` validates every line; a corrupt line throws rather than being skipped.
+ */
+export class SessionStore {
+  readonly root: string;
+  private readonly now: () => number;
+  private readonly newId: () => string;
+  private readonly seqs = new Map<string, number>();
+
+  constructor(opts: SessionStoreOptions) {
+    this.root = opts.root;
+    this.now = opts.now ?? (() => Date.now());
+    this.newId = opts.newId ?? (() => randomUUID().slice(0, 8));
+  }
+
+  /** Create a session id. Nothing is written until the first append. */
+  create(): string {
+    const id = this.newId();
+    this.seqs.set(id, 0);
+    return id;
+  }
+
+  pathFor(sessionId: string): string {
+    return join(this.root, `${sessionId}.jsonl`);
+  }
+
+  /** Stamp the envelope and append. Returns the stored event. */
+  async append(sessionId: string, payload: EventPayload): Promise<HarnessEvent> {
+    const seq = await this.nextSeq(sessionId);
+    const event = { ...payload, seq, sessionId, ts: this.now() } as HarnessEvent;
+    await mkdir(this.root, { recursive: true });
+    await appendFile(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+    this.seqs.set(sessionId, seq + 1);
+    return event;
+  }
+
+  /** Stream a session's events in order. */
+  async *read(sessionId: string): AsyncGenerator<HarnessEvent> {
+    const rl = createInterface({ input: createReadStream(this.pathFor(sessionId), "utf8"), crlfDelay: Infinity });
+    let expected = 0;
+    for await (const line of rl) {
+      if (line.trim() === "") continue;
+      const event = parseEvent(line);
+      if (event.seq !== expected) {
+        throw new Error(`session ${sessionId}: expected seq ${expected}, got ${event.seq}`);
+      }
+      expected += 1;
+      yield event;
+    }
+  }
+
+  async readAll(sessionId: string): Promise<HarnessEvent[]> {
+    const out: HarnessEvent[] = [];
+    for await (const e of this.read(sessionId)) out.push(e);
+    return out;
+  }
+
+  async list(): Promise<SessionRef[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.root);
+    } catch {
+      return [];
+    }
+    const refs: SessionRef[] = [];
+    for (const name of names) {
+      if (!name.endsWith(".jsonl")) continue;
+      const path = join(this.root, name);
+      const s = await stat(path);
+      refs.push({ id: name.slice(0, -".jsonl".length), path, updatedAt: s.mtimeMs, bytes: s.size });
+    }
+    return refs.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  private async nextSeq(sessionId: string): Promise<number> {
+    const cached = this.seqs.get(sessionId);
+    if (cached !== undefined) return cached;
+    // Resuming a session this process didn't create: recover seq from disk.
+    let n = 0;
+    try {
+      for await (const _ of this.read(sessionId)) n += 1;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    this.seqs.set(sessionId, n);
+    return n;
+  }
+}
+
+/** Stable content hash used for `tool.call.inputHash` and `file.changed.contentHash`. */
+export function contentHash(value: unknown): string {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+}
