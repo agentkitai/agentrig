@@ -6,6 +6,7 @@ export function renderEvent(e: HarnessEvent): string {
   const p = `${String(e.seq).padStart(4)} ${t} ${e.type.padEnd(22)}`;
   switch (e.type) {
     case "session.start": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
+    case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "turn.start":
     case "turn.end": return `${p} n=${e.n}`;

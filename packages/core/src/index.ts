@@ -5,5 +5,7 @@ export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./permissions.js";
 export * from "./agent.js";
+export * from "./compaction.js";
 export * from "./providers/anthropic.js";
+export * from "./providers/openai.js";
 export * from "./tools/index.js";

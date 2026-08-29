@@ -16,6 +16,20 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a session.resume event", () => {
+    const event = HarnessEvent.parse({
+      seq: 40,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "session.resume",
+      task: "keep going",
+      cwd: "/w",
+      provider: "anthropic",
+      model: "m",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("rejects an unknown event type", () => {
     expect(() => parseEvent(JSON.stringify({ seq: 0, sessionId: "x", ts: 1, type: "nope" }))).toThrow();
   });

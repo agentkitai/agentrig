@@ -4,6 +4,7 @@ import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
+import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, contentHash } from "./session-store.js";
 
 export interface Budget {
@@ -33,6 +34,11 @@ export interface AgentConfig {
   store: SessionStore;
   budget?: Budget;
   pricing?: Pricing;
+  /**
+   * Defaults to `summarizeOlderTurns()` (PLAN §2.8). The summarization call goes straight to the
+   * provider and is not metered by the budget — its cost is the price of staying under the window.
+   */
+  compaction?: CompactionStrategy;
   /** max_tokens per model response (default 8192). */
   maxTokensPerTurn?: number;
   /**
@@ -66,7 +72,11 @@ export interface Session {
 }
 
 export interface Agent {
-  run(task: string, opts?: { cwd?: string }): Session;
+  /**
+   * `resume` continues an existing session from its snapshot: same id, same JSONL log
+   * (seq continues), prior messages restored, `task` appended as a fresh user message.
+   */
+  run(task: string, opts?: { cwd?: string; resume?: string }): Session;
 }
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
@@ -133,13 +143,15 @@ class PauseGate {
 }
 
 export function createAgent(config: AgentConfig): Agent {
-  return { run: (task, opts) => runSession(config, task, opts?.cwd ?? process.cwd()) };
+  return { run: (task, opts) => runSession(config, task, opts ?? {}) };
 }
 
-function runSession(config: AgentConfig, task: string, cwd: string): Session {
+function runSession(config: AgentConfig, task: string, opts: { cwd?: string; resume?: string }): Session {
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
-  const id = store.create();
+  const resume = opts.resume;
+  const id = resume ?? store.create();
+  let cwd = opts.cwd ?? process.cwd();
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
@@ -187,9 +199,20 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
 
     const toolsByName = new Map(config.tools.map((t) => [t.name, t]));
     const toolSpecs = config.tools.map(toToolSpec);
-    const system =
-      typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+    const compaction = config.compaction ?? summarizeOlderTurns();
     const startedAt = now();
+    let messages: Message[] = [];
+    let system = "";
+
+    // best-effort resume cache; the JSONL log stays the source of truth
+    const saveSnapshot = async (): Promise<void> => {
+      if (messages.length === 0) return;
+      try {
+        await store.writeSnapshot({ sessionId: id, task, cwd, turns, usage: { ...totals }, messages, ts: now() });
+      } catch {
+        // a failed snapshot only makes the next resume impossible, never the session incorrect
+      }
+    };
 
     const budgetExceeded = (): string | null => {
       const b = config.budget;
@@ -204,8 +227,23 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
     };
 
     try {
-      await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
-      const messages: Message[] = [{ role: "user", content: [{ type: "text", text: task }] }];
+      if (resume !== undefined) {
+        const snap = await store.readSnapshot(id);
+        if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
+        cwd = opts.cwd ?? snap.cwd;
+        turns = snap.turns;
+        totals.input = snap.usage.input;
+        totals.output = snap.usage.output;
+        if (snap.usage.cacheRead !== undefined) totals.cacheRead = snap.usage.cacheRead;
+        if (snap.usage.cacheWrite !== undefined) totals.cacheWrite = snap.usage.cacheWrite;
+        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model });
+        messages = snap.messages;
+        if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
+      } else {
+        await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
+        messages = [{ role: "user", content: [{ type: "text", text: task }] }];
+      }
+      system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
 
       loop: while (true) {
         await gate.wait();
@@ -332,13 +370,28 @@ function runSession(config: AgentConfig, task: string, cwd: string): Session {
           results.push(await runTool(tu));
         }
         messages.push({ role: "user", content: results });
+
+        if (
+          compaction.shouldCompact({
+            tokens: usage.input + usage.output,
+            window: provider.capabilities.contextWindow,
+          })
+        ) {
+          const before = estimateTokens(system, messages);
+          messages = await compaction.compact(messages, provider);
+          const after = estimateTokens(system, messages);
+          await emit({ type: "context.compact", before, after });
+        }
+
         await emit({ type: "turn.end", n: turns });
+        await saveSnapshot();
       }
     } catch (err) {
       reason = "error";
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      await saveSnapshot();
       // a steer that never reached a turn boundary was not delivered — record that, don't lose it
       for (const s of pendingSteers.splice(0)) {
         await emit({

@@ -61,6 +61,43 @@ describe("SessionStore", () => {
   });
 });
 
+describe("snapshots", () => {
+  it("round-trips a snapshot and returns null when none exists", async () => {
+    const store = new SessionStore({ root });
+    expect(await store.readSnapshot("nope")).toBe(null);
+    const snapshot = {
+      sessionId: "s9",
+      task: "do things",
+      cwd: "/w",
+      turns: 3,
+      usage: { input: 100, output: 50 },
+      messages: [
+        { role: "user" as const, content: [{ type: "text" as const, text: "do things" }] },
+        {
+          role: "assistant" as const,
+          content: [{ type: "tool_use" as const, id: "t1", name: "bash", input: { command: "ls" } }],
+        },
+        {
+          role: "user" as const,
+          content: [{ type: "tool_result" as const, toolUseId: "t1", content: "a.txt", isError: false }],
+        },
+      ],
+      ts: 1234,
+    };
+    await store.writeSnapshot(snapshot);
+    expect(await store.readSnapshot("s9")).toEqual(snapshot);
+  });
+
+  it("keeps snapshots out of the session listing", async () => {
+    const store = new SessionStore({ root, newId: () => "s10" });
+    const id = store.create();
+    await store.append(id, { type: "turn.start", n: 1 });
+    await store.writeSnapshot({ sessionId: id, task: "t", cwd: "/w", turns: 1, usage: { input: 0, output: 0 }, messages: [], ts: 1 });
+    const refs = await store.list();
+    expect(refs.map((r) => r.id)).toEqual(["s10"]);
+  });
+});
+
 describe("contentHash", () => {
   it("is stable for equal inputs and differs otherwise", () => {
     expect(contentHash({ a: 1 })).toBe(contentHash({ a: 1 }));

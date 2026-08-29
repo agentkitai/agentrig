@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import {
   AnthropicProvider,
+  OpenAICompatibleProvider,
   createAgent,
   builtinTools,
   defaultRules,
@@ -9,6 +10,7 @@ import {
   PermissionClass,
   type Budget,
   type Decision,
+  type ModelProvider,
   type PermissionRequest,
   type PermissionRule,
   type Pricing,
@@ -16,11 +18,16 @@ import {
 } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+
 export interface RunOptions {
   root: string;
   json?: boolean;
   headless?: boolean;
+  provider: string;
   model: string;
+  baseUrl?: string;
+  resume?: string;
   system?: string;
   allow?: string[];
   deny?: string[];
@@ -31,6 +38,29 @@ export interface RunOptions {
   priceIn?: string;
   priceOut?: string;
   maxTokensPerTurn: string;
+}
+
+function buildProvider(opts: RunOptions): ModelProvider {
+  if (opts.provider === "anthropic") {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+    return new AnthropicProvider({ apiKey, model: opts.model });
+  }
+  if (opts.provider === "openai") {
+    if (opts.model === DEFAULT_ANTHROPIC_MODEL) {
+      throw new Error("--model is required with --provider openai");
+    }
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey && opts.baseUrl === undefined) {
+      throw new Error("OPENAI_API_KEY is not set (or pass --base-url for a local server)");
+    }
+    return new OpenAICompatibleProvider({
+      model: opts.model,
+      ...(apiKey ? { apiKey } : {}),
+      ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
+    });
+  }
+  throw new Error(`unknown provider "${opts.provider}" (anthropic | openai)`);
 }
 
 const PATH_TOOLS = new Set(["read_file", "write_file", "edit_file", "glob", "grep"]);
@@ -84,9 +114,11 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
 }
 
 export async function runCommand(task: string, opts: RunOptions): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY is not set");
+  let provider: ModelProvider;
+  try {
+    provider = buildProvider(opts);
+  } catch (err) {
+    console.error((err as Error).message);
     process.exitCode = 1;
     return;
   }
@@ -120,14 +152,14 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     return;
   }
 
-  const cwd = process.cwd();
   const interactive = !opts.headless && process.stdin.isTTY === true;
   const agent = createAgent({
-    provider: new AnthropicProvider({ apiKey, model: opts.model }),
+    provider,
     tools: builtinTools(),
     // deny rules first so an explicit deny always wins; `ask` prompts when interactive, else denies.
     permissions: new RulePolicy([...toRules(opts.deny, "deny"), ...toRules(opts.allow, "allow"), ...defaultRules]),
-    systemPrompt: opts.system ?? defaultSystemPrompt(cwd),
+    // a function so a resumed session gets its snapshot's cwd, not this process's
+    systemPrompt: (ctx) => opts.system ?? defaultSystemPrompt(ctx.cwd),
     store: new SessionStore({ root: opts.root }),
     budget,
     ...(pricing === undefined ? {} : { pricing }),
@@ -135,7 +167,11 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     ...(interactive ? { onAsk: askInteractively } : {}),
   });
 
-  const session: Session = agent.run(task, { cwd });
+  // on resume, omit cwd so the snapshot's cwd wins
+  const session: Session = agent.run(
+    task,
+    opts.resume === undefined ? { cwd: process.cwd() } : { resume: opts.resume },
+  );
   const onSigint = () => session.control.abort();
   process.on("SIGINT", onSigint);
   try {

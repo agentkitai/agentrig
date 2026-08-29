@@ -8,6 +8,7 @@ import {
   createAgent,
   RulePolicy,
   SessionStore,
+  summarizeOlderTurns,
   toToolSpec,
   type Session,
   type AgentConfig,
@@ -474,6 +475,87 @@ describe("agent loop", () => {
     }, 10);
     await collect(session);
     expect((await session.done).reason).toBe("aborted");
+  });
+});
+
+describe("compaction in the loop", () => {
+  it("compacts past the window threshold and emits context.compact", async () => {
+    const provider = new FakeProvider([
+      // turn 1: small usage, no compaction
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "one" } }, usage(10, 5), stop("tool_use")],
+      // turn 2: 80k of a 100k window — compaction triggers after this turn's tools
+      [{ type: "tool_use", id: "t2", name: "echo", input: { text: "two" } }, usage(80_000, 100), stop("tool_use")],
+      // the summarization call consumes the next scripted response
+      [{ type: "text_delta", text: "SUMMARY OF EARLIER WORK" }, usage(50, 20), stop("end_turn")],
+      // turn 3 runs on the compacted history
+      [usage(100, 5), stop("end_turn")],
+    ]);
+    const session = createAgent(
+      makeConfig(provider, { compaction: summarizeOlderTurns({ keepLastMessages: 2 }) }),
+    ).run("t");
+    const events = await collect(session);
+    await session.done;
+
+    const compact = events.find((e) => e.type === "context.compact");
+    expect(compact).toBeDefined();
+    expect(compact!.after).toBeLessThan(compact!.before);
+
+    // turn 3's request sees: task, summary, and turn 2's pair verbatim — turn 1 summarized away
+    const turn3 = provider.requests[3]!.messages;
+    expect(turn3).toHaveLength(4);
+    expect(turn3[0]!.content[0]).toMatchObject({ type: "text", text: "t" });
+    expect(turn3[1]!.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("SUMMARY OF EARLIER WORK") });
+    expect(turn3[2]!.content[0]).toMatchObject({ type: "tool_use", id: "t2" });
+    expect(turn3[3]!.content[0]).toMatchObject({ type: "tool_result", toolUseId: "t2" });
+  });
+});
+
+describe("resume", () => {
+  it("continues a session from its snapshot: same log, restored messages, appended task", async () => {
+    const first = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } }, usage(10, 5), stop("tool_use")],
+      [{ type: "text_delta", text: "done" }, usage(20, 3), stop("end_turn")],
+    ]);
+    const config = makeConfig(first);
+    const s1 = createAgent(config).run("say hi", { cwd: "/w" });
+    await collect(s1);
+    const firstSummary = await s1.done;
+    expect(firstSummary.reason).toBe("done");
+
+    const second = new FakeProvider([[{ type: "text_delta", text: "again" }, usage(5, 2), stop("end_turn")]]);
+    const s2 = createAgent({ ...config, provider: second }).run("now say bye", { resume: "sess1" });
+    const resumedEvents = await collect(s2);
+    const summary = await s2.done;
+
+    expect(summary).toMatchObject({ id: "sess1", reason: "done", turns: 3 });
+    expect(summary.usage).toMatchObject({ input: 35, output: 10 });
+    expect(resumedEvents[0]).toMatchObject({ type: "session.resume", task: "now say bye", cwd: "/w" });
+
+    // the resumed model call carries the whole prior conversation plus the new task
+    const msgs = second.requests[0]!.messages;
+    expect(msgs[0]!.content[0]).toMatchObject({ type: "text", text: "say hi" });
+    expect(msgs.at(-1)!.content[0]).toMatchObject({ type: "text", text: "now say bye" });
+    expect(msgs.some((m) => m.content.some((b) => b.type === "tool_result"))).toBe(true);
+
+    // one log, contiguous seq across both runs, exactly two session boundaries
+    const all = await config.store.readAll("sess1");
+    expect(all.map((e) => e.seq)).toEqual(all.map((_, i) => i));
+    expect(all.filter((e) => e.type === "session.end")).toHaveLength(2);
+    expect(all.some((e) => e.type === "session.resume")).toBe(true);
+  });
+
+  it("fails loudly when no snapshot exists", async () => {
+    const provider = new FakeProvider([]);
+    const session = createAgent(makeConfig(provider, { store: new SessionStore({ root, newId: () => "x" }) })).run(
+      "t",
+      { resume: "ghost" },
+    );
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("error");
+    expect(events.some((e) => e.type === "error" && e.fatal && /no snapshot/.test(e.message))).toBe(true);
+    expect(provider.requests).toHaveLength(0);
   });
 });
 
