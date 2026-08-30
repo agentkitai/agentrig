@@ -1,0 +1,29 @@
+name: CI
+
+# Every claim of "green" in this repo was a claim about Linux until a macOS run found two tests
+# that could never pass there — one of which also passed vacuously, so it was hiding as well as
+# failing. A matrix is the only thing that makes "green" mean green.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      # both platforms report, rather than the first failure cancelling the other's evidence
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test

@@ -972,6 +972,28 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   filter over rendered strings, so what a person reads and what a debugger reads can diverge in
   shape without either drifting from the log.
 
+## "Green" meant Linux (from the first macOS run, 2026-08-30)
+
+Two tests failed on a Mac. Neither was a code defect; both were **Linux assumptions in the test
+scaffolding**, written by someone who only ever ran the suite on Linux and reported it green.
+
+- **`mcp-process.test.ts` read `/proc/<pid>/stat`.** macOS has no `/proc`, so its liveness helper
+  returned "gone" for every pid: the pre-condition ("the grandchild is running") failed, and the
+  post-condition ("it is gone after close()") passed **for the wrong reason**. A test that cannot
+  pass on a platform is bad; one that also passes vacuously there is worse. It now falls back to
+  `kill(pid, 0)`, which cannot see a zombie — hence the existing poll.
+- **The shell test compared `/bin/bash` against `/bin/sh`.** That only demonstrates anything where
+  `/bin/sh` is dash. On macOS it is bash in POSIX mode and runs `[[ ]]` happily, so the assertion
+  failed for a reason unrelated to the code. Replaced with a **stub shell script** the test writes
+  itself, asserting the command arrives as `-c <command>` — deterministic on every platform, and
+  a stronger claim than the original.
+- **`groupIdOf` also read `/proc`,** so every assertion guarded by `if (group !== null)` was
+  skipped on macOS — passing without testing. It falls back to `ps -o pgid=`.
+- **CI now runs the matrix** (`ubuntu-latest`, `macos-latest`) on push and PR. There was no CI at
+  all before this: every "green" in this repo's history was one person running one platform.
+  Windows is follow-up **F3** — the suite's POSIX assumptions would make that job red on arrival,
+  and skipping the failures to get it green would produce a job that tests nothing.
+
 ## Windows notes (from the first real desktop run, 2026-08-30)
 
 - **CRLF was a silent edit-breaker.** `read_file` and `grep` split on `\n` only, so on a CRLF

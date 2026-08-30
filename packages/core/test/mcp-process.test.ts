@@ -1,4 +1,4 @@
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,10 +17,28 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** `S`/`R` = alive, `Z` = killed but not yet reaped, `gone` = reaped. */
+/**
+ * `S`/`R` = alive, `Z` = killed but not yet reaped, `gone` = reaped.
+ *
+ * `/proc` is Linux-only. Without a fallback this returned "gone" for every pid on macOS, which
+ * failed the pre-condition here and made the post-condition below pass for the wrong reason — a
+ * test that cannot pass on a platform is bad, but one that passes vacuously is worse.
+ */
+const HAS_PROC = existsSync("/proc/self/stat");
+
 function state(pid: number): string {
+  if (HAS_PROC) {
+    try {
+      return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]!.split(" ")[0]!;
+    } catch {
+      return "gone";
+    }
+  }
   try {
-    return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]!.split(" ")[0]!;
+    // signal 0 tests existence without delivering anything. It cannot distinguish a zombie from
+    // a live process — the reason /proc is preferred where it exists — so callers poll.
+    process.kill(pid, 0);
+    return "S";
   } catch {
     return "gone";
   }
