@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Box, Static, Text, useApp, useInput } from "ink";
+import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
+import { fitToRows, liveRows } from "./viewport.js";
 
 /**
- * Layout only. Every decision lives in `TuiController`, so this file has nothing in it worth
- * testing and nothing in it that a test would struggle to reach.
+ * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
+ * to reach — with one exception: how tall this tree renders is a correctness property, not a
+ * cosmetic one (see `viewport.ts`), and `test/tui-frame.test.ts` renders it against a fake TTY to
+ * hold it.
  */
 
 // `exactOptionalPropertyTypes` means `color={undefined}` is not the same as omitting it, so the
@@ -20,6 +23,7 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
 
 export function App({ controller }: { controller: TuiController }): JSX.Element {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
 
@@ -71,6 +75,9 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     setInput((v) => v + char);
   });
 
+  const columns = stdout?.columns ?? 80;
+  const rows = liveRows(stdout?.rows);
+
   return (
     <Box flexDirection="column">
       {/*
@@ -87,10 +94,15 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
         )}
       </Static>
 
-      {/* the reply as it streams, replaced by a committed line when the turn ends */}
+      {/*
+        The reply as it streams and the input buffer are the two things in the frame that grow
+        without bound, and a frame as tall as the window costs a full-screen clear plus a rewrite
+        of the whole scrollback on EVERY render — see `viewport.ts`. Both are drawn through a
+        viewport so the frame's height is a constant.
+      */}
       {state.streaming !== "" ? (
         <Box marginTop={1}>
-          <Text>{state.streaming}</Text>
+          <Text>{fitToRows(state.streaming, columns, rows)}</Text>
         </Box>
       ) : null}
 
@@ -111,7 +123,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
           <Text color={state.status === "running" ? "yellow" : "green"}>
             {state.status === "running" ? "· " : "> "}
           </Text>
-          <Text>{input}</Text>
+          {/* less the two columns the prompt marker takes, or the line wraps one row further */}
+          <Text>{fitToRows(input, columns - 2, rows)}</Text>
         </Box>
       )}
 
