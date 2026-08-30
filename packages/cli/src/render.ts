@@ -23,7 +23,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
-    case "subagent.end": return `${p} ${e.id}`;
+    case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;

@@ -116,7 +116,10 @@ export function buildProgram(): Command {
       .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
       .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
-      .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session");
+      .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session")
+      .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
+      .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
+      .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, []);
   }
 
   // AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice

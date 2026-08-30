@@ -5,6 +5,10 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  discoverSkills,
+  skillsInjection,
+  skillTool,
+  subagentTool,
   type Agent,
   type AnyTool,
   type Budget,
@@ -59,6 +63,11 @@ export interface AgentBuildOptions extends ProviderOptions {
   dreamStructuralOnly?: boolean;
   /** Path to a JSON file of MCP servers (PLAN §6's MCP client row). */
   mcpConfig?: string;
+  /** Give the agent a `subagent` tool for context-isolated sub-tasks. */
+  subagents?: boolean;
+  subagentMaxTurns?: string;
+  /** Directories to discover markdown skills in (repeatable). */
+  skills?: string[];
 }
 
 const McpServerEntry = z.object({
@@ -199,6 +208,20 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   }
 
   async function assemble(): Promise<BuiltAgent> {
+  // one policy object, shared by parent and children: a subagent that could do more than its
+  // parent would be a permission bypass with extra steps
+  const permissionPolicy = new RulePolicy([
+    ...toRules(opts.deny, "deny"),
+    ...toRules(opts.allow, "allow"),
+    ...(memoryToolset.length === 0
+      ? []
+      : [
+          { tool: "memory_search", decision: "allow" as const },
+          { tool: "memory_read", decision: "allow" as const },
+        ]),
+    ...defaultRules,
+  ]);
+
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend();
@@ -226,26 +249,55 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     );
   }
 
+  // The subagent tool needs an agent config to build children from, and that config is the one
+  // being built — so it is added after, closing over a factory rather than a value.
+  // Skills (PLAN §6): the catalogue rides in the system prompt one line each, and the body is
+  // fetched on demand — the same index-first shape as the wiki, for the same reason. Twenty
+  // skills of a thousand words each would cost more context than the task.
+  const skills = opts.skills === undefined || opts.skills.length === 0
+    ? []
+    : await discoverSkills({
+        roots: opts.skills,
+        onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
+      });
+
+  const tools: AnyTool[] = [...builtinTools(), ...memoryToolset, ...mcpTools];
+  if (skills.length > 0) tools.push(skillTool(skills));
+  if (opts.subagents === true) {
+    tools.push(
+      subagentTool({
+        createAgent,
+        maxTurns: positiveNumber("--subagent-max-turns", opts.subagentMaxTurns ?? "15"),
+        // a child gets the parent's provider, tools and permissions, but NOT the ability to
+        // spawn its own — depth 1, checked in the tool
+        childConfig: () => ({
+          provider,
+          tools: [...builtinTools(), ...memoryToolset, ...mcpTools],
+          permissions: permissionPolicy,
+          systemPrompt: (ctx: { cwd: string }) =>
+            [
+              "You are a subagent. You have been given one self-contained task and none of the",
+              "parent conversation. Do the task, then reply with the answer and no tool calls —",
+              "your final message is all the parent receives.",
+              `Working directory: ${ctx.cwd}`,
+            ].join("\n"),
+          store: new SessionStore({ root: opts.root }),
+          maxTokensPerTurn,
+        }),
+      }),
+    );
+  }
+
   const agent = createAgent({
     provider,
-    tools: [...builtinTools(), ...memoryToolset, ...mcpTools],
+    tools,
     // deny rules first so an explicit deny always wins
-    permissions: new RulePolicy([
-      ...toRules(opts.deny, "deny"),
-      ...toRules(opts.allow, "allow"),
-      // memory reads are confined to the wiki root by the store, not by cwd, so they cannot be
-      // expressed as a cwdOnly rule; allow them by tool name instead
-      ...(memoryToolset.length === 0
-        ? []
-        : [
-            { tool: "memory_search", decision: "allow" as const },
-            { tool: "memory_read", decision: "allow" as const },
-          ]),
-      ...defaultRules,
-    ]),
+    permissions: permissionPolicy,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) =>
-      [opts.system ?? defaultSystemPrompt(ctx.cwd), memoryIndex].filter((s) => s !== "").join("\n\n"),
+      [opts.system ?? defaultSystemPrompt(ctx.cwd), skillsInjection(skills), memoryIndex]
+        .filter((s) => s !== "")
+        .join("\n\n"),
     store: new SessionStore({ root: opts.root }),
     ...(hooks.length === 0 ? {} : { hooks }),
     budget,

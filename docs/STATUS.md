@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M7**
+Current milestone: **all milestones complete** — M0 through M7
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI + MCP done (2026-08-30); subagents, skills next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | done (2026-08-30) |
 
 ## M0 notes
 
@@ -783,6 +783,49 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - One real-process test covers group reaping, because it cannot be faked. Note the trap it
   documents: `kill(pid, 0)` succeeds on a *zombie*, so checking existence rather than liveness
   reports a false failure — the test polls process state instead.
+
+## M7 notes — subagents and skills (the last two rows)
+
+### Subagents
+
+- **`subagent.spawn` / `subagent.end` had been in the schema since M0 with nothing emitting one** —
+  the same dormant contract `plan.updated` was before M6. `subagent.end` gains an optional
+  `reason`, because knowing *how* a child finished is the useful part in a log.
+- **The point is context isolation, not parallelism.** A search that would fill the parent's
+  window with fifty file contents happens in a session of its own and the parent receives only the
+  answer. So the child's events go to the child's log; forwarding them would defeat the entire
+  reason to spawn one. The parent's log records that a child ran and how it ended — enough to
+  trace, not enough to drown.
+- **Depth-limited.** Unbounded recursion here is a fork bomb with a token budget attached. Default
+  depth 1: a subagent cannot spawn its own.
+- **A child gets its own, smaller turn budget** (15), not the parent's — and the same permission
+  policy object, because a subagent that could do more than its parent would be a permission
+  bypass with extra steps.
+- **The parent's abort reaches the child.** Aborting a session must not leave its children running
+  and billing.
+- The tool is `exec`: a child can do anything its tools can do, so claiming less would let
+  `--allow read` run arbitrary writes through one.
+- A child that ends on anything but `done` is reported to the parent as an **error**, not as an
+  answer, and a child that says nothing is reported as such rather than as an empty result.
+
+### Skills
+
+- **Index-first, like the wiki, for the same reason.** A project may have twenty skills of a
+  thousand words each; injecting them all would cost more context than the task. The system prompt
+  carries name + description one line each, and the body is fetched through the `skill` tool only
+  when the model decides one is relevant.
+- **The description is what the model chooses on**, so a skill without one falls back to the first
+  heading or line of its body rather than showing an empty entry it cannot reason about.
+- `<name>.md` or `<name>/SKILL.md`; a nested skill is named by its **directory**, since the file is
+  a fixed marker.
+- **The first root wins**, so a project skill shadows a global one of the same name — the order a
+  user expects.
+- **The `skill` tool reads only what was already discovered**, keyed by name into a fixed map, so
+  there is no model-supplied path to traverse. Bounded by file size and count.
+- **Caveat: skills are discovered once at startup.** Editing one mid-session has no effect until
+  the next run.
+- **Caveat: nothing validates a skill's body.** It is injected verbatim on load, so a skill is as
+  trusted as the repository it lives in.
 
 ## Decided
 
