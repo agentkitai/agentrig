@@ -1,129 +1,108 @@
 import { render } from "ink";
-import { createAgent, builtinTools, defaultRules, RulePolicy, SessionStore, type AnyTool } from "@agentkitai/agentrig-core";
+import { join } from "node:path";
 import {
+  applyDream,
   FileMemoryStore,
   FileRawStore,
-  indexInjection,
-  memoryTools,
-  runDream,
   findingCount,
+  renderReport,
+  runDream,
   unionRetrieve,
 } from "@agentkitai/agentrig-memory";
-import { join } from "node:path";
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
-import { buildProvider, type ProviderOptions } from "../provider.js";
-import { openBackend } from "../memory.js";
+import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 
-export interface TuiOptions extends ProviderOptions {
-  root: string;
-  memory?: string;
-  maxTurns: string;
-  maxTokensPerTurn: string;
-  modelExplicit?: boolean;
-}
+export type TuiOptions = AgentBuildOptions & { modelExplicit?: boolean };
 
 /**
- * `agentrig` with no subcommand (PLAN §5). Thin by design: it assembles the same agent
- * `agentrig run` does and hands it to the controller.
+ * `agentrig` with no subcommand (PLAN §5). Thin by design: `buildAgent` assembles exactly the
+ * agent `agentrig run` gets — same prompt, same permission rules, same session_end hooks, same
+ * flag validation — so the two entry points cannot drift apart the way they did when this file
+ * assembled its own.
  */
 export async function startTui(opts: TuiOptions): Promise<void> {
   if (process.stdin.isTTY !== true) {
-    console.error("the TUI needs a terminal; use `agentrig run \"<task>\" --headless` for scripts");
+    console.error('the TUI needs a terminal; use `agentrig run "<task>" --headless` for scripts');
     process.exitCode = 1;
     return;
   }
 
-  let provider;
+  let built;
+  const controller: TuiController = new TuiController({
+    cwd: process.cwd(),
+    // assigned below; the controller is constructed first because it owns `onAsk`
+    agent: { run: () => { throw new Error("agent not ready"); } },
+  });
+
   try {
-    provider = buildProvider(opts);
+    built = await buildAgent(opts, {
+      onAsk: (req) => controller.ask(req),
+      onHookError: (m) => controller.print(m, "error"),
+      onHookDone: (m) => controller.print(m, "system"),
+    });
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;
     return;
   }
 
-  let memoryIndex = "";
-  let memoryToolset: AnyTool[] = [];
-  let memoryStore: FileMemoryStore | undefined;
+  controller.attach(built.agent);
+  if (built.memoryStore !== undefined) {
+    const store = built.memoryStore;
+    controller.setMemory(async (query) => {
+      const hits =
+        query === ""
+          ? (await store.index()).map((e) => `${e.path} — ${e.summary}`)
+          : unionRetrieve(await store.index(), await store.pages(), query, 8).map(
+              (h) => `${h.page.path} — ${h.snippet}`,
+            );
+      return hits.length === 0 ? ["(the wiki is empty)"] : hits;
+    });
+  }
   if (opts.memory !== undefined) {
-    memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
-    memoryIndex = await indexInjection(memoryStore).catch(() => "");
-    const backend = openBackend();
-    memoryToolset = memoryTools({
-      store: memoryStore,
-      raw: new FileRawStore({ root: opts.memory }),
-      ...(backend === null ? {} : { backend }),
+    const dir = opts.memory;
+    controller.setDream(async (auto) => {
+      const wiki = new FileMemoryStore({ root: join(dir, "wiki") });
+      await wiki.init();
+      const result = await runDream({
+        wiki,
+        raw: new FileRawStore({ root: dir }),
+        provider: built!.provider,
+        cwd: process.cwd(),
+      });
+      const findings = findingCount(result.report, result.structural);
+      if (!auto) {
+        return [
+          renderReport(result.report, {
+            structural: result.structural,
+            promotionRejected: result.promotionRejected,
+            outputRoot: result.outputRoot,
+            applied: false,
+          }),
+          `to accept: agentrig dream --auto  |  to discard: rm -rf ${result.outputRoot}`,
+        ];
+      }
+      const backup = await applyDream(join(dir, "wiki"), result.outputRoot, `${Date.now()}-tui`);
+      await result.workspace.dispose().catch(() => {});
+      return [`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`];
     });
   }
 
-  const controller: TuiController = new TuiController({
-    cwd: process.cwd(),
-    agent: createAgent({
-      provider,
-      tools: [...builtinTools(), ...memoryToolset],
-      permissions: new RulePolicy([
-        ...(memoryToolset.length === 0
-          ? []
-          : [
-              { tool: "memory_search", decision: "allow" as const },
-              { tool: "memory_read", decision: "allow" as const },
-            ]),
-        ...defaultRules,
-      ]),
-      systemPrompt: (ctx) =>
-        [
-          "You are AgentRig, an autonomous software engineering agent.",
-          `Working directory: ${ctx.cwd}`,
-          "Use the available tools to complete the task. Verify your work before finishing.",
-          memoryIndex,
-        ]
-          .filter((s) => s !== "")
-          .join("\n"),
-      store: new SessionStore({ root: opts.root }),
-      budget: { maxTurns: Number(opts.maxTurns) },
-      maxTokensPerTurn: Number(opts.maxTokensPerTurn),
-      // the prompt is rendered by the TUI and resolved by a keypress
-      onAsk: (req) => controller.ask(req),
-    }),
-    ...(memoryStore === undefined
-      ? {}
-      : {
-          onMemory: async (query: string) => {
-            const hits =
-              query === ""
-                ? (await memoryStore.index()).map((e) => `${e.path} — ${e.summary}`)
-                : unionRetrieve(await memoryStore.index(), await memoryStore.pages(), query, 8).map(
-                    (h) => `${h.page.path} — ${h.snippet}`,
-                  );
-            return hits.length === 0 ? ["(the wiki is empty)"] : hits;
-          },
-        }),
-    ...(opts.memory === undefined
-      ? {}
-      : {
-          onDream: async (auto: boolean) => {
-            const wiki = new FileMemoryStore({ root: join(opts.memory!, "wiki") });
-            await wiki.init();
-            const result = await runDream({
-              wiki,
-              raw: new FileRawStore({ root: opts.memory! }),
-              provider,
-              cwd: process.cwd(),
-            });
-            const findings = findingCount(result.report, result.structural);
-            if (!auto) {
-              return [`dream found ${findings} thing(s); inspect ${result.outputRoot} or run agentrig dream --auto`];
-            }
-            const { applyDream } = await import("@agentkitai/agentrig-memory");
-            const backup = await applyDream(join(opts.memory!, "wiki"), result.outputRoot, String(Date.now()));
-            await result.workspace.dispose().catch(() => {});
-            return [`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`];
-          },
-        }),
-  });
+  // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the
+  // agent keeps running — still executing bash, still writing files, now invisibly.
+  const onSigint = (): void => controller.abort();
+  process.on("SIGINT", onSigint);
 
   controller.print("agentrig — type a task, or /help for commands", "system");
-  const { waitUntilExit } = render(<App controller={controller} />);
-  await waitUntilExit();
+  try {
+    // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
+    // to useInput, so the abort handler in the view could never run.
+    const { waitUntilExit } = render(<App controller={controller} />, { exitOnCtrlC: false });
+    await waitUntilExit();
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    // a session still running when the UI closes would keep billing with nothing watching it
+    await controller.shutdown();
+  }
 }

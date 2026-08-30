@@ -213,8 +213,16 @@ describe("TuiController", () => {
     expect(text(c)).toContain("no plan recorded yet");
   });
 
-  it("/supervisor says plainly when nothing has been signalled", async () => {
+  it("/supervisor says no supervisor is attached rather than promising an empty list", async () => {
+    // /help advertises the command; without a supervisor the only reachable output was "nothing
+    // raised", which reads as "all clear" when the truth is "nothing is watching"
     const c = makeController([]);
+    await c.submit("/supervisor");
+    expect(text(c)).toContain("no supervisor is attached");
+  });
+
+  it("/supervisor reports an empty list when one IS attached", async () => {
+    const c = makeController([], { supervised: true });
     await c.submit("/supervisor");
     expect(text(c)).toContain("raised nothing");
   });
@@ -298,5 +306,62 @@ describe("TuiController", () => {
     ]);
     await c.submit("say hi");
     expect(text(c)).not.toContain("model.delta");
+  });
+});
+
+describe("review regressions", () => {
+  it("the permission queue never drops a resolver", async () => {
+    // a single slot overwrote the first resolver when two requests overlapped, leaving its
+    // promise unsettled and the loop wedged. Latent through core today (tool calls are
+    // sequential) but free to fix, and a fork bomb of a bug once they are not.
+    const c = makeController([]);
+    const first = c.ask({ tool: "a", input: {}, class: "exec", cwd: root });
+    const second = c.ask({ tool: "b", input: {}, class: "exec", cwd: root });
+
+    expect(c.snapshot().pending!.req.tool).toBe("a");
+    expect(c.snapshot().queued).toBe(1);
+
+    c.answerPermission("allow");
+    expect(await first).toBe("allow");
+    // the second is now on screen rather than lost
+    expect(c.snapshot().pending!.req.tool).toBe("b");
+    expect(c.snapshot().queued).toBe(0);
+
+    c.answerPermission("deny");
+    expect(await second).toBe("deny");
+    expect(c.snapshot().pending).toBeNull();
+  });
+
+  it("shutdown settles every outstanding request rather than dropping it", async () => {
+    const c = makeController([]);
+    const pending = c.ask({ tool: "a", input: {}, class: "exec", cwd: root });
+    const queued = c.ask({ tool: "b", input: {}, class: "exec", cwd: root });
+    await c.shutdown();
+    // both resolve: an unsettled resolver is a loop that can never finish
+    expect(await pending).toBe("deny");
+    expect(await queued).toBe("deny");
+  });
+
+  it("/quit stops a running turn instead of abandoning it", async () => {
+    // the UI unmounting while the agent runs on means it keeps executing tools and billing with
+    // nobody watching
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const running = c.submit("start something");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+
+    expect(await c.submit("/quit")).toBe(false);
+    await running;
+    expect(c.snapshot().status).toBe("idle");
+    expect(c.snapshot().pending).toBeNull();
+  });
+
+  it("line keys stay unique across truncation, so React cannot reuse a row", () => {
+    const c = makeController([], { maxLines: 10 });
+    for (let i = 0; i < 50; i += 1) c.print(`line ${i}`);
+    const keys = c.snapshot().lines.map((l) => l.key);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

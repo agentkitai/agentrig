@@ -664,6 +664,20 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 
 ## M7 notes — the TUI (second row)
 
+- **`agentrig` is an `isDefault` subcommand, not options on the root.** Options declared on the
+  root `program` are consumed by Commander *wherever they appear in argv*, including after a
+  subcommand name — so putting the TUI's flags there silently swallowed `--root`, `--model`,
+  `--max-turns` and the rest from every shipped subcommand, which then fell back to its default
+  with no error. `agentrig sessions ls --root foo` wrote to the wrong directory and said nothing.
+  A default subcommand keeps the TUI's options on the TUI, and preserves Commander's
+  unknown-command error so a typo is rejected instead of dropping the user into an interactive
+  agent with their intended command discarded.
+- **One `buildAgent()` assembles the agent for both entry points.** `run` and the TUI each built
+  their own, and the copies had already diverged in seven ways inside the commit that created
+  them — different system prompts, no flag validation on the TUI side, no `--allow`/`--deny`, and
+  no `session_end` hooks at all, so an interactive session could read the wiki but never write to
+  it. That is precisely what CLAUDE.md's "keep the CLI thin" rule exists to prevent, and it was a
+  self-inflicted violation.
 - **The TUI is layout; a headless `TuiController` is everything else.** A terminal UI is close to
   untestable, so every decision — what a line says, when a permission prompt appears, what a slash
   command does — lives in a class a test drives without a screen. `app.tsx` has no logic in it,
@@ -675,8 +689,23 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   command; spending a turn on it as a prompt is the least useful possible response. Unknown
   commands print the help so the answer is always in reach.
 - **The permission prompt is a promise bridged to UI state.** `controller.ask` is the agent's
-  `onAsk`; it parks a resolver in state, the view renders it, and a keypress resolves it. While a
-  prompt is up it takes the keyboard entirely — answering it is the only useful thing to do.
+  `onAsk`; it parks a resolver, the view renders it, and a keypress resolves it. While a prompt is
+  up it takes the keyboard entirely. Requests **queue** rather than replacing each other: a single
+  slot silently overwrote the first resolver when two overlapped, leaving its promise unsettled
+  and the loop wedged. Core runs tool calls sequentially today so that was latent, but parallel
+  execution is an obvious next change and a queue costs nothing now. Nothing is ever dropped
+  unsettled — shutdown and abort resolve every outstanding request as a denial.
+- **ctrl-C had to be taken back from Ink.** With `exitOnCtrlC` on (the default) Ink unmounts on
+  ctrl-C *and refuses to dispatch it to `useInput`*, so the abort handler in the view was dead
+  code: the UI vanished while the agent kept running, still executing bash, now invisibly. The TUI
+  now renders with `exitOnCtrlC: false` and installs the same `SIGINT → abort` handler `run` does.
+- **`/quit` stops the turn before exiting**, for the same reason.
+- **Scrollback is `<Static>`.** As live `<Text>` the render cost grew with the buffer — 800 lines
+  took 5s at a 500-line cap versus 0.5s at 50 — because Ink repaints the whole frame on every
+  print, which also destroys terminal scrollback. `Static` writes each line once above the live
+  frame, so the cap could go from 500 to 5000.
+- **`/supervisor` says no supervisor is attached** rather than "nothing raised". The TUI attaches
+  none, and "nothing raised" reads as *all clear* when the truth is *nothing is watching*.
 - **`/abort` answers a pending prompt as well as aborting.** Without that the loop would sit
   waiting for an answer nobody is going to give, and the session would never end.
 - **The line buffer is bounded** (500 by default). An unattended terminal running a long session
@@ -685,7 +714,9 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   and a test can drive them without a wiki. When they are not wired the TUI says so rather than
   failing silently.
 - **Caveat: the input line is a minimal reader** — printable characters, backspace, enter. No
-  history, no cursor movement, no paste handling. Enough to use, not yet pleasant.
+  history, no cursor movement. A paste arrives as one multi-character chunk, which used to land
+  embedded newlines in the buffer literally and corrupt the line; it now submits at the first
+  newline and keeps the remainder, which is correct rather than pleasant.
 - **Caveat: `model.delta` is dropped rather than streamed.** Rendering per-token deltas as lines
   would drown everything else; showing them as a live-updating block is the obvious improvement
   and is not done.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Static, Text, useApp, useInput } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
 
 /**
@@ -49,16 +49,37 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       setInput((v) => v.slice(0, -1));
       return;
     }
-    if (char !== undefined && char !== "" && !key.ctrl && !key.meta) setInput((v) => v + char);
+    if (char === undefined || char === "" || key.ctrl || key.meta) return;
+    // a paste arrives as ONE multi-character chunk with `key.return` false, so an embedded
+    // newline used to land in the buffer literally and corrupt the line. Submit at the first
+    // newline and keep the remainder.
+    if (/[\r\n]/.test(char)) {
+      const [first = "", ...rest] = char.split(/\r\n|[\r\n]/);
+      const line = input + first;
+      setInput(rest.join(" "));
+      void controller.submit(line).then((keepGoing) => {
+        if (!keepGoing) exit();
+      });
+      return;
+    }
+    setInput((v) => v + char);
   });
 
   return (
     <Box flexDirection="column">
-      {state.lines.map((l) => (
-        <Text key={l.key} color={TONE[l.tone]}>
-          {l.text}
-        </Text>
-      ))}
+      {/*
+        `Static` writes each line ONCE above the live frame and never re-renders it. Keeping the
+        scrollback as live `<Text>` made render cost grow with the buffer — 800 lines took 5s at
+        a 500-line cap versus 0.5s at 50 — because Ink repaints the whole frame on every print,
+        which also destroys terminal scrollback for anything scrolled past.
+      */}
+      <Static items={state.lines}>
+        {(l) => (
+          <Text key={l.key} color={TONE[l.tone]}>
+            {l.text}
+          </Text>
+        )}
+      </Static>
 
       {state.pending !== null ? (
         <Box marginTop={1} flexDirection="column">
@@ -66,7 +87,9 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
             allow {state.pending.req.tool} [{state.pending.req.class}]
             {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}?
           </Text>
-          <Text dimColor>y = allow, n / esc = deny</Text>
+          <Text dimColor>
+            y = allow, n / esc = deny{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
+          </Text>
         </Box>
       ) : (
         <Box marginTop={1}>
