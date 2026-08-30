@@ -192,11 +192,17 @@ export interface SubagentWiring {
  */
 export function subagentOptions(w: SubagentWiring): SubagentOptions {
   // A child is a separate session with a separate meter, so the parent's budget cannot bind it.
-  // The bound is stated here instead: each child gets the parent's non-turn allowances, and all
-  // of one session's children together may not spend more than the parent's own budget.
+  // The bound is stated here instead: all of one session's children together may not spend more
+  // than the parent's own budget, so each child gets a SHARE of it. Giving each child the whole
+  // allowance would let one spawn spend it, and — since the pool reserves a child's cap when it
+  // starts — would make the first subagent the only one.
+  const maxChildren = positiveNumber("--subagent-max-children", w.opts.subagentMaxChildren ?? "8");
   const childBudget: Omit<Budget, "maxTurns"> = {};
-  if (w.budget.maxTokens !== undefined) childBudget.maxTokens = w.budget.maxTokens;
-  if (w.budget.maxUsd !== undefined) childBudget.maxUsd = w.budget.maxUsd;
+  if (w.budget.maxTokens !== undefined) {
+    childBudget.maxTokens = Math.max(1, Math.floor(w.budget.maxTokens / maxChildren));
+  }
+  if (w.budget.maxUsd !== undefined) childBudget.maxUsd = w.budget.maxUsd / maxChildren;
+  // wall clock, not an amount to divide: a child may take as long as the parent has left
   if (w.budget.maxMinutes !== undefined) childBudget.maxMinutes = w.budget.maxMinutes;
 
   return {
@@ -204,7 +210,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
     maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
     childBudget,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
-    maxChildren: positiveNumber("--subagent-max-children", w.opts.subagentMaxChildren ?? "8"),
+    maxChildren,
     ...(w.budget.maxTokens === undefined ? {} : { maxChildTokens: w.budget.maxTokens }),
     ...(w.budget.maxUsd === undefined ? {} : { maxChildUsd: w.budget.maxUsd }),
     // a child gets the parent's provider, tools and permissions, but NOT the ability to spawn
@@ -218,11 +224,11 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // The same policy object, and the same asker. A child that could do MORE than its parent
       // is a permission bypass; a child that can do LESS is the failure this originally had —
       // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
-      // file, was never prompted about it, and could not say why. The ask is tagged so the human
-      // answering knows they are answering for a session they are not watching.
-      ...(w.extras.onAsk === undefined
-        ? {}
-        : { onAsk: (req: PermissionRequest) => w.extras.onAsk!({ ...req, origin: "subagent" }) }),
+      // file, was never prompted about it, and could not say why. `origin` is set on the config
+      // rather than wrapped around `onAsk`, so the emitted `permission.request` carries it too:
+      // the prompt, the log and `sessions show` then agree on who asked.
+      origin: "subagent",
+      ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
       systemPrompt: (ctx: { cwd: string }) =>
         [
           "You are a subagent. You have been given one self-contained task and none of the",

@@ -56,8 +56,10 @@ function wiring(
 describe("what a child may spend", () => {
   it("gives the child the parent's non-turn allowances and pools them across children", () => {
     const o = wiring({ budget: { maxTurns: 40, maxTokens: 500_000, maxUsd: 5, maxMinutes: 30 } });
-    // the parent's own meter never sees a child's tokens, so the bound has to be stated
-    expect(o.childBudget).toEqual({ maxTokens: 500_000, maxUsd: 5, maxMinutes: 30 });
+    // the parent's own meter never sees a child's tokens, so the bound has to be stated — and
+    // each child gets a SHARE, so eight of them add up to the parent's budget rather than eight
+    // times it
+    expect(o.childBudget).toEqual({ maxTokens: 500_000 / 8, maxUsd: 5 / 8, maxMinutes: 30 });
     expect(o.maxChildTokens).toBe(500_000);
     expect(o.maxChildUsd).toBe(5);
     expect(o.maxChildren).toBe(8);
@@ -104,7 +106,7 @@ describe("what a child inherits", () => {
     expect(wiring({ permissionPolicy }).childConfig().permissions).toBe(permissionPolicy);
   });
 
-  it("the parent's asker, tagged, so an interactive parent's child is not silently deny-only", async () => {
+  it("the parent's asker, so an interactive parent's child is not silently deny-only", async () => {
     const asked: PermissionRequest[] = [];
     const o = wiring({}, {
       onAsk: async (req) => {
@@ -112,12 +114,14 @@ describe("what a child inherits", () => {
         return "allow";
       },
     });
-    const onAsk = o.childConfig().onAsk;
-    expect(onAsk).toBeDefined();
+    const config = o.childConfig();
+    expect(config.onAsk).toBeDefined();
     // AgentConfig.onAsk defaults to DENY: without this the TUI's subagent could not write a file,
     // was never prompted about it, and had no way to say so
-    expect(await onAsk!({ tool: "write_file", input: {}, class: "write", cwd: "/w" })).toBe("allow");
-    expect(asked[0]!.origin).toBe("subagent");
+    expect(await config.onAsk!({ tool: "write_file", input: {}, class: "write", cwd: "/w" })).toBe("allow");
+    expect(asked).toHaveLength(1);
+    // and the ask is tagged on the CONFIG, so the emitted event carries it as well as the prompt
+    expect(config.origin).toBe("subagent");
   });
 
   it("no asker at all when the parent has none, rather than a prompt nobody is watching", () => {
@@ -143,10 +147,14 @@ describe("what a child inherits", () => {
     expect(prompt).not.toContain("## Skills");
   });
 
-  it("a fresh store and the parent's per-turn cap", () => {
-    const config = wiring({ maxTokensPerTurn: 4096 }).childConfig();
-    expect(config.store.root).toBe(root);
-    expect(config.maxTokensPerTurn).toBe(4096);
+  it("a fresh store per child, and the parent's per-turn cap", () => {
+    const o = wiring({ maxTokensPerTurn: 4096 });
+    const first = o.childConfig();
+    const second = o.childConfig();
+    expect(first.store.root).toBe(root);
+    // a store carries per-session seq state, so children must not share one instance
+    expect(first.store).not.toBe(second.store);
+    expect(first.maxTokensPerTurn).toBe(4096);
   });
 });
 

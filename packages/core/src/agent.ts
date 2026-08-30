@@ -48,6 +48,12 @@ export interface AgentConfig {
    * The TUI (M7) plugs an interactive prompt in here.
    */
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
+  /**
+   * M7: who this session is, when a human answering its permission prompts is not watching it —
+   * a subagent sets `"subagent"`. It rides on every `permission.request` this session emits, so
+   * the prompt, the log and `sessions show` all agree on who asked.
+   */
+  origin?: string;
   /** PLAN §2.7. Extension points; a failing or slow hook is reported and skipped, never fatal. */
   hooks?: Hook[];
   hookTimeoutMs?: number;
@@ -213,6 +219,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // than letting it reach the filesystem or a session_end hook that builds a path from it
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
   const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
+  // A fresh run owns its log for its lifetime. Two runs appending to one id would restart `seq`
+  // and leave a log that cannot be read back at all — which a caller-supplied `id` makes possible
+  // for a fresh session, where the resume path's advisory file lock does not apply.
+  const releaseClaim = resume === undefined ? store.claim(id) : null;
   let cwd = opts.cwd ?? process.cwd();
   const stream = new EventStream();
   const gate = new PauseGate();
@@ -666,6 +676,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       await emit({ type: "session.end", reason }).catch(() => {});
       await chain.catch(() => {});
       await releaseLock?.().catch(() => {});
+      releaseClaim?.();
       stream.close();
     }
     return { id, reason, turns, usage: totals };
@@ -757,6 +768,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         class: permClass,
         cwd,
         ...(declaredPaths === undefined ? {} : { paths: declaredPaths }),
+        // whose session this is, when it is not the one a human is watching. Set on the config by
+        // whoever built the session (the subagent tool's `childConfig`), never by a tool or by
+        // the model — an ask that can name its own origin can lie about it.
+        ...(config.origin === undefined ? {} : { origin: config.origin }),
       };
       await emit({ type: "permission.request", req: permReq });
       let decision = await config.permissions.decide(permReq);

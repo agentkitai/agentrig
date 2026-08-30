@@ -73,6 +73,8 @@ export class SessionStore {
   private readonly now: () => number;
   private readonly newId: () => string;
   private readonly seqs = new Map<string, number>();
+  /** Sessions a live `run()` is appending to. See `claim`. */
+  private readonly claimed = new Set<string>();
 
   constructor(opts: SessionStoreOptions) {
     this.root = opts.root;
@@ -80,11 +82,36 @@ export class SessionStore {
     this.newId = opts.newId ?? (() => randomUUID().slice(0, 8));
   }
 
-  /** Create a session id. Nothing is written until the first append. */
+  /**
+   * Create a session id. Nothing is written until the first append.
+   *
+   * Retries on an id this store has already handed out or written: ids are short (8 hex chars by
+   * default), and one collision means two sessions appending to one log — `seq` restarts, and the
+   * log becomes unreadable rather than merely confusing.
+   */
   create(): string {
-    const id = assertSessionId(this.newId());
-    this.seqs.set(id, 0);
-    return id;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const id = assertSessionId(this.newId());
+      if (this.seqs.has(id) || this.claimed.has(id)) continue;
+      this.seqs.set(id, 0);
+      return id;
+    }
+    throw new Error("could not allocate an unused session id in 100 attempts");
+  }
+
+  /**
+   * Marks a session as being written by a live run, so a second run cannot interleave appends
+   * into the same log. In-process only, and complementary to `acquireLock`: that guards two
+   * processes resuming one session, this guards two `run()` calls in one process — which a
+   * caller-supplied `run({ id })` makes possible for a fresh session too.
+   */
+  claim(sessionId: string): () => void {
+    assertSessionId(sessionId);
+    if (this.claimed.has(sessionId)) {
+      throw new Error(`session ${sessionId} is already being written by this process`);
+    }
+    this.claimed.add(sessionId);
+    return () => this.claimed.delete(sessionId);
   }
 
   pathFor(sessionId: string): string {

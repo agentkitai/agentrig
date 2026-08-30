@@ -805,25 +805,44 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   meter, so a parent's `maxTokens`/`maxUsd`/`maxMinutes` cannot bind it: spreading the parent's
   budget gives *every* child the parent's whole allowance, and omitting it gives every child none.
   `subagentTool` takes `childBudget` explicitly and the CLI fills it from the parent's flags.
-- **Children are pooled per parent session** — `maxChildren` (default 8), `maxChildTokens` and
-  `maxChildUsd`. Each child's usage is metered into the pool when it finishes and further spawns
-  are refused with a message the model can act on. Without this a parent could finish `done`
-  inside a 10-token cap having spent thousands of dollars through its children.
+- **Descendants are pooled per parent session** — `maxChildren` (default 8), `maxChildTokens` and
+  `maxChildUsd`. Without this a parent could finish `done` inside a 10-token cap having spent
+  thousands of dollars through its children. Three details that a first version got wrong:
+  - the pool is threaded down the tree (`ancestorPools`), so a grandchild is charged to *every*
+    ancestor. Held per level, `maxChildren` bounded a level rather than a tree — total children
+    was `maxChildren ** maxDepth` — and everything below the first level was invisible.
+  - a child's cap is **reserved when it spawns** and reconciled against actual usage when it
+    finishes. The loop runs tool calls sequentially today, but `parallelTools` is advertised and
+    this tool is public API: a gate read before an `await` and written after it is not a gate.
+  - because the pool reserves, the CLI gives each child a **share** of the parent's budget
+    (`maxTokens / maxChildren`), not the whole of it — otherwise the first subagent would be the
+    only one that could ever run.
+- **Pool eviction is by last use and never touches a live pool.** Sessions are never announced as
+  finished to a tool, so the map is capped (256); evicting the oldest *inserted* entry would
+  target the longest-running session and hand it a pool with its limits back at zero.
 - **The same permission policy object *and* the same asker.** A subagent that could do more than
   its parent would be a permission bypass with extra steps; a subagent that can do less is the
   failure the first version had — `AgentConfig.onAsk` defaults to deny, so under the TUI a child
   could not write a file, was never prompted about it, and had no way to say why. The child's asks
-  now route through the parent's prompt carrying `PermissionRequest.origin = "subagent"`, so the
-  human answering knows they are answering for a session they cannot see.
+  now route through the parent's prompt carrying `PermissionRequest.origin = "subagent"`. That is
+  set on the child's **`AgentConfig`**, not wrapped around `onAsk`, so the emitted
+  `permission.request` carries it too — the prompt, the log, `renderEvent` and `sessions show` all
+  agree on who asked. Only whoever builds a session can set it; a tool or a model cannot.
 - **The parent's abort reaches the child**, and `subagent.end` is emitted on the abort path rather
   than after the event loop: by the time the loop unwinds the parent has ended and its events are
   dropped, which left a `subagent.spawn` in the log that no `subagent.end` ever answered.
 - **The parent logs the child before the child starts.** `Agent.run` takes an optional
   pre-allocated `id` (from `store.create()`) so `subagent.spawn` can name a session that has not
-  written anything yet; a trace read in order never shows a session that came from nowhere.
-- **The last turn that *said* something is the answer.** Keeping only the final turn's text meant
-  a child that stated its conclusion and then made one more tool call — normal, and not something
-  a system prompt prevents — reported "the subagent finished without a final message".
+  written anything yet; a trace read in order never shows a session that came from nowhere. Two
+  runs appending to one id would restart `seq` and leave a log that cannot be read back at all, so
+  a fresh run now **claims** its id for its lifetime (in-process; the resume path's advisory file
+  lock covers the cross-process case), and `store.create()` never returns an id it has already
+  handed out.
+- **The last turn that *said* something is the answer, and a preamble is labelled as one.** Keeping
+  only the final turn's text meant a child that stated its conclusion and then made one more tool
+  call — normal, and not something a system prompt prevents — reported "the subagent finished
+  without a final message". But an opening remark is also text, so when the kept text did not come
+  from the child's last turn the parent is told so, rather than handed a preamble as a conclusion.
 - The tool is `exec`: a child can do anything its tools can do, so claiming less would let
   `--allow read` run arbitrary writes through one.
 - A child that ends on anything but `done` is reported to the parent as an **error**, not as an
@@ -844,8 +863,11 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   way: keeping both `Deploy` and `deploy` advertised two skills and served one body for both.
   A shadowed skill is reported through `onError` rather than silently dropped.
 - **What reaches the system prompt is untrusted input, and is treated as such.** A name and a
-  description are stripped of control characters and bounded (80 / 200 chars) at parse time, and
-  the catalogue as a whole is capped at 8 KiB. A directory name may contain newlines — enough to
+  description are stripped of C0/C1 control characters *and* of zero-width and bidi formatting
+  (U+202E can visually reorder the rest of a line), bounded to 80 / 200 **code points** so
+  truncation cannot leave a lone surrogate, and the catalogue as a whole is capped at 8 KiB
+  **measured in bytes** — a cap counted in UTF-16 units lets a CJK catalogue through at ~3× what
+  it claims. A directory name may contain newlines — enough to
   forge a second `## Skills` section with entries nobody wrote — and a frontmatter `description:`
   may be 60,000 characters that ride in *every* request.
 - **Symlinks are not skills.** Discovery `lstat`s and skips them: `skills/notes.md -> ~/.ssh/id_rsa`

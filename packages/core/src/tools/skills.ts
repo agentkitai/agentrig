@@ -21,8 +21,8 @@ import type { AnyTool, ToolResult } from "../tool.js";
 /** What one catalogue line may cost. A description is a hint, not the instructions. */
 const MAX_NAME = 80;
 const MAX_DESCRIPTION = 200;
-/** What the whole catalogue may cost, whatever `maxSkills` allows. */
-const MAX_INJECTION = 8 * 1024;
+/** What the whole catalogue may cost, whatever `maxSkills` allows. Bytes, not UTF-16 units. */
+const MAX_INJECTION_BYTES = 8 * 1024;
 
 /**
  * One line, no control characters. `name` and `description` land verbatim in the system prompt,
@@ -30,10 +30,15 @@ const MAX_INJECTION = 8 * 1024;
  */
 export function sanitizeLine(value: string, max: number): string {
   const flat = value
+    // C0/C1 controls: a newline is enough to forge a heading
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    // zero-width and bidi formatting: invisible, and RLO can visually reorder the rest of the line
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  // by code point, not code unit: slicing UTF-16 leaves a lone surrogate in the system prompt
+  const chars = [...flat];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : flat;
 }
 
 const Frontmatter = z.object({
@@ -114,13 +119,12 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
     }
     for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (out.length >= maxSkills) return out;
-      // a symlink is not a skill: `skills/notes.md -> ~/.ssh/id_rsa` would put the target's
-      // first line into the system prompt of every request, with no model decision involved
-      if (e.isSymbolicLink()) continue;
       const path = e.isDirectory() ? join(root, e.name, "SKILL.md") : join(root, e.name);
       if (!e.isDirectory() && !/\.md$/i.test(e.name)) continue;
       try {
-        // lstat, not stat: `<dir>/SKILL.md` may itself be a link out of the root
+        // lstat, not stat: a symlink is not a skill, whether it is `notes.md -> ~/.ssh/id_rsa`
+        // or `<dir>/SKILL.md -> ../../secret`. Following one would put a file the project never
+        // contained into the system prompt of every request, with no model decision involved.
         const info = await lstat(path);
         if (!info.isFile() || info.size > maxBytes) continue;
         const skill = parseSkill(await readFile(path, "utf8"), path);
@@ -157,15 +161,17 @@ export function skillsInjection(skills: Skill[]): string {
   // each line is bounded by `parseSkill`, but 100 skills still add up, and this text rides in
   // EVERY request — so the catalogue as a whole has a ceiling too
   const lines: string[] = [];
-  let budget = MAX_INJECTION;
+  let budget = MAX_INJECTION_BYTES;
   let dropped = 0;
   for (const s of skills) {
     const line = `- ${s.name}: ${s.description}`;
-    if (line.length + 1 > budget) {
+    // bytes: a cap counted in UTF-16 units lets a CJK catalogue through at ~3x what it claims
+    const cost = Buffer.byteLength(line, "utf8") + 1;
+    if (cost > budget) {
       dropped += 1;
       continue;
     }
-    budget -= line.length + 1;
+    budget -= cost;
     lines.push(line);
   }
   if (dropped > 0) lines.push(`- (${dropped} further skill(s) not listed; ask by name)`);

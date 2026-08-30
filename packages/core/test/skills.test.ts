@@ -154,16 +154,37 @@ describe("what reaches the system prompt is untrusted input", () => {
     expect(skillsInjection([s]).length).toBeLessThan(600);
   });
 
-  it("bounds the catalogue as a whole, not just each line", async () => {
+  it("bounds the catalogue as a whole, in bytes, not just each line", async () => {
     for (let i = 0; i < 100; i += 1) {
-      await skill(`s${String(i).padStart(3, "0")}.md`, `---\ndescription: ${"d".repeat(200)}\n---\nb`);
+      // non-ASCII: a cap counted in UTF-16 units passes at roughly 3x what it claims
+      await skill(`s${String(i).padStart(3, "0")}.md`, `---\ndescription: ${"綾".repeat(200)}\n---\nb`);
     }
     const found = await discoverSkills({ roots: [dir] });
     expect(found).toHaveLength(100);
     const text = skillsInjection(found);
     // this text rides in EVERY request, so 100 skills must not add up to a quarter megabyte
-    expect(text.length).toBeLessThanOrEqual(8 * 1024 + 400);
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8 * 1024 + 400);
     expect(text).toContain("further skill(s) not listed");
+  });
+
+  it("truncates on code points, so no lone surrogate reaches the prompt", () => {
+    const s = parseSkill(`---\nname: ${"n".repeat(78)}🚀🚀\ndescription: d\n---\nb`, "/x/a.md");
+    expect(s.name.isWellFormed()).toBe(true);
+    expect(skillsInjection([s]).isWellFormed()).toBe(true);
+  });
+
+  it("strips zero-width and bidi formatting, which is invisible rather than merely noisy", () => {
+    // U+202E reorders everything after it: a name can rewrite how its own line reads
+    const s = parseSkill("---\nname: dep\u202Eyolp\ndescription: a\u200Bb\u2066c\n---\nb", "/x/a.md");
+    expect(s.name).toBe("depyolp");
+    expect(s.description).toBe("abc");
+  });
+
+  it("says (unnamed) rather than advertising an empty name", () => {
+    // frontmatter passes `min(1)`, sanitizing leaves nothing: without a fallback the catalogue
+    // shows `- : …` and the tool can never be asked for it
+    const s = parseSkill("---\nname: \u0007\u200B\ndescription: d\n---\nb", "/x/a.md");
+    expect(s.name).toBe("(unnamed)");
   });
 
   it("shadows case-insensitively, so the catalogue cannot lie about what loads", async () => {

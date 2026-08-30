@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Agent, AgentConfig, Budget, Pricing } from "../agent.js";
+import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
 /**
@@ -62,33 +63,51 @@ export interface SubagentOptions {
    */
   maxDepth?: number;
   depth?: number;
+  /**
+   * @internal Threaded by the tool when it builds a child's own subagent tool. A grandchild's
+   * spend is charged to every ancestor's pool, or the pool bounds one level and the tree grows
+   * as `maxChildren ** maxDepth` with everything below the first level invisible.
+   */
+  ancestorPools?: Pool[];
 }
 
 export const SUBAGENT_TOOL = "subagent";
 
-interface Pool {
+export interface Pool {
+  /** Descendants, not just direct children: every ancestor is charged. */
   children: number;
   tokens: number;
   usd: number;
+  /** Spawns currently running against this pool. An in-flight pool is never evicted. */
+  live: number;
 }
 
 /**
  * Per parent session, so a pool is not shared between two runs of the same agent. Sessions are
- * never announced as finished to a tool, so the map is bounded by eviction rather than by
- * cleanup — an entry is three numbers and the oldest is the least likely to still be running.
+ * never announced as finished to a tool, so the map is bounded by eviction rather than by cleanup:
+ * least-recently-used, and never a pool with a child still running (whose completion would
+ * otherwise charge an orphan, and whose session would be handed a fresh pool with its limits
+ * back at zero).
  */
 const MAX_POOLS = 256;
 
 function poolFor(pools: Map<string, Pool>, sessionId: string): Pool {
-  let pool = pools.get(sessionId);
-  if (pool === undefined) {
-    pool = { children: 0, tokens: 0, usd: 0 };
-    pools.set(sessionId, pool);
-    while (pools.size > MAX_POOLS) {
-      const oldest = pools.keys().next();
-      if (oldest.done === true) break;
-      pools.delete(oldest.value);
-    }
+  const existing = pools.get(sessionId);
+  if (existing !== undefined) {
+    // re-insert so eviction is by last use, not by first: the oldest INSERTED entry is the
+    // longest-running session, which is the last one whose limits should be forgotten
+    pools.delete(sessionId);
+    pools.set(sessionId, existing);
+    return existing;
+  }
+  const pool: Pool = { children: 0, tokens: 0, usd: 0, live: 0 };
+  pools.set(sessionId, pool);
+  while (pools.size > MAX_POOLS) {
+    const idle = [...pools].find(([, p]) => p.live === 0);
+    // every pool busy means the map is bounded by concurrency rather than by MAX_POOLS; that is
+    // the safe direction — resetting a live session's limits is not
+    if (idle === undefined) break;
+    pools.delete(idle[0]);
   }
   return pool;
 }
@@ -122,22 +141,27 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         return refuse(`subagents may not nest more than ${maxDepth} deep; do this task yourself`);
       }
 
-      // the pool is checked BEFORE anything is created, so a refusal costs no session
-      const pool = poolFor(pools, ctx.sessionId);
-      if (pool.children >= maxChildren) {
-        return refuse(
-          `this session has already run ${pool.children} subagent(s), the limit; do the rest yourself`,
-        );
-      }
-      if (opts.maxChildTokens !== undefined && pool.tokens >= opts.maxChildTokens) {
-        return refuse(
-          `subagents for this session have spent their token allowance (${opts.maxChildTokens}); do the rest yourself`,
-        );
-      }
-      if (opts.maxChildUsd !== undefined && pool.usd >= opts.maxChildUsd) {
-        return refuse(
-          `subagents for this session have spent their USD allowance ($${opts.maxChildUsd}); do the rest yourself`,
-        );
+      // Every ancestor's pool, then this session's. A grandchild is a descendant of each of them
+      // and is charged to all: with the pool held per level, `maxChildren` bounded a level rather
+      // than a tree, and a grandchild's spend was invisible to the session that started it all.
+      const chain = [...(opts.ancestorPools ?? []), poolFor(pools, ctx.sessionId)];
+      // checked BEFORE anything is created, so a refusal costs no session
+      for (const p of chain) {
+        if (p.children >= maxChildren) {
+          return refuse(
+            `this session has already run ${p.children} subagent(s), the limit; do the rest yourself`,
+          );
+        }
+        if (opts.maxChildTokens !== undefined && p.tokens >= opts.maxChildTokens) {
+          return refuse(
+            `subagents for this session have spent their token allowance (${opts.maxChildTokens}); do the rest yourself`,
+          );
+        }
+        if (opts.maxChildUsd !== undefined && p.usd >= opts.maxChildUsd) {
+          return refuse(
+            `subagents for this session have spent their USD allowance ($${opts.maxChildUsd}); do the rest yourself`,
+          );
+        }
       }
 
       const config = opts.childConfig();
@@ -145,7 +169,9 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // subagent tool `childConfig()` supplied (it carries the CURRENT depth) and, if another
       // level is allowed, add one that knows it is a level deeper.
       const childTools = config.tools.filter((t) => t.name !== SUBAGENT_TOOL);
-      if (depth + 1 < maxDepth) childTools.push(subagentTool({ ...opts, depth: depth + 1 }));
+      if (depth + 1 < maxDepth) {
+        childTools.push(subagentTool({ ...opts, depth: depth + 1, ancestorPools: chain }));
+      }
 
       const budget: Budget = { ...(opts.childBudget ?? {}), maxTurns };
       const pricing = opts.pricing ?? config.pricing;
@@ -160,7 +186,18 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // the parent's log records the child's existence before the child writes anything, so a
       // trace read in order never shows a session that came from nowhere
       const id = config.store.create();
-      pool.children += 1;
+      // Charged at SPAWN time, not on completion: the loop runs tool calls sequentially today,
+      // but `parallelTools` is advertised and this tool is public API — a gate that is read
+      // before an await and written after it is not a gate. The child's own cap is the best
+      // estimate available; the difference is reconciled when it finishes.
+      const reservedTokens = budget.maxTokens ?? 0;
+      const reservedUsd = budget.maxUsd ?? 0;
+      for (const p of chain) {
+        p.children += 1;
+        p.tokens += reservedTokens;
+        p.usd += reservedUsd;
+        p.live += 1;
+      }
       ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
 
       const session = child.run(input.task, { cwd: ctx.cwd, id });
@@ -182,8 +219,30 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       };
       ctx.signal.addEventListener("abort", onAbort, { once: true });
 
+      /**
+       * Reconciles the reservation with what the child actually spent, once. Called with the
+       * child's usage on the normal path and with none if it threw, where the reservation stands.
+       */
+      let settled = false;
+      const settle = (usage?: Usage): void => {
+        if (settled) return;
+        settled = true;
+        const spentTokens = usage === undefined ? reservedTokens : usage.input + usage.output;
+        const spentUsd =
+          usage === undefined || pricing === undefined
+            ? reservedUsd
+            : (usage.input * pricing.inputUsdPerMTok + usage.output * pricing.outputUsdPerMTok) / 1e6;
+        for (const p of chain) {
+          p.tokens += spentTokens - reservedTokens;
+          p.usd += spentUsd - reservedUsd;
+          p.live -= 1;
+        }
+      };
+
       /** The last turn that actually said something. */
       let answer = "";
+      /** Whether that turn was the child's last: a preamble is not a conclusion. */
+      let answerIsFinal = false;
       /** The turn in progress. */
       let current = "";
       try {
@@ -192,36 +251,45 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
           // context isolation that is the entire reason to spawn one
           if (e.type === "turn.start") current = "";
           else if (e.type === "model.delta") current += e.text;
-          // a child that states its conclusion and THEN makes one more tool call is normal, and
-          // no system prompt prevents it — so keep the last turn that had text, not the last turn
-          else if (e.type === "turn.end" && current.trim() !== "") answer = current;
+          // `turn.end` is emitted even when a turn is aborted or errors mid-tool, so every turn
+          // that produced text is seen here — there is no trailing buffer left to promote
+          else if (e.type === "turn.end") {
+            // A child that states its conclusion and THEN makes one more tool call is normal, and
+            // no system prompt prevents it — so the last turn that HAD text is the answer. But an
+            // opening remark is also text, so when it was not the final turn, say so rather than
+            // passing a preamble off as a conclusion.
+            if (current.trim() !== "") {
+              answer = current;
+              answerIsFinal = true;
+            } else if (answer !== "") {
+              answerIsFinal = false;
+            }
+          }
         }
-        // an aborted or errored final turn never reaches `turn.end`
-        if (current.trim() !== "") answer = current;
-
         const summary = await session.done;
-        pool.tokens += summary.usage.input + summary.usage.output;
-        if (pricing !== undefined) {
-          pool.usd +=
-            (summary.usage.input * pricing.inputUsdPerMTok +
-              summary.usage.output * pricing.outputUsdPerMTok) /
-            1e6;
-        }
+        settle(summary.usage);
         end(summary.reason);
 
         const text = answer.trim();
+        const answerText =
+          answerIsFinal || text === ""
+            ? text
+            : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
         if (summary.reason !== "done") {
           return {
             output: summary,
-            display: `subagent ${summary.reason} after ${summary.turns} turn(s)${text === "" ? "" : `:\n${text}`}`,
+            display: `subagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}`,
             isError: true,
           };
         }
         return {
           output: summary,
-          display: text === "" ? "(the subagent finished without a final message)" : text,
+          display: answerText === "" ? "(the subagent finished without a final message)" : answerText,
         };
       } finally {
+        // a throw anywhere above must still release the reservation, or one failed spawn would
+        // leave a pool permanently `live` (never evictable) and permanently charged
+        settle();
         ctx.signal.removeEventListener("abort", onAbort);
       }
     },
