@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+import type { Command } from "commander";
+import { buildProgram, describeStray } from "../src/program.ts";
+
+/**
+ * The argv contract. This file exists because a root-level option regression shipped without a
+ * single test failing: options added to the root `program` are consumed by Commander wherever
+ * they appear in argv — including after a subcommand name — so every subcommand silently lost
+ * `--root`, `--model`, `--max-turns` and the rest, falling back to its default with no error.
+ *
+ * Nothing could catch it because nothing could parse argv without also running the CLI.
+ */
+
+interface Captured {
+  path: string;
+  args: unknown[];
+  opts: Record<string, unknown>;
+}
+
+/** Replaces every action in the tree with a recorder, so parsing runs but nothing executes. */
+function stub(program: Command): { run: (argv: string[]) => Promise<Captured | null>; errors: string[] } {
+  const errors: string[] = [];
+  let captured: Captured | null = null;
+
+  const walk = (cmd: Command, path: string[]): void => {
+    const here = [...path, cmd.name()];
+    cmd.action(function (this: Command, ...args: unknown[]) {
+      captured = { path: here.join(" "), args: args.slice(0, -2), opts: this.opts() };
+    });
+    for (const sub of cmd.commands) walk(sub, here);
+  };
+  for (const sub of program.commands) walk(sub, []);
+
+  program.exitOverride((err) => {
+    errors.push(err.message);
+    throw err;
+  });
+  program.configureOutput({ writeErr: () => {}, writeOut: () => {} });
+
+  return {
+    run: async (argv) => {
+      captured = null;
+      await program.parseAsync(argv, { from: "user" }).catch(() => {});
+      return captured;
+    },
+    errors,
+  };
+}
+
+describe("argv parsing", () => {
+  it("a subcommand's own options are not swallowed by the root", async () => {
+    const { run } = stub(buildProgram());
+    // each of these was silently lost when the TUI's options lived on the root program
+    expect((await run(["sessions", "ls", "--root", "foo"]))?.opts.root).toBe("foo");
+    expect((await run(["run", "x", "--root", "bar"]))?.opts.root).toBe("bar");
+    expect((await run(["run", "x", "--provider", "openai"]))?.opts.provider).toBe("openai");
+    expect((await run(["run", "x", "--model", "gpt-5"]))?.opts.model).toBe("gpt-5");
+    expect((await run(["run", "x", "--max-turns", "3"]))?.opts.maxTurns).toBe("3");
+    expect((await run(["run", "x", "--max-tokens-per-turn", "99"]))?.opts.maxTokensPerTurn).toBe("99");
+    expect((await run(["run", "x", "--base-url", "http://h/v1"]))?.opts.baseUrl).toBe("http://h/v1");
+    expect((await run(["dream", "--model", "m"]))?.opts.model).toBe("m");
+    expect((await run(["memory", "ingest", "s1", "--model", "m"]))?.opts.model).toBe("m");
+    expect((await run(["sessions", "resume", "s1", "--max-turns", "7"]))?.opts.maxTurns).toBe("7");
+  });
+
+  it("dispatches to the command that was named", async () => {
+    const { run } = stub(buildProgram());
+    expect((await run(["sessions", "ls"]))?.path).toBe("sessions ls");
+    expect((await run(["memory", "lint"]))?.path).toBe("memory lint");
+    expect((await run(["dream"]))?.path).toBe("dream");
+    expect((await run(["run", "do it"]))?.path).toBe("run");
+    expect((await run(["login", "openai-chatgpt"]))?.path).toBe("login");
+  });
+
+  it("passes positional arguments through", async () => {
+    const { run } = stub(buildProgram());
+    expect((await run(["run", "fix the bug"]))?.args[0]).toBe("fix the bug");
+    expect((await run(["sessions", "show", "abc"]))?.args[0]).toBe("abc");
+    expect((await run(["memory", "search", "retry", "policy"]))?.args[0]).toEqual(["retry", "policy"]);
+  });
+
+  it("bare agentrig reaches the TUI", async () => {
+    const { run } = stub(buildProgram());
+    expect((await run([]))?.path).toBe("tui");
+  });
+
+  it("an unknown subcommand is rejected, not treated as a bare TUI launch", () => {
+    // `isDefault` catches any unmatched argv, so without this `agentrig sessons ls` dropped the
+    // user into an interactive agent with their intended command discarded
+    const known = ["run", "dream", "sessions", "memory", "login"];
+    expect(describeStray(["sessons", "ls"], known)).toMatch(/unknown command 'sessons'/);
+    expect(describeStray(["sessons"], known)).toMatch(/Did you mean sessions\?/);
+    expect(describeStray(["memroy"], known)).toMatch(/Did you mean memory\?/);
+  });
+
+  it("a bare launch is not mistaken for a typo", () => {
+    // Commander strips consumed option values before this sees them, so `agentrig --model gpt`
+    // arrives as `[]` — verified against commander@12 rather than assumed
+    const known = ["run", "dream"];
+    expect(describeStray([], known)).toBeNull();
+    // defensive: a bare flag that somehow survived is still not an operand
+    expect(describeStray(["--model"], known)).toBeNull();
+  });
+
+  it("offers no suggestion when nothing is close, rather than a misleading one", () => {
+    expect(describeStray(["zzzzzzzz"], ["run", "dream"])).toBe("error: unknown command 'zzzzzzzz'");
+  });
+
+  it("keeps flags of the same name distinct per subcommand", async () => {
+    const { run } = stub(buildProgram());
+    // `dream` has --scope; `run` does not. Neither should leak onto the other.
+    expect((await run(["dream", "--scope", "global"]))?.opts.scope).toBe("global");
+    expect((await run(["run", "x"]))?.opts.scope).toBeUndefined();
+  });
+
+  it("every command in the tree has an action, so none can silently no-op", () => {
+    const program = buildProgram();
+    const missing: string[] = [];
+    const walk = (cmd: Command, path: string[]): void => {
+      const here = [...path, cmd.name()];
+      // a command with children is a namespace; a leaf must do something
+      if (cmd.commands.length === 0 && (cmd as unknown as { _actionHandler?: unknown })._actionHandler === undefined) {
+        missing.push(here.join(" "));
+      }
+      for (const sub of cmd.commands) walk(sub, here);
+    };
+    for (const sub of program.commands) walk(sub, []);
+    expect(missing).toEqual([]);
+  });
+});
