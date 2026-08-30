@@ -303,11 +303,40 @@ describe("drift detector", () => {
   const plan = (scope: string[]) =>
     ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress", scope }] });
 
-  it("fires on a file outside every declared scope", () => {
+  it("uses caller scope when the plan declares none", () => {
+    const { signals } = feed(driftDetector({ scope: ["packages/core/src"] }), [
+      changed("packages/core/src/a.ts", "h1"),
+      changed("packages/cli/src/x.ts", "h2"),
+    ]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.type).toBe("drift");
+    expect(signals[0]!.evidence[0]).toContain("packages/cli/src/x.ts");
+  });
+
+  it("uses plan scope when the caller declares none", () => {
     const { signals } = feed(driftDetector(), [plan(["packages/core/src"]), changed("packages/cli/src/x.ts", "h")]);
     expect(signals).toHaveLength(1);
     expect(signals[0]!.type).toBe("drift");
     expect(signals[0]!.evidence[0]).toContain("packages/cli/src/x.ts");
+  });
+
+  it("unions caller and plan scopes", () => {
+    const { signals } = feed(driftDetector({ scope: ["packages/cli/src"] }), [
+      plan(["packages/core/src"]),
+      changed("packages/core/src/a.ts", "h1"),
+      changed("packages/cli/src/b.ts", "h2"),
+      changed("docs/outside.md", "h3"),
+    ]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.evidence[0]).toContain("docs/outside.md");
+    expect(signals[0]!.evidence[1]).toContain("packages/cli/src, packages/core/src");
+  });
+
+  it("stays silent when neither caller nor plan declares a scope", () => {
+    const noScope = ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress" }] });
+    expect(feed(driftDetector(), [noScope, changed("anything.ts", "h")]).signals).toHaveLength(0);
+    // and with no plan at all
+    expect(feed(driftDetector(), [changed("anything.ts", "h")]).signals).toHaveLength(0);
   });
 
   it("stays silent for files inside the scope", () => {
@@ -317,13 +346,6 @@ describe("drift detector", () => {
       changed("packages/core/src/deep/b.ts", "h"),
     ]);
     expect(signals).toHaveLength(0);
-  });
-
-  it("cannot fire when no plan item declares a scope", () => {
-    const noScope = ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress" }] });
-    expect(feed(driftDetector(), [noScope, changed("anything.ts", "h")]).signals).toHaveLength(0);
-    // and with no plan at all
-    expect(feed(driftDetector(), [changed("anything.ts", "h")]).signals).toHaveLength(0);
   });
 
   it("reports each stray path once, not on every subsequent edit", () => {

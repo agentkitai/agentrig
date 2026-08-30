@@ -49,6 +49,7 @@ export interface RunOptions extends AgentBuildOptions {
   resume?: string;
   system?: string;
   allow?: string[];
+  driftScope?: string[];
   deny?: string[];
   maxTurns: string;
   maxTokens?: string;
@@ -180,6 +181,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             ...(budget.budget.maxMinutes === undefined ? {} : { maxMinutes: budget.budget.maxMinutes }),
           },
           capabilities: { abort: opts.supervisorNoAbort !== true },
+          drift: { scope: opts.driftScope ?? [] },
           task,
           ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
           ...(memoryIndex === "" ? {} : { memoryIndex }),
