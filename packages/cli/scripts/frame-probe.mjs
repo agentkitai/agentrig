@@ -15,14 +15,16 @@
  * there to catch. A synchronous trace stops exactly where the process stopped, and the last line
  * in the file says what it was doing.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, openSync } from "node:fs";
 import { createElement } from "react";
 import { render } from "ink";
 import { App } from "../dist/tui/app.js";
 import { TuiController } from "../dist/tui/controller.js";
 
 const LOG = "/tmp/agentrig-frame-probe.log";
-writeFileSync(LOG, "");
+// O_NOFOLLOW: a fixed path under a world-writable directory is a symlink waiting to be planted,
+// and this truncates whatever it opens
+closeSync(openSync(LOG, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW));
 const log = (m) => appendFileSync(LOG, `${m}\n`);
 
 const started = Date.now();
@@ -88,8 +90,15 @@ process.stdin.read = (...args) => {
 
 process.on("uncaughtException", (e) => log(`${at()} UNCAUGHT ${e?.stack ?? e}`));
 process.on("unhandledRejection", (e) => log(`${at()} UNHANDLED ${e?.stack ?? e}`));
-// ctrl-c reaches this only if the event loop is alive; its absence from the log is itself a result
-process.on("SIGINT", () => log(`${at()} SIGINT`));
+// Ctrl-c reaches this only if the event loop is alive; its absence from the log is itself a
+// result. It MUST still exit: a listener that only logs replaces Node's default terminate, and
+// this probe exists for the case where stdin is dead and the operator is signalling from another
+// terminal. `kill -INT` doing nothing sends them to `kill -9`, which is the one exit that leaves
+// the tty in raw mode needing `stty sane`.
+process.on("SIGINT", () => {
+  log(`${at()} SIGINT`);
+  process.exit(130);
+});
 
 const controller = new TuiController({
   cwd: process.cwd(),

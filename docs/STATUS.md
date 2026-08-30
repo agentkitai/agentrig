@@ -1155,6 +1155,21 @@ Notes for a future reader:
   told anything to still writes frames. `test/tui-visible.test.ts` asserts on CONTENT instead:
   that a printed line, a permission prompt and the session id actually appear in what reaches
   stdout. Removing the subscription fails all three and none of the twelve byte-counting ones.
+- **The first version of it still wrote mid-paste, on the most ordinary paste shape there is.**
+  Submitting drew synchronously, on the reasoning that stdin had just gone quiet. It has not: a
+  newline *inside* a paste submits from the middle of an arriving burst, and a bare carriage
+  return can be drained in the same batch as the text ahead of it. One newline in a 120-chunk
+  paste produced 11 writes and 1,141 bytes with chunks still queued — the byte volume of the write
+  that deadlocked. Both submit paths now queue their work to the same quiet point, after the draw.
+- **The claim holds only at an idle prompt.** Pasting while a reply streams — queueing a follow-up,
+  entirely routine — still writes, because the output is not the paste's to control. That is
+  inherent to an async stream rather than a hole in this fix, but it is not "nothing is written
+  while a paste is arriving" either.
+- **Keystrokes must not push the deadline out.** Resetting the timer on every change starved input
+  arriving faster than the window: measured at 15ms and 25ms and 30ms intervals, zero draws for as
+  long as the input continued. Human typing is nowhere near that, but macOS key auto-repeat is
+  15ms at the fast end of the slider — holding backspace froze the prompt until the key was
+  released. A change of four characters or fewer now leaves the existing deadline alone.
 - **Confirmed on the machine that had the bug.** The same ~2,500-character paste that froze cmux
   three times now lands, drawn as its tail with a `…(1,142 more)` marker, and submits in full.
 - **This is a mitigation for an environment bug, not a repair of one.** A terminal that drains its
