@@ -1143,6 +1143,8 @@ Notes for a future reader:
 - **There is deliberately no maximum wait on the coalescing.** A ceiling would guarantee a write in
   the middle of a long enough paste, which is exactly the thing being avoided. Input that never
   pauses is input nobody is reading yet.
+- **Confirmed on the machine that had the bug.** The same ~2,500-character paste that froze cmux
+  three times now lands, drawn as its tail with a `…(1,142 more)` marker, and submits in full.
 - **This is a mitigation for an environment bug, not a repair of one.** A terminal that drains its
   output side while writing input does not deadlock. What agentrig controls is whether it writes at
   all mid-paste, so that is what changed. It has not been reproduced in a test, and cannot be
