@@ -97,6 +97,7 @@ export function buildProgram(): Command {
         collect,
         [],
       )
+      .option("--drift-scope <path>", "path the drift detector may change (repeatable)", collect, [])
       .option("--deny <rule>", "deny a tool name or permission class (repeatable)", collect, [])
       .option("--max-turns <n>", "turn budget", "50")
       .option("--max-tokens <n>", "token budget (input + output)")

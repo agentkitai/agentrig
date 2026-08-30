@@ -972,6 +972,36 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   filter over rendered strings, so what a person reads and what a debugger reads can diverge in
   shape without either drifting from the log.
 
+## The first dogfood run, and what it found (2026-08-30)
+
+PLAN §6's exit criterion — "the harness is used to build the next milestone" — was honoured for
+the first time: agentrig implemented the caller-declared drift scope, on the drift detector, using
+itself. It read the detector, the CLI wiring and the existing tests, made the change, hit a real
+cross-package typecheck failure and fixed it correctly by rebuilding the supervisor's declarations
+first, then committed and pushed on request.
+
+The review of that work found the change sound — and found two things the work could not have
+known about:
+
+- **`--drift-scope` was proven to parse, not to arrive.** Deleting the line that passes it into
+  `supervise()` broke no test, because the wiring was inline in `runCommand` and the only way to
+  exercise it was to run a whole session. `supervisorOptions()` is now exported and pure, the same
+  shape as `subagentOptions()`, and the mutation that drops the flag fails a test.
+- **`--supervise` did nothing in the TUI, and never had.** `runCommand` calls `supervise(session)`;
+  `startTui` never did. Every detector, the whole ladder, the reviewer and the grader were
+  unreachable from the default entry point, while the flags were accepted and validated. The
+  dogfood session ran 33 turns with `--supervise` and produced no signal — which was read as
+  "the thresholds are conservative" until the code said otherwise. `TuiOptions` did not even
+  include the supervisor flags: the type was the first evidence.
+  The TUI creates its sessions inside the controller, so nothing outside could attach an observer;
+  `TuiControllerOptions.onSession` is that seam, called before the events are consumed — an
+  observer attached late has missed the events it exists to judge. An observer that throws costs
+  its own attachment and not the session.
+
+The lesson is the one the whole exercise was for: **a flag that is parsed, validated and
+documented can still be connected to nothing**, and no amount of unit testing at either end finds
+it. Only running the thing did.
+
 ## "Green" meant Linux (from the first macOS run, 2026-08-30)
 
 Two tests failed on a Mac. Neither was a code defect; both were **Linux assumptions in the test

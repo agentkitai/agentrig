@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runCommand, type RunOptions } from "../src/run.ts";
+import { parseSoft, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
 
 /**
  * The supervisor CLI surface had no tests at all. These drive `runCommand` directly with no
@@ -110,5 +110,61 @@ describe("budget flag validation still holds alongside the supervisor flags", ()
   it("requires pricing for --max-usd", async () => {
     await runCommand("t", opts({ maxUsd: "5" }));
     expect(errors.some((e) => e.includes("--max-usd requires"))).toBe(true);
+  });
+});
+
+/**
+ * `supervisorOptions` is exported and pure precisely because it used to be inline in
+ * `runCommand`: the only way to check a flag reached the supervisor was to run a whole session,
+ * so nothing did, and `--drift-scope` could be deleted from the wiring with every test still green.
+ */
+describe("supervisorOptions", () => {
+  const wiring = (over: Partial<Parameters<typeof supervisorOptions>[0]> = {}) =>
+    supervisorOptions({
+      opts: {},
+      task: "do the thing",
+      budget: { maxTurns: 40 },
+      memoryIndex: "",
+      provider: { id: "fake", model: "m" } as never,
+      soft: 0.8,
+      ...over,
+    });
+
+  it("carries --drift-scope through to the detector", () => {
+    expect(wiring({ opts: { driftScope: ["packages/core"] } }).drift).toEqual({
+      scope: ["packages/core"],
+    });
+  });
+
+  it("passes an empty scope when the flag was not given, which the detector reads as silence", () => {
+    expect(wiring().drift).toEqual({ scope: [] });
+  });
+
+  it("--supervisor-no-abort removes the abort rung rather than the whole supervisor", () => {
+    expect(wiring({ opts: { supervisorNoAbort: true } }).capabilities).toEqual({ abort: false });
+    expect(wiring().capabilities).toEqual({ abort: true });
+  });
+
+  it("only builds the model-backed rungs when --supervisor-review asked for them", () => {
+    const plain = wiring();
+    expect(plain.reviewer).toBeUndefined();
+    expect(plain.grader).toBeUndefined();
+    const reviewed = wiring({ opts: { supervisorReview: true } });
+    expect(reviewed.reviewer).toBeDefined();
+    expect(reviewed.grader).toBeDefined();
+  });
+
+  it("carries the budget the session is actually running under", () => {
+    const o = wiring({ budget: { maxTurns: 10, maxTokens: 500, maxUsd: 2, maxMinutes: 30 }, soft: 0.5 });
+    expect(o.budget).toEqual({ soft: 0.5, maxTurns: 10, maxTokens: 500, maxUsd: 2, maxMinutes: 30 });
+  });
+});
+
+describe("parseSoft", () => {
+  it("accepts a fraction and rejects a count, since it is a fraction of the budget", () => {
+    expect(parseSoft("0.5")).toBe(0.5);
+    expect(parseSoft("1")).toBe(1);
+    expect(() => parseSoft("80")).toThrow(/fraction of the budget/);
+    expect(() => parseSoft("lots")).toThrow(/--supervisor-soft/);
   });
 });

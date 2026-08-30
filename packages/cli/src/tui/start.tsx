@@ -12,8 +12,11 @@ import {
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
+import { parseSoft, supervisorOptions, type SupervisorFlags } from "../run.js";
+import { parseBudget } from "../agent-builder.js";
+import { supervise } from "@agentkitai/agentrig-supervisor";
 
-export type TuiOptions = AgentBuildOptions & { modelExplicit?: boolean };
+export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
 
 /**
  * `agentrig` with no subcommand (PLAN §5). Thin by design: `buildAgent` assembles exactly the
@@ -29,10 +32,34 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   let built;
+  const budget = parseBudget(opts);
   const controller: TuiController = new TuiController({
     cwd: process.cwd(),
     // assigned below; the controller is constructed first because it owns `onAsk`
     agent: { run: () => { throw new Error("agent not ready"); } },
+    ...(opts.supervise === true
+      ? {
+          supervised: true,
+          // The same `supervisorOptions` the `run` command builds, rather than a second copy:
+          // this entry point had NO supervisor at all, so `--supervise` was accepted and ignored.
+          onSession: (session) =>
+            void supervise(
+              session,
+              supervisorOptions({
+                opts,
+                task: "",
+                budget: budget.budget,
+                ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
+                memoryIndex: "",
+                provider: built!.provider,
+                soft: parseSoft(opts.supervisorSoft ?? "0.8"),
+                onEscalate: (question: string) => controller.print(`supervisor asks: ${question}`, "error"),
+                onError: (where: string, err: Error) =>
+                  controller.print(`supervisor ${where}: ${err.message}`, "error"),
+              }),
+            ),
+        }
+      : {}),
   });
 
   try {

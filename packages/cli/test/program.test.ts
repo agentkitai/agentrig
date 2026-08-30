@@ -106,11 +106,21 @@ describe("argv parsing", () => {
     expect(describeStray(["zzzzzzzz"], ["run", "dream"])).toBe("error: unknown command 'zzzzzzzz'");
   });
 
+  it("parses repeatable drift scopes for run and the default TUI", async () => {
+    const { run } = stub(buildProgram());
+    expect((await run(["run", "x", "--drift-scope", "src", "--drift-scope", "test"]))?.opts.driftScope).toEqual([
+      "src",
+      "test",
+    ]);
+    expect((await run(["--drift-scope", "packages/cli"]))?.opts.driftScope).toEqual(["packages/cli"]);
+  });
+
   it("keeps flags of the same name distinct per subcommand", async () => {
     const { run } = stub(buildProgram());
-    // `dream` has --scope; `run` does not. Neither should leak onto the other.
+    // `dream` has --scope; run/TUI deliberately use --drift-scope. Neither should leak.
     expect((await run(["dream", "--scope", "global"]))?.opts.scope).toBe("global");
     expect((await run(["run", "x"]))?.opts.scope).toBeUndefined();
+    expect((await run(["run", "x", "--drift-scope", "src"]))?.opts.driftScope).toEqual(["src"]);
   });
 
   it("every command in the tree has an action, so none can silently no-op", () => {

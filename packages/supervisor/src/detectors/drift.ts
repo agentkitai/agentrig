@@ -4,6 +4,8 @@ import type { SupervisorState } from "../state.js";
 import { signal } from "../types.js";
 
 export interface DriftOptions {
+  /** Caller-declared paths allowed independently of any scope declared by the plan. */
+  scope?: string[];
   /** Out-of-scope files before it fires. 1 is right for a tight plan, higher for a loose one. */
   strays?: number;
   /** Distinct stray paths remembered, so a very long session stays bounded. */
@@ -52,13 +54,14 @@ export function declaredScope(plan: PlanItem[]): string[] {
  * PLAN §4.1: "files touched outside the plan's declared scope". v1 is exactly that comparison —
  * no model in the loop (the LLM-judged, sampled version is v2/M6).
  *
- * Silent when no plan item declares a scope, which is the common case: with nothing to drift
- * from, every file would be out of scope and the detector would fire on the first write. So this
- * one is opt-in by the agent's own plan rather than by config.
+ * Silent when neither the caller nor a plan item declares a scope: with nothing to drift from,
+ * every file would be out of scope and the detector would fire on the first write. A caller scope
+ * makes the check independent of whether the agent declares one in its plan.
  */
 export function driftDetector(opts: DriftOptions = {}): Detector {
   const strays = opts.strays ?? 1;
   const maxReported = opts.maxReported ?? 2048;
+  const callerScope = opts.scope ?? [];
   const reported = new Set<string>();
   let pending: Array<{ path: string; seq: number }> = [];
 
@@ -66,7 +69,7 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
     id: "drift",
     observe(event: HarnessEvent, state: SupervisorState) {
       if (event.type !== "file.changed") return null;
-      const scope = declaredScope(state.plan);
+      const scope = [...new Set([...callerScope, ...declaredScope(state.plan)])];
       if (scope.length === 0) return null;
       if (inScope(event.path, scope) || reported.has(event.path)) return null;
 
@@ -83,7 +86,7 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
       const strayed = pending;
       pending = [];
       return signal("drift", 0.6, [
-        `changed ${strayed.map((p) => p.path).join(", ")}, which no plan item declares`,
+        `changed ${strayed.map((p) => p.path).join(", ")}, which is outside the declared scope`,
         `declared scope: ${scope.join(", ")}`,
       ], [strayed[0]!.seq, event.seq]);
     },
