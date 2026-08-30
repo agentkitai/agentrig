@@ -16,12 +16,31 @@
  *
  * So the buffer is the truth and it moves synchronously; drawing waits for stdin to go quiet.
  * During a burst that means one draw at the end instead of one per chunk, and nothing is written
- * while the terminal is still pushing. Nobody can read a buffer mid-paste anyway.
+ * while the terminal is still pushing.
  *
- * There is deliberately no maximum wait. A ceiling would guarantee a write in the middle of a
- * long enough paste, which is precisely the thing being avoided; input that never pauses is input
- * nobody is reading yet.
+ * **Submitting waits too.** The first version drew synchronously when a line was submitted, on the
+ * grounds that stdin had just gone quiet. It has not: a newline inside a paste submits from the
+ * middle of an arriving burst, and a bare carriage return can be drained in the same batch as the
+ * text ahead of it. Measured on the committed harness, one newline in a 120-chunk paste produced
+ * 11 writes and 1,141 bytes mid-paste — the same byte volume as the write that deadlocked. So a
+ * submit is queued and runs at the quiet point, right after the draw, and there is no path left
+ * that writes while chunks are still unread.
+ *
+ * There is deliberately no maximum wait. A ceiling would guarantee a write in the middle of a long
+ * enough paste, which is precisely the thing being avoided.
  */
+
+/**
+ * A change this size or smaller is a keystroke, not a chunk of a paste.
+ *
+ * Keystrokes must not push the deadline out, or input arriving faster than the quiet window never
+ * draws at all. Human typing is far slower than that, but key auto-repeat is not: macOS's repeat
+ * rate is 15ms at the fast end of the slider and 30ms one notch up, both under 32ms. Holding
+ * backspace to clear a line showed a frozen prompt for as long as the key was held, then snapped
+ * to the final value. A paste chunk is 64 bytes or more and still resets the deadline, so bursts
+ * coalesce exactly as before.
+ */
+const KEYSTROKE = 4;
 
 export interface InputBufferOptions {
   /** Quiet stdin for this long before the buffer is drawn. One frame is plenty. */
@@ -34,6 +53,9 @@ export interface InputBufferOptions {
 export class InputBuffer {
   private text = "";
   private handle: unknown = null;
+  private disposed = false;
+  /** Work to run once the draw lands — submitting a line, today. */
+  private readonly queued: Array<() => void> = [];
   private readonly quietMs: number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
@@ -53,29 +75,35 @@ export class InputBuffer {
     return this.text;
   }
 
-  /** Records input and schedules a draw once stdin has been quiet. */
-  set(next: string): void {
+  /**
+   * Records input, and optionally work to run once it has been drawn. Both happen at the next
+   * quiet point, so neither writes to the terminal while a paste is still arriving.
+   */
+  set(next: string, thenRun?: () => void): void {
+    if (this.disposed) return;
+    const delta = Math.abs(next.length - this.text.length);
     this.text = next;
+    if (thenRun !== undefined) this.queued.push(thenRun);
+    // a keystroke leaves the existing deadline alone; only a burst-sized change pushes it out
+    if (this.handle !== null && delta <= KEYSTROKE && thenRun === undefined) return;
     this.cancel();
     this.handle = this.setTimer(() => {
       this.handle = null;
-      this.onDraw(this.text);
+      this.draw();
     }, this.quietMs);
   }
 
-  /**
-   * Records input and draws now. For the paths that must not lag — submitting a line, where the
-   * prompt has to clear before the reply starts arriving.
-   */
-  setNow(next: string): void {
-    this.text = next;
+  /** Drops pending work, so an unmounted component is never drawn into. Latches. */
+  dispose(): void {
+    this.disposed = true;
+    this.queued.length = 0;
     this.cancel();
-    this.onDraw(next);
   }
 
-  /** Drops a pending draw, so an unmounted component is never drawn into. */
-  dispose(): void {
-    this.cancel();
+  private draw(): void {
+    this.onDraw(this.text);
+    // spliced first: a callback that submits can schedule more work, and must not re-run this one
+    for (const run of this.queued.splice(0)) run();
   }
 
   private cancel(): void {

@@ -50,6 +50,10 @@ class FakeStdin extends EventEmitter {
   read(): string | null {
     return this.chunks.shift() ?? null;
   }
+  /** Chunks the terminal has delivered that nobody has taken yet. */
+  get unread(): number {
+    return this.chunks.length;
+  }
   /** A paste reaches a raw-mode tty as a run of chunks, not as one keystroke. */
   paste(text: string, chunk = 64): void {
     this.queue(text, chunk);
@@ -68,6 +72,8 @@ interface Harness {
   stdin: FakeStdin;
   controller: TuiController;
   writes: string[];
+  /** Unread stdin chunks at the moment of each write. Any non-zero entry is the hazard. */
+  unreadAtWrite: () => number[];
   bytes: () => number;
   reset: () => void;
   stop: () => void;
@@ -100,6 +106,8 @@ class StreamingProvider implements ModelProvider {
 
 function mount(scrollback: number, reply = "", rows = ROWS, columns = COLUMNS): Harness {
   let writes: string[] = [];
+  let unreadAtWrite: number[] = [];
+  const stdin = new FakeStdin();
   const stdout = new EventEmitter() as EventEmitter & {
     columns: number;
     rows: number;
@@ -109,8 +117,12 @@ function mount(scrollback: number, reply = "", rows = ROWS, columns = COLUMNS): 
   stdout.columns = columns;
   stdout.rows = rows;
   stdout.isTTY = true;
+  // A write while chunks are still queued is the deadlock condition itself: the terminal is
+  // pushing input and cannot drain output. Recorded per write rather than counted at the end, so
+  // it holds for ANY paste shape rather than only the one a test happens to use.
   stdout.write = (s: string): boolean => {
     writes.push(s);
+    unreadAtWrite.push(stdin.unread);
     return true;
   };
 
@@ -130,7 +142,6 @@ function mount(scrollback: number, reply = "", rows = ROWS, columns = COLUMNS): 
     controller.print(`tool read packages/cli/src/tui/controller.ts (line ${i})`, "event");
   }
 
-  const stdin = new FakeStdin();
   const instance = render(createElement(App, { controller }), {
     stdout: stdout as never,
     stdin: stdin as never,
@@ -145,8 +156,10 @@ function mount(scrollback: number, reply = "", rows = ROWS, columns = COLUMNS): 
       return writes;
     },
     bytes: () => writes.reduce((n, s) => n + s.length, 0),
+    unreadAtWrite: () => unreadAtWrite,
     reset: () => {
       writes = [];
+      unreadAtWrite = [];
     },
     stop: () => instance.unmount(),
   };
@@ -376,5 +389,72 @@ describe("output while a paste is arriving", () => {
     expect(during, "wrote to the terminal mid-paste").toBe(0);
     // and the buffer is drawn once the burst settles, rather than never
     expect(after).toBeGreaterThan(0);
+  });
+});
+
+describe("a paste that contains a newline", () => {
+  /**
+   * The shape the first version of this fix missed entirely. A newline submits, and submitting
+   * used to draw synchronously — from the middle of an arriving paste. Measured on this harness,
+   * one newline in a 120-chunk paste produced 11 writes and 1,141 bytes while chunks were still
+   * queued, which is the byte volume of the write that deadlocked a real terminal.
+   */
+  const chunk = (i: number, at: number): string => (i === at ? `${"y".repeat(63)}\n` : "y".repeat(64));
+
+  /**
+   * Delivered in batches, because that is what a tty does: Ink drains several chunks per
+   * `readable` wakeup, so while it is working through one the rest are still queued — which is
+   * the only arrangement in which a write can land with input unread.
+   */
+  const pasteWithNewline = async (h: Harness, chunks: number, at: number, batch = 5): Promise<void> => {
+    for (let i = 0; i < chunks; i += batch) {
+      for (let j = i; j < Math.min(i + batch, chunks) - 1; j += 1) h.stdin.queue(chunk(j, at), 64);
+      h.stdin.paste(chunk(Math.min(i + batch, chunks) - 1, at), 64);
+      await new Promise((r) => setImmediate(r));
+    }
+  };
+
+  it("writes nothing while chunks are still queued", async () => {
+    const h = mount(300);
+    await settle();
+    h.reset();
+
+    await pasteWithNewline(h, 120, 10);
+    const during = h.writes.length;
+    h.stop();
+    expect(during, "wrote to the terminal mid-paste").toBe(0);
+  });
+
+  it("never writes while stdin still has something unread, whatever the shape", async () => {
+    // asserted per write rather than by counting at the end, so this holds for paste shapes no
+    // test thought to try — which is exactly how the newline case got through
+    const h = mount(300);
+    await settle();
+    h.reset();
+
+    await pasteWithNewline(h, 60, 30);
+    await settle();
+    const hazards = h.unreadAtWrite().filter((n) => n > 0);
+    h.stop();
+    expect(hazards, "wrote while the terminal still had input queued").toEqual([]);
+  });
+
+  it("still submits the line, and every character of it", async () => {
+    const h = mount(300);
+    await settle();
+    const seen: string[] = [];
+    const real = h.controller.submit.bind(h.controller);
+    h.controller.submit = async (line: string): Promise<boolean> => {
+      seen.push(line);
+      return real("");
+    };
+
+    await pasteWithNewline(h, 20, 10);
+    await settle();
+    h.stop();
+
+    // 10 chunks of 64 before the newline, plus the 63 characters that precede it in chunk 10
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe("y".repeat(10 * 64 + 63));
   });
 });

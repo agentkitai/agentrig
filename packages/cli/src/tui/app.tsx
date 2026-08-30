@@ -68,10 +68,13 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     }
 
     if (key.return) {
+      // queued rather than run now: a bare carriage return can be drained in the same batch as
+      // the text ahead of it, so "the user pressed enter" is not proof that stdin has gone quiet
       const line = buf.value;
-      buf.setNow("");
-      void controller.submit(line).then((keepGoing) => {
-        if (!keepGoing) exit();
+      buf.set("", () => {
+        void controller.submit(line).then((keepGoing) => {
+          if (!keepGoing) exit();
+        });
       });
       return;
     }
@@ -86,9 +89,10 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     if (/[\r\n]/.test(char)) {
       const [first = "", ...rest] = char.split(/\r\n|[\r\n]/);
       const line = buf.value + first;
-      buf.setNow(rest.join(" "));
-      void controller.submit(line).then((keepGoing) => {
-        if (!keepGoing) exit();
+      buf.set(rest.join(" "), () => {
+        void controller.submit(line).then((keepGoing) => {
+          if (!keepGoing) exit();
+        });
       });
       return;
     }
