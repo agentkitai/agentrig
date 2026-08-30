@@ -561,12 +561,26 @@ describe("TuiController", () => {
     expect(await c.submit("/help")).toBe(true);
   });
 
-  it("bounds the line buffer so a long session cannot grow the terminal without limit", () => {
+  it("bounds what a long session retains without ever dropping a line from the buffer", () => {
     const c = makeController([], { maxLines: 10 });
     for (let i = 0; i < 50; i += 1) c.print(`line ${i}`);
-    expect(c.snapshot().lines).toHaveLength(10);
+
+    // Ink's `Static` indexes into this array and renders `items.slice(alreadyWritten)`, so the
+    // array may only ever grow: dropping the front shifts every index past what it remembers and
+    // the TUI stops printing for good. The cap binds the text it holds, not the array's shape.
+    expect(c.snapshot().lines).toHaveLength(50);
     expect(text(c)).toContain("line 49");
     expect(text(c)).not.toContain("line 0\n");
+    expect(c.snapshot().lines.filter((l) => l.text !== "")).toHaveLength(10);
+  });
+
+  it("still prints after the cap is reached, rather than going silent", () => {
+    const c = makeController([], { maxLines: 10 });
+    for (let i = 0; i < 25; i += 1) c.print(`line ${i}`);
+    c.print("AFTER-THE-CAP");
+    // the index `Static` holds must still land inside the array, or nothing after this ever shows
+    expect(c.snapshot().lines.length).toBeGreaterThan(25);
+    expect(last(c)).toBe("AFTER-THE-CAP");
   });
 
   it("notifies subscribers and stops after unsubscribe", () => {

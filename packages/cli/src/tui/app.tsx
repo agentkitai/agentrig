@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
 import { fitToRows, liveRows } from "./viewport.js";
@@ -26,6 +26,17 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
+  /**
+   * The authoritative buffer. Ink drains several stdin chunks in one `readable` batch, and React
+   * does not update `input` between them — so reading the state variable to build a line dropped
+   * whole chunks: pasting 2,500 characters ending in a newline submitted 2,436 of them, silently.
+   * The ref moves synchronously; `input` exists only so a change re-renders.
+   */
+  const buffer = useRef("");
+  const write = useCallback((next: string) => {
+    buffer.current = next;
+    setInput(next);
+  }, []);
 
   useEffect(() => controller.subscribe(setState), [controller]);
 
@@ -48,15 +59,15 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     }
 
     if (key.return) {
-      const line = input;
-      setInput("");
+      const line = buffer.current;
+      write("");
       void controller.submit(line).then((keepGoing) => {
         if (!keepGoing) exit();
       });
       return;
     }
     if (key.backspace || key.delete) {
-      setInput((v) => v.slice(0, -1));
+      write(buffer.current.slice(0, -1));
       return;
     }
     if (char === undefined || char === "" || key.ctrl || key.meta) return;
@@ -65,17 +76,20 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     // newline and keep the remainder.
     if (/[\r\n]/.test(char)) {
       const [first = "", ...rest] = char.split(/\r\n|[\r\n]/);
-      const line = input + first;
-      setInput(rest.join(" "));
+      const line = buffer.current + first;
+      write(rest.join(" "));
       void controller.submit(line).then((keepGoing) => {
         if (!keepGoing) exit();
       });
       return;
     }
-    setInput((v) => v + char);
+    write(buffer.current + char);
   });
 
-  const columns = stdout?.columns ?? 80;
+  // `||`, not `??`: Ink's own layout notes that `columns` is undefined OR ZERO off a TTY, and a
+  // zero width collapses the budget to one character per row — the user saw the marker and none
+  // of what they had typed
+  const columns = stdout?.columns || 80;
   const rows = liveRows(stdout?.rows);
 
   return (

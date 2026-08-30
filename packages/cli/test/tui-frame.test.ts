@@ -52,8 +52,15 @@ class FakeStdin extends EventEmitter {
   }
   /** A paste reaches a raw-mode tty as a run of chunks, not as one keystroke. */
   paste(text: string, chunk = 64): void {
-    for (let i = 0; i < text.length; i += chunk) this.chunks.push(text.slice(i, i + chunk));
+    this.queue(text, chunk);
     this.emit("readable");
+  }
+  /**
+   * Queues without waking the reader, so a following chunk lands in the SAME `readable` batch —
+   * which is the only way a bare "\r" arrives while React has not yet applied the text before it.
+   */
+  queue(text: string, chunk = 64): void {
+    for (let i = 0; i < text.length; i += chunk) this.chunks.push(text.slice(i, i + chunk));
   }
 }
 
@@ -91,7 +98,7 @@ class StreamingProvider implements ModelProvider {
   }
 }
 
-function mount(scrollback: number, reply = ""): Harness {
+function mount(scrollback: number, reply = "", rows = ROWS, columns = COLUMNS): Harness {
   let writes: string[] = [];
   const stdout = new EventEmitter() as EventEmitter & {
     columns: number;
@@ -99,8 +106,8 @@ function mount(scrollback: number, reply = ""): Harness {
     isTTY: boolean;
     write: (s: string) => boolean;
   };
-  stdout.columns = COLUMNS;
-  stdout.rows = ROWS;
+  stdout.columns = columns;
+  stdout.rows = rows;
   stdout.isTTY = true;
   stdout.write = (s: string): boolean => {
     writes.push(s);
@@ -149,6 +156,21 @@ function mount(scrollback: number, reply = ""): Harness {
 const settle = async (ms = 250): Promise<void> => {
   await new Promise((r) => setTimeout(r, ms));
 };
+
+
+/** An ordinary answer: short lines, bullets, a fenced block. 1,625 characters, 155 rows. */
+const BULLETED_REPLY = Array.from({ length: 155 }, (_, i) =>
+  i % 5 === 0 ? `- point ${i}` : `  step ${i}`,
+).join("\n");
+
+describe("the test harness itself", () => {
+  it("runs with Ink's CI short-circuit disabled, or it asserts nothing at all", () => {
+    // `ink/build/ink.js` returns from `onRender` before the frame-height branch when `is-in-ci` is
+    // true, and every GitHub Actions step sets `CI`. Without `test/setup-no-ci.ts` these tests
+    // pass against a fully reverted fix.
+    expect(process.env["CI"]).toBeUndefined();
+  });
+});
 
 describe("the live frame", () => {
   it("never repaints the whole terminal because of a long paste", async () => {
@@ -202,6 +224,40 @@ describe("the live frame", () => {
     expect(bigBytes).toBeLessThan(smallBytes * 2 + 2_000);
   });
 
+
+  it("never repaints the whole terminal because of a reply made of short lines", async () => {
+    // The shape of nearly every real answer: bullets, steps, a code block. A character budget
+    // reads this as 21 rows; the terminal renders 155. Before the row budget it drove 40
+    // full-screen repaints and 699,389 bytes — worse than the paste this all started with, and
+    // from a reply of only 1,625 characters.
+    const h = mount(300, BULLETED_REPLY);
+    await settle();
+    h.reset();
+
+    await h.controller.submit("explain the retry policy");
+    await settle();
+
+    const clears = h.writes.filter((w) => w.includes(CLEAR_TERMINAL));
+    h.stop();
+    expect(clears).toHaveLength(0);
+  });
+
+  it("holds in a small window with a reply streaming AND something typed", async () => {
+    // The frame draws two growable regions. Budgeting each against the whole window left every
+    // terminal from 12 to 20 rows — a tmux pane, a split editor — freezing exactly as before.
+    for (const rows of [12, 16, 20, 24]) {
+      const h = mount(200, BULLETED_REPLY, rows);
+      await settle();
+      h.reset();
+      h.stdin.paste("x".repeat(2_500));
+      await h.controller.submit("explain");
+      await settle();
+      const clears = h.writes.filter((w) => w.includes(CLEAR_TERMINAL));
+      h.stop();
+      expect(clears, `${rows}-row terminal`).toHaveLength(0);
+    }
+  }, 30_000);
+
   it("never repaints the whole terminal because of a long streamed reply", async () => {
     // a reply of a few thousand characters is an ordinary answer, not an outlier, and it arrives
     // token by token — so the tall frame was redrawn once per delta for the whole turn
@@ -215,5 +271,83 @@ describe("the live frame", () => {
     const clears = h.writes.filter((w) => w.includes(CLEAR_TERMINAL));
     h.stop();
     expect(clears).toHaveLength(0);
+  });
+});
+
+describe("the frame off a real terminal", () => {
+  it("still shows what was typed when the terminal reports zero columns", async () => {
+    // Ink's own layout notes that `columns` is undefined OR ZERO off a TTY and falls back with
+    // `||`. With `??` the zero passes through, the budget collapses to one character per row, and
+    // the user sees the "(N more)" marker and none of what they typed.
+    const h = mount(20, "", ROWS, 0);
+    await settle();
+    h.reset();
+
+    h.stdin.paste("fix the retry logic in the anthropic adapter");
+    await settle();
+    const frame = h.writes.join("");
+    h.stop();
+
+    expect(frame).toContain("fix the retry logic in the anthropic adapter");
+  });
+});
+
+describe("the input buffer", () => {
+  /** What `submit` was actually handed, which is the only thing that reaches the agent. */
+  const submitted = (h: Harness): string[] => {
+    const seen: string[] = [];
+    const real = h.controller.submit.bind(h.controller);
+    h.controller.submit = async (line: string): Promise<boolean> => {
+      seen.push(line);
+      return real("");
+    };
+    return seen;
+  };
+
+  it("submits every character of a paste that ends in a newline", async () => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+
+    // Ink drains several chunks in one `readable` batch and React does not update state between
+    // them, so building the line from the state variable dropped whole chunks: this used to
+    // submit 2,436 of the 2,500 characters, silently and with no way to notice.
+    h.stdin.paste(`${"y".repeat(2_500)}\ntail`);
+    await settle();
+    h.stop();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe("y".repeat(2_500));
+  });
+
+  it("submits every character when the return key arrives in the same batch as the text", async () => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+
+    // A separate keystroke a moment later would let React catch up and prove nothing. Ink drains
+    // the whole queue in one `readable` handler, so this is the return arriving before any of the
+    // text ahead of it has been applied to state.
+    h.stdin.queue("z".repeat(2_496));
+    h.stdin.paste("\r");
+    await settle();
+    h.stop();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe("z".repeat(2_496));
+  });
+
+  it("submits the full buffer, not the viewport slice drawn on screen", async () => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+
+    h.stdin.paste(`${"q".repeat(4_000)}\n`);
+    await settle();
+    h.stop();
+
+    // the frame shows a tail with a "(N more)" marker; what the agent gets is all of it
+    expect(seen[0]).toBe("q".repeat(4_000));
+    expect(seen[0]).not.toContain("more)");
   });
 });

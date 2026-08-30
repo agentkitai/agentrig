@@ -143,7 +143,19 @@ export class TuiController {
 
   print(text: string, tone: TuiLine["tone"] = "system"): void {
     const lines = [...this.state.lines, { key: this.nextKey++, text, tone }];
-    this.set({ lines: lines.length > this.maxLines ? lines.slice(-this.maxLines) : lines });
+    // Append-only, ALWAYS. Ink's `Static` remembers how many items it has already written and
+    // renders `items.slice(thatIndex)`. Dropping items off the front shifts every index, the
+    // remembered one runs past the end, and the TUI silently stops printing ANYTHING for the rest
+    // of the session — which is exactly what the `slice(-maxLines)` here used to do, at the 5,000th
+    // line of a long run, with no error and no clue.
+    //
+    // The cap still binds what is retained, just not the array's shape: a line past it has already
+    // been written to the terminal and is never read again, so its text is released and its slot
+    // stays where `Static` left it. Exactly one line falls out of the window per print.
+    const over = lines.length - this.maxLines;
+    const dropped = over > 0 ? lines[over - 1] : undefined;
+    if (dropped !== undefined && dropped.text !== "") lines[over - 1] = { ...dropped, text: "" };
+    this.set({ lines });
   }
 
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
