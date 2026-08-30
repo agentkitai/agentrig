@@ -450,6 +450,44 @@ describe("TuiController", () => {
     expect(text(on)).toContain("raised nothing this session");
   });
 
+  it("prompts for a supervisor escalation and steers the answer back to the running agent", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    let asked: Promise<void> | undefined;
+    let c!: TuiController;
+    c = makeControllerWith(provider, {
+      supervised: true,
+      onSession: () => {
+        asked = c.askSupervisor("Should I keep debugging or revert?");
+      },
+    });
+
+    const running = c.submit("fix it");
+    await vi.waitFor(() => expect(c.snapshot().escalation).not.toBeNull());
+    expect(c.snapshot().escalation!.question).toContain("debugging or revert");
+
+    c.answerEscalation("Keep debugging, but inspect the parser first.");
+    await asked;
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("deny");
+    await running;
+
+    expect(c.snapshot().escalation).toBeNull();
+    expect(JSON.stringify(provider.requests)).toContain("inspect the parser first");
+  });
+
+  it("expires an unanswered supervisor escalation instead of leaving the TUI hung", async () => {
+    const c = makeController([]);
+    const asked = c.askSupervisor("Anyone there?", 10);
+    expect(c.snapshot().escalation).not.toBeNull();
+
+    await asked;
+    expect(c.snapshot().escalation).toBeNull();
+    expect(text(c)).toContain("no answer");
+  });
+
   it("refuses to start a second turn while one is running", async () => {
     const c = makeController([
       [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],

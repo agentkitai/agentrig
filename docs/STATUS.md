@@ -360,7 +360,9 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   between a supervisor and a deadlock. Reaching `escalate` with no handler is reported through
   `onError` rather than recorded as an intervention that quietly does nothing, and `supervise()`
   derives the capability from the handler's presence so declaring it without one cannot buy a
-  dead rung.
+  dead rung. In the TUI the handler is now a free-form prompt rather than a line printed into
+  scrollback: the answer is queued back to the running agent as a user steer. The prompt expires
+  and is also settled on session/UI teardown, so a user who never answers cannot hang the run.
 - **`record()` validates before appending.** `Detector` is a public interface and `signal()`'s
   clamping is optional, so a third-party detector can hand back `confidence: 1.4` — or `NaN`,
   which `JSON.stringify` writes as `null`. `serializeEvent` is a bare stringify, so either would
@@ -395,11 +397,15 @@ defects that meant M3 did not run at all. All fixed, each with a regression test
   the path held *earlier* and differing from what it holds now — rewriting the same content is a
   no-op write, not a revert — tallied per file, with both the per-path history and the tracked-path
   set bounded.
-- **`stall` treats a turn that reaches for a tool it has not used before as productive**, even if
-  it wrote nothing — otherwise reading and exploring would count as spinning. Its test-run branch
-  counts only runs that are **still failing** and resets whenever a file changes: an unchanged
-  pass count on a *green* suite is the success condition, and re-verifying that a refactor kept
-  the suite green is exactly the shape this would otherwise have called a stall.
+- **`stall` treats exploration as progress, not just a new tool name.** A turn that reads a file or
+  searches/globs a path not seen before resets the quiet-turn tally, so an agent orienting itself
+  through an unfamiliar tree is not called stuck; repeatedly reading the same target still fires.
+  One continuous stall condition now emits once and re-arms only after progress, instead of
+  generating the same escalation every N turns and climbing the ladder on unchanged evidence. Its
+  test-run branch has the same one-signal-per-unchanged-count behaviour, counts only runs that are
+  **still failing**, and resets whenever a file changes: an unchanged pass count on a *green* suite
+  is the success condition, and re-verifying that a refactor kept the suite green is exactly the
+  shape this would otherwise have called a stall.
 - `drift` is v1 as specified: a literal path-prefix comparison, no model in the loop. Scope entries
   are exact paths or directory prefixes, not globs, on the grounds that a plan forced to write `**`
   will declare a scope so broad drift can never fire. Both sides are normalized before comparing —
