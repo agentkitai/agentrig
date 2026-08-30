@@ -6,6 +6,7 @@ import {
   connectServers,
   mcpTool,
   mcpToolName,
+  normalizeSchema,
   renderContent,
   toToolSpec,
   type AnyTool,
@@ -249,5 +250,161 @@ describe("connectServers", () => {
     expect(connected.map((c) => c.name)).toEqual(["working"]);
     expect(errors[0]).toContain("broken");
     for (const c of connected) await c.close();
+  });
+});
+
+describe("review regressions: a bad server must not kill the session", () => {
+  const ANTHROPIC_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
+
+  it("sanitises names the provider would reject outright", () => {
+    // a 400 on the tool spec is a fatal error on turn 1 — one bad entry cost the whole session,
+    // not just its own tools
+    for (const [server, tool] of [
+      ["my server", "search"],
+      ["svr", "a.b"],
+      ["github-enterprise", "list_pull_request_review_comments_for_repository_and_more"],
+      ["über", "naïve"],
+    ] as const) {
+      const name = mcpToolName(server, tool);
+      expect(ANTHROPIC_NAME.test(name), `${server}/${tool} → ${name}`).toBe(true);
+    }
+  });
+
+  it("keeps distinct servers distinct even when sanitising collapses characters", () => {
+    // `__` is the delimiter, so these two splits used to compose to one name and the registry
+    // silently kept only the last while shipping both specs
+    expect(mcpToolName("a__b", "c")).not.toBe(mcpToolName("a", "b__c"));
+    expect(mcpToolName("my server", "x")).not.toBe(mcpToolName("my_server", "x"));
+  });
+
+  it("normalises a schema the provider would reject", () => {
+    // a server declaring {"type":"string"} is both rejected by the provider and, if accepted,
+    // tells the model to send a string that inputSchema's zod check refuses forever
+    expect(normalizeSchema({ type: "string" })).toEqual({ type: "object", properties: {} });
+    expect(normalizeSchema(null)).toEqual({ type: "object", properties: {} });
+    expect(normalizeSchema([1, 2])).toEqual({ type: "object", properties: {} });
+    expect(normalizeSchema(undefined)).toEqual({ type: "object", properties: {} });
+  });
+
+  it("keeps a valid object schema, minus $schema", () => {
+    const kept = normalizeSchema({
+      $schema: "http://json-schema.org/draft-07/schema#",
+      type: "object",
+      properties: { q: { type: "string", description: "the query" } },
+      required: ["q"],
+    });
+    expect(kept.$schema).toBeUndefined();
+    expect(kept.required).toEqual(["q"]);
+    expect(JSON.stringify(kept)).toContain("the query");
+  });
+
+  it("an object schema with no properties still gets one", () => {
+    expect(normalizeSchema({ type: "object" })).toEqual({ type: "object", properties: {} });
+  });
+
+  it("the composed spec is something a provider will accept", () => {
+    const tool = mcpTool({
+      client: { name: "my server", callTool: async () => ({ content: [] }) } as never,
+      spec: { name: "a.b", inputSchema: { type: "string" } },
+    });
+    const spec = toToolSpec(tool);
+    expect(ANTHROPIC_NAME.test(spec.name)).toBe(true);
+    expect((spec.inputSchema as { type: string }).type).toBe("object");
+  });
+});
+
+describe("review regressions: lifecycle and cancellation", () => {
+  it("close() kills the child and resolves even with a quiescent event loop", async () => {
+    const { spawnFn, child } = fakeServer(okHandler([]));
+    const client = new McpClient({ name: "f", command: "x" }, { spawnFn });
+    await client.start();
+    // an unref'd sleep let Node exit before the timer fired, so close() never resolved and any
+    // later server in the list was never closed at all
+    await client.close();
+    expect(child.kill).toHaveBeenCalled();
+  });
+
+  it("a timed-out request is cleaned up, not merely rejected", async () => {
+    const { spawnFn } = fakeServer((req) =>
+      req.method === "initialize" ? { protocolVersion: "1" } : new Promise(() => {}),
+    );
+    const client = new McpClient({ name: "f", command: "x", timeoutMs: 30 }, { spawnFn });
+    await client.start();
+    await expect(client.callTool("x", {})).rejects.toThrow(/did not answer/);
+    expect(client.pendingCount).toBe(0);
+    await client.close();
+  });
+
+  it("an aborted call rejects and is cleaned up", async () => {
+    const { spawnFn } = fakeServer((req) =>
+      req.method === "initialize" ? { protocolVersion: "1" } : new Promise(() => {}),
+    );
+    const client = new McpClient({ name: "f", command: "x" }, { spawnFn });
+    await client.start();
+    const ac = new AbortController();
+    const call = client.callTool("x", {}, ac.signal);
+    ac.abort();
+    await expect(call).rejects.toThrow(/aborted/);
+    expect(client.pendingCount).toBe(0);
+    await client.close();
+  });
+
+  it("does not accumulate an abort listener per call on the session-lifetime signal", async () => {
+    const { spawnFn } = fakeServer(okHandler([]));
+    const client = new McpClient({ name: "f", command: "x" }, { spawnFn });
+    await client.start();
+    const { getEventListeners } = await import("node:events");
+    const ac = new AbortController();
+    // `AbortSignal` is an EventTarget, not an EventEmitter — it has no `listenerCount`, so
+    // reaching for one made this assertion vacuous in both directions
+    for (let i = 0; i < 25; i += 1) await client.callTool("x", {}, ac.signal);
+    // every tool call is handed the SAME session-lifetime signal; a listener per request that is
+    // never removed grows monotonically for the life of the session
+    expect(getEventListeners(ac.signal, "abort").length).toBeLessThan(3);
+    await client.close();
+  });
+
+  it("refuses a second start rather than orphaning the first child", async () => {
+    const { spawnFn } = fakeServer(okHandler([]));
+    const client = new McpClient({ name: "f", command: "x" }, { spawnFn });
+    await client.start();
+    await expect(client.start()).rejects.toThrow(/already started/);
+    await client.close();
+  });
+
+  it("rejects a tools/list reply with no tools key instead of reporting zero tools", async () => {
+    const { spawnFn } = fakeServer((req) =>
+      req.method === "initialize" ? { protocolVersion: "1" } : { somethingElse: true },
+    );
+    const client = new McpClient({ name: "f", command: "x" }, { spawnFn });
+    await client.start();
+    await expect(client.listTools()).rejects.toThrow(/unrecognised result/);
+    await client.close();
+  });
+
+  it("connectServers closes a client whose listing failed", async () => {
+    const bad = fakeServer((req) =>
+      req.method === "initialize" ? { protocolVersion: "1" } : new Promise(() => {}),
+    );
+    const { tools, connected } = await connectServers({
+      servers: [new McpClient({ name: "b", command: "x", timeoutMs: 30 }, { spawnFn: bad.spawnFn })],
+      onError: () => {},
+    });
+    expect(tools).toEqual([]);
+    expect(connected).toEqual([]);
+    expect(bad.child.kill).toHaveBeenCalled();
+  });
+});
+
+describe("review regressions: the permission invariant end to end", () => {
+  it("--allow read cannot reach an MCP tool", async () => {
+    const { RulePolicy, defaultRules } = await import("@agentkitai/agentrig-core");
+    const tool = mcpTool({ client: { name: "s", callTool: async () => ({ content: [] }) } as never, spec: SEARCH });
+    const req = { tool: tool.name, input: {}, class: tool.permission as "exec", cwd: "/w" };
+
+    // asserting the FIELD says "exec" is not the same as asserting the policy denies it
+    expect(await new RulePolicy([{ class: "read", decision: "allow" }, ...defaultRules]).decide(req)).toBe("ask");
+    expect(await new RulePolicy(defaultRules).decide(req)).toBe("ask");
+    expect(await new RulePolicy([{ class: "exec", decision: "allow" }]).decide(req)).toBe("allow");
   });
 });

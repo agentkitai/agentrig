@@ -61,22 +61,23 @@ export interface AgentBuildOptions extends ProviderOptions {
   mcpConfig?: string;
 }
 
+const McpServerEntry = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  cwd: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+});
+
 /**
- * `{ "servers": { "<name>": { "command": "...", "args": [...], "env": {...} } } }` — the shape
- * Claude Code and Cursor use, so an existing config file works unchanged.
+ * Both spellings, because the ecosystem has two: Claude Code and Cursor use `mcpServers`, while
+ * VS Code's `.vscode/mcp.json` uses `servers`. Accepting only one — with a `.default({})` on top —
+ * meant pointing the flag at a working Claude Code config produced a silently tool-less session,
+ * no error, no warning. Neither key present is now a hard failure naming both.
  */
 const McpConfigFile = z.object({
-  servers: z
-    .record(
-      z.object({
-        command: z.string().min(1),
-        args: z.array(z.string()).optional(),
-        env: z.record(z.string()).optional(),
-        cwd: z.string().optional(),
-        timeoutMs: z.number().int().positive().optional(),
-      }),
-    )
-    .default({}),
+  servers: z.record(McpServerEntry).optional(),
+  mcpServers: z.record(McpServerEntry).optional(),
 });
 
 export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
@@ -90,9 +91,13 @@ export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
   if (!parsed.success) {
     throw new Error(`${path} is not a valid MCP config: ${parsed.error.issues[0]?.message ?? "unknown"}`);
   }
+  const servers = parsed.data.mcpServers ?? parsed.data.servers;
+  if (servers === undefined) {
+    throw new Error(`${path} has no "mcpServers" (or "servers") key; nothing to connect to`);
+  }
   // `exactOptionalPropertyTypes`: an absent key and an explicit `undefined` are different types,
   // so optional fields are spread in only when present
-  return Object.entries(parsed.data.servers).map(([name, cfg]) => ({
+  return Object.entries(servers).map(([name, cfg]) => ({
     name,
     command: cfg.command,
     ...(cfg.args === undefined ? {} : { args: cfg.args }),
@@ -184,6 +189,16 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     mcp = connected.connected;
   }
 
+  try {
+    return await assemble();
+  } catch (err) {
+    // anything after connectServers can throw (a bad --dream-every-* flag, a provider error),
+    // and a caller that never receives `built` can never close what was already started
+    await Promise.all(mcp.map((c) => c.close().catch(() => {})));
+    throw err;
+  }
+
+  async function assemble(): Promise<BuiltAgent> {
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend();
@@ -240,4 +255,5 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   return { agent, provider, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  }
 }

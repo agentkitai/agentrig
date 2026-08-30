@@ -48,6 +48,8 @@ export class McpClient {
   private reader: Interface | null = null;
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
+  /** Detaches each request's abort listener when it settles. */
+  private readonly cleanup = new Map<number, () => void>();
   private closed = false;
   private startError: Error | null = null;
 
@@ -62,6 +64,9 @@ export class McpClient {
 
   /** Spawns the server and performs the MCP handshake. */
   async start(): Promise<void> {
+    // a second start would overwrite `this.child`, orphaning the first process and leaving its
+    // reader open; close() would then reap only the second
+    if (this.child !== null) throw new Error(`mcp ${this.config.name}: already started`);
     const spawnFn = this.opts.spawnFn ?? spawn;
     const child = spawnFn(this.config.command, this.config.args ?? [], {
       // the server's env is NOT inherited wholesale: a user pointing at a third-party binary
@@ -69,6 +74,8 @@ export class McpClient {
       env: { PATH: process.env.PATH ?? "", ...(this.config.env ?? {}) },
       ...(this.config.cwd === undefined ? {} : { cwd: this.config.cwd }),
       stdio: ["pipe", "pipe", "pipe"],
+      // its own process group, so close() can reap the wrapper AND what it spawned
+      detached: true,
     }) as ChildProcessWithoutNullStreams;
     this.child = child;
 
@@ -128,11 +135,22 @@ export class McpClient {
     const child = this.child;
     if (child === null) return;
     child.stdin.end();
-    // detached kill of the group, same as the bash tool: a server that ignores SIGTERM and has
-    // spawned children of its own would otherwise outlive the harness
-    child.kill("SIGTERM");
-    await new Promise<void>((r) => setTimeout(r, 50).unref?.());
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    // Kill the process GROUP, not just the pid. Real MCP servers are commonly wrappers (`npx`,
+    // `uvx`, a shell shim) that spawn the actual server, so signalling one pid orphans the
+    // grandchild — the common case, not the exotic one. Same shape as the bash tool.
+    killGroup(child, "SIGTERM");
+    // NOT unref'd: an unref'd timer lets Node exit before it fires, so `close()` never resolved
+    // when the event loop was otherwise quiescent — which is exactly the teardown case. The
+    // escalation below was skipped and any later server in the list was never closed at all.
+    await new Promise<void>((r) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        r();
+      };
+      const timer = setTimeout(done, 200);
+      child.once("exit", done);
+    });
+    if (child.exitCode === null && child.signalCode === null) killGroup(child, "SIGKILL");
   }
 
   private notify(method: string, params: unknown): void {
@@ -150,7 +168,7 @@ export class McpClient {
 
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(id);
+        this.settle(id);
         reject(new Error(`mcp ${this.config.name}: ${method} did not answer within ${timeoutMs}ms`));
       }, timeoutMs);
       timer.unref?.();
@@ -159,17 +177,20 @@ export class McpClient {
       const onAbort = (): void => {
         const p = this.pending.get(id);
         if (p === undefined) return;
-        this.pending.delete(id);
+        this.settle(id);
         clearTimeout(p.timer);
         reject(new Error(`mcp ${this.config.name}: ${method} aborted`));
       };
       signal?.addEventListener("abort", onAbort, { once: true });
       if (signal?.aborted === true) onAbort();
+      // every tool call is handed the SAME session-lifetime signal, so a listener per request
+      // that is never removed grows monotonically for the life of the session
+      this.cleanup.set(id, () => signal?.removeEventListener("abort", onAbort));
 
       try {
         child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
       } catch (err) {
-        this.pending.delete(id);
+        this.settle(id);
         clearTimeout(timer);
         reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -194,7 +215,7 @@ export class McpClient {
     const id = typeof parsed.data.id === "number" ? parsed.data.id : Number(parsed.data.id);
     const p = this.pending.get(id);
     if (p === undefined) return;
-    this.pending.delete(id);
+    this.settle(id);
     clearTimeout(p.timer);
 
     if (parsed.data.error !== undefined) {
@@ -209,8 +230,34 @@ export class McpClient {
     if (this.startError === null && !this.closed) this.startError = err;
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
-      this.pending.delete(id);
+      this.settle(id);
       p.reject(err);
+    }
+  }
+
+  /** Removes a request and detaches its abort listener. */
+  private settle(id: number): void {
+    this.pending.delete(id);
+    this.cleanup.get(id)?.();
+    this.cleanup.delete(id);
+  }
+
+  /** Requests still awaiting a reply — observable so a test can assert cleanup, not just rejection. */
+  get pendingCount(): number {
+    return this.pending.size;
+  }
+}
+
+/** Signals the whole group, falling back to the pid when there is no group (a fake in tests). */
+function killGroup(child: { pid?: number | undefined; kill: (s: NodeJS.Signals) => boolean }, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid !== undefined) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      // already gone
     }
   }
 }

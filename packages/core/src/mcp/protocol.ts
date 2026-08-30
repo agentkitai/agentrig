@@ -49,7 +49,9 @@ export const McpToolSpec = z.object({
 export type McpToolSpec = z.infer<typeof McpToolSpec>;
 
 export const ToolsListResult = z.object({
-  tools: z.array(McpToolSpec).default([]),
+  // required, not defaulted: a reply with no `tools` key is a non-conforming server, and
+  // accepting it as "zero tools" reported the server as connected with no diagnostic at all
+  tools: z.array(McpToolSpec),
   nextCursor: z.string().optional(),
 });
 
@@ -63,7 +65,7 @@ export const McpContent = z.array(
 );
 
 export const ToolsCallResult = z.object({
-  content: McpContent.default([]),
+  content: McpContent,
   isError: z.boolean().optional(),
 });
 export type ToolsCallResult = z.infer<typeof ToolsCallResult>;
