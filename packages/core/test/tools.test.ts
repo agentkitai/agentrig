@@ -171,12 +171,56 @@ function parseStat(stat: string): { pid: number; pgrp: number } | null {
   return Number.isFinite(pid) && Number.isFinite(pgrp) ? { pid, pgrp } : null;
 }
 
+describe("which shell runs the command", () => {
+  it("runs the command in the shell it was given, not the platform default", async () => {
+    // `$0` is the shell itself, so this cannot pass unless that shell really ran it
+    const sh = await bashTool({ shell: "/bin/sh" }).execute({ command: "echo $0" }, ctx);
+    const bash = await bashTool({ shell: "/bin/bash" }).execute({ command: "echo $0" }, ctx);
+    expect((sh.output as { stdout: string }).stdout.trim()).toBe("/bin/sh");
+    expect((bash.output as { stdout: string }).stdout.trim()).toBe("/bin/bash");
+  });
+
+  it("a bashism works under bash and not under sh, which is the whole point of the flag", async () => {
+    const command = "[[ 1 == 1 ]] && echo bashism-ran";
+    const bash = await bashTool({ shell: "/bin/bash" }).execute({ command }, ctx);
+    expect((bash.output as { stdout: string }).stdout).toContain("bashism-ran");
+    // /bin/sh is dash here; a model writing bash at a POSIX shell fails exactly like this
+    const sh = await bashTool({ shell: "/bin/sh" }).execute({ command }, ctx);
+    expect((sh.output as { exitCode: number }).exitCode).not.toBe(0);
+  });
+
+  it("tells the model which shell it is writing for, and in which syntax", () => {
+    expect(bashTool({ shell: "/bin/bash" }).description).toContain("/bin/bash");
+    expect(bashTool({ shell: "/bin/bash" }).description).toContain("POSIX");
+
+    // a model told nothing writes bash at cmd.exe and is simply wrong
+    const onCmd = bashTool({ platform: "win32", shellExists: () => false, env: { ComSpec: "cmd.exe" } });
+    expect(onCmd.description).toContain("cmd.exe");
+    expect(onCmd.description).toContain("dir");
+
+    const onPwsh = bashTool({ shell: "pwsh" });
+    expect(onPwsh.description).toContain("Get-ChildItem");
+  });
+
+  it("is still called `bash`, because permission rules and every recorded trajectory name it", () => {
+    expect(bashTool({ shell: "pwsh" }).name).toBe("bash");
+    expect(bashTool({ shell: "pwsh" }).permission).toBe("exec");
+  });
+
+  it("builtinTools passes the choice through to the tool that needs it", () => {
+    const tool = builtinTools({ shell: "/bin/bash" }).find((t) => t.name === "bash")!;
+    expect(tool.description).toContain("/bin/bash");
+  });
+});
+
 describe("killing a command's whole tree", () => {
   it("uses taskkill on Windows, and does not detach to get a group it cannot use", async () => {
     const killed: number[] = [];
     let group: number | null = null;
     const tool = bashTool({
       platform: "win32",
+      // the shell is held constant so this test is about the kill, not about what runs
+      shell: "/bin/sh",
       killTree: (pid) => {
         killed.push(pid);
         // `detached` on Windows means "survive the parent, in a console of its own" — a flashing

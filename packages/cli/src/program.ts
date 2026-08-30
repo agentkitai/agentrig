@@ -121,7 +121,11 @@ export function buildProgram(): Command {
       .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
       .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
-      .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, []);
+      .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
+      .option(
+        "--shell <path>",
+        "shell for the `bash` tool (default: /bin/sh; on Windows, Git Bash then PowerShell then cmd)",
+      );
   }
 
   // AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice

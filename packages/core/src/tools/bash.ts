@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveShell, syntaxHint } from "./shell.js";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { bound } from "./shared.js";
@@ -27,15 +28,31 @@ export interface BashToolOptions {
   platform?: NodeJS.Platform;
   /** Defaults to `taskkill /pid <pid> /T /F`. Injected for the same reason. */
   killTree?: (pid: number) => void;
+  /** An explicit shell — a path or a bare name. Defaults per platform; see `resolveShell`. */
+  shell?: string;
+  /** Defaults to `existsSync`, for probing the Windows candidates. */
+  shellExists?: (path: string) => boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput> {
-  const isWindows = (opts.platform ?? process.platform) === "win32";
+  const platform = opts.platform ?? process.platform;
+  const isWindows = platform === "win32";
   const killTree = opts.killTree ?? defaultKillTree;
+  const shell = resolveShell({
+    ...(opts.shell === undefined ? {} : { shell: opts.shell }),
+    platform,
+    ...(opts.shellExists === undefined ? {} : { exists: opts.shellExists }),
+    ...(opts.env === undefined ? {} : { env: opts.env }),
+  });
   return {
     name: "bash",
+    // The tool is called `bash` for the same reason it always was — permission rules and every
+    // trajectory ever recorded name it — but what actually runs the command is named here, along
+    // with the syntax to write. A model told nothing writes bash at `cmd.exe` and is simply wrong.
     description:
-      "Run a shell command in the working directory and return its stdout, stderr, and exit code. " +
+      `Run a shell command in the working directory using ${shell.label}, and return its stdout, ` +
+      `stderr, and exit code. Write ${syntaxHint(shell.family)}. ` +
       "Non-zero exits are reported as errors with the output attached.",
     inputSchema: BashInput,
     permission: "exec",
@@ -52,7 +69,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       // command's children too — a plain child.kill orphans them and they keep
       // the stdio pipes (and the session) open past any timeout.
       const child = spawn(input.command, {
-        shell: true,
+        shell: shell.path,
         cwd: ctx.cwd,
         env: process.env,
         stdio: ["ignore", "pipe", "pipe"],

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  assertShellExists,
   builtinTools,
   createAgent,
   defaultRules,
@@ -73,6 +74,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   subagentMaxChildren?: string;
   /** Directories to discover markdown skills in (repeatable). */
   skills?: string[];
+  /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
+  shell?: string;
 }
 
 const McpServerEntry = z.object({
@@ -124,6 +127,8 @@ export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
 export interface BuiltAgent {
   agent: Agent;
   provider: ModelProvider;
+  /** The tools the agent was given. Exposed so the wiring can be asserted rather than assumed. */
+  tools: AnyTool[];
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
   /** Connected MCP servers, so the caller can shut them down when the session ends. */
@@ -341,7 +346,12 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
 
-  const tools: AnyTool[] = [...builtinTools(), ...memoryToolset, ...mcpTools];
+  // validated once, here, rather than failing on every bash call with an ENOENT that names
+  // neither the flag nor the file
+  const shell = opts.shell === undefined ? undefined : assertShellExists(opts.shell);
+  const builtins = (): AnyTool[] => builtinTools(shell === undefined ? {} : { shell });
+
+  const tools: AnyTool[] = [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
     tools.push(
@@ -355,7 +365,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           permissionPolicy,
           skills,
           maxTokensPerTurn,
-          childTools: () => [...builtinTools(), ...memoryToolset, ...mcpTools],
+          childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
         }),
       ),
     );
@@ -379,6 +389,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, provider, tools, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

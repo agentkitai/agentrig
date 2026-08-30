@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildAgent } from "../src/agent-builder.ts";
 import { buildProvider } from "../src/provider.ts";
 import { buildProgram } from "../src/program.ts";
 
@@ -52,5 +53,34 @@ describe("the flag source is what decides", () => {
     const untouched = buildProgram().commands.find((c) => c.name() === "run")!;
     untouched.parseOptions([]);
     expect(untouched.getOptionValueSource("maxTokensPerTurn")).toBe("default");
+  });
+});
+
+describe("--shell reaches the bash tool (PLAN §9 F2)", () => {
+  it("names the chosen shell in the tool the model sees", async () => {
+    process.env.ANTHROPIC_API_KEY ??= "test-key";
+    const built = await buildAgent({
+      root: "/tmp/agentrig-shell-test",
+      provider: "anthropic",
+      model: "m",
+      maxTurns: "5",
+      maxTokensPerTurn: "1024",
+      shell: "/bin/bash",
+    } as never);
+    expect(built.tools.find((t) => t.name === "bash")!.description).toContain("/bin/bash");
+  });
+
+  it("rejects a shell that is not there, rather than failing on every command", async () => {
+    process.env.ANTHROPIC_API_KEY ??= "test-key";
+    await expect(
+      buildAgent({
+        root: "/tmp/agentrig-shell-test",
+        provider: "anthropic",
+        model: "m",
+        maxTurns: "5",
+        maxTokensPerTurn: "1024",
+        shell: "/no/such/shell",
+      } as never),
+    ).rejects.toThrow(/--shell/);
   });
 });
