@@ -149,6 +149,18 @@ account has credits.
   per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
   instead — acceptable for non-reasoning models, and the most likely first live failure to
   watch for with a reasoning model.
+- **The browser sign-in works (verified live, 2026-08-30, macOS, no Codex credential present).**
+  First attempt, first try: the authorize parameters read from the codex source are right, and the
+  loopback redirect, state check and code exchange all behaved. Nothing in the auth path is
+  unverified any more.
+- **`login` exits when it is done, which is correct and was unhelpful.** It is a separate command
+  from `run`/`tui`, like `gh auth login` — but the only "what now" it printed was `--export`, for
+  seeding a cloud environment. It now names the two commands a person actually wants next, both
+  with `--model`, since this provider requires one and a hint that does not run is not a hint.
+- **`loginCommand` has tests** (it had none): the auth object is injected, so everything except the
+  one human-and-browser step is covered — the unknown provider, the URL being printed before the
+  wait, `--no-browser`, the next-step hint, a failed sign-in exiting non-zero, and `--export`
+  keeping the credential on stdout alone.
 - **Sign-in is a browser flow now; the device-code flow is deleted (F1, 2026-08-30).**
   `auth.openai.com` puts an interactive Cloudflare challenge in front of BOTH `/deviceauth/usercode`
   and `/oauth/authorize` (`cf-mitigated: challenge`, 403 — reproduced from a cloud container and
