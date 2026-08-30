@@ -22,6 +22,9 @@ import {
   ingestOnSessionEnd,
   memoryTools,
 } from "@agentkitai/agentrig-memory";
+import { readFile } from "node:fs/promises";
+import { z } from "zod";
+import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
 import { buildProvider, type ProviderOptions } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { defaultSystemPrompt, positiveNumber, toRules } from "./run.js";
@@ -54,6 +57,49 @@ export interface AgentBuildOptions extends ProviderOptions {
   dreamEverySessions?: string;
   dreamEveryHours?: string;
   dreamStructuralOnly?: boolean;
+  /** Path to a JSON file of MCP servers (PLAN §6's MCP client row). */
+  mcpConfig?: string;
+}
+
+/**
+ * `{ "servers": { "<name>": { "command": "...", "args": [...], "env": {...} } } }` — the shape
+ * Claude Code and Cursor use, so an existing config file works unchanged.
+ */
+const McpConfigFile = z.object({
+  servers: z
+    .record(
+      z.object({
+        command: z.string().min(1),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string()).optional(),
+        cwd: z.string().optional(),
+        timeoutMs: z.number().int().positive().optional(),
+      }),
+    )
+    .default({}),
+});
+
+export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(path, "utf8"));
+  } catch (err) {
+    throw new Error(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const parsed = McpConfigFile.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`${path} is not a valid MCP config: ${parsed.error.issues[0]?.message ?? "unknown"}`);
+  }
+  // `exactOptionalPropertyTypes`: an absent key and an explicit `undefined` are different types,
+  // so optional fields are spread in only when present
+  return Object.entries(parsed.data.servers).map(([name, cfg]) => ({
+    name,
+    command: cfg.command,
+    ...(cfg.args === undefined ? {} : { args: cfg.args }),
+    ...(cfg.env === undefined ? {} : { env: cfg.env }),
+    ...(cfg.cwd === undefined ? {} : { cwd: cfg.cwd }),
+    ...(cfg.timeoutMs === undefined ? {} : { timeoutMs: cfg.timeoutMs }),
+  }));
 }
 
 export interface BuiltAgent {
@@ -61,6 +107,8 @@ export interface BuiltAgent {
   provider: ModelProvider;
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
+  /** Connected MCP servers, so the caller can shut them down when the session ends. */
+  mcp: McpClient[];
 }
 
 /** Validates every numeric flag up front. Throws with the flag's own name; callers report it. */
@@ -122,6 +170,20 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     });
   }
 
+  // MCP servers (PLAN §6). A server that fails to start costs its own tools and nothing else —
+  // one broken entry in a config file must not stop the agent from running.
+  let mcpTools: AnyTool[] = [];
+  let mcp: McpClient[] = [];
+  if (opts.mcpConfig !== undefined) {
+    const configs = await readMcpConfig(opts.mcpConfig);
+    const connected = await connectServers({
+      servers: configs.map((c) => new McpClient(c, { onError: (e) => extras.onHookError?.(`mcp: ${e.message}`) })),
+      onError: (server, err) => extras.onHookError?.(`mcp ${server} unavailable (continuing): ${err.message}`),
+    });
+    mcpTools = connected.tools;
+    mcp = connected.connected;
+  }
+
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend();
@@ -151,7 +213,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
 
   const agent = createAgent({
     provider,
-    tools: [...builtinTools(), ...memoryToolset],
+    tools: [...builtinTools(), ...memoryToolset, ...mcpTools],
     // deny rules first so an explicit deny always wins
     permissions: new RulePolicy([
       ...toRules(opts.deny, "deny"),
@@ -177,5 +239,5 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, memoryIndex, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, provider, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
 }

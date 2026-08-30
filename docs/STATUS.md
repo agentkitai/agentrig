@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI done (2026-08-29); MCP, subagents, skills next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI + MCP done (2026-08-30); subagents, skills next |
 
 ## M0 notes
 
@@ -725,6 +725,40 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Caveat: no test renders the React tree.** `ink-testing-library` is installed but unused — the
   controller split means there is nothing in the view worth asserting on, and a snapshot test of
   terminal output would break on every cosmetic change.
+
+## M7 notes — the MCP client (third row)
+
+- **Written against the wire format, not the SDK.** A client needs three request shapes —
+  `initialize`, `tools/list`, `tools/call` — over newline-delimited JSON-RPC. The official SDK
+  would pull a large surface for that, and the adapter is the interesting part anyway.
+- **An MCP tool's permission class is `exec`, always.** The harness cannot know what a
+  third-party tool does: a server's `search` may read a database or shell out. `read` would be a
+  guess that fails open, and the permission system's whole value is that the dangerous default is
+  the safe one. It also declares no `paths()`, so it can never satisfy a `cwdOnly` rule — there is
+  no honest way to say which files a remote tool will touch.
+- **Tools are namespaced `mcp__<server>__<tool>`**, so two servers exporting `search` cannot
+  collide with each other or shadow a builtin.
+- **`Tool.jsonSchema` was added to core** (additive) so an MCP tool advertises the *server's* own
+  JSON Schema. Converting it to zod and back would degrade it to "an object", losing every field
+  description the server wrote — which is exactly what the model needs to call the tool correctly.
+  `inputSchema` still governs validation, so a permissive zod schema plus the server's real schema
+  is honest on both sides rather than a lossy round trip.
+- **A server is third-party code, so the M7a hook lessons apply unchanged**: every request is
+  timeout-bounded, a non-conforming reply is rejected rather than trusted, a dead child rejects
+  everything outstanding rather than leaving requests pending forever, and non-JSON on stdout is
+  reported once rather than crashing the reader. `tools/list` pagination is bounded, because a
+  server returning a cursor forever would loop.
+- **The environment is not inherited wholesale.** A user pointing at a third-party binary should
+  not hand it every secret in their shell, so only `PATH` plus explicitly configured vars are
+  passed.
+- **A server that fails to start costs its own tools and nothing else** — one broken entry in a
+  config file must not stop the agent from running, the same way a failed hook or backend does not.
+- Config is `{"servers": {"<name>": {"command", "args", "env"}}}` — the shape Claude Code and
+  Cursor use, so an existing file works unchanged. `--mcp-config <path>`.
+- **Caveat: stdio transport only.** HTTP/SSE servers are not supported.
+- **Caveat: only `tools/*` is implemented.** MCP resources and prompts are not, and neither is
+  the server-initiated side of the protocol (sampling, roots).
+- **Caveat: servers are started per session**, so a long-lived server is respawned each run.
 
 ## Decided
 

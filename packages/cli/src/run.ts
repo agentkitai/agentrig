@@ -223,6 +223,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = summary.reason === "done" ? 0 : 1;
   } finally {
     process.removeListener("SIGINT", onSigint);
+    // a server left running would outlive the session that spawned it
+    for (const server of built.mcp) await server.close().catch(() => {});
     if (supervisor !== null) {
       const timedOut = Symbol("timeout");
       const raced = await Promise.race([
