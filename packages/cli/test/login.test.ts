@@ -72,6 +72,24 @@ describe("agentrig login", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it("says the credential is saved and that nothing needs setting", async () => {
+    await loginCommand("openai-chatgpt", { makeAuth: fakeAuth, noBrowser: true });
+
+    // the login already stored it; a reader who comes away thinking they must export it has been
+    // told the wrong thing by their own tool
+    expect(err()).toMatch(/Saved to .*openai-chatgpt-auth\.json/);
+    expect(err()).toContain("nothing to add to your environment");
+  });
+
+  it("frames --export as the exception it is, not as the next step", async () => {
+    await loginCommand("openai-chatgpt", { makeAuth: fakeAuth, noBrowser: true });
+
+    const hint = err().slice(err().indexOf("--export") - 200);
+    expect(hint).toContain("Optional");
+    // it is for a machine that cannot run this command at all
+    expect(hint).toMatch(/no browser|cannot sign in/i);
+  });
+
   it("reports a failed sign-in and exits non-zero", async () => {
     const auth = fakeAuth({
       startLoopbackLogin: async () => ({
@@ -98,6 +116,9 @@ describe("agentrig login", () => {
     expect(logs).toEqual([JSON.stringify(tokens)]);
     expect(err()).toContain("AGENTRIG_OPENAI_CHATGPT_TOKEN");
     expect(err()).not.toContain(tokens.accessToken);
+    // ...and it says where THIS machine already reads it from, so the export is not mistaken for
+    // something the local setup needs
+    expect(err()).toMatch(/already reads it from/);
   });
 
   it("--export when signed out says so instead of printing null", async () => {

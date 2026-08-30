@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import {
+  defaultAuthPath,
   OpenAIChatGPTAuth,
   TOKEN_ENV_VAR,
   type ChatGPTTokens,
@@ -76,7 +77,10 @@ export async function loginCommand(provider: string, opts: LoginOptions = {}): P
       }
       // the bundle IS a credential — only stdout, so it can be piped/copied deliberately
       console.log(JSON.stringify(tokens));
-      console.error(`\nSet this as ${TOKEN_ENV_VAR} in your environment to reuse it in cloud sessions.`);
+      console.error(
+        `\nSet this as ${TOKEN_ENV_VAR} on a machine that cannot sign in itself (a cloud container, CI).\n` +
+          `This machine already reads it from ${defaultAuthPath()} and needs nothing set.`,
+      );
       return;
     }
 
@@ -92,17 +96,19 @@ export async function loginCommand(provider: string, opts: LoginOptions = {}): P
 
     const tokens = await login.complete();
     console.error(`\nSigned in.${tokens.accountId === undefined ? "" : ` Account: ${tokens.accountId}`}`);
-    // the next thing anyone wants is to use it; `--export` is a later concern and was the only
-    // thing this said
+    // Where it went, and that nothing else is needed. The only follow-up this used to print was
+    // `--export`, which reads like a required step and is not one: it is for a machine that
+    // cannot run this command at all.
+    console.error(`Saved to ${defaultAuthPath()} — this machine is set up; nothing to add to your environment.`);
     console.error(
       `\nStart working:\n` +
         `  agentrig --provider openai-chatgpt --model ${SUGGESTED_MODEL}          # interactive\n` +
         `  agentrig run "<task>" --provider openai-chatgpt --model ${SUGGESTED_MODEL}   # one task`,
     );
     console.error(
-      `\nFor cloud/unattended runs, seed the token once:\n` +
+      `\nOptional, and only for a cloud or CI machine that has no browser to sign in with:\n` +
         `  agentrig login openai-chatgpt --export\n` +
-        `then set its output as ${TOKEN_ENV_VAR} in your environment settings.`,
+        `prints this credential so it can be set as ${TOKEN_ENV_VAR} there.`,
     );
   } catch (err) {
     console.error((err as Error).message);
