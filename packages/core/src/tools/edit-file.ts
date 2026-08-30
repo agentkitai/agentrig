@@ -33,7 +33,27 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
       } catch (err) {
         return { output: { path: rel, replacements: 0 }, display: `cannot read ${input.path}: ${(err as Error).message}`, isError: true };
       }
-      const count = text.split(input.oldText).length - 1;
+      // The model reads a file through `read_file`, which shows lines without their carriage
+      // returns, and writes `oldText` back with plain `\n`. On a CRLF file — every checkout on
+      // Windows — a multi-line oldText then matches nothing, and every edit fails with
+      // "oldText not found". So when the verbatim match fails, retry with the line endings
+      // converted, and convert `newText` the same way so the file keeps the endings it had.
+      let oldText = input.oldText;
+      let newText = input.newText;
+      let count = occurrences(text, oldText);
+      if (count === 0) {
+        for (const convert of [toCrlf, toLf]) {
+          const candidate = convert(oldText);
+          if (candidate === oldText) continue;
+          const found = occurrences(text, candidate);
+          if (found > 0) {
+            oldText = candidate;
+            newText = convert(newText);
+            count = found;
+            break;
+          }
+        }
+      }
       if (count === 0) {
         return { output: { path: rel, replacements: 0 }, display: `oldText not found in ${rel}`, isError: true };
       }
@@ -45,8 +65,8 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
         };
       }
       const next = input.replaceAll
-        ? text.split(input.oldText).join(input.newText)
-        : text.replace(input.oldText, () => input.newText);
+        ? text.split(oldText).join(newText)
+        : text.replace(oldText, () => newText);
       await writeFile(path, next, "utf8");
       ctx.emit({ type: "file.changed", path: rel, op: "edit", contentHash: contentHash(next) });
       const replacements = input.replaceAll ? count : 1;
@@ -56,4 +76,18 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
       };
     },
   };
+}
+
+function occurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+/** Every line ending as CRLF, whatever it was. */
+function toCrlf(text: string): string {
+  return toLf(text).replace(/\n/g, "\r\n");
+}
+
+/** Every line ending as LF, whatever it was. */
+function toLf(text: string): string {
+  return text.replace(/\r\n/g, "\n");
 }

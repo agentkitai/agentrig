@@ -149,6 +149,72 @@ describe("edit_file", () => {
   });
 });
 
+describe("CRLF files (every checkout on Windows)", () => {
+  it("read_file shows lines without their carriage returns", async () => {
+    await writeFile(join(root, "crlf.md"), "# AgentRig\r\nsecond line\r\n", "utf8");
+    const r = await readFileTool().execute({ path: "crlf.md" }, ctx);
+    // the model copies what it is shown straight into edit_file's oldText
+    expect(r.display).not.toContain("\r");
+    expect(r.display).toContain("# AgentRig");
+  });
+
+  it("grep matches an anchored pattern that a carriage return would break", async () => {
+    await writeFile(join(root, "crlf.txt"), "alpha\r\nbeta\r\n", "utf8");
+    const r = await grepTool().execute({ pattern: "alpha$" }, ctx);
+    // asserted on the structured output, not the display: "no matches for /alpha$/" contains
+    // the word "alpha" too, so a display-substring check passes whether or not it matched
+    expect(r.output).toEqual([{ path: "crlf.txt", line: 1, text: "alpha" }]);
+  });
+
+  it("edit_file applies a multi-line edit the model wrote with plain newlines", async () => {
+    const path = join(root, "crlf.ts");
+    await writeFile(path, "const a = 1;\r\nconst b = 2;\r\nconst c = 3;\r\n", "utf8");
+    // exactly what a model produces after reading the file: LF, because that is what it was shown
+    const r = await editFileTool().execute(
+      { path: "crlf.ts", oldText: "const a = 1;\nconst b = 2;", newText: "const a = 10;\nconst b = 20;" },
+      ctx,
+    );
+
+    expect(r.isError).toBeUndefined();
+    const after = await readFile(path, "utf8");
+    expect(after).toBe("const a = 10;\r\nconst b = 20;\r\nconst c = 3;\r\n");
+    // the file keeps the endings it had — an edit must not rewrite every line of the diff
+    expect(after).not.toMatch(/[^\r]\n/);
+  });
+
+  it("edit_file applies an edit the model wrote with carriage returns to an LF file", async () => {
+    const path = join(root, "lf.ts");
+    await writeFile(path, "const a = 1;\nconst b = 2;\n", "utf8");
+    const r = await editFileTool().execute(
+      { path: "lf.ts", oldText: "const a = 1;\r\nconst b = 2;", newText: "const a = 10;\r\nconst b = 20;" },
+      ctx,
+    );
+
+    expect(r.isError).toBeUndefined();
+    expect(await readFile(path, "utf8")).toBe("const a = 10;\nconst b = 20;\n");
+  });
+
+  it("replaceAll converts every occurrence, not just the one it matched on", async () => {
+    const path = join(root, "many.ts");
+    await writeFile(path, "x();\r\ny();\r\nx();\r\ny();\r\n", "utf8");
+    const r = await editFileTool().execute(
+      { path: "many.ts", oldText: "x();\ny();", newText: "z();\nw();", replaceAll: true },
+      ctx,
+    );
+
+    expect(r.output).toMatchObject({ replacements: 2 });
+    expect(await readFile(path, "utf8")).toBe("z();\r\nw();\r\nz();\r\nw();\r\n");
+  });
+
+  it("still reports a genuinely absent oldText rather than mangling the file", async () => {
+    const path = join(root, "crlf2.ts");
+    await writeFile(path, "const a = 1;\r\n", "utf8");
+    const r = await editFileTool().execute({ path: "crlf2.ts", oldText: "nothing like this", newText: "x" }, ctx);
+    expect(r.isError).toBe(true);
+    expect(await readFile(path, "utf8")).toBe("const a = 1;\r\n");
+  });
+});
+
 describe("glob", () => {
   it("matches patterns and skips node_modules", async () => {
     await mkdir(join(root, "src"), { recursive: true });

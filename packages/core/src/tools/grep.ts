@@ -56,7 +56,8 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
         if (!s?.isFile() || s.size > MAX_FILE_BYTES) continue;
         const text = await readFile(abs, "utf8").catch(() => null);
         if (text === null || text.includes("\0")) continue;
-        const lines = text.split("\n");
+        // `\r?\n`: a trailing carriage return breaks an anchored pattern and shows up in output
+        const lines = text.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
           if (!re.test(lines[i]!)) continue;
           if (matches.length >= MAX_MATCHES) {

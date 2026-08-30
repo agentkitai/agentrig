@@ -26,7 +26,9 @@ export function readFileTool(): Tool<ReadFileInput, string> {
       } catch (err) {
         return { output: "", display: `cannot read ${input.path}: ${(err as Error).message}`, isError: true };
       }
-      const lines = text.split("\n");
+      // `\r?\n`, not `\n`: on a CRLF file every line would otherwise reach the model with a
+      // trailing carriage return, which it then copies into `edit_file`'s oldText
+      const lines = text.split(/\r?\n/);
       const start = (input.offset ?? 1) - 1;
       const slice = lines.slice(start, input.limit === undefined ? undefined : start + input.limit);
       const width = String(start + slice.length).length;
