@@ -1,5 +1,16 @@
 import { spawn } from "node:child_process";
-import { OpenAIChatGPTAuth, TOKEN_ENV_VAR } from "@agentkitai/agentrig-core";
+import {
+  OpenAIChatGPTAuth,
+  TOKEN_ENV_VAR,
+  type ChatGPTTokens,
+  type LoopbackLogin,
+} from "@agentkitai/agentrig-core";
+
+/**
+ * Named in the "what now" hint after a successful sign-in. `--model` is required for this
+ * provider — there is no default — so a hint without one is a hint that does not run.
+ */
+const SUGGESTED_MODEL = "gpt-5.6-sol";
 
 /**
  * `agentrig login openai-chatgpt` — a browser sign-in (PKCE + loopback redirect, PLAN §9 F1).
@@ -18,6 +29,14 @@ export interface LoginOptions {
   /** Print the URL and wait, without trying to open a browser. For SSH and headless terminals. */
   noBrowser?: boolean;
   openBrowser?: (url: string) => void;
+  /** Injected in tests: signing in for real needs a browser and a person. */
+  makeAuth?: () => AuthLike;
+}
+
+/** What `loginCommand` needs from the auth object, so a test can stand in for it. */
+export interface AuthLike {
+  exportTokens(): Promise<ChatGPTTokens | null>;
+  startLoopbackLogin(): Promise<LoopbackLogin>;
 }
 
 /** Best-effort: the URL is always printed, so a failure here costs nothing. */
@@ -45,7 +64,7 @@ export async function loginCommand(provider: string, opts: LoginOptions = {}): P
     return;
   }
 
-  const auth = new OpenAIChatGPTAuth();
+  const auth: AuthLike = (opts.makeAuth ?? (() => new OpenAIChatGPTAuth()))();
 
   try {
     if (opts.export === true) {
@@ -73,6 +92,13 @@ export async function loginCommand(provider: string, opts: LoginOptions = {}): P
 
     const tokens = await login.complete();
     console.error(`\nSigned in.${tokens.accountId === undefined ? "" : ` Account: ${tokens.accountId}`}`);
+    // the next thing anyone wants is to use it; `--export` is a later concern and was the only
+    // thing this said
+    console.error(
+      `\nStart working:\n` +
+        `  agentrig --provider openai-chatgpt --model ${SUGGESTED_MODEL}          # interactive\n` +
+        `  agentrig run "<task>" --provider openai-chatgpt --model ${SUGGESTED_MODEL}   # one task`,
+    );
     console.error(
       `\nFor cloud/unattended runs, seed the token once:\n` +
         `  agentrig login openai-chatgpt --export\n` +
