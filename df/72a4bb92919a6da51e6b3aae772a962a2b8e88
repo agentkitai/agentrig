@@ -1,0 +1,28 @@
+docs/STATUS.md
+  h_26c5a60a657125 363-365,400-408
+packages/cli/src/run.ts
+  h_26c5a60a657125 181
+packages/cli/src/tui/app.tsx
+  h_26c5a60a657125 70-77,152-160
+packages/cli/src/tui/controller.ts
+  h_26c5a60a657125 33-38,46-47,60-61,91,224-269,307,472-473,475
+packages/cli/src/tui/start.tsx
+  h_26c5a60a657125 56
+packages/cli/test/tui.test.ts
+  h_26c5a60a657125 453-490
+packages/supervisor/src/detectors/stall.ts
+  h_26c5a60a657125 8,18-25,36,40-41,45-54,63,67,71-82,93,97-98,103,113,116-117,119-124,126
+packages/supervisor/test/detectors.test.ts
+  h_26c5a60a657125 42-43,169-203,219-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "df72a4bb92919a6da51e6b3aae772a962a2b8e88",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
