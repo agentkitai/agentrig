@@ -135,7 +135,10 @@ export function toResponsesRequest(
     // reasoning models require their reasoning items on the following request; ask for the
     // encrypted form so they can be replayed without server-side storage
     include: ["reasoning.encrypted_content"],
-    max_output_tokens: req.maxTokens,
+    // NO `max_output_tokens`: this backend rejects it outright — verified live, 2026-08-30,
+    // `HTTP 400 {"detail":"Unsupported parameter: max_output_tokens"}` on the first authenticated
+    // call. Codex does not send it either. `ModelRequest.maxTokens` therefore cannot bind a
+    // single response here; the session budget still meters what was actually spent.
   };
   if (req.tools.length > 0) {
     body.tools = req.tools.map((t) => ({

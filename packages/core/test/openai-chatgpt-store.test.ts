@@ -60,11 +60,27 @@ describe("FileTokenStore", () => {
     expect(leftovers).toEqual([]);
   });
 
+  it("reads a Codex auth.json copied into place, rather than calling it corrupt", async () => {
+    const codexPath = join(root, "codex.json");
+    // the device-code login is unusable (Cloudflare challenges every non-browser client), so
+    // copying Codex's own credential here is the obvious move — and it used to fail with an
+    // error that named neither the real problem nor the fix
+    await writeFile(
+      codexPath,
+      JSON.stringify({ tokens: { access_token: "at", refresh_token: "rt", account_id: "acc" } }),
+    );
+    expect(await new FileTokenStore(codexPath).read()).toEqual({
+      accessToken: "at",
+      refreshToken: "rt",
+      accountId: "acc",
+    });
+  });
+
   it("reports a corrupt file with the path and a recovery hint", async () => {
     await mkdir(join(root, "nested"), { recursive: true });
     await writeFile(path, "{not json");
     await expect(new FileTokenStore(path).read()).rejects.toThrow(CorruptTokenFileError);
-    await expect(new FileTokenStore(path).read()).rejects.toThrow(/delete it and re-run/);
+    await expect(new FileTokenStore(path).read()).rejects.toThrow(/delete it and seed a credential again/);
   });
 });
 

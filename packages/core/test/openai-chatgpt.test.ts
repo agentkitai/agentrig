@@ -33,7 +33,9 @@ describe("toResponsesRequest", () => {
     expect(body.model).toBe("gpt-5.6-sol");
     expect(body.instructions).toBe("be terse");
     expect(body.stream).toBe(true);
-    expect(body.max_output_tokens).toBe(1024);
+    // this backend answers `HTTP 400 Unsupported parameter: max_output_tokens` (verified live);
+    // sending it made every request fail before a single token was generated
+    expect(body).not.toHaveProperty("max_output_tokens");
     expect(body.tools).toEqual([{ type: "function", name: "bash", description: "run", parameters: { type: "object" } }]);
     expect(body.input).toEqual([
       { type: "message", role: "user", content: [{ type: "input_text", text: "run ls" }] },

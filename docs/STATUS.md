@@ -1,13 +1,14 @@
 # Status
 
-Current milestone: **all milestones complete** — M0 through M7
+Current milestone: **all milestones complete** — M0 through M7. M2.5's live validation, the one
+thing the table carried as unproven, is done: the provider authenticates and reaches the model.
 
 | M | Deliverable | Status |
 |---|---|---|
 | 0 | Monorepo skeleton, event schema, session JSONL store, replay CLI | done (2026-08-29) |
 | 1 | Core loop: Anthropic adapter, 6 tools, allow/deny/ask permissions, budget, headless `run` | done (2026-08-29) |
 | 2 | OpenAI-compatible adapter, compaction, resume | done (2026-08-29) |
-| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | built (2026-08-29) — logic tested, not yet validated against the live endpoint |
+| 2.5 | Experimental `openai-chatgpt` provider: device-code OAuth against a ChatGPT subscription (PLAN §2.9) | validated live (2026-08-30) — authenticates and reaches the model; credential must be seeded from Codex, see notes |
 | 3 | Memory v1: wiki layout + `SCHEMA.md`, session-end ingest, `index.md` injection, index ∪ BM25 search, attempts ledger, pins | done (2026-08-29) |
 | 3b | Lore backend: `MemoryBackend` seam + Lore adapter (ingest push, recall union, promote, provenance both ways) | done (2026-08-29) |
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
@@ -106,11 +107,18 @@ account has credits.
   `~/.agentrig/openai-chatgpt-auth.json`, `AGENTRIG_OPENAI_CHATGPT_AUTH` to override), and
   proactive + 401-forced refresh that persists refresh-token rotation. CLI:
   `agentrig login openai-chatgpt` then `run --provider openai-chatgpt --model gpt-5.6-sol`.
-- **Not yet validated live.** The endpoint/headers/payload and the device-code and refresh JSON
-  field names are read from the Apache-2.0 openai/codex source and RFC-8628-style conventions;
-  everything is unit-tested with injected fetch (request mapping, SSE parsing, refresh/rotation,
-  expiry, device poll), but the first real `login` + `run` against OpenAI is the live check.
-  Expect small field-name fixes on first contact; the provider is experimental by design.
+- **Validated live on 2026-08-30 (Windows, Node, seeded from a Codex credential).** Two answers
+  the unit tests could never give:
+  - **The honest originator is accepted post-authentication.** `originator: agentrig` with a real
+    token reached the application layer and was answered on its merits — no 403, no edge block.
+    The spike's worry that a non-Codex originator is filtered is now disproved on both sides of
+    authentication.
+  - **The backend rejects `max_output_tokens`**: `HTTP 400 {"detail":"Unsupported parameter:
+    max_output_tokens"}` on the first authenticated request, before a single token was generated.
+    Codex does not send it either. The provider no longer sends it, so `ModelRequest.maxTokens`
+    cannot bind one response here — the session budget still meters what was spent, and the CLI
+    warns when `--max-tokens-per-turn` is typed against this provider rather than accepting a
+    number it will not send.
 - **Auth reuse for cloud/unattended runs.** Authorize once, then seed every session: run
   `agentrig login openai-chatgpt` on any machine, `agentrig login openai-chatgpt --export` to
   print the bundle, and set it as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the environment. A fresh
@@ -141,19 +149,27 @@ account has credits.
   per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
   instead — acceptable for non-reasoning models, and the most likely first live failure to
   watch for with a reasoning model.
-- **The device-code login cannot run headless (permanent, verified 2026-08-29).**
+- **The device-code login cannot run from ANY Node process (corrected 2026-08-30).**
   `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive bot challenge
-  (`cf-mitigated: challenge`, 403 with an HTML interstitial), so the flow needs a real browser
-  and never completes from a cloud container. Sign in on a machine with a browser, then
-  `login openai-chatgpt --export` and set the bundle as `AGENTRIG_OPENAI_CHATGPT_TOKEN` in the
-  environment's secrets (an existing Codex `~/.codex/auth.json` can be pasted directly). The
-  harness now names this condition instead of dumping the interstitial markup.
-- **Honest originator was NOT rejected pre-auth (verified).** An unauthenticated probe of
-  `chatgpt.com/backend-api/codex/responses` sending `originator: agentrig` returned **401
-  Unauthorized, not 403** — it cleared the edge and reached the application layer, refused only
-  for missing credentials. This disproves the spike's claim that a non-Codex originator is
-  filtered outright. It does **not** yet prove acceptance post-authentication; that remains the
-  open question for the first credentialed call.
+  (`cf-mitigated: challenge`, 403 with an HTML interstitial). The earlier note said to "sign in on
+  a machine with a browser" — that is wrong, and a desktop attempt produced the identical 403:
+  the challenge targets the HTTP *client*, not the network location, and `fetch` is not a browser
+  wherever it runs. `agentrig login openai-chatgpt` is therefore unusable as written.
+  **How to get a credential today:** take Codex's. Its login is a PKCE + loopback flow, so the
+  challenged request is made by the browser. `~/.codex/auth.json` is accepted verbatim, either
+  copied to `~/.agentrig/openai-chatgpt-auth.json` or set as `AGENTRIG_OPENAI_CHATGPT_TOKEN`.
+  **The real fix is a PKCE + loopback login of our own** (browser to `auth.openai.com`, redirect
+  caught on a local port), which is the only flow that can work; the device-code path should be
+  replaced by it rather than kept.
+- **The token file reader accepts both shapes.** It used to parse only AgentRig's own camelCase
+  bundle, so the obvious move — copying `~/.codex/auth.json` into place — failed with a "corrupt
+  file" error that named neither the cause nor the fix, while the env-var path accepted exactly
+  that shape. Both now go through `tokensFromEnvValue`.
+- **Honest originator was NOT rejected pre-auth (verified 2026-08-29), and is accepted
+  post-auth (verified 2026-08-30).** An unauthenticated probe returned **401, not 403** — it
+  cleared the edge and was refused only for missing credentials. The first credentialed call then
+  got a **400 about a request parameter**, which is an application-layer answer: the request was
+  authenticated and read. The question this row was carrying is closed.
 - Concurrency caveat: one subscription token should have a single refresh owner. Fanning out
   many resumed/parallel worker sessions on one token can race on refresh-token rotation; a
   static env seed sidesteps this only while the access token is still valid (~hours).
