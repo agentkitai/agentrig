@@ -89,7 +89,7 @@ export class CorruptTokenFileError extends Error {
   constructor(readonly path: string, cause: unknown) {
     super(
       `openai-chatgpt: token file ${path} is unreadable (${cause instanceof Error ? cause.message : String(cause)}); ` +
-        "delete it and re-run `agentrig login openai-chatgpt`",
+        "delete it and seed a credential again (see the openai-chatgpt notes in docs/STATUS.md)",
     );
     this.name = "CorruptTokenFileError";
   }
@@ -111,11 +111,12 @@ export class FileTokenStore implements TokenStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    try {
-      return ChatGPTTokens.parse(JSON.parse(text));
-    } catch (err) {
-      throw new CorruptTokenFileError(this.path, err);
-    }
+    // the same reader as the env seed: a Codex `~/.codex/auth.json` copied here is the obvious
+    // move once the device-code login turns out to be unusable, and it failed with a "corrupt
+    // file" error that named neither the real problem nor the fix
+    const tokens = tokensFromEnvValue(text);
+    if (tokens !== null) return tokens;
+    throw new CorruptTokenFileError(this.path, new Error("no usable access/refresh token pair"));
   }
 
   async write(tokens: ChatGPTTokens): Promise<void> {

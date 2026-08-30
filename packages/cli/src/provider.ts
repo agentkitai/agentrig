@@ -14,6 +14,8 @@ export interface ProviderOptions {
   baseUrl?: string;
   /** True when the model came from --model or AGENTRIG_MODEL rather than the built-in default. */
   modelExplicit?: boolean;
+  /** True when the user actually typed --max-tokens-per-turn; the flag has a default otherwise. */
+  maxTokensPerTurnExplicit?: boolean;
 }
 
 export function buildProvider(opts: ProviderOptions): ModelProvider {
@@ -42,6 +44,11 @@ export function buildProvider(opts: ProviderOptions): ModelProvider {
     }
     // experimental subscription auth; tokens come from `agentrig login openai-chatgpt`
     console.error("Warning: --provider openai-chatgpt is experimental and uses an undocumented ChatGPT backend.");
+    // the backend rejects `max_output_tokens` outright, so the flag cannot be honoured here.
+    // Say so rather than accepting a number and quietly not sending it.
+    if (opts.maxTokensPerTurnExplicit === true) {
+      console.error("Warning: --max-tokens-per-turn is ignored by openai-chatgpt (the backend rejects the parameter).");
+    }
     return new OpenAIChatGPTProvider({ model: opts.model });
   }
   throw new Error(`unknown provider "${opts.provider}" (anthropic | openai | openai-chatgpt)`);

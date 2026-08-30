@@ -128,12 +128,21 @@ export function buildProgram(): Command {
     return cmd.getOptionValueSource("model") !== "default" || process.env.AGENTRIG_MODEL !== undefined;
   }
 
+  /** A flag with a default is always "set"; only a typed one is worth warning about. */
+  function maxTokensPerTurnExplicit(cmd: Command): boolean {
+    return cmd.getOptionValueSource("maxTokensPerTurn") !== "default";
+  }
+
   withRunOptions(
     program.command("run <task>").description("Run the agent on a task, non-interactively"),
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
     .action(async (task: string, opts: RunOptions, cmd: Command) =>
-      runCommand(task, { ...opts, modelExplicit: modelExplicit(cmd) }),
+      runCommand(task, {
+        ...opts,
+        modelExplicit: modelExplicit(cmd),
+        maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
+      }),
     );
 
   function collect(value: string, prev: string[]): string[] {
@@ -196,7 +205,12 @@ export function buildProgram(): Command {
       .command("resume <id> [task...]")
       .description("Continue a session from its snapshot; the task becomes the next user message"),
   ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) =>
-    runCommand(taskWords.join(" ") || "Continue the task.", { ...opts, resume: id, modelExplicit: modelExplicit(cmd) }),
+    runCommand(taskWords.join(" ") || "Continue the task.", {
+      ...opts,
+      resume: id,
+      modelExplicit: modelExplicit(cmd),
+      maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
+    }),
   );
 
   sessions
@@ -249,7 +263,11 @@ export function buildProgram(): Command {
         program.error(complaint);
         return;
       }
-      await startTui({ ...opts, modelExplicit: modelExplicit(cmd) });
+      await startTui({
+        ...opts,
+        modelExplicit: modelExplicit(cmd),
+        maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
+      });
     });
 
 
