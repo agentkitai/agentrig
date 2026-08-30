@@ -1143,6 +1143,18 @@ Notes for a future reader:
 - **There is deliberately no maximum wait on the coalescing.** A ceiling would guarantee a write in
   the middle of a long enough paste, which is exactly the thing being avoided. Input that never
   pauses is input nobody is reading yet.
+- **The first version of this fix blinded the TUI completely.** The edit that introduced
+  `InputBuffer` spliced out `useEffect(() => controller.subscribe(setState), [controller])` along
+  with the code it was replacing. The App kept accepting input and the agent kept running — the
+  session log showed the model planning and reaching a permission prompt — but nothing the
+  controller printed ever reached the screen: no echo of the task, no status change, no permission
+  prompt, no streamed reply. Pressing enter looked like it did nothing at all.
+
+  Every existing test of this component passed. All of them count bytes — how many writes, how
+  large, whether a full-screen clear appears — and a component that renders a frame nobody has
+  told anything to still writes frames. `test/tui-visible.test.ts` asserts on CONTENT instead:
+  that a printed line, a permission prompt and the session id actually appear in what reaches
+  stdout. Removing the subscription fails all three and none of the twelve byte-counting ones.
 - **Confirmed on the machine that had the bug.** The same ~2,500-character paste that froze cmux
   three times now lands, drawn as its tail with a `…(1,142 more)` marker, and submits in full.
 - **This is a mitigation for an environment bug, not a repair of one.** A terminal that drains its

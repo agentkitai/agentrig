@@ -43,6 +43,12 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   const buf = buffer.current;
   useEffect(() => () => buf.dispose(), [buf]);
 
+  // Everything the controller has to say reaches the screen through here and nowhere else: the
+  // reply, the event lines, the status, the permission prompt. Without it the TUI still accepts
+  // input and still runs the agent — it just never shows any of it, which is not a failure any
+  // test that counts bytes can see. `test/tui-visible.test.ts` asserts the content instead.
+  useEffect(() => controller.subscribe(setState), [controller]);
+
   useInput((char, key) => {
     if (key.ctrl && char === "c") {
       if (state.status === "running") controller.abort();
