@@ -106,13 +106,18 @@ describe("argv parsing", () => {
     expect(describeStray(["zzzzzzzz"], ["run", "dream"])).toBe("error: unknown command 'zzzzzzzz'");
   });
 
-  it("parses repeatable drift scopes for run and the default TUI", async () => {
+  it("parses repeatable drift scopes and contracts for run and the default TUI", async () => {
     const { run } = stub(buildProgram());
     expect((await run(["run", "x", "--drift-scope", "src", "--drift-scope", "test"]))?.opts.driftScope).toEqual([
       "src",
       "test",
     ]);
     expect((await run(["--drift-scope", "packages/cli"]))?.opts.driftScope).toEqual(["packages/cli"]);
+    expect(
+      (await run(["run", "x", "--drift-contract", "package.json", "--drift-contract", ".github"]))?.opts
+        .driftContract,
+    ).toEqual(["package.json", ".github"]);
+    expect((await run(["--drift-contract", "custom.config.ts"]))?.opts.driftContract).toEqual(["custom.config.ts"]);
   });
 
   it("keeps flags of the same name distinct per subcommand", async () => {

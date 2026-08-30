@@ -332,20 +332,26 @@ describe("drift detector", () => {
     expect(signals[0]!.evidence[1]).toContain("packages/cli/src, packages/core/src");
   });
 
-  it("stays silent when neither caller nor plan declares a scope", () => {
+  it("reports contract files but stays silent for ordinary files when no scope is declared anywhere", () => {
     const noScope = ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress" }] });
-    expect(feed(driftDetector(), [noScope, changed("anything.ts", "h")]).signals).toHaveLength(0);
-    // and with no plan at all
-    expect(feed(driftDetector(), [changed("anything.ts", "h")]).signals).toHaveLength(0);
+    expect(feed(driftDetector(), [noScope, changed("src/ordinary.ts", "h")]).signals).toHaveLength(0);
+    // With no plan and no caller scope, an ordinary file is still silent but a contract file fires.
+    expect(feed(driftDetector(), [changed("src/ordinary.ts", "h")]).signals).toHaveLength(0);
+    const { signals } = feed(driftDetector(), [changed("package.json", "h")]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.type).toBe("drift");
+    expect(signals[0]!.evidence[0]).toContain("part of the project's build or test contract");
   });
 
-  it("stays silent for files inside the scope", () => {
+  it("stays silent for ordinary and contract files inside a declared scope", () => {
     const { signals } = feed(driftDetector(), [
       plan(["packages/core/src"]),
       changed("packages/core/src/a.ts", "h"),
       changed("packages/core/src/deep/b.ts", "h"),
     ]);
     expect(signals).toHaveLength(0);
+    // A caller names a contract path to say that changing what "passing" means is intentional.
+    expect(feed(driftDetector({ scope: ["package.json"] }), [changed("package.json", "h")]).signals).toHaveLength(0);
   });
 
   it("reports each stray path once, not on every subsequent edit", () => {

@@ -98,6 +98,12 @@ export function buildProgram(): Command {
         [],
       )
       .option("--drift-scope <path>", "path the drift detector may change (repeatable)", collect, [])
+      .option(
+        "--drift-contract <path>",
+        "build or test contract path the drift detector watches (repeatable)",
+        collect,
+        undefined,
+      )
       .option("--deny <rule>", "deny a tool name or permission class (repeatable)", collect, [])
       .option("--max-turns <n>", "turn budget", "50")
       .option("--max-tokens <n>", "token budget (input + output)")
@@ -151,7 +157,7 @@ export function buildProgram(): Command {
       }),
     );
 
-  function collect(value: string, prev: string[]): string[] {
+  function collect(value: string, prev: string[] = []): string[] {
     return [...prev, value];
   }
 

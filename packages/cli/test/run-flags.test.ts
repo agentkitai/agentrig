@@ -130,9 +130,12 @@ describe("supervisorOptions", () => {
       ...over,
     });
 
-  it("carries --drift-scope through to the detector", () => {
-    expect(wiring({ opts: { driftScope: ["packages/core"] } }).drift).toEqual({
+  it("carries --drift-scope and --drift-contract through to the detector", () => {
+    expect(
+      wiring({ opts: { driftScope: ["packages/core"], driftContract: ["custom.config.ts"] } }).drift,
+    ).toEqual({
       scope: ["packages/core"],
+      contract: ["custom.config.ts"],
     });
   });
 

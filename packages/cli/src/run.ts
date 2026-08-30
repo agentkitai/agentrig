@@ -105,6 +105,7 @@ export interface SupervisorFlags {
   supervisorSoft?: string;
   supervisorReview?: boolean;
   driftScope?: string[];
+  driftContract?: string[];
   memory?: string;
 }
 
@@ -146,7 +147,10 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ...(w.budget.maxMinutes === undefined ? {} : { maxMinutes: w.budget.maxMinutes }),
     },
     capabilities: { abort: o.supervisorNoAbort !== true },
-    drift: { scope: o.driftScope ?? [] },
+    drift: {
+      scope: o.driftScope ?? [],
+      ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),
+    },
     task: w.task,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
     ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
