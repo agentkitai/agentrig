@@ -1102,6 +1102,60 @@ scaffolding**, written by someone who only ever ran the suite on Linux and repor
   login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
   `icacls` call itself has not been observed to succeed.
 
+## The paste freeze was a pty deadlock, and neither earlier fix touched it (2026-08-30)
+
+Two merged fixes later the TUI still froze on a paste in cmux on macOS, with ctrl-c dead. A probe
+that renders the real component in a real terminal and traces every stdin read and stdout write
+synchronously (`packages/cli/scripts/frame-probe.mjs`) settled it. At 158x52:
+
+```
++22939ms read#1  len=64    total=64
++22940ms write#5 len=144   total=13589
++22940ms read#2  len=1016  total=1080
++22949ms write#6 len=1166  total=14755
+                      <- nothing, ever
+```
+
+`%CPU 0.0`, `STAT S+`, and the 500ms heartbeat stops dead after `write#6` is logged — and that log
+line is appended *before* the write is forwarded. So the process is asleep inside a 1,166-byte
+blocking write to the tty, with 1,080 of ~2,242 pasted bytes delivered and the rest never arriving.
+
+Node's writes to a TTY are synchronous on macOS. The peer was blocked writing the rest of the paste
+into the pty's input buffer — because this process had stopped reading in order to service a
+render — while this process was blocked writing its output, because the peer was not draining that
+side. Both sleep forever. Ctrl-c does not help: in raw mode ctrl-c is a byte on that same stalled
+stdin, not a signal.
+
+**Total output involved: 1,310 bytes, and zero full-screen clears.** The frame height was never the
+cause of this one. The two earlier fixes were real — the byte counts behind them stand, and a
+frame taller than the window genuinely costs a full repaint of the whole scrollback per render —
+but they were fixing a different problem, and no amount of shrinking a frame avoids a deadlock that
+needs about a kilobyte to trigger. Nor could any fake-TTY test have caught it: the harness has no
+pty, and a fake stdout never blocks.
+
+The fix is `packages/cli/src/tui/input-buffer.ts`: the buffer is the truth and moves synchronously,
+and drawing waits for stdin to go quiet (32ms). A 31-chunk paste now draws once, at the end, and
+writes nothing while the terminal is still pushing input. Submitting a line still draws
+immediately, because the prompt has to clear before the reply starts.
+
+Notes for a future reader:
+
+- **There is deliberately no maximum wait on the coalescing.** A ceiling would guarantee a write in
+  the middle of a long enough paste, which is exactly the thing being avoided. Input that never
+  pauses is input nobody is reading yet.
+- **This is a mitigation for an environment bug, not a repair of one.** A terminal that drains its
+  output side while writing input does not deadlock. What agentrig controls is whether it writes at
+  all mid-paste, so that is what changed. It has not been reproduced in a test, and cannot be
+  without a real pty and a peer that stops reading; the end-to-end test asserts the property that
+  closes the window (no writes until the chunks stop), not the deadlock itself.
+- **Three wrong diagnoses preceded this one**, each plausible and each measured: bracketed paste
+  (ruled out — the first 24 bytes were plain text), frame height (real, fixed, not this), and a
+  stalled Node stream (ruled out by the heartbeat: `readableLength=0`, `isPaused=true` — nothing
+  was waiting to be read, the reader was simply never going to run again).
+- **The probe is kept.** It is the only instrument that can see any of this, and a sampling version
+  of it saw nothing at all — a timer never fires on a blocked loop, which is why the first version
+  logged one line and stopped.
+
 ## The paste fix was half a fix — the review found the other half (2026-08-30)
 
 The adversarial review of the fix above found three majors. All three are now fixed; the section
