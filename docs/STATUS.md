@@ -901,6 +901,24 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
   the project has instructions for should be able to load them.
 
+## Windows notes (from the first real desktop run, 2026-08-30)
+
+- **CRLF was a silent edit-breaker.** `read_file` and `grep` split on `\n` only, so on a CRLF
+  checkout — every clone on Windows — each line reached the model with a trailing carriage return
+  (`"1\t# AgentRig\r"` in a live trajectory). The model then copies what it was shown into
+  `edit_file`'s `oldText` with plain `\n`, which matches nothing in the file, and *every*
+  multi-line edit fails with "oldText not found". Both tools now split on `/\r?\n/`, and
+  `edit_file` retries a failed match with the line endings converted — in both directions —
+  converting `newText` the same way so the file keeps the endings it had. An edit must not
+  rewrite every line of a file as a side effect of matching one.
+- **The `bash` tool runs `cmd.exe` on Windows.** It spawns with `shell: true`, so a model's
+  bash-isms (`ls`, `&&`, POSIX quoting) may misbehave. Not yet addressed; making the shell
+  configurable is the obvious fix.
+- **Process-group kill degrades.** Timeout and abort call `process.kill(-pid)`, which Windows
+  does not support; the catch falls back to killing the direct child, so a grandchild can survive.
+- **The token file is not ACL-protected.** `chmod(0o600)` only toggles the read-only bit on
+  Windows. Fine on a single-user machine; on a shared one the file needs `icacls`.
+
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
