@@ -110,10 +110,31 @@ const instance = render(createElement(App, { controller }), {
 });
 log(`${at()} mounted`);
 
+/**
+ * Unconditional, so it distinguishes the two ways a TUI stops responding — which the first
+ * version of this probe could not, because it only logged when the write count changed.
+ *
+ * A timer fires only when the event loop is free. So if these lines keep coming while stdin has
+ * gone quiet, the loop is alive and the STREAM is stalled — and `readableLength` says whether the
+ * rest of the paste is sitting in the buffer with nobody reading it. If they stop, the loop is
+ * blocked and the last read/write line above says where.
+ */
+const beat = setInterval(() => {
+  const s = process.stdin;
+  log(
+    `${at()} beat reads=${reads}/${readBytes}B writes=${writes}/${bytes}B ` +
+      `readableLength=${s.readableLength} isPaused=${s.isPaused()} flowing=${String(s.readableFlowing)} ` +
+      `readableListeners=${s.listenerCount("readable")} dataListeners=${s.listenerCount("data")} ` +
+      `rawMode=${String(s.isRaw)} destroyed=${s.destroyed}`,
+  );
+}, 500);
+beat.unref?.();
+
 instance
   .waitUntilExit()
   .catch((e) => log(`${at()} EXIT ERROR ${e?.stack ?? e}`))
   .finally(() => {
+    clearInterval(beat);
     log(`FINAL writes=${writes} bytes=${bytes} biggest=${biggest} clears=${clears} reads=${reads}`);
     realWrite(`\nwrote ${LOG}\n`);
   });
