@@ -15,6 +15,7 @@ export type TuiCommand =
   | { kind: "plan" }
   | { kind: "verbose" }
   | { kind: "new" }
+  | { kind: "permissions"; reset: boolean }
   | { kind: "resume"; id: string }
   | { kind: "unknown"; name: string };
 
@@ -32,6 +33,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "supervisor", summary: "show what the supervisor has signalled this session" },
   { name: "plan", summary: "show the agent's current plan" },
   { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
+  { name: "permissions", args: "[reset]", summary: "show the standing allow/deny answers, or clear them" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "new", summary: "forget this conversation and start a new session" },
   { name: "abort", summary: "stop the running turn" },
@@ -89,6 +91,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "resume", id: args };
     case "new":
       return { kind: "new" };
+    case "permissions":
+      return { kind: "permissions", reset: /(^|\s)reset(\s|$)/.test(args) };
     default:
       return { kind: "unknown", name };
   }

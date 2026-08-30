@@ -26,7 +26,8 @@ export interface TuiLine {
 
 export interface PendingPermission {
   req: PermissionRequest;
-  resolve: (d: Exclude<Decision, "ask">) => void;
+  /** `remember` applies the answer to every later request for the same tool this session. */
+  resolve: (d: Exclude<Decision, "ask">, remember: boolean) => void;
 }
 
 export interface TuiState {
@@ -79,6 +80,8 @@ export class TuiController {
   };
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
+  /** Tool name -> standing answer for this session. Never written to disk. */
+  private readonly standing = new Map<string, Exclude<Decision, "ask">>();
   /**
    * Whether the current session can be continued. Set by a completed turn, because that is when
    * the loop writes the snapshot a resume reads — a session that died before finishing a turn
@@ -139,10 +142,26 @@ export class TuiController {
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
   readonly ask = (req: PermissionRequest): Promise<Exclude<Decision, "ask">> =>
     new Promise((resolve) => {
+      // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
+      // every single write in a twenty-file task is how a permission prompt stops being read at
+      // all, which is worse than not having one.
+      const standing = this.standing.get(req.tool);
+      if (standing !== undefined) {
+        resolve(standing);
+        return;
+      }
       const entry: PendingPermission = {
         req,
-        resolve: (d) => {
-          this.print(`${d === "allow" ? "allowed" : "denied"} ${req.tool}`, d === "allow" ? "system" : "error");
+        resolve: (d, remember) => {
+          if (remember === true) {
+            this.standing.set(req.tool, d);
+            this.print(
+              `${d === "allow" ? "allowing" : "denying"} ${req.tool} for the rest of this session (/permissions to review)`,
+              d === "allow" ? "system" : "error",
+            );
+          } else {
+            this.print(`${d === "allow" ? "allowed" : "denied"} ${req.tool}`, d === "allow" ? "system" : "error");
+          }
           resolve(d);
           this.advanceQueue();
         },
@@ -163,8 +182,22 @@ export class TuiController {
     this.set({ pending: next ?? null, queued: this.queue.length });
   }
 
-  answerPermission(d: Exclude<Decision, "ask">): void {
-    this.state.pending?.resolve(d);
+  /**
+   * `remember` makes the answer standing for that tool, for this session only. Deliberately not
+   * persisted: a blanket grant written to disk is a decision that outlives the task it was made
+   * for, and nobody would remember making it.
+   */
+  answerPermission(d: Exclude<Decision, "ask">, remember = false): void {
+    this.state.pending?.resolve(d, remember);
+  }
+
+  /** What has a standing answer, and how to take it back. */
+  private describeStanding(): string {
+    if (this.standing.size === 0) {
+      return "nothing has a standing answer — every request is asked. `a` at a prompt makes one standing.";
+    }
+    const lines = [...this.standing].map(([tool, d]) => `  ${d === "allow" ? "allow" : "deny "} ${tool}`);
+    return [...lines, "/permissions reset clears these"].join("\n");
   }
 
   /** Settles every outstanding request as a denial — nothing may be dropped unsettled. */
@@ -172,7 +205,7 @@ export class TuiController {
     const all = [this.state.pending, ...this.queue].filter((p): p is PendingPermission => p !== null);
     this.queue.length = 0;
     this.state = { ...this.state, pending: null, queued: 0 };
-    for (const p of all) p.resolve("deny");
+    for (const p of all) p.resolve("deny", false);
   }
 
   abort(): void {
@@ -253,6 +286,15 @@ export class TuiController {
           // trust the id the user named: they are asking for a session this process never ran
           this.resumable = true;
           await this.start("Continue the task.", { resume: cmd.id });
+        }
+        return true;
+      case "permissions":
+        if (cmd.reset) {
+          const had = this.standing.size;
+          this.standing.clear();
+          this.print(had === 0 ? "nothing to reset" : `cleared ${had} standing answer(s)`, "system");
+        } else {
+          this.print(this.describeStanding(), "system");
         }
         return true;
       case "verbose": {

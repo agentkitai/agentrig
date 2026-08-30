@@ -136,6 +136,8 @@ function makeControllerWith(
 }
 
 const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text).join("\n");
+/** The most recent line only — for assertions the whole scrollback would satisfy trivially. */
+const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
   it("runs a task and reports how it finished", async () => {
@@ -307,6 +309,101 @@ describe("TuiController", () => {
     expect(text(c)).toContain("denied needs_permission");
     // the conversation view says it plainly; the raw event name is behind /verbose
     expect(text(c)).toContain("✗ denied needs_permission");
+  });
+
+  it("a standing allow is asked once and applied thereafter", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [{ type: "tool_use", id: "t2", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [{ type: "tool_use", id: "t3", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const running = c.submit("do it three times");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("allow", true);
+    await running;
+
+    // being asked to approve every write in a twenty-file task is how a prompt stops being read
+    expect(c.snapshot().pending).toBeNull();
+    expect(text(c)).toContain("allowing needs_permission for the rest of this session");
+    // the tool really did run all three times, unprompted after the first
+    expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(3);
+  });
+
+  it("without remembering, it asks every time", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [{ type: "tool_use", id: "t2", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const running = c.submit("twice");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("allow");
+    // the second call must raise its own prompt
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("allow");
+    await running;
+    expect(text(c).match(/allowed needs_permission/g)).toHaveLength(2);
+  });
+
+  it("a standing deny is standing too, so a runaway tool can be shut off", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [{ type: "tool_use", id: "t2", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const running = c.submit("try twice");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("deny", true);
+    await running;
+
+    expect(c.snapshot().pending).toBeNull();
+    expect(text(c).match(/✗ denied needs_permission/g)).toHaveLength(2);
+  });
+
+  it("/permissions shows what is standing, and reset takes it back", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    await c.submit("/permissions");
+    expect(text(c)).toContain("nothing has a standing answer");
+
+    const running = c.submit("once");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    c.answerPermission("allow", true);
+    await running;
+
+    // asserted on the LAST line each time: `text(c)` is the whole scrollback, and the first
+    // /permissions above already printed "nothing has a standing answer" into it
+    await c.submit("/permissions");
+    expect(last(c)).toMatch(/allow\s+needs_permission/);
+    await c.submit("/permissions reset");
+    expect(last(c)).toContain("cleared 1 standing answer");
+    await c.submit("/permissions");
+    expect(last(c)).toContain("nothing has a standing answer");
+  });
+
+  it("a standing answer does not outlive the process", async () => {
+    // deliberately in memory only: a blanket grant written to disk outlives the task it was made
+    // for, and nobody remembers making it
+    const first = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const running = first.submit("once");
+    await vi.waitFor(() => expect(first.snapshot().pending).not.toBeNull());
+    first.answerPermission("allow", true);
+    await running;
+
+    const second = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const again = second.submit("once");
+    await vi.waitFor(() => expect(second.snapshot().pending).not.toBeNull());
+    second.answerPermission("deny");
+    await again;
   });
 
   it("refuses to start a second turn while one is running", async () => {
