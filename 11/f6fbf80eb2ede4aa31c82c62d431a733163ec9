@@ -1,0 +1,24 @@
+packages/cli/src/program.ts
+  h_26c5a60a657125 101-106,160
+packages/cli/src/run.ts
+  h_26c5a60a657125 108,150-153
+packages/cli/test/program.test.ts
+  h_26c5a60a657125 109,116-120
+packages/cli/test/run-flags.test.ts
+  h_26c5a60a657125 133-136,138
+packages/supervisor/src/detectors/drift.ts
+  h_26c5a60a657125 9-10,59-62,64-72,77,79,86,88-90,99,104-115
+packages/supervisor/test/detectors.test.ts
+  h_26c5a60a657125 335,337-343,346,353-354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "11f6fbf80eb2ede4aa31c82c62d431a733163ec9",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
