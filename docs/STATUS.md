@@ -922,6 +922,24 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
   the project has instructions for should be able to load them.
 
+## Standing permission answers (from the first task worth approving, 2026-08-30)
+
+- **Approving every action individually is how a prompt stops being read.** A task that edits
+  twenty files raised twenty identical prompts, and the only alternatives were `--allow write
+  --allow exec` at startup (all-or-nothing, decided before you know what the task will do) or
+  answering all twenty. Both are worse than a prompt that remembers.
+- `a` at a prompt allows that **tool** for the rest of the session; `d` denies it for the rest of
+  the session, which is how a tool that is misbehaving gets shut off without aborting the task.
+  `y`/`n` still answer once.
+- **Per tool, not per class or per call.** A class ("allow all writes") grants more than the
+  prompt was showing; a per-call grant remembers nothing. The tool name is what the prompt named.
+- **In memory only, never written to disk.** A blanket grant that survives the process outlives
+  the task it was made for, and nobody remembers making it. `/permissions` lists what is standing
+  and `/permissions reset` clears it.
+- Caveat: a standing answer applies to a subagent's requests too, since they carry the same tool
+  name (with `origin: "subagent"` shown on the prompt). Granting `bash` for the session grants it
+  to children as well.
+
 ## The TUI held no conversation (from the second interactive run, 2026-08-30)
 
 - **Every prompt started a new session.** `submit` called `agent.run(task)` with no `resume`, so

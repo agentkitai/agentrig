@@ -35,6 +35,10 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     // a permission prompt takes the keyboard: answering it is the only useful thing to do
     if (state.pending !== null) {
       if (char === "y" || char === "Y") controller.answerPermission("allow");
+      // `a` answers this request AND every later one for the same tool: a task that writes twenty
+      // files should be approved once, not twenty times
+      else if (char === "a" || char === "A") controller.answerPermission("allow", true);
+      else if (char === "d" || char === "D") controller.answerPermission("deny", true);
       else if (char === "n" || char === "N" || key.escape) controller.answerPermission("deny");
       return;
     }
@@ -98,7 +102,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
             {state.pending.req.origin === undefined ? "" : ` (asked by ${state.pending.req.origin})`}?
           </Text>
           <Text dimColor>
-            y = allow, n / esc = deny{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
+            y = allow once, a = allow {state.pending.req.tool} all session, n / esc = deny, d = deny
+            all session{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>
         </Box>
       ) : (
