@@ -11,6 +11,7 @@ import {
   type AnyTool,
   type ModelEvent,
   type ModelProvider,
+  type ModelRequest,
 } from "@agentkitai/agentrig-core";
 import { COMMANDS, helpText, parseCommand } from "../src/tui/commands.ts";
 import { TuiController } from "../src/tui/controller.ts";
@@ -41,6 +42,14 @@ describe("parseCommand", () => {
     expect(parseCommand("/dream")).toEqual({ kind: "dream", auto: false });
   });
 
+  it("treats the bare words every REPL treats as leaving", () => {
+    for (const word of ["exit", "quit", "bye", ":q", "EXIT", "  quit  "]) {
+      expect(parseCommand(word), word).toEqual({ kind: "quit" });
+    }
+    // ...but only on their own: they are ordinary words inside a task
+    expect(parseCommand("exit the retry loop early")!.kind).toBe("task");
+  });
+
   it("accepts the obvious aliases", () => {
     expect(parseCommand("/exit")!.kind).toBe("quit");
     expect(parseCommand("/?")!.kind).toBe("help");
@@ -69,9 +78,15 @@ class FakeProvider implements ModelProvider {
   readonly id = "fake";
   readonly model = "fake-1";
   readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
-  constructor(private readonly turns: ModelEvent[][]) {}
-  async *stream(): AsyncIterable<ModelEvent> {
-    yield* this.turns.shift() ?? [{ type: "stop", reason: "end_turn" }];
+  /** Every request it was given, so a test can see what the model was actually sent. */
+  readonly requests: ModelRequest[] = [];
+  /** An `Error` entry throws instead of streaming — what a provider rejecting a request does. */
+  constructor(private readonly turns: Array<ModelEvent[] | Error>) {}
+  async *stream(req: ModelRequest): AsyncIterable<ModelEvent> {
+    this.requests.push(structuredClone(req));
+    const turn = this.turns.shift() ?? [{ type: "stop" as const, reason: "end_turn" as const }];
+    if (turn instanceof Error) throw turn;
+    yield* turn;
   }
 }
 
@@ -95,11 +110,18 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function makeController(turns: ModelEvent[][], extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {}) {
+function makeController(turns: Array<ModelEvent[] | Error>, extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {}) {
+  return makeControllerWith(new FakeProvider(turns), extra);
+}
+
+function makeControllerWith(
+  provider: FakeProvider,
+  extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
+) {
   const controller: TuiController = new TuiController({
     cwd: root,
     agent: createAgent({
-      provider: new FakeProvider(turns),
+      provider,
       tools: [askingTool()],
       permissions: new RulePolicy(defaultRules),
       systemPrompt: "test",
@@ -175,11 +197,78 @@ describe("TuiController", () => {
     expect(c.snapshot().verbose).toBe(false);
   });
 
-  it("/quit is the only thing that ends the app", async () => {
+  it("/quit ends the app, and so does a bare exit", async () => {
     const c = makeController([]);
     expect(await c.submit("/quit")).toBe(false);
     expect(await c.submit("/help")).toBe(true);
     expect(await c.submit("anything else")).toBe(true);
+  });
+
+  it("a bare exit leaves rather than spending a turn asking the model to", async () => {
+    const c = makeController([[{ type: "text_delta", text: "Exiting." }, usage(1, 1), stop("end_turn")]]);
+    expect(await c.submit("exit")).toBe(false);
+    // it used to cost a turn and 1330 tokens, and then not exit
+    expect(c.snapshot().sessionId).toBeNull();
+    expect(text(c)).not.toContain("Exiting.");
+  });
+
+  it("holds a conversation instead of starting over on every line", async () => {
+    const c = makeController([
+      [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "2, 3, 5" }, usage(1, 1), stop("end_turn")],
+    ]);
+    await c.submit("hello");
+    const first = c.snapshot().sessionId;
+    await c.submit("show me the first primes");
+
+    // a new session per prompt means nothing the user said is in scope for what they say next
+    expect(c.snapshot().sessionId).toBe(first);
+    expect(c.snapshot().turns).toBe(2);
+  });
+
+  it("sends the earlier conversation to the model, not just the new prompt", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "2, 3, 5" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider);
+    await c.submit("hello");
+    await c.submit("and the primes?");
+
+    // the token counts in a live run never grew between turns — no history was being sent
+    const second = provider.requests.at(-1)!;
+    const text = JSON.stringify(second.messages);
+    expect(text).toContain("hello");
+    expect(text).toContain("Hello!");
+    expect(text).toContain("and the primes?");
+  });
+
+  it("/new drops the thread deliberately", async () => {
+    const c = makeController([
+      [{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "two" }, usage(1, 1), stop("end_turn")],
+    ]);
+    await c.submit("first");
+    const first = c.snapshot().sessionId;
+    await c.submit("/new");
+    expect(c.snapshot().sessionId).toBeNull();
+    await c.submit("second");
+    expect(c.snapshot().sessionId).not.toBe(first);
+  });
+
+  it("does not try to continue a session that never finished a turn", async () => {
+    // a provider that rejects the request — exactly the live `HTTP 400 Unsupported parameter`
+    // case — dies before any turn.end, so there is no snapshot and nothing to resume from
+    const c = makeController([
+      new Error("HTTP 400 Unsupported parameter: max_output_tokens"),
+      [{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")],
+    ]);
+    await c.submit("this one breaks");
+    const broken = c.snapshot().sessionId;
+    await c.submit("this one should still work");
+
+    expect(c.snapshot().sessionId).not.toBe(broken);
+    expect(text(c)).toContain("ok");
   });
 
   it("prints help on an unknown command, so the answer is always in reach", async () => {

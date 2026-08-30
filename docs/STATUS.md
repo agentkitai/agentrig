@@ -901,6 +901,20 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
   the project has instructions for should be able to load them.
 
+## The TUI held no conversation (from the second interactive run, 2026-08-30)
+
+- **Every prompt started a new session.** `submit` called `agent.run(task)` with no `resume`, so
+  nothing the user said was ever in scope for what they said next — three exchanges in a row
+  reported `turn 1` and sent 1330, 1335, 1330 input tokens, an input that never grew because no
+  history was being sent. A task now continues the current session, and `/new` drops the thread
+  deliberately. A session is only continued once a `turn.end` has been seen, because that is when
+  the loop writes the snapshot a resume reads: a session that died before finishing a turn (a
+  provider rejecting the request, as the live `400` did) has nothing to resume from, and asking
+  would lose the next prompt to an error.
+- **A bare `exit` was sent to the model.** It spent a turn and 1330 tokens replying "Exiting." and
+  then did not exit. `exit`, `quit`, `bye` and `:q` on their own are now the quit command, as in
+  every other REPL; inside a sentence they are still ordinary words.
+
 ## The output surfaces (from the first real interactive run, 2026-08-30)
 
 - **Neither surface ever showed the model's reply.** The TUI skipped `model.delta` as per-token
