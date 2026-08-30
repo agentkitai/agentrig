@@ -83,17 +83,13 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       return;
     }
     if (char === undefined || char === "" || key.ctrl || key.meta) return;
-    // a paste arrives as ONE multi-character chunk with `key.return` false, so an embedded
-    // newline used to land in the buffer literally and corrupt the line. Submit at the first
-    // newline and keep the remainder.
+    // A newline INSIDE a chunk is pasted text, not the enter key. This used to submit at the
+    // first one and join the remainder with spaces, so pasting a multi-line brief sent only its
+    // first line as the task and answered every following line with "a turn is already running".
+    // Enter is its own chunk and is handled above; a paste is kept whole, line breaks and all —
+    // `fitToRows` measures rendered rows, so a multi-line buffer draws correctly.
     if (/[\r\n]/.test(char)) {
-      const [first = "", ...rest] = char.split(/\r\n|[\r\n]/);
-      const line = buf.value + first;
-      buf.set(rest.join(" "), () => {
-        void controller.submit(line).then((keepGoing) => {
-          if (!keepGoing) exit();
-        });
-      });
+      buf.set(buf.value + char.replace(/\r\n?/g, "\n"));
       return;
     }
     buf.set(buf.value + char);

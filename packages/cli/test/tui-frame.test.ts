@@ -317,20 +317,38 @@ describe("the input buffer", () => {
     return seen;
   };
 
-  it("submits every character of a paste that ends in a newline", async () => {
+  it("keeps a multi-line paste whole instead of submitting its first line", async () => {
     const h = mount(50);
     await settle();
     const seen = submitted(h);
 
-    // Ink drains several chunks in one `readable` batch and React does not update state between
-    // them, so building the line from the state variable dropped whole chunks: this used to
-    // submit 2,436 of the 2,500 characters, silently and with no way to notice.
-    h.stdin.paste(`${"y".repeat(2_500)}\ntail`);
+    // This used to submit at the first newline and join the remainder with spaces. Pasting a
+    // multi-line brief therefore sent only its first sentence as the task, and every line after
+    // it came back "a turn is already running — /abort first" while the agent worked on a
+    // fragment. A newline inside a chunk is pasted text; enter is its own chunk.
+    h.stdin.paste("line one\nline two\nline three");
+    await settle();
+
+    expect(seen, "submitted a fragment of the paste").toHaveLength(0);
+
+    // and pressing enter afterwards submits all of it, line breaks intact
+    h.stdin.paste("\r");
     await settle();
     h.stop();
+    expect(seen).toEqual(["line one\nline two\nline three"]);
+  });
 
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toBe("y".repeat(2_500));
+  it("normalises the line endings a terminal may deliver", async () => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+
+    h.stdin.paste("first\r\nsecond");
+    await settle();
+    h.stdin.paste("\r");
+    await settle();
+    h.stop();
+    expect(seen).toEqual(["first\nsecond"]);
   });
 
   it("submits every character when the return key arrives in the same batch as the text", async () => {
@@ -355,7 +373,9 @@ describe("the input buffer", () => {
     await settle();
     const seen = submitted(h);
 
-    h.stdin.paste(`${"q".repeat(4_000)}\n`);
+    h.stdin.paste("q".repeat(4_000));
+    await settle();
+    h.stdin.paste("\r");
     await settle();
     h.stop();
 
@@ -439,7 +459,7 @@ describe("a paste that contains a newline", () => {
     expect(hazards, "wrote while the terminal still had input queued").toEqual([]);
   });
 
-  it("still submits the line, and every character of it", async () => {
+  it("submits the whole brief once enter is pressed, every character of it", async () => {
     const h = mount(300);
     await settle();
     const seen: string[] = [];
@@ -451,10 +471,14 @@ describe("a paste that contains a newline", () => {
 
     await pasteWithNewline(h, 20, 10);
     await settle();
+    expect(seen, "submitted mid-paste").toHaveLength(0);
+
+    h.stdin.paste("\r");
+    await settle();
     h.stop();
 
-    // 10 chunks of 64 before the newline, plus the 63 characters that precede it in chunk 10
+    // 20 chunks: 19 of 64 characters and one of 63 plus a newline
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toBe("y".repeat(10 * 64 + 63));
+    expect(seen[0]).toBe(`${"y".repeat(10 * 64 + 63)}\n${"y".repeat(9 * 64)}`);
   });
 });

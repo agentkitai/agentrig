@@ -1102,6 +1102,34 @@ scaffolding**, written by someone who only ever ran the suite on Linux and repor
   login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
   `icacls` call itself has not been observed to succeed.
 
+## A multi-line paste sent only its first line (2026-08-30)
+
+Found the first time a multi-line brief was pasted into a TUI where pasting finally worked. The
+handler submitted at the first newline and joined the remainder with spaces:
+
+```
+Fix three defects in the supervisor that a live dogfood run exposed.
+BRANCH FIRST. Run `git fetch origin main` then ...
+a turn is already running — /abort first
+(1) packages/supervisor/src/detectors/stall.ts fires on legitimate reading. ...
+a turn is already running — /abort first
+```
+
+The agent got one sentence as its whole task and set about searching memory and grepping the tree
+to work out what the three defects were. Every following line arrived while that turn was running
+and was refused.
+
+The rule was written when an embedded newline could land in the buffer literally and corrupt a
+line, and submitting at the first one was the cautious reading. It is the wrong one: a newline
+*inside* a chunk is pasted text, and enter arrives as a chunk of its own — which is how every
+other terminal UI tells them apart. A paste is now kept whole, line breaks and all, and enter
+submits it. `\r\n` is normalised to `\n` on the way in.
+
+This only became reachable once pasting worked at all, which is why five rounds of paste fixes
+preceded it: the freeze, the frame height twice, the pty deadlock, and then this. Worth noting for
+the next time a fix "completes" a feature — the bug behind it may simply never have been reachable
+before.
+
 ## The paste freeze was a pty deadlock, and neither earlier fix touched it (2026-08-30)
 
 Two merged fixes later the TUI still froze on a paste in cmux on macOS, with ctrl-c dead. A probe
