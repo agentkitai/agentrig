@@ -628,7 +628,7 @@ fix. Same standing as AgentLens in §7: recorded so it is a decision rather than
 
 | # | Follow-up | Why it is not in the build order | Shape of the fix |
 |---|---|---|---|
-| F1 | **PKCE + loopback login for `openai-chatgpt`** | `agentrig login openai-chatgpt` cannot work as built: `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive challenge aimed at the HTTP *client*, so no Node process completes it (verified from a cloud container and a desktop). Today's answer is to seed the credential from Codex, which works but requires Codex. | Replace the device-code flow with what Codex itself does: generate a PKCE verifier, open the system browser to `auth.openai.com/oauth/authorize`, listen on a fixed loopback port for the redirect, exchange the code. The browser makes the challenged request, so the challenge is satisfied by a real browser. Needs: a local HTTP listener bound to 127.0.0.1 with a state check, a browser launcher, and a timeout that leaves no listener behind. The existing token store, refresh and rotation are unchanged. |
+| ~~F1~~ | ~~**PKCE + loopback login for `openai-chatgpt`**~~ | **Built (2026-08-30).** `startLoopbackLogin`: PKCE S256, a one-shot listener on both loopback stacks, state checked, code exchanged at `/oauth/token`. The device-code flow it replaces is deleted — it could never work. | — |
 | ~~F2~~ | ~~**A configurable shell for the `bash` tool**~~ | **Built (2026-08-30).** `bashTool({ shell })` and `--shell`; POSIX keeps `/bin/sh`, Windows prefers Git Bash, then PowerShell, then `cmd.exe`, and the tool description names both the shell and the syntax to write in. | — |
 
-F1 does not block anything today: seeding the credential from Codex works. F2 is built.
+Both are built. The table is kept as the record of why each was deferred and what closed it.

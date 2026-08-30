@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
+import { authorizeUrl, createPkce, createState, listenForCallback } from "./oauth-loopback.js";
 
 /**
  * Token lifecycle for the experimental `openai-chatgpt` provider (PLAN §2.9): the "Sign in with
@@ -16,13 +17,15 @@ import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
  * experimental and opt-in, never core auth. Because drift is expected, every server response is
  * validated before it is allowed to overwrite a stored credential — a malformed 200 must fail
  * loudly, never corrupt the store.
+ *
+ * Sign-in is a browser flow (PKCE + loopback redirect), not a device code: see
+ * `startLoopbackLogin` for why the device-code endpoints are unusable from any Node process.
  */
 
 /** Public OAuth client id Codex ships (not a secret). */
 export const CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_BASE_URL = "https://auth.openai.com";
 const OAUTH_SCOPES = "openid profile email offline_access api.connectors.read api.connectors.invoke";
-const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 /** Refresh once the access token is within this window of expiry. */
 const REFRESH_SKEW_MS = 5 * 60_000;
 /** Fallback for an opaque (non-JWT) access token, which carries no readable expiry. */
@@ -245,24 +248,35 @@ function accessTokenExpiry(accessToken: string): number | null {
   return typeof exp === "number" ? exp * 1000 : null;
 }
 
-export interface DeviceLogin {
-  userCode: string;
-  verificationUri: string;
-  expiresInSec: number;
-  /** Resolves once the user authorizes; rejects on timeout/denial. Persists the tokens. */
-  complete(): Promise<ChatGPTTokens>;
-}
-
 export interface OpenAIChatGPTAuthOptions {
   store?: TokenStore;
   clientId?: string;
   authBaseUrl?: string;
   fetchFn?: typeof fetch;
   now?: () => number;
-  /** Injectable for tests so device-code polling doesn't actually wait. */
-  sleep?: (ms: number) => Promise<void>;
   /** Backoff for transient failures reaching the auth host. */
   retry?: RetryPolicy;
+}
+
+export const DEFAULT_LOOPBACK_PORT = 1455;
+
+export interface LoopbackLoginOptions {
+  /**
+   * Where the redirect is served. The provider matches `redirect_uri` against what is registered
+   * for the client, so this is effectively fixed — it exists for a test, not for a preference.
+   */
+  port?: number;
+  timeoutMs?: number;
+}
+
+export interface LoopbackLogin {
+  /** The URL the user must open in a real browser. */
+  url: string;
+  redirectUri: string;
+  /** Resolves once the browser comes back and the code is exchanged. Persists the tokens. */
+  complete(): Promise<ChatGPTTokens>;
+  /** Stops the listener without waiting — for a cancelled login. */
+  cancel(): void;
 }
 
 /** A transient failure reaching the auth host — the stored credentials are still fine. */
@@ -284,7 +298,6 @@ export class OpenAIChatGPTAuth {
   private readonly authBaseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
-  private readonly sleep: (ms: number) => Promise<void>;
   private readonly retry: RetryPolicy;
   private inFlight: Promise<ChatGPTTokens> | null = null;
 
@@ -294,7 +307,6 @@ export class OpenAIChatGPTAuth {
     this.authBaseUrl = (opts.authBaseUrl ?? AUTH_BASE_URL).replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
     this.now = opts.now ?? (() => Date.now());
-    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.retry = opts.retry ?? {};
   }
 
@@ -303,61 +315,82 @@ export class OpenAIChatGPTAuth {
     return this.store.read();
   }
 
-  /** Start the device-code flow: returns the code/URL to show the user plus a completion poller. */
-  async startDeviceLogin(): Promise<DeviceLogin> {
-    const res = await fetchWithRetries(
-      this.fetchFn,
-      "openai-chatgpt device login",
-      `${this.authBaseUrl}/deviceauth/usercode`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ client_id: this.clientId, scope: OAUTH_SCOPES }),
-      },
-      new AbortController().signal,
-      this.retry,
-    );
-    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const deviceCode = typeof data.device_code === "string" ? data.device_code : "";
-    if (deviceCode === "") {
-      throw new Error("openai-chatgpt device login: response carried no device_code");
-    }
-    const interval = Number(data.interval ?? 5);
-    const expiresInSec = Number(data.expires_in ?? 900);
+  /**
+   * Start the browser sign-in: PKCE, a loopback redirect, and a code exchanged for tokens.
+   *
+   * The device-code flow this replaces could never work. `auth.openai.com` puts an interactive
+   * Cloudflare challenge in front of its authorization endpoints (`cf-mitigated: challenge`, 403,
+   * reproduced from a cloud container and from a desktop), and the challenge targets the HTTP
+   * client — `fetch` is not a browser wherever it runs. Here the browser makes that request and
+   * this process never does: it serves the redirect on loopback and posts the code to
+   * `/oauth/token`, which is not challenged (the same endpoint every refresh already uses).
+   */
+  async startLoopbackLogin(opts: LoopbackLoginOptions = {}): Promise<LoopbackLogin> {
+    const port = opts.port ?? DEFAULT_LOOPBACK_PORT;
+    const pkce = createPkce();
+    const state = createState();
+    const listener = await listenForCallback({
+      port,
+      expectedState: state,
+      ...(opts.timeoutMs === undefined ? {} : { timeoutMs: opts.timeoutMs }),
+    });
+    const url = authorizeUrl({
+      authBaseUrl: this.authBaseUrl,
+      clientId: this.clientId,
+      redirectUri: listener.redirectUri,
+      scope: OAUTH_SCOPES,
+      challenge: pkce.challenge,
+      state,
+      // Codex asks for these; they decide what the issued token is scoped to, so they are part of
+      // the request shape rather than decoration
+      extra: { id_token_add_organizations: "true", codex_cli_simplified_flow: "true" },
+    });
+
     return {
-      userCode: String(data.user_code ?? ""),
-      verificationUri: String(data.verification_uri_complete ?? data.verification_uri ?? "https://chatgpt.com/codex/device"),
-      expiresInSec,
-      complete: () => this.pollDeviceToken(deviceCode, interval, expiresInSec),
+      url,
+      redirectUri: listener.redirectUri,
+      complete: async (): Promise<ChatGPTTokens> => {
+        try {
+          const { code } = await listener.wait;
+          return await this.exchangeCode(code, listener.redirectUri, pkce.verifier);
+        } finally {
+          listener.close();
+        }
+      },
+      cancel: () => listener.close(),
     };
   }
 
-  private async pollDeviceToken(deviceCode: string, intervalSec: number, expiresInSec: number): Promise<ChatGPTTokens> {
-    const deadline = this.now() + expiresInSec * 1000;
-    let intervalMs = Math.max(1, intervalSec) * 1000;
-    while (this.now() < deadline) {
-      const res = await this.fetchFn(`${this.authBaseUrl}/deviceauth/token`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ client_id: this.clientId, device_code: deviceCode, grant_type: DEVICE_GRANT_TYPE }),
-      });
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (res.ok && typeof data.access_token === "string") {
-        return this.persist(data);
-      }
-      const err = String(data.error ?? "");
-      if (err === "authorization_pending") {
-        // keep waiting
-      } else if (err === "slow_down") {
-        intervalMs += 5000;
-      } else if (res.status >= 500) {
-        // transient upstream blip; keep polling rather than aborting the login
-      } else {
-        throw new Error(`openai-chatgpt device login failed: ${err || `HTTP ${res.status}`}`);
-      }
-      await this.sleep(intervalMs);
+  /** RFC 6749 §4.1.3: the code, the same redirect URI, and the PKCE verifier. */
+  private async exchangeCode(code: string, redirectUri: string, verifier: string): Promise<ChatGPTTokens> {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: this.clientId,
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    });
+    const res = await fetchWithRetries(
+      this.fetchFn,
+      "openai-chatgpt token exchange",
+      `${this.authBaseUrl}/oauth/token`,
+      { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: body.toString() },
+      new AbortController().signal,
+      this.retry,
+    );
+    // read once: the body is either the tokens or the error, and it may carry the request back,
+    // so it goes through `errorDetail`, which redacts secrets and bounds the length
+    const text = await res.text().catch(() => "");
+    if (!res.ok) {
+      throw new Error(`openai-chatgpt sign-in failed: HTTP ${res.status} ${errorDetail(text)}`);
     }
-    throw new Error("openai-chatgpt device login timed out; run `agentrig login openai-chatgpt` again");
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new Error(`openai-chatgpt sign-in: token endpoint returned non-JSON: ${errorDetail(text, 200)}`);
+    }
+    return this.persist(data);
   }
 
   /**

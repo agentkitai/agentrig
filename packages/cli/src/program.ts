@@ -156,9 +156,13 @@ export function buildProgram(): Command {
 
   program
     .command("login <provider>")
-    .description("Sign in to a subscription provider (experimental: openai-chatgpt device-code OAuth)")
+    .description("Sign in to a subscription provider (experimental: openai-chatgpt browser OAuth)")
     .option("--export", "print the stored token bundle (to seed AGENTRIG_OPENAI_CHATGPT_TOKEN) instead of signing in")
-    .action(async (provider: string, opts: { export?: boolean }) => loginCommand(provider, opts));
+    .option("--no-browser", "print the sign-in URL and wait, without opening a browser")
+    .action(async (provider: string, opts: { export?: boolean; browser?: boolean }) =>
+      // commander turns `--no-browser` into `browser: false`
+      loginCommand(provider, { ...opts, ...(opts.browser === false ? { noBrowser: true } : {}) }),
+    );
 
   const memory = program.command("memory").description("Inspect and maintain the LLM Wiki memory");
   const memoryDir = (cmd: Command): Command =>

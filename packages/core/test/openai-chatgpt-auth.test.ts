@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   EnvSeededTokenStore,
@@ -34,46 +35,104 @@ describe("decodeJwtClaims", () => {
   });
 });
 
-describe("OpenAIChatGPTAuth device login", () => {
-  it("requests a user code and polls until authorized, persisting tokens", async () => {
-    const calls: string[] = [];
-    let now = 1_000_000;
-    let poll = 0;
-    const fetchFn: typeof fetch = async (url) => {
-      const u = String(url);
-      calls.push(u);
-      if (u.endsWith("/deviceauth/usercode")) {
-        return new Response(JSON.stringify({ device_code: "dev", user_code: "WXYZ", verification_uri: "https://x/device", interval: 1, expires_in: 900 }), { status: 200 });
-      }
-      // first poll pending, second authorized
-      if (poll++ === 0) return new Response(JSON.stringify({ error: "authorization_pending" }), { status: 400 });
-      return new Response(
-        JSON.stringify({ access_token: accessJwt(now / 1000 + 3600), refresh_token: "r1", id_token: jwt({ chatgpt_account_id: "acct_9" }) }),
-        { status: 200 },
-      );
+/** Drives the loopback listener the way a browser would, without one. */
+async function visit(url: string): Promise<number> {
+  const res = await fetch(url, { redirect: "manual" });
+  await res.text();
+  return res.status;
+}
+
+describe("OpenAIChatGPTAuth browser login", () => {
+  it("exchanges the code for tokens and persists them", async () => {
+    const bodies: string[] = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      bodies.push(String(init!.body));
+      expect(String(url)).toMatch(/\/oauth\/token$/);
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r" }), { status: 200 });
     };
     const store = new MemoryStore();
-    const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, sleep: async () => {} });
+    const auth = new OpenAIChatGPTAuth({ store, fetchFn, retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
 
-    const login = await auth.startDeviceLogin();
-    expect(login.userCode).toBe("WXYZ");
-    expect(login.verificationUri).toBe("https://x/device");
-    const tokens = await login.complete();
+    // the authorize URL is what the BROWSER opens; this process never fetches it, because that
+    // is the request Cloudflare challenges
+    const authorize = new URL(login.url);
+    expect(authorize.origin + authorize.pathname).toBe("https://auth.openai.com/oauth/authorize");
+    expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorize.searchParams.get("redirect_uri")).toBe(login.redirectUri);
 
-    expect(tokens.refreshToken).toBe("r1");
-    expect(tokens.accountId).toBe("acct_9");
-    expect(store.tokens?.accessToken).toContain(".");
-    expect(calls.filter((c) => c.endsWith("/deviceauth/token"))).toHaveLength(2);
+    const state = authorize.searchParams.get("state")!;
+    const done = login.complete();
+    expect(await visit(`${login.redirectUri}?code=the-code&state=${state}`)).toBe(200);
+    expect(await done).toMatchObject({ accessToken: "a", refreshToken: "r" });
+    expect(store.tokens).toMatchObject({ accessToken: "a" });
+
+    const body = new URLSearchParams(bodies[0]!);
+    expect(body.get("grant_type")).toBe("authorization_code");
+    expect(body.get("code")).toBe("the-code");
+    expect(body.get("redirect_uri")).toBe(login.redirectUri);
+    // the verifier is what proves the same client started the flow
+    expect(body.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it("throws a clear error on device denial", async () => {
-    const fetchFn: typeof fetch = async (url) =>
-      String(url).endsWith("/usercode")
-        ? new Response(JSON.stringify({ device_code: "d", user_code: "C", interval: 1, expires_in: 900 }), { status: 200 })
-        : new Response(JSON.stringify({ error: "access_denied" }), { status: 400 });
-    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {}, retry: { sleep: async () => {} } });
-    const login = await auth.startDeviceLogin();
-    await expect(login.complete()).rejects.toThrow(/access_denied/);
+  it("proves possession: the verifier hashes to the challenge it advertised", async () => {
+    const bodies: string[] = [];
+    const fetchFn: typeof fetch = async (_u, init) => {
+      bodies.push(String(init!.body));
+      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r" }), { status: 200 });
+    };
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
+    const params = new URL(login.url).searchParams;
+    const done = login.complete();
+    await visit(`${login.redirectUri}?code=c&state=${params.get("state")}`);
+    await done;
+
+    const verifier = new URLSearchParams(bodies[0]!).get("code_verifier")!;
+    expect(createHash("sha256").update(verifier).digest("base64url")).toBe(params.get("code_challenge"));
+  });
+
+  it("refuses a redirect whose state is not the one it issued", async () => {
+    let exchanged = 0;
+    const fetchFn: typeof fetch = async () => {
+      exchanged += 1;
+      return new Response("{}", { status: 200 });
+    };
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
+    // the assertion is attached before the redirect arrives: a rejection with no handler yet is
+    // an unhandled rejection, which vitest reports as an error even when the test passes
+    const done = expect(login.complete()).rejects.toThrow(/state did not match/);
+    expect(await visit(`${login.redirectUri}?code=stolen&state=not-ours`)).toBe(400);
+    await done;
+    // the point of the check: a code we did not ask for is never exchanged
+    expect(exchanged).toBe(0);
+  });
+
+  it("reports the provider's own refusal rather than waiting for a code", async () => {
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
+    const done = expect(login.complete()).rejects.toThrow(/User said no/);
+    await visit(`${login.redirectUri}?error=access_denied&error_description=User%20said%20no`);
+    await done;
+  });
+
+  it("surfaces a rejected exchange with the status, redacted", async () => {
+    const fetchFn: typeof fetch = async () =>
+      new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
+    const state = new URL(login.url).searchParams.get("state")!;
+    const done = expect(login.complete()).rejects.toThrow(/HTTP 400/);
+    await visit(`${login.redirectUri}?code=c&state=${state}`);
+    await done;
+  });
+
+  it("cancel stops the listener, so a declined login leaves nothing running", async () => {
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), retry: { sleep: async () => {} } });
+    const login = await auth.startLoopbackLogin({ port: 0 });
+    login.cancel();
+    await expect(fetch(login.redirectUri)).rejects.toThrow();
   });
 });
 
@@ -261,28 +320,6 @@ describe("opaque (non-JWT) access tokens", () => {
     const auth = new OpenAIChatGPTAuth({ store, fetchFn, now: () => now, retry: { sleep: async () => {} } });
     await auth.getAccessToken();
     expect(refreshes).toBe(0);
-  });
-});
-
-describe("device login hardening", () => {
-  it("fails fast when the usercode response carries no device_code", async () => {
-    const fetchFn: typeof fetch = async () => new Response(JSON.stringify({ user_code: "ABCD" }), { status: 200 });
-    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, retry: { sleep: async () => {} } });
-    await expect(auth.startDeviceLogin()).rejects.toThrow(/no device_code/);
-  });
-
-  it("sends the RFC 8628 grant_type when polling", async () => {
-    const bodies: string[] = [];
-    const fetchFn: typeof fetch = async (url, init) => {
-      if (String(url).endsWith("/usercode")) {
-        return new Response(JSON.stringify({ device_code: "d", user_code: "C", interval: 0, expires_in: 900 }), { status: 200 });
-      }
-      bodies.push(String(init!.body));
-      return new Response(JSON.stringify({ access_token: "a", refresh_token: "r" }), { status: 200 });
-    };
-    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore(), fetchFn, sleep: async () => {}, retry: { sleep: async () => {} } });
-    await (await auth.startDeviceLogin()).complete();
-    expect(JSON.parse(bodies[0]!).grant_type).toBe("urn:ietf:params:oauth:grant-type:device_code");
   });
 });
 

@@ -11,6 +11,7 @@ export * from "./providers/anthropic.js";
 export * from "./providers/openai.js";
 export * from "./providers/openai-chatgpt.js";
 export * from "./providers/openai-chatgpt-auth.js";
+export * from "./providers/oauth-loopback.js";
 export * from "./providers/retry.js";
 export * from "./tools/index.js";
 export * from "./mcp/index.js";
