@@ -16,7 +16,7 @@ import {
   type Pricing,
   type Session,
 } from "@agentkitai/agentrig-core";
-import { renderEvent } from "./render.js";
+import { AssistantText, renderChatEvent, renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
@@ -43,6 +43,8 @@ export const DEFAULT_SESSIONS_DIR = ".agentrig/raw/sessions";
 export interface RunOptions extends AgentBuildOptions {
   root: string;
   json?: boolean;
+  /** Show the raw event trace instead of the conversation. `--json` is unaffected. */
+  verbose?: boolean;
   headless?: boolean;
   resume?: string;
   system?: string;
@@ -204,14 +206,28 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   const onSigint = (): void => session.control.abort();
   process.on("SIGINT", onSigint);
   try {
+    const assistant = new AssistantText();
     for await (const e of session.events) {
       if (opts.json === true) {
         console.log(JSON.stringify(e));
         // machine consumers read stdout; humans tailing stderr still deserve fatal errors
         if (e.type === "error" && e.fatal) console.error(`fatal: ${e.message}`);
-      } else if (e.type !== "model.delta") {
-        console.log(renderEvent(e));
+        continue;
       }
+      // the model's reply, gathered from the per-token deltas and printed once per turn. Without
+      // this the answer was never printed at all: the deltas were skipped and nothing else
+      // carries the text.
+      const reply = assistant.push(e);
+      if (reply !== null) console.log(reply);
+      if (e.type === "model.delta") continue;
+
+      if (opts.verbose === true) {
+        console.log(renderEvent(e));
+        continue;
+      }
+      // a person asked a question; `turn.start` and `model.request` are not an answer
+      const line = renderChatEvent(e);
+      if (line !== null) console.log(line);
     }
     const summary = await session.done;
     if (summary.error !== undefined) console.error(summary.error);

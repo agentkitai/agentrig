@@ -7,7 +7,7 @@ import type {
   Session,
   Signal,
 } from "@agentkitai/agentrig-core";
-import { renderEvent } from "../render.js";
+import { AssistantText, renderChatEvent, renderEvent } from "../render.js";
 import { helpText, parseCommand, type TuiCommand } from "./commands.js";
 
 /**
@@ -21,7 +21,7 @@ import { helpText, parseCommand, type TuiCommand } from "./commands.js";
 export interface TuiLine {
   key: number;
   text: string;
-  tone: "event" | "you" | "system" | "error";
+  tone: "event" | "you" | "system" | "error" | "assistant";
 }
 
 export interface PendingPermission {
@@ -42,6 +42,10 @@ export interface TuiState {
   signals: Signal[];
   sessionId: string | null;
   turns: number;
+  /** The reply being streamed, shown live and committed when the turn ends. */
+  streaming: string;
+  /** Whether the raw event trace is shown as well as the conversation. */
+  verbose: boolean;
 }
 
 export interface TuiControllerOptions {
@@ -70,8 +74,11 @@ export class TuiController {
     signals: [],
     sessionId: null,
     turns: 0,
+    streaming: "",
+    verbose: false,
   };
   private listeners = new Set<(s: TuiState) => void>();
+  private readonly assistant = new AssistantText();
   private session: Session | null = null;
   /** Requests waiting behind the one on screen. */
   private readonly queue: PendingPermission[] = [];
@@ -238,6 +245,17 @@ export class TuiController {
         if (cmd.id === "") this.print("usage: /resume <session-id>", "error");
         else await this.start("Continue the task.", { resume: cmd.id });
         return true;
+      case "verbose": {
+        const verbose = !this.state.verbose;
+        this.set({ verbose });
+        this.print(
+          verbose
+            ? "verbose: showing the raw event trace as well as the conversation"
+            : "verbose: off — showing the conversation only",
+          "system",
+        );
+        return true;
+      }
       case "unknown":
         this.print(`unknown command ${cmd.name === "" ? "/" : `/${cmd.name}`}\n${helpText()}`, "error");
         return true;
@@ -307,11 +325,29 @@ export class TuiController {
   }
 
   private consume(e: HarnessEvent): void {
-    // model.delta is per-token; rendering each as its own line would drown everything else
-    if (e.type === "model.delta") return;
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
     if (e.type === "turn.end") this.set({ turns: e.n });
-    this.print(renderEvent(e), e.type === "error" ? "error" : "event");
+
+    // The reply is the point of the whole exercise. `model.delta` is per-token, so it streams
+    // into a live line rather than one printed line per token, and is committed when its turn
+    // ends. Dropping it outright — which both surfaces used to do — meant the agent never showed
+    // an answer at all.
+    const finished = this.assistant.push(e);
+    if (e.type === "model.delta") {
+      this.set({ streaming: this.assistant.pending });
+      return;
+    }
+    if (finished !== null) {
+      this.print(finished, "assistant");
+      this.set({ streaming: "" });
+    }
+
+    if (this.state.verbose) {
+      this.print(renderEvent(e), e.type === "error" ? "error" : "event");
+      return;
+    }
+    const line = renderChatEvent(e);
+    if (line !== null) this.print(line, e.type === "error" ? "error" : "event");
   }
 }

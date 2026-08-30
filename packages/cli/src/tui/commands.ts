@@ -13,6 +13,7 @@ export type TuiCommand =
   | { kind: "dream"; auto: boolean }
   | { kind: "supervisor" }
   | { kind: "plan" }
+  | { kind: "verbose" }
   | { kind: "resume"; id: string }
   | { kind: "unknown"; name: string };
 
@@ -29,6 +30,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "dream", args: "[--auto]", summary: "run the scheduled lint; reports unless --auto" },
   { name: "supervisor", summary: "show what the supervisor has signalled this session" },
   { name: "plan", summary: "show the agent's current plan" },
+  { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "abort", summary: "stop the running turn" },
   { name: "quit", summary: "exit (ctrl-c also works)" },
@@ -70,6 +72,9 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "supervisor" };
     case "plan":
       return { kind: "plan" };
+    case "verbose":
+    case "trace":
+      return { kind: "verbose" };
     case "resume":
       return { kind: "resume", id: args };
     default:

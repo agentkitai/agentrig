@@ -901,6 +901,24 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
   the project has instructions for should be able to load them.
 
+## The output surfaces (from the first real interactive run, 2026-08-30)
+
+- **Neither surface ever showed the model's reply.** The TUI skipped `model.delta` as per-token
+  noise and `agentrig run` skipped it for the same reason — and nothing else carries the text, so
+  a session that answered a question printed `session.start`, `turn.start`, `model.request`,
+  `model.response`, `turn.end`, `session.end` and no answer. The one live run that *looked* like
+  it worked only did so because the answer happened to appear inside a `tool.result`.
+  `AssistantText` now gathers the deltas and emits them once per turn; the TUI also streams the
+  turn in progress live and commits it when the turn ends.
+- **The default view is the conversation, not the trace.** `renderChatEvent` shows the reply, what
+  the agent did (`⚒ bash pnpm test`), files it changed, plan progress, supervisor signals, errors
+  and anything that ended badly — and hides session/turn/model/permission-decision/compaction
+  plumbing. `renderEvent` is unchanged and is what `--verbose` (and the TUI's `/verbose`) shows.
+  `--json` is untouched: machine consumers still get every event.
+- The two views are deliberately separate functions over the same event stream rather than a
+  filter over rendered strings, so what a person reads and what a debugger reads can diverge in
+  shape without either drifting from the log.
+
 ## Windows notes (from the first real desktop run, 2026-08-30)
 
 - **CRLF was a silent edit-breaker.** `read_file` and `grep` split on `\n` only, so on a CRLF
