@@ -99,7 +99,8 @@ Built-ins for v1: `bash`, `read_file`, `edit_file` (search/replace), `write_file
 ### 2.4 Permissions
 
 ```ts
-interface PermissionRequest { tool: string; input: unknown; class: PermissionClass; cwd: string }
+interface PermissionRequest { tool: string; input: unknown; class: PermissionClass; cwd: string;
+                              paths?: string[]; origin?: string /* M7: a subagent's ask, routed to its parent */ }
 type Decision = 'allow' | 'deny' | 'ask';
 interface PermissionPolicy { decide(req: PermissionRequest): Promise<Decision> }
 ```
@@ -127,7 +128,8 @@ type HarnessEvent =
   | { type: 'permission.request'; req: PermissionRequest } | { type: 'permission.decision'; d: Decision }
   | { type: 'context.compact'; before: number; after: number }
   | { type: 'plan.updated'; items: PlanItem[] }
-  | { type: 'subagent.spawn'; id: string; task: string } | { type: 'subagent.end'; id: string }
+  | { type: 'subagent.spawn'; id: string; task: string }
+  | { type: 'subagent.end'; id: string; reason?: 'done' | 'aborted' | 'error' | 'budget' }
   | { type: 'steer'; source: 'user' | 'supervisor'; message: string }
   | { type: 'memory.note'; scope: 'project' | 'global'; path: string }
   | { type: 'supervisor.signal'; signal: Signal }
@@ -157,7 +159,8 @@ interface Session {
   done: Promise<SessionSummary>;
 }
 
-interface Agent { run(task: string, opts?: { cwd?: string; resume?: string }): Session }
+interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?: string }): Session }
+// `id` is a pre-allocated `store.create()` id, so a caller can log a session before it starts
 ```
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.

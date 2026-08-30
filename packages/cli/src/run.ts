@@ -110,7 +110,8 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
-    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}? (y/N) `);
+    const who = req.origin === undefined ? "" : ` for ${req.origin}`;
+    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);
     return /^y(es)?$/i.test(answer.trim()) ? "allow" : "deny";
   } finally {
     rl.close();

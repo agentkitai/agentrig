@@ -31,6 +31,12 @@ export const PermissionRequest = z.object({
   cwd: z.string(),
   /** Filesystem paths the call touches, as declared by the tool's `paths()`; absent when the tool declares none. */
   paths: z.array(z.string()).optional(),
+  /**
+   * M7: who is asking, when it is not the session the user is watching — a subagent routes its
+   * asks through its parent's prompt, and answering "allow" for a child you cannot see is a
+   * different decision from answering it for yourself. Absent means the session itself.
+   */
+  origin: z.string().optional(),
 });
 export type PermissionRequest = z.infer<typeof PermissionRequest>;
 
@@ -106,7 +112,12 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("context.compact"), before: z.number().int(), after: z.number().int() }),
   z.object({ type: z.literal("plan.updated"), items: z.array(PlanItem) }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
-  z.object({ type: z.literal("subagent.end"), id: z.string() }),
+  z.object({
+    type: z.literal("subagent.end"),
+    id: z.string(),
+    /** M7: how the child finished. Optional so logs written before this still parse. */
+    reason: z.enum(["done", "aborted", "error", "budget"]).optional(),
+  }),
   z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string() }),
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),

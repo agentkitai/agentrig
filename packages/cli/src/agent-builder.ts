@@ -5,6 +5,10 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  discoverSkills,
+  skillsInjection,
+  skillTool,
+  subagentTool,
   type Agent,
   type AnyTool,
   type Budget,
@@ -13,6 +17,9 @@ import {
   type PermissionRequest,
   type Decision,
   type Pricing,
+  type PermissionPolicy,
+  type Skill,
+  type SubagentOptions,
 } from "@agentkitai/agentrig-core";
 import {
   dreamOnSessionEnd,
@@ -59,6 +66,13 @@ export interface AgentBuildOptions extends ProviderOptions {
   dreamStructuralOnly?: boolean;
   /** Path to a JSON file of MCP servers (PLAN §6's MCP client row). */
   mcpConfig?: string;
+  /** Give the agent a `subagent` tool for context-isolated sub-tasks. */
+  subagents?: boolean;
+  subagentMaxTurns?: string;
+  /** How many subagents one session may run. The backstop when tokens are not metered. */
+  subagentMaxChildren?: string;
+  /** Directories to discover markdown skills in (repeatable). */
+  skills?: string[];
 }
 
 const McpServerEntry = z.object({
@@ -156,6 +170,81 @@ export interface AgentExtras {
   onHookDone?: (message: string) => void;
 }
 
+
+export interface SubagentWiring {
+  opts: AgentBuildOptions;
+  extras: AgentExtras;
+  budget: Budget;
+  pricing?: Pricing;
+  provider: ModelProvider;
+  permissionPolicy: PermissionPolicy;
+  skills: Skill[];
+  maxTokensPerTurn: number;
+  /** The tools a child inherits, minus skills — rebuilt per child so nothing is shared by accident. */
+  childTools: () => AnyTool[];
+}
+
+/**
+ * How a child is bounded and what it inherits. Exported because this is the whole of the
+ * subagent wiring, and every property worth having is a property of this object: a child that
+ * can spawn is a fork bomb, a child with no budget is unbounded spend, and a child whose asks
+ * are answered by nobody is a `--subagents` that cannot write a file.
+ */
+export function subagentOptions(w: SubagentWiring): SubagentOptions {
+  // A child is a separate session with a separate meter, so the parent's budget cannot bind it.
+  // The bound is stated here instead: all of one session's children together may not spend more
+  // than the parent's own budget, so each child gets a SHARE of it. Giving each child the whole
+  // allowance would let one spawn spend it, and — since the pool reserves a child's cap when it
+  // starts — would make the first subagent the only one.
+  const maxChildren = positiveNumber("--subagent-max-children", w.opts.subagentMaxChildren ?? "8");
+  const childBudget: Omit<Budget, "maxTurns"> = {};
+  if (w.budget.maxTokens !== undefined) {
+    childBudget.maxTokens = Math.max(1, Math.floor(w.budget.maxTokens / maxChildren));
+  }
+  if (w.budget.maxUsd !== undefined) childBudget.maxUsd = w.budget.maxUsd / maxChildren;
+  // wall clock, not an amount to divide: a child may take as long as the parent has left
+  if (w.budget.maxMinutes !== undefined) childBudget.maxMinutes = w.budget.maxMinutes;
+
+  return {
+    createAgent,
+    maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
+    childBudget,
+    ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
+    maxChildren,
+    ...(w.budget.maxTokens === undefined ? {} : { maxChildTokens: w.budget.maxTokens }),
+    ...(w.budget.maxUsd === undefined ? {} : { maxChildUsd: w.budget.maxUsd }),
+    // a child gets the parent's provider, tools and permissions, but NOT the ability to spawn
+    // its own — `subagentTool` builds the child's subagent tool itself, at depth + 1
+    childConfig: () => ({
+      provider: w.provider,
+      // skills too: a subagent doing a task the project has instructions for should be able to
+      // load them, and the catalogue costs one line each
+      tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
+      permissions: w.permissionPolicy,
+      // The same policy object, and the same asker. A child that could do MORE than its parent
+      // is a permission bypass; a child that can do LESS is the failure this originally had —
+      // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
+      // file, was never prompted about it, and could not say why. `origin` is set on the config
+      // rather than wrapped around `onAsk`, so the emitted `permission.request` carries it too:
+      // the prompt, the log and `sessions show` then agree on who asked.
+      origin: "subagent",
+      ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
+      systemPrompt: (ctx: { cwd: string }) =>
+        [
+          "You are a subagent. You have been given one self-contained task and none of the",
+          "parent conversation. Do the task, then reply with the answer and no tool calls —",
+          "your final message is all the parent receives.",
+          `Working directory: ${ctx.cwd}`,
+          skillsInjection(w.skills),
+        ]
+          .filter((line) => line !== "")
+          .join("\n"),
+      store: new SessionStore({ root: w.opts.root }),
+      maxTokensPerTurn: w.maxTokensPerTurn,
+    }),
+  };
+}
+
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
@@ -199,6 +288,20 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   }
 
   async function assemble(): Promise<BuiltAgent> {
+  // one policy object, shared by parent and children: a subagent that could do more than its
+  // parent would be a permission bypass with extra steps
+  const permissionPolicy = new RulePolicy([
+    ...toRules(opts.deny, "deny"),
+    ...toRules(opts.allow, "allow"),
+    ...(memoryToolset.length === 0
+      ? []
+      : [
+          { tool: "memory_search", decision: "allow" as const },
+          { tool: "memory_read", decision: "allow" as const },
+        ]),
+    ...defaultRules,
+  ]);
+
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend();
@@ -226,26 +329,48 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     );
   }
 
+  // The subagent tool needs an agent config to build children from, and that config is the one
+  // being built — so it is added after, closing over a factory rather than a value.
+  // Skills (PLAN §6): the catalogue rides in the system prompt one line each, and the body is
+  // fetched on demand — the same index-first shape as the wiki, for the same reason. Twenty
+  // skills of a thousand words each would cost more context than the task.
+  const skills = opts.skills === undefined || opts.skills.length === 0
+    ? []
+    : await discoverSkills({
+        roots: opts.skills,
+        onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
+      });
+
+  const tools: AnyTool[] = [...builtinTools(), ...memoryToolset, ...mcpTools];
+  if (skills.length > 0) tools.push(skillTool(skills));
+  if (opts.subagents === true) {
+    tools.push(
+      subagentTool(
+        subagentOptions({
+          opts,
+          extras,
+          budget,
+          ...(pricing === undefined ? {} : { pricing }),
+          provider,
+          permissionPolicy,
+          skills,
+          maxTokensPerTurn,
+          childTools: () => [...builtinTools(), ...memoryToolset, ...mcpTools],
+        }),
+      ),
+    );
+  }
+
   const agent = createAgent({
     provider,
-    tools: [...builtinTools(), ...memoryToolset, ...mcpTools],
+    tools,
     // deny rules first so an explicit deny always wins
-    permissions: new RulePolicy([
-      ...toRules(opts.deny, "deny"),
-      ...toRules(opts.allow, "allow"),
-      // memory reads are confined to the wiki root by the store, not by cwd, so they cannot be
-      // expressed as a cwdOnly rule; allow them by tool name instead
-      ...(memoryToolset.length === 0
-        ? []
-        : [
-            { tool: "memory_search", decision: "allow" as const },
-            { tool: "memory_read", decision: "allow" as const },
-          ]),
-      ...defaultRules,
-    ]),
+    permissions: permissionPolicy,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) =>
-      [opts.system ?? defaultSystemPrompt(ctx.cwd), memoryIndex].filter((s) => s !== "").join("\n\n"),
+      [opts.system ?? defaultSystemPrompt(ctx.cwd), skillsInjection(skills), memoryIndex]
+        .filter((s) => s !== "")
+        .join("\n\n"),
     store: new SessionStore({ root: opts.root }),
     ...(hooks.length === 0 ? {} : { hooks }),
     budget,

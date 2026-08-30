@@ -595,6 +595,112 @@ describe("compaction lifecycle", () => {
   });
 });
 
+describe("who is asking (PermissionRequest.origin)", () => {
+  it("puts the session's origin on every permission.request it emits, not just on the prompt", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } }, usage(1, 1), stop("tool_use")],
+      [{ type: "text_delta", text: "done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const asked: Array<{ origin?: string }> = [];
+    const session = createAgent(
+      makeConfig(provider, {
+        origin: "subagent",
+        permissions: new RulePolicy([{ class: "read", decision: "ask" }]),
+        onAsk: async (req) => {
+          asked.push(req);
+          return "allow";
+        },
+      }),
+    ).run("go", { cwd: "/w" });
+    const events = await collect(session);
+    await session.done;
+
+    // the prompt sees it...
+    expect(asked[0]!.origin).toBe("subagent");
+    // ...and so does the log, so `sessions show` and the renderer agree with what the human saw
+    const req = events.find((e) => e.type === "permission.request") as { req: { origin?: string } };
+    expect(req.req.origin).toBe("subagent");
+  });
+
+  it("omits origin entirely for an ordinary session", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } }, usage(1, 1), stop("tool_use")],
+      [{ type: "text_delta", text: "done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const session = createAgent(makeConfig(provider)).run("go", { cwd: "/w" });
+    const events = await collect(session);
+    await session.done;
+    const req = events.find((e) => e.type === "permission.request") as { req: { origin?: string } };
+    expect(req.req.origin).toBeUndefined();
+  });
+});
+
+describe("a pre-allocated session id", () => {
+  it("run() uses an id the caller allocated, so the caller can log the session before it starts", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    const config = makeConfig(provider, { store: new SessionStore({ root }) });
+    const id = config.store.create();
+    // the subagent tool records `subagent.spawn` before the child writes anything
+    const session = createAgent(config).run("go", { cwd: "/w", id });
+    await collect(session);
+    const summary = await session.done;
+
+    expect(session.id).toBe(id);
+    expect(summary.id).toBe(id);
+    const events: HarnessEvent[] = [];
+    for await (const e of config.store.read(id)) events.push(e);
+    expect(events[0]).toMatchObject({ sessionId: id, type: "session.start" });
+  });
+
+  it("rejects an id that is not a session id, rather than letting it reach the filesystem", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    expect(() => createAgent(makeConfig(provider)).run("go", { cwd: "/w", id: "../../etc/passwd" })).toThrow(
+      /invalid session id/,
+    );
+  });
+
+  it("refuses an id a live session is already writing, rather than corrupting its log", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "echo", input: { text: "hi" } }, usage(1, 1), stop("tool_use")],
+      [{ type: "text_delta", text: "done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, { store: new SessionStore({ root }) });
+    const id = config.store.create();
+    const first = createAgent(config).run("go", { cwd: "/w", id });
+    // two runs appending to one log restart `seq`, and the log can then never be read back
+    expect(() => createAgent(config).run("also go", { cwd: "/w", id })).toThrow(/already being written/);
+
+    await collect(first);
+    await first.done;
+    // ...and the claim is released when the session ends, so the id is reusable for a resume
+    const events: HarnessEvent[] = [];
+    for await (const e of config.store.read(id)) events.push(e);
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i));
+  });
+
+  it("never hands out an id it has already used", () => {
+    let n = 0;
+    // a store that keeps repeating itself: 8 hex chars collide by birthday around 77k sessions,
+    // and one collision makes a log unreadable
+    const store = new SessionStore({ root, newId: () => ["a", "a", "a", "b"][n++] ?? "c" });
+    expect(store.create()).toBe("a");
+    expect(store.create()).toBe("b");
+  });
+
+  it("resume still wins: an id alongside it is ignored, not a second session", async () => {
+    const first = new FakeProvider([[{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")]]);
+    const config = makeConfig(first);
+    const s1 = createAgent(config).run("go", { cwd: "/w" });
+    await collect(s1);
+    await s1.done;
+
+    const second = new FakeProvider([[{ type: "text_delta", text: "two" }, usage(1, 1), stop("end_turn")]]);
+    const s2 = createAgent({ ...config, provider: second }).run("again", { resume: "sess1", id: "other" });
+    await collect(s2);
+    expect((await s2.done).id).toBe("sess1");
+  });
+});
+
 describe("resume", () => {
   it("continues a session from its snapshot: same log, restored messages, appended task", async () => {
     const first = new FakeProvider([

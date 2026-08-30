@@ -1,0 +1,689 @@
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { z } from "zod";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  createAgent,
+  RulePolicy,
+  SessionStore,
+  subagentTool,
+  type AgentConfig,
+  type AnyTool,
+  type HarnessEvent,
+  type ModelEvent,
+  type ModelProvider,
+  type Budget,
+  type Pricing,
+} from "@agentkitai/agentrig-core";
+
+/** Each call to stream() consumes the next scripted turn. Shared by parent and child. */
+class ScriptedProvider implements ModelProvider {
+  readonly id = "fake";
+  readonly model = "fake-1";
+  readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
+  constructor(private readonly turns: ModelEvent[][]) {}
+  async *stream(): AsyncIterable<ModelEvent> {
+    yield* this.turns.shift() ?? [{ type: "stop", reason: "end_turn" }];
+  }
+}
+
+const usage = (i: number, o: number): ModelEvent => ({ type: "usage", usage: { input: i, output: o } });
+const stop = (r: "end_turn" | "tool_use"): ModelEvent => ({ type: "stop", reason: r });
+const say = (text: string): ModelEvent => ({ type: "text_delta", text });
+const spawn = (task: string, label?: string): ModelEvent[] => [
+  { type: "tool_use", id: "s1", name: "subagent", input: { task, ...(label === undefined ? {} : { label }) } },
+  usage(1, 1),
+  stop("tool_use"),
+];
+
+const echoTool = (): AnyTool => ({
+  name: "echo",
+  description: "echo",
+  inputSchema: z.object({ text: z.string() }),
+  permission: "read",
+  paths: () => [],
+  execute: async (i: { text: string }) => ({ output: i.text, display: `echo: ${i.text}` }),
+});
+
+let root: string;
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "agentrig-sub-"));
+});
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+/** Slow enough that an abort can land while the child is mid-tool. */
+const slowTool = (): AnyTool => ({
+  name: "echo",
+  description: "slow echo",
+  inputSchema: z.object({ text: z.string() }),
+  permission: "read",
+  paths: () => [],
+  execute: async (i: { text: string }, ctx) => {
+    await new Promise((r) => setTimeout(r, 60));
+    ctx.signal.throwIfAborted();
+    return { output: i.text, display: `echo: ${i.text}` };
+  },
+});
+
+interface HarnessOptions {
+  maxDepth?: number;
+  depth?: number;
+  slow?: boolean;
+  maxChildren?: number;
+  maxChildTokens?: number;
+  maxChildUsd?: number;
+  pricing?: Pricing;
+  childBudget?: Omit<Budget, "maxTurns">;
+  /** A budget on the config `childConfig()` returns — which the tool must NOT inherit. */
+  configBudget?: Budget;
+  /** Extra tools the caller's `childConfig()` hands the child. */
+  childExtraTools?: AnyTool[];
+  /** Every config `createAgent` was called with, in order: child, then grandchild. */
+  created?: AgentConfig[];
+}
+
+/** The tool alone, plus a context to drive it with — no parent agent between test and tool. */
+function bareTool(provider: ModelProvider, opts: HarnessOptions = {}) {
+  const tool = harnessTool(provider, opts);
+  const controller = new AbortController();
+  const emitted: Array<{ type: string }> = [];
+  const ctx = {
+    cwd: root,
+    sessionId: "parent",
+    emit: (e: { type: string }) => void emitted.push(e),
+    signal: controller.signal,
+  };
+  return { tool, ctx, controller, emitted };
+}
+
+function harnessTool(provider: ModelProvider, opts: HarnessOptions = {}) {
+  const childTool = opts.slow === true ? slowTool() : echoTool();
+  const allowAll = () =>
+    new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]);
+  const base = (): AgentConfig => ({
+    provider,
+    tools: [childTool, ...(opts.childExtraTools ?? [])],
+    permissions: allowAll(),
+    systemPrompt: "child",
+    store: new SessionStore({ root }),
+    maxTokensPerTurn: 100,
+    ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
+  });
+  return subagentTool({
+    createAgent: (config) => {
+      opts.created?.push(config);
+      return createAgent(config);
+    },
+    childConfig: base,
+    maxTurns: 5,
+    ...(opts.maxDepth === undefined ? {} : { maxDepth: opts.maxDepth }),
+    ...(opts.depth === undefined ? {} : { depth: opts.depth }),
+    ...(opts.maxChildren === undefined ? {} : { maxChildren: opts.maxChildren }),
+    ...(opts.maxChildTokens === undefined ? {} : { maxChildTokens: opts.maxChildTokens }),
+    ...(opts.maxChildUsd === undefined ? {} : { maxChildUsd: opts.maxChildUsd }),
+    ...(opts.pricing === undefined ? {} : { pricing: opts.pricing }),
+    ...(opts.childBudget === undefined ? {} : { childBudget: opts.childBudget }),
+  });
+}
+
+function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
+  const childTool = opts.slow === true ? slowTool() : echoTool();
+  const allowAll = () =>
+    new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]);
+  const base = (): AgentConfig => ({
+    provider,
+    tools: [childTool, ...(opts.childExtraTools ?? [])],
+    permissions: allowAll(),
+    systemPrompt: "child",
+    store: new SessionStore({ root }),
+    maxTokensPerTurn: 100,
+    ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
+  });
+  const tool = subagentTool({
+    createAgent: (config) => {
+      opts.created?.push(config);
+      return createAgent(config);
+    },
+    childConfig: base,
+    maxTurns: 5,
+    ...(opts.maxDepth === undefined ? {} : { maxDepth: opts.maxDepth }),
+    ...(opts.depth === undefined ? {} : { depth: opts.depth }),
+    ...(opts.maxChildren === undefined ? {} : { maxChildren: opts.maxChildren }),
+    ...(opts.maxChildTokens === undefined ? {} : { maxChildTokens: opts.maxChildTokens }),
+    ...(opts.maxChildUsd === undefined ? {} : { maxChildUsd: opts.maxChildUsd }),
+    ...(opts.pricing === undefined ? {} : { pricing: opts.pricing }),
+    ...(opts.childBudget === undefined ? {} : { childBudget: opts.childBudget }),
+  });
+  return createAgent({
+    provider,
+    tools: [childTool, tool],
+    permissions: allowAll(),
+    systemPrompt: "parent",
+    store: new SessionStore({ root }),
+    budget: { maxTurns: 10 },
+    maxTokensPerTurn: 100,
+  });
+}
+
+async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promise<HarnessEvent[]> {
+  const out: HarnessEvent[] = [];
+  for await (const e of session.events) out.push(e);
+  return out;
+}
+
+describe("subagents are context isolation, not parallelism", () => {
+  it("the parent receives the child's answer and nothing else", async () => {
+    const provider = new ScriptedProvider([
+      spawn("count the files"),
+      // the child's turns
+      [say("I looked at forty files and the answer is 42."), usage(1, 1), stop("end_turn")],
+      // back in the parent
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { display: string };
+    expect(result.display).toContain("the answer is 42");
+  });
+
+  it("the child's transcript stays in the CHILD's log", async () => {
+    const provider = new ScriptedProvider([
+      spawn("go and look"),
+      [
+        { type: "tool_use", id: "c1", name: "echo", input: { text: "child noise" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [say("done"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const parentEvents = await collect(session);
+    const summary = await session.done;
+
+    // forwarding the child's events would defeat the isolation that is the whole reason to spawn
+    expect(parentEvents.some((e) => e.type === "tool.result" && (e as { display: string }).display.includes("child noise"))).toBe(false);
+
+    const spawned = parentEvents.find((e) => e.type === "subagent.spawn") as { id: string };
+    const store = new SessionStore({ root });
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of store.read(spawned.id)) childEvents.push(e);
+    // ...and it really is in the child's own log
+    expect(childEvents.some((e) => e.type === "tool.result" && (e as { display: string }).display.includes("child noise"))).toBe(true);
+    expect(spawned.id).not.toBe(summary.id);
+  });
+
+  it("emits spawn and end, with how the child finished", async () => {
+    const provider = new ScriptedProvider([
+      spawn("a task", "counting files"),
+      [say("42"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const start = events.find((e) => e.type === "subagent.spawn") as { task: string };
+    const end = events.find((e) => e.type === "subagent.end") as { reason?: string };
+    // the label is what makes a trajectory readable; the full task would be a paragraph
+    expect(start.task).toBe("counting files");
+    expect(end.reason).toBe("done");
+  });
+
+  it("falls back to the task when no label is given", async () => {
+    const provider = new ScriptedProvider([
+      spawn("the whole task text"),
+      [say("ok"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+    expect((events.find((e) => e.type === "subagent.spawn") as { task: string }).task).toBe("the whole task text");
+  });
+});
+
+describe("a subagent cannot run away", () => {
+  it("refuses to nest past the depth limit — and creates nothing", async () => {
+    const provider = new ScriptedProvider([spawn("recurse"), [usage(1, 1), stop("end_turn")]]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { depth: 1, maxDepth: 1, created }).run("do it", { cwd: root });
+    const events = await collect(session);
+    const summary = await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { ok: boolean; display: string };
+    // unbounded recursion here is a fork bomb with a token budget attached
+    expect(result.ok).toBe(false);
+    expect(result.display).toContain("may not nest");
+    expect(events.some((e) => e.type === "subagent.spawn")).toBe(false);
+    // the point of the guard is that no child EXISTS, not that an error was returned: a refusal
+    // issued after the session was created and left running would satisfy the assertions above
+    expect(created).toEqual([]);
+    const logs = (await readdir(root)).filter((f) => f.endsWith(".jsonl"));
+    expect(logs).toEqual([`${summary.id}.jsonl`]);
+  });
+
+  it("threads depth itself, so the child's own subagent tool is one level deeper", async () => {
+    // parent spawns a child; the child spawns a grandchild; the grandchild has no subagent tool
+    const provider = new ScriptedProvider([
+      spawn("level 1"),
+      spawn("level 2"),
+      [say("bottom"), usage(1, 1), stop("end_turn")],
+      [say("middle"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 2, created }).run("do it", { cwd: root });
+    await collect(session);
+    await session.done;
+
+    expect(created).toHaveLength(2);
+    // `depth` is threaded HERE, not by the caller: a guard that only fires when the caller
+    // remembers to increment a counter never fires at all
+    expect(created[0]!.tools.map((t) => t.name)).toContain("subagent");
+    expect(created[1]!.tools.map((t) => t.name)).not.toContain("subagent");
+  });
+
+  it("replaces a subagent tool the caller's childConfig supplied", async () => {
+    const forged: AnyTool = {
+      name: "subagent",
+      description: "an unbounded one, built at depth 0",
+      inputSchema: z.object({ task: z.string() }),
+      permission: "exec",
+      execute: async () => ({ output: null, display: "" }),
+    } as AnyTool;
+    const provider = new ScriptedProvider([
+      spawn("go"),
+      [say("ok"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 1, childExtraTools: [forged], created }).run("do it", {
+      cwd: root,
+    });
+    await collect(session);
+    await session.done;
+
+    // otherwise one line in a caller's wiring turns the depth limit back into a fork bomb
+    expect(created[0]!.tools.map((t) => t.name)).not.toContain("subagent");
+  });
+
+  it("states the child's budget rather than inheriting the config's", async () => {
+    const provider = new ScriptedProvider([
+      spawn("go"),
+      [say("ok"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, {
+      // a caller whose childConfig carries the parent's budget must not give it to EVERY child
+      configBudget: { maxTurns: 99, maxTokens: 5_000_000, maxUsd: 50, maxMinutes: 600 },
+      childBudget: { maxTokens: 1000 },
+      created,
+    }).run("do it", { cwd: root });
+    await collect(session);
+    await session.done;
+
+    expect(created[0]!.budget).toEqual({ maxTurns: 5, maxTokens: 1000 });
+  });
+
+  it("children of one session share a pool, so spawning cannot go on forever", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(1, 1), stop("end_turn")],
+      spawn("two"),
+      [say("b"), usage(1, 1), stop("end_turn")],
+      spawn("three"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxChildren: 2, created }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(2);
+    expect(created).toHaveLength(2);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ ok: boolean; display: string }>;
+    expect(results.at(-1)!.ok).toBe(false);
+    expect(results.at(-1)!.display).toContain("the limit");
+  });
+
+  it("meters what children actually spent, not just how many there were", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(40, 40), stop("end_turn")],
+      spawn("two"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, { maxChildTokens: 50 }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    // a parent's own meter never sees a child's tokens — the child is a separate session
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(1);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("token allowance");
+  });
+
+  it("meters children in USD when pricing is given", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(1000, 1000), stop("end_turn")],
+      spawn("two"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, {
+      maxChildUsd: 0.001,
+      pricing: { inputUsdPerMTok: 1000, outputUsdPerMTok: 1000 },
+    }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(1);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("USD allowance");
+  });
+
+  it("a child that exhausts its own budget is reported as an error, not as an answer", async () => {
+    const provider = new ScriptedProvider([
+      spawn("loop forever"),
+      // the child keeps calling a tool and never finishes
+      ...Array.from({ length: 8 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "again" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { ok: boolean; display: string };
+    expect(result.ok).toBe(false);
+    expect(result.display).toMatch(/budget/);
+    expect((events.find((e) => e.type === "subagent.end") as { reason?: string }).reason).toBe("budget");
+  });
+
+  it("a child gets its own smaller budget, not the parent's", async () => {
+    // the parent allows 10 turns; the tool caps the child at 5
+    const provider = new ScriptedProvider([
+      spawn("spin"),
+      ...Array.from({ length: 8 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const store = new SessionStore({ root });
+    let turns = 0;
+    for await (const e of store.read(spawned.id)) if (e.type === "turn.end") turns += 1;
+    expect(turns).toBeLessThanOrEqual(5);
+  });
+
+  it("the pool bounds the TREE, not one level of it", async () => {
+    // parent -> child -> grandchild, with maxChildren 2: the whole tree is 2 descendants, not 2
+    // per level. A pool held per level made the bound `maxChildren ** maxDepth`.
+    const provider = new ScriptedProvider([
+      spawn("level 1"),
+      spawn("level 2"),
+      [say("bottom"), usage(1, 1), stop("end_turn")],
+      // the child tries a second grandchild; the parent's pool is already full
+      spawn("level 2 again"),
+      [say("middle"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 2, maxChildren: 2, created }).run("do it", { cwd: root });
+    await collect(session);
+    await session.done;
+
+    expect(created).toHaveLength(2);
+  });
+
+  it("a grandchild's spend is charged to every ancestor", async () => {
+    const provider = new ScriptedProvider([
+      spawn("level 1"),
+      spawn("level 2"),
+      // the grandchild burns the allowance
+      [say("bottom"), usage(60, 60), stop("end_turn")],
+      [say("middle"), usage(1, 1), stop("end_turn")],
+      // the parent tries again; the tokens its grandchild spent are its own to account for
+      spawn("another child"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 2, maxChildren: 5, maxChildTokens: 100, created }).run(
+      "do it",
+      { cwd: root },
+    );
+    const events = await collect(session);
+    await session.done;
+
+    expect(created).toHaveLength(2);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("token allowance");
+  });
+
+  it("charges a child's cap at spawn time, so two spawns in flight cannot both pass the gate", async () => {
+    // the agent loop runs tool calls sequentially today, but `parallelTools` is advertised and
+    // this tool is public API: a gate read before an await and written after it is not a gate
+    const provider = new ScriptedProvider([
+      [say("a"), usage(0, 0), stop("end_turn")],
+      [say("b"), usage(0, 0), stop("end_turn")],
+    ]);
+    const { tool, ctx } = bareTool(provider, { maxChildTokens: 100, childBudget: { maxTokens: 100 }, slow: true });
+    const [first, second] = await Promise.all([
+      tool.execute({ task: "one" }, ctx),
+      tool.execute({ task: "two" }, ctx),
+    ]);
+
+    const displays = [first.display, second.display];
+    expect(displays.filter((d) => d.includes("token allowance"))).toHaveLength(1);
+    // exactly one ran; charging only on completion let both through
+    expect(displays.filter((d) => d === "a" || d === "b")).toHaveLength(1);
+  });
+
+  it("gives the reservation back when the child spends less than its cap", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(1, 1), stop("end_turn")],
+      spawn("two"),
+      [say("b"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, { maxChildTokens: 100, childBudget: { maxTokens: 90 } }).run("do it", {
+      cwd: root,
+    });
+    const events = await collect(session);
+    await session.done;
+
+    // reserving without reconciling would make every child after the first impossible
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(2);
+  });
+
+  it("defaults to eight children per session, with no wiring required", async () => {
+    const provider = new ScriptedProvider([
+      ...Array.from({ length: 8 }, () => [
+        spawn("go"),
+        [say("ok"), usage(1, 1), stop("end_turn")],
+      ]).flat(),
+      spawn("one too many"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    // an embedder that sets no limit at all still gets one
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(8);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("the limit");
+  });
+
+  it("the parent's abort reaches the child", async () => {
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    // a slow child, so the abort lands while it is still working rather than after it finished
+    const session = harness(provider, { slow: true }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    const summary = await session.done;
+
+    // aborting a session must not leave its children running and billing
+    expect(summary.reason).toBe("aborted");
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string } | undefined;
+    expect(spawned).toBeDefined();
+    const store = new SessionStore({ root });
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of store.read(spawned!.id)) childEvents.push(e);
+    const end = childEvents.at(-1) as { type: string; reason?: string };
+    expect(end.type).toBe("session.end");
+    expect(end.reason).toBe("aborted");
+  });
+
+  it("records the child's end in the parent's log even when the parent is the one aborting", async () => {
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, { slow: true }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    await session.done;
+
+    // a spawn with no matching end leaves a trace that can never say whether the child stopped
+    expect(events.some((e) => e.type === "subagent.spawn")).toBe(true);
+    const end = events.find((e) => e.type === "subagent.end") as { reason?: string } | undefined;
+    expect(end?.reason).toBe("aborted");
+  });
+
+  it("keeps the answer when the child's last turn is a tool call, not a message", async () => {
+    const provider = new ScriptedProvider([
+      spawn("answer then tidy up"),
+      // a child that states its conclusion and THEN calls one more tool is entirely normal
+      [
+        say("THE ANSWER IS 42"),
+        { type: "tool_use" as const, id: "c1", name: "echo", input: { text: "tidy" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { display: string };
+    // keeping only the LAST turn's text told the parent the child had said nothing at all
+    expect(result.display).toContain("THE ANSWER IS 42");
+  });
+
+  it("does not pass a preamble off as a conclusion", async () => {
+    const provider = new ScriptedProvider([
+      spawn("do the work"),
+      // an opening remark, then real work, then a silent end: the remark is NOT the answer
+      [
+        say("Let me start by reading the files."),
+        { type: "tool_use" as const, id: "c1", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [
+        { type: "tool_use" as const, id: "c2", name: "echo", input: { text: "y" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { display: string };
+    // keeping the text is right — reporting it as the final word is not
+    expect(result.display).toContain("Let me start by reading the files.");
+    expect(result.display).toContain("final turn carried no message");
+  });
+
+  it("keeps what an aborted child said in the turn it never finished", async () => {
+    // driven through the tool directly: when the PARENT is what aborted, its own tool result is
+    // the abort, so this path is only visible to the tool's caller
+    const provider = new ScriptedProvider([
+      [
+        say("PARTIAL FINDING: the bug is in parser.ts"),
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      ...Array.from({ length: 10 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const { tool, ctx, controller } = bareTool(provider, { slow: true });
+    const running = tool.execute({ task: "long job" }, ctx);
+    // abort while the FIRST turn is still mid-tool, so that turn never reaches `turn.end` and the
+    // text it carried exists only in the buffer the post-loop promotion reads
+    setTimeout(() => controller.abort(), 25);
+    const result = await running;
+
+    expect(result.isError).toBe(true);
+    // an interrupted child still reports what it had found: `turn.end` is emitted even for the
+    // turn the abort landed in, so the text is not lost with it
+    expect(result.display).toContain("PARTIAL FINDING");
+  });
+
+  it("a child that says nothing is reported as such rather than as an empty answer", async () => {
+    const provider = new ScriptedProvider([
+      spawn("say nothing"),
+      [usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+    const result = events.find((e) => e.type === "tool.result") as { display: string };
+    expect(result.display).toContain("finished without a final message");
+  });
+});
+
+describe("the subagent tool's own shape", () => {
+  it("is exec: a child can do anything its tools can do", () => {
+    const tool = subagentTool({ createAgent, childConfig: () => ({}) as AgentConfig });
+    // claiming less would let `--allow read` run arbitrary writes through a child
+    expect(tool.permission).toBe("exec");
+    expect(tool.paths).toBeUndefined();
+  });
+
+  it("requires a non-empty task", () => {
+    const tool = subagentTool({ createAgent, childConfig: () => ({}) as AgentConfig });
+    expect(tool.inputSchema.safeParse({ task: "" }).success).toBe(false);
+    expect(tool.inputSchema.safeParse({}).success).toBe(false);
+    expect(tool.inputSchema.safeParse({ task: "do it" }).success).toBe(true);
+  });
+});

@@ -1,6 +1,6 @@
 # Status
 
-Current milestone: **M7**
+Current milestone: **all milestones complete** — M0 through M7
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI + MCP done (2026-08-30); subagents, skills next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | done (2026-08-30) |
 
 ## M0 notes
 
@@ -783,6 +783,107 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - One real-process test covers group reaping, because it cannot be faked. Note the trap it
   documents: `kill(pid, 0)` succeeds on a *zombie*, so checking existence rather than liveness
   reports a false failure — the test polls process state instead.
+
+## M7 notes — subagents and skills (the last two rows)
+
+### Subagents
+
+- **`subagent.spawn` / `subagent.end` had been in the schema since M0 with nothing emitting one** —
+  the same dormant contract `plan.updated` was before M6. `subagent.end` gains an optional
+  `reason`, because knowing *how* a child finished is the useful part in a log.
+- **The point is context isolation, not parallelism.** A search that would fill the parent's
+  window with fifty file contents happens in a session of its own and the parent receives only the
+  answer. So the child's events go to the child's log; forwarding them would defeat the entire
+  reason to spawn one. The parent's log records that a child ran and how it ended — enough to
+  trace, not enough to drown.
+- **Depth-limited, and the tool threads `depth` itself.** Unbounded recursion here is a fork bomb
+  with a token budget attached. Default depth 1: a subagent cannot spawn its own. The child's
+  subagent tool is built by the tool at `depth + 1`, and any subagent tool the caller's
+  `childConfig()` supplies is dropped — the first version left `depth` for the caller to thread,
+  which nothing did, so `maxDepth` could never fire (3601 sessions in 5s with `maxDepth: 1`).
+- **A child's budget is stated, never inherited.** A child is a separate session with a separate
+  meter, so a parent's `maxTokens`/`maxUsd`/`maxMinutes` cannot bind it: spreading the parent's
+  budget gives *every* child the parent's whole allowance, and omitting it gives every child none.
+  `subagentTool` takes `childBudget` explicitly and the CLI fills it from the parent's flags.
+- **Descendants are pooled per parent session** — `maxChildren` (default 8), `maxChildTokens` and
+  `maxChildUsd`. Without this a parent could finish `done` inside a 10-token cap having spent
+  thousands of dollars through its children. Three details that a first version got wrong:
+  - the pool is threaded down the tree (`ancestorPools`), so a grandchild is charged to *every*
+    ancestor. Held per level, `maxChildren` bounded a level rather than a tree — total children
+    was `maxChildren ** maxDepth` — and everything below the first level was invisible.
+  - a child's cap is **reserved when it spawns** and reconciled against actual usage when it
+    finishes. The loop runs tool calls sequentially today, but `parallelTools` is advertised and
+    this tool is public API: a gate read before an `await` and written after it is not a gate.
+  - because the pool reserves, the CLI gives each child a **share** of the parent's budget
+    (`maxTokens / maxChildren`), not the whole of it — otherwise the first subagent would be the
+    only one that could ever run.
+- **Pool eviction is by last use and never touches a live pool.** Sessions are never announced as
+  finished to a tool, so the map is capped (256); evicting the oldest *inserted* entry would
+  target the longest-running session and hand it a pool with its limits back at zero.
+- **The same permission policy object *and* the same asker.** A subagent that could do more than
+  its parent would be a permission bypass with extra steps; a subagent that can do less is the
+  failure the first version had — `AgentConfig.onAsk` defaults to deny, so under the TUI a child
+  could not write a file, was never prompted about it, and had no way to say why. The child's asks
+  now route through the parent's prompt carrying `PermissionRequest.origin = "subagent"`. That is
+  set on the child's **`AgentConfig`**, not wrapped around `onAsk`, so the emitted
+  `permission.request` carries it too — the prompt, the log, `renderEvent` and `sessions show` all
+  agree on who asked. Only whoever builds a session can set it; a tool or a model cannot.
+- **The parent's abort reaches the child**, and `subagent.end` is emitted on the abort path rather
+  than after the event loop: by the time the loop unwinds the parent has ended and its events are
+  dropped, which left a `subagent.spawn` in the log that no `subagent.end` ever answered.
+- **The parent logs the child before the child starts.** `Agent.run` takes an optional
+  pre-allocated `id` (from `store.create()`) so `subagent.spawn` can name a session that has not
+  written anything yet; a trace read in order never shows a session that came from nowhere. Two
+  runs appending to one id would restart `seq` and leave a log that cannot be read back at all, so
+  a fresh run now **claims** its id for its lifetime (in-process; the resume path's advisory file
+  lock covers the cross-process case), and `store.create()` never returns an id it has already
+  handed out.
+- **The last turn that *said* something is the answer, and a preamble is labelled as one.** Keeping
+  only the final turn's text meant a child that stated its conclusion and then made one more tool
+  call — normal, and not something a system prompt prevents — reported "the subagent finished
+  without a final message". But an opening remark is also text, so when the kept text did not come
+  from the child's last turn the parent is told so, rather than handed a preamble as a conclusion.
+- The tool is `exec`: a child can do anything its tools can do, so claiming less would let
+  `--allow read` run arbitrary writes through one.
+- A child that ends on anything but `done` is reported to the parent as an **error**, not as an
+  answer, and a child that says nothing is reported as such rather than as an empty result.
+
+### Skills
+
+- **Index-first, like the wiki, for the same reason.** A project may have twenty skills of a
+  thousand words each; injecting them all would cost more context than the task. The system prompt
+  carries name + description one line each, and the body is fetched through the `skill` tool only
+  when the model decides one is relevant.
+- **The description is what the model chooses on**, so a skill without one falls back to the first
+  heading or line of its body rather than showing an empty entry it cannot reason about.
+- `<name>.md` or `<name>/SKILL.md`; a nested skill is named by its **directory**, since the file is
+  a fixed marker.
+- **The first root wins**, so a project skill shadows a global one of the same name — the order a
+  user expects. Shadowing is matched **case-insensitively**, because the `skill` tool looks up that
+  way: keeping both `Deploy` and `deploy` advertised two skills and served one body for both.
+  A shadowed skill is reported through `onError` rather than silently dropped.
+- **What reaches the system prompt is untrusted input, and is treated as such.** A name and a
+  description are stripped of C0/C1 control characters *and* of zero-width and bidi formatting
+  (U+202E can visually reorder the rest of a line), bounded to 80 / 200 **code points** so
+  truncation cannot leave a lone surrogate, and the catalogue as a whole is capped at 8 KiB
+  **measured in bytes** — a cap counted in UTF-16 units lets a CJK catalogue through at ~3× what
+  it claims. A directory name may contain newlines — enough to
+  forge a second `## Skills` section with entries nobody wrote — and a frontmatter `description:`
+  may be 60,000 characters that ride in *every* request.
+- **Symlinks are not skills.** Discovery `lstat`s and skips them: `skills/notes.md -> ~/.ssh/id_rsa`
+  would otherwise put the target's first line into the system prompt of every request, with no
+  model decision involved.
+- **A subdirectory with no `SKILL.md` is not an error** — `--skills .` on a repo root would
+  otherwise report one failure per `.git`, `node_modules` and everything else.
+- **The `skill` tool reads only what was already discovered**, keyed by name into a fixed map, so
+  there is no model-supplied path to traverse. Bounded by file size and count.
+- **Caveat: skills are discovered once at startup.** Editing one mid-session has no effect until
+  the next run.
+- **Caveat: nothing validates a skill's *body*.** Names and descriptions are sanitized because they
+  reach the prompt with no model decision; a body only arrives when the model asks for it, and is
+  then shown verbatim. A skill is as trusted as the repository it lives in.
+- **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
+  the project has instructions for should be able to load them.
 
 ## Decided
 

@@ -14,6 +14,8 @@ export { grepTool, type GrepMatch } from "./grep.js";
 export { readFileTool } from "./read-file.js";
 export { writeFileTool } from "./write-file.js";
 export { updatePlanTool } from "./update-plan.js";
+export { subagentTool, SUBAGENT_TOOL, type SubagentOptions } from "./subagent.js";
+export * from "./skills.js";
 
 /**
  * The built-ins: bash, read_file, edit_file, write_file, glob, grep, and update_plan.

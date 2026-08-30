@@ -20,6 +20,34 @@ describe("renderEvent", () => {
     expect(line).toContain('"keep going"');
   });
 
+  it("renders subagent.spawn and subagent.end, including how the child finished", () => {
+    const spawned = renderEvent(
+      HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files" }),
+    );
+    expect(spawned).toContain("subagent.spawn");
+    expect(spawned).toContain("c1");
+    expect(spawned).toContain("counting files");
+
+    const ended = renderEvent(
+      HarnessEvent.parse({ seq: 2, sessionId: "p", ts: 1, type: "subagent.end", id: "c1", reason: "budget" }),
+    );
+    expect(ended).toContain("subagent.end");
+    expect(ended).toContain("budget");
+    // a log written before M7 added `reason` still renders
+    expect(renderEvent(HarnessEvent.parse({ seq: 3, sessionId: "p", ts: 1, type: "subagent.end", id: "c1" }))).toContain("c1");
+  });
+
+  it("names who a permission request is for when it is not this session", () => {
+    const line = renderEvent(
+      HarnessEvent.parse({
+        seq: 4, sessionId: "p", ts: 1, type: "permission.request",
+        req: { tool: "write_file", input: {}, class: "write", cwd: "/w", origin: "subagent" },
+      }),
+    );
+    // answering "allow" for a child you cannot see is a different decision from answering it for yourself
+    expect(line).toContain("subagent");
+  });
+
   it("renders supervisor.signal with its type, confidence and evidence", () => {
     const e = HarnessEvent.parse({
       seq: 14,

@@ -18,12 +18,13 @@ export function renderEvent(e: HarnessEvent): string {
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
     case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
-    case "permission.request": return `${p} ${e.req.tool} [${e.req.class}]`;
+    case "permission.request":
+      return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
     case "permission.decision": return `${p} ${e.d}`;
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
-    case "subagent.end": return `${p} ${e.id}`;
+    case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
