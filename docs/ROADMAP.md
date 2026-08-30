@@ -13,7 +13,9 @@ agreement is the strongest signal in this document.
 The one-line thesis the second pass adds, worth keeping over every milestone: **the agent kernel
 proposes; the policy engine authorizes; the tool broker executes.** AgentRig's loop already leans
 this way — permissions decide before tools run — and each security-flavoured milestone below
-moves another decision out of the model's hands and into that structure. It is written to be **worked as dogfood**: every row is sized for one
+moves another decision out of the model's hands and into that structure.
+
+The roadmap is written to be **worked as dogfood**: every row is sized for one
 AgentRig session, and the flow per milestone is the one in `.claude/commands/goal.md` — fresh
 branch from main, implement one row, `pnpm build && pnpm test && pnpm typecheck` green with
 network-free tests, STATUS updated, PR, adversarial review, fix everything, merge.
@@ -121,6 +123,20 @@ benefit) is a description of what the dream's promotion gate should grow into.
 | Parallel tool calls / parallel subagents | ✓ | — | loop plugin | ✓ | ✓ | — | sequential (parallelTools advertised!) | R10 |
 | Web fetch/search tool | ✓ | via bash | ✓ | ✓ | ✓ | ✓ | **missing** | R11 |
 
+New rows from the second pass (its corpus, so the harness columns differ — the AgentRig column is
+what matters):
+
+| Capability *(second pass)* | Strongest reference | AgentRig today | Milestone |
+|---|---|---|---|
+| Trusted-project boundary before loading repo config | Gemini CLI | designed in from the start | R1 |
+| Unified `doctor` diagnostic | OpenCode/Codex trackers (as an absence) | **missing** | R1 |
+| Context manifest (what was sent, why, at what cost) | none consistently — the gap itself | **missing** | R1.5 |
+| Side-effect-aware resume (no double execution) | LangGraph's documented limitation | tools simply re-run today | R3/R4 |
+| Tool/MCP supply-chain: pin, hash, re-consent on change | Goose, NSA MCP guidance | MCP tools trusted as served | R5 |
+| Capability grants (scoped, expiring, revocable, explained) | the gap all approval UIs share | allow/deny/ask + standing answers | R12 |
+| Instruction-vs-data provenance / trust labels | prompt-injection literature | all context is one trust level | R13 |
+| Acceptance contracts + claim–evidence verification | OpenHands QA, Codex reviewer | M6 judges the trajectory, not evidence | R14 |
+
 Carried follow-ups that ride along where they fit: **F3 Windows CI** (R2 forces it — the sandbox
 seam needs a per-platform no-op), **OTEL sink** (R8, same seam as RPC), **bracketed paste** (R1,
 trivial once touched).
@@ -145,6 +161,8 @@ flags.*
 | R1a | `AGENTS.md` discovery and injection: repo root, walked up from cwd; `CLAUDE.md` accepted as an alias; content appended to the system prompt with a clear delimiter; a `context.loaded` event records path + byte count | core |
 | R1b | Config file `.agentrig/config.json` (project) merged over `~/.agentrig/config.json` (user), zod-validated, carrying any long-lived flag (provider, model, allow/deny, drift scope/contract, supervise, memory dir); CLI flags win over project wins over user; `--profile <name>` selects a named block | cli (parsing stays thin — the merge logic is a pure exported function) |
 | R1c | Bracketed paste: emit `ESC[?2004h/l` around raw mode and strip the `200~`/`201~` markers in the input path, so terminals that wrap pastes stop leaking markers into the buffer | cli/tui |
+| R1d | Trusted-project boundary *(second pass; Gemini CLI's rule)*: repo-provided `AGENTS.md` and `.agentrig/config.json` are loaded only after the repo is marked trusted — first interactive visit asks once, recorded under `~/.agentrig/trust.json`; headless requires `--trust` or a prior record. A cloned repo must not be able to reconfigure the agent that clones it | core + cli |
+| R1e | `agentrig doctor` *(second pass)*: one command checking provider credentials (and token expiry), config validity and precedence, memory dir, MCP endpoints, git state, and TTY sanity — each line pass/fail with the fix named. Diagnosing "why does my session not work" today takes a person who wrote the code | cli |
 
 Acceptance: a repo with an `AGENTS.md` visibly changes the agent's first turn (test: fake
 provider asserts the system prompt contains the file's text); precedence pinned by tests
@@ -172,6 +190,8 @@ everything below it — every subsequent dogfood session pays this tax.*
 | R1.5a | Tool-result eviction: when building the outbound request, tool results older than K turns (default 5) with large payloads are replaced by a stub naming the tool, the target, and how to re-fetch ("read of packages/core/src/agent.ts elided — re-read if needed"); the session LOG is untouched (raw/ stays immutable and complete — this is a view, not a rewrite); `context.evicted` event records count + bytes saved | core |
 | R1.5b | Cached-token accounting: `Usage` gains an optional `cachedInput` field (schema-added); the Anthropic and openai-chatgpt adapters populate it from their cache-read fields; budget math charges cached tokens at the provider's discount when pricing is configured; displays read "3.3M in (2.9M cached)" | core + providers |
 | R1.5c | Turn-cap sanity: interactive sessions (TUI, `run` without `--headless`) default `maxTurns` to a high ceiling (200) while headless keeps 50; both overridable; the budget stop message says which limit fired and how to raise it | cli |
+| R1.5d | Context manifest *(second pass)*: a `context.manifest` event per turn recording each block sent to the model — source (system prompt / AGENTS.md / memory index / history / tool result), byte and token estimate, evicted or kept. TUI `/context` renders the latest. What the model was actually shown stops being a matter of reconstruction | core + cli |
+| R1.5e | Repo map *(Aider's idea, reclassified: this is a context-economy feature, not code intelligence — renunciation №7 partially overturned, see §4)*: a size-budgeted structural map — file tree plus top-level exported symbols and signatures, a few KB — generated at session start, injected after the system prompt, regenerated when mtimes change; `--no-repo-map` opts out. The 3.3M-token run spent much of its input on **orientation reads**, whole files read to learn what is in them; the map is the cheap substitute. Mechanical extraction only — no LSP, no build graph | core |
 
 Acceptance: a fixture conversation with three large reads shows the Nth-turn request smaller
 than the (N-1)th once eviction engages (the discriminating test: without eviction it is strictly
@@ -179,6 +199,11 @@ larger); an evicted file that the model re-reads round-trips; `cachedInput` flow
 provider's usage frames to the session summary; interactive-vs-headless defaults pinned by a
 flags-reach-the-code test each. Mutation: disabling eviction must fail the shrinking-request
 test; double-counting cached tokens into `maxTokens` budget must fail a budget test.
+
+The repo map's discriminating test: a fixture task ("which file defines X?") answerable from the
+map alone with zero `read_file` calls, versus a mapless baseline needing several; the map stays
+under its size budget on this repository itself (the dogfood check); a stale map is regenerated,
+pinned by an mtime fixture.
 
 Renunciation: **no summarization pass here.** Eviction is mechanical and free; the M2
 compactor stays the tool for genuinely long conversations. A model-written summary of old turns
@@ -314,10 +339,14 @@ it to transports.*
 | R8a | `agentrig rpc`: newline-delimited JSON over stdio — requests (`submit`, `answerPermission`, `abort`, `state`) and the event stream out; the protocol is zod-schema'd and versioned; one page of docs with an example client | cli |
 | R8b | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
 | R8c | OTEL sink (carried follow-up): an optional event-stream subscriber mapping `HarnessEvent`s to OTLP spans (session→trace, turn→span, tool→child span), behind `--otel-endpoint`; no dependency added when unused | core (subscriber) + cli |
+| R8d | Web client *(renunciation №2 overturned, see §4)*: `agentrig web` serves ONE static HTML page on `127.0.0.1` only, speaking the R8a protocol over a WebSocket bridge to the same controller the TUI uses. No framework, no build step, no auth story — localhost is the boundary, and binding any other interface is refused, not configurable. It is the REFERENCE client for the RPC protocol: if the page cannot do something, the protocol is missing it | cli |
 
 Acceptance: an RPC round-trip test drives a full permission-ask cycle over pipes; the MCP server
 answers `tools/list` and executes `run_task` against the fake provider; OTEL mapping is tested
-against a capture buffer, no network.
+against a capture buffer, no network. The web client: the server refuses a non-loopback bind (the
+test tries and asserts the refusal); a scripted WebSocket session runs a task, answers a
+permission prompt, and sees the streamed reply — the same controller-level assertions the TUI
+tests make.
 
 ### R9 — Trajectory export and replay-as-eval
 
@@ -443,8 +472,11 @@ feature list):
 1. **No always-on gateway, no messaging channels** (OpenClaw, Hermes, nanobot). The R7 scheduler
    is a file and a crontab entry; the R8 RPC/MCP seams let someone else build a gateway *on*
    AgentRig. The OpenClaw security literature is the argument.
-2. **No web UI** (dsh, nanobot). The TUI plus RPC is the surface. A web UI is an R8 client
-   someone can write out-of-tree.
+2. ~~No web UI~~ — **overturned 2026-08-30**, on this project's own evidence: five PRs in one
+   day fighting the terminal (Ink's render cliff, a pty deadlock, paste chunking, key
+   auto-repeat), every one structurally impossible in a browser page. The concession is bounded:
+   one static localhost page as R8d, the reference client for the RPC protocol — still no
+   framework, no build step, no hosted anything.
 3. **No 30-provider matrix** (pi's `pi-ai`). Three adapters exist and cover the dogfood; new
    providers arrive when a real task needs one, as adapters, never as core knowledge.
 4. **No plan mode as a mode** (renounced by pi, shipped by others). `update_plan` + the
@@ -455,9 +487,10 @@ feature list):
 6. **No OpenAI-compatible serving endpoint** (nanobot). AgentRig is a harness, not a model
    gateway; R8's MCP server is the composition point.
 7. **No repository-intelligence fusion service** *(second pass proposed one: lexical + AST + LSP
-   + build graph + coverage + ownership)*. That is a product of its own. If dogfooding shows
-   grep/glob starving the agent, the adoption path is an Aider-style repo map as an R5 extension
-   — cheap, proven, and droppable.
+   + build graph + coverage + ownership)*. That is a product of its own and stays renounced. The
+   repo-map half was **overturned 2026-08-30**: the 3.3M-token dogfood run showed orientation
+   reads are a context-economy problem, which makes Aider's map an R1.5 row (R1.5e), not a
+   fallback. The line held: mechanical extraction in core, the fusion service never.
 8. **No external workflow engine** (Temporal/DBOS/Restate, the second pass's suggestion for
    durable execution). The event log plus R3/R4's side-effect-aware replay covers single-machine
    durability; adopting a distributed engine before there is a distributed workload is
