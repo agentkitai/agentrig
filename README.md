@@ -1,16 +1,73 @@
 # AgentRig
 
-An agentic coding harness — SDK core plus a thin CLI — with two things most harnesses don't have built in:
+AgentRig is a working agentic coding harness: a TypeScript SDK core plus a thin CLI for running coding agents interactively or headlessly. It combines a persistent, replayable agent loop with two built-in systems that are usually external to a harness:
 
-- a **supervisor loop** that watches the session out-of-band, catches stalls and unproductive cycles, and redirects (from NVIDIA's AVO paper, generalized from "objective score" to proxy signals + rubric grading);
-- an **LLM Wiki memory** (Karpathy's pattern): sessions are immutable raw sources, the agent maintains an interlinked markdown wiki about the project, and a scheduled **dream** runs the wiki's lint pass — contradictions, stale claims, orphans, promotion to a global wiki — on a copy, with a reviewable report.
+- a **supervisor loop** that observes the session out-of-band, detects stalls, loops, drift, and budget pressure, then escalates from guidance and replanning through review or abort;
+- an **LLM Wiki memory** that keeps immutable session sources and a human-readable Markdown wiki, retrieves with index + BM25 search, records failed attempts, and runs reviewable “dream” consolidation on a copy.
 
-Provider-agnostic. TypeScript monorepo: `core`, `memory`, `supervisor`, `cli`.
+The harness supports Anthropic, OpenAI-compatible APIs and local servers, and experimental browser OAuth for a ChatGPT subscription. It includes tool permissions, budgets, compaction and resume, an interactive TUI, JSONL event logs, session replay, hooks, MCP tools, context-isolated subagents, and on-demand Markdown skills.
 
-Spec: [`docs/PLAN.md`](docs/PLAN.md). Progress: [`docs/STATUS.md`](docs/STATUS.md).
+**Status: all milestones M0 through M7 are complete.** See [`docs/STATUS.md`](docs/STATUS.md) for implementation notes and known caveats, and [`docs/PLAN.md`](docs/PLAN.md) for the original specification.
 
+## Quickstart
+
+AgentRig requires Node.js 22+ and pnpm. From this checkout:
+
+```sh
+pnpm install
+pnpm build
 ```
-pnpm install && pnpm build && pnpm test && pnpm demo
+
+The examples below use the package's `agentrig` binary. Before the package is linked or installed, run `node packages/cli/dist/index.js` in its place.
+
+Sign in once with the experimental ChatGPT subscription provider. AgentRig opens a browser and stores the resulting credential locally:
+
+```sh
+agentrig login openai-chatgpt
 ```
 
-Status: M0 (event spine + session store + replay). Not usable yet.
+Then use either of the two run modes:
+
+```sh
+# One task, non-interactive
+agentrig run "inspect the project and fix the failing tests" \
+  --provider openai-chatgpt --model gpt-5.6-sol
+
+# Interactive TUI (the default when no command is given)
+agentrig --provider openai-chatgpt --model gpt-5.6-sol
+```
+
+`login openai-chatgpt --no-browser` prints the sign-in URL instead of opening it. `login openai-chatgpt --export` prints the stored token bundle for seeding `AGENTRIG_OPENAI_CHATGPT_TOKEN` in another environment. Anthropic uses `ANTHROPIC_API_KEY`; OpenAI-compatible mode uses `OPENAI_API_KEY`, or `--base-url` for a local server.
+
+## Commands
+
+- `agentrig` — start the interactive TUI.
+- `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
+- `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
+- `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.
+- `agentrig memory init|ls|show|search|promote|lint|ingest` — create, inspect, search, maintain, or populate the Markdown wiki.
+- `agentrig dream` — run structural and model-backed wiki consolidation on a copy; review is the default and `--auto` applies it while retaining the previous wiki.
+
+The CLI also exposes provider, permission, budget, output, and command-specific controls through its generated command help.
+
+## Optional run flag groups
+
+These flags are available on both `run` and the interactive TUI (and on `sessions resume`):
+
+- **Memory:** `--memory <dir>` injects a wiki index and enables its read/search tools. `--ingest-on-end` distils the completed session into that wiki. `--dream-on-end` runs a due dream in report-only mode; `--dream-every-sessions <n>` and `--dream-every-hours <n>` set its cadence, while `--dream-structural-only` skips the model-backed pass.
+- **Supervisor:** `--supervise` attaches heuristic detectors and the escalating policy ladder. `--supervisor-no-abort` disables its abort rung, `--supervisor-soft <fraction>` sets the soft budget threshold, and `--supervisor-review` enables the token-using trajectory reviewer and rubric grader rungs.
+- **Skills:** repeat `--skills <dir>` to discover Markdown skills from multiple roots. Earlier directories shadow later ones; only the compact catalogue is injected, and the agent loads a selected skill on demand.
+- **Subagents:** `--subagents` adds the context-isolated `subagent` tool. `--subagent-max-turns <n>` limits each child and `--subagent-max-children <n>` limits the total children a session may run.
+- **MCP:** `--mcp-config <path>` starts the stdio MCP servers in the JSON config and adds their namespaced tools to the session. MCP tools use the `exec` permission class.
+- **Shell:** `--shell <path>` chooses the shell used by the `bash` tool instead of the platform default (`/bin/sh` on POSIX; Git Bash, then PowerShell, then `cmd.exe` on Windows).
+
+## Development
+
+```sh
+pnpm build
+pnpm typecheck
+pnpm test
+pnpm demo
+```
+
+The monorepo packages are `core`, `memory`, `supervisor`, and `cli`.
