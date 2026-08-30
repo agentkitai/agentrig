@@ -10,9 +10,11 @@ import type { TuiController, TuiState } from "./controller.js";
 // `exactOptionalPropertyTypes` means `color={undefined}` is not the same as omitting it, so the
 // default tone is a real colour rather than an absent prop
 const TONE: Record<TuiState["lines"][number]["tone"], string> = {
-  event: "white",
+  event: "gray",
   you: "cyan",
   system: "gray",
+  // the reply is what the user asked for; everything else is context around it
+  assistant: "white",
   error: "red",
 };
 
@@ -80,6 +82,13 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
           </Text>
         )}
       </Static>
+
+      {/* the reply as it streams, replaced by a committed line when the turn ends */}
+      {state.streaming !== "" ? (
+        <Box marginTop={1}>
+          <Text>{state.streaming}</Text>
+        </Box>
+      ) : null}
 
       {state.pending !== null ? (
         <Box marginTop={1} flexDirection="column">

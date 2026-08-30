@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
-import { renderEvent } from "../src/render.ts";
+import { AssistantText, renderChatEvent, renderEvent } from "../src/render.ts";
 
 describe("renderEvent", () => {
   it("renders session.resume", () => {
@@ -125,5 +125,121 @@ describe("renderEvent", () => {
       after: 12_000,
     });
     expect(renderEvent(e)).toContain("90000 -> 12000");
+  });
+});
+
+const at = (seq: number, payload: Record<string, unknown>): HarnessEvent =>
+  HarnessEvent.parse({ seq, sessionId: "s", ts: 1_700_000_000_000, ...payload });
+
+describe("renderChatEvent — the conversation, not the trace", () => {
+  it("hides the plumbing a person waiting for an answer does not read", () => {
+    const plumbing = [
+      { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" },
+      { type: "session.resume", task: "t", cwd: "/w", provider: "p", model: "m" },
+      { type: "turn.start", n: 1 },
+      { type: "turn.end", n: 1 },
+      { type: "model.request", tokensIn: 10 },
+      { type: "model.delta", text: "hello" },
+      { type: "model.response", usage: { input: 1, output: 1 }, stop: "end_turn" },
+      { type: "permission.request", req: { tool: "bash", input: {}, class: "exec", cwd: "/w" } },
+      { type: "permission.decision", d: "allow" },
+      { type: "context.compact", before: 100, after: 50 },
+      { type: "memory.note", scope: "project", path: "a.md" },
+      { type: "session.end", reason: "done" },
+    ];
+    for (const [i, p] of plumbing.entries()) {
+      expect(renderChatEvent(at(i, p)), `${String(p.type)} should be hidden`).toBeNull();
+    }
+  });
+
+  it("shows what the agent did, in a form that reads", () => {
+    expect(renderChatEvent(at(1, { type: "tool.call", id: "t", name: "bash", input: { command: "pnpm test" }, inputHash: "h" })))
+      .toBe("⚒ bash pnpm test");
+    // a successful tool is noise; a failing one explains the next turn
+    expect(renderChatEvent(at(2, { type: "tool.result", id: "t", ok: true, display: "fine", durationMs: 1 }))).toBeNull();
+    expect(renderChatEvent(at(3, { type: "tool.result", id: "t", ok: false, display: "boom", durationMs: 1 })))
+      .toBe("✗ boom");
+    expect(renderChatEvent(at(4, { type: "file.changed", path: "a.ts", op: "edit", contentHash: "h" })))
+      .toBe("± edit a.ts");
+  });
+
+  it("keeps the things that need a human: errors, signals, and a session that did not finish", () => {
+    expect(renderChatEvent(at(5, { type: "error", message: "it broke", fatal: true }))).toBe("! it broke");
+    expect(renderChatEvent(at(6, { type: "session.end", reason: "budget" }))).toBe("— session budget");
+    const signal = renderChatEvent(
+      at(7, { type: "supervisor.signal", signal: { type: "loop", confidence: 0.9, evidence: ["same call x3"], window: [1, 3] } }),
+    );
+    expect(signal).toContain("loop");
+    expect(signal).toContain("same call x3");
+    const intervention = renderChatEvent(
+      at(8, { type: "supervisor.intervention", intervention: { type: "inject_guidance", message: "stop repeating" } }),
+    );
+    expect(intervention).toContain("inject_guidance");
+    expect(intervention).toContain("stop repeating");
+  });
+
+  it("summarises a plan by progress rather than reprinting every item", () => {
+    const line = renderChatEvent(
+      at(9, {
+        type: "plan.updated",
+        items: [
+          { id: "a", text: "first thing", status: "done" },
+          { id: "b", text: "second thing", status: "in_progress" },
+          { id: "c", text: "third thing", status: "pending" },
+        ],
+      }),
+    );
+    expect(line).toBe("▸ plan 1/3: second thing");
+  });
+
+  it("never lets a multi-line value break the one-line shape", () => {
+    const line = renderChatEvent(
+      at(10, { type: "tool.call", id: "t", name: "bash", input: { command: "a\nb\nc" }, inputHash: "h" }),
+    );
+    expect(line).toBe("⚒ bash a b c");
+    const long = renderChatEvent(
+      at(11, { type: "tool.result", id: "t", ok: false, display: "x".repeat(500), durationMs: 1 }),
+    );
+    expect(long!.length).toBeLessThan(120);
+    expect(long).not.toContain("\n");
+  });
+});
+
+describe("AssistantText — the reply neither surface used to show", () => {
+  it("gathers the deltas of a turn and emits them when it ends", () => {
+    const a = new AssistantText();
+    expect(a.push(at(1, { type: "turn.start", n: 1 }))).toBeNull();
+    expect(a.push(at(2, { type: "model.delta", text: "The answer " }))).toBeNull();
+    expect(a.push(at(3, { type: "model.delta", text: "is 42." }))).toBeNull();
+    expect(a.push(at(4, { type: "turn.end", n: 1 }))).toBe("The answer is 42.");
+  });
+
+  it("emits nothing for a turn that said nothing", () => {
+    const a = new AssistantText();
+    expect(a.push(at(1, { type: "turn.end", n: 1 }))).toBeNull();
+    a.push(at(2, { type: "model.delta", text: "   \n  " }));
+    expect(a.push(at(3, { type: "turn.end", n: 2 }))).toBeNull();
+  });
+
+  it("does not run two turns together", () => {
+    const a = new AssistantText();
+    a.push(at(1, { type: "model.delta", text: "first" }));
+    expect(a.push(at(2, { type: "turn.end", n: 1 }))).toBe("first");
+    a.push(at(3, { type: "model.delta", text: "second" }));
+    expect(a.push(at(4, { type: "turn.end", n: 2 }))).toBe("second");
+  });
+
+  it("flushes on session.end, so an aborted turn still reports what it said", () => {
+    const a = new AssistantText();
+    a.push(at(1, { type: "model.delta", text: "partial finding" }));
+    expect(a.push(at(2, { type: "session.end", reason: "aborted" }))).toBe("partial finding");
+  });
+
+  it("exposes the turn in progress, for a live view", () => {
+    const a = new AssistantText();
+    a.push(at(1, { type: "model.delta", text: "half" }));
+    expect(a.pending).toBe("half");
+    a.push(at(2, { type: "turn.end", n: 1 }));
+    expect(a.pending).toBe("");
   });
 });

@@ -1,4 +1,14 @@
-import type { HarnessEvent } from "@agentkitai/agentrig-core";
+import type { HarnessEvent, Intervention } from "@agentkitai/agentrig-core";
+
+/**
+ * Two views of one event stream.
+ *
+ * `renderEvent` is the trace: every event, one line, timestamps and hashes — what you want when
+ * something went wrong. `renderChatEvent` is the conversation: the model's answer, what it did,
+ * and anything that needs a decision. A person asking a question does not need `turn.start`,
+ * `model.request` and `model.response`, and burying the answer in them is how the answer went
+ * missing entirely — the deltas that carry it were dropped by both surfaces.
+ */
 
 /** One line per event. Kept dumb on purpose: the TUI (M7) replaces this. */
 export function renderEvent(e: HarnessEvent): string {
@@ -29,17 +39,131 @@ export function renderEvent(e: HarnessEvent): string {
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
     case "supervisor.intervention": {
-      const i = e.intervention;
-      const detail =
-        i.type === "inject_guidance" ? i.message
-        : i.type === "escalate" ? i.question
-        : i.type === "abort" ? i.reason
-        : i.type === "run_reviewer" ? i.reason
-        : i.type === "run_grader" ? i.rubric
-        : i.type === "checkpoint_rollback" ? `to seq ${i.toSeq}`
-        : "";
-      return `${p} ${i.type}${detail === "" ? "" : `: ${detail.replace(/\s+/g, " ").slice(0, 200)}`}`;
+      const detail = interventionDetail(e.intervention);
+      return `${p} ${e.intervention.type}${detail === "" ? "" : `: ${detail.replace(/\s+/g, " ").slice(0, 200)}`}`;
     }
     case "error": return `${p} fatal=${e.fatal} ${e.message}`;
+  }
+}
+
+/** Whatever the rung carries that a reader needs; shared by both views. */
+function interventionDetail(i: Intervention): string {
+  return i.type === "inject_guidance" ? i.message
+    : i.type === "escalate" ? i.question
+    : i.type === "abort" ? i.reason
+    : i.type === "run_reviewer" ? i.reason
+    : i.type === "run_grader" ? i.rubric
+    : i.type === "checkpoint_rollback" ? `to seq ${i.toSeq}`
+    : "";
+}
+
+/** Fit a value on one line, for a view that is read rather than grepped. */
+function oneLine(text: string, max = 100): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** The interesting part of a tool's input: one argument reads better than a JSON blob. */
+function toolSummary(name: string, input: unknown): string {
+  if (input !== null && typeof input === "object") {
+    const o = input as Record<string, unknown>;
+    // whichever the tool actually takes; `command` and `path` cover every builtin
+    for (const key of ["command", "path", "pattern", "query", "task", "name"]) {
+      const v = o[key];
+      if (typeof v === "string" && v !== "") return `${name} ${oneLine(v, 80)}`;
+    }
+  }
+  return name;
+}
+
+/**
+ * The conversation view: what a person watching needs, or `null` for plumbing they do not.
+ *
+ * Hidden: session start/resume/end, turn boundaries, model requests and responses, permission
+ * decisions, compaction, memory notes. Each is real and each is in the log; none of them is
+ * something a person reads while waiting for an answer.
+ */
+export function renderChatEvent(e: HarnessEvent): string | null {
+  switch (e.type) {
+    case "tool.call":
+      return `⚒ ${toolSummary(e.name, e.input)}`;
+    case "tool.result":
+      // a successful tool is noise; a failing one is the thing that explains the next turn
+      return e.ok ? null : `✗ ${oneLine(e.display)}`;
+    case "tool.result.patched":
+      return `✎ ${e.by} rewrote what the model saw`;
+    case "tool.denied":
+      return `✗ denied ${e.name}`;
+    case "file.changed":
+      return `± ${e.op} ${e.path}`;
+    case "plan.updated": {
+      const current = e.items.find((i) => i.status === "in_progress") ?? e.items.find((i) => i.status === "pending");
+      const done = e.items.filter((i) => i.status === "done").length;
+      return `▸ plan ${done}/${e.items.length}${current === undefined ? "" : `: ${oneLine(current.text, 80)}`}`;
+    }
+    case "subagent.spawn":
+      return `⤷ subagent: ${oneLine(e.task, 80)}`;
+    case "subagent.end":
+      return e.reason === "done" ? null : `⤶ subagent ${e.reason ?? "ended"}`;
+    case "steer":
+      return `↪ ${e.source}: ${oneLine(e.message)}`;
+    case "supervisor.signal":
+      return `⚠ ${e.signal.type} (${e.signal.confidence}) ${oneLine(e.signal.evidence.join("; "), 80)}`;
+    case "supervisor.intervention": {
+      const detail = interventionDetail(e.intervention);
+      return `⚠ ${e.intervention.type}${detail === "" ? "" : `: ${oneLine(detail, 160)}`}`;
+    }
+    case "error":
+      return `! ${oneLine(e.message, 200)}`;
+    case "session.end":
+      // "done" is already said by the summary line; anything else is why it stopped
+      return e.reason === "done" ? null : `— session ${e.reason}`;
+    case "session.start":
+    case "session.resume":
+    case "turn.start":
+    case "turn.end":
+    case "model.request":
+    case "model.delta":
+    case "model.response":
+    case "permission.request":
+    case "permission.decision":
+    case "context.compact":
+    case "memory.note":
+      return null;
+  }
+}
+
+/**
+ * Accumulates `model.delta` into the message a turn produced.
+ *
+ * Both surfaces dropped `model.delta` outright — the TUI because per-token lines would drown
+ * everything, `run` for the same reason — so the assistant's reply was never shown anywhere. The
+ * text has to be gathered and emitted once, at the end of the turn that produced it.
+ */
+export class AssistantText {
+  private buffer = "";
+
+  /** The turn in progress, for a live view. */
+  get pending(): string {
+    return this.buffer;
+  }
+
+  /** Feeds one event; returns the finished message when this event completes a turn. */
+  push(e: HarnessEvent): string | null {
+    if (e.type === "model.delta") {
+      this.buffer += e.text;
+      return null;
+    }
+    // a turn that never ended (an abort mid-stream) still said what it said, so `session.end`
+    // flushes too rather than discarding it
+    if (e.type === "turn.end" || e.type === "session.end") return this.flush();
+    return null;
+  }
+
+  /** Emits and clears whatever has been gathered, or null when that is nothing. */
+  flush(): string | null {
+    const text = this.buffer.trim();
+    this.buffer = "";
+    return text === "" ? null : text;
   }
 }

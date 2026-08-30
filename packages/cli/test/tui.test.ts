@@ -126,6 +126,55 @@ describe("TuiController", () => {
     expect(c.snapshot().sessionId).not.toBeNull();
   });
 
+  it("shows the model's reply — the whole point, and the one thing it used to drop", async () => {
+    const c = makeController([
+      [{ type: "text_delta", text: "Hello! " }, { type: "text_delta", text: "How can I help?" }, usage(1, 1), stop("end_turn")],
+    ]);
+    await c.submit("hello");
+
+    // `model.delta` was skipped as per-token noise, and nothing else carries the text: the agent
+    // answered and the user saw session.start, turn.start, model.request, turn.end, session.end
+    expect(text(c)).toContain("Hello! How can I help?");
+    const reply = c.snapshot().lines.find((l) => l.text.includes("How can I help?"));
+    expect(reply!.tone).toBe("assistant");
+  });
+
+  it("streams the reply live, then commits it once", async () => {
+    const c = makeController([[{ type: "text_delta", text: "thinking out loud" }, usage(1, 1), stop("end_turn")]]);
+    await c.submit("hello");
+
+    // the live buffer is cleared when the turn ends, or the text would appear twice
+    expect(c.snapshot().streaming).toBe("");
+    expect(text(c).match(/thinking out loud/g)).toHaveLength(1);
+  });
+
+  it("keeps the plumbing out of the way until /verbose asks for it", async () => {
+    const c = makeController([[{ type: "text_delta", text: "hi" }, usage(1, 1), stop("end_turn")]]);
+    await c.submit("hello");
+
+    // a person asking a question does not read turn.start and model.request
+    for (const noise of ["turn.start", "model.request", "model.response", "session.start"]) {
+      expect(text(c), `${noise} should not be shown by default`).not.toContain(noise);
+    }
+
+    expect(await c.submit("/verbose")).toBe(true);
+    expect(c.snapshot().verbose).toBe(true);
+    await c.submit("again");
+    expect(text(c)).toContain("model.request");
+    expect(text(c)).toContain("turn.start");
+
+    // ...and the reply is still shown in verbose mode, not replaced by the trace
+    expect(text(c)).toContain("hi");
+  });
+
+  it("/verbose toggles back off", async () => {
+    const c = makeController([]);
+    await c.submit("/verbose");
+    expect(c.snapshot().verbose).toBe(true);
+    await c.submit("/verbose");
+    expect(c.snapshot().verbose).toBe(false);
+  });
+
   it("/quit is the only thing that ends the app", async () => {
     const c = makeController([]);
     expect(await c.submit("/quit")).toBe(false);
@@ -167,7 +216,8 @@ describe("TuiController", () => {
     c.answerPermission("deny");
     await running;
     expect(text(c)).toContain("denied needs_permission");
-    expect(text(c)).toContain("tool.denied");
+    // the conversation view says it plainly; the raw event name is behind /verbose
+    expect(text(c)).toContain("✗ denied needs_permission");
   });
 
   it("refuses to start a second turn while one is running", async () => {
@@ -300,12 +350,15 @@ describe("TuiController", () => {
     expect(seen).toEqual([0, 1]);
   });
 
-  it("does not render per-token deltas as their own lines", async () => {
+  it("joins per-token deltas into one line rather than one line per token", async () => {
     const c = makeController([
       [{ type: "text_delta", text: "hello " }, { type: "text_delta", text: "world" }, usage(1, 1), stop("end_turn")],
     ]);
     await c.submit("say hi");
     expect(text(c)).not.toContain("model.delta");
+    // one line carrying the whole reply, not two carrying "hello " and "world"
+    const replies = c.snapshot().lines.filter((l) => l.tone === "assistant");
+    expect(replies.map((l) => l.text)).toEqual(["hello world"]);
   });
 });
 

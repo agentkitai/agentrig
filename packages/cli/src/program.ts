@@ -87,6 +87,7 @@ export function buildProgram(): Command {
     return withProviderOptions(cmd)
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
+      .option("--verbose", "show the raw event trace instead of just the conversation")
       .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
       .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
       .option("--system <prompt>", "override the system prompt")
