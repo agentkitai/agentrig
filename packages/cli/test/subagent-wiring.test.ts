@@ -158,6 +158,16 @@ describe("what a child inherits", () => {
   });
 });
 
+describe("--shell", () => {
+  it("is offered by every command that builds an agent", () => {
+    const program = buildProgram();
+    for (const name of ["run", "tui"]) {
+      const cmd = program.commands.find((c) => c.name() === name)!;
+      expect(cmd.options.map((o) => o.long)).toContain("--shell");
+    }
+  });
+});
+
 describe("the flags exist on the commands that build an agent", () => {
   it("run and tui both accept --subagents, --skills and the subagent bounds", async () => {
     await mkdir(join(root, "skills"), { recursive: true });

@@ -7,7 +7,16 @@ import { updatePlanTool } from "./update-plan.js";
 import { readFileTool } from "./read-file.js";
 import { writeFileTool } from "./write-file.js";
 
-export { bashTool } from "./bash.js";
+export { bashTool, type BashToolOptions } from "./bash.js";
+export {
+  assertShellExists,
+  resolveShell,
+  shellFamily,
+  syntaxHint,
+  type ResolvedShell,
+  type ResolveShellOptions,
+  type ShellFamily,
+} from "./shell.js";
 export { editFileTool } from "./edit-file.js";
 export { globTool, isExcludedPath } from "./glob.js";
 export { grepTool, type GrepMatch } from "./grep.js";
@@ -22,6 +31,19 @@ export * from "./skills.js";
  * `update_plan` is what makes the supervisor's `drift` detector and `force_replan` rung
  * reachable — both were specified against `plan.updated`, which nothing emitted until M6.
  */
-export function builtinTools(): AnyTool[] {
-  return [bashTool(), readFileTool(), editFileTool(), writeFileTool(), globTool(), grepTool(), updatePlanTool()];
+export function builtinTools(opts: BuiltinToolOptions = {}): AnyTool[] {
+  return [
+    bashTool(opts.shell === undefined ? {} : { shell: opts.shell }),
+    readFileTool(),
+    editFileTool(),
+    writeFileTool(),
+    globTool(),
+    grepTool(),
+    updatePlanTool(),
+  ];
+}
+
+export interface BuiltinToolOptions {
+  /** Which shell `bash` runs commands in. Defaults per platform; see `resolveShell`. */
+  shell?: string;
 }

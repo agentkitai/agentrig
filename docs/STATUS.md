@@ -943,9 +943,25 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   `edit_file` retries a failed match with the line endings converted — in both directions —
   converting `newText` the same way so the file keeps the endings it had. An edit must not
   rewrite every line of a file as a side effect of matching one.
-- **The `bash` tool runs `cmd.exe` on Windows.** It spawns with `shell: true`, so a model's
-  bash-isms (`ls`, `&&`, POSIX quoting) may misbehave. **Open — follow-up F2**, because choosing a
-  shell changes what every trajectory in a repo means and is a decision rather than a patch.
+- **The `bash` tool ran `cmd.exe` on Windows (fixed — F2).** `spawn(..., { shell: true })` means
+  `/bin/sh` on POSIX and `cmd.exe` on Windows, and a model writes bash — so on Windows every
+  command went to a shell that does not speak it, and the model was never told which one it had.
+  `resolveShell` now picks it and `--shell` overrides it:
+  - **POSIX keeps `/bin/sh`.** Changing it would silently change what every existing trajectory in
+    every repo means. `--shell /bin/bash` is there for anyone who wants bashisms — and `[[ ]]`
+    really does fail under `/bin/sh` (dash), which is the same class of bug as `cmd.exe`, milder.
+  - **Windows prefers Git Bash, then PowerShell, then `cmd.exe`** — the first speaks what the model
+    writes, the second is at least a real shell, the third is the status quo.
+  - **The description names the shell and the syntax**: "using bash.exe … Write POSIX shell
+    syntax", or "using cmd.exe … Write cmd.exe syntax (`dir`, not `ls`; `%VAR%`, not `$VAR`)".
+    Half the fix is picking a shell; the other half is telling the model which one it got.
+  - The tool is still called `bash`. Permission rules and every trajectory ever recorded name it,
+    and renaming it would break both to fix a label.
+  - `--shell` is validated once at build time — a path that does not exist is refused by name,
+    rather than failing on every command with an ENOENT that names neither the flag nor the file.
+  - Caveat: `resolveShell` takes the platform as a parameter, so it must not use `node:path`'s
+    `basename`/`sep`, which follow the *host*. It parses both separators itself; the first version
+    did not and mis-classified every Windows path when run from POSIX.
 - **Process-group kill degraded to killing one process (fixed).** Timeout and abort called
   `process.kill(-pid)`, which Windows does not support: it threw, and the fallback killed only the
   direct child — so `cmd.exe` died and whatever it started kept running, holding the stdio pipes
@@ -973,9 +989,7 @@ Recorded rather than built, each with a working path in the meantime:
 1. **F1 — PKCE + loopback login for `openai-chatgpt`.** The device-code flow cannot work from any
    Node process (Cloudflare challenges the client, not the location). Until then: seed the
    credential from Codex's `~/.codex/auth.json`, which the file store and the env var both read.
-2. **F2 — a configurable shell for the `bash` tool.** It runs `cmd.exe` on Windows, and models
-   write bash. Choosing the shell changes what every trajectory means, so it is a decision, not a
-   patch.
+2. ~~**F2 — a configurable shell for the `bash` tool.**~~ Built (2026-08-30) — see below.
 
 ## Open questions (from PLAN.md §8)
 
