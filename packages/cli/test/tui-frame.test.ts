@@ -351,3 +351,30 @@ describe("the input buffer", () => {
     expect(seen[0]).not.toContain("more)");
   });
 });
+
+describe("output while a paste is arriving", () => {
+  it("writes nothing to the terminal until the chunks stop coming", async () => {
+    // Every write during a paste is a blocking write to the tty, and one of them deadlocked a
+    // real terminal: the peer was blocked writing the rest of the paste into the input buffer
+    // while this process was blocked writing 1,166 bytes out. It needs about a kilobyte, so no
+    // amount of shrinking the frame avoids it — the fix is to write nothing at all until stdin
+    // goes quiet.
+    const h = mount(300);
+    await settle();
+    h.reset();
+
+    // 31 separate wakeups, the way the terminal actually delivered it
+    for (let i = 0; i < 31; i += 1) {
+      h.stdin.paste("x".repeat(64), 64);
+      await new Promise((r) => setImmediate(r));
+    }
+    const during = h.writes.length;
+    await settle();
+    const after = h.writes.length;
+    h.stop();
+
+    expect(during, "wrote to the terminal mid-paste").toBe(0);
+    // and the buffer is drawn once the burst settles, rather than never
+    expect(after).toBeGreaterThan(0);
+  });
+});

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
+import { InputBuffer } from "./input-buffer.js";
 import { fitToRows, liveRows } from "./viewport.js";
 
 /**
@@ -27,17 +28,25 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   /**
-   * The authoritative buffer. Ink drains several stdin chunks in one `readable` batch, and React
-   * does not update `input` between them — so reading the state variable to build a line dropped
-   * whole chunks: pasting 2,500 characters ending in a newline submitted 2,436 of them, silently.
-   * The ref moves synchronously; `input` exists only so a change re-renders.
+   * The authoritative buffer. Two reasons it is not the `input` state variable:
+   *
+   * - Ink drains several stdin chunks in one `readable` batch and React does not update state
+   *   between them, so reading state to build a line dropped whole chunks — pasting 2,500
+   *   characters ending in a newline submitted 2,436 of them, silently.
+   * - Drawing on every chunk interleaves output with input, which can deadlock a pty. See
+   *   `input-buffer.ts`; that is why drawing waits for stdin to go quiet.
+   *
+   * `input` exists only to trigger a re-render when the buffer is drawn.
    */
-  const buffer = useRef("");
-  const write = useCallback((next: string) => {
-    buffer.current = next;
-    setInput(next);
-  }, []);
+  const buffer = useRef<InputBuffer | null>(null);
+  buffer.current ??= new InputBuffer(setInput);
+  const buf = buffer.current;
+  useEffect(() => () => buf.dispose(), [buf]);
 
+  // Everything the controller has to say reaches the screen through here and nowhere else: the
+  // reply, the event lines, the status, the permission prompt. Without it the TUI still accepts
+  // input and still runs the agent — it just never shows any of it, which is not a failure any
+  // test that counts bytes can see. `test/tui-visible.test.ts` asserts the content instead.
   useEffect(() => controller.subscribe(setState), [controller]);
 
   useInput((char, key) => {
@@ -59,15 +68,15 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     }
 
     if (key.return) {
-      const line = buffer.current;
-      write("");
+      const line = buf.value;
+      buf.setNow("");
       void controller.submit(line).then((keepGoing) => {
         if (!keepGoing) exit();
       });
       return;
     }
     if (key.backspace || key.delete) {
-      write(buffer.current.slice(0, -1));
+      buf.set(buf.value.slice(0, -1));
       return;
     }
     if (char === undefined || char === "" || key.ctrl || key.meta) return;
@@ -76,14 +85,14 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     // newline and keep the remainder.
     if (/[\r\n]/.test(char)) {
       const [first = "", ...rest] = char.split(/\r\n|[\r\n]/);
-      const line = buffer.current + first;
-      write(rest.join(" "));
+      const line = buf.value + first;
+      buf.setNow(rest.join(" "));
       void controller.submit(line).then((keepGoing) => {
         if (!keepGoing) exit();
       });
       return;
     }
-    write(buffer.current + char);
+    buf.set(buf.value + char);
   });
 
   // `||`, not `??`: Ink's own layout notes that `columns` is undefined OR ZERO off a TTY, and a
