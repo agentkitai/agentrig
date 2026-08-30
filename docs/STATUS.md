@@ -1102,6 +1102,55 @@ scaffolding**, written by someone who only ever ran the suite on Linux and repor
   login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
   `icacls` call itself has not been observed to succeed.
 
+## The paste fix was half a fix — the review found the other half (2026-08-30)
+
+The adversarial review of the fix above found three majors. All three are now fixed; the section
+above describes the mechanism, this one what it got wrong.
+
+**The budget counted characters, and a reply is mostly line breaks.** `fitToRows` multiplied
+columns by rows and compared that to `text.length`, which is the same quantity only for text with
+no line breaks in it. An answer made of bullets and code — the shape almost every real reply has —
+measures far more rows than characters/columns suggests. A **1,625-character** reply of short
+lines measures 155 rows, drove 40 full-screen repaints and 699,389 bytes; flattening the same text
+to one line: 0 repaints, 31,059 bytes. So the freeze was unfixed on the more common of the two
+paths, and the one test covering it streamed `"answer ".repeat(500)` — a single long line with no
+newline in it, the one reply shape a character budget happens to handle. The budget is now rendered
+rows (`measureRows`), measured in display columns via `string-width` — the same measure Ink uses —
+so wide characters count as two.
+
+**`liveRows` budgeted one growable region and the frame draws two.** With a reply streaming *and*
+something typed, the frame is `2 × liveRows + 3`. Every terminal from 12 to 20 rows — a tmux pane,
+a split editor, VS Code's integrated terminal at its default height — still froze exactly as
+before. The allowance is now halved (`(rows - 6) / 2`), and the test asserts the condition the
+frame actually has to satisfy rather than restating the furniture count.
+
+**The regression guard could not fail on CI, which is the only place it runs.** Ink checks
+`is-in-ci` *before* the frame-height branch in `onRender` and returns having written only the
+`<Static>` output. GitHub Actions sets `CI=true` on every step. Reverting the fix entirely and
+running `CI=true pnpm test` left all four frame tests green. `test/setup-no-ci.ts` now clears those
+variables before any test file imports Ink — a setup file, because `is-in-ci` computes its value at
+module load and `vi.stubEnv` inside a test is too late — and one test asserts the setup ran, so the
+guard is itself guarded.
+
+Two pre-existing bugs surfaced in the same pass, both confirmed identical on the commit before any
+of this work and both fixed here:
+
+- **The TUI went silent for good at the 5,000th line.** `print` did `lines.slice(-maxLines)`, but
+  Ink's `<Static>` remembers how many items it has written and renders `items.slice(thatIndex)`.
+  Dropping items off the front shifts every index past what it remembers, and nothing is ever
+  printed again — no error, no clue. The array is now append-only; the cap releases the *text* of
+  a line that falls out of the window, which `Static` never reads again, so memory is still bound.
+- **A paste ending in a newline lost a chunk.** Ink drains several stdin chunks in one `readable`
+  batch and React does not update state between them, so the submit paths that read the `input`
+  state variable saw a stale buffer: pasting 2,500 characters ending in `\n` submitted 2,436.
+  The buffer is now a ref, which moves synchronously; `input` exists only to trigger a re-render.
+
+Smaller things from the same review: the "(N more)" count under-reported by the marker's own width
+(now derived from what was actually kept); the marker could be returned wider than a one-row
+budget in a very narrow window; and `columns ?? 80` let a TTY-reported **zero** through, collapsing
+the budget to one character per row so the user saw the marker and none of what they had typed —
+Ink's own layout uses `||` for exactly this reason.
+
 ## The TUI froze on a pasted brief (2026-08-30)
 
 Pasting a ~2,500-character task into the TUI hung it, twice, on a terminal that was otherwise

@@ -7,6 +7,9 @@ const pkg = (name: string) =>
 export default defineConfig({
   test: {
     include: ["packages/*/test/**/*.test.ts"],
+    // Ink disables the render path the TUI frame tests assert on whenever `CI` is set, which is
+    // every GitHub Actions step. See the setup file for what that hid.
+    setupFiles: ["./test/setup-no-ci.ts"],
   },
   resolve: {
     // Tests import workspace packages by name and resolve straight to source,
