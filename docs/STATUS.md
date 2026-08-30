@@ -1350,9 +1350,9 @@ Notes for a future reader:
 
 ## Next: the R-milestones (2026-08-30)
 
-M0–M7 are done and merged. What comes next is `docs/ROADMAP.md`: eleven R-milestones distilled
+M0–M7 are done and merged. What comes next is `docs/ROADMAP.md`: twelve R-milestones distilled
 from studying six open harnesses (Codex CLI, pi, DeepSeek Harness, Hermes Agent, OpenClaw,
-nanobot), ordered by dogfood leverage — context/config first, sandbox second, session
+nanobot), ordered by dogfood leverage — context/config first, context economy (R1.5, added after the first --yolo dogfood run spent 3.3M input tokens on quadratic resends), sandbox, session
 trees/checkpoints, then the compounding loop (extensions, memory→skills, scheduler), then the
 serve/eval/parallel surface. The roadmap carries its own renunciation list (§4) so future
 sessions don't build the gateway/web-UI/marketplace features the research argued against, and it

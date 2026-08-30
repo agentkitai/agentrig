@@ -80,6 +80,7 @@ session. R6 builds on exactly that edge.
 |---|---|---|---|---|---|---|---|---|
 | Project context file (`AGENTS.md`) | ✓ | ✓ | ✓ | — | ✓ | — | **missing** | R1 |
 | Config file + named profiles | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | flags only | R1 |
+| Tool-result eviction / context economy | ✓ (truncation) | ✓ (compaction) | ? | ? | ? | ? | full history resent every turn | R1.5 |
 | OS/container sandbox, escalation path | ✓ | renounced | seam | containers | config | — | **missing** (PLAN §8 open Q1) | R2 |
 | Session fork / tree / search / replay | resume | ✓✓ | ✓ | — | — | — | linear resume only | R3 |
 | Git checkpoint / undo | ✓ | extension | — | — | — | — | **missing** (PLAN §8 open Q2) | R4 |
@@ -122,6 +123,36 @@ provider asserts the system prompt contains the file's text); precedence pinned 
 (user < project < flags, each direction); a config key that parses but doesn't reach its
 subsystem must be impossible — one test per key asserts arrival, the `--supervise` lesson.
 Mutation: deleting the merge order fails a named test.
+
+### R1.5 — Context economy (added after the first --yolo dogfood run)
+
+*Evidence: the first unattended dogfood run (the supervisor-defect fix, PR #33) spent
+**3,301,978 input tokens over 50 turns** for 16,911 out. The work was good; the bill was
+quadratic. Every turn resends the whole conversation, the conversation carries every file ever
+read in full (one 1,400-line doc was read twice), and the M2 compaction only trips near the
+context window — a large-window model never reaches it. Claude Code and Codex both evict stale
+tool results from the outbound context; the OpenAI Responses API reports `cached_tokens` that
+agentrig currently ignores, so the displayed spend also overstates the effective one. Numbering
+is R1.5 in the M2.5/M3b house style: it was discovered after R1 was written and outranks
+everything below it — every subsequent dogfood session pays this tax.*
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R1.5a | Tool-result eviction: when building the outbound request, tool results older than K turns (default 5) with large payloads are replaced by a stub naming the tool, the target, and how to re-fetch ("read of packages/core/src/agent.ts elided — re-read if needed"); the session LOG is untouched (raw/ stays immutable and complete — this is a view, not a rewrite); `context.evicted` event records count + bytes saved | core |
+| R1.5b | Cached-token accounting: `Usage` gains an optional `cachedInput` field (schema-added); the Anthropic and openai-chatgpt adapters populate it from their cache-read fields; budget math charges cached tokens at the provider's discount when pricing is configured; displays read "3.3M in (2.9M cached)" | core + providers |
+| R1.5c | Turn-cap sanity: interactive sessions (TUI, `run` without `--headless`) default `maxTurns` to a high ceiling (200) while headless keeps 50; both overridable; the budget stop message says which limit fired and how to raise it | cli |
+
+Acceptance: a fixture conversation with three large reads shows the Nth-turn request smaller
+than the (N-1)th once eviction engages (the discriminating test: without eviction it is strictly
+larger); an evicted file that the model re-reads round-trips; `cachedInput` flows from a fake
+provider's usage frames to the session summary; interactive-vs-headless defaults pinned by a
+flags-reach-the-code test each. Mutation: disabling eviction must fail the shrinking-request
+test; double-counting cached tokens into `maxTokens` budget must fail a budget test.
+
+Renunciation: **no summarization pass here.** Eviction is mechanical and free; the M2
+compactor stays the tool for genuinely long conversations. A model-written summary of old turns
+is a quality feature with a token cost, not a cost feature, and it waits until R9's evals can
+measure whether it hurts.
 
 ### R2 — Sandbox: a second axis, not a better prompt (the big one)
 
@@ -330,12 +361,12 @@ feature list):
 ## 5. Sequencing and exit criteria
 
 ```
-R1 → R2 → R3 → R4 → R5 → R6 → R7 → R8 → R9 → R10 → R11
+R1 → R1.5 → R2 → R3 → R4 → R5 → R6 → R7 → R8 → R9 → R10 → R11
 └─ context ─┘ └─ cheap failure ─┘ └── compounding ──┘ └─ scale-out ─┘
 ```
 
-R1–R2 first because every later dogfood session benefits (context loaded, prompts gone,
-unattended runs safe). R3–R4 make experiments cheap to abandon. R5–R7 are the compounding loop —
+R1–R2 first because every later dogfood session benefits (context loaded, tokens linear
+instead of quadratic, prompts gone, unattended runs safe). R3–R4 make experiments cheap to abandon. R5–R7 are the compounding loop —
 extensions absorb feature pressure, memory emits skills, the scheduler runs the dream nightly.
 R8–R11 widen the surface last, when there's a supervisor-watched, evaled, sandboxed core worth
 exposing. Reorder only with a written reason in STATUS.
