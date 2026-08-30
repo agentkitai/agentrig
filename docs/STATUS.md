@@ -1102,6 +1102,52 @@ scaffolding**, written by someone who only ever ran the suite on Linux and repor
   login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
   `icacls` call itself has not been observed to succeed.
 
+## The TUI froze on a pasted brief (2026-08-30)
+
+Pasting a ~2,500-character task into the TUI hung it, twice, on a terminal that was otherwise
+responsive. It is not the paste handling: it is how tall the frame is.
+
+Ink has a cliff in its renderer. While the live frame is shorter than the window it redraws
+incrementally through `log-update`. The moment `outputHeight >= stdout.rows` it gives up on that
+and writes `clearTerminal + fullStaticOutput + output` instead — a full-screen clear followed by
+the **entire** accumulated `<Static>` scrollback, which Ink appends to and never trims. So a tall
+frame does not cost one big paint. It costs one big paint per render, and the paint grows with how
+long the session has been running.
+
+Two things in the frame grow without bound and are drawn live: the input buffer and the reply as
+it streams. A 2,500-character line wraps to ~32 rows at 80 columns, which is taller than most
+windows; a paste arrives at a raw-mode tty as a run of chunks, and each chunk is one `useInput`
+call, one `setInput`, one render.
+
+Measured with the real `App` against a fake 80x30 TTY, a 2,500-character paste in 64-byte chunks:
+
+| scrollback | before | after |
+| --- | --- | --- |
+| 300 lines | 40 repaints, 192,596 bytes | no full-screen repaints, ~27,000 bytes |
+| 2,000 lines | 40 repaints, 962,196 bytes | unchanged from the 300-line case |
+
+An 80-character paste cost 267 bytes either way — the blow-up is entirely the cliff.
+
+The fix is `packages/cli/src/tui/viewport.ts`: `fitToRows` draws the tail of a growable region and
+says how much it is not showing, `liveRows` decides how many rows one region may claim (a small
+fraction of the window, since the prompt, the status line and a permission prompt share the frame
+and the cliff is a property of the frame as a whole). Nothing is truncated in the buffer — it is a
+viewport, not an edit; the full text is still what gets submitted.
+
+Notes for a future reader:
+
+- **The streaming reply was the worse half.** A pasted brief is unusual; a multi-thousand-character
+  answer is an ordinary reply, and it arrives token by token, so the tall frame was fully repainted
+  once per delta for the whole turn. That is most of why the TUI felt slow before any of this was
+  understood, and `--verbose` made it worse by growing the scrollback that each repaint reprints.
+- **`app.tsx` is no longer untestable.** Its header used to say there was nothing in it worth
+  testing. How tall it renders is a correctness property, so `packages/cli/test/tui-frame.test.ts`
+  mounts the real component against a fake TTY and asserts on the bytes that reach stdout — the
+  presence of a full-screen clear in a write *is* the pathology, so that is what it looks for.
+- **`fitToRows` counts characters, not display columns.** A wide-character or emoji-heavy line can
+  therefore wrap one row further than the budget assumed. `liveRows` leaves eight rows of headroom,
+  which absorbs it; a `string-width` measure would be exact and is not worth the dependency yet.
+
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
