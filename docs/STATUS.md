@@ -1348,6 +1348,16 @@ Notes for a future reader:
   therefore wrap one row further than the budget assumed. `liveRows` leaves eight rows of headroom,
   which absorbs it; a `string-width` measure would be exact and is not worth the dependency yet.
 
+## Next: the R-milestones (2026-08-30)
+
+M0–M7 are done and merged. What comes next is `docs/ROADMAP.md`: eleven R-milestones distilled
+from studying six open harnesses (Codex CLI, pi, DeepSeek Harness, Hermes Agent, OpenClaw,
+nanobot), ordered by dogfood leverage — context/config first, sandbox second, session
+trees/checkpoints, then the compounding loop (extensions, memory→skills, scheduler), then the
+serve/eval/parallel surface. The roadmap carries its own renunciation list (§4) so future
+sessions don't build the gateway/web-UI/marketplace features the research argued against, and it
+resolves both PLAN §8 open questions (R2 sandboxing, R4 checkpoints).
+
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
