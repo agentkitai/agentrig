@@ -130,6 +130,15 @@ describe("supervisorOptions", () => {
       ...over,
     });
 
+  it("leaves the contract watchlist alone when the flag is absent", () => {
+    // Load-bearing: commander defaults `--drift-contract` to `undefined`, NOT `[]`, so an absent
+    // flag leaves `DriftOptions.contract` unset and the detector's own default list applies.
+    // Defaulting it to `[]` — the obvious edit, for consistency with --drift-scope — would pass
+    // an empty watchlist and silently switch the whole feature off for every run.
+    expect(wiring().drift).not.toHaveProperty("contract");
+    expect(wiring({ opts: { driftContract: [] } }).drift).toHaveProperty("contract", []);
+  });
+
   it("carries --drift-scope and --drift-contract through to the detector", () => {
     expect(
       wiring({ opts: { driftScope: ["packages/core"], driftContract: ["custom.config.ts"] } }).drift,

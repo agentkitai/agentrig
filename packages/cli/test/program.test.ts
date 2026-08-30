@@ -143,3 +143,15 @@ describe("argv parsing", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("--drift-contract's default is load-bearing", () => {
+  it("is undefined when absent, so the detector's own watchlist survives", async () => {
+    const { run } = stub(buildProgram());
+    // `[]` here would reach the detector as "watch nothing" and disable the feature silently;
+    // `undefined` means "no opinion", which is what lets DEFAULT_CONTRACT apply
+    expect((await run(["run", "x"]))?.opts.driftContract).toBeUndefined();
+    expect((await run([]))?.opts.driftContract).toBeUndefined();
+    // ...while --drift-scope keeps its empty-array default, which the detector reads as "no scope"
+    expect((await run(["run", "x"]))?.opts.driftScope).toEqual([]);
+  });
+});
