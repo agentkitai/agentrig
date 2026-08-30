@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
@@ -100,8 +101,28 @@ export class CorruptTokenFileError extends Error {
  * never follow a pre-existing symlink or inherit a loosened mode, and it is removed if the
  * rename fails rather than left on disk holding a live credential.
  */
+export interface FileTokenStoreOptions {
+  /** Defaults to `process.platform`. Injected so the Windows path is testable off Windows. */
+  platform?: NodeJS.Platform;
+  /** Defaults to an `icacls` call. Injected for the same reason. */
+  restrict?: (path: string) => Promise<void>;
+  warn?: (message: string) => void;
+}
+
 export class FileTokenStore implements TokenStore {
-  constructor(private readonly path: string = defaultAuthPath()) {}
+  private readonly isWindows: boolean;
+  private readonly restrict: (path: string) => Promise<void>;
+  private readonly warn: (message: string) => void;
+  private warnedRestrict = false;
+
+  constructor(
+    private readonly path: string = defaultAuthPath(),
+    opts: FileTokenStoreOptions = {},
+  ) {
+    this.isWindows = (opts.platform ?? process.platform) === "win32";
+    this.restrict = opts.restrict ?? restrictToOwnerWindows;
+    this.warn = opts.warn ?? ((m) => console.error(m));
+  }
 
   async read(): Promise<ChatGPTTokens | null> {
     let text: string;
@@ -132,6 +153,23 @@ export class FileTokenStore implements TokenStore {
         await handle.close();
       }
       await rename(tmp, this.path);
+      // `chmod(0o600)` only toggles the read-only bit on Windows — it does not keep another
+      // account out. Tighten the ACL there instead, best-effort: a credential that could not be
+      // locked down is still a credential the user needs, so this warns rather than failing.
+      if (this.isWindows) {
+        try {
+          await this.restrict(this.path);
+        } catch (err) {
+          if (!this.warnedRestrict) {
+            this.warnedRestrict = true;
+            this.warn(
+              `openai-chatgpt: could not restrict ${this.path} to your account ` +
+                `(${(err as Error).message}); on a shared machine, run: ` +
+                `icacls "${this.path}" /inheritance:r /grant:r "%USERNAME%":F`,
+            );
+          }
+        }
+      }
     } catch (err) {
       await rm(tmp, { force: true }).catch(() => {});
       throw err;
@@ -419,4 +457,21 @@ export class OpenAIChatGPTAuth {
     }
     return this.persist(raw, previous);
   }
+}
+
+/**
+ * Strip inherited ACEs and grant the current account full control — the Windows equivalent of
+ * the `0600` this file already asks for everywhere else.
+ */
+async function restrictToOwnerWindows(path: string): Promise<void> {
+  const user = process.env.USERNAME;
+  if (user === undefined || user === "") throw new Error("USERNAME is not set");
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      "icacls",
+      [path, "/inheritance:r", "/grant:r", `${user}:F`],
+      { timeout: 10_000, windowsHide: true },
+      (err: Error | null) => (err === null ? resolve() : reject(err)),
+    );
+  });
 }
