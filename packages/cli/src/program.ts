@@ -105,6 +105,11 @@ export function buildProgram(): Command {
         undefined,
       )
       .option("--deny <rule>", "deny a tool name or permission class (repeatable)", collect, [])
+      .option(
+        "--dangerously-skip-permissions",
+        "allow every tool call without asking, including outside the working directory; --deny still applies",
+      )
+      .option("--yolo", "alias for --dangerously-skip-permissions")
       .option("--max-turns <n>", "turn budget", "50")
       .option("--max-tokens <n>", "token budget (input + output)")
       .option("--max-minutes <n>", "wall-clock budget in minutes")

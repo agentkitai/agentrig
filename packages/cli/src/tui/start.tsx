@@ -12,7 +12,7 @@ import {
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
-import { parseSoft, supervisorOptions, type SupervisorFlags } from "../run.js";
+import { parseSoft, permissionWarning, supervisorOptions, type SupervisorFlags } from "../run.js";
 import { parseBudget } from "../agent-builder.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 
@@ -75,6 +75,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   controller.attach(built.agent);
+  // in the frame rather than on stderr: stderr would be overwritten by the first render
+  const warning = permissionWarning(opts, process.cwd());
+  if (warning !== null) controller.print(warning, "error");
   if (built.memoryStore !== undefined) {
     const store = built.memoryStore;
     controller.setMemory(async (query) => {

@@ -95,6 +95,60 @@ export function toRules(values: string[] | undefined, decision: "allow" | "deny"
 }
 
 /**
+ * Whether this run skips the permission prompt entirely.
+ *
+ * Two spellings for one thing: `--dangerously-skip-permissions` is the name that says what it
+ * does, `--yolo` is the name people actually type. Read through this helper rather than either
+ * flag, so a caller cannot honour one and miss the other.
+ */
+export function skipsPermissions(opts: { dangerouslySkipPermissions?: boolean; yolo?: boolean }): boolean {
+  return opts.dangerouslySkipPermissions === true || opts.yolo === true;
+}
+
+/**
+ * The policy both entry points run under.
+ *
+ * Order is the whole design. `--deny` is first, so it still wins under `--yolo`: skipping the
+ * prompt is not the same as discarding the rules you asked for, and `--yolo --deny write:anywhere`
+ * has to mean something. Skipping only changes what happens to a request NOTHING matched — `ask`
+ * normally, `allow` here — so it can never quietly overturn an earlier decision.
+ *
+ * Every request and its decision are still emitted to the session log, so a run that asked nothing
+ * is still a run you can read back afterwards.
+ */
+export function buildPermissionPolicy(opts: {
+  allow?: string[];
+  deny?: string[];
+  dangerouslySkipPermissions?: boolean;
+  yolo?: boolean;
+  extra?: PermissionRule[];
+}): RulePolicy {
+  return new RulePolicy(
+    [...toRules(opts.deny, "deny"), ...toRules(opts.allow, "allow"), ...(opts.extra ?? []), ...defaultRules],
+    skipsPermissions(opts) ? "allow" : "ask",
+  );
+}
+
+/**
+ * What to say before a run that will not ask. Returned rather than printed so the TUI can put it
+ * in the frame and `run` can put it on stderr, and so a test can assert on it.
+ */
+export function permissionWarning(
+  opts: { dangerouslySkipPermissions?: boolean; yolo?: boolean; deny?: string[] },
+  cwd: string,
+): string | null {
+  if (!skipsPermissions(opts)) return null;
+  const denied = (opts.deny ?? []).length === 0 ? "" : ` (except --deny ${(opts.deny ?? []).join(", ")})`;
+  // the cwd is named because "skip permissions" is abstract and "it may delete anything under
+  // /Users/you/work" is not
+  return (
+    `permissions are OFF${denied}: every tool call is allowed without asking, including writing ` +
+    `and deleting outside ${cwd} and running any shell command. The session log still records ` +
+    `every one of them.`
+  );
+}
+
+/**
  * The supervisor's own flags, split out so BOTH entry points can carry them. `TuiOptions` did not
  * include these at all — the type was the first evidence that `--supervise` could not possibly
  * work there.
@@ -218,6 +272,11 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   if (opts.memory === undefined && (opts.ingestOnEnd === true || opts.dreamOnEnd === true)) {
     console.error("--ingest-on-end/--dream-on-end need --memory; no session_end hook was registered");
   }
+
+  // said before the agent starts, not after: the point of the warning is to be readable while
+  // there is still time to stop
+  const warning = permissionWarning(opts, process.cwd());
+  if (warning !== null) console.error(warning);
 
   const interactive = opts.headless !== true && process.stdin.isTTY === true;
 

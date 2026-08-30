@@ -35,7 +35,7 @@ import { z } from "zod";
 import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
 import { buildProvider, type ProviderOptions } from "./provider.js";
 import { openBackend } from "./memory.js";
-import { defaultSystemPrompt, positiveNumber, toRules } from "./run.js";
+import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 
 /**
  * The one place an agent is assembled.
@@ -53,6 +53,10 @@ export interface AgentBuildOptions extends ProviderOptions {
   system?: string;
   allow?: string[];
   deny?: string[];
+  /** Allow everything nothing else matched, rather than asking. `--deny` still wins. */
+  dangerouslySkipPermissions?: boolean;
+  /** The same thing, spelled the way people type it. */
+  yolo?: boolean;
   maxTurns: string;
   maxTokens?: string;
   maxMinutes?: string;
@@ -295,17 +299,21 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   async function assemble(): Promise<BuiltAgent> {
   // one policy object, shared by parent and children: a subagent that could do more than its
   // parent would be a permission bypass with extra steps
-  const permissionPolicy = new RulePolicy([
-    ...toRules(opts.deny, "deny"),
-    ...toRules(opts.allow, "allow"),
-    ...(memoryToolset.length === 0
-      ? []
-      : [
-          { tool: "memory_search", decision: "allow" as const },
-          { tool: "memory_read", decision: "allow" as const },
-        ]),
-    ...defaultRules,
-  ]);
+  const permissionPolicy = buildPermissionPolicy({
+    ...(opts.allow === undefined ? {} : { allow: opts.allow }),
+    ...(opts.deny === undefined ? {} : { deny: opts.deny }),
+    ...(opts.dangerouslySkipPermissions === undefined
+      ? {}
+      : { dangerouslySkipPermissions: opts.dangerouslySkipPermissions }),
+    ...(opts.yolo === undefined ? {} : { yolo: opts.yolo }),
+    extra:
+      memoryToolset.length === 0
+        ? []
+        : [
+            { tool: "memory_search", decision: "allow" as const },
+            { tool: "memory_read", decision: "allow" as const },
+          ],
+  });
 
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {

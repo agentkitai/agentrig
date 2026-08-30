@@ -1102,6 +1102,40 @@ scaffolding**, written by someone who only ever ran the suite on Linux and repor
   login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
   `icacls` call itself has not been observed to succeed.
 
+## --yolo / --dangerously-skip-permissions (2026-08-30)
+
+Asked for after a dogfood run in which the agent's first move, `git fetch origin main`, was denied
+twice — standing answers (`a`) help once you are asked, but not before the first prompt of every
+kind, and not at all unattended.
+
+Implemented as the RulePolicy **fallback**, not as a switch that bypasses the policy:
+
+```
+[ ...--deny, ...--allow, ...memory tools, ...defaultRules ]   fallback: skip ? allow : ask
+```
+
+Order is the whole design. `--deny` is matched first, so it still wins under `--yolo`: skipping the
+prompt is not the same as discarding a rule you asked for, and `--yolo --deny bash` has to mean
+something. Skipping changes only what happens to a request nothing matched — `ask` normally,
+`allow` here — so it can never overturn an earlier decision.
+
+Notes for a future reader:
+
+- **Two spellings, one meaning.** `--dangerously-skip-permissions` says what it does, `--yolo` is
+  what people type. Both are read through `skipsPermissions()` rather than checked individually, so
+  a caller cannot honour one and miss the other — a mutation that drops the alias fails five tests.
+- **The warning names the working directory.** "Permissions are off" is abstract; "it may delete
+  anything outside /Users/you/project" is not. It also lists any `--deny` still in force, or the
+  warning would be actively misleading.
+- **It stays auditable.** `permission.request` and `permission.decision` are emitted for every call
+  regardless of how it was decided, so a run that asked nothing still reads back completely in
+  `agentrig sessions show`. That was already true; it is what makes the flag defensible.
+- **Subagents inherit it**, because parent and children share one policy object — a child that
+  could do more than its parent would be a permission bypass with extra steps, and the same
+  reasoning makes a child that must ask when its parent need not merely annoying.
+- **No root check.** Refusing to run as root is a common guard, but every container runs as root
+  and that would break the main unattended use case. The warning is the guard.
+
 ## A multi-line paste sent only its first line (2026-08-30)
 
 Found the first time a multi-line brief was pasted into a TUI where pasting finally worked. The
