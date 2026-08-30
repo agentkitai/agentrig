@@ -31,6 +31,16 @@ export interface Tool<I = unknown, O = unknown> {
    * directory (`cwdOnly` rules). A tool without this cannot be path-confined (e.g. bash).
    */
   paths?(input: I): string[];
+  /**
+   * The JSON Schema shown to the MODEL, when it cannot be derived from `inputSchema`.
+   *
+   * An MCP server describes its tools in JSON Schema already; converting that to zod and back
+   * would degrade it to "an object", losing every field description the server wrote — which is
+   * exactly what the model needs to call the tool correctly. `inputSchema` still governs
+   * validation, so a permissive zod schema plus the server's real schema is honest on both
+   * sides rather than a lossy round trip.
+   */
+  jsonSchema?: Record<string, unknown>;
   execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
 }
 

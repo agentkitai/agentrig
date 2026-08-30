@@ -13,7 +13,7 @@ Current milestone: **M7**
 | 4 | Supervisor v1: heuristic detectors, policy ladder, inject/escalate/abort | done (2026-08-29) |
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
-| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI done (2026-08-29); MCP, subagents, skills next |
+| 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | hooks + TUI + MCP done (2026-08-30); subagents, skills next |
 
 ## M0 notes
 
@@ -725,6 +725,64 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - **Caveat: no test renders the React tree.** `ink-testing-library` is installed but unused — the
   controller split means there is nothing in the view worth asserting on, and a snapshot test of
   terminal output would break on every cosmetic change.
+
+## M7 notes — the MCP client (third row)
+
+- **Written against the wire format, not the SDK.** A client needs three request shapes —
+  `initialize`, `tools/list`, `tools/call` — over newline-delimited JSON-RPC. The official SDK
+  would pull a large surface for that, and the adapter is the interesting part anyway.
+- **An MCP tool's permission class is `exec`, always.** The harness cannot know what a
+  third-party tool does: a server's `search` may read a database or shell out. `read` would be a
+  guess that fails open, and the permission system's whole value is that the dangerous default is
+  the safe one. It also declares no `paths()`, so it can never satisfy a `cwdOnly` rule — there is
+  no honest way to say which files a remote tool will touch.
+- **Tool names are namespaced *and sanitised*.** Both halves are user- or server-controlled and go
+  straight into the provider payload, which requires `^[a-zA-Z0-9_-]{1,64}$`. A server named
+  `my server` in a config file, a dotted tool name (common in real servers), or a long name from
+  an enterprise server all produced a name the provider rejects — and the rejection is a 400 on
+  *every* model request, so one bad entry killed the whole session rather than costing only its
+  own tools, falsifying the claim that a broken server is contained. Disallowed characters are
+  mapped, over-long names truncated with a hash of the original, and the hash is applied whenever
+  the composition is not reversible — which also closes the `__`-delimiter collision where
+  server `a__b`/tool `c` and server `a`/tool `b__c` composed to one name.
+- **A server's schema is normalised before it is advertised.** A server declaring
+  `{"type":"string"}` is both rejected by the provider and, if accepted, tells the model to send a
+  string that `inputSchema`'s zod check then refuses forever — the two sides disagreeing by
+  construction. Non-object schemas fall back to an empty object schema, and `$schema` is stripped.
+- **`Tool.jsonSchema` was added to core** (additive) so an MCP tool advertises the *server's* own
+  JSON Schema. Converting it to zod and back would degrade it to "an object", losing every field
+  description the server wrote — which is exactly what the model needs to call the tool correctly.
+  `inputSchema` still governs validation, so a permissive zod schema plus the server's real schema
+  is honest on both sides rather than a lossy round trip.
+- **A server is third-party code, so the M7a hook lessons apply unchanged**: every request is
+  timeout-bounded, a non-conforming reply is rejected rather than trusted, a dead child rejects
+  everything outstanding rather than leaving requests pending forever, and non-JSON on stdout is
+  reported once rather than crashing the reader. `tools/list` pagination is bounded, because a
+  server returning a cursor forever would loop.
+- **`close()` reaps the process *group*.** Real MCP servers are commonly wrappers (`npx`, `uvx`,
+  a shell shim) that spawn the actual server, so signalling one pid orphaned the grandchild — the
+  common case, not the exotic one. The child is spawned `detached` and killed by group, as the
+  bash tool does. The teardown sleep is also no longer `unref`'d: an unref'd timer let Node exit
+  before it fired, so `close()` never resolved when the event loop was otherwise quiescent — which
+  is exactly the teardown case, meaning the SIGKILL escalation was skipped and any later server in
+  the list was never closed at all.
+- **Config accepts `mcpServers` and `servers`.** Claude Code and Cursor use the former, VS Code
+  the latter; accepting only one — with a default of `{}` on top — meant pointing the flag at a
+  working config produced a silently tool-less session. Neither key present is now a hard error.
+- **The environment is not inherited wholesale.** A user pointing at a third-party binary should
+  not hand it every secret in their shell, so only `PATH` plus explicitly configured vars are
+  passed.
+- **A server that fails to start costs its own tools and nothing else** — one broken entry in a
+  config file must not stop the agent from running, the same way a failed hook or backend does not.
+- Config is `{"servers": {"<name>": {"command", "args", "env"}}}` — the shape Claude Code and
+  Cursor use, so an existing file works unchanged. `--mcp-config <path>`.
+- **Caveat: stdio transport only.** HTTP/SSE servers are not supported.
+- **Caveat: only `tools/*` is implemented.** MCP resources and prompts are not, and neither is
+  the server-initiated side of the protocol (sampling, roots).
+- **Caveat: servers are started per session**, so a long-lived server is respawned each run.
+- One real-process test covers group reaping, because it cannot be faked. Note the trap it
+  documents: `kill(pid, 0)` succeeds on a *zombie*, so checking existence rather than liveness
+  reports a false failure — the test polls process state instead.
 
 ## Decided
 

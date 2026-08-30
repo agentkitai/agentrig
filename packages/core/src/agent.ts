@@ -115,6 +115,11 @@ export interface Agent {
 }
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
+  // a tool carrying its own JSON Schema (an MCP tool) advertises that; deriving one from its
+  // permissive zod schema would tell the model the input is "an object" and nothing more
+  if (tool.jsonSchema !== undefined) {
+    return { name: tool.name, description: tool.description, inputSchema: tool.jsonSchema };
+  }
   const schema = zodToJsonSchema(tool.inputSchema, { $refStrategy: "none" }) as Record<string, unknown>;
   delete schema.$schema;
   return { name: tool.name, description: tool.description, inputSchema: schema };

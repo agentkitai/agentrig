@@ -115,7 +115,8 @@ export function buildProgram(): Command {
       .option("--dream-on-end", "run the scheduled dream when one is due (PLAN §3.7); reports, never applies")
       .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
-      .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens");
+      .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
+      .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session");
   }
 
   // AGENTRIG_MODEL baked into the flag default still counts as an explicit model choice

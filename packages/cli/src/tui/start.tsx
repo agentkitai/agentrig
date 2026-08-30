@@ -104,5 +104,6 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     process.removeListener("SIGINT", onSigint);
     // a session still running when the UI closes would keep billing with nothing watching it
     await controller.shutdown();
+    for (const server of built.mcp) await server.close().catch(() => {});
   }
 }
