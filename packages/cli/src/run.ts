@@ -28,7 +28,12 @@ import {
   memoryTools,
 } from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
-import { RubricGrader, supervise, TrajectoryReviewer } from "@agentkitai/agentrig-supervisor";
+import {
+  RubricGrader,
+  supervise,
+  TrajectoryReviewer,
+  type SuperviseOptions,
+} from "@agentkitai/agentrig-supervisor";
 import { join } from "node:path";
 
 export { DEFAULT_ANTHROPIC_MODEL };
@@ -40,7 +45,7 @@ export { DEFAULT_ANTHROPIC_MODEL };
  */
 export const DEFAULT_SESSIONS_DIR = ".agentrig/raw/sessions";
 
-export interface RunOptions extends AgentBuildOptions {
+export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   root: string;
   json?: boolean;
   /** Show the raw event trace instead of the conversation. `--json` is unaffected. */
@@ -59,10 +64,8 @@ export interface RunOptions extends AgentBuildOptions {
   priceOut?: string;
   maxTokensPerTurn: string;
   memory?: string;
-  supervise?: boolean;
-  supervisorNoAbort?: boolean;
+  /** Required here (the flag has a default) while `SupervisorFlags` leaves it optional. */
   supervisorSoft: string;
-  supervisorReview?: boolean;
   ingestOnEnd?: boolean;
   dreamOnEnd?: boolean;
   dreamEverySessions: string;
@@ -89,6 +92,77 @@ export function toRules(values: string[] | undefined, decision: "allow" | "deny"
     }
     return rule;
   });
+}
+
+/**
+ * The supervisor's own flags, split out so BOTH entry points can carry them. `TuiOptions` did not
+ * include these at all — the type was the first evidence that `--supervise` could not possibly
+ * work there.
+ */
+export interface SupervisorFlags {
+  supervise?: boolean;
+  supervisorNoAbort?: boolean;
+  supervisorSoft?: string;
+  supervisorReview?: boolean;
+  driftScope?: string[];
+  memory?: string;
+}
+
+/** `--supervisor-soft` is a fraction of the budget, not a count. Shared so both parse it alike. */
+export function parseSoft(value: string): number {
+  const soft = positiveNumber("--supervisor-soft", value);
+  if (soft > 1) throw new Error(`--supervisor-soft is a fraction of the budget, got ${JSON.stringify(value)}`);
+  return soft;
+}
+
+export interface SupervisorWiring {
+  opts: SupervisorFlags;
+  task: string;
+  budget: Budget;
+  pricing?: Pricing;
+  memoryIndex: string;
+  provider: ModelProvider;
+  soft: number;
+  onEscalate?: (question: string) => void;
+  onError?: (where: string, err: Error) => void;
+}
+
+/**
+ * Everything the supervisor is configured with, in one place.
+ *
+ * Exported and pure because it was previously inline in `runCommand` — where the only way to test
+ * that a flag reached the supervisor was to run a whole session, so nothing did. `--drift-scope`
+ * could be deleted from the wiring and every test still passed. It is also what lets the TUI
+ * attach the same supervisor rather than a second, divergent one.
+ */
+export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
+  const o = w.opts;
+  return {
+    budget: {
+      soft: w.soft,
+      ...(w.budget.maxTurns === undefined ? {} : { maxTurns: w.budget.maxTurns }),
+      ...(w.budget.maxTokens === undefined ? {} : { maxTokens: w.budget.maxTokens }),
+      ...(w.budget.maxUsd === undefined ? {} : { maxUsd: w.budget.maxUsd }),
+      ...(w.budget.maxMinutes === undefined ? {} : { maxMinutes: w.budget.maxMinutes }),
+    },
+    capabilities: { abort: o.supervisorNoAbort !== true },
+    drift: { scope: o.driftScope ?? [] },
+    task: w.task,
+    ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
+    ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
+    ...(o.supervisorReview === true
+      ? {
+          reviewer: new TrajectoryReviewer({ provider: w.provider }),
+          grader: new RubricGrader({ provider: w.provider }),
+          attempts: async () => {
+            if (o.memory === undefined) return [];
+            return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;
+          },
+        }
+      : {}),
+    ...(w.onEscalate === undefined ? {} : { onEscalate: w.onEscalate }),
+    ...(w.onError === undefined ? {} : { onError: w.onError }),
+  };
 }
 
 export function defaultSystemPrompt(cwd: string): string {
@@ -126,10 +200,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let dreamEveryHours: number;
   let supervisorSoft: number;
   try {
-    supervisorSoft = positiveNumber("--supervisor-soft", opts.supervisorSoft);
-    if (supervisorSoft > 1) {
-      throw new Error(`--supervisor-soft is a fraction of the budget, got "${opts.supervisorSoft}"`);
-    }
+    supervisorSoft = parseSoft(opts.supervisorSoft);
     dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
     dreamEveryHours = positiveNumber("--dream-every-hours", opts.dreamEveryHours);
   } catch (err) {
@@ -172,38 +243,22 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   const supervisor =
     opts.supervise !== true
       ? null
-      : supervise(session, {
-          budget: {
+      : supervise(
+          session,
+          supervisorOptions({
+            opts,
+            task,
+            budget: budget.budget,
+            ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
+            memoryIndex,
+            provider,
             soft: supervisorSoft,
-            ...(budget.budget.maxTurns === undefined ? {} : { maxTurns: budget.budget.maxTurns }),
-            ...(budget.budget.maxTokens === undefined ? {} : { maxTokens: budget.budget.maxTokens }),
-            ...(budget.budget.maxUsd === undefined ? {} : { maxUsd: budget.budget.maxUsd }),
-            ...(budget.budget.maxMinutes === undefined ? {} : { maxMinutes: budget.budget.maxMinutes }),
-          },
-          capabilities: { abort: opts.supervisorNoAbort !== true },
-          drift: { scope: opts.driftScope ?? [] },
-          task,
-          ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
-          ...(memoryIndex === "" ? {} : { memoryIndex }),
-          ...(opts.supervisorReview === true
-            ? {
-                reviewer: new TrajectoryReviewer({ provider }),
-                grader: new RubricGrader({ provider }),
-                attempts: async () => {
-                  if (opts.memory === undefined) return [];
-                  return (await new FileRawStore({ root: opts.memory }).readAttempts()).attempts;
-                },
-              }
-            : {}),
-          ...(interactive
-            ? {
-                onEscalate: (question: string) => {
-                  console.error(`supervisor escalation: ${question}`);
-                },
-              }
-            : {}),
-          onError: (where, err) => console.error(`supervisor ${where}: ${err.message}`),
-        });
+            ...(interactive
+              ? { onEscalate: (question: string) => console.error(`supervisor escalation: ${question}`) }
+              : {}),
+            onError: (where, err) => console.error(`supervisor ${where}: ${err.message}`),
+          }),
+        );
 
   const onSigint = (): void => session.control.abort();
   process.on("SIGINT", onSigint);

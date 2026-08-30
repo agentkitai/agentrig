@@ -59,6 +59,13 @@ export interface TuiControllerOptions {
   /** Whether a supervisor is attached; `/supervisor` says so rather than promising an empty list. */
   supervised?: boolean;
   /**
+   * Attaches an observer to each session as it starts. Sessions are created in here, so the
+   * supervisor cannot be attached from outside — which is why `--supervise` was accepted by the
+   * TUI and silently did nothing: every detector, the whole ladder, the reviewer and the grader
+   * were unreachable from the default entry point.
+   */
+  onSession?: (session: Session) => void;
+  /**
    * Cap on retained lines. Generous because `Static` renders each line once — the old 500 was
    * sized for a live tree whose cost grew with the buffer.
    */
@@ -358,6 +365,13 @@ export class TuiController {
       return;
     }
     this.session = session;
+    // before the events are consumed: an observer attached late misses the start of the session
+    // it is meant to be watching
+    try {
+      this.opts.onSession?.(session);
+    } catch (err) {
+      this.print(`supervisor could not attach: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
     // a continued session keeps the plan and the signals it already had; only a new one clears
     this.set({
       status: "running",

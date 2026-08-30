@@ -406,6 +406,50 @@ describe("TuiController", () => {
     await again;
   });
 
+  it("attaches an observer to each session, which is how the supervisor reaches the TUI", async () => {
+    // `--supervise` was accepted here and silently did nothing: sessions are created inside the
+    // controller, so nothing outside it could attach an observer, and startTui never tried
+    const seen: string[] = [];
+    const c = makeController(
+      [
+        [{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")],
+        [{ type: "text_delta", text: "two" }, usage(1, 1), stop("end_turn")],
+      ],
+      { onSession: (session) => seen.push(session.id) },
+    );
+    await c.submit("first");
+    await c.submit("second");
+
+    // once per session, including the continued one — an observer of a session it did not see
+    // start has missed the events it exists to judge
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(c.snapshot().sessionId);
+  });
+
+  it("an observer that throws costs its own attachment, not the session", async () => {
+    const c = makeController([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]], {
+      onSession: () => {
+        throw new Error("supervisor exploded");
+      },
+    });
+    await c.submit("go");
+
+    // the work is what the user asked for; the observer is not
+    expect(text(c)).toContain("supervisor could not attach: supervisor exploded");
+    expect(text(c)).toContain("ok");
+    expect(c.snapshot().status).toBe("idle");
+  });
+
+  it("/supervisor stops claiming nothing is attached when something is", async () => {
+    const off = makeController([]);
+    await off.submit("/supervisor");
+    expect(text(off)).toContain("no supervisor is attached");
+
+    const on = makeController([], { supervised: true, onSession: () => {} });
+    await on.submit("/supervisor");
+    expect(text(on)).toContain("raised nothing this session");
+  });
+
   it("refuses to start a second turn while one is running", async () => {
     const c = makeController([
       [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
