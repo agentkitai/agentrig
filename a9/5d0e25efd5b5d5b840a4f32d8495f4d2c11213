@@ -1,0 +1,14 @@
+README.md
+  h_26c5a60a657125 3,5-6,8,10,12-37,39-70,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "a95d0e25efd5b5d5b840a4f32d8495f4d2c11213",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
