@@ -1,5 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -151,23 +151,25 @@ describe("edit_file", () => {
 });
 
 /**
- * A process's group id, read from /proc. `process.getpgid` is not available in every Node build,
- * and this is the only way to see whether `detached` was set from outside the spawn call.
+ * A process's group id. `ps`, not `/proc`: `/proc` is Linux-only, and the version of this helper
+ * that read it returned null on macOS — where every assertion guarded by it was skipped, so the
+ * tests passed there without testing anything.
  */
 function groupIdOf(pid: number): number | null {
   try {
-    return parseStat(readFileSync(`/proc/${pid}/stat`, "utf8"))?.pgrp ?? null;
+    const out = execFileSync("ps", ["-o", "pgid=", "-p", String(pid)], { encoding: "utf8" }).trim();
+    const pgrp = Number(out);
+    return out !== "" && Number.isFinite(pgrp) ? pgrp : null;
   } catch {
-    return null; // not Linux, or already reaped
+    return null; // already reaped, or no ps
   }
 }
 
-/** `pid (comm) state ppid pgrp ...` — comm can itself contain spaces and parentheses. */
-function parseStat(stat: string): { pid: number; pgrp: number } | null {
-  const close = stat.lastIndexOf(")");
-  if (close === -1) return null;
-  const pid = Number(stat.slice(0, stat.indexOf(" ")));
-  const pgrp = Number(stat.slice(close + 2).split(" ")[2]);
+/** `<pid>` then `<pgid>`, as the shell prints them about itself into the command's own stdout. */
+function selfIds(stdout: string): { pid: number; pgrp: number } | null {
+  const [pidLine, pgidLine] = stdout.trim().split(/\n/);
+  const pid = Number(pidLine);
+  const pgrp = Number(pgidLine);
   return Number.isFinite(pid) && Number.isFinite(pgrp) ? { pid, pgrp } : null;
 }
 
@@ -180,13 +182,18 @@ describe("which shell runs the command", () => {
     expect((bash.output as { stdout: string }).stdout.trim()).toBe("/bin/bash");
   });
 
-  it("a bashism works under bash and not under sh, which is the whole point of the flag", async () => {
-    const command = "[[ 1 == 1 ]] && echo bashism-ran";
-    const bash = await bashTool({ shell: "/bin/bash" }).execute({ command }, ctx);
-    expect((bash.output as { stdout: string }).stdout).toContain("bashism-ran");
-    // /bin/sh is dash here; a model writing bash at a POSIX shell fails exactly like this
-    const sh = await bashTool({ shell: "/bin/sh" }).execute({ command }, ctx);
-    expect((sh.output as { exitCode: number }).exitCode).not.toBe(0);
+  it("hands the command to the named shell, with -c, whatever that shell is", async () => {
+    // A stub shell rather than a real one: comparing bash against /bin/sh only demonstrates
+    // anything where /bin/sh is dash. On macOS it is bash in POSIX mode and runs `[[ ]]` happily,
+    // so the version of this test that compared them failed there for a reason that had nothing
+    // to do with the code under test.
+    const stub = join(root, "stub-shell.sh");
+    await writeFile(stub, '#!/bin/sh\necho "STUB RAN: $1 $2"\n', "utf8");
+    await chmod(stub, 0o755);
+
+    const r = await bashTool({ shell: stub }).execute({ command: "echo hello" }, ctx);
+    // proves both that the chosen shell ran it and that it arrived the way a shell expects
+    expect((r.output as { stdout: string }).stdout.trim()).toBe("STUB RAN: -c echo hello");
   });
 
   it("tells the model which shell it is writing for, and in which syntax", () => {
@@ -247,14 +254,17 @@ describe("killing a command's whole tree", () => {
     const killed: number[] = [];
     const tool = bashTool({ killTree: (p) => void killed.push(p) });
     // the shell reports its own stat line before sleeping, so the group is read while it lives
-    const r = await tool.execute({ command: "cat /proc/$$/stat; sleep 5", timeoutMs: 300 }, ctx);
+    const r = await tool.execute({ command: "echo $$; ps -o pgid= -p $$; sleep 5", timeoutMs: 400 }, ctx);
     const out = (r.output as { stdout: string }).stdout;
 
     expect(killed).toEqual([]);
     expect(r.output).toMatchObject({ timedOut: true });
-    const shell = parseStat(out);
+    // asserted, not skipped: reading /proc from inside the command simply failed on macOS, and
+    // the `if (shell !== null)` that tolerated it turned the whole check into a no-op there
+    const shell = selfIds(out);
+    expect(shell, `could not read the shell's own ids from ${JSON.stringify(out)}`).not.toBeNull();
     // the shell is its own group leader, so `kill(-pid)` reaches everything it started
-    if (shell !== null) expect(shell.pgrp).toBe(shell.pid);
+    expect(shell!.pgrp).toBe(shell!.pid);
   });
 });
 

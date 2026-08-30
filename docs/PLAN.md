@@ -631,4 +631,7 @@ fix. Same standing as AgentLens in §7: recorded so it is a decision rather than
 | ~~F1~~ | ~~**PKCE + loopback login for `openai-chatgpt`**~~ | **Built (2026-08-30).** `startLoopbackLogin`: PKCE S256, a one-shot listener on both loopback stacks, state checked, code exchanged at `/oauth/token`. The device-code flow it replaces is deleted — it could never work. | — |
 | ~~F2~~ | ~~**A configurable shell for the `bash` tool**~~ | **Built (2026-08-30).** `bashTool({ shell })` and `--shell`; POSIX keeps `/bin/sh`, Windows prefers Git Bash, then PowerShell, then `cmd.exe`, and the tool description names both the shell and the syntax to write in. | — |
 
-Both are built. The table is kept as the record of why each was deferred and what closed it.
+| F3 | **A Windows CI job** | The suite assumes a POSIX shell in several places (`/bin/sh`, `sleep`, process groups), so a `windows-latest` job would be red on arrival for reasons unrelated to the code it would be testing. Making it pass is real work, and doing it badly — by skipping every test that fails — would produce a green job that tests nothing. | Replace the POSIX assumptions in test helpers the way the macOS pass did (a stub shell instead of `/bin/sh`, `taskkill`-aware liveness checks), then add the job. The Windows *code* paths are already covered off-Windows through injected `platform`/`killTree`/`shellExists` seams; it is the test scaffolding that is not portable. |
+
+Both F1 and F2 are built. The table is kept as the record of why each was deferred and what closed
+it — and F3 is what the first real macOS run added to it.
