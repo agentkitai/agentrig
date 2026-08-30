@@ -1002,6 +1002,41 @@ The lesson is the one the whole exercise was for: **a flag that is parsed, valid
 documented can still be connected to nothing**, and no amount of unit testing at either end finds
 it. Only running the thing did.
 
+## The supervisor, watched doing real work (2026-08-30)
+
+The second dogfood run — the contract watchlist, built by agentrig with `--supervise` actually
+attached for the first time. Every rung fired, and each one is now observed rather than inferred:
+
+- **`stall` → `inject_guidance` → the agent changed course.** The steer was delivered and answered
+  ("I'm not blocked; I was tracing the shared run/TUI option path"), and file edits started on the
+  next turn. Signal to behaviour change, live.
+- **`force_replan` blocked a tool call**: `blocked: the supervisor requires a fresh plan before
+  more tool calls`. The agent called `update_plan` and continued. The M6 rung works.
+- **`error_burst`** fired at 5-of-10 failing calls; **`escalate`** reached the user through the
+  TUI's new `onEscalate`.
+
+Three defects the same run exposed, none of which a test would have found:
+
+- **`stall` fires on reading.** Its first signal landed during legitimate orientation — several
+  turns of `read_file`/`grep` while mapping unfamiliar code. "No file changed and no new tool
+  used" describes research as well as it describes being stuck, and the agent's reply amounted to
+  "I am not stalled, I am reading". It was right.
+- **`escalate` asks a question nobody can answer.** The TUI prints it and moves on; there is no way
+  to reply, and nothing waits for one. A rung whose purpose is to consult a human currently
+  consults and ignores.
+- **The same signal repeats.** Identical stall escalations at 38, 41 and 58 tool calls on an
+  unchanged condition. A ladder that re-fires one rung is noise, and noise is how a supervisor
+  comes to be ignored.
+
+## A default that was load-bearing and untested
+
+`--drift-contract` defaults to `undefined`, not `[]` — deliberately. An absent flag must leave
+`DriftOptions.contract` unset so the detector's own `DEFAULT_CONTRACT` applies; passing `[]` would
+reach it as "watch nothing" and switch the whole feature off for every run that did not name a
+path. Changing `undefined` to `[]`, which is the obvious edit for consistency with
+`--drift-scope`, broke no test when the feature was written. Both halves of the property are
+pinned now: the flag's default, and the detector's fallback.
+
 ## "Green" meant Linux (from the first macOS run, 2026-08-30)
 
 Two tests failed on a Mac. Neither was a code defect; both were **Linux assumptions in the test
