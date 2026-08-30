@@ -149,18 +149,27 @@ account has credits.
   per-provider-instance, so a resumed session in a fresh process replays reconstructed calls
   instead — acceptable for non-reasoning models, and the most likely first live failure to
   watch for with a reasoning model.
-- **The device-code login cannot run from ANY Node process (corrected 2026-08-30).**
-  `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive bot challenge
-  (`cf-mitigated: challenge`, 403 with an HTML interstitial). The earlier note said to "sign in on
-  a machine with a browser" — that is wrong, and a desktop attempt produced the identical 403:
-  the challenge targets the HTTP *client*, not the network location, and `fetch` is not a browser
-  wherever it runs. `agentrig login openai-chatgpt` is therefore unusable as written.
-  **How to get a credential today:** take Codex's. Its login is a PKCE + loopback flow, so the
-  challenged request is made by the browser. `~/.codex/auth.json` is accepted verbatim, either
-  copied to `~/.agentrig/openai-chatgpt-auth.json` or set as `AGENTRIG_OPENAI_CHATGPT_TOKEN`.
-  **The real fix is a PKCE + loopback login of our own** (browser to `auth.openai.com`, redirect
-  caught on a local port), which is the only flow that can work; the device-code path should be
-  replaced by it rather than kept.
+- **Sign-in is a browser flow now; the device-code flow is deleted (F1, 2026-08-30).**
+  `auth.openai.com` puts an interactive Cloudflare challenge in front of BOTH `/deviceauth/usercode`
+  and `/oauth/authorize` (`cf-mitigated: challenge`, 403 — reproduced from a cloud container and
+  from a desktop, and confirmed again against `/oauth/authorize` while building this). The
+  challenge targets the HTTP *client*: `fetch` is not a browser wherever it runs, so no Node
+  process can complete either. An earlier note here said to "sign in on a machine with a browser";
+  that was wrong.
+  `startLoopbackLogin` inverts it — **the browser makes the challenged request and we never do**:
+  - PKCE S256; the verifier never leaves the process, the challenge goes in the URL.
+  - A one-shot listener on `127.0.0.1` **and** `::1`, because the browser decides what `localhost`
+    means and on Windows that is usually `::1` — a v4-only listener never hears the redirect.
+  - `state` is checked before anything is exchanged: a redirect that fails it is not ours, and a
+    code we did not ask for is never sent to the token endpoint.
+  - The code is never echoed into the page the browser shows. Paths other than the callback get a
+    404 rather than failing the login, because a browser also asks for `/favicon.ico`.
+  - The code is exchanged at `/oauth/token` — the same endpoint every refresh already uses, and the
+    one endpoint that is NOT challenged, which is what makes the whole flow possible.
+  - The device-code code and its tests are deleted rather than kept: a path proven unusable in
+    production, kept "just in case", is dead code that reads like a fallback.
+  Seeding from Codex's `~/.codex/auth.json` still works and is still the fastest path on a machine
+  that already has it.
 - **The token file reader accepts both shapes.** It used to parse only AgentRig's own camelCase
   bundle, so the obvious move — copying `~/.codex/auth.json` into place — failed with a "corrupt
   file" error that named neither the cause nor the fix, while the env-var path accepted exactly
@@ -986,9 +995,7 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 
 Recorded rather than built, each with a working path in the meantime:
 
-1. **F1 — PKCE + loopback login for `openai-chatgpt`.** The device-code flow cannot work from any
-   Node process (Cloudflare challenges the client, not the location). Until then: seed the
-   credential from Codex's `~/.codex/auth.json`, which the file store and the env var both read.
+1. ~~**F1 — PKCE + loopback login for `openai-chatgpt`.**~~ Built (2026-08-30) — see below.
 2. ~~**F2 — a configurable shell for the `bash` tool.**~~ Built (2026-08-30) — see below.
 
 ## Open questions (from PLAN.md §8)
