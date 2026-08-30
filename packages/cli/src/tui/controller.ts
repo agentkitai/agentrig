@@ -79,6 +79,12 @@ export class TuiController {
   };
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
+  /**
+   * Whether the current session can be continued. Set by a completed turn, because that is when
+   * the loop writes the snapshot a resume reads — a session that died before finishing a turn
+   * has nothing to resume from, and asking would lose the next prompt to an error.
+   */
+  private resumable = false;
   private session: Session | null = null;
   /** Requests waiting behind the one on screen. */
   private readonly queue: PendingPermission[] = [];
@@ -243,7 +249,11 @@ export class TuiController {
         return true;
       case "resume":
         if (cmd.id === "") this.print("usage: /resume <session-id>", "error");
-        else await this.start("Continue the task.", { resume: cmd.id });
+        else {
+          // trust the id the user named: they are asking for a session this process never ran
+          this.resumable = true;
+          await this.start("Continue the task.", { resume: cmd.id });
+        }
         return true;
       case "verbose": {
         const verbose = !this.state.verbose;
@@ -261,7 +271,18 @@ export class TuiController {
         return true;
       case "task":
         this.print(cmd.text, "you");
-        await this.start(cmd.text, { cwd: this.opts.cwd });
+        // Continue the session rather than starting a new one. Every prompt used to be its own
+        // session, so nothing the user said was ever in scope for what they said next: the token
+        // count did not grow between turns because no history was being sent.
+        await this.start(cmd.text, {
+          cwd: this.opts.cwd,
+          ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
+        });
+        return true;
+      case "new":
+        this.resumable = false;
+        this.set({ sessionId: null, plan: [], signals: [], turns: 0 });
+        this.print("starting fresh — the next task begins a new session", "system");
         return true;
       default:
         return true;
@@ -295,7 +316,12 @@ export class TuiController {
       return;
     }
     this.session = session;
-    this.set({ status: "running", sessionId: session.id, plan: [], signals: [] });
+    // a continued session keeps the plan and the signals it already had; only a new one clears
+    this.set({
+      status: "running",
+      sessionId: session.id,
+      ...(opts.resume === undefined ? { plan: [], signals: [] } : {}),
+    });
 
     const work = this.drive(session);
     this.running = work;
@@ -327,7 +353,12 @@ export class TuiController {
   private consume(e: HarnessEvent): void {
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
-    if (e.type === "turn.end") this.set({ turns: e.n });
+    if (e.type === "turn.end") {
+      this.set({ turns: e.n });
+      // the loop writes its resume snapshot after every turn.end, so this is exactly when the
+      // session becomes continuable
+      this.resumable = true;
+    }
 
     // The reply is the point of the whole exercise. `model.delta` is per-token, so it streams
     // into a live line rather than one printed line per token, and is committed when its turn

@@ -14,6 +14,7 @@ export type TuiCommand =
   | { kind: "supervisor" }
   | { kind: "plan" }
   | { kind: "verbose" }
+  | { kind: "new" }
   | { kind: "resume"; id: string }
   | { kind: "unknown"; name: string };
 
@@ -32,8 +33,9 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
+  { name: "new", summary: "forget this conversation and start a new session" },
   { name: "abort", summary: "stop the running turn" },
-  { name: "quit", summary: "exit (ctrl-c also works)" },
+  { name: "quit", summary: "exit (bare `exit`/`quit`, and ctrl-c, also work)" },
 ];
 
 /**
@@ -43,8 +45,16 @@ export const COMMANDS: CommandSpec[] = [
  * `/memroy` meant to run a command, and silently spending a turn on it as a prompt is the
  * least useful possible response.
  */
+/**
+ * Bare words every REPL treats as leaving, and nobody types as a task for an agent. Typing
+ * `exit` used to be sent to the model, which spent a turn and 1330 tokens replying "Exiting."
+ * and then did not exit.
+ */
+const BARE_QUIT = new Set(["exit", "quit", "bye", ":q"]);
+
 export function parseCommand(line: string): TuiCommand | null {
   const trimmed = line.trim();
+  if (BARE_QUIT.has(trimmed.toLowerCase())) return { kind: "quit" };
   if (trimmed === "") return null;
   if (!trimmed.startsWith("/")) return { kind: "task", text: trimmed };
 
@@ -77,6 +87,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "verbose" };
     case "resume":
       return { kind: "resume", id: args };
+    case "new":
+      return { kind: "new" };
     default:
       return { kind: "unknown", name };
   }
