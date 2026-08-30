@@ -39,7 +39,8 @@ function feed(
   return { signals, state };
 }
 
-const call = (name: string, hash: string) => ev({ type: "tool.call", id: `c${seq}`, name, input: {}, inputHash: hash });
+const call = (name: string, hash: string, input: unknown = {}) =>
+  ev({ type: "tool.call", id: `c${seq}`, name, input, inputHash: hash });
 const result = (ok: boolean, display: string) => ev({ type: "tool.result", id: `c${seq}`, ok, display, durationMs: 1 });
 const changed = (path: string, contentHash: string) =>
   ev({ type: "file.changed", path, op: "edit", contentHash });
@@ -165,6 +166,41 @@ describe("stall detector", () => {
     expect(signals).toHaveLength(0);
   });
 
+  it("treats reading a previously unseen file or search path as progress", () => {
+    const { signals } = feed(stallDetector({ turns: 3 }), [
+      call("read_file", "a", { path: "src/a.ts" }),
+      turnEnd(),
+      call("read_file", "b", { path: "src/b.ts" }),
+      turnEnd(),
+      call("read_file", "c", { path: "src/c.ts" }),
+      turnEnd(),
+      call("read_file", "d", { path: "src/d.ts" }),
+      turnEnd(),
+    ]);
+    expect(signals).toHaveLength(0);
+  });
+
+  it("still fires when the same file is read over and over", () => {
+    const reads = Array.from({ length: 4 }, (_, i) => [
+      call("read_file", `read-${i}`, { path: "src/a.ts" }),
+      turnEnd(),
+    ]).flat();
+    expect(feed(stallDetector({ turns: 3 }), reads).signals).toHaveLength(1);
+  });
+
+  it("reports one signal per unchanged stall condition, then re-arms after progress", () => {
+    const repeated = Array.from({ length: 9 }, () => turnEnd());
+    expect(feed(stallDetector({ turns: 3 }), repeated).signals).toHaveLength(1);
+
+    const withProgress = [
+      ...Array.from({ length: 3 }, () => turnEnd()),
+      call("read_file", "new-information", { path: "new/path.ts" }),
+      turnEnd(),
+      ...Array.from({ length: 3 }, () => turnEnd()),
+    ];
+    expect(feed(stallDetector({ turns: 3 }), withProgress).signals).toHaveLength(2);
+  });
+
   it("fires when repeated test runs report an identical pass count", () => {
     const runs = Array.from({ length: 3 }, () => result(true, "Tests  4 failed | 40 passed (44)"));
     const { signals } = feed(stallDetector({ testRuns: 3 }), runs);
@@ -179,6 +215,17 @@ describe("stall detector", () => {
       result(true, "Tests  2 failed | 42 passed (44)"),
     ]);
     expect(signals).toHaveLength(0);
+  });
+
+  it("reports an unchanged failing test count once and re-arms after the count changes", () => {
+    const same = Array.from({ length: 9 }, () => result(true, "Tests  4 failed | 40 passed (44)"));
+    expect(feed(stallDetector({ testRuns: 3 }), same).signals).toHaveLength(1);
+
+    const changedCount = [
+      ...Array.from({ length: 3 }, () => result(true, "Tests  4 failed | 40 passed (44)")),
+      ...Array.from({ length: 3 }, () => result(true, "Tests  3 failed | 41 passed (44)")),
+    ];
+    expect(feed(stallDetector({ testRuns: 3 }), changedCount).signals).toHaveLength(2);
   });
 });
 

@@ -30,6 +30,12 @@ export interface PendingPermission {
   resolve: (d: Exclude<Decision, "ask">, remember: boolean) => void;
 }
 
+export interface PendingEscalation {
+  question: string;
+  /** `null` settles a prompt that timed out or whose session ended without an answer. */
+  resolve: (answer: string | null, reason?: "timeout" | "closed") => void;
+}
+
 export interface TuiState {
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
@@ -37,6 +43,8 @@ export interface TuiState {
   pending: PendingPermission | null;
   /** How many more are waiting, so the view can say so. */
   queued: number;
+  /** A supervisor question accepts free-form input independently of permission yes/no prompts. */
+  escalation: PendingEscalation | null;
   /** Latest plan the agent recorded, for `/plan`. */
   plan: PlanItem[];
   /** Signals the supervisor raised this session, for `/supervisor`. */
@@ -48,6 +56,8 @@ export interface TuiState {
   /** Whether the raw event trace is shown as well as the conversation. */
   verbose: boolean;
 }
+
+export const DEFAULT_ESCALATION_PROMPT_TIMEOUT_MS = 60_000;
 
 export interface TuiControllerOptions {
   agent: Agent;
@@ -78,6 +88,7 @@ export class TuiController {
     status: "idle",
     pending: null,
     queued: 0,
+    escalation: null,
     plan: [],
     signals: [],
     sessionId: null,
@@ -210,6 +221,52 @@ export class TuiController {
     this.state.pending?.resolve(d, remember);
   }
 
+  /**
+   * Makes the supervisor's escalation rung an actual free-form prompt. The promise is bounded even
+   * when this is used outside `supervise()` (which has its own safety timeout), and session teardown
+   * settles it too, so an absent user can never wedge shutdown.
+   */
+  askSupervisor(question: string, timeoutMs = DEFAULT_ESCALATION_PROMPT_TIMEOUT_MS): Promise<void> {
+    // The supervisor currently serializes interventions, but replacing rather than orphaning an
+    // existing prompt keeps this seam safe for another caller or future parallel observers.
+    this.state.escalation?.resolve(null, "closed");
+    return new Promise((done) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const entry: PendingEscalation = {
+        question,
+        resolve: (answer, reason = "timeout") => {
+          if (settled) return;
+          settled = true;
+          if (timer !== undefined) clearTimeout(timer);
+          if (this.state.escalation === entry) this.set({ escalation: null });
+
+          const guidance = answer?.trim() ?? "";
+          if (guidance !== "") {
+            if (this.session !== null) {
+              this.session.control.steer(`[user response to supervisor] ${guidance}`, "user");
+              this.print(`answered supervisor: ${guidance}`, "you");
+            } else {
+              this.print("the supervisor answer arrived after the session ended and was not sent", "error");
+            }
+          } else if (reason === "timeout") {
+            this.print("supervisor escalation expired with no answer; the run will continue", "system");
+          } else {
+            this.print("supervisor escalation closed before an answer", "system");
+          }
+          done();
+        },
+      };
+      timer = setTimeout(() => entry.resolve(null, "timeout"), timeoutMs);
+      timer.unref?.();
+      this.set({ escalation: entry });
+    });
+  }
+
+  answerEscalation(answer: string): void {
+    this.state.escalation?.resolve(answer);
+  }
+
   /** What has a standing answer, and how to take it back. */
   private describeStanding(): string {
     if (this.standing.size === 0) {
@@ -247,6 +304,7 @@ export class TuiController {
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
+    this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
   }
 
@@ -411,9 +469,10 @@ export class TuiController {
     } finally {
       this.session = null;
       this.running = null;
-      // settle rather than drop: clearing `pending` would leave a resolver unsettled and the
-      // loop waiting on a promise that can never resolve
+      // settle rather than drop: clearing either prompt would leave a resolver unsettled and the
+      // loop or supervisor waiting on a promise that can never resolve
       this.denyAllPending();
+      this.state.escalation?.resolve(null, "closed");
       this.set({ status: "idle" });
     }
   }

@@ -53,7 +53,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 memoryIndex: "",
                 provider: built!.provider,
                 soft: parseSoft(opts.supervisorSoft ?? "0.8"),
-                onEscalate: (question: string) => controller.print(`supervisor asks: ${question}`, "error"),
+                onEscalate: (question: string) => controller.askSupervisor(question),
                 onError: (where: string, err: Error) =>
                   controller.print(`supervisor ${where}: ${err.message}`, "error"),
               }),

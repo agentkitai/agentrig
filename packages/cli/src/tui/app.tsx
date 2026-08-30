@@ -67,6 +67,14 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       return;
     }
 
+    // Unlike a permission decision, an escalation needs a real sentence. It uses the normal input
+    // buffer but bypasses submit(), which correctly refuses ordinary new tasks while a turn runs.
+    if (state.escalation !== null && key.return) {
+      const answer = buf.value;
+      buf.set("", () => controller.answerEscalation(answer));
+      return;
+    }
+
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as
       // the text ahead of it, so "the user pressed enter" is not proof that stdin has gone quiet
@@ -140,6 +148,15 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
             y = allow once, a = allow {state.pending.req.tool} all session, n / esc = deny, d = deny
             all session{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>
+        </Box>
+      ) : state.escalation !== null ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text color="yellow">supervisor asks: {state.escalation.question}</Text>
+          <Box>
+            <Text color="cyan">answer: </Text>
+            <Text>{fitToRows(input, columns - 8, rows)}</Text>
+          </Box>
+          <Text dimColor>enter sends this guidance to the running agent; unanswered prompts expire</Text>
         </Box>
       ) : (
         <Box marginTop={1}>

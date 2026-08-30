@@ -178,7 +178,7 @@ export interface SupervisorWiring {
   memoryIndex: string;
   provider: ModelProvider;
   soft: number;
-  onEscalate?: (question: string) => void;
+  onEscalate?: (question: string) => void | Promise<void>;
   onError?: (where: string, err: Error) => void;
 }
 
