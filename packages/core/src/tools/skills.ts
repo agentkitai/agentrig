@@ -1,5 +1,5 @@
-import { readFile, readdir, stat } from "node:fs/promises";
-import { basename, join, resolve, sep } from "node:path";
+import { lstat, readFile, readdir } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import type { AnyTool, ToolResult } from "../tool.js";
 
@@ -11,7 +11,30 @@ import type { AnyTool, ToolResult } from "../tool.js";
  * injecting them all would cost more context than the task. So the system prompt carries only
  * name + description — one line each — and the body is fetched through a tool. That is the same
  * index-first shape as the wiki (PLAN §3.2), for the same reason.
+ *
+ * Everything here is untrusted input that reaches the system prompt without a model decision, so
+ * a name and a description are sanitized and bounded at parse time: a directory name may contain
+ * newlines, and a frontmatter description may be a megabyte long. Both were true, and both put
+ * attacker-chosen text into every request.
  */
+
+/** What one catalogue line may cost. A description is a hint, not the instructions. */
+const MAX_NAME = 80;
+const MAX_DESCRIPTION = 200;
+/** What the whole catalogue may cost, whatever `maxSkills` allows. */
+const MAX_INJECTION = 8 * 1024;
+
+/**
+ * One line, no control characters. `name` and `description` land verbatim in the system prompt,
+ * where a newline is enough to forge a second `## Skills` section with entries nobody wrote.
+ */
+export function sanitizeLine(value: string, max: number): string {
+  const flat = value
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
 
 const Frontmatter = z.object({
   name: z.string().min(1).optional(),
@@ -46,11 +69,14 @@ export function parseSkill(text: string, path: string): Skill {
   const parsed = Frontmatter.safeParse(fields);
   const fm = parsed.success ? parsed.data : {};
 
+  // sanitized HERE rather than at injection time so the catalogue, the tool's lookup map and
+  // the shadowing check all agree on what a skill is called
+  const name = sanitizeLine(fm.name ?? fallbackName, MAX_NAME);
   return {
-    name: fm.name ?? fallbackName,
+    name: name === "" ? "(unnamed)" : name,
     // a skill with no description is nearly useless — the model picks on descriptions — so say
     // so rather than showing it an empty line it cannot reason about
-    description: fm.description ?? firstLine(body) ?? "(no description)",
+    description: sanitizeLine(fm.description ?? firstLine(body) ?? "(no description)", MAX_DESCRIPTION),
     path,
     body: body.trim(),
   };
@@ -88,18 +114,31 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
     }
     for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (out.length >= maxSkills) return out;
+      // a symlink is not a skill: `skills/notes.md -> ~/.ssh/id_rsa` would put the target's
+      // first line into the system prompt of every request, with no model decision involved
+      if (e.isSymbolicLink()) continue;
       const path = e.isDirectory() ? join(root, e.name, "SKILL.md") : join(root, e.name);
       if (!e.isDirectory() && !/\.md$/i.test(e.name)) continue;
       try {
-        const info = await stat(path);
+        // lstat, not stat: `<dir>/SKILL.md` may itself be a link out of the root
+        const info = await lstat(path);
         if (!info.isFile() || info.size > maxBytes) continue;
         const skill = parseSkill(await readFile(path, "utf8"), path);
         // first root wins: a project skill shadows a global one of the same name, which is the
-        // order a user expects
-        if (seen.has(skill.name)) continue;
-        seen.add(skill.name);
+        // order a user expects. Keyed case-insensitively because `skillTool` looks up that way —
+        // keeping both `Deploy` and `deploy` advertises two skills and serves one body twice.
+        const key = skill.name.toLowerCase();
+        if (seen.has(key)) {
+          // silently dropping a skill makes a catalogue that lies; say which file lost
+          opts.onError?.(new Error(`skill ${JSON.stringify(skill.name)} at ${path} is shadowed by an earlier one`));
+          continue;
+        }
+        seen.add(key);
         out.push(skill);
       } catch (err) {
+        // a directory with no SKILL.md is not a skill and not an error — `.git`, `node_modules`
+        // and every other subdirectory would otherwise produce one report each
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
         opts.onError?.(err instanceof Error ? err : new Error(String(err)));
       }
     }
@@ -110,13 +149,27 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
 /** The one-line-each catalogue injected into the system prompt. */
 export function skillsInjection(skills: Skill[]): string {
   if (skills.length === 0) return "";
-  const lines = skills.map((s) => `- ${s.name}: ${s.description}`);
-  return [
+  const header = [
     "## Skills",
     "Instructions available for specific kinds of work. Load one with the `skill` tool before",
     "starting a task it covers; the body is not shown here.",
-    ...lines,
-  ].join("\n");
+  ];
+  // each line is bounded by `parseSkill`, but 100 skills still add up, and this text rides in
+  // EVERY request — so the catalogue as a whole has a ceiling too
+  const lines: string[] = [];
+  let budget = MAX_INJECTION;
+  let dropped = 0;
+  for (const s of skills) {
+    const line = `- ${s.name}: ${s.description}`;
+    if (line.length + 1 > budget) {
+      dropped += 1;
+      continue;
+    }
+    budget -= line.length + 1;
+    lines.push(line);
+  }
+  if (dropped > 0) lines.push(`- (${dropped} further skill(s) not listed; ask by name)`);
+  return [...header, ...lines].join("\n");
 }
 
 const SkillInput = z.object({ name: z.string().min(1).describe("the skill's name, exactly as listed") });

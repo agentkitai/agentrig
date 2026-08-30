@@ -796,13 +796,34 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   answer. So the child's events go to the child's log; forwarding them would defeat the entire
   reason to spawn one. The parent's log records that a child ran and how it ended — enough to
   trace, not enough to drown.
-- **Depth-limited.** Unbounded recursion here is a fork bomb with a token budget attached. Default
-  depth 1: a subagent cannot spawn its own.
-- **A child gets its own, smaller turn budget** (15), not the parent's — and the same permission
-  policy object, because a subagent that could do more than its parent would be a permission
-  bypass with extra steps.
-- **The parent's abort reaches the child.** Aborting a session must not leave its children running
-  and billing.
+- **Depth-limited, and the tool threads `depth` itself.** Unbounded recursion here is a fork bomb
+  with a token budget attached. Default depth 1: a subagent cannot spawn its own. The child's
+  subagent tool is built by the tool at `depth + 1`, and any subagent tool the caller's
+  `childConfig()` supplies is dropped — the first version left `depth` for the caller to thread,
+  which nothing did, so `maxDepth` could never fire (3601 sessions in 5s with `maxDepth: 1`).
+- **A child's budget is stated, never inherited.** A child is a separate session with a separate
+  meter, so a parent's `maxTokens`/`maxUsd`/`maxMinutes` cannot bind it: spreading the parent's
+  budget gives *every* child the parent's whole allowance, and omitting it gives every child none.
+  `subagentTool` takes `childBudget` explicitly and the CLI fills it from the parent's flags.
+- **Children are pooled per parent session** — `maxChildren` (default 8), `maxChildTokens` and
+  `maxChildUsd`. Each child's usage is metered into the pool when it finishes and further spawns
+  are refused with a message the model can act on. Without this a parent could finish `done`
+  inside a 10-token cap having spent thousands of dollars through its children.
+- **The same permission policy object *and* the same asker.** A subagent that could do more than
+  its parent would be a permission bypass with extra steps; a subagent that can do less is the
+  failure the first version had — `AgentConfig.onAsk` defaults to deny, so under the TUI a child
+  could not write a file, was never prompted about it, and had no way to say why. The child's asks
+  now route through the parent's prompt carrying `PermissionRequest.origin = "subagent"`, so the
+  human answering knows they are answering for a session they cannot see.
+- **The parent's abort reaches the child**, and `subagent.end` is emitted on the abort path rather
+  than after the event loop: by the time the loop unwinds the parent has ended and its events are
+  dropped, which left a `subagent.spawn` in the log that no `subagent.end` ever answered.
+- **The parent logs the child before the child starts.** `Agent.run` takes an optional
+  pre-allocated `id` (from `store.create()`) so `subagent.spawn` can name a session that has not
+  written anything yet; a trace read in order never shows a session that came from nowhere.
+- **The last turn that *said* something is the answer.** Keeping only the final turn's text meant
+  a child that stated its conclusion and then made one more tool call — normal, and not something
+  a system prompt prevents — reported "the subagent finished without a final message".
 - The tool is `exec`: a child can do anything its tools can do, so claiming less would let
   `--allow read` run arbitrary writes through one.
 - A child that ends on anything but `done` is reported to the parent as an **error**, not as an
@@ -819,13 +840,28 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
 - `<name>.md` or `<name>/SKILL.md`; a nested skill is named by its **directory**, since the file is
   a fixed marker.
 - **The first root wins**, so a project skill shadows a global one of the same name — the order a
-  user expects.
+  user expects. Shadowing is matched **case-insensitively**, because the `skill` tool looks up that
+  way: keeping both `Deploy` and `deploy` advertised two skills and served one body for both.
+  A shadowed skill is reported through `onError` rather than silently dropped.
+- **What reaches the system prompt is untrusted input, and is treated as such.** A name and a
+  description are stripped of control characters and bounded (80 / 200 chars) at parse time, and
+  the catalogue as a whole is capped at 8 KiB. A directory name may contain newlines — enough to
+  forge a second `## Skills` section with entries nobody wrote — and a frontmatter `description:`
+  may be 60,000 characters that ride in *every* request.
+- **Symlinks are not skills.** Discovery `lstat`s and skips them: `skills/notes.md -> ~/.ssh/id_rsa`
+  would otherwise put the target's first line into the system prompt of every request, with no
+  model decision involved.
+- **A subdirectory with no `SKILL.md` is not an error** — `--skills .` on a repo root would
+  otherwise report one failure per `.git`, `node_modules` and everything else.
 - **The `skill` tool reads only what was already discovered**, keyed by name into a fixed map, so
   there is no model-supplied path to traverse. Bounded by file size and count.
 - **Caveat: skills are discovered once at startup.** Editing one mid-session has no effect until
   the next run.
-- **Caveat: nothing validates a skill's body.** It is injected verbatim on load, so a skill is as
-  trusted as the repository it lives in.
+- **Caveat: nothing validates a skill's *body*.** Names and descriptions are sanitized because they
+  reach the prompt with no model decision; a body only arrives when the model asks for it, and is
+  then shown verbatim. A skill is as trusted as the repository it lives in.
+- **Subagents get the skills too** — the `skill` tool and the catalogue — since a child doing a task
+  the project has instructions for should be able to load them.
 
 ## Decided
 

@@ -77,6 +77,37 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(e))).toEqual(e);
   });
 
+  it("round-trips subagent.spawn/end, and keeps M7's reason optional", () => {
+    const spawned = HarnessEvent.parse({
+      seq: 3, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files",
+    });
+    expect(spawned).toMatchObject({ type: "subagent.spawn", id: "c1" });
+
+    const ended = HarnessEvent.parse({ seq: 4, sessionId: "p", ts: 1, type: "subagent.end", id: "c1", reason: "budget" });
+    expect(ended).toMatchObject({ type: "subagent.end", reason: "budget" });
+
+    // logs written before M7 added `reason` must still parse — fields are added, never repurposed
+    expect(HarnessEvent.safeParse({ seq: 5, sessionId: "p", ts: 1, type: "subagent.end", id: "c1" }).success).toBe(true);
+    // ...and a reason that is not a SessionSummary reason is not one of ours
+    expect(
+      HarnessEvent.safeParse({ seq: 6, sessionId: "p", ts: 1, type: "subagent.end", id: "c1", reason: "cancelled" }).success,
+    ).toBe(false);
+  });
+
+  it("round-trips a permission.request carrying M7's origin, and keeps it optional", () => {
+    const withOrigin = HarnessEvent.parse({
+      seq: 7, sessionId: "p", ts: 1, type: "permission.request",
+      req: { tool: "write_file", input: {}, class: "write", cwd: "/w", origin: "subagent" },
+    });
+    expect(withOrigin).toMatchObject({ req: { origin: "subagent" } });
+    expect(
+      HarnessEvent.safeParse({
+        seq: 8, sessionId: "p", ts: 1, type: "permission.request",
+        req: { tool: "write_file", input: {}, class: "write", cwd: "/w" },
+      }).success,
+    ).toBe(true);
+  });
+
   it("rejects a signal whose confidence is out of range", () => {
     expect(() =>
       parseEvent(

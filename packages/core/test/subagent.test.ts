@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -13,6 +13,8 @@ import {
   type HarnessEvent,
   type ModelEvent,
   type ModelProvider,
+  type Budget,
+  type Pricing,
 } from "@agentkitai/agentrig-core";
 
 /** Each call to stream() consumes the next scripted turn. Shared by parent and child. */
@@ -66,27 +68,55 @@ const slowTool = (): AnyTool => ({
   },
 });
 
-function harness(provider: ModelProvider, opts: { maxDepth?: number; depth?: number; slow?: boolean } = {}) {
+interface HarnessOptions {
+  maxDepth?: number;
+  depth?: number;
+  slow?: boolean;
+  maxChildren?: number;
+  maxChildTokens?: number;
+  maxChildUsd?: number;
+  pricing?: Pricing;
+  childBudget?: Omit<Budget, "maxTurns">;
+  /** A budget on the config `childConfig()` returns — which the tool must NOT inherit. */
+  configBudget?: Budget;
+  /** Extra tools the caller's `childConfig()` hands the child. */
+  childExtraTools?: AnyTool[];
+  /** Every config `createAgent` was called with, in order: child, then grandchild. */
+  created?: AgentConfig[];
+}
+
+function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
   const childTool = opts.slow === true ? slowTool() : echoTool();
+  const allowAll = () =>
+    new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]);
   const base = (): AgentConfig => ({
     provider,
-    tools: [childTool],
-    permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+    tools: [childTool, ...(opts.childExtraTools ?? [])],
+    permissions: allowAll(),
     systemPrompt: "child",
     store: new SessionStore({ root }),
     maxTokensPerTurn: 100,
+    ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
   });
   const tool = subagentTool({
-    createAgent,
+    createAgent: (config) => {
+      opts.created?.push(config);
+      return createAgent(config);
+    },
     childConfig: base,
     maxTurns: 5,
     ...(opts.maxDepth === undefined ? {} : { maxDepth: opts.maxDepth }),
     ...(opts.depth === undefined ? {} : { depth: opts.depth }),
+    ...(opts.maxChildren === undefined ? {} : { maxChildren: opts.maxChildren }),
+    ...(opts.maxChildTokens === undefined ? {} : { maxChildTokens: opts.maxChildTokens }),
+    ...(opts.maxChildUsd === undefined ? {} : { maxChildUsd: opts.maxChildUsd }),
+    ...(opts.pricing === undefined ? {} : { pricing: opts.pricing }),
+    ...(opts.childBudget === undefined ? {} : { childBudget: opts.childBudget }),
   });
   return createAgent({
     provider,
     tools: [childTool, tool],
-    permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
+    permissions: allowAll(),
     systemPrompt: "parent",
     store: new SessionStore({ root }),
     budget: { maxTurns: 10 },
@@ -175,17 +205,144 @@ describe("subagents are context isolation, not parallelism", () => {
 });
 
 describe("a subagent cannot run away", () => {
-  it("refuses to nest past the depth limit", async () => {
+  it("refuses to nest past the depth limit — and creates nothing", async () => {
     const provider = new ScriptedProvider([spawn("recurse"), [usage(1, 1), stop("end_turn")]]);
-    const session = harness(provider, { depth: 1, maxDepth: 1 }).run("do it", { cwd: root });
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { depth: 1, maxDepth: 1, created }).run("do it", { cwd: root });
     const events = await collect(session);
-    await session.done;
+    const summary = await session.done;
 
     const result = events.find((e) => e.type === "tool.result") as { ok: boolean; display: string };
     // unbounded recursion here is a fork bomb with a token budget attached
     expect(result.ok).toBe(false);
     expect(result.display).toContain("may not nest");
     expect(events.some((e) => e.type === "subagent.spawn")).toBe(false);
+    // the point of the guard is that no child EXISTS, not that an error was returned: a refusal
+    // issued after the session was created and left running would satisfy the assertions above
+    expect(created).toEqual([]);
+    const logs = (await readdir(root)).filter((f) => f.endsWith(".jsonl"));
+    expect(logs).toEqual([`${summary.id}.jsonl`]);
+  });
+
+  it("threads depth itself, so the child's own subagent tool is one level deeper", async () => {
+    // parent spawns a child; the child spawns a grandchild; the grandchild has no subagent tool
+    const provider = new ScriptedProvider([
+      spawn("level 1"),
+      spawn("level 2"),
+      [say("bottom"), usage(1, 1), stop("end_turn")],
+      [say("middle"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 2, created }).run("do it", { cwd: root });
+    await collect(session);
+    await session.done;
+
+    expect(created).toHaveLength(2);
+    // `depth` is threaded HERE, not by the caller: a guard that only fires when the caller
+    // remembers to increment a counter never fires at all
+    expect(created[0]!.tools.map((t) => t.name)).toContain("subagent");
+    expect(created[1]!.tools.map((t) => t.name)).not.toContain("subagent");
+  });
+
+  it("replaces a subagent tool the caller's childConfig supplied", async () => {
+    const forged: AnyTool = {
+      name: "subagent",
+      description: "an unbounded one, built at depth 0",
+      inputSchema: z.object({ task: z.string() }),
+      permission: "exec",
+      execute: async () => ({ output: null, display: "" }),
+    } as AnyTool;
+    const provider = new ScriptedProvider([
+      spawn("go"),
+      [say("ok"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxDepth: 1, childExtraTools: [forged], created }).run("do it", {
+      cwd: root,
+    });
+    await collect(session);
+    await session.done;
+
+    // otherwise one line in a caller's wiring turns the depth limit back into a fork bomb
+    expect(created[0]!.tools.map((t) => t.name)).not.toContain("subagent");
+  });
+
+  it("states the child's budget rather than inheriting the config's", async () => {
+    const provider = new ScriptedProvider([
+      spawn("go"),
+      [say("ok"), usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, {
+      // a caller whose childConfig carries the parent's budget must not give it to EVERY child
+      configBudget: { maxTurns: 99, maxTokens: 5_000_000, maxUsd: 50, maxMinutes: 600 },
+      childBudget: { maxTokens: 1000 },
+      created,
+    }).run("do it", { cwd: root });
+    await collect(session);
+    await session.done;
+
+    expect(created[0]!.budget).toEqual({ maxTurns: 5, maxTokens: 1000 });
+  });
+
+  it("children of one session share a pool, so spawning cannot go on forever", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(1, 1), stop("end_turn")],
+      spawn("two"),
+      [say("b"), usage(1, 1), stop("end_turn")],
+      spawn("three"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const created: AgentConfig[] = [];
+    const session = harness(provider, { maxChildren: 2, created }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(2);
+    expect(created).toHaveLength(2);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ ok: boolean; display: string }>;
+    expect(results.at(-1)!.ok).toBe(false);
+    expect(results.at(-1)!.display).toContain("the limit");
+  });
+
+  it("meters what children actually spent, not just how many there were", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(40, 40), stop("end_turn")],
+      spawn("two"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, { maxChildTokens: 50 }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    // a parent's own meter never sees a child's tokens — the child is a separate session
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(1);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("token allowance");
+  });
+
+  it("meters children in USD when pricing is given", async () => {
+    const provider = new ScriptedProvider([
+      spawn("one"),
+      [say("a"), usage(1000, 1000), stop("end_turn")],
+      spawn("two"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, {
+      maxChildUsd: 0.001,
+      pricing: { inputUsdPerMTok: 1000, outputUsdPerMTok: 1000 },
+    }).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.filter((e) => e.type === "subagent.spawn")).toHaveLength(1);
+    const results = events.filter((e) => e.type === "tool.result") as Array<{ display: string }>;
+    expect(results.at(-1)!.display).toContain("USD allowance");
   });
 
   it("a child that exhausts its own budget is reported as an error, not as an answer", async () => {
@@ -249,14 +406,55 @@ describe("a subagent cannot run away", () => {
     // aborting a session must not leave its children running and billing
     expect(summary.reason).toBe("aborted");
     const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string } | undefined;
-    if (spawned !== undefined) {
-      const store = new SessionStore({ root });
-      const childEvents: HarnessEvent[] = [];
-      for await (const e of store.read(spawned.id)) childEvents.push(e);
-      const end = childEvents.at(-1) as { type: string; reason?: string };
-      expect(end.type).toBe("session.end");
-      expect(["aborted", "budget", "done"]).toContain(end.reason);
-    }
+    expect(spawned).toBeDefined();
+    const store = new SessionStore({ root });
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of store.read(spawned!.id)) childEvents.push(e);
+    const end = childEvents.at(-1) as { type: string; reason?: string };
+    expect(end.type).toBe("session.end");
+    expect(end.reason).toBe("aborted");
+  });
+
+  it("records the child's end in the parent's log even when the parent is the one aborting", async () => {
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, { slow: true }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    await session.done;
+
+    // a spawn with no matching end leaves a trace that can never say whether the child stopped
+    expect(events.some((e) => e.type === "subagent.spawn")).toBe(true);
+    const end = events.find((e) => e.type === "subagent.end") as { reason?: string } | undefined;
+    expect(end?.reason).toBe("aborted");
+  });
+
+  it("keeps the answer when the child's last turn is a tool call, not a message", async () => {
+    const provider = new ScriptedProvider([
+      spawn("answer then tidy up"),
+      // a child that states its conclusion and THEN calls one more tool is entirely normal
+      [
+        say("THE ANSWER IS 42"),
+        { type: "tool_use" as const, id: "c1", name: "echo", input: { text: "tidy" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ],
+      [usage(1, 1), stop("end_turn")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const result = events.find((e) => e.type === "tool.result") as { display: string };
+    // keeping only the LAST turn's text told the parent the child had said nothing at all
+    expect(result.display).toContain("THE ANSWER IS 42");
   });
 
   it("a child that says nothing is reported as such rather than as an empty answer", async () => {

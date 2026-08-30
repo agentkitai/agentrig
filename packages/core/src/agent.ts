@@ -106,12 +106,23 @@ export interface Session {
   done: Promise<SessionSummary>;
 }
 
+export interface RunOptions {
+  cwd?: string;
+  resume?: string;
+  /**
+   * A pre-allocated id from `store.create()`, for a caller that must record a session's
+   * existence before the session starts writing (the subagent tool logs `subagent.spawn`).
+   * Ignored when `resume` is set.
+   */
+  id?: string;
+}
+
 export interface Agent {
   /**
    * `resume` continues an existing session from its snapshot: same id, same JSONL log
    * (seq continues), prior messages restored, `task` appended as a fresh user message.
    */
-  run(task: string, opts?: { cwd?: string; resume?: string }): Session;
+  run(task: string, opts?: RunOptions): Session;
 }
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
@@ -195,13 +206,13 @@ export function createAgent(config: AgentConfig): Agent {
   return { run: (task, opts) => runSession(config, task, opts ?? {}) };
 }
 
-function runSession(config: AgentConfig, task: string, opts: { cwd?: string; resume?: string }): Session {
+function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
   // a resumed id is user input (`--resume <id>`) and becomes a filename; reject it here rather
   // than letting it reach the filesystem or a session_end hook that builds a path from it
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
-  const id = resume ?? store.create();
+  const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
   let cwd = opts.cwd ?? process.cwd();
   const stream = new EventStream();
   const gate = new PauseGate();

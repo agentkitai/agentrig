@@ -595,6 +595,44 @@ describe("compaction lifecycle", () => {
   });
 });
 
+describe("a pre-allocated session id", () => {
+  it("run() uses an id the caller allocated, so the caller can log the session before it starts", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    const config = makeConfig(provider, { store: new SessionStore({ root }) });
+    const id = config.store.create();
+    // the subagent tool records `subagent.spawn` before the child writes anything
+    const session = createAgent(config).run("go", { cwd: "/w", id });
+    await collect(session);
+    const summary = await session.done;
+
+    expect(session.id).toBe(id);
+    expect(summary.id).toBe(id);
+    const events: HarnessEvent[] = [];
+    for await (const e of config.store.read(id)) events.push(e);
+    expect(events[0]).toMatchObject({ sessionId: id, type: "session.start" });
+  });
+
+  it("rejects an id that is not a session id, rather than letting it reach the filesystem", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")]]);
+    expect(() => createAgent(makeConfig(provider)).run("go", { cwd: "/w", id: "../../etc/passwd" })).toThrow(
+      /invalid session id/,
+    );
+  });
+
+  it("resume still wins: an id alongside it is ignored, not a second session", async () => {
+    const first = new FakeProvider([[{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")]]);
+    const config = makeConfig(first);
+    const s1 = createAgent(config).run("go", { cwd: "/w" });
+    await collect(s1);
+    await s1.done;
+
+    const second = new FakeProvider([[{ type: "text_delta", text: "two" }, usage(1, 1), stop("end_turn")]]);
+    const s2 = createAgent({ ...config, provider: second }).run("again", { resume: "sess1", id: "other" });
+    await collect(s2);
+    expect((await s2.done).id).toBe("sess1");
+  });
+});
+
 describe("resume", () => {
   it("continues a session from its snapshot: same log, restored messages, appended task", async () => {
     const first = new FakeProvider([

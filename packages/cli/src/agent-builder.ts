@@ -17,6 +17,9 @@ import {
   type PermissionRequest,
   type Decision,
   type Pricing,
+  type PermissionPolicy,
+  type Skill,
+  type SubagentOptions,
 } from "@agentkitai/agentrig-core";
 import {
   dreamOnSessionEnd,
@@ -66,6 +69,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   /** Give the agent a `subagent` tool for context-isolated sub-tasks. */
   subagents?: boolean;
   subagentMaxTurns?: string;
+  /** How many subagents one session may run. The backstop when tokens are not metered. */
+  subagentMaxChildren?: string;
   /** Directories to discover markdown skills in (repeatable). */
   skills?: string[];
 }
@@ -163,6 +168,75 @@ export interface AgentExtras {
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
   onHookDone?: (message: string) => void;
+}
+
+
+export interface SubagentWiring {
+  opts: AgentBuildOptions;
+  extras: AgentExtras;
+  budget: Budget;
+  pricing?: Pricing;
+  provider: ModelProvider;
+  permissionPolicy: PermissionPolicy;
+  skills: Skill[];
+  maxTokensPerTurn: number;
+  /** The tools a child inherits, minus skills — rebuilt per child so nothing is shared by accident. */
+  childTools: () => AnyTool[];
+}
+
+/**
+ * How a child is bounded and what it inherits. Exported because this is the whole of the
+ * subagent wiring, and every property worth having is a property of this object: a child that
+ * can spawn is a fork bomb, a child with no budget is unbounded spend, and a child whose asks
+ * are answered by nobody is a `--subagents` that cannot write a file.
+ */
+export function subagentOptions(w: SubagentWiring): SubagentOptions {
+  // A child is a separate session with a separate meter, so the parent's budget cannot bind it.
+  // The bound is stated here instead: each child gets the parent's non-turn allowances, and all
+  // of one session's children together may not spend more than the parent's own budget.
+  const childBudget: Omit<Budget, "maxTurns"> = {};
+  if (w.budget.maxTokens !== undefined) childBudget.maxTokens = w.budget.maxTokens;
+  if (w.budget.maxUsd !== undefined) childBudget.maxUsd = w.budget.maxUsd;
+  if (w.budget.maxMinutes !== undefined) childBudget.maxMinutes = w.budget.maxMinutes;
+
+  return {
+    createAgent,
+    maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
+    childBudget,
+    ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
+    maxChildren: positiveNumber("--subagent-max-children", w.opts.subagentMaxChildren ?? "8"),
+    ...(w.budget.maxTokens === undefined ? {} : { maxChildTokens: w.budget.maxTokens }),
+    ...(w.budget.maxUsd === undefined ? {} : { maxChildUsd: w.budget.maxUsd }),
+    // a child gets the parent's provider, tools and permissions, but NOT the ability to spawn
+    // its own — `subagentTool` builds the child's subagent tool itself, at depth + 1
+    childConfig: () => ({
+      provider: w.provider,
+      // skills too: a subagent doing a task the project has instructions for should be able to
+      // load them, and the catalogue costs one line each
+      tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
+      permissions: w.permissionPolicy,
+      // The same policy object, and the same asker. A child that could do MORE than its parent
+      // is a permission bypass; a child that can do LESS is the failure this originally had —
+      // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
+      // file, was never prompted about it, and could not say why. The ask is tagged so the human
+      // answering knows they are answering for a session they are not watching.
+      ...(w.extras.onAsk === undefined
+        ? {}
+        : { onAsk: (req: PermissionRequest) => w.extras.onAsk!({ ...req, origin: "subagent" }) }),
+      systemPrompt: (ctx: { cwd: string }) =>
+        [
+          "You are a subagent. You have been given one self-contained task and none of the",
+          "parent conversation. Do the task, then reply with the answer and no tool calls —",
+          "your final message is all the parent receives.",
+          `Working directory: ${ctx.cwd}`,
+          skillsInjection(w.skills),
+        ]
+          .filter((line) => line !== "")
+          .join("\n"),
+      store: new SessionStore({ root: w.opts.root }),
+      maxTokensPerTurn: w.maxTokensPerTurn,
+    }),
+  };
 }
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
@@ -265,26 +339,19 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
     tools.push(
-      subagentTool({
-        createAgent,
-        maxTurns: positiveNumber("--subagent-max-turns", opts.subagentMaxTurns ?? "15"),
-        // a child gets the parent's provider, tools and permissions, but NOT the ability to
-        // spawn its own — depth 1, checked in the tool
-        childConfig: () => ({
+      subagentTool(
+        subagentOptions({
+          opts,
+          extras,
+          budget,
+          ...(pricing === undefined ? {} : { pricing }),
           provider,
-          tools: [...builtinTools(), ...memoryToolset, ...mcpTools],
-          permissions: permissionPolicy,
-          systemPrompt: (ctx: { cwd: string }) =>
-            [
-              "You are a subagent. You have been given one self-contained task and none of the",
-              "parent conversation. Do the task, then reply with the answer and no tool calls —",
-              "your final message is all the parent receives.",
-              `Working directory: ${ctx.cwd}`,
-            ].join("\n"),
-          store: new SessionStore({ root: opts.root }),
+          permissionPolicy,
+          skills,
           maxTokensPerTurn,
+          childTools: () => [...builtinTools(), ...memoryToolset, ...mcpTools],
         }),
-      }),
+      ),
     );
   }
 

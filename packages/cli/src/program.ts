@@ -119,6 +119,7 @@ export function buildProgram(): Command {
       .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session")
       .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
+      .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, []);
   }
 

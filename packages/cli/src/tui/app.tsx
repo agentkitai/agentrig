@@ -85,7 +85,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
         <Box marginTop={1} flexDirection="column">
           <Text color="yellow">
             allow {state.pending.req.tool} [{state.pending.req.class}]
-            {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}?
+            {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}
+            {state.pending.req.origin === undefined ? "" : ` (asked by ${state.pending.req.origin})`}?
           </Text>
           <Text dimColor>
             y = allow, n / esc = deny{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
