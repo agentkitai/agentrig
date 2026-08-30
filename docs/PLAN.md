@@ -618,3 +618,18 @@ Exit criterion for each milestone: the harness is used to build the next milesto
 1. Sandboxing: none + allowlists for v1, Docker later — acceptable?
 2. Rollback: git-based checkpoints (`checkpoint_rollback`) require the workspace to be a repo; opt-in or assumed?
 3. Which repo to dogfood on after AgentRig itself.
+
+---
+
+## 9. Follow-ups
+
+Work that is understood, scoped and deliberately not built — each with the reason it is not a bug
+fix. Same standing as AgentLens in §7: recorded so it is a decision rather than a surprise.
+
+| # | Follow-up | Why it is not in the build order | Shape of the fix |
+|---|---|---|---|
+| F1 | **PKCE + loopback login for `openai-chatgpt`** | `agentrig login openai-chatgpt` cannot work as built: `auth.openai.com/deviceauth/usercode` sits behind a Cloudflare interactive challenge aimed at the HTTP *client*, so no Node process completes it (verified from a cloud container and a desktop). Today's answer is to seed the credential from Codex, which works but requires Codex. | Replace the device-code flow with what Codex itself does: generate a PKCE verifier, open the system browser to `auth.openai.com/oauth/authorize`, listen on a fixed loopback port for the redirect, exchange the code. The browser makes the challenged request, so the challenge is satisfied by a real browser. Needs: a local HTTP listener bound to 127.0.0.1 with a state check, a browser launcher, and a timeout that leaves no listener behind. The existing token store, refresh and rotation are unchanged. |
+| F2 | **A configurable shell for the `bash` tool** | The tool spawns with `shell: true`, which is `/bin/sh` on POSIX and **`cmd.exe`** on Windows. A model writes bash, so `ls`, `&&` chains and POSIX quoting can misbehave on a Windows checkout. Choosing a shell is a design decision — it changes what every trajectory in a repo means — not a defect to patch quietly. | `bashTool({ shell })` plus a CLI flag, defaulting to `/bin/sh` on POSIX and PowerShell (or Git Bash when present) on Windows; the tool description should name the shell so the model writes for it. Interacts with the permission model: `exec` rules and `cwdOnly` say nothing about shell syntax. |
+
+Neither blocks anything today: F1 has a working path (seed from Codex), and F2 has a working path
+(POSIX shells, or Windows commands written for `cmd`).

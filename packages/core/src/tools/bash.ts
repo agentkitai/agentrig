@@ -22,7 +22,16 @@ export interface BashOutput {
   timedOut: boolean;
 }
 
-export function bashTool(): Tool<BashInput, BashOutput> {
+export interface BashToolOptions {
+  /** Defaults to `process.platform`. Injected so the Windows path is testable off Windows. */
+  platform?: NodeJS.Platform;
+  /** Defaults to `taskkill /pid <pid> /T /F`. Injected for the same reason. */
+  killTree?: (pid: number) => void;
+}
+
+export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput> {
+  const isWindows = (opts.platform ?? process.platform) === "win32";
+  const killTree = opts.killTree ?? defaultKillTree;
   return {
     name: "bash",
     description:
@@ -47,7 +56,11 @@ export function bashTool(): Tool<BashInput, BashOutput> {
         cwd: ctx.cwd,
         env: process.env,
         stdio: ["ignore", "pipe", "pipe"],
-        detached: true,
+        // Windows has no process groups, and `detached` there means "survive the parent" plus a
+        // console of its own — a flashing window per command, and a child that outlives the
+        // session. The tree is killed with `taskkill /T` instead.
+        detached: !isWindows,
+        windowsHide: true,
       });
 
       let stdout = "";
@@ -56,9 +69,20 @@ export function bashTool(): Tool<BashInput, BashOutput> {
       child.stderr.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
 
       const killGroup = () => {
+        const pid = child.pid;
+        if (pid === undefined) {
+          child.kill("SIGKILL");
+          return;
+        }
+        if (isWindows) {
+          // `process.kill(-pid)` is not supported here: it throws, and the old catch fell back to
+          // killing only the direct child — so `cmd.exe` died and whatever it started kept
+          // running, holding the stdio pipes past the timeout that was supposed to end it
+          killTree(pid);
+          return;
+        }
         try {
-          if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
-          else child.kill("SIGKILL");
+          process.kill(-pid, "SIGKILL");
         } catch {
           child.kill("SIGKILL");
         }
@@ -104,4 +128,32 @@ export function bashTool(): Tool<BashInput, BashOutput> {
       return result;
     },
   };
+}
+
+/**
+ * Windows' equivalent of killing a process group. Best-effort and never throws into the tool: if
+ * `taskkill` is missing the child is killed directly, which is what the old code did for the
+ * whole tree.
+ */
+function defaultKillTree(pid: number): void {
+  try {
+    const killer = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    // an unhandled `error` event on a ChildProcess is fatal to the process
+    killer.on("error", () => {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    });
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
 }

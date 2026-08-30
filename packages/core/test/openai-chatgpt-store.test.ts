@@ -60,6 +60,42 @@ describe("FileTokenStore", () => {
     expect(leftovers).toEqual([]);
   });
 
+  it("tightens the ACL on Windows, where chmod only sets the read-only bit", async () => {
+    const restricted: string[] = [];
+    const store = new FileTokenStore(path, {
+      platform: "win32",
+      restrict: async (p) => void restricted.push(p),
+    });
+    await store.write(bundle);
+    expect(restricted).toEqual([path]);
+  });
+
+  it("does not shell out on platforms where the mode is real", async () => {
+    const restricted: string[] = [];
+    const store = new FileTokenStore(path, { platform: "linux", restrict: async (p) => void restricted.push(p) });
+    await store.write(bundle);
+    expect(restricted).toEqual([]);
+  });
+
+  it("keeps the credential when the ACL call fails, and says what to run", async () => {
+    const warnings: string[] = [];
+    const store = new FileTokenStore(path, {
+      platform: "win32",
+      restrict: async () => {
+        throw new Error("icacls not found");
+      },
+      warn: (m) => void warnings.push(m),
+    });
+    await store.write(bundle);
+
+    // a credential that could not be locked down is still a credential the user needs
+    expect(await store.read()).toEqual(bundle);
+    expect(warnings.join("\n")).toContain("icacls");
+    // ...and it says it once, not on every refresh
+    await store.write(bundle);
+    expect(warnings).toHaveLength(1);
+  });
+
   it("reads a Codex auth.json copied into place, rather than calling it corrupt", async () => {
     const codexPath = join(root, "codex.json");
     // the device-code login is unusable (Cloudflare challenges every non-browser client), so

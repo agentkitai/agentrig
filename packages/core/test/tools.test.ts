@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -146,6 +147,70 @@ describe("edit_file", () => {
   it("errors when oldText is absent", async () => {
     const r = await editFileTool().execute({ path: "e.txt", oldText: "nope", newText: "z" }, ctx);
     expect(r.isError).toBe(true);
+  });
+});
+
+/**
+ * A process's group id, read from /proc. `process.getpgid` is not available in every Node build,
+ * and this is the only way to see whether `detached` was set from outside the spawn call.
+ */
+function groupIdOf(pid: number): number | null {
+  try {
+    return parseStat(readFileSync(`/proc/${pid}/stat`, "utf8"))?.pgrp ?? null;
+  } catch {
+    return null; // not Linux, or already reaped
+  }
+}
+
+/** `pid (comm) state ppid pgrp ...` — comm can itself contain spaces and parentheses. */
+function parseStat(stat: string): { pid: number; pgrp: number } | null {
+  const close = stat.lastIndexOf(")");
+  if (close === -1) return null;
+  const pid = Number(stat.slice(0, stat.indexOf(" ")));
+  const pgrp = Number(stat.slice(close + 2).split(" ")[2]);
+  return Number.isFinite(pid) && Number.isFinite(pgrp) ? { pid, pgrp } : null;
+}
+
+describe("killing a command's whole tree", () => {
+  it("uses taskkill on Windows, and does not detach to get a group it cannot use", async () => {
+    const killed: number[] = [];
+    let group: number | null = null;
+    const tool = bashTool({
+      platform: "win32",
+      killTree: (pid) => {
+        killed.push(pid);
+        // `detached` on Windows means "survive the parent, in a console of its own" — a flashing
+        // window per command and a child that outlives the session, with no group to gain
+        group = groupIdOf(pid);
+        // stand in for taskkill: with no group to signal, killing the pid is all it must do
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      },
+    });
+    const r = await tool.execute({ command: "sleep 5", timeoutMs: 100 }, ctx);
+
+    // `process.kill(-pid)` throws on Windows, and the old fallback killed only the direct
+    // child — so cmd.exe died and whatever it started kept the pipes open past the timeout
+    expect(killed).toHaveLength(1);
+    if (group !== null) expect(group).not.toBe(killed[0]);
+    expect(r.output).toMatchObject({ timedOut: true });
+  });
+
+  it("keeps the process group on this platform, where killing one is the point", async () => {
+    const killed: number[] = [];
+    const tool = bashTool({ killTree: (p) => void killed.push(p) });
+    // the shell reports its own stat line before sleeping, so the group is read while it lives
+    const r = await tool.execute({ command: "cat /proc/$$/stat; sleep 5", timeoutMs: 300 }, ctx);
+    const out = (r.output as { stdout: string }).stdout;
+
+    expect(killed).toEqual([]);
+    expect(r.output).toMatchObject({ timedOut: true });
+    const shell = parseStat(out);
+    // the shell is its own group leader, so `kill(-pid)` reaches everything it started
+    if (shell !== null) expect(shell.pgrp).toBe(shell.pid);
   });
 });
 

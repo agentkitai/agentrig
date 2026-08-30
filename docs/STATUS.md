@@ -912,18 +912,38 @@ and M3b's Lore auto-retrieval. Two of those three are now closed.
   converting `newText` the same way so the file keeps the endings it had. An edit must not
   rewrite every line of a file as a side effect of matching one.
 - **The `bash` tool runs `cmd.exe` on Windows.** It spawns with `shell: true`, so a model's
-  bash-isms (`ls`, `&&`, POSIX quoting) may misbehave. Not yet addressed; making the shell
-  configurable is the obvious fix.
-- **Process-group kill degrades.** Timeout and abort call `process.kill(-pid)`, which Windows
-  does not support; the catch falls back to killing the direct child, so a grandchild can survive.
-- **The token file is not ACL-protected.** `chmod(0o600)` only toggles the read-only bit on
-  Windows. Fine on a single-user machine; on a shared one the file needs `icacls`.
+  bash-isms (`ls`, `&&`, POSIX quoting) may misbehave. **Open — follow-up F2**, because choosing a
+  shell changes what every trajectory in a repo means and is a decision rather than a patch.
+- **Process-group kill degraded to killing one process (fixed).** Timeout and abort called
+  `process.kill(-pid)`, which Windows does not support: it threw, and the fallback killed only the
+  direct child — so `cmd.exe` died and whatever it started kept running, holding the stdio pipes
+  past the timeout that was supposed to end it. Windows now uses `taskkill /pid <pid> /T /F`, and
+  the child is **not** spawned `detached` there: on Windows that means "survive the parent, in a
+  console of its own" — a flashing window per command and a child that outlives the session — with
+  no process group to gain, since Windows has none.
+- **The token file was not ACL-protected (fixed).** `chmod(0o600)` only toggles the read-only bit
+  on Windows. `FileTokenStore` now runs `icacls <path> /inheritance:r /grant:r <user>:F` after
+  writing, best-effort: a credential that could not be locked down is still a credential the user
+  needs, so a failure warns once — naming the command to run by hand — rather than failing the
+  login. **Unverified on real Windows**: the branch is unit-tested with an injected runner, the
+  `icacls` call itself has not been observed to succeed.
 
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
   of truth and the default stays no-infra (milestone 3b).
 - AgentLens is a future sink for the event stream (observability), not a memory dependency.
+
+## Follow-ups (PLAN.md §9)
+
+Recorded rather than built, each with a working path in the meantime:
+
+1. **F1 — PKCE + loopback login for `openai-chatgpt`.** The device-code flow cannot work from any
+   Node process (Cloudflare challenges the client, not the location). Until then: seed the
+   credential from Codex's `~/.codex/auth.json`, which the file store and the env var both read.
+2. **F2 — a configurable shell for the `bash` tool.** It runs `cmd.exe` on Windows, and models
+   write bash. Choosing the shell changes what every trajectory means, so it is a decision, not a
+   patch.
 
 ## Open questions (from PLAN.md §8)
 
