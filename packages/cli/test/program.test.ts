@@ -63,6 +63,22 @@ describe("argv parsing", () => {
     expect((await run(["sessions", "resume", "s1", "--max-turns", "7"]))?.opts.maxTurns).toBe("7");
   });
 
+  it("carries the skip-permissions flags on every entry point that runs an agent", async () => {
+    const { run } = stub(buildProgram());
+    // A flag the parser accepts and the wiring drops is the shape `--supervise` had in the TUI
+    // for weeks: validated, documented, and doing nothing. `skip-permissions.test.ts` pins what
+    // the policy does with these; this pins that they arrive at all.
+    expect((await run(["run", "x", "--yolo"]))?.opts.yolo).toBe(true);
+    expect((await run(["run", "x", "--dangerously-skip-permissions"]))?.opts.dangerouslySkipPermissions).toBe(true);
+    expect((await run(["--yolo"]))?.opts.yolo).toBe(true);
+    expect((await run(["sessions", "resume", "s1", "--yolo"]))?.opts.yolo).toBe(true);
+    // and neither is on unless it was asked for — from a FRESH program, because commander keeps
+    // parsed option values on the command object and a reused one carries the earlier --yolo over
+    const fresh = stub(buildProgram());
+    expect((await fresh.run(["run", "x"]))?.opts.yolo).toBeUndefined();
+    expect((await fresh.run(["run", "x"]))?.opts.dangerouslySkipPermissions).toBeUndefined();
+  });
+
   it("dispatches to the command that was named", async () => {
     const { run } = stub(buildProgram());
     expect((await run(["sessions", "ls"]))?.path).toBe("sessions ls");
