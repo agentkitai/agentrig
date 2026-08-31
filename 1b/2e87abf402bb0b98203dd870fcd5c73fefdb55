@@ -1,0 +1,22 @@
+docs/STATUS.md
+  h_26c5a60a657125 42-46,50-51
+packages/core/src/agent.ts
+  h_26c5a60a657125 621-624
+packages/core/src/tool-result-eviction.ts
+  h_26c5a60a657125 9,48,51-52,73-76,84-89,95
+packages/core/test/agent.test.ts
+  h_26c5a60a657125 756-780
+packages/core/test/tool-result-eviction.test.ts
+  h_26c5a60a657125 48-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "1b2e87abf402bb0b98203dd870fcd5c73fefdb55",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
