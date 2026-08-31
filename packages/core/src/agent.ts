@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { SupervisorRecord } from "./events.js";
@@ -34,6 +36,11 @@ export interface AgentConfig {
   tools: AnyTool[];
   permissions: PermissionPolicy;
   systemPrompt: string | ((ctx: PromptContext) => string);
+  /**
+   * Canonical project root whose repository-provided instructions may be loaded. Absent means
+   * untrusted. Core checks the run cwd itself so another entry point cannot bypass the boundary.
+   */
+  trustedProjectRoot?: string;
   /** Every event goes through this store; the session log is the source of truth. */
   store: SessionStore;
   budget?: Budget;
@@ -428,7 +435,23 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         for (const text of extra) messages.push({ role: "user", content: [{ type: "text", text }] });
       }
       system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
-      const projectInstructions = await discoverProjectInstructions(cwd);
+      // This gate is deliberately adjacent to the read. A caller-provided boolean would be easy to
+      // reuse for another cwd; canonical containment keeps aliases within one trusted project.
+      const configuredRoot = config.trustedProjectRoot;
+      // A vanished or synthetic cwd is not permission to load anything, but it is not a reason to
+      // fail an otherwise valid session either.
+      const canonicalRoot = configuredRoot === undefined
+        ? undefined
+        : await realpath(configuredRoot).catch(() => undefined);
+      const canonicalCwd = canonicalRoot === undefined
+        ? undefined
+        : await realpath(cwd).catch(() => undefined);
+      const fromRoot = canonicalRoot === undefined || canonicalCwd === undefined ? ".." : relative(canonicalRoot, canonicalCwd);
+      const mayLoadProjectContext = canonicalRoot !== undefined && canonicalCwd !== undefined
+        && fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
+      const projectInstructions = mayLoadProjectContext
+        ? await discoverProjectInstructions(canonicalCwd, canonicalRoot)
+        : null;
       if (projectInstructions !== null) {
         system = appendProjectInstructions(system, projectInstructions);
         await emit({

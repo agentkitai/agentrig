@@ -28,6 +28,8 @@ async function fixture(): Promise<{ cwd: string; home: string }> {
   const cwd = join(base, "project");
   const home = join(base, "home");
   await Promise.all([mkdir(join(cwd, ".agentrig"), { recursive: true }), mkdir(join(home, ".agentrig"), { recursive: true })]);
+  // R1b tests exercise config precedence, not consent; their fixture is already trusted.
+  await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [cwd]: true } }), "utf8");
   return { cwd, home };
 }
 
