@@ -382,9 +382,34 @@ describe("grep", () => {
     expect(r.display).toContain("invalid regex");
   });
 
-  it("errors on a nonexistent search directory", async () => {
+  it("errors on a nonexistent search path", async () => {
     const r = await grepTool().execute({ pattern: "x", path: "no-such-dir" }, ctx);
     expect(r.isError).toBe(true);
-    expect(r.display).toContain("not a directory");
+    expect(r.display).toContain("no such file or directory");
+  });
+
+  it("searches a single named file — this used to error and burn a turn every session", async () => {
+    await mkdir(join(root, "src"), { recursive: true });
+    await writeFile(join(root, "src/one.ts"), "alpha\nbeta\nalpha again\n");
+    await writeFile(join(root, "src/two.ts"), "alpha elsewhere\n");
+    const r = await grepTool().execute({ pattern: "alpha", path: "src/one.ts" }, ctx);
+    expect(r.isError).not.toBe(true);
+    // only the named file is searched, and matches carry the path as the model gave it
+    expect(r.output).toEqual([
+      { path: "src/one.ts", line: 1, text: "alpha" },
+      { path: "src/one.ts", line: 3, text: "alpha again" },
+    ]);
+  });
+
+  it("says why a named file cannot be searched instead of silently skipping it", async () => {
+    await writeFile(join(root, "bin.dat"), "abc\0def");
+    const binary = await grepTool().execute({ pattern: "abc", path: "bin.dat" }, ctx);
+    expect(binary.isError).toBe(true);
+    expect(binary.display).toContain("not a text file");
+
+    await writeFile(join(root, "big.txt"), "x".repeat(513 * 1024));
+    const big = await grepTool().execute({ pattern: "x", path: "big.txt" }, ctx);
+    expect(big.isError).toBe(true);
+    expect(big.display).toContain("512KB");
   });
 });
