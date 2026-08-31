@@ -221,6 +221,6 @@ export class AnthropicProvider implements ModelProvider {
       if (!res.body) throw new Error("anthropic: empty response body");
       yield* parseAnthropicSse(res.body);
     }.bind(this);
-    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry);
+    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry, (info) => ({ type: "retry", ...info }));
   }
 }

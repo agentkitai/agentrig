@@ -162,6 +162,13 @@ export async function* streamWithRetries<T>(
   signal: AbortSignal,
   policy: RetryPolicy = {},
   onRetry?: (info: StreamRetryInfo) => void,
+  /**
+   * Makes a retry visible downstream as an event of the stream's own type, so a consumer that
+   * only sees events (the agent loop) can record it. A marker is informational, NOT content:
+   * it is yielded from the catch path, outside the loop that flips the per-attempt `yielded`
+   * guard, so a marker never forbids the retry that follows it.
+   */
+  toEvent?: (info: StreamRetryInfo) => T,
 ): AsyncIterable<T> {
   const maxRetries = policy.maxRetries ?? 3;
   const baseDelayMs = policy.baseDelayMs ?? 1000;
@@ -179,9 +186,10 @@ export async function* streamWithRetries<T>(
       const reason = err instanceof Error ? err.message : String(err);
       if (err instanceof RetriesExhaustedError) throw err;
       if (yielded || signal.aborted || attempt >= maxRetries || !isTransientStreamError(reason)) throw err;
-      const delayMs = Math.min(baseDelayMs * 2 ** attempt, MAX_DELAY_MS);
-      onRetry?.({ attempt: attempt + 1, maxAttempts: maxRetries + 1, delayMs, reason });
-      await sleep(delayMs, signal);
+      const info: StreamRetryInfo = { attempt: attempt + 1, maxAttempts: maxRetries + 1, delayMs: Math.min(baseDelayMs * 2 ** attempt, MAX_DELAY_MS), reason };
+      onRetry?.(info);
+      if (toEvent !== undefined) yield toEvent(info);
+      await sleep(info.delayMs, signal);
     }
   }
 }

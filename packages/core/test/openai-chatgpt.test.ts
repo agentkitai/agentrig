@@ -225,6 +225,14 @@ describe("OpenAIChatGPTProvider.stream", () => {
     expect(posts).toBe(2);
     expect(retries).toEqual(["1/4 after 1000ms"]);
     expect(events).toEqual([
+      // the retry surfaces in-stream too, so the loop can log it as a model.retry session event
+      {
+        type: "retry",
+        attempt: 1,
+        maxAttempts: 4,
+        delayMs: 1000,
+        reason: "openai-chatgpt stream error: Our servers are currently overloaded. Please try again later.",
+      },
       { type: "text_delta", text: "hi" },
       { type: "usage", usage: { input: 1, output: 1 } },
       { type: "stop", reason: "end_turn" },

@@ -104,6 +104,18 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
   z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string() }),
+  /**
+   * A transient provider failure was retried before anything streamed. Informational, but
+   * load-bearing for diagnosis: two real sessions died on overload errors and the logs said
+   * nothing about the provider struggling until the fatal line.
+   */
+  z.object({
+    type: z.literal("model.retry"),
+    attempt: z.number().int().positive(),
+    maxAttempts: z.number().int().positive(),
+    delayMs: z.number().int().nonnegative(),
+    reason: z.string(),
+  }),
   z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string() }),
   z.object({ type: z.literal("tool.result"), id: z.string(), ok: z.boolean(), display: z.string(), durationMs: z.number().int() }),
   /**
