@@ -1,0 +1,26 @@
+docs/STATUS.md
+  h_26c5a60a657125 3,26-43
+packages/cli/src/tui/app.tsx
+  h_26c5a60a657125 4,45-47,63-98,106
+packages/cli/src/tui/bracketed-paste-mode.ts
+  h_26c5a60a657125 1-22
+packages/cli/src/tui/input-buffer.ts
+  h_26c5a60a657125 45-111,163-176
+packages/cli/src/tui/start.tsx
+  h_26c5a60a657125 14,136-141
+packages/cli/test/bracketed-paste-mode.test.ts
+  h_26c5a60a657125 1-48
+packages/cli/test/bracketed-paste.test.ts
+  h_26c5a60a657125 1-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f42209d053f6604f70817dbba0793be68db0d693",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
