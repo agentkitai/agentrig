@@ -1,0 +1,22 @@
+packages/cli/src/tui/app.tsx
+  h_26c5a60a657125 4-8,66-95,105-106,117-120
+packages/cli/src/tui/bracketed-paste-mode.ts
+  h_26c5a60a657125 9-18,22,26-45,47-48,52-53
+packages/cli/src/tui/input-buffer.ts
+  h_26c5a60a657125 49-68,72-73,86,97-98,104,110-124,131-134,153-154,157-160
+packages/cli/test/bracketed-paste-mode.test.ts
+  h_26c5a60a657125 1,36-61
+packages/cli/test/bracketed-paste.test.ts
+  h_26c5a60a657125 2-6,69-76,86-92,158-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "2a5fd8f057f6c7fa7c9a4ba40268df2f7ff1cc0b",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
