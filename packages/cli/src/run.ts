@@ -52,6 +52,8 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   verbose?: boolean;
   headless?: boolean;
   resume?: string;
+  /** Named config profile to overlay; may arrive from the subcommand flag or the root-level one. */
+  profile?: string;
   system?: string;
   allow?: string[];
   driftScope?: string[];

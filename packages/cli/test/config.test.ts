@@ -167,6 +167,26 @@ describe("both agent entry points use config", () => {
     expect(received?.model).toBe("profile");
   });
 
+  it("honours a --profile placed before the subcommand — the alias shape (issue #56)", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "--profile", "fast", "run", "test",
+    ]);
+    expect(received?.model).toBe("profile");
+  });
+
+  it("honours a leading --profile on the default TUI launch", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
+    let received: TuiOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, tui: async (opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "--profile", "fast",
+    ]);
+    expect(received?.model).toBe("profile");
+  });
+
   it("treats a typed value equal to the built-in default as an explicit CLI override", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { model: "project-model" });

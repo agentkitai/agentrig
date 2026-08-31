@@ -1,7 +1,7 @@
 import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { diagnose, type DoctorOptions, type DoctorProbes } from "../src/doctor.ts";
 import { buildProgram } from "../src/program.ts";
 
@@ -178,6 +178,24 @@ describe("agentrig doctor", () => {
     expect(find(result.lines, "config:project")).toContain("skipped (untrusted)");
     expect(f.reads).not.toContain(PROJECT_CONFIG);
     expect(result.lines.join("\n")).not.toContain("MALICIOUS_PROJECT_SECRET");
+  });
+
+  it("honours a --profile placed before the doctor subcommand (issue #56)", async () => {
+    // the root-level --profile is scanned out of argv before dispatch, so doctor's own opts
+    // never see it; the action must recover it via optsWithGlobals or diagnose the wrong profile
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ profiles: { work: { model: "work-model" } } }));
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => void lines.push(String(line)));
+    try {
+      const program = buildProgram({ doctor: f.options });
+      program.exitOverride((err) => { throw err; });
+      program.configureOutput({ writeErr: () => {}, writeOut: () => {} });
+      await program.parseAsync(["--profile", "work", "doctor"], { from: "user" }).catch(() => {});
+      expect(find(lines, "config:profile")).toContain("pass");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("passes an active profile and fails an absent one with the fix named", async () => {

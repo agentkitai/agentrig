@@ -151,6 +151,24 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## CLI: leading --profile (issue #56)
+
+Status: **done**.
+
+- `--profile` is now also a root-level option, so the alias shape `agentrig --profile personal
+  <subcommand>` dispatches correctly instead of dying in the default TUI command's stray-operand
+  check with "unknown command 'sessions' (Did you mean sessions?)".
+- Deliberately the ONLY dual-registered flag: Commander scans root options out of argv wherever
+  they appear (the shipped root-option regression documented in `program.ts`), so the root copy
+  swallows the subcommand's `--profile` token — the value is recovered at the config seam via
+  `optsWithGlobals()` (`configured` and the doctor action). A test pins that the root option set
+  is exactly `["--profile"]` so no other flag quietly migrates up.
+- Behavior note: subcommands that never consult config (`sessions ls`, `login`, …) now accept a
+  leading `--profile` and ignore it — a profile simply has nothing to select there. Previously
+  this was an "unknown option" error.
+- Pinned by dispatch, both-positions value flow, run/TUI/doctor end-to-end profile resolution,
+  and root-option confinement tests; each verified to fail with the corresponding line reverted.
+
 ## Supervisor refinement
 
 Status: **done**.
