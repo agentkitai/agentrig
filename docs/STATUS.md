@@ -32,6 +32,24 @@ complete, including M2.5's live provider validation.
 - External-review stall measurement: no supervisor stall warning occurred during the external-review
   phase.
 
+## Supervisor ladder incident fix
+
+Status: **done**.
+
+- The R1a work session could not write its own ending: during final verification, four stall signals
+  fired on varied `git status` / `git diff` / build-test-typecheck and known-file reading stretches.
+  The ladder accumulated those separately resolved signals through guidance, replan, escalation, and
+  abort, killing the session at 81 tool calls while the repository-required green check was running.
+- Varied consecutive tool inputs now reset the stall detector's quiet-turn tally, while an identical
+  command repeated without progress remains quiet and can still signal. Ladder recurrence advances
+  only when no file change followed the prior intervention for that signal type; durable progress
+  resets that type to guidance, while command variation alone cannot forgive a periodic loop. Abort is opt-in through
+  `--supervisor-abort` on both `run` and the TUI; `--supervisor-no-abort` remains a documented no-op.
+- Rejected idea: disable or substantially lengthen the stall threshold during verification. That
+  would hide genuine same-command loops and make detection depend on guessing which commands are
+  "verification"; comparing input identity preserves the ladder's teeth without command-name
+  special cases.
+
 ## M0 notes
 
 - `HarnessEvent` = envelope (`seq`, `sessionId`, `ts`, stamped by the store) + discriminated `EventPayload`.

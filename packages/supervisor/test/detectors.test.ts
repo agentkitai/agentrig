@@ -124,19 +124,25 @@ describe("loop detector", () => {
 });
 
 describe("stall detector", () => {
-  it("fires after N quiet turns", () => {
+  it("fires after N quiet turns repeating the same command", () => {
     const { signals } = feed(stallDetector({ turns: 3 }), [
-      call("bash", "a"), // first use of bash is exploration, so this turn counts as productive
+      call("bash", "same"), // first use of bash is exploration, so this turn counts as productive
       turnEnd(),
-      call("bash", "b"),
+      call("bash", "same"),
       turnEnd(),
-      call("bash", "c"),
+      call("bash", "same"),
       turnEnd(),
-      call("bash", "d"),
+      call("bash", "same"),
       turnEnd(),
     ]);
     expect(signals).toHaveLength(1);
     expect(signals[0]!.type).toBe("stall");
+  });
+
+  it("treats varied verification commands as activity, not a stall", () => {
+    const verification = ["git-status", "git-diff", "pnpm-build", "pnpm-test", "pnpm-typecheck"]
+      .flatMap((hash) => [call("bash", hash), turnEnd()]);
+    expect(feed(stallDetector({ turns: 3 }), verification).signals).toHaveLength(0);
   });
 
   it("a turn that changes a file resets the count", () => {
@@ -181,8 +187,8 @@ describe("stall detector", () => {
   });
 
   it("still fires when the same file is read over and over", () => {
-    const reads = Array.from({ length: 4 }, (_, i) => [
-      call("read_file", `read-${i}`, { path: "src/a.ts" }),
+    const reads = Array.from({ length: 4 }, () => [
+      call("read_file", "same-read", { path: "src/a.ts" }),
       turnEnd(),
     ]).flat();
     expect(feed(stallDetector({ turns: 3 }), reads).signals).toHaveLength(1);

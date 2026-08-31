@@ -137,7 +137,11 @@ describe("attach", () => {
   it("catches a real looping session and aborts it well short of the turn budget", async () => {
     const provider = new LoopingProvider();
     const session = run(provider, 40);
-    const sup = supervise(session, { loop: { repeats: 3 }, ladder: { cooldownTurns: 1 } });
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: true },
+    });
     const events = await drain(session);
     await sup.done;
     const summary = await session.done;
@@ -154,7 +158,11 @@ describe("attach", () => {
   it("steers the agent through the real message list before it resorts to aborting", async () => {
     const provider = new LoopingProvider();
     const session = run(provider, 40);
-    const sup = supervise(session, { loop: { repeats: 3 }, ladder: { cooldownTurns: 1 } });
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 1 },
+      capabilities: { abort: true },
+    });
     const events = await drain(session);
     await sup.done;
     await session.done;
@@ -377,6 +385,7 @@ describe("review regressions", () => {
     const sup = supervise(session, {
       loop: { repeats: 3 },
       ladder: { cooldownTurns: 1 },
+      capabilities: { abort: true },
       onEscalate: () => new Promise<void>(() => {}), // never resolves
       escalateTimeoutMs: 50,
       onError: (where, err) => errors.push(`${where}: ${err.message}`),
@@ -398,6 +407,7 @@ describe("review regressions", () => {
     const sup = supervise(session, {
       loop: { repeats: 3 },
       ladder: { cooldownTurns: 1 },
+      capabilities: { abort: true },
       onEscalate: () => Promise.reject(new Error("no human here")),
       onError: (where, err) => errors.push(`${where}: ${err.message}`),
     });
@@ -427,7 +437,7 @@ describe("review regressions", () => {
     const sup = supervise(session, {
       loop: { repeats: 3 },
       ladder: { cooldownTurns: 1 },
-      capabilities: { escalate: true }, // no onEscalate supplied
+      capabilities: { escalate: true, abort: true }, // no onEscalate supplied
     });
     const events = await drain(session);
     await sup.done;
@@ -586,6 +596,7 @@ describe("M6: the LLM-backed rungs and force_replan", () => {
     const sup = supervise(session, {
       loop: { repeats: 3 },
       ladder: { cooldownTurns: 1 },
+      capabilities: { abort: true },
       reviewer: hanging,
       reviewTimeoutMs: 50,
       onError: (where, err) => errors.push(`${where}: ${err.message}`),

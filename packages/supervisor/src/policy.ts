@@ -66,6 +66,7 @@ export class LadderPolicy implements Policy {
   private readonly guidance: Record<SignalType, string>;
   private readonly level = new Map<SignalType, number>();
   private readonly lastTurn = new Map<SignalType, number>();
+  private readonly filesChangedAtIntervention = new Map<SignalType, number>();
   private issued = 0;
 
   private readonly rubric: string | undefined;
@@ -78,7 +79,7 @@ export class LadderPolicy implements Policy {
       if (r === "run_reviewer") return caps.reviewer === true;
       if (r === "run_grader") return caps.grader === true && opts.rubric !== undefined;
       if (r === "escalate") return caps.escalate === true;
-      if (r === "abort") return caps.abort !== false;
+      if (r === "abort") return caps.abort === true;
       return true;
     });
     this.cooldownTurns = opts.cooldownTurns ?? 2;
@@ -96,6 +97,13 @@ export class LadderPolicy implements Policy {
       const last = this.lastTurn.get(s.type);
       if (last !== undefined && state.turns - last < this.cooldownTurns) continue;
 
+      const priorFilesChanged = this.filesChangedAtIntervention.get(s.type);
+      if (priorFilesChanged !== undefined && state.filesChanged > priorFilesChanged) {
+        // A file change is durable progress: the previous intervention worked. Mere command
+        // variation is not enough here, because a periodic A/B loop must still climb the ladder.
+        this.level.set(s.type, 0);
+      }
+
       const rung = this.rungs[Math.min(this.level.get(s.type) ?? 0, this.rungs.length - 1)];
       if (rung === undefined) continue;
 
@@ -105,6 +113,7 @@ export class LadderPolicy implements Policy {
       out.push(intervention);
       this.issued += 1;
       this.lastTurn.set(s.type, state.turns);
+      this.filesChangedAtIntervention.set(s.type, state.filesChanged);
       this.level.set(s.type, (this.level.get(s.type) ?? 0) + 1);
     }
     return out;

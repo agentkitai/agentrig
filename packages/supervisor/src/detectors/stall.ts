@@ -5,7 +5,7 @@ import { signal } from "../types.js";
 import { parseTestCounts } from "../test-output.js";
 
 export interface StallOptions {
-  /** Consecutive turns with no file change, new tool kind, or newly read path before it counts as a stall. */
+  /** Consecutive turns with no file change, varied tool input, new tool kind, or newly read path before it counts as a stall. */
   turns?: number;
   /** Consecutive test runs reporting an identical pass count before it counts as a stall. */
   testRuns?: number;
@@ -15,8 +15,10 @@ export interface StallOptions {
  * PLAN §4.1: "N consecutive turns with no `file.changed` and no new tool kind; or ≥ k test runs
  * with unchanged pass count."
  *
- * A new tool kind is exploration, but so is using a familiar read tool on an unfamiliar target.
- * `read_file`, `grep`, and `glob` therefore count a path only once: walking through new files and
+ * A new tool kind is exploration, and a tool input that differs from the previous call is varied
+ * activity: `git status` → `pnpm test` → `git diff` is verification, not spinning. A familiar read
+ * tool on an unfamiliar target is exploration too. `read_file`, `grep`, and `glob` therefore count
+ * a path only once: walking through new files and
  * directories is orientation, while repeatedly reading or searching the same target can still
  * become a stall.
  *
@@ -38,6 +40,8 @@ export function stallDetector(opts: StallOptions = {}): Detector {
   let changedThisTurn = false;
   let newKindThisTurn = false;
   let newReadThisTurn = false;
+  let variedInputThisTurn = false;
+  let lastInputHash: string | null = null;
   let reportedQuietStall = false;
 
   let lastCounts: string | null = null;
@@ -69,6 +73,11 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       }
 
       if (event.type === "tool.call") {
+        if (lastInputHash !== null && event.inputHash !== lastInputHash) {
+          variedInputThisTurn = true;
+          reportedQuietStall = false;
+        }
+        lastInputHash = event.inputHash;
         if (!toolKinds.has(event.name)) {
           toolKinds.add(event.name);
           newKindThisTurn = true;
@@ -110,10 +119,11 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       }
 
       if (event.type === "turn.end") {
-        const productive = changedThisTurn || newKindThisTurn || newReadThisTurn;
+        const productive = changedThisTurn || newKindThisTurn || newReadThisTurn || variedInputThisTurn;
         changedThisTurn = false;
         newKindThisTurn = false;
         newReadThisTurn = false;
+        variedInputThisTurn = false;
         if (productive) {
           quietTurns = 0;
           reportedQuietStall = false;
@@ -123,7 +133,7 @@ export function stallDetector(opts: StallOptions = {}): Detector {
         if (quietTurns >= turnLimit && !reportedQuietStall) {
           reportedQuietStall = true;
           return signal("stall", 0.65, [
-            `${turnLimit} consecutive turns changed no file, discovered no new read target, and used no new tool kind`,
+            `${turnLimit} consecutive turns changed no file, varied no tool input, discovered no new read target, and used no new tool kind`,
             `${state.toolCalls} tool call(s) so far, ${state.filesChanged} file change(s)`,
           ], [from, event.seq]);
         }

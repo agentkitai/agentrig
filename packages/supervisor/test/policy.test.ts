@@ -37,7 +37,7 @@ describe("LadderPolicy", () => {
     expect(types).toEqual(["inject_guidance", "escalate", "abort"]);
   });
 
-  it("runs the whole ladder when every capability is present", () => {
+  it("runs the whole ladder when every capability is present and no progress follows interventions", () => {
     const p = new LadderPolicy({
       cooldownTurns: 0,
       capabilities: { forceReplan: true, reviewer: true, grader: true, escalate: true, abort: true },
@@ -53,6 +53,50 @@ describe("LadderPolicy", () => {
       "abort",
     ]);
     expect(DEFAULT_LADDER).toHaveLength(6);
+  });
+
+  it("restarts at guidance when progress followed the previous intervention", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { forceReplan: true, escalate: true, abort: true },
+    });
+    const types = [0, 1, 2, 3].map((t) => {
+      const s = state(t);
+      s.filesChanged = t;
+      return p.decide([sig("stall")], s)[0]!.type;
+    });
+    expect(types).toEqual(["inject_guidance", "inject_guidance", "inject_guidance", "inject_guidance"]);
+  });
+
+  it("still climbs to abort when four signals recur without progress", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { forceReplan: true, escalate: true, abort: true },
+    });
+    const types = [0, 1, 2, 3].map((t) => p.decide([sig("stall")], state(t))[0]!.type);
+    expect(types).toEqual(["inject_guidance", "force_replan", "escalate", "abort"]);
+  });
+
+  it("does not mistake varied commands in a periodic loop for durable progress", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { forceReplan: true, escalate: true, abort: true },
+    });
+    const types = [0, 1, 2, 3].map((t) => {
+      // Models the unfixed global-activity counter: A/B calls increase it between every signal,
+      // but no file changes, so the recurrence must keep climbing rather than be forgiven.
+      const s = state(t) as SupervisorState & { progressEvents: number };
+      s.progressEvents = t;
+      s.toolCalls = t * 3;
+      return p.decide([sig("loop")], s)[0]!.type;
+    });
+    expect(types).toEqual(["inject_guidance", "force_replan", "escalate", "abort"]);
+  });
+
+  it("does not include abort unless the capability is explicitly enabled", () => {
+    const p = new LadderPolicy({ cooldownTurns: 0, capabilities: { escalate: true } });
+    const types = [0, 1, 2, 3].map((t) => p.decide([sig("stall")], state(t))[0]!.type);
+    expect(types).toEqual(["inject_guidance", "escalate", "escalate", "escalate"]);
   });
 
   it("run_grader is unreachable without a rubric, even with a grader attached", () => {

@@ -152,9 +152,13 @@ describe("supervisorOptions", () => {
     expect(wiring().drift).toEqual({ scope: [] });
   });
 
-  it("--supervisor-no-abort removes the abort rung rather than the whole supervisor", () => {
+  it("enables abort only when --supervisor-abort is explicitly present", () => {
+    expect(wiring({ opts: { supervisorAbort: true } }).capabilities).toEqual({ abort: true });
+    expect(wiring().capabilities).toEqual({ abort: false });
+  });
+
+  it("keeps --supervisor-no-abort as a compatibility no-op", () => {
     expect(wiring({ opts: { supervisorNoAbort: true } }).capabilities).toEqual({ abort: false });
-    expect(wiring().capabilities).toEqual({ abort: true });
   });
 
   it("only builds the model-backed rungs when --supervisor-review asked for them", () => {
