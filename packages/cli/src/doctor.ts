@@ -1,14 +1,14 @@
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, join, resolve, sep } from "node:path";
+import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
 import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
-import { resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
+import { parseTrustText, resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
 
 const execFileAsync = promisify(execFile);
 const OPAQUE_TOKEN_MAX_AGE_MS = 45 * 60_000;
@@ -23,11 +23,17 @@ export interface DoctorGitState {
   detached?: boolean;
 }
 
+export interface DoctorFileInfo {
+  isFile(): boolean;
+  isDirectory(): boolean;
+}
+
 export interface DoctorProbes {
   readFile(path: string): Promise<string>;
   access(path: string, mode: number): Promise<void>;
+  stat(path: string): Promise<DoctorFileInfo>;
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
-  commandExists(command: string, env: NodeJS.ProcessEnv): Promise<boolean>;
+  commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
   gitState(cwd: string): Promise<DoctorGitState>;
 }
 
@@ -58,22 +64,36 @@ function enoent(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
-async function defaultCommandExists(command: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+/** Quote every external string so terminal controls and bidi marks are never executable output. */
+function display(value: string): string {
+  return JSON.stringify(value).replace(/[\u202a-\u202e\u2066-\u2069]/giu, (character) =>
+    `\\u${character.codePointAt(0)!.toString(16).padStart(4, "0")}`,
+  );
+}
+
+function isAtOrBelow(root: string, candidate: string): boolean {
+  const fromRoot = relative(root, candidate);
+  return fromRoot === "" || (fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot));
+}
+
+async function defaultCommandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean> {
   const candidates: string[] = [];
   const extensions = process.platform === "win32"
-    ? (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";")
+    ? ["", ...(env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";")]
     : [""];
   if (isAbsolute(command) || command.includes("/") || command.includes("\\")) {
-    for (const extension of extensions) candidates.push(`${command}${extension}`);
+    const direct = isAbsolute(command) ? command : resolve(cwd, command);
+    for (const extension of extensions) candidates.push(`${direct}${extension}`);
   } else {
     for (const directory of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
-      for (const extension of extensions) candidates.push(join(directory, `${command}${extension}`));
+      const absoluteDirectory = isAbsolute(directory) ? directory : resolve(cwd, directory);
+      for (const extension of extensions) candidates.push(join(absoluteDirectory, `${command}${extension}`));
     }
   }
   for (const candidate of candidates) {
     try {
       await access(candidate, constants.X_OK);
-      return true;
+      if ((await stat(candidate)).isFile()) return true;
     } catch { /* keep searching */ }
   }
   return false;
@@ -81,15 +101,21 @@ async function defaultCommandExists(command: string, env: NodeJS.ProcessEnv): Pr
 
 async function defaultGitState(cwd: string): Promise<DoctorGitState> {
   try {
-    await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], { cwd });
-  } catch {
-    return { inside: false };
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], { cwd });
+    if (stdout.trim() !== "true") throw new Error("unexpected git response");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
+    const stderr = typeof (error as { stderr?: unknown }).stderr === "string" ? (error as { stderr: string }).stderr : "";
+    if (/not a git repository/iu.test(stderr)) return { inside: false };
+    throw error;
   }
   try {
     const { stdout } = await execFileAsync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd });
     return { inside: true, branch: stdout.trim(), detached: false };
-  } catch {
-    return { inside: true, detached: true };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
+    if ((error as { code?: unknown }).code === 1) return { inside: true, detached: true };
+    throw error;
   }
 }
 
@@ -97,6 +123,7 @@ function defaultProbes(): DoctorProbes {
   return {
     readFile: (path) => readFile(path, "utf8"),
     access,
+    stat,
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
     gitState: defaultGitState,
@@ -143,12 +170,12 @@ async function readOptionalConfig(path: string, probes: DoctorProbes): Promise<{
     text = await probes.readFile(path);
   } catch (error) {
     if (enoent(error)) return { check: line("skip", path, "not present; this layer has no overrides") };
-    return { check: line("fail", path, `cannot be read; fix permissions on ${path}`) };
+    return { check: line("fail", path, `cannot be read; fix permissions on ${display(path)}`) };
   }
   try {
     return { file: parseConfigText(path, text), check: line("pass", path, "parses and validates") };
   } catch {
-    return { check: line("fail", path, `invalid; fix ${path} (run with a valid JSON config and no credentials in it)`) };
+    return { check: line("fail", path, `invalid; fix ${display(path)} (use valid JSON with no credentials in it)`) };
   }
 }
 
@@ -167,20 +194,17 @@ async function readTrust(
     text = await probes.readFile(path);
   } catch (error) {
     if (enoent(error)) return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided; project config and instructions are skipped — ${fix}`) };
-    return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided because the trust store is unreadable; fix permissions on ${path}, then ${fix}`) };
+    return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided because the trust store is unreadable; fix permissions on ${display(path)}, then ${fix}`) };
   }
-  let projects: unknown;
+  let projects: Record<string, boolean>;
   try {
-    projects = (JSON.parse(text) as { projects?: unknown }).projects;
+    projects = parseTrustText(text);
   } catch {
-    return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided because the trust store is malformed; fix ${path}, then ${fix}`) };
+    return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided because the trust store is malformed; fix ${display(path)}, then ${fix}`) };
   }
-  if (projects === null || typeof projects !== "object" || Array.isArray(projects)) {
-    return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided because the trust store is malformed; fix ${path}, then ${fix}`) };
-  }
-  const decision = (projects as Record<string, unknown>)[boundary.projectRoot];
+  const decision = projects[boundary.projectRoot];
   if (decision === true) return { trusted: true, status: "trusted", check: line("pass", "trust", "trusted; project config and instructions may load") };
-  if (decision === false) return { trusted: false, status: "untrusted", check: line("fail", "trust", `untrusted; project config and instructions are skipped — ${fix}`) };
+  if (decision === false) return { trusted: false, status: "untrusted", check: line("fail", "trust", `untrusted; project config and instructions are skipped — remove this project's entry from ${display(path)}, then ${fix}`) };
   return { trusted: false, status: "undecided", check: line("fail", "trust", `undecided; project config and instructions are skipped — ${fix}`) };
 }
 
@@ -205,16 +229,16 @@ async function credentialCheck(
       ? line("pass", "credentials", "provider openai; OPENAI_API_KEY is present (environment)")
       : line("fail", "credentials", "provider openai; OPENAI_API_KEY is absent — set OPENAI_API_KEY");
   }
+  if (provider !== "openai-chatgpt") {
+    return line("fail", "credentials", `unknown provider ${display(String(provider))} — set --provider to anthropic, openai, or openai-chatgpt`);
+  }
   const authPath = env.AGENTRIG_OPENAI_CHATGPT_AUTH ?? join(home, ".agentrig", "openai-chatgpt-auth.json");
   let tokens: ChatGPTTokens | null = null;
   let source = "";
   try {
     const raw = await probes.readFile(authPath);
-    const parsed = ChatGPTTokens.safeParse(JSON.parse(raw));
-    if (parsed.success && parsed.data.refreshToken !== "") {
-      tokens = parsed.data;
-      source = `token store ${authPath}`;
-    }
+    tokens = tokensFromEnvValue(raw);
+    if (tokens !== null) source = `token store ${display(authPath)}`;
   } catch { /* env is the read-only fallback; never surface parser or filesystem errors */ }
   if (tokens === null && env.AGENTRIG_OPENAI_CHATGPT_TOKEN !== undefined) {
     tokens = tokensFromEnvValue(env.AGENTRIG_OPENAI_CHATGPT_TOKEN);
@@ -223,9 +247,13 @@ async function credentialCheck(
   const fix = "run agentrig login openai-chatgpt";
   if (tokens === null) return line("fail", "credentials", `provider openai-chatgpt; no readable valid token bundle — ${fix}`);
   const expiresAt = expiry(tokens);
-  if (expiresAt === null) return line("fail", "credentials", `provider openai-chatgpt; token expiry cannot be established from ${source} — ${fix}`);
-  if (expiresAt <= now) return line("fail", "credentials", `provider openai-chatgpt; token from ${source} expired ${duration(now - expiresAt)} ago — ${fix}`);
-  return line("pass", "credentials", `provider openai-chatgpt; token store readable from ${source}; expires in ${duration(expiresAt - now)}`);
+  if (expiresAt === null) {
+    return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; expiry unavailable, so the runtime will refresh before use`);
+  }
+  if (expiresAt <= now) {
+    return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; access token has 0m remaining and the runtime will refresh before use`);
+  }
+  return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; expires in ${duration(expiresAt - now)}`);
 }
 
 export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResult> {
@@ -237,20 +265,23 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   const probes = { ...defaultProbes(), ...options.probes };
   const checks: CheckLine[] = [];
 
-  let boundary: ProjectBoundary;
+  let boundary: ProjectBoundary | undefined;
+  let trust: { trusted: boolean; status: "trusted" | "untrusted" | "undecided" } = { trusted: false, status: "undecided" };
   try {
     boundary = await probes.boundary(cwd, home);
+    const resolvedTrust = await readTrust(boundary, home, probes);
+    trust = resolvedTrust;
+    checks.push(resolvedTrust.check);
   } catch {
     checks.push(line("fail", "trust", "cannot determine the project boundary; fix permissions on the working directory, then rerun agentrig doctor"));
-    boundary = { projectRoot: cwd, userStateSafe: false };
   }
-  const trust = await readTrust(boundary, home, probes);
-  checks.push(trust.check);
 
   const userPath = join(home, ".agentrig", "config.json");
   let user: ConfigFile | undefined;
-  let configInvalid = false;
-  if (!boundary.userStateSafe) {
+  let configInvalid = boundary === undefined;
+  if (boundary === undefined) {
+    checks.push(line("skip", "config:user", "skipped because the project boundary is unavailable"));
+  } else if (!boundary.userStateSafe) {
     checks.push(line("skip", "config:user", "skipped because the user state directory is inside the project boundary"));
   } else {
     const loaded = await readOptionalConfig(userPath, probes);
@@ -260,8 +291,10 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   }
 
   let project: ConfigFile | undefined;
-  const projectPath = join(boundary.projectRoot, ".agentrig", "config.json");
-  if (!trust.trusted) {
+  const projectPath = join(boundary?.projectRoot ?? cwd, ".agentrig", "config.json");
+  if (boundary === undefined) {
+    checks.push(line("skip", "config:project", "skipped because the project boundary is unavailable; file was not opened"));
+  } else if (!trust.trusted) {
     checks.push(line("skip", "config:project", `skipped (untrusted) — trust state is ${trust.status}; file was not opened`));
   } else {
     const loaded = await readOptionalConfig(projectPath, probes);
@@ -277,12 +310,18 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     checks.push(line("pass", "config:profile", `active profile ${JSON.stringify(profile)} exists`));
   } else {
     configInvalid = true;
-    checks.push(line("fail", "config:profile", `active profile ${JSON.stringify(profile)} does not exist — add it under profiles or remove --profile ${profile}`));
+    checks.push(line("fail", "config:profile", `active profile ${display(profile)} does not exist — add it under profiles or remove --profile ${display(profile)}`));
   }
 
-  let effective: ConfigValues & Record<string, unknown> = { provider: "anthropic", model: DEFAULT_ANTHROPIC_MODEL };
+  let effective: ConfigValues & Record<string, unknown> = {
+    provider: "anthropic",
+    model: DEFAULT_ANTHROPIC_MODEL,
+    memory: ".agentrig",
+    ...cli,
+  };
   if (configInvalid) {
     checks.push(line("fail", "config:effective", "precedence cannot be trusted while config is invalid — fix the failed config line above"));
+    checks.push(line("skip", "credentials", "effective provider is unknown until the failed config is fixed"));
   } else {
     effective = resolveConfig({
       defaults: { provider: "anthropic", model: DEFAULT_ANTHROPIC_MODEL, memory: ".agentrig" },
@@ -292,12 +331,21 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       cli,
       ...(profile === undefined ? {} : { profile }),
     });
-    const provider = effective.provider ?? "anthropic";
-    const model = effective.model ?? DEFAULT_ANTHROPIC_MODEL;
-    checks.push(line("pass", "config:effective", `provider ${provider} from ${sourceOf("provider", user, project, profile, env, cli)}; model ${model} from ${sourceOf("model", user, project, profile, env, cli)}`));
+    const provider = String(effective.provider ?? "anthropic");
+    const model = String(effective.model ?? DEFAULT_ANTHROPIC_MODEL);
+    const providerSource = sourceOf("provider", user, project, profile, env, cli);
+    const modelSource = sourceOf("model", user, project, profile, env, cli);
+    if (!["anthropic", "openai", "openai-chatgpt"].includes(provider)) {
+      checks.push(line("fail", "config:effective", `unknown provider ${display(provider)} — set --provider to anthropic, openai, or openai-chatgpt`));
+      checks.push(line("skip", "credentials", "effective provider is invalid; fix config:effective first"));
+    } else if ((provider === "openai" || provider === "openai-chatgpt") && modelSource === "built-in default") {
+      checks.push(line("fail", "config:effective", `provider ${display(provider)} requires an explicit model — set --model, AGENTRIG_MODEL, or model in config`));
+      checks.push(line("skip", "credentials", "effective provider/model pair is invalid; fix config:effective first"));
+    } else {
+      checks.push(line("pass", "config:effective", `provider ${display(provider)} from ${display(providerSource)}; model ${display(model)} from ${display(modelSource)}`));
+      checks.push(await credentialCheck(effective, env, home, now, probes));
+    }
   }
-
-  checks.push(await credentialCheck(effective, env, home, now, probes));
 
   const memory = typeof effective.memory === "string" ? resolve(cwd, effective.memory) : undefined;
   if (memory === undefined) {
@@ -305,37 +353,44 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     checks.push(line("skip", "memory:index", "no memory directory is configured"));
   } else {
     try {
-      await probes.access(memory, constants.F_OK | constants.W_OK);
-      checks.push(line("pass", "memory", `${memory} exists and is writable`));
+      await probes.access(memory, constants.F_OK | constants.W_OK | constants.X_OK);
+      if (!(await probes.stat(memory)).isDirectory()) throw new Error("not a directory");
+      checks.push(line("pass", "memory", `${display(memory)} exists and is a writable directory`));
     } catch {
-      checks.push(line("fail", "memory", `${memory} is missing or not writable — run agentrig memory init --dir ${memory} and fix directory permissions`));
+      checks.push(line("fail", "memory", `${display(memory)} is missing or not a writable directory — run agentrig memory init --dir ${display(memory)} and fix directory permissions`));
     }
     const index = join(memory, "wiki", "index.md");
     try {
       await probes.access(index, constants.R_OK);
-      checks.push(line("pass", "memory:index", `${index} is readable`));
+      if (!(await probes.stat(index)).isFile()) throw new Error("not a file");
+      checks.push(line("pass", "memory:index", `${display(index)} is a readable file`));
     } catch {
-      checks.push(line("fail", "memory:index", `${index} is missing or unreadable — run agentrig memory init --dir ${memory} and fix file permissions`));
+      checks.push(line("fail", "memory:index", `${display(index)} is missing or not a readable file — run agentrig memory init --dir ${display(memory)} and fix file permissions`));
     }
   }
 
   const mcpPath = typeof effective.mcpConfig === "string" ? resolve(cwd, effective.mcpConfig) : undefined;
   if (mcpPath === undefined) {
     checks.push(line("skip", "mcp", "no MCP config is configured"));
+  } else if (boundary !== undefined && !trust.trusted && isAtOrBelow(boundary.projectRoot, mcpPath)) {
+    checks.push(line("skip", "mcp", `skipped (untrusted) — ${display(mcpPath)} is project-owned and was not opened`));
   } else {
     let servers: ReturnType<typeof parseMcpConfigText> | undefined;
     try {
       servers = parseMcpConfigText(mcpPath, await probes.readFile(mcpPath));
-      checks.push(line("pass", "mcp", `${mcpPath} parses (${servers.length} server${servers.length === 1 ? "" : "s"})`));
+      checks.push(line("pass", "mcp", `${display(mcpPath)} parses (${servers.length} server${servers.length === 1 ? "" : "s"})`));
     } catch {
-      checks.push(line("fail", "mcp", `${mcpPath} cannot be read or parsed — fix --mcp-config ${mcpPath}`));
+      checks.push(line("fail", "mcp", `${display(mcpPath)} cannot be read or parsed — fix --mcp-config ${display(mcpPath)}`));
     }
     for (const server of servers ?? []) {
       let exists = false;
-      try { exists = await probes.commandExists(server.command, env); } catch { exists = false; }
+      const serverEnv = { ...env, ...server.env };
+      const serverCwd = server.cwd === undefined ? cwd : resolve(cwd, server.cwd);
+      try { exists = await probes.commandExists(server.command, serverEnv, serverCwd); } catch { exists = false; }
+      const label = `mcp:${display(server.name)}`;
       checks.push(exists
-        ? line("pass", `mcp:${server.name}`, `command ${JSON.stringify(server.command)} exists on PATH`)
-        : line("fail", `mcp:${server.name}`, `command ${JSON.stringify(server.command)} is unavailable — install it or put ${server.command} on PATH`));
+        ? line("pass", label, `command ${display(server.command)} exists on PATH`)
+        : line("fail", label, `command ${display(server.command)} is unavailable — install it or put ${display(server.command)} on PATH`));
     }
   }
 
@@ -345,7 +400,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       ? line("pass", "git", "not inside a Git repository (informational)")
       : git.detached === true
         ? line("pass", "git", "inside a Git repository; HEAD is detached (informational)")
-        : line("pass", "git", `inside a Git repository; branch ${git.branch ?? "unknown"} (informational)`));
+        : line("pass", "git", `inside a Git repository; branch ${display(git.branch ?? "unknown")} (informational)`));
   } catch {
     checks.push(line("skip", "git", "Git state unavailable (informational only)"));
   }

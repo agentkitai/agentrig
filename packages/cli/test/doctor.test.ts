@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +10,10 @@ const ROOT = "/work/project";
 const TRUST = join(HOME, ".agentrig", "trust.json");
 const USER_CONFIG = join(HOME, ".agentrig", "config.json");
 const PROJECT_CONFIG = join(ROOT, ".agentrig", "config.json");
+const cleanupDirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(cleanupDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
 
 function missing(): NodeJS.ErrnoException {
   return Object.assign(new Error("missing"), { code: "ENOENT" });
@@ -37,6 +41,12 @@ function fixture(): Fixture {
       return value;
     },
     async access(path) { accesses.push(path); },
+    async stat(path) {
+      return {
+        isDirectory: () => !path.endsWith("index.md"),
+        isFile: () => path.endsWith("index.md"),
+      };
+    },
     async boundary() { return { projectRoot: ROOT, userStateSafe: true }; },
     async commandExists() { return true; },
     async gitState() { return { inside: true, branch: "feat/test", detached: false }; },
@@ -106,18 +116,34 @@ describe("agentrig doctor", () => {
     f.files.set(USER_CONFIG, JSON.stringify({ provider: "openai-chatgpt", model: "gpt-test" }));
     f.files.set(authPath, JSON.stringify({ accessToken: secret, refreshToken: "FABRICATED_REFRESH_SECRET" }));
     const result = await diagnose({ ...f.options, env: {} });
-    expect(find(result.lines, "credentials")).toMatch(/token store readable.*expires in 10m/);
+    expect(find(result.lines, "credentials")).toMatch(/token bundle readable.*expires in 10m/);
     expect(result.lines.join("\n")).not.toContain(secret);
     expect(result.lines.join("\n")).not.toContain("FABRICATED_SECRET");
   });
 
-  it("fails an expired ChatGPT token and names login as the fix", async () => {
+  it("passes an expired access token when its refresh bundle is usable", async () => {
     const f = fixture();
     const token = `x.${Buffer.from(JSON.stringify({ exp: 1_699_999_000 })).toString("base64url")}.x`;
     f.files.set(USER_CONFIG, JSON.stringify({ provider: "openai-chatgpt", model: "gpt-test" }));
     f.files.set(join(HOME, ".agentrig", "openai-chatgpt-auth.json"), JSON.stringify({ accessToken: token, refreshToken: "refresh" }));
     const result = await diagnose({ ...f.options, env: {} });
+    expect(find(result.lines, "credentials")).toContain("0m remaining and the runtime will refresh");
+  });
+
+  it("fails an unusable ChatGPT bundle and names login as the fix", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ provider: "openai-chatgpt", model: "gpt-test" }));
+    f.files.set(join(HOME, ".agentrig", "openai-chatgpt-auth.json"), JSON.stringify({ accessToken: "secret", refreshToken: "" }));
+    const result = await diagnose({ ...f.options, env: {} });
     expect(find(result.lines, "credentials")).toContain("run agentrig login openai-chatgpt");
+  });
+
+  it("accepts a Codex-shaped ChatGPT token file without rewriting it", async () => {
+    const f = fixture();
+    const token = `x.${Buffer.from(JSON.stringify({ exp: 1_700_000_600 })).toString("base64url")}.x`;
+    f.files.set(USER_CONFIG, JSON.stringify({ provider: "openai-chatgpt", model: "gpt-test" }));
+    f.files.set(join(HOME, ".agentrig", "openai-chatgpt-auth.json"), JSON.stringify({ tokens: { access_token: token, refresh_token: "refresh" } }));
+    expect(find((await diagnose({ ...f.options, env: {} })).lines, "credentials")).toContain("expires in 10m");
   });
 
   it("passes valid user and project config files", async () => {
@@ -133,7 +159,7 @@ describe("agentrig doctor", () => {
     const f = fixture();
     f.files.set(USER_CONFIG, `{ "model": "FABRICATED_CONFIG_SECRET"`);
     const result = await diagnose(f.options);
-    expect(find(result.lines, "config:user")).toContain(`fix ${USER_CONFIG}`);
+    expect(find(result.lines, "config:user")).toContain(`fix ${JSON.stringify(USER_CONFIG)}`);
     expect(result.lines.join("\n")).not.toContain("FABRICATED_CONFIG_SECRET");
   });
 
@@ -141,7 +167,7 @@ describe("agentrig doctor", () => {
     const f = fixture();
     f.files.set(PROJECT_CONFIG, "not-json");
     const result = await diagnose(f.options);
-    expect(find(result.lines, "config:project")).toContain(`fix ${PROJECT_CONFIG}`);
+    expect(find(result.lines, "config:project")).toContain(`fix ${JSON.stringify(PROJECT_CONFIG)}`);
   });
 
   it("never opens an untrusted project config and reports the mandated skip", async () => {
@@ -160,7 +186,7 @@ describe("agentrig doctor", () => {
     let result = await diagnose({ ...f.options, cli: { profile: "work" } });
     expect(find(result.lines, "config:profile")).toContain("pass");
     result = await diagnose({ ...f.options, cli: { profile: "missing" } });
-    expect(find(result.lines, "config:profile")).toContain("add it under profiles or remove --profile missing");
+    expect(find(result.lines, "config:profile")).toContain('add it under profiles or remove --profile "missing"');
   });
 
   it("reports effective provider/model and the winning precedence layers", async () => {
@@ -172,7 +198,7 @@ describe("agentrig doctor", () => {
       env: { AGENTRIG_MODEL: "env-model", AGENTRIG_OPENAI_CHATGPT_TOKEN: JSON.stringify({ accessToken: "opaque", refreshToken: "r", lastRefresh: 1_700_000_000_000 }) },
       cli: { profile: "work", model: "cli-model" },
     });
-    expect(find(result.lines, "config:effective")).toContain("provider openai-chatgpt from project config; model cli-model from CLI flag");
+    expect(find(result.lines, "config:effective")).toContain('provider "openai-chatgpt" from "project config"; model "cli-model" from "CLI flag"');
   });
 
   it("reports trusted state and fails undecided state with the trust fix named", async () => {
@@ -186,8 +212,8 @@ describe("agentrig doctor", () => {
   it("passes a writable memory directory and readable wiki index", async () => {
     const f = fixture();
     const result = await diagnose(f.options);
-    expect(find(result.lines, "memory")).toContain("exists and is writable");
-    expect(find(result.lines, "memory:index")).toContain("is readable");
+    expect(find(result.lines, "memory")).toContain("exists and is a writable directory");
+    expect(find(result.lines, "memory:index")).toContain("is a readable file");
   });
 
   it("fails memory directory and index probes with agentrig memory init named", async () => {
@@ -205,7 +231,7 @@ describe("agentrig doctor", () => {
     f.files.set(path, JSON.stringify({ mcpServers: { docs: { command: "docs-server" } } }));
     const result = await diagnose({ ...f.options, cli: { mcpConfig: path } });
     expect(find(result.lines, "mcp")).toContain("parses (1 server)");
-    expect(find(result.lines, "mcp:docs")).toContain("exists on PATH");
+    expect(find(result.lines, 'mcp:"docs"')).toContain("exists on PATH");
   });
 
   it("fails malformed MCP config with its repair flag and redacts env values", async () => {
@@ -213,7 +239,7 @@ describe("agentrig doctor", () => {
     const path = join(ROOT, "mcp.json");
     f.files.set(path, `{ "mcpServers": { "x": { "env": { "TOKEN": "MCP_SECRET" } } }`);
     const result = await diagnose({ ...f.options, cli: { mcpConfig: path } });
-    expect(find(result.lines, "mcp")).toContain(`fix --mcp-config ${path}`);
+    expect(find(result.lines, "mcp")).toContain(`fix --mcp-config ${JSON.stringify(path)}`);
     expect(result.lines.join("\n")).not.toContain("MCP_SECRET");
   });
 
@@ -223,12 +249,12 @@ describe("agentrig doctor", () => {
     f.files.set(path, JSON.stringify({ mcpServers: { docs: { command: "missing-server" } } }));
     f.probes.commandExists = async () => false;
     const result = await diagnose({ ...f.options, cli: { mcpConfig: path } });
-    expect(find(result.lines, "mcp:docs")).toContain("install it or put missing-server on PATH");
+    expect(find(result.lines, 'mcp:"docs"')).toContain('install it or put "missing-server" on PATH');
   });
 
   it("reports Git branch, detached HEAD, and outside-repository states as informational", async () => {
     const f = fixture();
-    expect(find((await diagnose(f.options)).lines, "git")).toContain("branch feat/test");
+    expect(find((await diagnose(f.options)).lines, "git")).toContain('branch "feat/test"');
     f.probes.gitState = async () => ({ inside: true, detached: true });
     expect(find((await diagnose(f.options)).lines, "git")).toContain("HEAD is detached");
     f.probes.gitState = async () => ({ inside: false });
@@ -254,6 +280,98 @@ describe("agentrig doctor", () => {
     expect((await diagnose({ ...passing.options, env: {} })).exitCode).toBe(1);
   });
 
+  it("does not leak an invalid enum value and skips credentials when config resolution failed", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ provider: "FABRICATED_ENUM_SECRET" }));
+    const result = await diagnose(f.options);
+    expect(find(result.lines, "config:user")).toContain("fix");
+    expect(find(result.lines, "credentials")).toContain("effective provider is unknown");
+    expect(result.lines.join("\n")).not.toContain("FABRICATED_ENUM_SECRET");
+  });
+
+  it("fails an unknown injected provider rather than treating it as ChatGPT", async () => {
+    const f = fixture();
+    const result = await diagnose({ ...f.options, cli: { provider: "surprise" as never } });
+    expect(find(result.lines, "config:effective")).toContain("set --provider to anthropic, openai, or openai-chatgpt");
+    expect(find(result.lines, "credentials")).toContain("effective provider is invalid");
+  });
+
+  it("fails OpenAI providers without an explicit model and names all model fixes", async () => {
+    const f = fixture();
+    for (const provider of ["openai", "openai-chatgpt"] as const) {
+      f.files.set(USER_CONFIG, JSON.stringify({ provider }));
+      const result = await diagnose({ ...f.options, env: { OPENAI_API_KEY: "present" } });
+      expect(find(result.lines, "config:effective")).toContain("set --model, AGENTRIG_MODEL, or model in config");
+      expect(result.exitCode).toBe(1);
+    }
+  });
+
+  it("does not read config or trust paths when project-boundary resolution throws", async () => {
+    const f = fixture();
+    f.probes.boundary = async () => { throw new Error("boundary failed"); };
+    const result = await diagnose(f.options);
+    expect(find(result.lines, "trust")).toContain("fix permissions on the working directory");
+    expect(f.reads).toEqual([]);
+    expect(result.lines.filter((candidate) => candidate.startsWith("fail trust "))).toHaveLength(1);
+  });
+
+  it("requires the memory path to be a directory and its index to be a regular file", async () => {
+    const f = fixture();
+    f.probes.stat = async () => ({ isDirectory: () => false, isFile: () => false });
+    const result = await diagnose(f.options);
+    expect(find(result.lines, "memory")).toContain("not a writable directory");
+    expect(find(result.lines, "memory:index")).toContain("not a readable file");
+  });
+
+  it("does not open a project-owned MCP config while the project is untrusted", async () => {
+    const f = fixture();
+    f.files.set(TRUST, JSON.stringify({ projects: { [ROOT]: false } }));
+    f.files.set(join(ROOT, "mcp.json"), JSON.stringify({ mcpServers: {} }));
+    const result = await diagnose({ ...f.options, cli: { mcpConfig: "mcp.json" } });
+    expect(find(result.lines, "mcp")).toContain("skipped (untrusted)");
+    expect(f.reads).not.toContain(join(ROOT, "mcp.json"));
+  });
+
+  it("default command lookup rejects a directory and accepts an executable regular file", async () => {
+    const f = fixture();
+    const dir = await mkdtemp(join(tmpdir(), "agentrig-command-"));
+    cleanupDirs.push(dir);
+    const executable = join(dir, "real-server");
+    const directory = join(dir, "fake-server");
+    await writeFile(executable, "#!/bin/sh\n", "utf8");
+    await chmod(executable, 0o700);
+    await mkdir(directory);
+    const mcp = join(ROOT, "mcp.json");
+    delete (f.probes as Partial<DoctorProbes>).commandExists;
+    f.files.set(mcp, JSON.stringify({ mcpServers: { real: { command: executable }, fake: { command: directory } } }));
+    const result = await diagnose({ ...f.options, probes: f.probes, cli: { mcpConfig: mcp } });
+    expect(find(result.lines, 'mcp:"real"')).toContain("pass");
+    expect(find(result.lines, 'mcp:"fake"')).toContain("install it");
+  });
+
+  it("checks an MCP command with the server's env and cwd context", async () => {
+    const f = fixture();
+    const path = join(ROOT, "mcp.json");
+    f.files.set(path, JSON.stringify({ mcpServers: { docs: { command: "server", env: { PATH: "tools" }, cwd: "service" } } }));
+    let seen: { env: NodeJS.ProcessEnv; cwd: string } | undefined;
+    f.probes.commandExists = async (_command, env, cwd) => { seen = { env, cwd }; return true; };
+    await diagnose({ ...f.options, cli: { mcpConfig: path } });
+    expect(seen).toEqual({ env: { ANTHROPIC_API_KEY: "fabricated-anthropic-secret", PATH: "tools" }, cwd: join(ROOT, "service") });
+  });
+
+  it("escapes terminal controls from dynamic profile, model, server, command, and branch values", async () => {
+    const f = fixture();
+    const marker = "evil\u001b[2J\nINJECTED";
+    f.files.set(USER_CONFIG, JSON.stringify({ profiles: { [marker]: { model: marker } } }));
+    f.files.set(join(ROOT, "mcp.json"), JSON.stringify({ mcpServers: { [marker]: { command: marker } } }));
+    f.probes.gitState = async () => ({ inside: true, branch: marker });
+    const result = await diagnose({ ...f.options, cli: { profile: marker, mcpConfig: join(ROOT, "mcp.json") } });
+    const output = result.lines.join("\n");
+    expect(output).not.toContain("\u001b");
+    expect(result.lines.every((candidate) => !candidate.includes("\n"))).toBe(true);
+    expect(output).toContain("\\u001b[2J\\nINJECTED");
+  });
+
   it("is deterministic when probes return the same state", async () => {
     const f = fixture();
     const first = await diagnose(f.options);
@@ -264,8 +382,47 @@ describe("agentrig doctor", () => {
 
 describe("doctor read-only guarantee", () => {
   const cleanup: string[] = [];
+
+  async function snapshot(root: string, relative = ""): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    for (const entry of await readdir(join(root, relative), { withFileTypes: true })) {
+      const name = join(relative, entry.name);
+      if (entry.isDirectory()) Object.assign(result, await snapshot(root, name));
+      else if (entry.isFile()) result[name] = await readFile(join(root, name), "utf8");
+    }
+    return result;
+  }
   afterEach(async () => {
     await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  });
+
+  it("does not change any config, trust, token, memory, or MCP file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentrig-doctor-root-"));
+    const home = await mkdtemp(join(tmpdir(), "agentrig-doctor-home-"));
+    cleanup.push(root, home);
+    await mkdir(join(home, ".agentrig"), { recursive: true });
+    await mkdir(join(root, ".agentrig", "wiki"), { recursive: true });
+    const auth = join(home, ".agentrig", "auth.json");
+    const mcp = join(home, ".agentrig", "mcp.json");
+    const token = `x.${Buffer.from(JSON.stringify({ exp: 1_800_000_000 })).toString("base64url")}.x`;
+    await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [root]: true } }));
+    await writeFile(join(home, ".agentrig", "config.json"), JSON.stringify({ provider: "openai-chatgpt", model: "gpt", memory: join(root, ".agentrig"), mcpConfig: mcp }));
+    await writeFile(join(root, ".agentrig", "config.json"), JSON.stringify({ maxTurns: 3 }));
+    await writeFile(join(root, ".agentrig", "wiki", "index.md"), "# index\n");
+    await writeFile(auth, JSON.stringify({ accessToken: token, refreshToken: "FABRICATED_REFRESH" }));
+    await writeFile(mcp, JSON.stringify({ mcpServers: {} }));
+    const before = { home: await snapshot(home), root: await snapshot(root) };
+    await diagnose({
+      cwd: root,
+      home,
+      env: { AGENTRIG_OPENAI_CHATGPT_AUTH: auth },
+      now: () => 1_700_000_000_000,
+      probes: {
+        boundary: async () => ({ projectRoot: root, userStateSafe: true }),
+        gitState: async () => ({ inside: false }),
+      },
+    });
+    expect({ home: await snapshot(home), root: await snapshot(root) }).toEqual(before);
   });
 
   it("does not change an existing trust.json", async () => {
