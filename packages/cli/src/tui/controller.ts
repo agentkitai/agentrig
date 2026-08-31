@@ -30,6 +30,8 @@ export interface PendingPermission {
   resolve: (d: Exclude<Decision, "ask">, remember: boolean) => void;
 }
 
+export type SupervisorPromptOutcome = "answered" | "expired" | "closed";
+
 export interface PendingEscalation {
   question: string;
   /** `null` settles a prompt that timed out or whose session ended without an answer. */
@@ -259,7 +261,7 @@ export class TuiController {
    * when this is used outside `supervise()` (which has its own safety timeout), and session teardown
    * settles it too, so an absent user can never wedge shutdown.
    */
-  askSupervisor(question: string, timeoutMs = DEFAULT_ESCALATION_PROMPT_TIMEOUT_MS): Promise<void> {
+  askSupervisor(question: string, timeoutMs = DEFAULT_ESCALATION_PROMPT_TIMEOUT_MS): Promise<SupervisorPromptOutcome> {
     // The supervisor currently serializes interventions, but replacing rather than orphaning an
     // existing prompt keeps this seam safe for another caller or future parallel observers.
     this.state.escalation?.resolve(null, "closed");
@@ -275,6 +277,9 @@ export class TuiController {
           if (this.state.escalation === entry) this.set({ escalation: null });
 
           const guidance = answer?.trim() ?? "";
+          const outcome: SupervisorPromptOutcome = answer !== null
+            ? "answered"
+            : reason === "timeout" ? "expired" : "closed";
           if (guidance !== "") {
             if (this.session !== null) {
               this.session.control.steer(`[user response to supervisor] ${guidance}`, "user");
@@ -282,12 +287,12 @@ export class TuiController {
             } else {
               this.print("the supervisor answer arrived after the session ended and was not sent", "error");
             }
-          } else if (reason === "timeout") {
+          } else if (outcome === "expired") {
             this.print("supervisor escalation expired with no answer; the run will continue", "system");
-          } else {
+          } else if (outcome === "closed") {
             this.print("supervisor escalation closed before an answer", "system");
           }
-          done();
+          done(outcome);
         },
       };
       timer = setTimeout(() => entry.resolve(null, "timeout"), timeoutMs);

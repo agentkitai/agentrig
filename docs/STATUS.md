@@ -151,6 +151,43 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## Supervisor refinement
+
+Status: **done**.
+
+- Background polling now composes with the loop detector's durable-progress reset: a `bash_job`
+  status result carrying incremental output clears repetition, and a poll with positive `waitMs`
+  that comes back empty is NEUTRAL — not spinning, but not progress that clears other tallies
+  either (clearing there let a `waitMs` poll on a finished job, which returns immediately, launder
+  an unrelated loop running between polls). Immediate repeated polls that report `(no new output)`
+  still tally, as do identical non-poll calls. Pinned by `treats identical bash_job status polls
+  carrying new output as progress`, `does not count deliberate bash_job status polls that use
+  waitMs as spinning`, `a waitMs poll between identical failing commands does not launder the
+  loop`, `still counts repeated non-blocking bash_job polls with no new output`, and the
+  pre-existing `loop: the same call three times with nothing changing is still a loop`. The
+  `(no new output)` literal is pinned core-side too, as a cross-package contract.
+- Verification/shipping is observable progress when a bash exit code transitions in either direction
+  or a successful command stages, commits, pushes, or performs a `gh pr` operation. Variation credit
+  is withdrawn when that varied call fails, preserving PR #36's varied-input lesson without allowing
+  failure alternation to escape. Pinned by `treats bash exit-code transitions in either direction as
+  verification progress`, `treats repeated successful git push operations as shipping progress`, and
+  `does not forgive an A/B loop of fifteen failing bash commands on variation alone`.
+- Escalation handlers may now resolve `answered`, `expired`, or `closed`; TUI prompts return that
+  outcome, while legacy/non-TUI void handlers default to closed. An expiry counts as the issued
+  rung's outcome and suppresses another ask only for the same stable signal signature for the rest
+  of that policy/session, degrading it to guidance. Pinned by `degrades an expired escalation
+  signature to guidance for the rest of the session`, `still escalates a different signature after
+  another escalation expired`, `an answered escalation suppresses nothing`, `an expired escalation
+  is counted once and recurring signals degrade to guidance`, `a void non-TUI escalation handler
+  defaults to closed and suppresses nothing`, and — through the real timeout path rather than an
+  explicit return — `a timed-out escalation counts as expired and degrades the recurring
+  signature`.
+- Rejected idea: exempt every `bash_job` status call from loop detection. It would hide the R1e shape
+  where immediate polls repeatedly return no output; result-aware handling preserves that evidence.
+- This refinement session's exact token count is unavailable from the API runner rather than
+  fabricated; record it as another unavailable point beside the **1,718,936 / 669,418 / 3.3M /
+  4.0M** existing baselines.
+
 ## M0 notes
 
 - `HarnessEvent` = envelope (`seq`, `sessionId`, `ts`, stamped by the store) + discriminated `EventPayload`.

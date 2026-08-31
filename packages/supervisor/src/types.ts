@@ -9,8 +9,12 @@ export interface Detector {
   observe(event: HarnessEvent, state: SupervisorState): Signal | null;
 }
 
+export type EscalationOutcome = "answered" | "expired" | "closed";
+
 export interface Policy {
   decide(signals: Signal[], state: SupervisorState): Intervention[];
+  /** Optional feedback seam for policies whose future choice depends on whether a human answered. */
+  onEscalationOutcome?(intervention: Intervention, outcome: EscalationOutcome): void;
 }
 
 export interface Detachable {

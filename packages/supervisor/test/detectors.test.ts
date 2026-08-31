@@ -42,6 +42,10 @@ function feed(
 const call = (name: string, hash: string, input: unknown = {}) =>
   ev({ type: "tool.call", id: `c${seq}`, name, input, inputHash: hash });
 const result = (ok: boolean, display: string) => ev({ type: "tool.result", id: `c${seq}`, ok, display, durationMs: 1 });
+const exchange = (id: string, name: string, hash: string, input: unknown, ok: boolean, display: string) => [
+  ev({ type: "tool.call", id, name, input, inputHash: hash }),
+  ev({ type: "tool.result", id, ok, display, durationMs: 1 }),
+];
 const changed = (path: string, contentHash: string) =>
   ev({ type: "file.changed", path, op: "edit", contentHash });
 const turnEnd = () => ev({ type: "turn.end", n: 1 });
@@ -57,6 +61,76 @@ describe("loop detector", () => {
   it("does not fire on distinct inputs, however many", () => {
     const calls = Array.from({ length: 20 }, (_, i) => call("bash", `h${i}`));
     expect(feed(loopDetector({ repeats: 3 }), calls).signals).toHaveLength(0);
+  });
+
+  it("treats identical bash_job status polls carrying new output as progress", () => {
+    const polls = ["reviewer started", "reviewer finding one", "NO FINDINGS"].flatMap((display, i) =>
+      exchange(`poll-${i}`, "bash_job", "same-status-poll", { id: "job-1", action: "status" }, true, display),
+    );
+    expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(0);
+  });
+
+  it("does not count deliberate bash_job status polls that use waitMs as spinning", () => {
+    const polls = Array.from({ length: 3 }, (_, i) =>
+      exchange(
+        `wait-${i}`,
+        "bash_job",
+        "same-waiting-poll",
+        { id: "job-1", action: "status", waitMs: 300_000 },
+        true,
+        "(no new output)",
+      ),
+    ).flat();
+    expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(0);
+  });
+
+  it("still counts repeated non-blocking bash_job polls with no new output", () => {
+    const polls = Array.from({ length: 3 }, (_, i) =>
+      exchange(
+        `empty-${i}`,
+        "bash_job",
+        "same-empty-poll",
+        { id: "job-1", action: "status" },
+        true,
+        "(no new output)",
+      ),
+    ).flat();
+    expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(1);
+  });
+
+  it("a waitMs poll between identical failing commands does not launder the loop", () => {
+    // A waited-but-empty poll is neutral: not spinning, but not progress either. When clearing
+    // the tallies here, a waitMs poll on a finished job (which returns immediately) reset the
+    // identical-call and error counters every cycle and hid a real loop running between polls.
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 3; i++) {
+      events.push(
+        ...exchange(`err-${i}`, "bash", "same-cmd", { command: "pnpm test" }, false, "same failure\n[exit code 1]"),
+        ...exchange(
+          `lull-${i}`,
+          "bash_job",
+          "same-waiting-poll",
+          { id: "job-1", action: "status", waitMs: 300_000 },
+          true,
+          "(no new output)",
+        ),
+      );
+    }
+    expect(feed(loopDetector({ repeats: 3 }), events).signals.length).toBeGreaterThan(0);
+  });
+
+  it("still counts failed bash_job status polls as repeated errors", () => {
+    const polls = Array.from({ length: 3 }, (_, i) =>
+      exchange(
+        `failed-${i}`,
+        "bash_job",
+        "same-failed-poll",
+        { id: "job-1", action: "status", waitMs: 300_000 },
+        false,
+        "job-1 never started: spawn ENOENT",
+      ),
+    ).flat();
+    expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(1);
   });
 
   it("re-arms rather than firing on every subsequent repeat", () => {
@@ -143,6 +217,68 @@ describe("stall detector", () => {
     const verification = ["git-status", "git-diff", "pnpm-build", "pnpm-test", "pnpm-typecheck"]
       .flatMap((hash) => [call("bash", hash), turnEnd()]);
     expect(feed(stallDetector({ turns: 3 }), verification).signals).toHaveLength(0);
+  });
+
+  it("does not forgive an A/B loop of fifteen failing bash commands on variation alone", () => {
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 15; i++) {
+      events.push(...exchange(
+        `fail-${i}`,
+        "bash",
+        i % 2 === 0 ? "hash-a" : "hash-b",
+        { command: i % 2 === 0 ? "pnpm test" : "pnpm typecheck" },
+        false,
+        "same failure\n[exit code 1]",
+      ), turnEnd());
+    }
+    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(1);
+  });
+
+  it("treats bash exit-code transitions in either direction as verification progress", () => {
+    const events: HarnessEvent[] = [];
+    const exits = [1, 1, 0, 0, 2, 2, 0];
+    for (const [i, code] of exits.entries()) {
+      events.push(...exchange(
+        `verify-${i}`,
+        "bash",
+        "same-verification-command",
+        { command: "pnpm build && pnpm test && pnpm typecheck" },
+        code === 0,
+        code === 0 ? "1039 tests passed" : `build failed\n[exit code ${code}]`,
+      ), turnEnd());
+    }
+    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(0);
+  });
+
+  it("does not treat alternating nonzero exit codes as red-green progress", () => {
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 15; i++) {
+      const code = i % 2 === 0 ? 1 : 127;
+      events.push(...exchange(
+        `mixed-failure-${i}`,
+        "bash",
+        i % 2 === 0 ? "hash-test" : "hash-missing-binary",
+        { command: i % 2 === 0 ? "pnpm test" : "missing-check" },
+        false,
+        `failed\n[exit code ${code}]`,
+      ), turnEnd());
+    }
+    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(1);
+  });
+
+  it("treats repeated successful git push operations as shipping progress", () => {
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 5; i++) {
+      events.push(...exchange(
+        `push-${i}`,
+        "bash",
+        "same-git-push",
+        { command: "git push -u origin feat/supervisor-refinement" },
+        true,
+        "Everything up-to-date",
+      ), turnEnd());
+    }
+    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(0);
   });
 
   it("a turn that changes a file resets the count", () => {

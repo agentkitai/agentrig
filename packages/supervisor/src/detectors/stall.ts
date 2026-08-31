@@ -16,7 +16,10 @@ export interface StallOptions {
  * with unchanged pass count."
  *
  * A new tool kind is exploration, and a tool input that differs from the previous call is varied
- * activity: `git status` → `pnpm test` → `git diff` is verification, not spinning. A familiar read
+ * activity: `git status` → `pnpm test` → `git diff` is verification, not spinning. A failed result
+ * withdraws that call's variation credit, so alternating two failing commands is still a stall.
+ * Bash exit-code transitions (red→green or green→red) are new information, and successful staging,
+ * commit, push, and PR commands are shipping progress even when their input repeats. A familiar read
  * tool on an unfamiliar target is exploration too. `read_file`, `grep`, and `glob` therefore count
  * a path only once: walking through new files and
  * directories is orientation, while repeatedly reading or searching the same target can still
@@ -40,8 +43,16 @@ export function stallDetector(opts: StallOptions = {}): Detector {
   let changedThisTurn = false;
   let newKindThisTurn = false;
   let newReadThisTurn = false;
-  let variedInputThisTurn = false;
+  let variedInputsThisTurn = 0;
+  let verificationProgressThisTurn = false;
   let lastInputHash: string | null = null;
+  const lastBashExitCode = new Map<string, number>();
+  const pendingCalls = new Map<string, {
+    name: string;
+    inputHash: string;
+    varied: boolean;
+    command: string | null;
+  }>();
   let reportedQuietStall = false;
 
   let lastCounts: string | null = null;
@@ -56,6 +67,23 @@ export function stallDetector(opts: StallOptions = {}): Detector {
     // Calls spelling the same target as `./src/a.ts`, `src\\a.ts`, or `src/a.ts/` are repeats.
     return path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "") || ".";
   };
+
+  const commandOf = (event: Extract<HarnessEvent, { type: "tool.call" }>): string | null => {
+    if (event.name !== "bash" || typeof event.input !== "object" || event.input === null || Array.isArray(event.input)) {
+      return null;
+    }
+    const command = (event.input as { command?: unknown }).command;
+    return typeof command === "string" ? command : null;
+  };
+
+  const exitCodeOf = (event: Extract<HarnessEvent, { type: "tool.result" }>): number | null => {
+    if (event.ok) return 0;
+    const match = /\[exit code (-?\d+)\]/.exec(event.display);
+    return match === null ? null : Number(match[1]);
+  };
+
+  const isShippingCommand = (command: string): boolean =>
+    /(?:^|[;&|]\s*)(?:git\s+(?:add|commit|push)\b|gh\s+pr\s+(?:create|merge|ready|edit|comment)\b)/.test(command);
 
   return {
     id: "stall",
@@ -73,10 +101,15 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       }
 
       if (event.type === "tool.call") {
-        if (lastInputHash !== null && event.inputHash !== lastInputHash) {
-          variedInputThisTurn = true;
-          reportedQuietStall = false;
-        }
+        const varied = lastInputHash !== null && event.inputHash !== lastInputHash;
+        if (varied) variedInputsThisTurn += 1;
+        pendingCalls.set(event.id, {
+          name: event.name,
+          inputHash: event.inputHash,
+          varied,
+          command: commandOf(event),
+        });
+        while (pendingCalls.size > 400) pendingCalls.delete(pendingCalls.keys().next().value!);
         lastInputHash = event.inputHash;
         if (!toolKinds.has(event.name)) {
           toolKinds.add(event.name);
@@ -93,6 +126,32 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       }
 
       if (event.type === "tool.result") {
+        const pending = pendingCalls.get(event.id);
+        if (pending !== undefined) {
+          pendingCalls.delete(event.id);
+          // Variation is exploratory until its result proves it was just another failed A/B
+          // attempt. This preserves PR #36's varied-input activity without forgiving failure loops.
+          if (!event.ok && pending.varied) variedInputsThisTurn = Math.max(0, variedInputsThisTurn - 1);
+          if (pending.name === "bash") {
+            const exitCode = exitCodeOf(event);
+            if (exitCode !== null) {
+              const previous = lastBashExitCode.get(pending.inputHash);
+              // The same check crossing the red/green boundary is information. Distinct commands
+              // and nonzero→nonzero alternation do not borrow transition credit from each other.
+              if (previous !== undefined && (exitCode === 0) !== (previous === 0)) {
+                verificationProgressThisTurn = true;
+                reportedQuietStall = false;
+              }
+              lastBashExitCode.set(pending.inputHash, exitCode);
+              while (lastBashExitCode.size > 400) lastBashExitCode.delete(lastBashExitCode.keys().next().value!);
+            }
+            if (event.ok && pending.command !== null && isShippingCommand(pending.command)) {
+              verificationProgressThisTurn = true;
+              reportedQuietStall = false;
+            }
+          }
+        }
+
         const counts = parseTestCounts(event.display);
         if (counts === null) return null;
         if (counts.failed === 0) {
@@ -119,11 +178,13 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       }
 
       if (event.type === "turn.end") {
-        const productive = changedThisTurn || newKindThisTurn || newReadThisTurn || variedInputThisTurn;
+        const productive = changedThisTurn || newKindThisTurn || newReadThisTurn ||
+          variedInputsThisTurn > 0 || verificationProgressThisTurn;
         changedThisTurn = false;
         newKindThisTurn = false;
         newReadThisTurn = false;
-        variedInputThisTurn = false;
+        variedInputsThisTurn = 0;
+        verificationProgressThisTurn = false;
         if (productive) {
           quietTurns = 0;
           reportedQuietStall = false;
