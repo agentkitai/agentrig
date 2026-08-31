@@ -163,11 +163,20 @@ Status: **done**.
   swallows the subcommand's `--profile` token — the value is recovered at the config seam via
   `optsWithGlobals()` (`configured` and the doctor action). A test pins that the root option set
   is exactly `["--profile"]` so no other flag quietly migrates up.
-- Behavior note: subcommands that never consult config (`sessions ls`, `login`, …) now accept a
-  leading `--profile` and ignore it — a profile simply has nothing to select there. Previously
-  this was an "unknown option" error.
+- Behavior note: subcommands that never consult config (`sessions ls`, `login`, `dream`,
+  `memory ingest`, …) accept `--profile` in ANY position (the root scan reaches trailing flags
+  too) where they previously errored "unknown option". Never silently: a preAction hook prints
+  `note: --profile is ignored by \`<command>\`` — erroring instead would break the alias shape
+  this exists for, since a wrapper function appends the flag to every forwarded subcommand.
+- Known accepted cost (adversarial review): a literal `"--profile"` used as another option's
+  VALUE (`--system "--profile"`) is stolen by the root scan and errors misleadingly. The escape
+  hatches work and are documented in `program.ts`: the `=` form (`--system=--profile`) and
+  anything after `--` are never scanned. `enablePositionalOptions()` would remove the class but
+  forbids the pinned bare-launch shape `agentrig --yolo`.
 - Pinned by dispatch, both-positions value flow, run/TUI/doctor end-to-end profile resolution,
-  and root-option confinement tests; each verified to fail with the corresponding line reverted.
+  nested `sessions resume` recovery (a `cmd.parent?.opts()` mutant survived the original suite),
+  the ignored-note behavior, and root-option confinement tests; each verified to fail with the
+  corresponding code reverted.
 
 ## Supervisor refinement
 

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
 import { supervisorOptions, type SupervisorFlags } from "../src/run.ts";
@@ -161,6 +161,29 @@ describe("argv parsing", () => {
     };
     expect(await capture(["run", "x", "--profile", "trailing"])).toBe("trailing");
     expect(await capture(["--profile", "leading", "run", "x"])).toBe("leading");
+  });
+
+  it("says --profile is ignored on commands that never consult config, instead of silence", async () => {
+    // an alias appends --profile to EVERY forwarded subcommand, so these paths are hit
+    // constantly; accepted-but-silently-dead is the timeoutMs failure mode all over again
+    const notes: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => void notes.push(a.join(" ")));
+    // a fresh program per parse: commander keeps parsed option values on the command object,
+    // so a reused tree would leak the earlier --profile into the silent cases below
+    const parse = async (argv: string[]) => stub(buildProgram()).run(argv);
+    try {
+      await parse(["--profile", "p", "memory", "ls"]);
+      await parse(["dream", "--profile", "p", "--structural-only"]);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(1);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(1);
+      notes.length = 0;
+      await parse(["--profile", "p", "run", "x"]);
+      await parse(["--profile", "p"]);
+      await parse(["memory", "ls"]);
+      expect(notes.filter((n) => n.includes("--profile is ignored"))).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("dual registration is confined to --profile — no other flag moved to the root", () => {

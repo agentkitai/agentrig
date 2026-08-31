@@ -94,9 +94,28 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    * flag still parses on its subcommand exactly as before), and the value is recovered where
    * config is resolved via `optsWithGlobals()`, which `program.test.ts` and `config.test.ts` pin
    * in both positions. On subcommands that never consult config (`sessions ls`, `login`, …) a
-   * leading --profile is accepted and has nothing to affect, which is what a profile means there.
+   * --profile in ANY position is accepted, and the preAction hook below says it is ignored —
+   * erroring instead would break the very alias shape this exists for, since a wrapper appends
+   * the flag to every subcommand it forwards.
+   *
+   * Known, accepted cost (adversarial review, PR #57): the root scan also consumes a literal
+   * "--profile" appearing as another option's VALUE (`--system "--profile"`), erroring about a
+   * flag the user never set. The escape hatches work: `--system=--profile` and anything after
+   * `--` are never scanned. `enablePositionalOptions()` would remove the whole class but forbids
+   * the pinned bare-launch shape `agentrig --yolo`, so it is not worth that trade.
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
+  /** The entry points whose actions resolve config and therefore honour --profile. */
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume"]);
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    // A profile aimed at a command that never consults config is accepted so aliases keep
+    // working, but never silently: an ignored flag the user typed deserves a note (the same
+    // contract bash's background timeoutMs settled on).
+    const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
+    if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name())) {
+      console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read config profiles`);
+    }
+  });
 
   function withProviderOptions(cmd: Command): Command {
     return cmd
