@@ -1,7 +1,7 @@
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
-import { fetchWithRetries, type RetryPolicy } from "./retry.js";
+import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 
 /**
  * Anthropic Messages API adapter. Speaks the streaming REST API directly (no vendor SDK),
@@ -17,6 +17,8 @@ export interface AnthropicProviderOptions {
   fetchFn?: typeof fetch;
   /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
   retry?: RetryPolicy;
+  /** Called when a transient in-stream failure triggers a clean re-request, so a UI can say so. */
+  onRetry?: (info: StreamRetryInfo) => void;
 }
 
 const API_VERSION = "2023-06-01";
@@ -179,6 +181,7 @@ export class AnthropicProvider implements ModelProvider {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly retry: RetryPolicy | undefined;
+  private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
 
   constructor(opts: AnthropicProviderOptions) {
     this.apiKey = opts.apiKey;
@@ -186,6 +189,7 @@ export class AnthropicProvider implements ModelProvider {
     this.baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
     this.retry = opts.retry;
+    this.onRetry = opts.onRetry;
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -195,23 +199,28 @@ export class AnthropicProvider implements ModelProvider {
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
-    const res = await fetchWithRetries(
-      this.fetchFn,
-      "anthropic",
-      `${this.baseUrl}/v1/messages`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": this.apiKey,
-          "anthropic-version": API_VERSION,
+    // streamWithRetries re-requests when the failure arrives INSIDE a 200 stream (Anthropic
+    // sends `overloaded_error` as an SSE error event) — but only before anything was yielded
+    const openOnce = async function* (this: AnthropicProvider): AsyncIterable<ModelEvent> {
+      const res = await fetchWithRetries(
+        this.fetchFn,
+        "anthropic",
+        `${this.baseUrl}/v1/messages`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": this.apiKey,
+            "anthropic-version": API_VERSION,
+          },
+          body: JSON.stringify(toAnthropicRequest(req, this.model)),
         },
-        body: JSON.stringify(toAnthropicRequest(req, this.model)),
-      },
-      signal,
-      this.retry ?? {},
-    );
-    if (!res.body) throw new Error("anthropic: empty response body");
-    yield* parseAnthropicSse(res.body);
+        signal,
+        this.retry ?? {},
+      );
+      if (!res.body) throw new Error("anthropic: empty response body");
+      yield* parseAnthropicSse(res.body);
+    }.bind(this);
+    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry);
   }
 }

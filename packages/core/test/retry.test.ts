@@ -3,10 +3,13 @@ import {
   AnthropicProvider,
   fetchWithRetries,
   isQuotaExhaustion,
+  isTransientStreamError,
   parseRetryAfter,
   redactSecrets,
+  streamWithRetries,
   type ModelEvent,
   type ModelRequest,
+  type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
 
 const req = (): ModelRequest => ({ system: "s", messages: [], tools: [], maxTokens: 10 });
@@ -240,5 +243,110 @@ describe("edge bot challenges are named, not dumped as markup", () => {
     }).catch((e: Error) => e)) as Error;
     expect(err.message).toContain("bad request");
     expect(err.message).not.toContain("edge bot challenge");
+  });
+});
+
+// ---------------------------------------------------------------- stream-level retry
+
+describe("isTransientStreamError", () => {
+  it("recognises the messages that killed real sessions, and network-level cuts", () => {
+    // verbatim from the ChatGPT backend, delivered inside an HTTP 200 SSE stream
+    expect(isTransientStreamError("openai-chatgpt stream error: Our servers are currently overloaded. Please try again later.")).toBe(true);
+    expect(isTransientStreamError("anthropic stream error: overloaded_error: Overloaded")).toBe(true);
+    expect(isTransientStreamError("fetch failed")).toBe(true);
+    expect(isTransientStreamError("read ECONNRESET")).toBe(true);
+  });
+
+  it("never calls quota exhaustion transient, whatever the phrasing around it", () => {
+    // "try again" appears in the message, but retrying an empty wallet burns attempts for nothing
+    expect(isTransientStreamError("You have exceeded your current quota. Please try again later.")).toBe(false);
+    expect(isTransientStreamError("HTTP 401 invalid api key")).toBe(false);
+    expect(isTransientStreamError("model not found")).toBe(false);
+  });
+});
+
+describe("streamWithRetries", () => {
+  const signal = () => new AbortController().signal;
+  const collectAll = async <T>(it: AsyncIterable<T>): Promise<T[]> => {
+    const out: T[] = [];
+    for await (const e of it) out.push(e);
+    return out;
+  };
+
+  function failing(times: number, message: string, events: string[] = ["a", "b"]) {
+    let calls = 0;
+    return {
+      open: async function* (): AsyncIterable<string> {
+        calls += 1;
+        if (calls <= times) throw new Error(message);
+        yield* events;
+      },
+      calls: () => calls,
+    };
+  }
+
+  it("re-requests a transient failure and delivers the clean attempt in full", async () => {
+    const f = failing(2, "stream error: Our servers are currently overloaded.");
+    const delays: number[] = [];
+    const notices: StreamRetryInfo[] = [];
+    const out = await collectAll(
+      streamWithRetries(f.open, signal(), { sleep: async (ms) => void delays.push(ms) }, (i) => notices.push(i)),
+    );
+    expect(out).toEqual(["a", "b"]);
+    expect(f.calls()).toBe(3);
+    // exponential: 1s then 2s
+    expect(delays).toEqual([1000, 2000]);
+    expect(notices.map((n) => `${n.attempt}/${n.maxAttempts}`)).toEqual(["1/4", "2/4"]);
+    expect(notices[0]!.reason).toContain("overloaded");
+  });
+
+  it("NEVER re-requests once an event has been yielded — a retry would replay the prefix", async () => {
+    let calls = 0;
+    const open = async function* (): AsyncIterable<string> {
+      calls += 1;
+      yield "partial reply";
+      throw new Error("stream error: overloaded");
+    };
+    const seen: string[] = [];
+    await expect(async () => {
+      for await (const e of streamWithRetries(open, signal(), { sleep: async () => {} })) seen.push(e);
+    }).rejects.toThrow(/overloaded/);
+    expect(calls).toBe(1);
+    expect(seen).toEqual(["partial reply"]);
+  });
+
+  it("throws a non-transient failure immediately", async () => {
+    const f = failing(1, "HTTP 401 invalid key");
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(/401/);
+    expect(f.calls()).toBe(1);
+  });
+
+  it("does not mistake quota exhaustion for a transient overload", async () => {
+    const f = failing(1, "You have exceeded your current quota. Please try again later.");
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(/quota/);
+    expect(f.calls()).toBe(1);
+  });
+
+  it("gives up after maxRetries with the last error", async () => {
+    const f = failing(99, "temporarily unavailable");
+    await expect(
+      collectAll(streamWithRetries(f.open, signal(), { maxRetries: 2, sleep: async () => {} })),
+    ).rejects.toThrow(/temporarily unavailable/);
+    expect(f.calls()).toBe(3);
+  });
+
+  it("stops retrying when the caller aborts", async () => {
+    const ctl = new AbortController();
+    let calls = 0;
+    const open = async function* (): AsyncIterable<string> {
+      calls += 1;
+      ctl.abort();
+      throw new Error("overloaded");
+      yield "never";
+    };
+    await expect(collectAll(streamWithRetries(open, ctl.signal, { sleep: async () => {} }))).rejects.toThrow(
+      /overloaded/,
+    );
+    expect(calls).toBe(1);
   });
 });

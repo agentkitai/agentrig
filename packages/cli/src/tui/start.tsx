@@ -70,6 +70,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       onAsk: (req) => controller.ask(req),
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
+      // in the frame, not on stderr: stderr is overwritten by the next render, and an invisible
+      // retry is indistinguishable from the hangs this TUI has already been debugged for
+      onNotice: (m) => controller.print(m, "system"),
     });
   } catch (err) {
     console.error((err as Error).message);

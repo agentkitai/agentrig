@@ -102,6 +102,69 @@ export function parseRetryAfter(header: string | null, now: number): number | nu
   return Math.max(0, date - now);
 }
 
+/** What a stream-level retry looked like, for a UI that wants to say "retrying in 2s". */
+export interface StreamRetryInfo {
+  /** 1-based: the attempt that just failed. */
+  attempt: number;
+  /** Total attempts that will be made before giving up. */
+  maxAttempts: number;
+  delayMs: number;
+  /** The failed attempt's error message, already redacted by the thrower. */
+  reason: string;
+}
+
+/**
+ * Whether an error thrown MID-STREAM is worth a clean re-request. This is a different question
+ * from HTTP-status retryability: the ChatGPT backend in particular answers 200 and then delivers
+ * "Our servers are currently overloaded. Please try again later." as an SSE error event, which
+ * sailed past `fetchWithRetries` and killed two real dogfood sessions at turns 43 and 46.
+ * Quota exhaustion is never transient, whatever the phrasing around it.
+ */
+export function isTransientStreamError(message: string): boolean {
+  if (isQuotaExhaustion(message)) return false;
+  return /overloaded|rate limit|too many requests|try again|temporarily unavailable|server_error|internal (server )?error|ECONNRESET|ETIMEDOUT|socket hang up|premature close|terminated|fetch failed|network error/i.test(
+    message,
+  );
+}
+
+/**
+ * Runs `open()` and re-runs it on a transient failure — but ONLY while nothing has been yielded
+ * downstream. Once the consumer has seen an event, a retry would replay the prefix (duplicated
+ * text deltas, double tool calls), so a later failure propagates instead. That guard is what
+ * makes this safe to wrap around a whole provider stream: an overload error arrives before any
+ * content, so it retries; a genuine mid-reply disconnect does not pretend to be recoverable.
+ *
+ * Layering: `fetchWithRetries` (inside `open`) covers failures BEFORE a 200 arrives; this covers
+ * failures inside the stream that follows. The two never retry the same failure twice.
+ */
+export async function* streamWithRetries<T>(
+  open: () => AsyncIterable<T>,
+  signal: AbortSignal,
+  policy: RetryPolicy = {},
+  onRetry?: (info: StreamRetryInfo) => void,
+): AsyncIterable<T> {
+  const maxRetries = policy.maxRetries ?? 3;
+  const baseDelayMs = policy.baseDelayMs ?? 1000;
+  const sleep = policy.sleep ?? abortableSleep;
+
+  for (let attempt = 0; ; attempt++) {
+    let yielded = false;
+    try {
+      for await (const event of open()) {
+        yielded = true;
+        yield event;
+      }
+      return;
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      if (yielded || signal.aborted || attempt >= maxRetries || !isTransientStreamError(reason)) throw err;
+      const delayMs = Math.min(baseDelayMs * 2 ** attempt, MAX_DELAY_MS);
+      onRetry?.({ attempt: attempt + 1, maxAttempts: maxRetries + 1, delayMs, reason });
+      await sleep(delayMs, signal);
+    }
+  }
+}
+
 export async function fetchWithRetries(
   fetchFn: typeof fetch,
   label: string,

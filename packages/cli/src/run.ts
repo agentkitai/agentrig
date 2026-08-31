@@ -287,6 +287,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
       ...(interactive ? { onAsk: askInteractively } : {}),
       onHookError: (m) => console.error(m),
       onHookDone: (m) => console.error(m),
+      onNotice: (m) => console.error(m),
     });
   } catch (err) {
     console.error((err as Error).message);
