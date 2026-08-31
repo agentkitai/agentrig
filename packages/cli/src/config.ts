@@ -11,7 +11,7 @@ const positiveSetting = z
 const softSetting = z
   .union([z.string().min(1), z.number().finite()])
   .transform(String)
-  .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1, "must be between 0 and 1");
+  .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1, "must be greater than 0 and at most 1");
 const stringList = z.array(z.string().min(1));
 
 /**
@@ -79,7 +79,8 @@ function credentialPath(value: unknown, path: string[] = []): string[] | null {
   if (value === null || typeof value !== "object") return null;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const next = [...path, key];
-    if (CREDENTIAL_KEY.test(key)) return next;
+    // Profile names are labels, not setting keys; a profile named "secret" carries no secret.
+    if (!(path.length === 1 && path[0] === "profiles") && CREDENTIAL_KEY.test(key)) return next;
     const found = credentialPath(child, next);
     if (found !== null) return found;
   }

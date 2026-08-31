@@ -31,7 +31,10 @@ live provider validation.
   and every other array replace the lower-precedence array rather than append to it. Appending can
   silently retain a user-level permission that a project intended to narrow, while replacement makes
   the effective policy locally legible. A selected profile overlays its own file's top level before
-  the next file-precedence layer is applied.
+  the next file-precedence layer is applied. Relative path settings retain CLI semantics and resolve
+  from the invocation cwd (the project root), not from whichever user/project config file supplied
+  them; this keeps the same resolved value on `run` and TUI paths and makes a user default portable
+  across projects.
 - **Known R1d caveat:** project `.agentrig/config.json` is currently loaded without a trusted-project
   check. Trust gating and persisted consent deliberately remain R1d scope.
 - Rejected idea for R1b: infer whether a CLI option was explicit by comparing its value to the

@@ -145,6 +145,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
       .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
+      // Config may enable a boolean; paired negations let one invocation still override it.
+      .option("--no-dangerously-skip-permissions", "override config and require permission checks")
+      .option("--no-yolo", "override config and require permission checks")
+      .option("--no-supervise", "override config and disable supervision")
+      .option("--no-supervisor-abort", "override config and disable supervisor aborts")
+      .option("--no-supervisor-review", "override config and disable trajectory review")
+      .option("--no-ingest-on-end", "override config and skip session-end memory ingest")
+      .option("--no-dream-on-end", "override config and skip scheduled session-end dream")
+      .option("--no-dream-structural-only", "override config and allow model-backed dream consolidation")
+      .option("--no-subagents", "override config and disable subagents")
       .option(
         "--shell <path>",
         "shell for the `bash` tool (default: /bin/sh; on Windows, Git Bash then PowerShell then cmd)",

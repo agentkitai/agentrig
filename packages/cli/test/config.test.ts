@@ -17,6 +17,7 @@ import type { TuiOptions } from "../src/tui/start.tsx";
 const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   process.exitCode = undefined;
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -74,12 +75,13 @@ describe("resolveConfig precedence (pure)", () => {
 
   it("profiles overlay each file base while project precedence remains intact", () => {
     const resolved = resolveConfig({
-      defaults: {},
-      user: file({ model: "user-base", provider: "anthropic", profiles: { fast: { model: "user-fast", allow: ["read"] } } }),
-      project: file({ model: "project-base", profiles: { fast: { provider: "openai", allow: ["bash"] } } }),
+      defaults: { model: "default" },
+      user: file({ model: "user-base", profiles: { fast: { model: "user-profile" } } }),
+      project: file({ model: "project-base", profiles: { fast: { model: "project-profile" } } }),
       profile: "fast",
     });
-    expect(resolved).toMatchObject({ model: "project-base", provider: "openai", allow: ["bash"] });
+    // One conflicting key pins every edge: default < user base < user profile < project base < project profile.
+    expect(resolved.model).toBe("project-profile");
   });
 
   it("rejects an unknown profile and lists the profiles that exist", () => {
@@ -114,13 +116,25 @@ describe("config file boundary", () => {
     await writeFile(path, "{ nope", "utf8");
     await expect(readConfigFile(path)).rejects.toThrow(new RegExp(`invalid config .*config\\.json at <json>:`));
   });
+
+  it("allows credential-like profile labels while still checking settings inside them", async () => {
+    const { cwd } = await fixture();
+    const path = await configAt(cwd, { profiles: { secret: { model: "local" } } });
+    await expect(readConfigFile(path)).resolves.toMatchObject({ profiles: { secret: { model: "local" } } });
+  });
+
+  it("rejects an out-of-range supervisor soft threshold at the config field", async () => {
+    const { cwd } = await fixture();
+    const path = await configAt(cwd, { supervisorSoft: 0 });
+    await expect(readConfigFile(path)).rejects.toThrow(/config\.json at supervisorSoft: must be greater than 0 and at most 1/);
+  });
 });
 
 describe("both agent entry points use config", () => {
   it("passes the same configured value through run and the default TUI into built agents", async () => {
     const { cwd, home } = await fixture();
-    await configAt(cwd, { shell: "/bin/sh", model: "configured-model" });
-    process.env.ANTHROPIC_API_KEY = "test-key";
+    await configAt(cwd, { shell: "/bin/bash", model: "configured-model" });
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     const received: Array<RunOptions | TuiOptions> = [];
     const dependencies = {
       config: { cwd, home, env: {} },
@@ -135,24 +149,38 @@ describe("both agent entry points use config", () => {
     for (const options of received) {
       expect(options.model).toBe("configured-model");
       const built = await buildAgent(options as AgentBuildOptions);
-      expect(built.tools.find((tool) => tool.name === "bash")?.description).toContain("/bin/sh");
+      expect(built.tools.find((tool) => tool.name === "bash")?.description).toContain("/bin/bash");
     }
   });
 
-  it("honours --profile and typed CLI flags through Commander", async () => {
+  it("honours --profile through Commander without another layer masking it", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
     let received: RunOptions | undefined;
     await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
-      "node",
-      "agentrig",
-      "run",
-      "test",
-      "--profile",
-      "fast",
-      "--model",
-      "cli",
+      "node", "agentrig", "run", "test", "--profile", "fast",
     ]);
-    expect(received?.model).toBe("cli");
+    expect(received?.model).toBe("profile");
+  });
+
+  it("treats a typed value equal to the built-in default as an explicit CLI override", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "project-model" });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--model", "claude-sonnet-5",
+    ]);
+    expect(received?.model).toBe("claude-sonnet-5");
+    expect(received?.modelExplicit).toBe(true);
+  });
+
+  it("lets an explicit negative boolean override project config", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { supervise: true });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--no-supervise",
+    ]);
+    expect(received?.supervise).toBe(false);
   });
 });
