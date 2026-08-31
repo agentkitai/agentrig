@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
@@ -23,7 +23,9 @@ afterEach(async () => {
 });
 
 async function fixture(): Promise<{ cwd: string; home: string }> {
-  const base = await mkdtemp(join(tmpdir(), "agentrig-config-"));
+  // Canonicalized for the same reason as the agent tests: the trust store is keyed by realpath,
+  // and macOS's tmpdir is a symlink — a raw-path trust key is silently "not trusted" there.
+  const base = await realpath(await mkdtemp(join(tmpdir(), "agentrig-config-")));
   dirs.push(base);
   const cwd = join(base, "project");
   const home = join(base, "home");
