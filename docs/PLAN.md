@@ -599,6 +599,10 @@ Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-
 
 Exit criterion for each milestone: the harness is used to build the next milestone.
 
+M7 was the last row of this table. The continuation — R-milestones distilled from a study of six
+open harnesses (Codex CLI, pi, DeepSeek Harness, Hermes Agent, OpenClaw, nanobot) — lives in
+`docs/ROADMAP.md` and is worked under the same flow and the same exit criterion.
+
 ---
 
 ## 7. Decisions locked (defaults, change if you disagree)

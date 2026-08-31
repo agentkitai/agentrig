@@ -1348,6 +1348,22 @@ Notes for a future reader:
   therefore wrap one row further than the budget assumed. `liveRows` leaves eight rows of headroom,
   which absorbs it; a `string-width` measure would be exact and is not worth the dependency yet.
 
+## Next: the R-milestones (2026-08-30)
+
+M0–M7 are done and merged. What comes next is `docs/ROADMAP.md`: fifteen R-milestones distilled
+from studying six open harnesses (Codex CLI, pi, DeepSeek Harness, Hermes Agent, OpenClaw,
+nanobot), ordered by dogfood leverage — context/config first, context economy (R1.5, added after the first --yolo dogfood run spent 3.3M input tokens on quadratic resends), sandbox, session
+trees/checkpoints, then the compounding loop (extensions, memory→skills, scheduler), then the
+serve/eval/parallel surface. The roadmap carries its own renunciation list (§4) so future
+sessions don't build the gateway/web-UI/marketplace features the research argued against, and it
+resolves both PLAN §8 open questions (R2 sandboxing, R4 checkpoints). A second, independent
+research pass over a different corpus (OpenHands, SWE-agent, Aider, Gemini CLI, Cline, Goose,
+OpenCode, the orchestration runtimes) was merged in afterwards: it validated the build order and
+the memory-promotion gate from the other direction, hardened R1/R3/R5/R10 (trusted-project
+boundary, doctor, side-effect-aware replay, tool-definition pinning, worktree-per-writer), and
+contributed the closing trust-and-proof arc — R12 capability grants, R13 provenance labels, R14
+acceptance contracts with claim→evidence grading.
+
 ## Decided
 
 - Lore is an optional `MemoryBackend` behind the seam in PLAN.md §3.8; the wiki stays the source
