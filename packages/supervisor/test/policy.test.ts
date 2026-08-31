@@ -123,6 +123,48 @@ describe("LadderPolicy", () => {
     expect(p.decide([second], state(2))[0]!.type).toBe("escalate");
   });
 
+  it("normalizes volatile loop error displays into the same escalation signature", () => {
+    const p = new LadderPolicy({ cooldownTurns: 0, capabilities: { escalate: true } });
+    const first = {
+      ...sig("loop"),
+      evidence: ["the same tool error came back 3 times", "timeout after 3.21s", "errorFingerprint=timeout after T"],
+    };
+    const later = {
+      ...sig("loop"),
+      evidence: ["the same tool error came back 3 times", "timeout after 3.34s", "errorFingerprint=timeout after T"],
+    };
+    p.decide([first], state(0));
+    const escalation = p.decide([first], state(1))[0]!;
+    p.onEscalationOutcome(escalation, "expired");
+
+    expect(p.decide([later], state(2))[0]!.type).toBe("inject_guidance");
+  });
+
+  it("keeps duplicate escalation outcomes distinct even when their questions match", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { escalate: true },
+      ladder: ["escalate"],
+    });
+    const recurring = { ...sig("loop"), evidence: ["same loop", "inputHash=same"] };
+    const [answered, expired] = p.decide([recurring, recurring], state(0));
+    p.onEscalationOutcome(answered!, "answered");
+    p.onEscalationOutcome(expired!, "expired");
+
+    expect(p.decide([recurring], state(1))[0]!.type).toBe("inject_guidance");
+  });
+
+  it("does not merge distinct error-burst signatures", () => {
+    const p = new LadderPolicy({ cooldownTurns: 0, capabilities: { escalate: true } });
+    const auth = { ...sig("error_burst"), evidence: ["4 of the last 4 tool calls failed (100%)", "4 errors"] };
+    const network = { ...sig("error_burst"), evidence: ["7 of the last 10 tool calls failed (70%)", "11 errors"] };
+    p.decide([auth], state(0));
+    const escalation = p.decide([auth], state(1))[0]!;
+    p.onEscalationOutcome(escalation, "expired");
+
+    expect(p.decide([network], state(2))[0]!.type).toBe("escalate");
+  });
+
   it("an answered escalation suppresses nothing", () => {
     const p = new LadderPolicy({ cooldownTurns: 0, capabilities: { escalate: true } });
     const recurring = { ...sig("error_burst"), evidence: ["15 identical failing bash calls"] };

@@ -46,8 +46,13 @@ export function stallDetector(opts: StallOptions = {}): Detector {
   let variedInputsThisTurn = 0;
   let verificationProgressThisTurn = false;
   let lastInputHash: string | null = null;
-  let lastBashExitCode: number | null = null;
-  const pendingCalls = new Map<string, { name: string; varied: boolean; command: string | null }>();
+  const lastBashExitCode = new Map<string, number>();
+  const pendingCalls = new Map<string, {
+    name: string;
+    inputHash: string;
+    varied: boolean;
+    command: string | null;
+  }>();
   let reportedQuietStall = false;
 
   let lastCounts: string | null = null;
@@ -98,7 +103,12 @@ export function stallDetector(opts: StallOptions = {}): Detector {
       if (event.type === "tool.call") {
         const varied = lastInputHash !== null && event.inputHash !== lastInputHash;
         if (varied) variedInputsThisTurn += 1;
-        pendingCalls.set(event.id, { name: event.name, varied, command: commandOf(event) });
+        pendingCalls.set(event.id, {
+          name: event.name,
+          inputHash: event.inputHash,
+          varied,
+          command: commandOf(event),
+        });
         while (pendingCalls.size > 400) pendingCalls.delete(pendingCalls.keys().next().value!);
         lastInputHash = event.inputHash;
         if (!toolKinds.has(event.name)) {
@@ -125,11 +135,15 @@ export function stallDetector(opts: StallOptions = {}): Detector {
           if (pending.name === "bash") {
             const exitCode = exitCodeOf(event);
             if (exitCode !== null) {
-              if (lastBashExitCode !== null && exitCode !== lastBashExitCode) {
+              const previous = lastBashExitCode.get(pending.inputHash);
+              // The same check crossing the red/green boundary is information. Distinct commands
+              // and nonzero→nonzero alternation do not borrow transition credit from each other.
+              if (previous !== undefined && (exitCode === 0) !== (previous === 0)) {
                 verificationProgressThisTurn = true;
                 reportedQuietStall = false;
               }
-              lastBashExitCode = exitCode;
+              lastBashExitCode.set(pending.inputHash, exitCode);
+              while (lastBashExitCode.size > 400) lastBashExitCode.delete(lastBashExitCode.keys().next().value!);
             }
             if (event.ok && pending.command !== null && isShippingCommand(pending.command)) {
               verificationProgressThisTurn = true;

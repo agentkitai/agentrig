@@ -163,9 +163,10 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                   opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
                   "onEscalate",
                 );
-                // Existing non-interactive handlers resolve void after delivering/answering the
-                // question. Preserve that contract: only an explicit expiry suppresses retries.
-                opts.policy.onEscalationOutcome?.(active, outcome ?? "answered");
+                // Legacy non-interactive handlers only report that delivery returned; they do not
+                // prove a human answered. Treat void as closed (which, like answered, suppresses
+                // nothing) and reserve answered for an explicit outcome from an interactive seam.
+                opts.policy.onEscalationOutcome?.(active, outcome ?? "closed");
               } catch (err) {
                 opts.policy.onEscalationOutcome?.(
                   active,

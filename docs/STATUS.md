@@ -169,13 +169,13 @@ Status: **done**.
   verification progress`, `treats repeated successful git push operations as shipping progress`, and
   `does not forgive an A/B loop of fifteen failing bash commands on variation alone`.
 - Escalation handlers may now resolve `answered`, `expired`, or `closed`; TUI prompts return that
-  outcome, while legacy/non-TUI void handlers default to answered. An expiry counts as the issued
+  outcome, while legacy/non-TUI void handlers default to closed. An expiry counts as the issued
   rung's outcome and suppresses another ask only for the same stable signal signature for the rest
   of that policy/session, degrading it to guidance. Pinned by `degrades an expired escalation
   signature to guidance for the rest of the session`, `still escalates a different signature after
   another escalation expired`, `an answered escalation suppresses nothing`, `an expired escalation
   is counted once and recurring signals degrade to guidance`, and `a void non-TUI escalation handler
-  defaults to answered and suppresses nothing`.
+  defaults to closed and suppresses nothing`.
 - Rejected idea: exempt every `bash_job` status call from loop detection. It would hide the R1e shape
   where immediate polls repeatedly return no output; result-aware handling preserves that evidence.
 - This refinement session's exact token count is unavailable from the API runner rather than

@@ -71,7 +71,7 @@ export class LadderPolicy implements Policy {
   private readonly filesChangedAtIntervention = new Map<SignalType, number>();
   /** Full serialized signatures avoid hash collisions between distinct loops. */
   private readonly expiredEscalations = new Set<string>();
-  private readonly pendingEscalations = new Map<string, string>();
+  private readonly pendingEscalations = new Map<Intervention, string>();
   private issued = 0;
 
   private readonly rubric: string | undefined;
@@ -115,12 +115,12 @@ export class LadderPolicy implements Policy {
       const signature = this.signature(s);
       // An expiry established that nobody is watching this recurring incident. Keep recording it
       // as an intervention outcome, but degrade only this exact signature instead of waiting again.
-      const effectiveRung = rung === "escalate" && this.expiredEscalations.has(signature)
-        ? "inject_guidance"
-        : rung;
-      const intervention = this.build(effectiveRung, s);
+      const degraded = rung === "escalate" && this.expiredEscalations.has(signature);
+      const intervention = this.build(degraded ? "inject_guidance" : rung, s);
       if (intervention === null) continue;
-      if (intervention.type === "escalate") this.pendingEscalations.set(intervention.question, signature);
+      if (intervention.type === "escalate") {
+        this.pendingEscalations.set(intervention, signature);
+      }
 
       out.push(intervention);
       this.issued += 1;
@@ -133,9 +133,9 @@ export class LadderPolicy implements Policy {
 
   onEscalationOutcome(intervention: Intervention, outcome: EscalationOutcome): void {
     if (intervention.type !== "escalate") return;
-    const signature = this.pendingEscalations.get(intervention.question);
-    this.pendingEscalations.delete(intervention.question);
-    if (outcome === "expired" && signature !== undefined) this.expiredEscalations.add(signature);
+    const pending = this.pendingEscalations.get(intervention);
+    this.pendingEscalations.delete(intervention);
+    if (outcome === "expired" && pending !== undefined) this.expiredEscalations.add(pending);
   }
 
   private signature(s: Signal): string {
@@ -144,8 +144,12 @@ export class LadderPolicy implements Policy {
     // call/error description and inputHash, so two different tools with the same input do not
     // collide. Error bursts expose no cause identity in v1, so their signal type is the honest
     // granularity; stall's first line describes its stable condition while its second is cumulative.
-    if (s.type === "loop") return JSON.stringify([s.type, s.evidence[0], s.evidence[1]]);
-    if (s.type === "error_burst") return JSON.stringify([s.type]);
+    if (s.type === "loop") {
+      const stableDetail = s.evidence.find((line) =>
+        line.startsWith("inputHash=") || line.startsWith("errorFingerprint="));
+      return JSON.stringify([s.type, s.evidence[0], stableDetail ?? s.evidence[1]]);
+    }
+    if (s.type === "error_burst") return JSON.stringify([s.type, s.evidence[0]]);
     if (s.type === "stall") return JSON.stringify([s.type, s.evidence[0]]);
     return JSON.stringify([s.type, s.evidence]);
   }

@@ -420,7 +420,7 @@ describe("review regressions", () => {
     expect(interventions.filter((type) => type === "inject_guidance").length).toBeGreaterThan(1);
   });
 
-  it("a void non-TUI escalation handler defaults to answered and suppresses nothing", async () => {
+  it("a void non-TUI escalation handler defaults to closed and suppresses nothing", async () => {
     const session = run(new LoopingProvider(25), 30);
     const sup = supervise(session, {
       loop: { repeats: 3 },

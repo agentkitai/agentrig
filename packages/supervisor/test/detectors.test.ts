@@ -98,6 +98,20 @@ describe("loop detector", () => {
     expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(1);
   });
 
+  it("still counts failed bash_job status polls as repeated errors", () => {
+    const polls = Array.from({ length: 3 }, (_, i) =>
+      exchange(
+        `failed-${i}`,
+        "bash_job",
+        "same-failed-poll",
+        { id: "job-1", action: "status", waitMs: 300_000 },
+        false,
+        "job-1 never started: spawn ENOENT",
+      ),
+    ).flat();
+    expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(1);
+  });
+
   it("re-arms rather than firing on every subsequent repeat", () => {
     const calls = Array.from({ length: 6 }, () => call("bash", "same"));
     // 6 identical calls at k=3 is two loops, not four signals
@@ -213,6 +227,22 @@ describe("stall detector", () => {
       ), turnEnd());
     }
     expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(0);
+  });
+
+  it("does not treat alternating nonzero exit codes as red-green progress", () => {
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 15; i++) {
+      const code = i % 2 === 0 ? 1 : 127;
+      events.push(...exchange(
+        `mixed-failure-${i}`,
+        "bash",
+        i % 2 === 0 ? "hash-test" : "hash-missing-binary",
+        { command: i % 2 === 0 ? "pnpm test" : "missing-check" },
+        false,
+        `failed\n[exit code ${code}]`,
+      ), turnEnd());
+    }
+    expect(feed(stallDetector({ turns: 3 }), events).signals).toHaveLength(1);
   });
 
   it("treats repeated successful git push operations as shipping progress", () => {

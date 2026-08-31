@@ -73,7 +73,13 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
   let errors: Seen[] = [];
   const toolNames = new Set<string>();
   /** Status polls are tallied when their result arrives, because only then is activity visible. */
-  const pendingPolls = new Map<string, { inputHash: string; seq: number }>();
+  const pendingPolls = new Map<string, {
+    inputHash: string;
+    seq: number;
+    waited: boolean;
+    progressGeneration: number;
+  }>();
+  let progressGeneration = 0;
   /** path -> content hashes seen, in order, capped. */
   const history = new Map<string, string[]>();
   const revertCount = new Map<string, number>();
@@ -96,6 +102,7 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
   const clearProgress = (): void => {
     hashes = [];
     errors = [];
+    progressGeneration += 1;
   };
 
   return {
@@ -107,14 +114,15 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
           : null;
         const isStatusPoll = event.name === "bash_job" && input?.action === "status";
         if (isStatusPoll) {
-          // `waitMs` is an intentional block, not a spin. For an immediate status poll, defer the
-          // decision until tool.result reveals whether the incremental drain carried new output.
-          if (typeof input.waitMs === "number" && input.waitMs > 0) {
-            clearProgress();
-          } else {
-            pendingPolls.set(event.id, { inputHash: event.inputHash, seq: event.seq });
-            while (pendingPolls.size > window) pendingPolls.delete(pendingPolls.keys().next().value!);
-          }
+          // The result distinguishes an intentional wait or incremental output from an immediate
+          // empty poll, and also lets failed polls flow into the ordinary error tally.
+          pendingPolls.set(event.id, {
+            inputHash: event.inputHash,
+            seq: event.seq,
+            waited: typeof input.waitMs === "number" && input.waitMs > 0,
+            progressGeneration,
+          });
+          while (pendingPolls.size > window) pendingPolls.delete(pendingPolls.keys().next().value!);
           return null;
         }
 
@@ -140,19 +148,24 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
         const poll = pendingPolls.get(event.id);
         if (poll !== undefined) {
           pendingPolls.delete(event.id);
-          if (!/^\(no new output\)$/m.test(event.display)) {
-            clearProgress();
+          if (event.ok) {
+            if (poll.progressGeneration !== progressGeneration) return null;
+            if (poll.waited || !/^\(no new output\)$/m.test(event.display)) {
+              clearProgress();
+              return null;
+            }
+            const hits = tally(hashes, poll.inputHash, poll.seq);
+            if (hits.length >= repeats) {
+              hashes = hashes.filter((h) => h.value !== poll.inputHash);
+              return signal("loop", Math.min(1, hits.length / (repeats * 2) + 0.5), [
+                `polled bash_job status ${hits.length} times with no new output`,
+                `inputHash=${poll.inputHash}`,
+              ], [hits[0]!.seq, event.seq]);
+            }
             return null;
           }
-          const hits = tally(hashes, poll.inputHash, poll.seq);
-          if (hits.length >= repeats) {
-            hashes = hashes.filter((h) => h.value !== poll.inputHash);
-            return signal("loop", Math.min(1, hits.length / (repeats * 2) + 0.5), [
-              `polled bash_job status ${hits.length} times with no new output`,
-              `inputHash=${poll.inputHash}`,
-            ], [hits[0]!.seq, event.seq]);
-          }
-          return null;
+          // A failed status operation is neither output progress nor a deliberate successful wait.
+          // Let its stable display join the ordinary repeated-error branch below.
         }
         if (event.ok) return null;
         const print = errorFingerprint(event.display);
@@ -163,6 +176,7 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
           return signal("loop", Math.min(1, hits.length / (repeats * 2) + 0.5), [
             `the same tool error came back ${hits.length} times, with no file changing in between`,
             event.display.slice(0, 200),
+            `errorFingerprint=${print}`,
           ], [hits[0]!.seq, event.seq]);
         }
         return null;
