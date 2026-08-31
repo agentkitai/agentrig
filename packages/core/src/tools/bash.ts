@@ -85,7 +85,12 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
           // refusing beats silently ignoring: "I set a timeout" must not mean nothing
           return {
             output: empty,
-            display: "a background job has no timeout — poll it with bash_job, or kill it there",
+            // prescriptive, because the vague version of this message sent a real agent into a
+            // three-retry loop: it knew the call was wrong but not which parameter to drop
+            display:
+              "remove timeoutMs and resend with background: true — background jobs have no timeout. " +
+              'To bound one later: bash_job {"id":"<id>","action":"kill"}; to wait on it: ' +
+              '{"action":"status","waitMs":300000}.',
             isError: true,
           };
         }
