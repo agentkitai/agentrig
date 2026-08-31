@@ -110,6 +110,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
   z.object({ type: z.literal("context.compact"), before: z.number().int(), after: z.number().int() }),
+  z.object({ type: z.literal("context.loaded"), path: z.string(), bytes: z.number().int().nonnegative() }),
   z.object({ type: z.literal("plan.updated"), items: z.array(PlanItem) }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({

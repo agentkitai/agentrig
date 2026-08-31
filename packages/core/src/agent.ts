@@ -8,6 +8,7 @@ import type { AnyTool, ToolContext } from "./tool.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
+import { appendProjectInstructions, discoverProjectInstructions } from "./project-context.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -424,6 +425,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         for (const text of extra) messages.push({ role: "user", content: [{ type: "text", text }] });
       }
       system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+      const projectInstructions = await discoverProjectInstructions(cwd);
+      if (projectInstructions !== null) {
+        system = appendProjectInstructions(system, projectInstructions);
+        await emit({
+          type: "context.loaded",
+          path: projectInstructions.path,
+          bytes: projectInstructions.bytes,
+        });
+      }
 
       loop: while (true) {
         await gate.wait();

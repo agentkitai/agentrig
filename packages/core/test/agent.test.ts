@@ -133,6 +133,89 @@ describe("agent loop", () => {
       { role: "user", content: [{ type: "tool_result", toolUseId: "t1", content: "echo: hi" }] },
     ]);
     expect(provider.requests[0]!.system).toBe("test system");
+    expect(events.some((e) => e.type === "context.loaded")).toBe(false);
+  });
+
+  it("walks up from cwd, appends AGENTS.md verbatim only to the system prompt, and records the load", async () => {
+    const instructions = "  Keep leading space.\nDo not trim the final blank line.\n\n";
+    const instructionsPath = join(root, "AGENTS.md");
+    const cwd = join(root, "packages", "core", "src");
+    await writeFile(instructionsPath, instructions, "utf8");
+    await mkdir(cwd, { recursive: true });
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+
+    const session = createAgent(makeConfig(provider, { systemPrompt: "base system" })).run("work", { cwd });
+    const events = await collect(session);
+    await session.done;
+
+    expect(provider.requests[0]!.system).toBe(
+      `base system\n\n===== BEGIN PROJECT INSTRUCTIONS (${instructionsPath}) =====\n${instructions}\n===== END PROJECT INSTRUCTIONS =====`,
+    );
+    expect(JSON.stringify(provider.requests[0]!.messages)).not.toContain("Keep leading space");
+    expect(events.filter((e) => e.type === "context.loaded")).toEqual([
+      expect.objectContaining({
+        type: "context.loaded",
+        path: instructionsPath,
+        bytes: Buffer.byteLength(instructions, "utf8"),
+      }),
+    ]);
+  });
+
+  it("accepts CLAUDE.md as an alias when AGENTS.md is absent", async () => {
+    const instructions = "Alias instructions";
+    const instructionsPath = join(root, "CLAUDE.md");
+    const cwd = join(root, "nested");
+    await writeFile(instructionsPath, instructions, "utf8");
+    await mkdir(cwd);
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+
+    const session = createAgent(makeConfig(provider)).run("work", { cwd });
+    const events = await collect(session);
+    await session.done;
+
+    expect(provider.requests[0]!.system).toContain(instructions);
+    expect(events).toContainEqual(expect.objectContaining({ type: "context.loaded", path: instructionsPath, bytes: 18 }));
+  });
+
+  it("prefers AGENTS.md over its CLAUDE.md alias in the same directory", async () => {
+    await writeFile(join(root, "AGENTS.md"), "canonical instructions", "utf8");
+    await writeFile(join(root, "CLAUDE.md"), "alias must not load", "utf8");
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+
+    const session = createAgent(makeConfig(provider)).run("work", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(provider.requests[0]!.system).toContain("canonical instructions");
+    expect(provider.requests[0]!.system).not.toContain("alias must not load");
+    expect(events.filter((e) => e.type === "context.loaded")).toHaveLength(1);
+  });
+
+  it("loads empty and large AGENTS.md files without treating empty as absent or truncating large content", async () => {
+    const emptyDir = join(root, "empty");
+    const largeDir = join(root, "large");
+    await mkdir(emptyDir);
+    await mkdir(largeDir);
+    await writeFile(join(emptyDir, "AGENTS.md"), "", "utf8");
+    const large = `large-start\n${"x".repeat(256 * 1024)}\nlarge-end`;
+    await writeFile(join(largeDir, "AGENTS.md"), large, "utf8");
+    const emptyProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const largeProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+
+    const emptySession = createAgent(makeConfig(emptyProvider)).run("work", { cwd: emptyDir });
+    const emptyEvents = await collect(emptySession);
+    await emptySession.done;
+    const largeSession = createAgent(makeConfig(largeProvider)).run("work", { cwd: largeDir });
+    const largeEvents = await collect(largeSession);
+    await largeSession.done;
+
+    expect(emptyProvider.requests[0]!.system).toContain("BEGIN PROJECT INSTRUCTIONS");
+    expect(emptyEvents).toContainEqual(expect.objectContaining({ type: "context.loaded", bytes: 0 }));
+    expect(largeProvider.requests[0]!.system).toContain(large);
+    expect(largeEvents).toContainEqual(expect.objectContaining({
+      type: "context.loaded",
+      bytes: Buffer.byteLength(large, "utf8"),
+    }));
   });
 
   it("denies by policy: tool.denied event, error tool_result to the model", async () => {
@@ -495,7 +578,7 @@ describe("compaction in the loop", () => {
     ]);
     const session = createAgent(
       makeConfig(provider, { compaction: summarizeOlderTurns({ keepLastMessages: 2 }) }),
-    ).run("t");
+    ).run("t", { cwd: root });
     const events = await collect(session);
     await session.done;
 

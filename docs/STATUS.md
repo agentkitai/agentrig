@@ -1,7 +1,7 @@
 # Status
 
-Current milestone: **all milestones complete** — M0 through M7. M2.5's live validation, the one
-thing the table carried as unproven, is done: the provider authenticates and reaches the model.
+Current roadmap row: **R1a complete; R1b is next.** The original milestones M0 through M7 remain
+complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -15,6 +15,21 @@ thing the table carried as unproven, is done: the provider authenticates and rea
 | 5 | Dream = scheduled lint over a wiki copy, review/auto, promotion to global | done (2026-08-29) |
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | done (2026-08-30) |
+
+## R1 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R1a | `AGENTS.md` discovery and system-prompt injection, with `CLAUDE.md` alias and `context.loaded` event | done |
+
+- R1a walks upward from the session cwd, prefers `AGENTS.md` over its alias, preserves the file body
+  verbatim between explicit system-prompt delimiters, and records the absolute path and UTF-8 file
+  byte count without copying the body into the event stream or conversation messages.
+- Considered Gemini CLI's trusted-project boundary from the studied harnesses, but deliberately did
+  not implement it: the roadmap assigns trust and consent persistence to R1d, and pulling it into
+  R1a would expand this row beyond discovery and injection.
+- External-review stall measurement: no supervisor stall warning occurred during the external-review
+  phase.
 
 ## M0 notes
 
