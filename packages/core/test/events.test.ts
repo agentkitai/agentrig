@@ -16,6 +16,18 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a context.loaded event with its source path and byte count", () => {
+    const event = HarnessEvent.parse({
+      seq: 39,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.loaded",
+      path: "/repo/AGENTS.md",
+      bytes: 123,
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a session.resume event", () => {
     const event = HarnessEvent.parse({
       seq: 40,

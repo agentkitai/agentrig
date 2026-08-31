@@ -115,6 +115,20 @@ describe("renderEvent", () => {
     expect(line).toContain("in_progress:write the tests");
   });
 
+  it("renders context.loaded with its path and byte count", () => {
+    const e = HarnessEvent.parse({
+      seq: 12,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.loaded",
+      path: "/repo/AGENTS.md",
+      bytes: 321,
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("/repo/AGENTS.md");
+    expect(line).toContain("321 bytes");
+  });
+
   it("renders context.compact", () => {
     const e = HarnessEvent.parse({
       seq: 13,

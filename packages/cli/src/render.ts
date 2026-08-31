@@ -32,6 +32,7 @@ export function renderEvent(e: HarnessEvent): string {
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
     case "permission.decision": return `${p} ${e.d}`;
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
+    case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
@@ -128,6 +129,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "permission.request":
     case "permission.decision":
     case "context.compact":
+    case "context.loaded":
     case "memory.note":
       return null;
   }
