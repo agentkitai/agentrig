@@ -71,7 +71,9 @@ describe("parseResponsesSse", () => {
       { type: "text_delta", text: "wor" },
       { type: "text_delta", text: "king" },
       { type: "tool_use", id: "fc_1", name: "bash", input: { command: "ls" } },
-      { type: "usage", usage: { input: 12, output: 5, cacheRead: 3 } },
+      // input_tokens is 12 INCLUDING 3 cached; the Usage contract keeps the fields disjoint,
+      // so input reports only the 9 uncached tokens — input + cacheRead must not double-count
+      { type: "usage", usage: { input: 9, output: 5, cacheRead: 3 } },
       { type: "stop", reason: "tool_use" },
     ]);
   });
@@ -187,6 +189,64 @@ describe("OpenAIChatGPTProvider.stream", () => {
     const fetchFn: typeof fetch = async () => new Response("rate limited", { status: 429 });
     const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
     await expect(collect(provider.stream(baseReq, new AbortController().signal))).rejects.toThrow(/HTTP 429/);
+  });
+
+  it("re-requests when the backend answers 200, then sends an overload error inside the stream", async () => {
+    // The exact failure that killed real dogfood sessions at turns 43 and 46: fetchWithRetries
+    // never saw it because the HTTP status was 200 — the error arrived as an SSE event.
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore({ accessToken: futureJwt(), refreshToken: "r" }) });
+    let posts = 0;
+    const fetchFn: typeof fetch = async () => {
+      posts += 1;
+      if (posts === 1) {
+        return new Response(
+          sse([{ type: "error", error: { message: "Our servers are currently overloaded. Please try again later." } }]),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        sse([
+          { type: "response.output_text.delta", delta: "hi" },
+          { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+        ]),
+        { status: 200 },
+      );
+    };
+    const retries: string[] = [];
+    const provider = new OpenAIChatGPTProvider({
+      model: "m",
+      auth,
+      fetchFn,
+      retry: { sleep: async () => {} },
+      onRetry: (info) => retries.push(`${info.attempt}/${info.maxAttempts} after ${info.delayMs}ms`),
+    });
+    const events = await collect(provider.stream(baseReq, new AbortController().signal));
+
+    expect(posts).toBe(2);
+    expect(retries).toEqual(["1/4 after 1000ms"]);
+    expect(events).toEqual([
+      { type: "text_delta", text: "hi" },
+      { type: "usage", usage: { input: 1, output: 1 } },
+      { type: "stop", reason: "end_turn" },
+    ]);
+  });
+
+  it("does NOT re-request once the reply has started — that would replay the prefix", async () => {
+    const auth = new OpenAIChatGPTAuth({ store: new MemoryStore({ accessToken: futureJwt(), refreshToken: "r" }) });
+    let posts = 0;
+    const fetchFn: typeof fetch = async () => {
+      posts += 1;
+      return new Response(
+        sse([
+          { type: "response.output_text.delta", delta: "partial" },
+          { type: "error", error: { message: "overloaded" } },
+        ]),
+        { status: 200 },
+      );
+    };
+    const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
+    await expect(collect(provider.stream(baseReq, new AbortController().signal))).rejects.toThrow(/overloaded/);
+    expect(posts).toBe(1);
   });
 });
 

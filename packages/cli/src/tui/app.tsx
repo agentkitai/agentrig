@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
 import { InputBuffer } from "./input-buffer.js";
+import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
 
 /**
@@ -169,9 +170,13 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       )}
 
       <Box>
-        <Text dimColor>
-          {state.sessionId ?? "no session"} · {state.status}
-          {state.turns > 0 ? ` · turn ${state.turns}` : ""} · /help
+        {/*
+          truncated, never wrapped: the statusline is budgeted as ONE row (see `liveRows`), and a
+          long branch name wrapping to two would push the frame past the height the viewport was
+          sized to hold
+        */}
+        <Text dimColor wrap="truncate-end">
+          {statusLine(state)}
         </Text>
       </Box>
     </Box>

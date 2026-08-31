@@ -51,6 +51,16 @@ export interface TuiState {
   signals: Signal[];
   sessionId: string | null;
   turns: number;
+  /** The model in use, from session.start (or the flags, before the first task runs). */
+  model: string | null;
+  /**
+   * Tokens the model saw on its most recent call — input plus cache reads plus the reply it
+   * produced, which the next call resends. This is the live "how full is the context" gauge; the
+   * cumulative totals stay where they were, in the end-of-session summary line.
+   */
+  context: number | null;
+  /** Git branch of the cwd, re-read each turn because the agent itself can check branches out. */
+  branch: string | null;
   /** The reply being streamed, shown live and committed when the turn ends. */
   streaming: string;
   /** Whether the raw event trace is shown as well as the conversation. */
@@ -80,6 +90,13 @@ export interface TuiControllerOptions {
    * sized for a live tree whose cost grew with the buffer.
    */
   maxLines?: number;
+  /** Shown in the statusline before the first session starts; session.start overrides it. */
+  model?: string;
+  /**
+   * Returns the cwd's git branch, or null off a repo. Injected — the controller stays free of
+   * filesystem reads so a test can drive the statusline without building a repository.
+   */
+  branch?: () => string | null;
 }
 
 export class TuiController {
@@ -93,6 +110,9 @@ export class TuiController {
     signals: [],
     sessionId: null,
     turns: 0,
+    model: null,
+    context: null,
+    branch: null,
     streaming: "",
     verbose: false,
   };
@@ -119,6 +139,19 @@ export class TuiController {
     this.agent = opts.agent;
     this.memory = opts.onMemory;
     this.dream = opts.onDream;
+    if (opts.model !== undefined) this.state = { ...this.state, model: opts.model };
+    this.refreshBranch();
+  }
+
+  /** Re-reads the branch through the injected reader; a throw shows as no branch, not a crash. */
+  private refreshBranch(): void {
+    let branch: string | null = null;
+    try {
+      branch = this.opts.branch?.() ?? null;
+    } catch {
+      branch = null;
+    }
+    if (branch !== this.state.branch) this.set({ branch });
   }
 
   /** The agent is assembled after the controller, because it needs the controller's `onAsk`. */
@@ -400,7 +433,8 @@ export class TuiController {
         return true;
       case "new":
         this.resumable = false;
-        this.set({ sessionId: null, plan: [], signals: [], turns: 0 });
+        // context is per-conversation and the next session starts empty; the model persists
+        this.set({ sessionId: null, plan: [], signals: [], turns: 0, context: null });
         this.print("starting fresh — the next task begins a new session", "system");
         return true;
       default:
@@ -480,8 +514,26 @@ export class TuiController {
   private consume(e: HarnessEvent): void {
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
+    if (e.type === "session.start" || e.type === "session.resume") {
+      // the event says what is actually running, which beats whatever the flags claimed
+      this.set({ model: e.model });
+      this.refreshBranch();
+    }
+    if (e.type === "model.response") {
+      // The Usage fields are disjoint (see core's Usage schema), so what the model saw is their
+      // sum — cache writes included: on the first call of a session the cached prefix is a write,
+      // not a read, and dropping it showed a near-zero gauge until the second call. The output is
+      // resent on the next call, so the total is the size of the conversation as it stands.
+      const u = e.usage;
+      const total = u.input + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0) + u.output;
+      // All-zero usage is a provider that reported nothing (core prints a warning for it), not a
+      // zero-token conversation — keep the last honest reading rather than asserting "ctx 0".
+      if (total > 0) this.set({ context: total });
+    }
     if (e.type === "turn.end") {
       this.set({ turns: e.n });
+      // the agent may have moved the working tree — a checkout mid-task should show
+      this.refreshBranch();
       // the loop writes its resume snapshot after every turn.end, so this is exactly when the
       // session becomes continuable
       this.resumable = true;

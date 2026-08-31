@@ -12,6 +12,7 @@ import {
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
+import { currentGitBranch } from "../git-branch.js";
 import { parseSoft, permissionWarning, supervisorOptions, type SupervisorFlags } from "../run.js";
 import { parseBudget } from "../agent-builder.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
@@ -35,6 +36,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   const budget = parseBudget(opts);
   const controller: TuiController = new TuiController({
     cwd: process.cwd(),
+    model: opts.model,
+    branch: () => currentGitBranch(process.cwd()),
     // assigned below; the controller is constructed first because it owns `onAsk`
     agent: { run: () => { throw new Error("agent not ready"); } },
     ...(opts.supervise === true
@@ -67,6 +70,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       onAsk: (req) => controller.ask(req),
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
+      // in the frame, not on stderr: stderr is overwritten by the next render, and an invisible
+      // retry is indistinguishable from the hangs this TUI has already been debugged for
+      onNotice: (m) => controller.print(m, "system"),
     });
   } catch (err) {
     console.error((err as Error).message);
