@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAgent } from "../src/agent-builder.ts";
-import { buildProvider } from "../src/provider.ts";
+import { buildProvider, describeRetry } from "../src/provider.ts";
 import { buildProgram } from "../src/program.ts";
 
 /**
@@ -82,5 +82,14 @@ describe("--shell reaches the bash tool (PLAN §9 F2)", () => {
         shell: "/no/such/shell",
       } as never),
     ).rejects.toThrow(/--shell/);
+  });
+});
+
+describe("describeRetry", () => {
+  it("names the attempt that FAILED, not the one about to run", () => {
+    // "retrying (attempt 1 of 4)" read as "this is the first try" when attempt 1 was already spent
+    expect(describeRetry({ attempt: 1, maxAttempts: 4, delayMs: 2000, reason: "overloaded" })).toBe(
+      "provider error (overloaded) — attempt 1 of 4 failed, retrying in 2s",
+    );
   });
 });

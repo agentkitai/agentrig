@@ -26,7 +26,9 @@ export interface ProviderHooks {
 
 /** One phrasing for every provider, so the three adapters cannot drift. */
 export function describeRetry(info: StreamRetryInfo): string {
-  return `provider error (${info.reason}) — retrying in ${Math.round(info.delayMs / 1000)}s (attempt ${info.attempt} of ${info.maxAttempts})`;
+  // `attempt` is the one that just FAILED — saying "retrying (attempt 1 of 4)" when attempt 1
+  // is already spent misread as "this is the first try"
+  return `provider error (${info.reason}) — attempt ${info.attempt} of ${info.maxAttempts} failed, retrying in ${Math.round(info.delayMs / 1000)}s`;
 }
 
 export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}): ModelProvider {

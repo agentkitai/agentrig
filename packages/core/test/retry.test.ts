@@ -6,6 +6,7 @@ import {
   isTransientStreamError,
   parseRetryAfter,
   redactSecrets,
+  RetriesExhaustedError,
   streamWithRetries,
   type ModelEvent,
   type ModelRequest,
@@ -263,6 +264,17 @@ describe("isTransientStreamError", () => {
     expect(isTransientStreamError("HTTP 401 invalid api key")).toBe(false);
     expect(isTransientStreamError("model not found")).toBe(false);
   });
+
+  it("is not steered by polite server prose inside a deterministic HTTP failure", () => {
+    // server-controlled body text is interpolated into fetchWithRetries error messages; a 400 or
+    // 403 whose page says "try again" is still deterministic and retrying it is pure waste
+    expect(isTransientStreamError("anthropic: HTTP 400 invalid_request_error: tools.0 schema invalid, please fix and try again")).toBe(false);
+    expect(isTransientStreamError("openai-chatgpt: HTTP 403 originator not allowed. If you believe this is an error, try again or contact support.")).toBe(false);
+    expect(isTransientStreamError("anthropic: HTTP 413 request too large, reduce your prompt and try again")).toBe(false);
+    // "terminated" only as undici's whole message (a mid-body connection cut), never as a substring
+    expect(isTransientStreamError("terminated")).toBe(true);
+    expect(isTransientStreamError("openai-chatgpt stream failed: response terminated by moderation")).toBe(false);
+  });
 });
 
 describe("streamWithRetries", () => {
@@ -335,6 +347,22 @@ describe("streamWithRetries", () => {
     expect(f.calls()).toBe(3);
   });
 
+  it("refuses a failure the HTTP layer already retried to exhaustion", async () => {
+    // without the typed refusal, both budgets were spent on one failure: 16 fetches, ~35s
+    const f = {
+      calls: 0,
+      open: async function* (this: void): AsyncIterable<string> {
+        f.calls += 1;
+        throw new RetriesExhaustedError("anthropic: fetch failed (after 4 attempts)");
+        yield "never";
+      },
+    };
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(
+      /after 4 attempts/,
+    );
+    expect(f.calls).toBe(1);
+  });
+
   it("stops retrying when the caller aborts", async () => {
     const ctl = new AbortController();
     let calls = 0;
@@ -348,5 +376,33 @@ describe("streamWithRetries", () => {
       /overloaded/,
     );
     expect(calls).toBe(1);
+  });
+});
+
+describe("retry layering through the public provider API", () => {
+  it("spends ONE retry budget on a persistent network failure, not four stream x four HTTP", async () => {
+    let calls = 0;
+    const fetchFn = (async () => {
+      calls += 1;
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    const provider = new AnthropicProvider({ apiKey: "k", model: "m", fetchFn, retry: { sleep: instantSleep } });
+    await expect(async () => {
+      for await (const e of provider.stream(req(), new AbortController().signal)) void e;
+    }).rejects.toThrow(/fetch failed \(after 4 attempts\)/);
+    expect(calls).toBe(4); // 1 + 3 HTTP retries; the stream layer must not multiply it to 16
+  });
+
+  it("spends ONE retry budget on a persistent overloaded 529 too", async () => {
+    let calls = 0;
+    const fetchFn = (async () => {
+      calls += 1;
+      return new Response('{"error":{"type":"overloaded_error","message":"Overloaded"}}', { status: 529 });
+    }) as typeof fetch;
+    const provider = new AnthropicProvider({ apiKey: "k", model: "m", fetchFn, retry: { sleep: instantSleep } });
+    await expect(async () => {
+      for await (const e of provider.stream(req(), new AbortController().signal)) void e;
+    }).rejects.toThrow(/HTTP 529/);
+    expect(calls).toBe(4);
   });
 });

@@ -114,6 +114,15 @@ export interface StreamRetryInfo {
 }
 
 /**
+ * Thrown by `fetchWithRetries` when it retried a transient failure and ran out of attempts.
+ * The type is the contract that stops retry stacking: `streamWithRetries` refuses to retry it,
+ * because the HTTP layer already spent the full budget on this exact failure — without this,
+ * a persistent outage cost 16 fetches and ~35 seconds (4 stream attempts × 4 HTTP attempts)
+ * against a backend that was already saying it is overloaded.
+ */
+export class RetriesExhaustedError extends Error {}
+
+/**
  * Whether an error thrown MID-STREAM is worth a clean re-request. This is a different question
  * from HTTP-status retryability: the ChatGPT backend in particular answers 200 and then delivers
  * "Our servers are currently overloaded. Please try again later." as an SSE error event, which
@@ -122,7 +131,16 @@ export interface StreamRetryInfo {
  */
 export function isTransientStreamError(message: string): boolean {
   if (isQuotaExhaustion(message)) return false;
-  return /overloaded|rate limit|too many requests|try again|temporarily unavailable|server_error|internal (server )?error|ECONNRESET|ETIMEDOUT|socket hang up|premature close|terminated|fetch failed|network error/i.test(
+  // A message carrying an HTTP status label came from fetchWithRetries, which already applied
+  // status-based policy. A non-retryable status is deterministic no matter how politely the
+  // body says otherwise — "please fix and try again" inside a 400, or a 403 gateway page's
+  // "try again or contact support", is server-controlled text and must not drive retries.
+  const status = message.match(/HTTP (\d{3})/);
+  if (status !== null && !RETRYABLE_STATUSES.has(Number(status[1]))) return false;
+  // undici reports a connection cut mid-body as exactly "terminated"; matched whole, because as
+  // a bare substring it also matched deterministic messages like "terminated by moderation"
+  if (/^terminated$/.test(message)) return true;
+  return /overloaded|rate limit|too many requests|temporarily unavailable|server_error|internal (server )?error|ECONNRESET|ETIMEDOUT|socket hang up|premature close|fetch failed|network error/i.test(
     message,
   );
 }
@@ -135,7 +153,9 @@ export function isTransientStreamError(message: string): boolean {
  * content, so it retries; a genuine mid-reply disconnect does not pretend to be recoverable.
  *
  * Layering: `fetchWithRetries` (inside `open`) covers failures BEFORE a 200 arrives; this covers
- * failures inside the stream that follows. The two never retry the same failure twice.
+ * failures inside the stream that follows. A failure the HTTP layer already retried to
+ * exhaustion arrives as `RetriesExhaustedError` and is refused here, so the two layers never
+ * spend both budgets on the same failure.
  */
 export async function* streamWithRetries<T>(
   open: () => AsyncIterable<T>,
@@ -157,6 +177,7 @@ export async function* streamWithRetries<T>(
       return;
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
+      if (err instanceof RetriesExhaustedError) throw err;
       if (yielded || signal.aborted || attempt >= maxRetries || !isTransientStreamError(reason)) throw err;
       const delayMs = Math.min(baseDelayMs * 2 ** attempt, MAX_DELAY_MS);
       onRetry?.({ attempt: attempt + 1, maxAttempts: maxRetries + 1, delayMs, reason });
@@ -185,7 +206,8 @@ export async function fetchWithRetries(
     } catch (err) {
       if (signal.aborted || attempt >= maxRetries) {
         if (signal.aborted || !(err instanceof Error)) throw err;
-        throw new Error(`${label}: ${err.message}${suffix}`);
+        // typed: the retry budget was spent on this failure, so no outer layer retries it again
+        throw new RetriesExhaustedError(`${label}: ${err.message}${suffix}`);
       }
       await sleep(Math.min(baseDelayMs * 2 ** attempt, MAX_DELAY_MS), signal);
       continue;
@@ -197,7 +219,11 @@ export async function fetchWithRetries(
       RETRYABLE_STATUSES.has(res.status) && !(res.status === 429 && isQuotaExhaustion(body));
     if (!retryable || attempt >= maxRetries) {
       const challenge = describeEdgeChallenge(res, body);
-      throw new Error(`${label}: HTTP ${res.status} ${challenge ?? errorDetail(body)}${suffix}`);
+      const message = `${label}: HTTP ${res.status} ${challenge ?? errorDetail(body)}${suffix}`;
+      // a retryable status that ran out of attempts is typed so the stream layer stands down;
+      // a non-retryable status throws plain — it never consumed retry budget here, and the
+      // status guard in isTransientStreamError keeps it non-transient anyway
+      throw retryable ? new RetriesExhaustedError(message) : new Error(message);
     }
     const retryAfter = parseRetryAfter(res.headers.get("retry-after"), Date.now());
     const delay = retryAfter ?? baseDelayMs * 2 ** attempt;
