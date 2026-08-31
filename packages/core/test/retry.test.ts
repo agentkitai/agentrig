@@ -265,6 +265,18 @@ describe("isTransientStreamError", () => {
     expect(isTransientStreamError("model not found")).toBe(false);
   });
 
+  it("treats the ChatGPT backend's generic 'you can retry' in-stream error as transient", () => {
+    // verbatim from a real session it killed at turn 30 — a 200 stream, no HTTP status label,
+    // the server explicitly inviting a retry
+    expect(
+      isTransientStreamError(
+        "openai-chatgpt stream error: An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists.",
+      ),
+    ).toBe(true);
+    // ...but the same phrase under a non-retryable HTTP status label stays refused
+    expect(isTransientStreamError("openai-chatgpt: HTTP 400 bad input. You can retry your request.")).toBe(false);
+  });
+
   it("is not steered by polite server prose inside a deterministic HTTP failure", () => {
     // server-controlled body text is interpolated into fetchWithRetries error messages; a 400 or
     // 403 whose page says "try again" is still deterministic and retrying it is pure waste
