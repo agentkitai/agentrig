@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R1.5a complete; R1b is next.** R1.5a was deliberately taken out of
+Current roadmap row: **R1b complete; R1c is next.** R1.5a was deliberately taken out of
 nominal order before R1b; the original milestones M0 through M7 remain complete, including M2.5's
 live provider validation.
 
@@ -22,6 +22,24 @@ live provider validation.
 | Row | Deliverable | Status |
 |---|---|---|
 | R1a | `AGENTS.md` discovery and system-prompt injection, with `CLAUDE.md` alias and `context.loaded` event | done |
+| R1b | Zod-validated user/project config, named profiles, and explicit-source precedence shared by `run` and the TUI | done |
+
+- R1b precedence is **CLI > environment > project config > user config > built-in defaults**. The
+  only existing non-credential `AGENTRIG_*` setting is `AGENTRIG_MODEL`; credential environment
+  variables remain provider/login concerns and can never be represented in config.
+- Config merge is shallow by setting. In particular, `allow`, `deny`, drift-contract/scope, skills,
+  and every other array replace the lower-precedence array rather than append to it. Appending can
+  silently retain a user-level permission that a project intended to narrow, while replacement makes
+  the effective policy locally legible. A selected profile overlays its own file's top level before
+  the next file-precedence layer is applied.
+- **Known R1d caveat:** project `.agentrig/config.json` is currently loaded without a trusted-project
+  check. Trust gating and persisted consent deliberately remain R1d scope.
+- Rejected idea for R1b: infer whether a CLI option was explicit by comparing its value to the
+  Commander default. A user may intentionally type the default value, so comparison loses source
+  information; `getOptionValueSource` instead determines which values enter the CLI overlay.
+- R1b dogfood token measurement: this API-runner session did not expose provider usage telemetry, so
+  an exact token count could not be recorded without inventing one. This missing first post-eviction
+  data point is noted explicitly beside the 1.7M/4.0M baselines rather than reported as a false value.
 
 - R1a walks upward from the session cwd, prefers a regular `AGENTS.md` over its alias (directories
   and symlinks are not instruction files), preserves the file body verbatim between explicit
