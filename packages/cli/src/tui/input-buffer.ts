@@ -46,9 +46,31 @@ const ESC = "\u001b";
 const START_MARKER = `${ESC}[200~`;
 const END_MARKER = `${ESC}[201~`;
 
+export type OrdinaryInputAction =
+  | { type: "append"; text: string }
+  | { type: "backspace" }
+  | { type: "enter" }
+  | { type: "interrupt" }
+  | { type: "escape" };
+
+/** Semantic replay for ordinary bytes sharing a raw chunk with a stripped protocol marker. */
+export function ordinaryInputActions(text: string): OrdinaryInputAction[] {
+  const actions: OrdinaryInputAction[] = [];
+  for (const character of text) {
+    if (character === "\u0003") actions.push({ type: "interrupt" });
+    else if (character === "\b" || character === "\u007f") actions.push({ type: "backspace" });
+    else if (character === "\r") actions.push({ type: "enter" });
+    else if (character === "\u001b") actions.push({ type: "escape" });
+    else actions.push({ type: "append", text: character });
+  }
+  return actions;
+}
+
 export interface DecodedInput {
   /** Text with protocol markers removed, tagged with whether Enter is content at that point. */
   segments: Array<{ text: string; pasted: boolean }>;
+  /** Bytes held from earlier chunks when a possible marker is disproved, excluding its bare ESC. */
+  released?: string;
   /** True when this chunk participated in bracketed-paste parsing rather than ordinary input. */
   protocol: boolean;
 }
@@ -61,6 +83,7 @@ export interface DecodedInput {
 export class BracketedPasteDecoder {
   private pending = "";
   private pasted = false;
+  private pastedCarriageReturn = false;
 
   get isPasting(): boolean {
     return this.pasted;
@@ -71,17 +94,33 @@ export class BracketedPasteDecoder {
   }
 
   feed(chunk: string): DecodedInput {
-    const input = this.pending + chunk;
+    const held = this.pending;
+    const input = held + chunk;
     this.pending = "";
     const segments: DecodedInput["segments"] = [];
     let markerSeen = false;
     let offset = 0;
 
-    const append = (text: string): void => {
+    const emit = (text: string): void => {
       if (text === "") return;
       const last = segments.at(-1);
       if (last?.pasted === this.pasted) last.text += text;
       else segments.push({ text, pasted: this.pasted });
+    };
+    const append = (text: string): void => {
+      if (!this.pasted) {
+        emit(text);
+        return;
+      }
+      for (const character of text) {
+        if (this.pastedCarriageReturn) {
+          emit("\n");
+          this.pastedCarriageReturn = false;
+          if (character === "\n") continue;
+        }
+        if (character === "\r") this.pastedCarriageReturn = true;
+        else emit(character);
+      }
     };
 
     while (offset < input.length) {
@@ -89,6 +128,10 @@ export class BracketedPasteDecoder {
       const marker = candidates.find((candidate) => input.startsWith(candidate, offset));
       if (marker !== undefined) {
         markerSeen = true;
+        if (marker === END_MARKER && this.pastedCarriageReturn) {
+          emit("\n");
+          this.pastedCarriageReturn = false;
+        }
         this.pasted = marker === START_MARKER;
         offset += marker.length;
         continue;
@@ -107,11 +150,14 @@ export class BracketedPasteDecoder {
       offset += 1;
     }
 
+    const protocol = markerSeen || this.pending !== "" || this.pasted;
+    const released = !protocol && held.length > 1 ? held.slice(1) : "";
     return {
       segments,
-      // A disproved prefix outside paste returns to the exact ordinary key path. The held ESC is
-      // intentionally absent from Ink's semantic input and remains ignored as it was before R1c.
-      protocol: markerSeen || this.pending !== "" || this.pasted,
+      ...(released === "" ? {} : { released }),
+      // A disproved prefix outside paste returns to Ink's ordinary path for the current chunk; the
+      // held printable suffix is supplied separately because Ink saw it only in earlier callbacks.
+      protocol,
     };
   }
 }

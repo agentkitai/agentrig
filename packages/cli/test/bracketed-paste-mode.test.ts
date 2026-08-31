@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
   DISABLE_BRACKETED_PASTE,
@@ -30,6 +31,32 @@ describe("bracketed paste terminal mode", () => {
     ).rejects.toThrow("exit failed");
 
     expect(writes.at(-1)).toBe(DISABLE_BRACKETED_PASTE);
+  });
+
+  it("disables synchronously and relays a termination signal", async () => {
+    const writes: string[] = [];
+    const emitter = new EventEmitter();
+    const killed: Array<[number, string]> = [];
+    let finish!: () => void;
+    const running = withBracketedPaste(
+      { isTTY: true, write: (chunk) => writes.push(chunk) },
+      () => new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+      {
+        pid: 42,
+        once: (signal, listener) => emitter.once(signal, listener),
+        removeListener: (signal, listener) => emitter.removeListener(signal, listener),
+        kill: (pid, signal) => killed.push([pid, signal]),
+      },
+    );
+
+    emitter.emit("SIGTERM");
+    expect(writes).toEqual([ENABLE_BRACKETED_PASTE, DISABLE_BRACKETED_PASTE]);
+    expect(killed).toEqual([[42, "SIGTERM"]]);
+    finish();
+    await running;
+    expect(writes, "finally disabled a second time").toHaveLength(2);
   });
 
   it("writes neither terminal sequence when stdout is not a TTY", async () => {

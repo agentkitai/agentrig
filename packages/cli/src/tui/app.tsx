@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
-import { BracketedPasteDecoder, InputBuffer } from "./input-buffer.js";
+import {
+  BracketedPasteDecoder,
+  InputBuffer,
+  ordinaryInputActions,
+} from "./input-buffer.js";
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
 import { useRawInput } from "./raw-input.js";
@@ -59,11 +63,36 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     if (decoded.protocol) {
       // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
       // so a later 201~ restores ordinary input correctly.
-      if (state.pending === null) {
-        for (const segment of decoded.segments) {
-          const text = segment.text.replaceAll("\u001b", "");
-          if (text === "") continue;
-          if (!segment.pasted && text === "\r") {
+      for (const segment of decoded.segments) {
+        if (segment.text === "") continue;
+        if (segment.pasted) {
+          // The decoder normalises CRLF across chunks; every other payload byte is preserved.
+          if (state.pending === null) buf.set(buf.value + segment.text);
+          continue;
+        }
+
+        // Bytes adjacent to an unmatched closing marker are ordinary input. Ink gives one semantic
+        // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
+        for (const action of ordinaryInputActions(segment.text)) {
+          if (action.type === "interrupt") {
+            if (state.status === "running") controller.abort();
+            else exit();
+          } else if (state.pending !== null) {
+            if (action.type === "append" && (action.text === "y" || action.text === "Y")) {
+              controller.answerPermission("allow");
+            } else if (action.type === "append" && (action.text === "a" || action.text === "A")) {
+              controller.answerPermission("allow", true);
+            } else if (action.type === "append" && (action.text === "d" || action.text === "D")) {
+              controller.answerPermission("deny", true);
+            } else if (
+              action.type === "escape" ||
+              (action.type === "append" && (action.text === "n" || action.text === "N"))
+            ) {
+              controller.answerPermission("deny");
+            }
+          } else if (action.type === "backspace") {
+            buf.set(buf.value.slice(0, -1));
+          } else if (action.type === "enter") {
             const line = buf.value;
             if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
             else {
@@ -73,9 +102,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
                 });
               });
             }
-          } else {
-            // Return is data between 200~ and 201~, including a bare CR in its own stdin chunk.
-            buf.set(buf.value + text.replace(/\r\n?/g, "\n"));
+          } else if (action.type === "append") {
+            buf.set(buf.value + action.text);
           }
         }
       }
@@ -85,6 +113,10 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       else buf.touch();
       return;
     }
+
+    // A possible marker prefix may have occupied earlier callbacks. Once disproved, restore its
+    // printable bytes before applying Ink's unchanged semantics for the current chunk.
+    if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
 
     if (key.ctrl && char === "c") {
       if (state.status === "running") controller.abort();

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BracketedPasteDecoder, InputBuffer } from "../src/tui/input-buffer.ts";
+import {
+  BracketedPasteDecoder,
+  InputBuffer,
+  ordinaryInputActions,
+} from "../src/tui/input-buffer.ts";
 
 const ESC = "\u001b";
 
@@ -62,6 +66,14 @@ describe("bracketed paste decoding", () => {
     expect(decoder.feed(`${ESC}[201~`).segments).toEqual([]);
   });
 
+  it("releases printable bytes when a split prefix proves not to be a marker", () => {
+    const decoder = new BracketedPasteDecoder();
+    expect(decoder.feed(ESC).protocol).toBe(true);
+    expect(decoder.feed("[").protocol).toBe(true);
+    expect(decoder.feed("2").protocol).toBe(true);
+    expect(decoder.feed("x")).toMatchObject({ protocol: false, released: "[2" });
+  });
+
   it("holds a bare ESC at a chunk edge so no start-marker byte leaks", () => {
     const h = inputHarness();
     h.feed(ESC);
@@ -69,6 +81,13 @@ describe("bracketed paste decoding", () => {
     h.feed(`${ESC}[201~`);
 
     expect(h.value()).toBe("split safely");
+  });
+
+  it("normalises CRLF even when it is split across pasted chunks", () => {
+    const decoder = new BracketedPasteDecoder();
+    decoder.feed(`${ESC}[200~first\r`);
+    const next = decoder.feed(`\nsecond${ESC}[201~`);
+    expect(next.segments).toEqual([{ text: "\nsecond", pasted: true }]);
   });
 
   it("submits Enter outside markers but keeps a bare CR inside them as content", () => {
@@ -134,6 +153,16 @@ describe("bracketed paste decoding", () => {
       { text: `before${ESC}[200~after`, pasted: true },
     ]);
     decoder.feed(`${ESC}[201~`);
+  });
+
+  it("retains ordinary control semantics after an unmatched end marker", () => {
+    const decoder = new BracketedPasteDecoder();
+    const decoded = decoder.feed(`${ESC}[201~\u007f\r`);
+    expect(decoded.segments).toEqual([{ text: "\u007f\r", pasted: false }]);
+    expect(ordinaryInputActions(decoded.segments[0]?.text ?? "")).toEqual([
+      { type: "backspace" },
+      { type: "enter" },
+    ]);
   });
 
   it("strips an unmatched end marker instead of leaking it into ordinary input", () => {
