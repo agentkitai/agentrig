@@ -5,6 +5,7 @@ import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOpti
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
+import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import {
   memoryIngest,
   memoryInit,
@@ -68,7 +69,15 @@ function distance(a: string, b: string): number {
   return rows[a.length]![b.length]!;
 }
 
-export function buildProgram(): Command {
+export interface ProgramDependencies {
+  run?: typeof runCommand;
+  tui?: typeof startTui;
+  config?: LoadRunConfigOptions;
+}
+
+export function buildProgram(dependencies: ProgramDependencies = {}): Command {
+  const executeRun = dependencies.run ?? runCommand;
+  const executeTui = dependencies.tui ?? startTui;
   const program = new Command();
   program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
 
@@ -85,6 +94,7 @@ export function buildProgram(): Command {
 
   function withRunOptions(cmd: Command): Command {
     return withProviderOptions(cmd)
+      .option("--profile <name>", "named config profile to overlay")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
       .option("--verbose", "show the raw event trace instead of just the conversation")
@@ -135,6 +145,16 @@ export function buildProgram(): Command {
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
       .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
+      // Config may enable a boolean; paired negations let one invocation still override it.
+      .option("--no-dangerously-skip-permissions", "override config and require permission checks")
+      .option("--no-yolo", "override config and require permission checks")
+      .option("--no-supervise", "override config and disable supervision")
+      .option("--no-supervisor-abort", "override config and disable supervisor aborts")
+      .option("--no-supervisor-review", "override config and disable trajectory review")
+      .option("--no-ingest-on-end", "override config and skip session-end memory ingest")
+      .option("--no-dream-on-end", "override config and skip scheduled session-end dream")
+      .option("--no-dream-structural-only", "override config and allow model-backed dream consolidation")
+      .option("--no-subagents", "override config and disable subagents")
       .option(
         "--shell <path>",
         "shell for the `bash` tool (default: /bin/sh; on Windows, Git Bash then PowerShell then cmd)",
@@ -146,22 +166,24 @@ export function buildProgram(): Command {
     return cmd.getOptionValueSource("model") !== "default" || process.env.AGENTRIG_MODEL !== undefined;
   }
 
-  /** A flag with a default is always "set"; only a typed one is worth warning about. */
-  function maxTokensPerTurnExplicit(cmd: Command): boolean {
-    return cmd.getOptionValueSource("maxTokensPerTurn") !== "default";
+  async function configured(opts: RunOptions, cmd: Command): Promise<RunOptions | undefined> {
+    try {
+      return (await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, dependencies.config)) as unknown as RunOptions;
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+      return undefined;
+    }
   }
 
   withRunOptions(
     program.command("run <task>").description("Run the agent on a task, non-interactively"),
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
-    .action(async (task: string, opts: RunOptions, cmd: Command) =>
-      runCommand(task, {
-        ...opts,
-        modelExplicit: modelExplicit(cmd),
-        maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
-      }),
-    );
+    .action(async (task: string, opts: RunOptions, cmd: Command) => {
+      const resolved = await configured(opts, cmd);
+      if (resolved !== undefined) await executeRun(task, resolved);
+    });
 
   function collect(value: string, prev: string[] = []): string[] {
     return [...prev, value];
@@ -226,14 +248,10 @@ export function buildProgram(): Command {
     sessions
       .command("resume <id> [task...]")
       .description("Continue a session from its snapshot; the task becomes the next user message"),
-  ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) =>
-    runCommand(taskWords.join(" ") || "Continue the task.", {
-      ...opts,
-      resume: id,
-      modelExplicit: modelExplicit(cmd),
-      maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
-    }),
-  );
+  ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) => {
+    const resolved = await configured({ ...opts, resume: id }, cmd);
+    if (resolved !== undefined) await executeRun(taskWords.join(" ") || "Continue the task.", resolved);
+  });
 
   sessions
     .command("ls")
@@ -285,11 +303,8 @@ export function buildProgram(): Command {
         program.error(complaint);
         return;
       }
-      await startTui({
-        ...opts,
-        modelExplicit: modelExplicit(cmd),
-        maxTokensPerTurnExplicit: maxTokensPerTurnExplicit(cmd),
-      });
+      const resolved = await configured(opts, cmd);
+      if (resolved !== undefined) await executeTui(resolved);
     });
 
 
