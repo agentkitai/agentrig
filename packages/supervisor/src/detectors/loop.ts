@@ -50,8 +50,9 @@ export function errorFingerprint(display: string): string {
  * edits — textbook agent behaviour, three identical `read_file` inputs — read as a loop, and a
  * session writing a new file every turn was aborted at turn 6 with five files of real progress
  * behind it. "Going in circles" has to mean circles, not repetition. The same applies to
- * `bash_job` status: an intentional `waitMs` block or an incremental result carrying new output is
- * activity; only repeated immediate polls whose result says `(no new output)` join the tally.
+ * `bash_job` status: a result carrying new output is activity; an intentional `waitMs` block that
+ * returns empty is neutral (not spinning, but not progress that clears other tallies either); only
+ * repeated immediate polls whose result says `(no new output)` join the tally.
  *
  * Each trigger also re-arms after firing (its tally resets), so one loop produces one signal
  * rather than a signal per subsequent event; the policy's cooldown is a second line of defence,
@@ -150,10 +151,15 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
           pendingPolls.delete(event.id);
           if (event.ok) {
             if (poll.progressGeneration !== progressGeneration) return null;
-            if (poll.waited || !/^\(no new output\)$/m.test(event.display)) {
+            if (!/^\(no new output\)$/m.test(event.display)) {
               clearProgress();
               return null;
             }
+            // An empty result after a deliberate wait is NEUTRAL, not progress: the model chose to
+            // block, so it is not spinning — but nothing new was learned either, so the other
+            // repeat tallies keep their counts. Clearing here let a waitMs poll on a finished job
+            // (which returns immediately) launder an unrelated identical-call or error loop.
+            if (poll.waited) return null;
             const hits = tally(hashes, poll.inputHash, poll.seq);
             if (hits.length >= repeats) {
               hashes = hashes.filter((h) => h.value !== poll.inputHash);

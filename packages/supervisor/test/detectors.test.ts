@@ -98,6 +98,27 @@ describe("loop detector", () => {
     expect(feed(loopDetector({ repeats: 3 }), polls).signals).toHaveLength(1);
   });
 
+  it("a waitMs poll between identical failing commands does not launder the loop", () => {
+    // A waited-but-empty poll is neutral: not spinning, but not progress either. When clearing
+    // the tallies here, a waitMs poll on a finished job (which returns immediately) reset the
+    // identical-call and error counters every cycle and hid a real loop running between polls.
+    const events: HarnessEvent[] = [];
+    for (let i = 0; i < 3; i++) {
+      events.push(
+        ...exchange(`err-${i}`, "bash", "same-cmd", { command: "pnpm test" }, false, "same failure\n[exit code 1]"),
+        ...exchange(
+          `lull-${i}`,
+          "bash_job",
+          "same-waiting-poll",
+          { id: "job-1", action: "status", waitMs: 300_000 },
+          true,
+          "(no new output)",
+        ),
+      );
+    }
+    expect(feed(loopDetector({ repeats: 3 }), events).signals.length).toBeGreaterThan(0);
+  });
+
   it("still counts failed bash_job status polls as repeated errors", () => {
     const polls = Array.from({ length: 3 }, (_, i) =>
       exchange(

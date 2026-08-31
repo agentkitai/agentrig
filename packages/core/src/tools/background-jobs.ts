@@ -308,6 +308,9 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
       const parts = [headline];
       if (drained.droppedBytes > 0) parts.push(`[${drained.droppedBytes} bytes of older output dropped]`);
       if (drained.output !== "") parts.push(drained.output);
+      // "(no new output)" is a cross-package contract, not just prose: the supervisor's loop
+      // detector matches this exact line to tell an empty poll from real progress. Reword it and
+      // empty-poll loop detection silently dies — change both together.
       else if (running || record.spawnError === undefined) parts.push("(no new output)");
       const { display, truncated } = bound(parts.join("\n").trim());
       const result: ToolResult<BashJobOutput> = { output, display };

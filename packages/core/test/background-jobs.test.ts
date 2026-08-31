@@ -82,6 +82,16 @@ describe("bash background jobs", () => {
     expect(second.exitCode).toBe(0);
   }, 10_000);
 
+  it("an empty poll says exactly '(no new output)' — the supervisor matches this line verbatim", async () => {
+    // Cross-package contract: the supervisor's loop detector distinguishes an empty status poll
+    // from real progress by this literal line. Rewording it here would silently disable
+    // empty-poll loop detection — change both together.
+    const r = await bash().execute({ command: "sleep 2", background: true }, ctx);
+    const id = r.display.match(/job-\d+/)![0];
+    const status = await job().execute({ id, action: "status" }, ctx);
+    expect(/^\(no new output\)$/m.test(status.display)).toBe(true);
+  }, 10_000);
+
   it("waitMs returns EARLY on exit, not at the deadline", async () => {
     const r = await bash().execute({ command: "echo quick", background: true }, ctx);
     const id = r.display.match(/job-\d+/)![0];

@@ -420,6 +420,33 @@ describe("review regressions", () => {
     expect(interventions.filter((type) => type === "inject_guidance").length).toBeGreaterThan(1);
   });
 
+  it("a timed-out escalation counts as expired and degrades the recurring signature", async () => {
+    // Same contract as the explicit-"expired" test above, but through the REAL expiry path: the
+    // handler hangs, withTimeout rejects, and the attach loop must map that ObserverTimeoutError
+    // to "expired" — in the TUI this race (prompt timeout vs escalate timeout, both 60s) decides
+    // whether a real unanswered escalation suppresses re-asks at all.
+    const errors: string[] = [];
+    const session = run(new LoopingProvider(25), 30);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 0 },
+      onEscalate: () => new Promise<never>(() => {}), // never answers
+      escalateTimeoutMs: 50,
+      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const interventions = events
+      .filter((e): e is Extract<HarnessEvent, { type: "supervisor.intervention" }> =>
+        e.type === "supervisor.intervention")
+      .map((e) => e.intervention.type);
+    expect(errors.some((e) => e.includes("did not answer within"))).toBe(true);
+    expect(interventions.filter((type) => type === "escalate")).toHaveLength(1);
+    expect(interventions.filter((type) => type === "inject_guidance").length).toBeGreaterThan(1);
+  });
+
   it("a void non-TUI escalation handler defaults to closed and suppresses nothing", async () => {
     const session = run(new LoopingProvider(25), 30);
     const sup = supervise(session, {
