@@ -24,11 +24,6 @@ export interface SupervisorState {
   plan: PlanItem[];
   /** Set once the session has ended — attach() stops applying interventions past this point. */
   ended: boolean;
-  /** Monotonic count of file changes and varied tool calls, used to judge whether an intervention worked. */
-  progressEvents: number;
-  /** Previous call identity, retained so repeated identical calls do not masquerade as progress. */
-  lastToolInputHash: string | null;
-  lastToolName: string | null;
 }
 
 export interface StateOptions {
@@ -54,9 +49,6 @@ export function initialState(): SupervisorState {
     lastTs: 0,
     plan: [],
     ended: false,
-    progressEvents: 0,
-    lastToolInputHash: null,
-    lastToolName: null,
   };
 }
 
@@ -82,22 +74,12 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
       break;
     case "tool.call":
       state.toolCalls += 1;
-      if (
-        state.lastToolInputHash === null ||
-        event.inputHash !== state.lastToolInputHash ||
-        event.name !== state.lastToolName
-      ) {
-        state.progressEvents += 1;
-      }
-      state.lastToolInputHash = event.inputHash;
-      state.lastToolName = event.name;
       break;
     case "tool.result":
       if (!event.ok) state.toolErrors += 1;
       break;
     case "file.changed":
       state.filesChanged += 1;
-      state.progressEvents += 1;
       break;
     case "model.response":
       state.usage.input += event.usage.input;

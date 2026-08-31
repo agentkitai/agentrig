@@ -63,7 +63,6 @@ describe("LadderPolicy", () => {
     const types = [0, 1, 2, 3].map((t) => {
       const s = state(t);
       s.filesChanged = t;
-      s.progressEvents = t;
       return p.decide([sig("stall")], s)[0]!.type;
     });
     expect(types).toEqual(["inject_guidance", "inject_guidance", "inject_guidance", "inject_guidance"]);
@@ -75,6 +74,22 @@ describe("LadderPolicy", () => {
       capabilities: { forceReplan: true, escalate: true, abort: true },
     });
     const types = [0, 1, 2, 3].map((t) => p.decide([sig("stall")], state(t))[0]!.type);
+    expect(types).toEqual(["inject_guidance", "force_replan", "escalate", "abort"]);
+  });
+
+  it("does not mistake varied commands in a periodic loop for durable progress", () => {
+    const p = new LadderPolicy({
+      cooldownTurns: 0,
+      capabilities: { forceReplan: true, escalate: true, abort: true },
+    });
+    const types = [0, 1, 2, 3].map((t) => {
+      // Models the unfixed global-activity counter: A/B calls increase it between every signal,
+      // but no file changes, so the recurrence must keep climbing rather than be forgiven.
+      const s = state(t) as SupervisorState & { progressEvents: number };
+      s.progressEvents = t;
+      s.toolCalls = t * 3;
+      return p.decide([sig("loop")], s)[0]!.type;
+    });
     expect(types).toEqual(["inject_guidance", "force_replan", "escalate", "abort"]);
   });
 

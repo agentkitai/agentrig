@@ -66,7 +66,7 @@ export class LadderPolicy implements Policy {
   private readonly guidance: Record<SignalType, string>;
   private readonly level = new Map<SignalType, number>();
   private readonly lastTurn = new Map<SignalType, number>();
-  private readonly progressAtIntervention = new Map<SignalType, number>();
+  private readonly filesChangedAtIntervention = new Map<SignalType, number>();
   private issued = 0;
 
   private readonly rubric: string | undefined;
@@ -97,10 +97,10 @@ export class LadderPolicy implements Policy {
       const last = this.lastTurn.get(s.type);
       if (last !== undefined && state.turns - last < this.cooldownTurns) continue;
 
-      const priorProgress = this.progressAtIntervention.get(s.type);
-      if (priorProgress !== undefined && state.progressEvents > priorProgress) {
-        // The previous intervention worked. A later recurrence is a new incident, not evidence that
-        // guidance failed, so it starts at the first rung rather than inheriting escalation debt.
+      const priorFilesChanged = this.filesChangedAtIntervention.get(s.type);
+      if (priorFilesChanged !== undefined && state.filesChanged > priorFilesChanged) {
+        // A file change is durable progress: the previous intervention worked. Mere command
+        // variation is not enough here, because a periodic A/B loop must still climb the ladder.
         this.level.set(s.type, 0);
       }
 
@@ -113,7 +113,7 @@ export class LadderPolicy implements Policy {
       out.push(intervention);
       this.issued += 1;
       this.lastTurn.set(s.type, state.turns);
-      this.progressAtIntervention.set(s.type, state.progressEvents);
+      this.filesChangedAtIntervention.set(s.type, state.filesChanged);
       this.level.set(s.type, (this.level.get(s.type) ?? 0) + 1);
     }
     return out;

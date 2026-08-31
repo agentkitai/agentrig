@@ -42,8 +42,8 @@ Status: **done**.
   abort, killing the session at 81 tool calls while the repository-required green check was running.
 - Varied consecutive tool inputs now reset the stall detector's quiet-turn tally, while an identical
   command repeated without progress remains quiet and can still signal. Ladder recurrence advances
-  only when no file change or varied tool activity followed the prior intervention for that signal
-  type; successful interventions reset that type to guidance. Abort is opt-in through
+  only when no file change followed the prior intervention for that signal type; durable progress
+  resets that type to guidance, while command variation alone cannot forgive a periodic loop. Abort is opt-in through
   `--supervisor-abort` on both `run` and the TUI; `--supervisor-no-abort` remains a documented no-op.
 - Rejected idea: disable or substantially lengthen the stall threshold during verification. That
   would hide genuine same-command loops and make detection depend on guessing which commands are

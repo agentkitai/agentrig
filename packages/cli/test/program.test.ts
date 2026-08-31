@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
@@ -109,6 +110,12 @@ describe("argv parsing", () => {
       const command = program.commands.find((c) => c.name() === name)!;
       expect(command.options.find((o) => o.long === "--supervisor-no-abort")!.description).toMatch(/compatibility no-op/i);
     }
+  });
+
+  it("documents the abort opt-in in the public README", async () => {
+    const readme = await readFile("README.md", "utf8");
+    expect(readme).toContain("`--supervisor-abort` opts into its final abort rung");
+    expect(readme).toContain("`--supervisor-no-abort` remains a compatibility no-op");
   });
 
   it("dispatches to the command that was named", async () => {
