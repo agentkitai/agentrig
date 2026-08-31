@@ -5,6 +5,19 @@ import { z } from "zod";
 
 const TrustFileSchema = z.object({ projects: z.record(z.boolean()) }).strict();
 
+/** Pure, read-only parser shared by runtime and diagnostics so trust can never be interpreted loosely. */
+export function parseTrustText(text: string): Record<string, boolean> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("malformed trust store");
+  }
+  const parsed = TrustFileSchema.safeParse(raw);
+  if (!parsed.success) throw new Error("malformed trust store");
+  return parsed.data.projects;
+}
+
 export interface ProjectTrustOptions {
   home: string;
   interactive: boolean;
@@ -45,9 +58,7 @@ async function readTrustFile(path: string, options: ProjectTrustOptions): Promis
   }
 
   try {
-    const parsed = TrustFileSchema.safeParse(JSON.parse(text));
-    if (!parsed.success) throw new Error("invalid trust store shape");
-    return { projects: parsed.data.projects, writable: true };
+    return { projects: parseTrustText(text), writable: true };
   } catch {
     say(options, `Warning: malformed trust store ${path}; treating all projects as untrusted.`);
     return { projects: {}, writable: false };

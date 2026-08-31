@@ -7,6 +7,7 @@ import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
+import { diagnose, type DoctorCliValues, type DoctorOptions } from "./doctor.js";
 import {
   memoryIngest,
   memoryInit,
@@ -74,6 +75,7 @@ export interface ProgramDependencies {
   run?: typeof runCommand;
   tui?: typeof startTui;
   config?: LoadRunConfigOptions;
+  doctor?: DoctorOptions;
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
@@ -257,6 +259,21 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--since <n>", "cap on raw sessions scanned")
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
     .action(async (opts: DreamOptions, cmd: Command) => dreamCommand({ ...opts, modelExplicit: modelExplicit(cmd) }));
+
+  program
+    .command("doctor")
+    .description("Diagnose configuration, credentials, project state, and local prerequisites (read-only)")
+    .option("-p, --provider <provider>", "provider override to diagnose")
+    .option("-m, --model <model>", "model override to diagnose")
+    .option("--base-url <url>", "OpenAI-compatible server URL override")
+    .option("--profile <name>", "named config profile to diagnose")
+    .option("--memory <dir>", "memory directory override")
+    .option("--mcp-config <path>", "MCP config override")
+    .action(async (opts: DoctorCliValues) => {
+      const result = await diagnose({ ...dependencies.doctor, cli: opts });
+      for (const diagnostic of result.lines) console.log(diagnostic);
+      if (result.exitCode !== 0) process.exitCode = result.exitCode;
+    });
 
   const sessions = program.command("sessions").description("Inspect session event logs");
 
