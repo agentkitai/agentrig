@@ -26,18 +26,18 @@ live provider validation.
 | R1c | TTY-scoped bracketed-paste mode with streaming marker decoding in the quiet-point input path | done |
 
 - R1c holds any suffix that is still a possible `ESC[200~` or `ESC[201~` marker (including a bare
-  `ESC`) across stdin chunks. When later bytes complete it, the marker is stripped; when they
-  disprove it, the held bytes are released as ordinary input, with the existing bare-Escape behavior
-  preserved by the view. Marker-only chunks also move the input buffer's quiet deadline, so neither
-  a draw nor a queued submit can write between a payload and a split closing marker.
+  `ESC`) across raw stdin chunks. When later bytes complete it, the marker is stripped; when they
+  disprove it, the held bytes are released to Ink's ordinary key path, preserving fallback behavior.
+  Drawing is suspended without a deadline while paste mode or a partial marker remains open, then
+  one draw and any queued submit are released through the existing stdin quiet point.
 - An unmatched `ESC[201~` is treated as protocol framing and stripped while remaining outside paste
   mode. This prevents a damaged or duplicated terminal wrapper from leaking marker bytes into the
   prompt. A `201~` sequence inside pasted payload necessarily closes the paste, as defined by the
   terminal protocol.
 - Rejected idea for R1c: replace Ink's input handling with a new raw-stdin key parser. That would make
-  bracketed-paste support responsible for reproducing every existing key and burst heuristic, risking
-  regressions on terminals that ignore `?2004h`; a stateful decoder at the existing input-buffer path
-  preserves the fallback behavior instead.
+  bracketed-paste support reproduce every existing key and burst heuristic. The implemented side
+  channel retains each exact raw chunk for marker decoding while Ink still supplies ordinary key
+  semantics, so terminals that ignore `?2004h` keep the old path.
 - R1c dogfood token measurement: this API-runner session exposes no provider usage telemetry, so its
   exact token count is unavailable rather than fabricated; record this as the next unavailable point
   beside the **1,718,936 / 669,418 / 3.3M / 4.0M** existing baselines.

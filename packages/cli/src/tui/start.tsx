@@ -128,7 +128,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the
   // agent keeps running — still executing bash, still writing files, now invisibly.
-  const onSigint = (): void => controller.abort();
+  let stopForSigint = (): void => controller.abort();
+  const onSigint = (): void => stopForSigint();
   process.on("SIGINT", onSigint);
 
   controller.print("agentrig — type a task, or /help for commands", "system");
@@ -136,7 +137,12 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     await withBracketedPaste(process.stdout, async () => {
       // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
       // to useInput, so the abort handler in the view could never run.
-      const { waitUntilExit } = render(<App controller={controller} />, { exitOnCtrlC: false });
+      const { unmount, waitUntilExit } = render(<App controller={controller} />, {
+        exitOnCtrlC: false,
+      });
+      // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this
+      // scope's finally disables bracketed paste; shutdown below then aborts any active session.
+      stopForSigint = unmount;
       await waitUntilExit();
     });
   } finally {

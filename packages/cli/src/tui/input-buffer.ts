@@ -43,9 +43,8 @@
 const KEYSTROKE = 4;
 
 const ESC = "\u001b";
-const START_MARKERS = [`${ESC}[200~`, "[200~"] as const;
-const END_MARKERS = [`${ESC}[201~`, "[201~"] as const;
-const MARKERS = [...START_MARKERS, ...END_MARKERS] as const;
+const START_MARKER = `${ESC}[200~`;
+const END_MARKER = `${ESC}[201~`;
 
 export interface DecodedInput {
   /** Text with protocol markers removed, tagged with whether Enter is content at that point. */
@@ -55,10 +54,9 @@ export interface DecodedInput {
 }
 
 /**
- * Stateful bracketed-paste decoder. Ink removes a leading ESC before `useInput` dispatches a
- * chunk, so both the wire spelling and that lossless-for-this-protocol spelling are accepted.
- * Prefixes are retained across calls; in particular, a bare ESC is not released until the next
- * chunk proves that it is not the start of a marker.
+ * Stateful decoder for raw stdin chunks. Prefixes are retained across calls; in particular, a
+ * bare ESC is not released until the next chunk proves that it is not the start of a marker.
+ * An opening marker inside a paste is payload; only the closing marker has protocol meaning there.
  */
 export class BracketedPasteDecoder {
   private pending = "";
@@ -68,8 +66,11 @@ export class BracketedPasteDecoder {
     return this.pasted;
   }
 
+  get hasPendingMarker(): boolean {
+    return this.pending !== "";
+  }
+
   feed(chunk: string): DecodedInput {
-    const startedWithProtocol = this.pending !== "" || this.pasted;
     const input = this.pending + chunk;
     this.pending = "";
     const segments: DecodedInput["segments"] = [];
@@ -84,17 +85,21 @@ export class BracketedPasteDecoder {
     };
 
     while (offset < input.length) {
-      const rest = input.slice(offset);
-      const marker = MARKERS.find((candidate) => rest.startsWith(candidate));
+      const candidates = this.pasted ? [END_MARKER] : [START_MARKER, END_MARKER];
+      const marker = candidates.find((candidate) => input.startsWith(candidate, offset));
       if (marker !== undefined) {
         markerSeen = true;
-        this.pasted = START_MARKERS.some((candidate) => candidate === marker);
+        this.pasted = marker === START_MARKER;
         offset += marker.length;
         continue;
       }
 
-      if (MARKERS.some((candidate) => candidate.startsWith(rest))) {
-        this.pending = rest;
+      const remaining = input.length - offset;
+      if (
+        remaining < END_MARKER.length &&
+        candidates.some((candidate) => candidate.startsWith(input.slice(offset)))
+      ) {
+        this.pending = input.slice(offset);
         break;
       }
 
@@ -104,7 +109,9 @@ export class BracketedPasteDecoder {
 
     return {
       segments,
-      protocol: startedWithProtocol || markerSeen || this.pending !== "" || this.pasted,
+      // A disproved prefix outside paste returns to the exact ordinary key path. The held ESC is
+      // intentionally absent from Ink's semantic input and remains ignored as it was before R1c.
+      protocol: markerSeen || this.pending !== "" || this.pasted,
     };
   }
 }
@@ -160,10 +167,15 @@ export class InputBuffer {
     }, this.quietMs);
   }
 
+  /** Cancels drawing without discarding text or queued submits; release it after paste framing. */
+  hold(): void {
+    if (this.disposed) return;
+    this.cancel();
+  }
+
   /**
-   * Records stdin activity that changes no text (for example, a bracket marker). It deliberately
-   * pushes the quiet point out: drawing after the payload but before its 201~ has arrived is still
-   * a terminal write in the middle of the paste.
+   * Records stdin activity that changes no text (for example, a completed closing marker). It
+   * starts the quiet wait only after bracket framing has fully resolved.
    */
   touch(): void {
     if (this.disposed) return;

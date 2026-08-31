@@ -96,19 +96,44 @@ describe("bracketed paste decoding", () => {
     const decoder = new BracketedPasteDecoder();
     const feed = (chunk: string): void => {
       const decoded = decoder.feed(chunk);
-      if (decoded.protocol) buffer.touch();
       for (const segment of decoded.segments) buffer.set(buffer.value + segment.text);
+      if (decoder.isPasting || decoder.hasPendingMarker) buffer.hold();
+      else if (decoded.protocol) buffer.touch();
     };
 
     feed(`${ESC}[200~`);
+    expect(timer, "armed a draw while the opening marker was unresolved").toBeNull();
     feed("x".repeat(64));
+    expect(timer, "armed a draw while paste payload was still open").toBeNull();
     feed(`${ESC}[201`);
+    expect(timer, "armed a draw while the closing marker was incomplete").toBeNull();
     feed("~");
     expect(drawn, "drew before the split end marker reached the quiet point").toEqual([]);
     const quiet = timer;
     timer = null;
     quiet?.();
     expect(drawn).toEqual(["x".repeat(64)]);
+  });
+
+  it("does not mistake ordinary bracket text for an ESC-prefixed marker", () => {
+    const decoder = new BracketedPasteDecoder();
+    expect(decoder.feed("[")).toEqual({
+      segments: [{ text: "[", pasted: false }],
+      protocol: false,
+    });
+    expect(decoder.feed("200~ literal")).toEqual({
+      segments: [{ text: "200~ literal", pasted: false }],
+      protocol: false,
+    });
+  });
+
+  it("keeps an opening marker spelling inside pasted payload as content", () => {
+    const decoder = new BracketedPasteDecoder();
+    decoder.feed(`${ESC}[200~`);
+    expect(decoder.feed(`before${ESC}[200~after`).segments).toEqual([
+      { text: `before${ESC}[200~after`, pasted: true },
+    ]);
+    decoder.feed(`${ESC}[201~`);
   });
 
   it("strips an unmatched end marker instead of leaking it into ordinary input", () => {

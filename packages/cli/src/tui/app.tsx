@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
+import { Box, Static, Text, useApp, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
 import { BracketedPasteDecoder, InputBuffer } from "./input-buffer.js";
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
+import { useRawInput } from "./raw-input.js";
 
 /**
  * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
@@ -53,46 +54,41 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   // test that counts bytes can see. `test/tui-visible.test.ts` asserts the content instead.
   useEffect(() => controller.subscribe(setState), [controller]);
 
-  useInput((char, key) => {
+  useRawInput((raw, char, key) => {
+    const decoded = paste.feed(raw);
+    if (decoded.protocol) {
+      // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
+      // so a later 201~ restores ordinary input correctly.
+      if (state.pending === null) {
+        for (const segment of decoded.segments) {
+          const text = segment.text.replaceAll("\u001b", "");
+          if (text === "") continue;
+          if (!segment.pasted && text === "\r") {
+            const line = buf.value;
+            if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
+            else {
+              buf.set("", () => {
+                void controller.submit(line).then((keepGoing) => {
+                  if (!keepGoing) exit();
+                });
+              });
+            }
+          } else {
+            // Return is data between 200~ and 201~, including a bare CR in its own stdin chunk.
+            buf.set(buf.value + text.replace(/\r\n?/g, "\n"));
+          }
+        }
+      }
+      // There is deliberately no timer while a paste or possible split marker remains open. Even a
+      // long delivery pause is not proof that the terminal has finished writing the paste.
+      if (paste.isPasting || paste.hasPendingMarker) buf.hold();
+      else buf.touch();
+      return;
+    }
+
     if (key.ctrl && char === "c") {
       if (state.status === "running") controller.abort();
       else exit();
-      return;
-    }
-
-    // Escape still denies a permission. Elsewhere a bare escape is handed to the decoder because
-    // it may be the first chunk of ESC[200~; the decoder releases it only when that becomes false.
-    if (state.pending !== null && key.escape) {
-      controller.answerPermission("deny");
-      return;
-    }
-
-    const decoded = paste.feed(key.return ? "\r" : key.escape ? "\u001b" : (char ?? ""));
-    if (decoded.protocol) {
-      // Markers carry no text, but they are still arriving stdin: move the same quiet point used by
-      // payload chunks so a render cannot land between the final payload byte and split 201~ bytes.
-      buf.touch();
-      // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
-      // so a later 201~ restores ordinary input correctly.
-      if (state.pending !== null) return;
-      for (const segment of decoded.segments) {
-        const text = segment.text.replaceAll("\u001b", "");
-        if (text === "") continue;
-        if (!segment.pasted && text === "\r") {
-          const line = buf.value;
-          if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
-          else {
-            buf.set("", () => {
-              void controller.submit(line).then((keepGoing) => {
-                if (!keepGoing) exit();
-              });
-            });
-          }
-        } else {
-          // Return is data between 200~ and 201~, including a bare CR in its own stdin chunk.
-          buf.set(buf.value + text.replace(/\r\n?/g, "\n"));
-        }
-      }
       return;
     }
 
@@ -103,7 +99,7 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       // files should be approved once, not twenty times
       else if (char === "a" || char === "A") controller.answerPermission("allow", true);
       else if (char === "d" || char === "D") controller.answerPermission("deny", true);
-      else if (char === "n" || char === "N") controller.answerPermission("deny");
+      else if (char === "n" || char === "N" || key.escape) controller.answerPermission("deny");
       return;
     }
 
