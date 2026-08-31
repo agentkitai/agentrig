@@ -1,0 +1,20 @@
+docs/STATUS.md
+  h_26c5a60a657125 34-37
+packages/cli/src/config.ts
+  h_26c5a60a657125 14,82-83
+packages/cli/src/program.ts
+  h_26c5a60a657125 148-157
+packages/cli/test/config.test.ts
+  h_26c5a60a657125 20,78-80,83-84,119-130,136-137,152,156,161-182,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "d91b2707f3f9620b38176035ea5a48f6c04f9d63",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
