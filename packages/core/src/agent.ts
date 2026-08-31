@@ -9,6 +9,7 @@ import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { appendProjectInstructions, discoverProjectInstructions } from "./project-context.js";
+import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -42,6 +43,8 @@ export interface AgentConfig {
    * provider and is not metered by the budget — its cost is the price of staying under the window.
    */
   compaction?: CompactionStrategy;
+  /** Outbound-only stale tool-result eviction; enabled with a 5-turn/8-KiB default. */
+  toolResultEviction?: ToolResultEvictionOptions;
   /** max_tokens per model response (default 8192). */
   maxTokensPerTurn?: number;
   /**
@@ -456,11 +459,18 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         turns += 1;
         turnsThisRun += 1;
         await emit({ type: "turn.start", n: turns });
-        await emit({ type: "model.request", tokensIn: estimateTokens(system, messages) });
+
+        // Eviction is only an outbound view. `messages` remains the complete conversation used by
+        // snapshots, resume, hooks and compaction; tool-result stubs exist solely in this request.
+        const eviction = evictToolResults(messages, config.toolResultEviction);
+        if (eviction.count > 0) {
+          await emit({ type: "context.evicted", count: eviction.count, bytesSaved: eviction.bytesSaved });
+        }
+        await emit({ type: "model.request", tokensIn: estimateTokens(system, eviction.messages) });
 
         const req: ModelRequest = {
           system,
-          messages,
+          messages: eviction.messages,
           tools: toolSpecs,
           maxTokens: config.maxTokensPerTurn ?? 8192,
           cacheHints: { systemPrefix: true },

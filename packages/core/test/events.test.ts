@@ -28,6 +28,18 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a context.evicted event with count and bytes saved", () => {
+    const event = HarnessEvent.parse({
+      seq: 40,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.evicted",
+      count: 3,
+      bytesSaved: 42_000,
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a session.resume event", () => {
     const event = HarnessEvent.parse({
       seq: 40,
