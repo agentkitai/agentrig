@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Command } from "commander";
 import { buildProgram } from "../src/program.ts";
 import { buildAgent, type AgentBuildOptions } from "../src/agent-builder.ts";
+import { loadRunConfig } from "../src/config.ts";
 import { resolveProjectTrust } from "../src/trust.ts";
 import type { RunOptions } from "../src/run.ts";
 import type { TuiOptions } from "../src/tui/start.tsx";
@@ -132,5 +134,79 @@ describe("trusted-project security boundary", () => {
     expect(prompts[0]).toContain("AGENTS.md/CLAUDE.md");
     expect(prompts[0]).toContain(".agentrig/config.json");
     expect(notices.some((notice) => notice.includes("continuing without project instructions"))).toBe(true);
+  });
+
+  it("uses the repository realpath as the key when invoked from a descendant", async () => {
+    const { cwd, home } = await fixture();
+    await mkdir(join(cwd, ".git"));
+    const child = join(cwd, "packages", "child");
+    await mkdir(child, { recursive: true });
+    await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [await realpath(cwd)]: true } }), "utf8");
+
+    await expect(resolveProjectTrust(child, { home, interactive: false, notice: () => {} })).resolves.toEqual({
+      projectRoot: await realpath(cwd),
+      trusted: true,
+    });
+  });
+
+  it("does not prompt or persist when trusted user config is invalid", async () => {
+    const { cwd, home } = await fixture();
+    await writeFile(join(home, ".agentrig", "config.json"), "{ bad", "utf8");
+    const confirm = vi.fn(async () => true);
+    await expect(loadRunConfig(new Command(), {}, { cwd, home, interactive: true, confirmTrust: confirm })).rejects.toThrow(/invalid config/);
+    expect(confirm).not.toHaveBeenCalled();
+    await expect(readFile(join(home, ".agentrig", "trust.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not overwrite malformed trust state when applying interactive consent", async () => {
+    const { cwd, home } = await fixture();
+    const malformed = "{ preserve-me";
+    const trustPath = join(home, ".agentrig", "trust.json");
+    await writeFile(trustPath, malformed, "utf8");
+    const notices: string[] = [];
+    await expect(resolveProjectTrust(cwd, {
+      home,
+      interactive: true,
+      confirm: async () => true,
+      notice: (message) => notices.push(message),
+    })).resolves.toMatchObject({ trusted: true });
+    expect(await readFile(trustPath, "utf8")).toBe(malformed);
+    expect(notices.some((notice) => notice.includes("not recorded"))).toBe(true);
+  });
+
+  it("fails closed when the repository contains the home trust store", async () => {
+    const base = await mkdtemp(join(tmpdir(), "agentrig-home-repo-"));
+    roots.push(base);
+    await Promise.all([mkdir(join(base, ".git")), mkdir(join(base, ".agentrig"))]);
+    await writeFile(join(base, ".agentrig", "config.json"), JSON.stringify({ model: "injected", yolo: true }), "utf8");
+    await writeFile(join(base, ".agentrig", "trust.json"), JSON.stringify({ projects: { [await realpath(base)]: true } }), "utf8");
+    const notices: string[] = [];
+
+    const untrusted = await loadRunConfig(new Command(), {}, { cwd: base, home: base, notice: (message) => notices.push(message) });
+    expect(untrusted.model).toBeUndefined();
+    expect(untrusted.yolo).toBeUndefined();
+    expect(untrusted.trustedProjectRoot).toBeUndefined();
+    expect(notices.some((notice) => notice.includes("contains the user AgentRig state"))).toBe(true);
+
+    const explicit = await loadRunConfig(new Command(), { trust: true }, { cwd: base, home: base, notice: () => {} });
+    expect(explicit.model).toBe("injected");
+    expect(explicit.yolo).toBe(true);
+  });
+
+  it("requires an explicit confirmer for interactive use and escapes control bytes in displayed paths", async () => {
+    const { base, home } = await fixture();
+    const controlled = join(base, "evil\u001b[31m-name");
+    await mkdir(controlled);
+    await expect(resolveProjectTrust(controlled, { home, interactive: true, notice: () => {} })).rejects.toThrow(/confirmation callback/);
+
+    const prompts: string[] = [];
+    await resolveProjectTrust(controlled, {
+      home,
+      interactive: true,
+      confirm: async (prompt) => { prompts.push(prompt); return false; },
+      notice: () => {},
+    });
+    expect(prompts[0]).not.toContain("\u001b");
+    expect(prompts[0]).toContain("\\u001b");
   });
 });

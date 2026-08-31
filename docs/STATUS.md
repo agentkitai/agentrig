@@ -30,6 +30,8 @@ live provider validation.
   project's canonical `realpath`; aliases and descendant working directories therefore share the
   same boundary. Core independently requires the run cwd to be at or below that canonical root and
   bounds instruction discovery there, while CLI resolves consent before opening project config.
+  If a repository is the home directory or contains it, `~/.agentrig` is also repo-controlled, so
+  user config and persisted trust are ignored and only invocation-scoped `--trust` can opt in.
 - `--trust` applies only to the current invocation and is not persisted. This is deliberately the
   least-ambient interpretation: CI or a one-off automation command may opt into a reviewed checkout
   without silently granting all later interactive sessions permission to load that checkout.
