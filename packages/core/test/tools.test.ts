@@ -401,6 +401,23 @@ describe("grep", () => {
     ]);
   });
 
+  it("ignores the glob filter for a named file, as the schema promises", async () => {
+    // a re-applied glob would silently empty the results — the exact silent-skip failure this
+    // feature exists to eliminate
+    await writeFile(join(root, "d.ts"), "needle one\n" + "pad\n".repeat(300) + "needle ".repeat(40) + "\n");
+    const r = await grepTool().execute({ pattern: "needle", path: "d.ts", glob: "*.md" }, ctx);
+    expect(r.isError).not.toBe(true);
+    expect(r.output.length).toBeGreaterThan(0);
+    expect(r.output[0]).toMatchObject({ path: "d.ts", line: 1 });
+  });
+
+  it("caps matches in a single-file search and says so via truncated", async () => {
+    await writeFile(join(root, "many.txt"), "hit\n".repeat(300));
+    const r = await grepTool().execute({ pattern: "hit", path: "many.txt" }, ctx);
+    expect(r.output).toHaveLength(200);
+    expect(r.truncated).toBe(true);
+  });
+
   it("says why a named file cannot be searched instead of silently skipping it", async () => {
     await writeFile(join(root, "bin.dat"), "abc\0def");
     const binary = await grepTool().execute({ pattern: "abc", path: "bin.dat" }, ctx);
