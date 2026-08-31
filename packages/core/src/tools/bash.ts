@@ -13,7 +13,7 @@ const BashInput = z.object({
     .positive()
     .max(600_000)
     .optional()
-    .describe("Kill the command after this many milliseconds (default 120000; foreground only)"),
+    .describe("Kill the command after this many milliseconds (default 120000). Ignored when background is true."),
   background: z
     .boolean()
     .optional()
@@ -81,19 +81,14 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
         if (opts.jobs === undefined) {
           return { output: empty, display: "background jobs are not available here", isError: true };
         }
-        if (input.timeoutMs !== undefined) {
-          // refusing beats silently ignoring: "I set a timeout" must not mean nothing
-          return {
-            output: empty,
-            // prescriptive, because the vague version of this message sent a real agent into a
-            // three-retry loop: it knew the call was wrong but not which parameter to drop
-            display:
-              "remove timeoutMs and resend with background: true — background jobs have no timeout. " +
-              'To bound one later: bash_job {"id":"<id>","action":"kill"}; to wait on it: ' +
-              '{"action":"status","waitMs":300000}.',
-            isError: true,
-          };
-        }
+        // timeoutMs is ACCEPTED AND IGNORED here, with a note — a reversal of the original
+        // "refuse, because a set timeout must not mean nothing" design, made on field evidence:
+        // across two independent dogfood runs, the model on the openai-chatgpt backend inserted
+        // timeoutMs into every bash call and could not drop it even when the refusal named the
+        // exact fix (15 identical retries in the second run — likely constrained decoding).
+        // Auto-killing at the deadline instead would quietly resurrect the ten-minute review
+        // massacre this feature exists to end, since the inserted values are capped at 600s.
+        // The note keeps the ignore honest; a model that truly wants a bound has bash_job kill.
         const { id, pid } = opts.jobs.start({
           command: input.command,
           shellPath: shell.path,
@@ -102,9 +97,13 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
           killTree,
           signal: ctx.signal,
         });
+        const timeoutNote =
+          input.timeoutMs === undefined
+            ? ""
+            : " (note: timeoutMs is ignored for background jobs — they have no deadline; use bash_job to kill one)";
         return {
           output: empty,
-          display: `started background job ${id}${pid === undefined ? "" : ` (pid ${pid})`} — check it with bash_job {"id":"${id}","action":"status"}`,
+          display: `started background job ${id}${pid === undefined ? "" : ` (pid ${pid})`} — check it with bash_job {"id":"${id}","action":"status"}${timeoutNote}`,
         };
       }
       // detached puts the shell in its own process group, so kill reaches the

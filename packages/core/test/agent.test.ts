@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -52,7 +52,11 @@ const stop = (reason: "end_turn" | "tool_use" | "max_tokens" | "error"): ModelEv
 
 let root: string;
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "agentrig-agent-"));
+  // Canonicalized, because macOS's tmpdir lives behind a symlink (/var -> /private/var) and the
+  // R1d boundary deliberately realpaths the cwd before discovery: every context.loaded event and
+  // instruction banner carries the canonical path, so expectations built from `root` must too.
+  // On Linux this is the identity — which is exactly how the mismatch hid until CI grew a macOS leg.
+  root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-agent-")));
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
