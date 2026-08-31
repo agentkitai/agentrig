@@ -140,7 +140,12 @@ export function isTransientStreamError(message: string): boolean {
   // undici reports a connection cut mid-body as exactly "terminated"; matched whole, because as
   // a bare substring it also matched deterministic messages like "terminated by moderation"
   if (/^terminated$/.test(message)) return true;
-  return /overloaded|rate limit|too many requests|temporarily unavailable|server_error|internal (server )?error|ECONNRESET|ETIMEDOUT|socket hang up|premature close|fetch failed|network error/i.test(
+  // "you can retry your request" is the ChatGPT backend's generic in-stream server error
+  // explicitly inviting a retry ("An error occurred while processing your request. You can
+  // retry your request, or contact us..."); it killed a real session at turn 30. It is safe to
+  // match DESPITE the server-prose lesson above: the HTTP-status guard has already refused any
+  // labeled 4xx carrying this text, so only unlabeled in-stream errors reach this pattern.
+  return /overloaded|rate limit|too many requests|temporarily unavailable|server_error|internal (server )?error|you can retry your request|ECONNRESET|ETIMEDOUT|socket hang up|premature close|fetch failed|network error/i.test(
     message,
   );
 }
