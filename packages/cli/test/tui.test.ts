@@ -455,7 +455,7 @@ describe("TuiController", () => {
       [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
       [usage(1, 1), stop("end_turn")],
     ]);
-    let asked: Promise<void> | undefined;
+    let asked: Promise<"answered" | "expired" | "closed"> | undefined;
     let c!: TuiController;
     c = makeControllerWith(provider, {
       supervised: true,
@@ -469,7 +469,7 @@ describe("TuiController", () => {
     expect(c.snapshot().escalation!.question).toContain("debugging or revert");
 
     c.answerEscalation("Keep debugging, but inspect the parser first.");
-    await asked;
+    await expect(asked).resolves.toBe("answered");
     await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
     c.answerPermission("deny");
     await running;
@@ -483,7 +483,7 @@ describe("TuiController", () => {
     const asked = c.askSupervisor("Anyone there?", 10);
     expect(c.snapshot().escalation).not.toBeNull();
 
-    await asked;
+    await expect(asked).resolves.toBe("expired");
     expect(c.snapshot().escalation).toBeNull();
     expect(text(c)).toContain("no answer");
   });

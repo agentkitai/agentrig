@@ -1,5 +1,5 @@
 import type { Session } from "@agentkitai/agentrig-core";
-import type { Detachable, Detector, Policy } from "./types.js";
+import type { Detachable, Detector, EscalationOutcome, Policy } from "./types.js";
 import { initialState, reduce, type StateOptions, type SupervisorState } from "./state.js";
 import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js";
 import { defaultDetectors, type DefaultDetectorOptions } from "./detectors/index.js";
@@ -9,6 +9,8 @@ import type { Grader } from "./grader.js";
 export const DEFAULT_ESCALATE_TIMEOUT_MS = 60_000;
 /** An LLM-backed rung is bounded like any other blocking call in the observer's loop. */
 export const DEFAULT_REVIEW_TIMEOUT_MS = 90_000;
+
+class ObserverTimeoutError extends Error {}
 
 /**
  * Races `work` against a timer. The timer is unref'd so a pending escalation cannot by itself
@@ -20,7 +22,7 @@ async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Prom
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} did not answer within ${ms}ms`)), ms);
+        timer = setTimeout(() => reject(new ObserverTimeoutError(`${label} did not answer within ${ms}ms`)), ms);
         timer.unref?.();
       }),
     ]);
@@ -36,7 +38,7 @@ export interface AttachOptions extends StateOptions {
    * Where an `escalate` intervention goes. Its presence is what makes the `escalate` rung
    * available at all — without a human on the other end the ladder skips straight to abort.
    */
-  onEscalate?: (question: string) => void | Promise<void>;
+  onEscalate?: (question: string) => EscalationOutcome | void | Promise<EscalationOutcome | void>;
   /**
    * How long to wait on `onEscalate` before giving up on it. The handler runs inside the event
    * loop, so an unbounded wait does not merely delay one intervention — the observer stops
@@ -147,19 +149,32 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
             case "inject_guidance":
               session.control.steer(active.message, "supervisor");
               break;
-            case "escalate":
+            case "escalate": {
               if (opts.onEscalate === undefined) {
                 // the policy reached a rung the harness cannot perform: say so rather than
                 // recording an intervention that quietly does nothing
+                opts.policy.onEscalationOutcome?.(active, "closed");
                 report("apply", new Error("escalate was reached with no onEscalate handler; nobody was asked"));
                 break;
               }
-              await withTimeout(
-                Promise.resolve(opts.onEscalate(active.question)),
-                opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
-                "onEscalate",
-              );
+              try {
+                const outcome = await withTimeout(
+                  Promise.resolve(opts.onEscalate(active.question)),
+                  opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
+                  "onEscalate",
+                );
+                // Existing non-interactive handlers resolve void after delivering/answering the
+                // question. Preserve that contract: only an explicit expiry suppresses retries.
+                opts.policy.onEscalationOutcome?.(active, outcome ?? "answered");
+              } catch (err) {
+                opts.policy.onEscalationOutcome?.(
+                  active,
+                  err instanceof ObserverTimeoutError ? "expired" : "closed",
+                );
+                throw err;
+              }
               break;
+            }
             case "abort":
               session.control.abort();
               break;
@@ -256,7 +271,7 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   /** Rubric for the `run_grader` rung; without it the rung stays unreachable. */
   rubric?: string;
   capabilities?: Capabilities;
-  onEscalate?: (question: string) => void | Promise<void>;
+  onEscalate?: (question: string) => EscalationOutcome | void | Promise<EscalationOutcome | void>;
   escalateTimeoutMs?: number;
   reviewer?: Reviewer;
   grader?: Grader;

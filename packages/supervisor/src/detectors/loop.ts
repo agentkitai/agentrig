@@ -49,7 +49,9 @@ export function errorFingerprint(display: string): string {
  * session moved, so the repeat counters reset. Without this, re-reading one spec file between
  * edits — textbook agent behaviour, three identical `read_file` inputs — read as a loop, and a
  * session writing a new file every turn was aborted at turn 6 with five files of real progress
- * behind it. "Going in circles" has to mean circles, not repetition.
+ * behind it. "Going in circles" has to mean circles, not repetition. The same applies to
+ * `bash_job` status: an intentional `waitMs` block or an incremental result carrying new output is
+ * activity; only repeated immediate polls whose result says `(no new output)` join the tally.
  *
  * Each trigger also re-arms after firing (its tally resets), so one loop produces one signal
  * rather than a signal per subsequent event; the policy's cooldown is a second line of defence,
@@ -70,6 +72,8 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
   let hashes: Seen[] = [];
   let errors: Seen[] = [];
   const toolNames = new Set<string>();
+  /** Status polls are tallied when their result arrives, because only then is activity visible. */
+  const pendingPolls = new Map<string, { inputHash: string; seq: number }>();
   /** path -> content hashes seen, in order, capped. */
   const history = new Map<string, string[]>();
   const revertCount = new Map<string, number>();
@@ -98,6 +102,22 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
     id: "loop",
     observe(event: HarnessEvent, state: SupervisorState) {
       if (event.type === "tool.call") {
+        const input = typeof event.input === "object" && event.input !== null && !Array.isArray(event.input)
+          ? event.input as Record<string, unknown>
+          : null;
+        const isStatusPoll = event.name === "bash_job" && input?.action === "status";
+        if (isStatusPoll) {
+          // `waitMs` is an intentional block, not a spin. For an immediate status poll, defer the
+          // decision until tool.result reveals whether the incremental drain carried new output.
+          if (typeof input.waitMs === "number" && input.waitMs > 0) {
+            clearProgress();
+          } else {
+            pendingPolls.set(event.id, { inputHash: event.inputHash, seq: event.seq });
+            while (pendingPolls.size > window) pendingPolls.delete(pendingPolls.keys().next().value!);
+          }
+          return null;
+        }
+
         // a tool it has never reached for before is exploration, not repetition
         if (!toolNames.has(event.name)) {
           toolNames.add(event.name);
@@ -116,7 +136,25 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
         return null;
       }
 
-      if (event.type === "tool.result" && !event.ok) {
+      if (event.type === "tool.result") {
+        const poll = pendingPolls.get(event.id);
+        if (poll !== undefined) {
+          pendingPolls.delete(event.id);
+          if (!/^\(no new output\)$/m.test(event.display)) {
+            clearProgress();
+            return null;
+          }
+          const hits = tally(hashes, poll.inputHash, poll.seq);
+          if (hits.length >= repeats) {
+            hashes = hashes.filter((h) => h.value !== poll.inputHash);
+            return signal("loop", Math.min(1, hits.length / (repeats * 2) + 0.5), [
+              `polled bash_job status ${hits.length} times with no new output`,
+              `inputHash=${poll.inputHash}`,
+            ], [hits[0]!.seq, event.seq]);
+          }
+          return null;
+        }
+        if (event.ok) return null;
         const print = errorFingerprint(event.display);
         if (print === "") return null;
         const hits = tally(errors, print, event.seq);

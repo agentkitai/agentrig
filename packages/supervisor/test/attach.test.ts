@@ -401,6 +401,41 @@ describe("review regressions", () => {
     expect(errors.some((e) => e.includes("did not answer within"))).toBe(true);
   });
 
+  it("an expired escalation is counted once and recurring signals degrade to guidance", async () => {
+    const session = run(new LoopingProvider(25), 30);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 0 },
+      onEscalate: () => "expired",
+    });
+    const events = await drain(session);
+    await sup.done;
+    expect((await session.done).reason).toBe("done");
+
+    const interventions = events
+      .filter((e): e is Extract<HarnessEvent, { type: "supervisor.intervention" }> =>
+        e.type === "supervisor.intervention")
+      .map((e) => e.intervention.type);
+    expect(interventions.filter((type) => type === "escalate")).toHaveLength(1);
+    expect(interventions.filter((type) => type === "inject_guidance").length).toBeGreaterThan(1);
+  });
+
+  it("a void non-TUI escalation handler defaults to answered and suppresses nothing", async () => {
+    const session = run(new LoopingProvider(25), 30);
+    const sup = supervise(session, {
+      loop: { repeats: 3 },
+      ladder: { cooldownTurns: 0 },
+      onEscalate: () => {},
+    });
+    const events = await drain(session);
+    await sup.done;
+    await session.done;
+
+    const escalations = events.filter((e) =>
+      e.type === "supervisor.intervention" && e.intervention.type === "escalate");
+    expect(escalations.length).toBeGreaterThan(1);
+  });
+
   it("a rejecting onEscalate is reported and the ladder keeps climbing", async () => {
     const errors: string[] = [];
     const session = run(new LoopingProvider(), 40);
