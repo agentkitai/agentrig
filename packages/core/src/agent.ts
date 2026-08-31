@@ -618,7 +618,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
-        const contextTokens = usage.input + usage.output || estimateTokens(system, messages);
+        const contextTokens = usage.input + usage.output || estimateTokens(
+          system,
+          evictToolResults(messages, config.toolResultEviction).messages,
+        );
         if (
           !compactionExhausted &&
           compaction.shouldCompact({ tokens: contextTokens, window: provider.capabilities.contextWindow })

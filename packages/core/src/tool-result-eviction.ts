@@ -6,7 +6,7 @@ export interface ToolResultEvictionOptions {
   enabled?: boolean;
   /** Number of most-recent assistant turns whose tool results stay verbatim (default 5). */
   keepLastTurns?: number;
-  /** Evict only tool-result payloads larger than this many UTF-8 bytes (default 8 KiB). */
+  /** Evict only tool-result payloads larger than this many serialized JSON UTF-8 bytes (default 8 KiB). */
   minBytes?: number;
 }
 
@@ -45,11 +45,11 @@ function targetOf(input: unknown): string {
   return serialized === undefined ? "its prior target" : shortTarget(serialized);
 }
 
-function stubFor(toolUse: ToolUse | undefined): string {
-  if (toolUse === undefined) return "tool result elided — re-run the tool if needed";
+function stubFor(toolUse: ToolUse): string {
   const target = targetOf(toolUse.input);
   if (toolUse.name === "read_file") return `read of ${target} elided — re-read if needed`;
-  return `${toolUse.name} of ${target} elided — re-run ${toolUse.name} if needed`;
+  // Unknown tools may have side effects, so never suggest replaying them automatically.
+  return `${toolUse.name} of ${target} elided`;
 }
 
 /**
@@ -70,27 +70,29 @@ export function evictToolResults(
   if (!Number.isInteger(minBytes) || minBytes < 0) throw new Error("minBytes must be a non-negative integer");
   if (!enabled) return { messages: messages as Message[], count: 0, bytesSaved: 0 };
 
+  const assistantTurns = messages.reduce(
+    (count, message) => count + (message.role === "assistant" ? 1 : 0),
+    0,
+  );
   let assistantTurn = 0;
   const toolUses = new Map<string, { block: ToolUse; turn: number }>();
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    assistantTurn += 1;
-    for (const block of message.content) {
-      if (block.type === "tool_use") toolUses.set(block.id, { block, turn: assistantTurn });
-    }
-  }
-
   let count = 0;
   let bytesSaved = 0;
   let outbound: Message[] | undefined;
   for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
     const message = messages[messageIndex]!;
+    if (message.role === "assistant") {
+      assistantTurn += 1;
+      for (const block of message.content) {
+        if (block.type === "tool_use") toolUses.set(block.id, { block, turn: assistantTurn });
+      }
+    }
     let content: ContentBlock[] | undefined;
     for (let blockIndex = 0; blockIndex < message.content.length; blockIndex += 1) {
       const block = message.content[blockIndex]!;
       if (block.type !== "tool_result") continue;
       const toolUse = toolUses.get(block.toolUseId);
-      if (toolUse === undefined || assistantTurn - toolUse.turn < keepLastTurns) continue;
+      if (toolUse === undefined || assistantTurns - toolUse.turn < keepLastTurns) continue;
       const before = payloadBytes(block.content);
       if (before <= minBytes) continue;
       const stub = stubFor(toolUse.block);

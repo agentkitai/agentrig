@@ -753,6 +753,31 @@ describe("tool-result eviction in the loop", () => {
     expect((await store.readSnapshot("reread"))!.messages).toEqual(snapshot!.messages);
   });
 
+  it("estimates the evicted request view before compacting when usage is unavailable", async () => {
+    const provider = new FakeProvider([
+      readTurn("a", "large-a.ts").map((event) => event.type === "usage" ? usage(0, 0) : event),
+      [usage(0, 0), stop("end_turn")],
+    ]);
+    let compactions = 0;
+    const compaction: AgentConfig["compaction"] = {
+      shouldCompact: ({ tokens }) => tokens > 1_000,
+      compact: async (messages) => {
+        compactions += 1;
+        return messages;
+      },
+    };
+    const session = createAgent(makeConfig(provider, {
+      tools: [fixtureReadTool()],
+      compaction,
+      toolResultEviction: { keepLastTurns: 0, minBytes: 100 },
+    })).run("avoid redundant compaction");
+    await collect(session);
+    await session.done;
+
+    expect(compactions).toBe(0);
+    expect(resultContent(provider.requests[1]!.messages, "a")).toContain("elided — re-read if needed");
+  });
+
   it("composes with compaction without feeding stubs back into stored history", async () => {
     const provider = new FakeProvider([
       readTurn("a", "large-a.ts"),
