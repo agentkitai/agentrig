@@ -42,6 +42,73 @@
  */
 const KEYSTROKE = 4;
 
+const ESC = "\u001b";
+const START_MARKERS = [`${ESC}[200~`, "[200~"] as const;
+const END_MARKERS = [`${ESC}[201~`, "[201~"] as const;
+const MARKERS = [...START_MARKERS, ...END_MARKERS] as const;
+
+export interface DecodedInput {
+  /** Text with protocol markers removed, tagged with whether Enter is content at that point. */
+  segments: Array<{ text: string; pasted: boolean }>;
+  /** True when this chunk participated in bracketed-paste parsing rather than ordinary input. */
+  protocol: boolean;
+}
+
+/**
+ * Stateful bracketed-paste decoder. Ink removes a leading ESC before `useInput` dispatches a
+ * chunk, so both the wire spelling and that lossless-for-this-protocol spelling are accepted.
+ * Prefixes are retained across calls; in particular, a bare ESC is not released until the next
+ * chunk proves that it is not the start of a marker.
+ */
+export class BracketedPasteDecoder {
+  private pending = "";
+  private pasted = false;
+
+  get isPasting(): boolean {
+    return this.pasted;
+  }
+
+  feed(chunk: string): DecodedInput {
+    const startedWithProtocol = this.pending !== "" || this.pasted;
+    const input = this.pending + chunk;
+    this.pending = "";
+    const segments: DecodedInput["segments"] = [];
+    let markerSeen = false;
+    let offset = 0;
+
+    const append = (text: string): void => {
+      if (text === "") return;
+      const last = segments.at(-1);
+      if (last?.pasted === this.pasted) last.text += text;
+      else segments.push({ text, pasted: this.pasted });
+    };
+
+    while (offset < input.length) {
+      const rest = input.slice(offset);
+      const marker = MARKERS.find((candidate) => rest.startsWith(candidate));
+      if (marker !== undefined) {
+        markerSeen = true;
+        this.pasted = START_MARKERS.some((candidate) => candidate === marker);
+        offset += marker.length;
+        continue;
+      }
+
+      if (MARKERS.some((candidate) => candidate.startsWith(rest))) {
+        this.pending = rest;
+        break;
+      }
+
+      append(input[offset] ?? "");
+      offset += 1;
+    }
+
+    return {
+      segments,
+      protocol: startedWithProtocol || markerSeen || this.pending !== "" || this.pasted,
+    };
+  }
+}
+
 export interface InputBufferOptions {
   /** Quiet stdin for this long before the buffer is drawn. One frame is plenty. */
   quietMs?: number;
@@ -86,6 +153,20 @@ export class InputBuffer {
     if (thenRun !== undefined) this.queued.push(thenRun);
     // a keystroke leaves the existing deadline alone; only a burst-sized change pushes it out
     if (this.handle !== null && delta <= KEYSTROKE && thenRun === undefined) return;
+    this.cancel();
+    this.handle = this.setTimer(() => {
+      this.handle = null;
+      this.draw();
+    }, this.quietMs);
+  }
+
+  /**
+   * Records stdin activity that changes no text (for example, a bracket marker). It deliberately
+   * pushes the quiet point out: drawing after the payload but before its 201~ has arrived is still
+   * a terminal write in the middle of the paste.
+   */
+  touch(): void {
+    if (this.disposed) return;
     this.cancel();
     this.handle = this.setTimer(() => {
       this.handle = null;

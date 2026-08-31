@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R1b complete; R1c is next.** R1.5a was deliberately taken out of
+Current roadmap row: **R1c complete; R1d is next.** R1.5a was deliberately taken out of
 nominal order before R1b; the original milestones M0 through M7 remain complete, including M2.5's
 live provider validation.
 
@@ -23,6 +23,24 @@ live provider validation.
 |---|---|---|
 | R1a | `AGENTS.md` discovery and system-prompt injection, with `CLAUDE.md` alias and `context.loaded` event | done |
 | R1b | Zod-validated user/project config, named profiles, and explicit-source precedence shared by `run` and the TUI | done |
+| R1c | TTY-scoped bracketed-paste mode with streaming marker decoding in the quiet-point input path | done |
+
+- R1c holds any suffix that is still a possible `ESC[200~` or `ESC[201~` marker (including a bare
+  `ESC`) across stdin chunks. When later bytes complete it, the marker is stripped; when they
+  disprove it, the held bytes are released as ordinary input, with the existing bare-Escape behavior
+  preserved by the view. Marker-only chunks also move the input buffer's quiet deadline, so neither
+  a draw nor a queued submit can write between a payload and a split closing marker.
+- An unmatched `ESC[201~` is treated as protocol framing and stripped while remaining outside paste
+  mode. This prevents a damaged or duplicated terminal wrapper from leaking marker bytes into the
+  prompt. A `201~` sequence inside pasted payload necessarily closes the paste, as defined by the
+  terminal protocol.
+- Rejected idea for R1c: replace Ink's input handling with a new raw-stdin key parser. That would make
+  bracketed-paste support responsible for reproducing every existing key and burst heuristic, risking
+  regressions on terminals that ignore `?2004h`; a stateful decoder at the existing input-buffer path
+  preserves the fallback behavior instead.
+- R1c dogfood token measurement: this API-runner session exposes no provider usage telemetry, so its
+  exact token count is unavailable rather than fabricated; record this as the next unavailable point
+  beside the **1,718,936 / 669,418 / 3.3M / 4.0M** existing baselines.
 
 - R1b precedence is **CLI > environment > project config > user config > built-in defaults**. The
   only existing non-credential `AGENTRIG_*` setting is `AGENTRIG_MODEL`; credential environment
