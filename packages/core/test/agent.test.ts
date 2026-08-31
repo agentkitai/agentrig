@@ -89,6 +89,30 @@ async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promis
 }
 
 describe("agent loop", () => {
+  it("records a provider retry as a model.retry session event", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "retry", attempt: 1, maxAttempts: 4, delayMs: 1000, reason: "overloaded" },
+        { type: "text_delta", text: "ok" },
+        usage(5, 2),
+        stop("end_turn"),
+      ],
+    ]);
+    const session = createAgent(makeConfig(provider)).run("go", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.find((e) => e.type === "model.retry")).toMatchObject({
+      attempt: 1,
+      maxAttempts: 4,
+      delayMs: 1000,
+      reason: "overloaded",
+    });
+    // informational only: the reply still streams and the turn still completes
+    expect(events.find((e) => e.type === "model.delta")).toMatchObject({ text: "ok" });
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "done" });
+  });
+
   it("runs a tool turn then finishes, with every event in the session store", async () => {
     const provider = new FakeProvider([
       [

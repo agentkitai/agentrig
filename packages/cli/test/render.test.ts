@@ -271,3 +271,27 @@ describe("AssistantText — the reply neither surface used to show", () => {
     expect(a.pending).toBe("");
   });
 });
+
+describe("model.retry rendering", () => {
+  const retry = {
+    seq: 1,
+    sessionId: "s",
+    ts: 0,
+    type: "model.retry",
+    attempt: 2,
+    maxAttempts: 4,
+    delayMs: 2000,
+    reason: "overloaded",
+  } as const;
+
+  it("shows attempt, delay and reason in the event trace", () => {
+    const line = renderEvent(HarnessEvent.parse(retry));
+    expect(line).toContain("2/4");
+    expect(line).toContain("2000ms");
+    expect(line).toContain("overloaded");
+  });
+
+  it("stays out of the chat view — the provider notice already says it in words", () => {
+    expect(renderChatEvent(HarnessEvent.parse(retry))).toBeNull();
+  });
+});

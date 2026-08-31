@@ -28,6 +28,20 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a model.retry event, so slow turns are explicable from the log alone", () => {
+    const event = HarnessEvent.parse({
+      seq: 7,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "model.retry",
+      attempt: 1,
+      maxAttempts: 4,
+      delayMs: 1000,
+      reason: "openai-chatgpt stream error: Our servers are currently overloaded.",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a context.evicted event with count and bytes saved", () => {
     const event = HarnessEvent.parse({
       seq: 40,

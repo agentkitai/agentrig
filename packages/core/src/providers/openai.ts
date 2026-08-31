@@ -258,6 +258,6 @@ export class OpenAICompatibleProvider implements ModelProvider {
       if (!res.body) throw new Error("openai-compatible: empty response body");
       yield* parseOpenAISse(res.body);
     }.bind(this);
-    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry);
+    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry, (info) => ({ type: "retry", ...info }));
   }
 }

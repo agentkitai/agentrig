@@ -382,6 +382,6 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       }
     }.bind(this);
 
-    yield* streamWithRetries(openOnce, signal, this.retry, this.onRetry);
+    yield* streamWithRetries(openOnce, signal, this.retry, this.onRetry, (info) => ({ type: "retry", ...info }));
   }
 }

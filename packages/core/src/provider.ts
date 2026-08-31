@@ -24,7 +24,14 @@ export type ModelEvent =
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "usage"; usage: Usage }
   /** `raw` carries the provider's verbatim stop reason when it doesn't map cleanly. */
-  | { type: "stop"; reason: StopReason; raw?: string };
+  | { type: "stop"; reason: StopReason; raw?: string }
+  /**
+   * A transient failure was retried inside the provider (see `streamWithRetries`). Informational:
+   * it carries no content, and the loop records it as a `model.retry` session event so the log
+   * explains why a turn took 30 extra seconds — the two dead R1.5a sessions were diagnosed from
+   * the outside precisely because nothing in the log said the provider was struggling.
+   */
+  | { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string };
 
 export interface ModelProvider {
   id: string;

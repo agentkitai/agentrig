@@ -532,6 +532,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
                 stop = ev.reason;
                 stopRaw = ev.raw;
                 break;
+              case "retry":
+                // informational: the provider re-requested a transient failure; logged so a slow
+                // turn is explicable from the session log alone
+                await emit({
+                  type: "model.retry",
+                  attempt: ev.attempt,
+                  maxAttempts: ev.maxAttempts,
+                  delayMs: ev.delayMs,
+                  reason: ev.reason,
+                });
+                break;
             }
           }
         } catch (err) {

@@ -347,6 +347,18 @@ describe("streamWithRetries", () => {
     expect(f.calls()).toBe(3);
   });
 
+  it("yields a marker for each retry without spending the replay guard on it", async () => {
+    // Two consecutive transient failures: each must produce a marker AND still be allowed to
+    // retry. If the marker flipped `yielded`, the first retry's own marker would forbid the
+    // second retry — the guard must count content, not bookkeeping.
+    const f = failing(2, "stream error: overloaded");
+    const out = await collectAll(
+      streamWithRetries(f.open, signal(), { sleep: async () => {} }, undefined, (info) => `retry#${info.attempt}`),
+    );
+    expect(out).toEqual(["retry#1", "retry#2", "a", "b"]);
+    expect(f.calls()).toBe(3);
+  });
+
   it("refuses a failure the HTTP layer already retried to exhaustion", async () => {
     // without the typed refusal, both budgets were spent on one failure: 16 fetches, ~35s
     const f = {
