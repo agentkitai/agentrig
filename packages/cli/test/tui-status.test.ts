@@ -132,9 +132,14 @@ class FakeProvider implements ModelProvider {
   }
 }
 
-const usage = (i: number, o: number, cacheRead?: number): ModelEvent => ({
+const usage = (i: number, o: number, cacheRead?: number, cacheWrite?: number): ModelEvent => ({
   type: "usage",
-  usage: { input: i, output: o, ...(cacheRead === undefined ? {} : { cacheRead }) },
+  usage: {
+    input: i,
+    output: o,
+    ...(cacheRead === undefined ? {} : { cacheRead }),
+    ...(cacheWrite === undefined ? {} : { cacheWrite }),
+  },
 });
 const stop = (): ModelEvent => ({ type: "stop", reason: "end_turn" });
 
@@ -190,19 +195,43 @@ describe("TuiController statusline state", () => {
     expect(c.snapshot().context).toBe(1_734);
   });
 
-  it("re-reads the branch at turn end, so a checkout mid-task shows", async () => {
-    const branches = ["main", "feat/x"];
-    let reads = 0;
+  it("counts cache WRITES too — on a session's first call the cached prefix is a write", async () => {
+    // Anthropic reports the just-cached system prompt as cacheWrite, not input; without it the
+    // first call of a session showed a near-zero gauge
+    const c = make([[usage(100, 20, 0, 3_000), stop()]]);
+    await c.submit("hi");
+    expect(c.snapshot().context).toBe(3_120);
+  });
+
+  it("treats all-zero usage as 'the provider reported nothing', not as ctx 0", async () => {
+    // both OpenAI parsers fall back to {input: 0, output: 0} when the server sends no usage
+    // frame; the gauge must keep its last honest reading rather than assert an empty context
+    const c = make([
+      [usage(2_000, 10), stop()],
+      [usage(0, 0), stop()],
+    ]);
+    await c.submit("hi");
+    expect(c.snapshot().context).toBe(2_010);
+    await c.submit("again");
+    expect(c.snapshot().context).toBe(2_010);
+  });
+
+  it("re-reads the branch at TURN end specifically, so a checkout mid-task shows", async () => {
+    // The reader is consumed at construction AND at session.start before any turn ends, so the
+    // switched value must only appear on the third read — an earlier version of this test flipped
+    // on the second and passed even with the turn.end refresh deleted.
+    const reads: string[] = [];
     const c = make([[usage(1, 1), stop()]], {
       branch: () => {
-        reads += 1;
-        return branches.shift() ?? "feat/x";
+        const value = reads.length < 2 ? "main" : "feat/x";
+        reads.push(value);
+        return value;
       },
     });
     // read once at construction, so the line is right before anything runs
     expect(c.snapshot().branch).toBe("main");
     await c.submit("hi");
-    expect(reads).toBeGreaterThan(1);
+    expect(reads.length).toBeGreaterThanOrEqual(3);
     expect(c.snapshot().branch).toBe("feat/x");
   });
 

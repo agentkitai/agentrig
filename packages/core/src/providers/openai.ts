@@ -154,9 +154,13 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
     }
     const u = data.usage as JsonObject | undefined;
     if (u && typeof u.prompt_tokens === "number" && typeof u.completion_tokens === "number") {
-      usage = { input: u.prompt_tokens, output: u.completion_tokens };
+      // The Usage contract (events.ts): `input` EXCLUDES cache reads. OpenAI's `prompt_tokens`
+      // includes `cached_tokens`, so the cached part is subtracted out — otherwise anything that
+      // sums input + cacheRead (the TUI context gauge) counts the cached prefix twice.
       const cached = (u.prompt_tokens_details as JsonObject | undefined)?.cached_tokens;
-      if (typeof cached === "number" && cached > 0) usage.cacheRead = cached;
+      const cacheRead = typeof cached === "number" && cached > 0 ? Math.min(cached, u.prompt_tokens) : 0;
+      usage = { input: u.prompt_tokens - cacheRead, output: u.completion_tokens };
+      if (cacheRead > 0) usage.cacheRead = cacheRead;
     }
     if (data.error) {
       const err = data.error as JsonObject;

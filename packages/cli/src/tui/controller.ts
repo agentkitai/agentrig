@@ -520,10 +520,15 @@ export class TuiController {
       this.refreshBranch();
     }
     if (e.type === "model.response") {
-      // input + cache reads is what the model was sent; its output is resent on the next call,
-      // so the sum is the size of the conversation as it stands
+      // The Usage fields are disjoint (see core's Usage schema), so what the model saw is their
+      // sum — cache writes included: on the first call of a session the cached prefix is a write,
+      // not a read, and dropping it showed a near-zero gauge until the second call. The output is
+      // resent on the next call, so the total is the size of the conversation as it stands.
       const u = e.usage;
-      this.set({ context: u.input + (u.cacheRead ?? 0) + u.output });
+      const total = u.input + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0) + u.output;
+      // All-zero usage is a provider that reported nothing (core prints a warning for it), not a
+      // zero-token conversation — keep the last honest reading rather than asserting "ctx 0".
+      if (total > 0) this.set({ context: total });
     }
     if (e.type === "turn.end") {
       this.set({ turns: e.n });

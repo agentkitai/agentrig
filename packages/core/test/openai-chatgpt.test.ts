@@ -71,7 +71,9 @@ describe("parseResponsesSse", () => {
       { type: "text_delta", text: "wor" },
       { type: "text_delta", text: "king" },
       { type: "tool_use", id: "fc_1", name: "bash", input: { command: "ls" } },
-      { type: "usage", usage: { input: 12, output: 5, cacheRead: 3 } },
+      // input_tokens is 12 INCLUDING 3 cached; the Usage contract keeps the fields disjoint,
+      // so input reports only the 9 uncached tokens — input + cacheRead must not double-count
+      { type: "usage", usage: { input: 9, output: 5, cacheRead: 3 } },
       { type: "stop", reason: "tool_use" },
     ]);
   });
