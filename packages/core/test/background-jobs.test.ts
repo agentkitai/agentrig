@@ -125,10 +125,13 @@ describe("bash background jobs", () => {
     expect((done.output as BashJobOutput).running).toBe(false);
   }, 10_000);
 
-  it("refuses background + timeoutMs instead of silently ignoring the timeout", async () => {
+  it("refuses background + timeoutMs with a PRESCRIPTIVE message naming the fix", async () => {
+    // the vague version ("a background job has no timeout") sent a real agent into a three-retry
+    // loop: it must say which parameter to drop and what to resend
     const r = await bash().execute({ command: "sleep 1", background: true, timeoutMs: 5_000 }, ctx);
     expect(r.isError).toBe(true);
-    expect(r.display).toContain("no timeout");
+    expect(r.display).toContain("remove timeoutMs");
+    expect(r.display).toContain("background: true");
   });
 
   it("refuses background when no registry is wired, honestly", async () => {
