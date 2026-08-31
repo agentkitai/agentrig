@@ -185,9 +185,13 @@ export async function* parseResponsesSse(
 
   const readUsage = (u: JsonObject | undefined): Usage | null => {
     if (!u || typeof u.input_tokens !== "number" || typeof u.output_tokens !== "number") return null;
-    const out: Usage = { input: u.input_tokens, output: u.output_tokens };
+    // The Usage contract (events.ts): `input` EXCLUDES cache reads. The Responses API's
+    // `input_tokens` includes `cached_tokens`, so the cached part is subtracted out — otherwise
+    // anything that sums input + cacheRead counts the cached prefix twice.
     const cached = (u.input_tokens_details as JsonObject | undefined)?.cached_tokens;
-    if (typeof cached === "number" && cached > 0) out.cacheRead = cached;
+    const cacheRead = typeof cached === "number" && cached > 0 ? Math.min(cached, u.input_tokens) : 0;
+    const out: Usage = { input: u.input_tokens - cacheRead, output: u.output_tokens };
+    if (cacheRead > 0) out.cacheRead = cacheRead;
     return out;
   };
 

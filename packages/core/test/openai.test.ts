@@ -95,7 +95,9 @@ describe("parseOpenAISse", () => {
     expect(events).toEqual([
       { type: "text_delta", text: "check" },
       { type: "tool_use", id: "call_9", name: "bash", input: { command: "ls" } },
-      { type: "usage", usage: { input: 12, output: 6, cacheRead: 4 } },
+      // prompt_tokens is 12 INCLUDING 4 cached; the Usage contract keeps the fields disjoint,
+      // so input reports only the 8 uncached tokens — input + cacheRead must not double-count
+      { type: "usage", usage: { input: 8, output: 6, cacheRead: 4 } },
       { type: "stop", reason: "tool_use" },
     ]);
   });

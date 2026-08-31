@@ -16,6 +16,13 @@ export type PermissionClass = z.infer<typeof PermissionClass>;
 export const Decision = z.enum(["allow", "deny", "ask"]);
 export type Decision = z.infer<typeof Decision>;
 
+/**
+ * The four counts are DISJOINT: `input` is the uncached input tokens only, excluding both
+ * `cacheRead` and `cacheWrite`. Anthropic reports it that way natively; both OpenAI adapters
+ * subtract `cached_tokens` out of the inclusive count the API returns. This is a contract —
+ * a consumer that wants "everything the model saw" sums the fields, and a provider that let a
+ * cached prefix stay inside `input` would make that sum double-count.
+ */
 export const Usage = z.object({
   input: z.number().int().nonnegative(),
   output: z.number().int().nonnegative(),
