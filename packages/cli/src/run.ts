@@ -155,6 +155,7 @@ export function permissionWarning(
  */
 export interface SupervisorFlags {
   supervise?: boolean;
+  supervisorAbort?: boolean;
   supervisorNoAbort?: boolean;
   supervisorSoft?: string;
   supervisorReview?: boolean;
@@ -200,7 +201,7 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ...(w.budget.maxUsd === undefined ? {} : { maxUsd: w.budget.maxUsd }),
       ...(w.budget.maxMinutes === undefined ? {} : { maxMinutes: w.budget.maxMinutes }),
     },
-    capabilities: { abort: o.supervisorNoAbort !== true },
+    capabilities: { abort: o.supervisorAbort === true },
     drift: {
       scope: o.driftScope ?? [],
       ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),

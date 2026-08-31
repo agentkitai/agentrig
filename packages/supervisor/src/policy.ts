@@ -66,6 +66,7 @@ export class LadderPolicy implements Policy {
   private readonly guidance: Record<SignalType, string>;
   private readonly level = new Map<SignalType, number>();
   private readonly lastTurn = new Map<SignalType, number>();
+  private readonly progressAtIntervention = new Map<SignalType, number>();
   private issued = 0;
 
   private readonly rubric: string | undefined;
@@ -78,7 +79,7 @@ export class LadderPolicy implements Policy {
       if (r === "run_reviewer") return caps.reviewer === true;
       if (r === "run_grader") return caps.grader === true && opts.rubric !== undefined;
       if (r === "escalate") return caps.escalate === true;
-      if (r === "abort") return caps.abort !== false;
+      if (r === "abort") return caps.abort === true;
       return true;
     });
     this.cooldownTurns = opts.cooldownTurns ?? 2;
@@ -96,6 +97,13 @@ export class LadderPolicy implements Policy {
       const last = this.lastTurn.get(s.type);
       if (last !== undefined && state.turns - last < this.cooldownTurns) continue;
 
+      const priorProgress = this.progressAtIntervention.get(s.type);
+      if (priorProgress !== undefined && state.progressEvents > priorProgress) {
+        // The previous intervention worked. A later recurrence is a new incident, not evidence that
+        // guidance failed, so it starts at the first rung rather than inheriting escalation debt.
+        this.level.set(s.type, 0);
+      }
+
       const rung = this.rungs[Math.min(this.level.get(s.type) ?? 0, this.rungs.length - 1)];
       if (rung === undefined) continue;
 
@@ -105,6 +113,7 @@ export class LadderPolicy implements Policy {
       out.push(intervention);
       this.issued += 1;
       this.lastTurn.set(s.type, state.turns);
+      this.progressAtIntervention.set(s.type, state.progressEvents);
       this.level.set(s.type, (this.level.get(s.type) ?? 0) + 1);
     }
     return out;

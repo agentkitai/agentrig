@@ -118,7 +118,8 @@ export function buildProgram(): Command {
       .option("--price-out <usd>", "output price in USD per million tokens")
       .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
       .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
-      .option("--supervisor-no-abort", "let the supervisor steer and escalate but never abort the session")
+      .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
+      .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8")
       .option(
         "--supervisor-review",

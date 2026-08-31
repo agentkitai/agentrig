@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
+import { supervisorOptions, type SupervisorFlags } from "../src/run.ts";
 
 /**
  * The argv contract. This file exists because a root-level option regression shipped without a
@@ -77,6 +78,37 @@ describe("argv parsing", () => {
     const fresh = stub(buildProgram());
     expect((await fresh.run(["run", "x"]))?.opts.yolo).toBeUndefined();
     expect((await fresh.run(["run", "x"]))?.opts.dangerouslySkipPermissions).toBeUndefined();
+  });
+
+  it("carries abort opt-in and compatibility flags into supervisor capabilities on run and TUI", async () => {
+    const capabilities = (opts: Record<string, unknown>) =>
+      supervisorOptions({
+        opts: opts as SupervisorFlags,
+        task: "t",
+        budget: {},
+        memoryIndex: "",
+        provider: { id: "fake", model: "m" } as never,
+        soft: 0.8,
+      }).capabilities;
+
+    for (const argv of [["run", "x"], []]) {
+      const plain = await stub(buildProgram()).run(argv);
+      expect(capabilities(plain!.opts)).toEqual({ abort: false });
+
+      const enabled = await stub(buildProgram()).run([...argv, "--supervisor-abort"]);
+      expect(capabilities(enabled!.opts)).toEqual({ abort: true });
+
+      const compatible = await stub(buildProgram()).run([...argv, "--supervisor-no-abort"]);
+      expect(capabilities(compatible!.opts)).toEqual({ abort: false });
+    }
+  });
+
+  it("documents --supervisor-no-abort as a compatibility no-op on run and TUI", () => {
+    const program = buildProgram();
+    for (const name of ["run", "tui"]) {
+      const command = program.commands.find((c) => c.name() === name)!;
+      expect(command.options.find((o) => o.long === "--supervisor-no-abort")!.description).toMatch(/compatibility no-op/i);
+    }
   });
 
   it("dispatches to the command that was named", async () => {
