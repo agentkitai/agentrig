@@ -96,21 +96,14 @@ function issueField(issue: z.ZodIssue | undefined): string {
   return issue.path.length === 0 ? "<root>" : issue.path.join(".");
 }
 
-/** Read and validate one config boundary. Missing files are the only errors ignored. */
-export async function readConfigFile(path: string): Promise<ConfigFile | undefined> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw new Error(`could not read config ${path}: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
+/** Parse one config without echoing its contents in an error (credentials may be present by mistake). */
+export function parseConfigText(path: string, text: string): ConfigFile {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`invalid config ${path} at <json>: ${err instanceof Error ? err.message : String(err)}`);
+  } catch {
+    // Recent JSON.parse implementations include source context. Never copy that into diagnostics.
+    throw new Error(`invalid config ${path} at <json>: malformed JSON`);
   }
 
   const credential = credentialPath(raw);
@@ -126,6 +119,18 @@ export async function readConfigFile(path: string): Promise<ConfigFile | undefin
     throw new Error(`invalid config ${path} at ${issueField(issue)}: ${issue?.message ?? "invalid value"}`);
   }
   return parsed.data;
+}
+
+/** Read and validate one config boundary. Missing files are the only errors ignored. */
+export async function readConfigFile(path: string): Promise<ConfigFile | undefined> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(`could not read config ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return parseConfigText(path, text);
 }
 
 export interface ResolveConfigInput<T extends Record<string, unknown>> {

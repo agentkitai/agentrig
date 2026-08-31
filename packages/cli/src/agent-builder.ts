@@ -103,12 +103,13 @@ const McpConfigFile = z.object({
   mcpServers: z.record(McpServerEntry).optional(),
 });
 
-export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
+export function parseMcpConfigText(path: string, text: string): McpServerConfig[] {
   let raw: unknown;
   try {
-    raw = JSON.parse(await readFile(path, "utf8"));
-  } catch (err) {
-    throw new Error(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    raw = JSON.parse(text);
+  } catch {
+    // MCP env blocks can contain credentials. JSON parser context must never reach diagnostics.
+    throw new Error(`${path} is not a valid MCP config: malformed JSON`);
   }
   const parsed = McpConfigFile.safeParse(raw);
   if (!parsed.success) {
@@ -128,6 +129,23 @@ export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
     ...(cfg.cwd === undefined ? {} : { cwd: cfg.cwd }),
     ...(cfg.timeoutMs === undefined ? {} : { timeoutMs: cfg.timeoutMs }),
   }));
+}
+
+export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (err) {
+    throw new Error(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    return parseMcpConfigText(path, text);
+  } catch (error) {
+    if (error instanceof Error && error.message.endsWith("malformed JSON")) {
+      throw new Error(`could not read ${path}: malformed JSON`);
+    }
+    throw error;
+  }
 }
 
 export interface BuiltAgent {

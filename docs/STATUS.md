@@ -1,8 +1,8 @@
 # Status
 
-Current roadmap row: **R1d complete; R1e is next.** R1.5a was deliberately taken out of
-nominal order before R1b; the original milestones M0 through M7 remain complete, including M2.5's
-live provider validation.
+Current roadmap row: **R1 is complete (R1a–R1e).** R1.5a was deliberately taken out of nominal
+order before R1b; the original milestones M0 through M7 remain complete, including M2.5's live
+provider validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -25,6 +25,27 @@ live provider validation.
 | R1b | Zod-validated user/project config, named profiles, and explicit-source precedence shared by `run` and the TUI | done |
 | R1c | TTY-scoped bracketed-paste mode with streaming marker decoding in the quiet-point input path | done |
 | R1d | Realpath-keyed, fail-closed consent gate for project instructions and config, shared by run and TUI | done |
+| R1e | Read-only `agentrig doctor` with actionable local diagnostics and scriptable exit status | done |
+
+- R1e ships the complete local checklist: effective provider credentials (environment presence or
+  readable ChatGPT token source and expiry/time remaining), user/project config validity, active
+  profile and provider/model precedence sources, trusted/untrusted/undecided project state, writable
+  memory plus readable wiki index, MCP config plus command-on-PATH checks, informational Git branch/
+  detached state, and stdin/stdout TTY capability. Every failure names a corrective command, setting,
+  path, or permission repair; any failure exits non-zero, while informational skips do not.
+- Doctor never prompts, writes, refreshes a token, or opens an untrusted project's config. Its
+  filesystem, environment, clock, command lookup, project-boundary, and Git probes are injectable, so
+  tests use no host credentials, HOME, PATH, or repository state. MCP protocol handshakes were
+  deliberately left out: R1e diagnoses configuration and executable availability, and the roadmap
+  explicitly does not require speaking the protocol.
+- Rejected idea for R1e: instantiate `OpenAIChatGPTAuth` and ask it for current credentials. Its normal
+  read path may seed the token file from the environment and its use path may proactively refresh and
+  persist rotation, violating doctor's read-only guarantee. Doctor instead parses a snapshot through
+  read-only probes and reports only source/presence/expiry, never token bytes or parser source context.
+- R1e dogfood token measurement: the interrupted implementation attempt used **271,083 input tokens
+  over 30 turns**. This resumed API-runner session exposes no provider usage telemetry, so its
+  additional token count is unavailable rather than fabricated. Add 271,083 plus this unavailable
+  continuation beside the **1,718,936 / 669,418 / 3.3M / 4.0M** existing baselines.
 
 - R1d stores interactive allow and decline decisions in `~/.agentrig/trust.json`, keyed by the
   project's canonical `realpath`; aliases and descendant working directories therefore share the
