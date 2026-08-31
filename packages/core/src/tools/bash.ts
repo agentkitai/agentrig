@@ -3,6 +3,7 @@ import { resolveShell, syntaxHint } from "./shell.js";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { bound } from "./shared.js";
+import type { JobRegistry } from "./background-jobs.js";
 
 const BashInput = z.object({
   command: z.string().min(1).describe("The shell command to run"),
@@ -12,7 +13,15 @@ const BashInput = z.object({
     .positive()
     .max(600_000)
     .optional()
-    .describe("Kill the command after this many milliseconds (default 120000)"),
+    .describe("Kill the command after this many milliseconds (default 120000; foreground only)"),
+  background: z
+    .boolean()
+    .optional()
+    .describe(
+      "Start the command as a background job and return its id immediately instead of waiting. " +
+        "No timeout applies; poll or stop it with the bash_job tool. Use for anything long-running " +
+        "(external reviewers, builds, watchers) or to run several commands concurrently.",
+    ),
 });
 type BashInput = z.infer<typeof BashInput>;
 
@@ -33,6 +42,8 @@ export interface BashToolOptions {
   /** Defaults to `existsSync`, for probing the Windows candidates. */
   shellExists?: (path: string) => boolean;
   env?: NodeJS.ProcessEnv;
+  /** Where `background: true` jobs live. Without one, background requests are refused honestly. */
+  jobs?: JobRegistry;
 }
 
 export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput> {
@@ -65,6 +76,32 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
           isError: true,
         };
       }
+      if (input.background === true) {
+        const empty: BashOutput = { exitCode: null, stdout: "", stderr: "", timedOut: false };
+        if (opts.jobs === undefined) {
+          return { output: empty, display: "background jobs are not available here", isError: true };
+        }
+        if (input.timeoutMs !== undefined) {
+          // refusing beats silently ignoring: "I set a timeout" must not mean nothing
+          return {
+            output: empty,
+            display: "a background job has no timeout — poll it with bash_job, or kill it there",
+            isError: true,
+          };
+        }
+        const { id, pid } = opts.jobs.start({
+          command: input.command,
+          shellPath: shell.path,
+          cwd: ctx.cwd,
+          isWindows,
+          killTree,
+          signal: ctx.signal,
+        });
+        return {
+          output: empty,
+          display: `started background job ${id}${pid === undefined ? "" : ` (pid ${pid})`} — check it with bash_job {"id":"${id}","action":"status"}`,
+        };
+      }
       // detached puts the shell in its own process group, so kill reaches the
       // command's children too — a plain child.kill orphans them and they keep
       // the stdio pipes (and the session) open past any timeout.
@@ -88,7 +125,8 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       const killGroup = () => {
         const pid = child.pid;
         if (pid === undefined) {
-          child.kill("SIGKILL");
+          // no process exists after a failed spawn, and child.kill() on Node's uninitialized
+          // handle can issue kill(0) — SIGKILL to our own process group (see background-jobs.ts)
           return;
         }
         if (isWindows) {
