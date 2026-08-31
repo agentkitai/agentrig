@@ -11,6 +11,7 @@ import {
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
+import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { currentGitBranch } from "../git-branch.js";
 import { parseSoft, permissionWarning, supervisorOptions, type SupervisorFlags } from "../run.js";
@@ -127,15 +128,23 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the
   // agent keeps running — still executing bash, still writing files, now invisibly.
-  const onSigint = (): void => controller.abort();
+  let stopForSigint = (): void => controller.abort();
+  const onSigint = (): void => stopForSigint();
   process.on("SIGINT", onSigint);
 
   controller.print("agentrig — type a task, or /help for commands", "system");
   try {
-    // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
-    // to useInput, so the abort handler in the view could never run.
-    const { waitUntilExit } = render(<App controller={controller} />, { exitOnCtrlC: false });
-    await waitUntilExit();
+    await withBracketedPaste(process.stdout, async () => {
+      // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
+      // to useInput, so the abort handler in the view could never run.
+      const { unmount, waitUntilExit } = render(<App controller={controller} />, {
+        exitOnCtrlC: false,
+      });
+      // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this
+      // scope's finally disables bracketed paste; shutdown below then aborts any active session.
+      stopForSigint = unmount;
+      await waitUntilExit();
+    });
   } finally {
     process.removeListener("SIGINT", onSigint);
     // a session still running when the UI closes would keep billing with nothing watching it

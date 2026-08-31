@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
+import { Box, Static, Text, useApp, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
-import { InputBuffer } from "./input-buffer.js";
+import {
+  BracketedPasteDecoder,
+  InputBuffer,
+  ordinaryInputActions,
+} from "./input-buffer.js";
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
+import { useRawInput } from "./raw-input.js";
 
 /**
  * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
@@ -42,6 +47,9 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   const buffer = useRef<InputBuffer | null>(null);
   buffer.current ??= new InputBuffer(setInput);
   const buf = buffer.current;
+  const pasteDecoder = useRef<BracketedPasteDecoder | null>(null);
+  pasteDecoder.current ??= new BracketedPasteDecoder();
+  const paste = pasteDecoder.current;
   useEffect(() => () => buf.dispose(), [buf]);
 
   // Everything the controller has to say reaches the screen through here and nowhere else: the
@@ -50,7 +58,66 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   // test that counts bytes can see. `test/tui-visible.test.ts` asserts the content instead.
   useEffect(() => controller.subscribe(setState), [controller]);
 
-  useInput((char, key) => {
+  useRawInput((raw, char, key) => {
+    const decoded = paste.feed(raw);
+    if (decoded.protocol) {
+      // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
+      // so a later 201~ restores ordinary input correctly.
+      for (const segment of decoded.segments) {
+        if (segment.text === "") continue;
+        if (segment.pasted) {
+          // The decoder normalises CRLF across chunks; every other payload byte is preserved.
+          if (state.pending === null) buf.set(buf.value + segment.text);
+          continue;
+        }
+
+        // Bytes adjacent to an unmatched closing marker are ordinary input. Ink gives one semantic
+        // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
+        for (const action of ordinaryInputActions(segment.text)) {
+          if (action.type === "interrupt") {
+            if (state.status === "running") controller.abort();
+            else exit();
+          } else if (state.pending !== null) {
+            if (action.type === "append" && (action.text === "y" || action.text === "Y")) {
+              controller.answerPermission("allow");
+            } else if (action.type === "append" && (action.text === "a" || action.text === "A")) {
+              controller.answerPermission("allow", true);
+            } else if (action.type === "append" && (action.text === "d" || action.text === "D")) {
+              controller.answerPermission("deny", true);
+            } else if (
+              action.type === "escape" ||
+              (action.type === "append" && (action.text === "n" || action.text === "N"))
+            ) {
+              controller.answerPermission("deny");
+            }
+          } else if (action.type === "backspace") {
+            buf.set(buf.value.slice(0, -1));
+          } else if (action.type === "enter") {
+            const line = buf.value;
+            if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
+            else {
+              buf.set("", () => {
+                void controller.submit(line).then((keepGoing) => {
+                  if (!keepGoing) exit();
+                });
+              });
+            }
+          } else if (action.type === "append") {
+            buf.set(buf.value + action.text);
+          }
+        }
+      }
+      // There is deliberately no timer while a paste or possible split marker remains open. Even a
+      // long delivery pause is not proof that the terminal has finished writing the paste.
+      if (paste.isPasting || paste.hasPendingMarker) buf.hold();
+      else buf.touch();
+      return;
+    }
+
+    // A possible marker prefix may have occupied earlier callbacks. Once disproved, restore its
+    // printable bytes before applying Ink's unchanged semantics for the current chunk.
+    if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
+
     if (key.ctrl && char === "c") {
       if (state.status === "running") controller.abort();
       else exit();

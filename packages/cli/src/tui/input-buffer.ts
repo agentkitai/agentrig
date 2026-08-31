@@ -42,6 +42,126 @@
  */
 const KEYSTROKE = 4;
 
+const ESC = "\u001b";
+const START_MARKER = `${ESC}[200~`;
+const END_MARKER = `${ESC}[201~`;
+
+export type OrdinaryInputAction =
+  | { type: "append"; text: string }
+  | { type: "backspace" }
+  | { type: "enter" }
+  | { type: "interrupt" }
+  | { type: "escape" };
+
+/** Semantic replay for ordinary bytes sharing a raw chunk with a stripped protocol marker. */
+export function ordinaryInputActions(text: string): OrdinaryInputAction[] {
+  const actions: OrdinaryInputAction[] = [];
+  for (const character of text) {
+    if (character === "\u0003") actions.push({ type: "interrupt" });
+    else if (character === "\b" || character === "\u007f") actions.push({ type: "backspace" });
+    else if (character === "\r") actions.push({ type: "enter" });
+    else if (character === "\u001b") actions.push({ type: "escape" });
+    else actions.push({ type: "append", text: character });
+  }
+  return actions;
+}
+
+export interface DecodedInput {
+  /** Text with protocol markers removed, tagged with whether Enter is content at that point. */
+  segments: Array<{ text: string; pasted: boolean }>;
+  /** Bytes held from earlier chunks when a possible marker is disproved, excluding its bare ESC. */
+  released?: string;
+  /** True when this chunk participated in bracketed-paste parsing rather than ordinary input. */
+  protocol: boolean;
+}
+
+/**
+ * Stateful decoder for raw stdin chunks. Prefixes are retained across calls; in particular, a
+ * bare ESC is not released until the next chunk proves that it is not the start of a marker.
+ * An opening marker inside a paste is payload; only the closing marker has protocol meaning there.
+ */
+export class BracketedPasteDecoder {
+  private pending = "";
+  private pasted = false;
+  private pastedCarriageReturn = false;
+
+  get isPasting(): boolean {
+    return this.pasted;
+  }
+
+  get hasPendingMarker(): boolean {
+    return this.pending !== "";
+  }
+
+  feed(chunk: string): DecodedInput {
+    const held = this.pending;
+    const input = held + chunk;
+    this.pending = "";
+    const segments: DecodedInput["segments"] = [];
+    let markerSeen = false;
+    let offset = 0;
+
+    const emit = (text: string): void => {
+      if (text === "") return;
+      const last = segments.at(-1);
+      if (last?.pasted === this.pasted) last.text += text;
+      else segments.push({ text, pasted: this.pasted });
+    };
+    const append = (text: string): void => {
+      if (!this.pasted) {
+        emit(text);
+        return;
+      }
+      for (const character of text) {
+        if (this.pastedCarriageReturn) {
+          emit("\n");
+          this.pastedCarriageReturn = false;
+          if (character === "\n") continue;
+        }
+        if (character === "\r") this.pastedCarriageReturn = true;
+        else emit(character);
+      }
+    };
+
+    while (offset < input.length) {
+      const candidates = this.pasted ? [END_MARKER] : [START_MARKER, END_MARKER];
+      const marker = candidates.find((candidate) => input.startsWith(candidate, offset));
+      if (marker !== undefined) {
+        markerSeen = true;
+        if (marker === END_MARKER && this.pastedCarriageReturn) {
+          emit("\n");
+          this.pastedCarriageReturn = false;
+        }
+        this.pasted = marker === START_MARKER;
+        offset += marker.length;
+        continue;
+      }
+
+      const remaining = input.length - offset;
+      if (
+        remaining < END_MARKER.length &&
+        candidates.some((candidate) => candidate.startsWith(input.slice(offset)))
+      ) {
+        this.pending = input.slice(offset);
+        break;
+      }
+
+      append(input[offset] ?? "");
+      offset += 1;
+    }
+
+    const protocol = markerSeen || this.pending !== "" || this.pasted;
+    const released = !protocol && held.length > 1 ? held.slice(1) : "";
+    return {
+      segments,
+      ...(released === "" ? {} : { released }),
+      // A disproved prefix outside paste returns to Ink's ordinary path for the current chunk; the
+      // held printable suffix is supplied separately because Ink saw it only in earlier callbacks.
+      protocol,
+    };
+  }
+}
+
 export interface InputBufferOptions {
   /** Quiet stdin for this long before the buffer is drawn. One frame is plenty. */
   quietMs?: number;
@@ -86,6 +206,25 @@ export class InputBuffer {
     if (thenRun !== undefined) this.queued.push(thenRun);
     // a keystroke leaves the existing deadline alone; only a burst-sized change pushes it out
     if (this.handle !== null && delta <= KEYSTROKE && thenRun === undefined) return;
+    this.cancel();
+    this.handle = this.setTimer(() => {
+      this.handle = null;
+      this.draw();
+    }, this.quietMs);
+  }
+
+  /** Cancels drawing without discarding text or queued submits; release it after paste framing. */
+  hold(): void {
+    if (this.disposed) return;
+    this.cancel();
+  }
+
+  /**
+   * Records stdin activity that changes no text (for example, a completed closing marker). It
+   * starts the quiet wait only after bracket framing has fully resolved.
+   */
+  touch(): void {
+    if (this.disposed) return;
     this.cancel();
     this.handle = this.setTimer(() => {
       this.handle = null;
