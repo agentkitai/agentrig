@@ -195,6 +195,11 @@ export class InputBuffer {
     return this.text;
   }
 
+  /** True until stdin has been quiet long enough for its next safe terminal draw. */
+  get hasPendingDraw(): boolean {
+    return this.handle !== null;
+  }
+
   /**
    * Records input, and optionally work to run once it has been drawn. Both happen at the next
    * quiet point, so neither writes to the terminal while a paste is still arriving.

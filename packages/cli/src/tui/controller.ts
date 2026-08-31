@@ -38,9 +38,15 @@ export interface PendingEscalation {
   resolve: (answer: string | null, reason?: "timeout" | "closed") => void;
 }
 
+export type TuiActivity =
+  | { kind: "thinking"; startedAt: number }
+  | { kind: "tool"; id: string; name: string; startedAt: number; detail?: string };
+
 export interface TuiState {
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
+  /** Work currently in flight, derived from the live event stream rather than persisted separately. */
+  activity: TuiActivity | null;
   /** The request being shown. Further requests queue behind it rather than replacing it. */
   pending: PendingPermission | null;
   /** How many more are waiting, so the view can say so. */
@@ -70,6 +76,19 @@ export interface TuiState {
 }
 
 export const DEFAULT_ESCALATION_PROMPT_TIMEOUT_MS = 60_000;
+
+const BASH_COMMAND_PREFIX_LENGTH = 32;
+
+function bashCommandPrefix(input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null || !("command" in input)) return undefined;
+  const command = (input as { command?: unknown }).command;
+  if (typeof command !== "string") return undefined;
+  const oneLine = command.replace(/\s+/g, " ").trim();
+  if (oneLine === "") return undefined;
+  return oneLine.length <= BASH_COMMAND_PREFIX_LENGTH
+    ? oneLine
+    : `${oneLine.slice(0, BASH_COMMAND_PREFIX_LENGTH - 1)}…`;
+}
 
 export interface TuiControllerOptions {
   agent: Agent;
@@ -105,6 +124,7 @@ export class TuiController {
   private state: TuiState = {
     lines: [],
     status: "idle",
+    activity: null,
     pending: null,
     queued: 0,
     escalation: null,
@@ -484,6 +504,7 @@ export class TuiController {
     // a continued session keeps the plan and the signals it already had; only a new one clears
     this.set({
       status: "running",
+      activity: null,
       sessionId: session.id,
       ...(opts.resume === undefined ? { plan: [], signals: [] } : {}),
     });
@@ -512,11 +533,53 @@ export class TuiController {
       // loop or supervisor waiting on a promise that can never resolve
       this.denyAllPending();
       this.state.escalation?.resolve(null, "closed");
-      this.set({ status: "idle" });
+      this.set({ status: "idle", activity: null });
+    }
+  }
+
+  private trackActivity(e: HarnessEvent): void {
+    if (e.type === "model.request") {
+      this.set({ activity: { kind: "thinking", startedAt: e.ts } });
+      return;
+    }
+    if (
+      (e.type === "model.delta" || e.type === "model.response") &&
+      this.state.activity?.kind === "thinking"
+    ) {
+      this.set({ activity: null });
+      return;
+    }
+    if (e.type === "tool.call") {
+      const detail = e.name === "bash" ? bashCommandPrefix(e.input) : undefined;
+      this.set({
+        activity: {
+          kind: "tool",
+          id: e.id,
+          name: e.name,
+          startedAt: e.ts,
+          ...(detail === undefined ? {} : { detail }),
+        },
+      });
+      return;
+    }
+    if (e.type === "tool.result" && this.state.activity?.kind === "tool" && this.state.activity.id === e.id) {
+      this.set({ activity: null });
+      return;
+    }
+    // Defensive terminal boundaries: provider failures and aborts need not produce the usual
+    // response/result closer, and session-end hooks may keep the UI alive after a fatal error.
+    if (
+      this.state.activity !== null &&
+      (e.type === "turn.end" ||
+        e.type === "session.end" ||
+        (e.type === "error" && (e.fatal || e.message.startsWith("model request refused by hook:"))))
+    ) {
+      this.set({ activity: null });
     }
   }
 
   private consume(e: HarnessEvent): void {
+    this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
     if (e.type === "session.start" || e.type === "session.resume") {

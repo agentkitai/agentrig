@@ -10,6 +10,7 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  type HarnessEvent,
   type ModelEvent,
   type ModelProvider,
 } from "@agentkitai/agentrig-core";
@@ -386,6 +387,73 @@ describe("the input buffer", () => {
 });
 
 describe("output while a paste is arriving", () => {
+  it("keeps the activity tick silent through a pending marker and an open paste", async () => {
+    const h = mount(0);
+    await settle();
+    const event: HarnessEvent = {
+      type: "model.request",
+      seq: 1,
+      sessionId: "s1",
+      ts: Date.now(),
+      tokensIn: 12,
+    };
+    (h.controller as unknown as { consume: (next: HarnessEvent) => void }).consume(event);
+    await settle();
+
+    // An ESC may be the first byte of a split opening marker. The first tick lands while it is
+    // pending; the second lands after the rest of the marker has opened the paste.
+    h.stdin.paste("\u001b");
+    h.reset();
+    await settle(1_100);
+    expect(h.writes, "activity tick wrote while an opening marker was pending").toHaveLength(0);
+
+    h.stdin.paste("[200~still arriving");
+    await settle(1_100);
+    expect(h.writes, "activity tick wrote while bracketed paste was open").toHaveLength(0);
+
+    // Event-driven state changes use the same gate; otherwise an activity transition racing the
+    // timer would still write even though the tick itself was suspended.
+    h.controller.print("DEFERRED-UNTIL-PASTE-END", "system");
+    await settle(100);
+    expect(h.writes, "controller state wrote while bracketed paste was open").toHaveLength(0);
+
+    h.stdin.paste("\u001b[201~");
+    await settle(100);
+    const flushed = h.writes.length;
+    h.stop();
+
+    expect(flushed, "did not flush the suspended activity render when paste completed").toBeGreaterThan(0);
+  });
+
+  it("keeps the activity tick behind the quiet point for an unframed input burst", async () => {
+    const h = mount(0);
+    await settle();
+    const event: HarnessEvent = {
+      type: "model.request",
+      seq: 1,
+      sessionId: "s1",
+      ts: Date.now(),
+      tokensIn: 12,
+    };
+    (h.controller as unknown as { consume: (next: HarnessEvent) => void }).consume(event);
+    await settle();
+    h.reset();
+
+    // Some terminals ignore bracketed-paste mode. Keep the input quiet deadline continuously armed
+    // across a 1 Hz tick; the timer must not bypass the same write discipline used by input draws.
+    for (let i = 0; i < 110; i += 1) {
+      h.stdin.paste("x".repeat(64));
+      await settle(10);
+    }
+    const during = h.writes.length;
+    await settle(100);
+    const after = h.writes.length;
+    h.stop();
+
+    expect(during, "activity tick bypassed the pending input draw").toBe(0);
+    expect(after, "input quiet point did not flush a render").toBeGreaterThan(0);
+  });
+
   it("writes nothing to the terminal until the chunks stop coming", async () => {
     // Every write during a paste is a blocking write to the tty, and one of them deadlocked a
     // real terminal: the peer was blocked writing the rest of the paste into the input buffer
