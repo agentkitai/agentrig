@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R1c complete; R1d is next.** R1.5a was deliberately taken out of
+Current roadmap row: **R1d complete; R1e is next.** R1.5a was deliberately taken out of
 nominal order before R1b; the original milestones M0 through M7 remain complete, including M2.5's
 live provider validation.
 
@@ -24,6 +24,25 @@ live provider validation.
 | R1a | `AGENTS.md` discovery and system-prompt injection, with `CLAUDE.md` alias and `context.loaded` event | done |
 | R1b | Zod-validated user/project config, named profiles, and explicit-source precedence shared by `run` and the TUI | done |
 | R1c | TTY-scoped bracketed-paste mode with streaming marker decoding in the quiet-point input path | done |
+| R1d | Realpath-keyed, fail-closed consent gate for project instructions and config, shared by run and TUI | done |
+
+- R1d stores interactive allow and decline decisions in `~/.agentrig/trust.json`, keyed by the
+  project's canonical `realpath`; aliases and descendant working directories therefore share the
+  same boundary. Core independently requires the run cwd to be at or below that canonical root and
+  bounds instruction discovery there, while CLI resolves consent before opening project config.
+- `--trust` applies only to the current invocation and is not persisted. This is deliberately the
+  least-ambient interpretation: CI or a one-off automation command may opt into a reviewed checkout
+  without silently granting all later interactive sessions permission to load that checkout.
+- Missing trust state is untrusted. Malformed or unreadable `trust.json` warns and behaves as an empty
+  trust store; headless run, headless TUI, and resume never prompt and visibly skip both project
+  instruction names and project config unless a prior allow or `--trust` applies. A recorded decline
+  is also visible and is not prompted again.
+- Rejected idea for R1d: place consent in project `.agentrig/` beside config. That file would be under
+  control of the freshly cloned repository whose claims are being evaluated, allowing the project to
+  mark itself trusted. Consent therefore lives only in the user's home-level AgentRig state.
+- R1d dogfood token measurement: this API-runner session exposes no provider usage telemetry, so its
+  exact token count is unavailable rather than fabricated; add this unavailable point beside the
+  **1,718,936 / 669,418 / 3.3M / 4.0M** existing baselines.
 
 - R1c holds any suffix that is still a possible `ESC[200~` or `ESC[201~` marker (including a bare
   `ESC`) across raw stdin chunks. When later bytes complete it, the marker is stripped; when they
@@ -53,8 +72,6 @@ live provider validation.
   from the invocation cwd (the project root), not from whichever user/project config file supplied
   them; this keeps the same resolved value on `run` and TUI paths and makes a user default portable
   across projects.
-- **Known R1d caveat:** project `.agentrig/config.json` is currently loaded without a trusted-project
-  check. Trust gating and persisted consent deliberately remain R1d scope.
 - Rejected idea for R1b: infer whether a CLI option was explicit by comparing its value to the
   Commander default. A user may intentionally type the default value, so comparison loses source
   information; `getOptionValueSource` instead determines which values enter the CLI overlay.

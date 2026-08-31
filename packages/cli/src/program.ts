@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { createInterface } from "node:readline/promises";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
@@ -95,6 +96,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   function withRunOptions(cmd: Command): Command {
     return withProviderOptions(cmd)
       .option("--profile <name>", "named config profile to overlay")
+      .option("--trust", "load project instructions and config for this run only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
       .option("--verbose", "show the raw event trace instead of just the conversation")
@@ -166,9 +168,22 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     return cmd.getOptionValueSource("model") !== "default" || process.env.AGENTRIG_MODEL !== undefined;
   }
 
-  async function configured(opts: RunOptions, cmd: Command): Promise<RunOptions | undefined> {
+  async function confirmTrust(message: string): Promise<boolean> {
+    const prompt = createInterface({ input: process.stdin, output: process.stderr });
     try {
-      return (await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, dependencies.config)) as unknown as RunOptions;
+      return /^y(?:es)?$/i.test((await prompt.question(message)).trim());
+    } finally {
+      prompt.close();
+    }
+  }
+
+  async function configured(opts: RunOptions, cmd: Command, interactive: boolean): Promise<RunOptions | undefined> {
+    try {
+      return (await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, {
+        ...dependencies.config,
+        interactive,
+        confirmTrust: dependencies.config?.confirmTrust ?? confirmTrust,
+      })) as unknown as RunOptions;
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
@@ -181,7 +196,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
     .action(async (task: string, opts: RunOptions, cmd: Command) => {
-      const resolved = await configured(opts, cmd);
+      // `run` is a headless entry point even when launched from a terminal.
+      const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await executeRun(task, resolved);
     });
 
@@ -249,7 +265,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .command("resume <id> [task...]")
       .description("Continue a session from its snapshot; the task becomes the next user message"),
   ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) => {
-    const resolved = await configured({ ...opts, resume: id }, cmd);
+    const resolved = await configured({ ...opts, resume: id }, cmd, false);
     if (resolved !== undefined) await executeRun(taskWords.join(" ") || "Continue the task.", resolved);
   });
 
@@ -303,7 +319,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         program.error(complaint);
         return;
       }
-      const resolved = await configured(opts, cmd);
+      const interactive = opts.headless !== true && process.stdin.isTTY === true;
+      const resolved = await configured(opts, cmd, interactive);
       if (resolved !== undefined) await executeTui(resolved);
     });
 

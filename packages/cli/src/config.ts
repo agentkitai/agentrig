@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
+import { resolveProjectTrust } from "./trust.js";
 
 const positiveSetting = z
   .union([z.string().min(1), z.number().finite()])
@@ -183,6 +184,10 @@ export interface LoadRunConfigOptions {
   cwd?: string;
   home?: string;
   env?: NodeJS.ProcessEnv;
+  /** Whether this entry point may ask for persistent project consent. */
+  interactive?: boolean;
+  confirmTrust?: (message: string) => Promise<boolean>;
+  notice?: (message: string) => void;
 }
 
 /** Filesystem shell around the pure resolver; both agent entry points call this exact function. */
@@ -194,10 +199,20 @@ export async function loadRunConfig(
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? homedir();
   const environment = options.env ?? process.env;
-  const [user, project] = await Promise.all([
+  // Security boundary: resolve consent before opening (or parsing) any project-owned file.
+  const [user, trust] = await Promise.all([
     readConfigFile(join(home, ".agentrig", "config.json")),
-    readConfigFile(join(cwd, ".agentrig", "config.json")),
+    resolveProjectTrust(cwd, {
+      home,
+      interactive: options.interactive === true,
+      explicitTrust: defaults.trust === true,
+      ...(options.confirmTrust === undefined ? {} : { confirm: options.confirmTrust }),
+      ...(options.notice === undefined ? {} : { notice: options.notice }),
+    }),
   ]);
+  const project = trust.trusted
+    ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"))
+    : undefined;
   const profile = typeof defaults.profile === "string" ? defaults.profile : undefined;
   const cli = explicitCliValues(cmd, defaults);
   const selected = (file: ConfigFile | undefined): ConfigValues | undefined =>
@@ -214,6 +229,7 @@ export async function loadRunConfig(
   });
   return {
     ...resolved,
+    ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),
   };
