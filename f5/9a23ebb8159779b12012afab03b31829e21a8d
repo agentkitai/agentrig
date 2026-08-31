@@ -1,0 +1,32 @@
+docs/STATUS.md
+  h_26c5a60a657125 3-5,36-54
+packages/cli/src/render.ts
+  h_26c5a60a657125 35,133
+packages/cli/test/render.test.ts
+  h_26c5a60a657125 23-36
+packages/core/src/agent.ts
+  h_26c5a60a657125 12,46-47,462-469,473
+packages/core/src/events.ts
+  h_26c5a60a657125 113-117
+packages/core/src/index.ts
+  h_26c5a60a657125 10
+packages/core/src/tool-result-eviction.ts
+  h_26c5a60a657125 1-110
+packages/core/test/agent.test.ts
+  h_26c5a60a657125 21,656-796
+packages/core/test/events.test.ts
+  h_26c5a60a657125 31-42
+packages/core/test/tool-result-eviction.test.ts
+  h_26c5a60a657125 1-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f59a23ebb8159779b12012afab03b31829e21a8d",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
