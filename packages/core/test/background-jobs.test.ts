@@ -125,14 +125,20 @@ describe("bash background jobs", () => {
     expect((done.output as BashJobOutput).running).toBe(false);
   }, 10_000);
 
-  it("refuses background + timeoutMs with a PRESCRIPTIVE message naming the fix", async () => {
-    // the vague version ("a background job has no timeout") sent a real agent into a three-retry
-    // loop: it must say which parameter to drop and what to resend
-    const r = await bash().execute({ command: "sleep 1", background: true, timeoutMs: 5_000 }, ctx);
-    expect(r.isError).toBe(true);
-    expect(r.display).toContain("remove timeoutMs");
-    expect(r.display).toContain("background: true");
-  });
+  it("accepts and IGNORES timeoutMs on a background job, saying so — never refuses, never kills", async () => {
+    // Reversal, on field evidence: the model on the openai-chatgpt backend inserts timeoutMs
+    // into every bash call and cannot drop it (15 identical retries against the prescriptive
+    // refusal). Refusing made the feature unusable there; honoring the timeout would re-create
+    // the ten-minute review kill. So: start the job, note the ignore.
+    const r = await bash().execute({ command: "sleep 1; echo survived", background: true, timeoutMs: 50 }, ctx);
+    expect(r.isError).toBeUndefined();
+    expect(r.display).toContain("timeoutMs is ignored");
+    const id = r.display.match(/job-\d+/)![0];
+    // the 50ms "timeout" must NOT kill it: the job runs to completion well past the deadline
+    const done = await waitForExit(id);
+    expect(done.exitCode).toBe(0);
+    expect(done.output).toContain("survived");
+  }, 10_000);
 
   it("refuses background when no registry is wired, honestly", async () => {
     const r = await bashTool().execute({ command: "echo x", background: true }, ctx);
