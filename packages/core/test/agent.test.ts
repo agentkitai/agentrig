@@ -18,6 +18,7 @@ import {
   type AgentConfig,
   type AnyTool,
   type HarnessEvent,
+  type Message,
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
@@ -651,6 +652,172 @@ describe("compaction in the loop", () => {
     expect(turn3[3]!.content[0]).toMatchObject({ type: "tool_result", toolUseId: "t2" });
   });
 });
+
+describe("tool-result eviction in the loop", () => {
+  const payloads: Record<string, string> = {
+    "large-a.ts": "A".repeat(30_000),
+    "large-b.ts": "B".repeat(12_000),
+    "large-c.ts": "C".repeat(2_000),
+    "large-d.ts": "D".repeat(1_500),
+    "large-e.ts": "E".repeat(1_000),
+  };
+
+  const fixtureReadTool = (): AnyTool => ({
+    name: "read_file",
+    description: "read a fixture",
+    inputSchema: z.object({ path: z.string() }),
+    permission: "read",
+    execute: async (input: { path: string }) => ({ output: payloads[input.path]!, display: payloads[input.path]! }),
+  });
+
+  const readTurn = (id: string, path: string): ModelEvent[] => [
+    { type: "tool_use", id, name: "read_file", input: { path } },
+    usage(10, 1),
+    stop("tool_use"),
+  ];
+
+  const requestBytes = (request: ModelRequest): number => Buffer.byteLength(JSON.stringify(request.messages));
+
+  it("makes the Nth request smaller when stale results engage, while the disabled baseline grows", async () => {
+    const script = [
+      readTurn("a", "large-a.ts"),
+      readTurn("b", "large-b.ts"),
+      readTurn("c", "large-c.ts"),
+      [usage(10, 1), stop("end_turn")],
+    ];
+    const enabled = new FakeProvider(structuredClone(script));
+    const enabledStore = new SessionStore({ root: join(root, "enabled"), now: () => 1, newId: () => "enabled" });
+    const enabledSession = createAgent(makeConfig(enabled, {
+      store: enabledStore,
+      tools: [fixtureReadTool()],
+      toolResultEviction: { keepLastTurns: 2, minBytes: 100 },
+    })).run("read three files");
+    const enabledEvents = await collect(enabledSession);
+    await enabledSession.done;
+
+    expect(requestBytes(enabled.requests[3]!)).toBeLessThan(requestBytes(enabled.requests[2]!));
+    expect(enabledEvents).toContainEqual(expect.objectContaining({
+      type: "context.evicted",
+      count: 1,
+      bytesSaved: expect.any(Number),
+    }));
+    const stored = await enabledStore.readSnapshot("enabled");
+    expect(resultContent(stored!.messages, "a")).toBe(payloads["large-a.ts"]);
+
+    const disabled = new FakeProvider(structuredClone(script));
+    const disabledSession = createAgent(makeConfig(disabled, {
+      store: new SessionStore({ root: join(root, "disabled"), now: () => 1, newId: () => "disabled" }),
+      tools: [fixtureReadTool()],
+      toolResultEviction: { enabled: false, keepLastTurns: 2, minBytes: 100 },
+    })).run("read three files");
+    await collect(disabledSession);
+    await disabledSession.done;
+
+    expect(requestBytes(disabled.requests[3]!)).toBeGreaterThan(requestBytes(disabled.requests[2]!));
+  });
+
+  it("keeps a re-read full, then evicts that fresh result only after K newer turns", async () => {
+    const provider = new FakeProvider([
+      readTurn("a-old", "large-a.ts"),
+      readTurn("b", "large-b.ts"),
+      readTurn("a-fresh", "large-a.ts"),
+      readTurn("d", "large-d.ts"),
+      readTurn("e", "large-e.ts"),
+      [usage(10, 1), stop("end_turn")],
+    ]);
+    const store = new SessionStore({ root: join(root, "reread"), now: () => 1, newId: () => "reread" });
+    const session = createAgent(makeConfig(provider, {
+      store,
+      tools: [fixtureReadTool()],
+      toolResultEviction: { keepLastTurns: 2, minBytes: 100 },
+    })).run("re-read when needed");
+    await collect(session);
+    await session.done;
+
+    expect(resultContent(provider.requests[3]!.messages, "a-old")).toContain("elided — re-read if needed");
+    expect(resultContent(provider.requests[3]!.messages, "a-fresh")).toBe(payloads["large-a.ts"]);
+    expect(resultContent(provider.requests[5]!.messages, "a-fresh")).toContain("elided — re-read if needed");
+    // The outbound stubs never leak into the resume cache.
+    const snapshot = await store.readSnapshot("reread");
+    expect(resultContent(snapshot!.messages, "a-old")).toBe(payloads["large-a.ts"]);
+    expect(resultContent(snapshot!.messages, "a-fresh")).toBe(payloads["large-a.ts"]);
+
+    const resumedProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const resumed = createAgent(makeConfig(resumedProvider, {
+      store,
+      tools: [fixtureReadTool()],
+      toolResultEviction: { keepLastTurns: 2, minBytes: 100 },
+    })).run("", { resume: "reread" });
+    await collect(resumed);
+    await resumed.done;
+    expect((await store.readSnapshot("reread"))!.messages).toEqual(snapshot!.messages);
+  });
+
+  it("estimates the evicted request view before compacting when usage is unavailable", async () => {
+    const provider = new FakeProvider([
+      readTurn("a", "large-a.ts").map((event) => event.type === "usage" ? usage(0, 0) : event),
+      [usage(0, 0), stop("end_turn")],
+    ]);
+    let compactions = 0;
+    const compaction: AgentConfig["compaction"] = {
+      shouldCompact: ({ tokens }) => tokens > 1_000,
+      compact: async (messages) => {
+        compactions += 1;
+        return messages;
+      },
+    };
+    const session = createAgent(makeConfig(provider, {
+      tools: [fixtureReadTool()],
+      compaction,
+      toolResultEviction: { keepLastTurns: 0, minBytes: 100 },
+    })).run("avoid redundant compaction");
+    await collect(session);
+    await session.done;
+
+    expect(compactions).toBe(0);
+    expect(resultContent(provider.requests[1]!.messages, "a")).toContain("elided — re-read if needed");
+  });
+
+  it("composes with compaction without feeding stubs back into stored history", async () => {
+    const provider = new FakeProvider([
+      readTurn("a", "large-a.ts"),
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    let compactedPayload = "";
+    const compaction: AgentConfig["compaction"] = {
+      shouldCompact: () => true,
+      compact: async (messages) => {
+        compactedPayload = resultContent(messages, "a");
+        return [
+          messages[0]!,
+          { role: "user", content: [{ type: "text", text: "[compacted fixture history]" }] },
+        ];
+      },
+    };
+    const session = createAgent(makeConfig(provider, {
+      tools: [fixtureReadTool()],
+      compaction,
+      toolResultEviction: { keepLastTurns: 0, minBytes: 100 },
+    })).run("compact then send");
+    const events = await collect(session);
+    await session.done;
+
+    expect(compactedPayload).toBe(payloads["large-a.ts"]);
+    expect(provider.requests[1]!.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "compact then send" }] },
+      { role: "user", content: [{ type: "text", text: "[compacted fixture history]" }] },
+    ]);
+    expect(events.some((event) => event.type === "context.compact")).toBe(true);
+    expect(events.some((event) => event.type === "context.evicted")).toBe(false);
+  });
+});
+
+function resultContent(messages: Message[], toolUseId: string): string {
+  const block = messages.flatMap((message) => message.content)
+    .find((candidate) => candidate.type === "tool_result" && candidate.toolUseId === toolUseId);
+  if (block?.type !== "tool_result" || typeof block.content !== "string") throw new Error(`missing result ${toolUseId}`);
+  return block.content;
+}
 
 describe("compaction lifecycle", () => {
   it("abort wins over a hung summarization call", async () => {

@@ -1,7 +1,8 @@
 # Status
 
-Current roadmap row: **R1a complete; R1b is next.** The original milestones M0 through M7 remain
-complete, including M2.5's live provider validation.
+Current roadmap row: **R1.5a complete; R1b is next.** R1.5a was deliberately taken out of
+nominal order before R1b; the original milestones M0 through M7 remain complete, including M2.5's
+live provider validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -31,6 +32,27 @@ complete, including M2.5's live provider validation.
   R1a would expand this row beyond discovery and injection.
 - External-review stall measurement: no supervisor stall warning occurred during the external-review
   phase.
+
+## R1.5 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R1.5a | Outbound-view eviction of stale, large tool results with `context.evicted` accounting | done |
+
+- R1.5a was implemented before nominally-next R1b because the earlier measured work sessions cost
+  3.3M and 4.0M input tokens on quadratic full-history resends. The first R1.5a session itself cost
+  **1,718,936 input tokens over 43 turns** and died twice on provider overloads; the retry layer now
+  on `main` addresses those transient in-stream failures. The required review continuation ran as a
+  fresh session and cost **669,418 input tokens over 34 model turns** through final delivery.
+- Eviction is a pure outbound request view. The live conversation, append-only session log, raw
+  sources, compaction input, and resume snapshot retain full tool results; stale large results are
+  replaced with pairing-preserving re-fetch stubs only in the request sent to the provider. The most
+  recent five assistant turns and results whose serialized JSON payload is at or below 8 KiB remain
+  verbatim by default.
+- Rejected idea: replace stale results in the live `messages` array to avoid rebuilding a shallow
+  request view each turn. That would make snapshots and resume lossy, feed synthetic stubs into
+  compaction, and violate the event-sourced log's complete-history contract; bounded view allocation
+  is the safer tradeoff.
 
 ## Supervisor ladder incident fix
 

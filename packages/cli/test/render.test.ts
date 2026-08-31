@@ -20,6 +20,20 @@ describe("renderEvent", () => {
     expect(line).toContain('"keep going"');
   });
 
+  it("renders context.evicted count and bytes saved", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 13,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.evicted",
+      count: 2,
+      bytesSaved: 12_345,
+    }));
+    expect(line).toContain("context.evicted");
+    expect(line).toContain("count=2");
+    expect(line).toContain("saved=12345 bytes");
+  });
+
   it("renders subagent.spawn and subagent.end, including how the child finished", () => {
     const spawned = renderEvent(
       HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files" }),
