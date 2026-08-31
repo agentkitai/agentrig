@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   builtinTools,
-  createAgent,
+  createAgent as createCoreAgent,
   RulePolicy,
   SessionStore,
   defaultRules,
@@ -14,6 +14,7 @@ import {
   toToolSpec,
   updatePlanTool,
   type Session,
+  type Agent,
   type AgentConfig,
   type AnyTool,
   type HarnessEvent,
@@ -69,6 +70,17 @@ function makeConfig(provider: ModelProvider, overrides: Partial<AgentConfig> = {
   };
 }
 
+/** Keep tests independent of instruction files in the checkout or on the host filesystem. */
+function createAgent(config: AgentConfig): Agent {
+  const agent = createCoreAgent(config);
+  return {
+    run: (task, opts = {}) => agent.run(
+      task,
+      opts.resume !== undefined && opts.cwd === undefined ? opts : { cwd: root, ...opts },
+    ),
+  };
+}
+
 async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promise<HarnessEvent[]> {
   const out: HarnessEvent[] = [];
   for await (const e of session.events) out.push(e);
@@ -88,7 +100,7 @@ describe("agent loop", () => {
       [{ type: "text_delta", text: "done" }, usage(20, 3), stop("end_turn")],
     ]);
     const config = makeConfig(provider);
-    const session = createAgent(config).run("say hi", { cwd: "/w" });
+    const session = createAgent(config).run("say hi", { cwd: root });
     const events = await collect(session);
     const summary = await session.done;
 
@@ -111,7 +123,7 @@ describe("agent loop", () => {
       "turn.end",
       "session.end",
     ]);
-    expect(events[0]).toMatchObject({ task: "say hi", provider: "fake", model: "fake-1", cwd: "/w" });
+    expect(events[0]).toMatchObject({ task: "say hi", provider: "fake", model: "fake-1", cwd: root });
     expect(events.find((e) => e.type === "tool.result")).toMatchObject({ id: "t1", ok: true, display: "echo: hi" });
     expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "done" });
     expect(summary).toMatchObject({ id: "sess1", reason: "done", turns: 2, usage: { input: 30, output: 8 } });
@@ -137,7 +149,7 @@ describe("agent loop", () => {
   });
 
   it("walks up from cwd, appends AGENTS.md verbatim only to the system prompt, and records the load", async () => {
-    const instructions = "  Keep leading space.\nDo not trim the final blank line.\n\n";
+    const instructions = "  Keep leading space — and emoji 🙂.\nDo not trim the final blank line.\n\n";
     const instructionsPath = join(root, "AGENTS.md");
     const cwd = join(root, "packages", "core", "src");
     await writeFile(instructionsPath, instructions, "utf8");
@@ -152,6 +164,8 @@ describe("agent loop", () => {
       `base system\n\n===== BEGIN PROJECT INSTRUCTIONS (${instructionsPath}) =====\n${instructions}\n===== END PROJECT INSTRUCTIONS =====`,
     );
     expect(JSON.stringify(provider.requests[0]!.messages)).not.toContain("Keep leading space");
+    expect(JSON.stringify(events)).not.toContain("Keep leading space");
+    expect(Buffer.byteLength(instructions, "utf8")).not.toBe(instructions.length);
     expect(events.filter((e) => e.type === "context.loaded")).toEqual([
       expect.objectContaining({
         type: "context.loaded",
@@ -191,6 +205,40 @@ describe("agent loop", () => {
     expect(events.filter((e) => e.type === "context.loaded")).toHaveLength(1);
   });
 
+  it("ignores directory-shaped and symlinked instruction candidates", async () => {
+    const directoryCase = join(root, "directory-candidate");
+    const symlinkCase = join(root, "symlink-candidate");
+    await mkdir(join(directoryCase, "AGENTS.md"), { recursive: true });
+    await writeFile(join(directoryCase, "CLAUDE.md"), "usable alias", "utf8");
+    await mkdir(symlinkCase);
+    const secretPath = join(root, "secret.txt");
+    await writeFile(secretPath, "must not reach the model", "utf8");
+    await symlink(secretPath, join(symlinkCase, "AGENTS.md"));
+    const directoryProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const symlinkProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const directoryConfig = makeConfig(directoryProvider, {
+      store: new SessionStore({ root: join(root, "directory-store") }),
+    });
+    const symlinkConfig = makeConfig(symlinkProvider, {
+      store: new SessionStore({ root: join(root, "symlink-store") }),
+    });
+
+    const directorySession = createAgent(directoryConfig).run("work", { cwd: directoryCase });
+    const directoryEvents = await collect(directorySession);
+    await directorySession.done;
+    const symlinkSession = createAgent(symlinkConfig).run("work", { cwd: symlinkCase });
+    const symlinkEvents = await collect(symlinkSession);
+    await symlinkSession.done;
+
+    expect(directoryProvider.requests[0]!.system).toContain("usable alias");
+    expect(directoryEvents).toContainEqual(expect.objectContaining({
+      type: "context.loaded",
+      path: join(directoryCase, "CLAUDE.md"),
+    }));
+    expect(symlinkProvider.requests[0]!.system).not.toContain("must not reach the model");
+    expect(symlinkEvents.some((event) => event.type === "context.loaded")).toBe(false);
+  });
+
   it("loads empty and large AGENTS.md files without treating empty as absent or truncating large content", async () => {
     const emptyDir = join(root, "empty");
     const largeDir = join(root, "large");
@@ -201,13 +249,19 @@ describe("agent loop", () => {
     await writeFile(join(largeDir, "AGENTS.md"), large, "utf8");
     const emptyProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
     const largeProvider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const emptyConfig = makeConfig(emptyProvider, {
+      store: new SessionStore({ root: join(root, "empty-store"), newId: () => "empty" }),
+    });
+    const largeConfig = makeConfig(largeProvider, {
+      store: new SessionStore({ root: join(root, "large-store"), newId: () => "large" }),
+    });
 
-    const emptySession = createAgent(makeConfig(emptyProvider)).run("work", { cwd: emptyDir });
+    const emptySession = createAgent(emptyConfig).run("work", { cwd: emptyDir });
     const emptyEvents = await collect(emptySession);
-    await emptySession.done;
-    const largeSession = createAgent(makeConfig(largeProvider)).run("work", { cwd: largeDir });
+    const emptySummary = await emptySession.done;
+    const largeSession = createAgent(largeConfig).run("work", { cwd: largeDir });
     const largeEvents = await collect(largeSession);
-    await largeSession.done;
+    const largeSummary = await largeSession.done;
 
     expect(emptyProvider.requests[0]!.system).toContain("BEGIN PROJECT INSTRUCTIONS");
     expect(emptyEvents).toContainEqual(expect.objectContaining({ type: "context.loaded", bytes: 0 }));
@@ -216,6 +270,8 @@ describe("agent loop", () => {
       type: "context.loaded",
       bytes: Buffer.byteLength(large, "utf8"),
     }));
+    expect(await emptyConfig.store.readAll(emptySummary.id)).toEqual(emptyEvents);
+    expect(await largeConfig.store.readAll(largeSummary.id)).toEqual(largeEvents);
   });
 
   it("denies by policy: tool.denied event, error tool_result to the model", async () => {

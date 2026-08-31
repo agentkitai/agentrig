@@ -22,9 +22,10 @@ complete, including M2.5's live provider validation.
 |---|---|---|
 | R1a | `AGENTS.md` discovery and system-prompt injection, with `CLAUDE.md` alias and `context.loaded` event | done |
 
-- R1a walks upward from the session cwd, prefers `AGENTS.md` over its alias, preserves the file body
-  verbatim between explicit system-prompt delimiters, and records the absolute path and UTF-8 file
-  byte count without copying the body into the event stream or conversation messages.
+- R1a walks upward from the session cwd, prefers a regular `AGENTS.md` over its alias (directories
+  and symlinks are not instruction files), preserves the file body verbatim between explicit
+  system-prompt delimiters, and records the absolute path and file byte count without copying the
+  body into the event stream or conversation messages.
 - Considered Gemini CLI's trusted-project boundary from the studied harnesses, but deliberately did
   not implement it: the roadmap assigns trust and consent persistence to R1d, and pulling it into
   R1a would expand this row beyond discovery and injection.
