@@ -711,6 +711,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       await chain.catch(() => {});
       await releaseLock?.().catch(() => {});
       releaseClaim?.();
+      // Resource cleanup, deliberately LAST (session_end hooks above run under this signal): a
+      // settled session's signal aborts so anything tied to it — background jobs above all —
+      // dies with the session instead of only on an explicit user abort. A session that ends
+      // "done" leaving an invisible watcher burning CPU is the same leak as an aborted one.
+      abortController.abort();
       stream.close();
     }
     return { id, reason, turns, usage: totals };

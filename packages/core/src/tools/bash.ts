@@ -125,7 +125,8 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       const killGroup = () => {
         const pid = child.pid;
         if (pid === undefined) {
-          child.kill("SIGKILL");
+          // no process exists after a failed spawn, and child.kill() on Node's uninitialized
+          // handle can issue kill(0) — SIGKILL to our own process group (see background-jobs.ts)
           return;
         }
         if (isWindows) {

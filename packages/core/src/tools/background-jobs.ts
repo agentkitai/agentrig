@@ -41,6 +41,8 @@ interface JobRecord {
   droppedBytes: number;
   exited: boolean;
   exitCode: number | null;
+  /** Why the process never really ran (ENOENT shell and friends); status reports it as an error. */
+  spawnError?: string;
   killGroup: () => void;
   /** Resolves when the pipes close; `wait` races it against its deadline. */
   done: Promise<void>;
@@ -78,7 +80,9 @@ export class JobRegistry {
     const killGroup = (): void => {
       const pid = child.pid;
       if (pid === undefined) {
-        child.kill("SIGKILL");
+        // A failed spawn has NO process — and Node's internal handle holds garbage here, so
+        // child.kill() was observed (via strace) issuing kill(0, SIGKILL): "kill my own process
+        // group". That took down the entire test runner three runs straight. Nothing to kill.
         return;
       }
       if (opts.isWindows) {
@@ -107,17 +111,27 @@ export class JobRegistry {
 
     const append = (chunk: Buffer): void => {
       record.unread += chunk.toString("utf8");
-      const over = Buffer.byteLength(record.unread, "utf8") - MAX_UNREAD_BYTES;
-      if (over > 0) {
-        // drop the oldest unread output, but never silently — the count reaches the next status
-        record.droppedBytes += over;
-        record.unread = record.unread.slice(-MAX_UNREAD_BYTES);
+      const beforeBytes = Buffer.byteLength(record.unread, "utf8");
+      if (beforeBytes > MAX_UNREAD_BYTES) {
+        // Drop the oldest unread output, but never silently — the count reaches the next status.
+        // Counted and cut in BYTES via Buffer: string.slice counts UTF-16 units, which kept up
+        // to 4x the cap for multibyte output and re-counted the standing overshoot as "newly
+        // dropped" on every chunk. The boundary walk keeps a split multibyte char out of the
+        // front of what remains.
+        const buf = Buffer.from(record.unread, "utf8").subarray(-MAX_UNREAD_BYTES);
+        let start = 0;
+        while (start < buf.length && (buf[start]! & 0xc0) === 0x80) start += 1;
+        record.unread = buf.subarray(start).toString("utf8");
+        record.droppedBytes += beforeBytes - Buffer.byteLength(record.unread, "utf8");
       }
     };
     child.stdout.on("data", append);
     child.stderr.on("data", append);
-    // a background child must never crash the harness; the error shows up as a dead job instead
-    child.on("error", () => {});
+    // a background child must never crash the harness — but a swallowed spawn failure looked
+    // exactly like a clean silent exit, so the reason is kept and surfaced by status
+    child.on("error", (err) => {
+      record.spawnError = err.message;
+    });
 
     const onAbort = (): void => killGroup();
     opts.signal.addEventListener("abort", onAbort, { once: true });
@@ -205,6 +219,8 @@ export interface BashJobOutput {
   output: string;
   /** Unread bytes that overflowed the buffer and were dropped, oldest first. */
   droppedBytes: number;
+  /** Present when the process could not be started at all (bad shell, fd exhaustion). */
+  spawnError?: string;
 }
 
 export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOutput> {
@@ -248,18 +264,28 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
         return result;
       }
 
-      if (input.waitMs !== undefined && !record.exited) {
-        // race the job against the deadline; the session abort also releases the wait, because a
-        // status call must never wedge shutdown
+      // The aborted check comes FIRST: an already-aborted signal never fires its listener, and
+      // waiting out the full deadline at shutdown is exactly the wedge this exists to prevent.
+      if (input.waitMs !== undefined && !record.exited && !ctx.signal.aborted) {
         await Promise.race([
           record.done,
           new Promise<void>((res) => {
-            const timer = setTimeout(res, input.waitMs);
+            const timer = setTimeout(() => {
+              ctx.signal.removeEventListener("abort", onAbort);
+              res();
+            }, input.waitMs);
             timer.unref?.();
-            ctx.signal.addEventListener("abort", () => {
+            const onAbort = (): void => {
               clearTimeout(timer);
               res();
-            }, { once: true });
+            };
+            ctx.signal.addEventListener("abort", onAbort, { once: true });
+            // whichever way the race settles, the listener must not accumulate on the
+            // long-lived session signal — one leak per poll adds up over a long run
+            void record.done.then(() => {
+              clearTimeout(timer);
+              ctx.signal.removeEventListener("abort", onAbort);
+            });
           }),
         ]);
       }
@@ -272,19 +298,24 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
         exitCode: record.exitCode,
         output: drained.output,
         droppedBytes: drained.droppedBytes,
+        ...(record.spawnError === undefined ? {} : { spawnError: record.spawnError }),
       };
       const headline = running
         ? `${input.id} running`
+        : record.spawnError !== undefined
+        ? `${input.id} never started: ${record.spawnError}`
         : `${input.id} exited with code ${record.exitCode ?? "none"}`;
       const parts = [headline];
       if (drained.droppedBytes > 0) parts.push(`[${drained.droppedBytes} bytes of older output dropped]`);
       if (drained.output !== "") parts.push(drained.output);
-      else parts.push("(no new output)");
+      else if (running || record.spawnError === undefined) parts.push("(no new output)");
       const { display, truncated } = bound(parts.join("\n").trim());
       const result: ToolResult<BashJobOutput> = { output, display };
       if (truncated) result.truncated = true;
-      // a non-zero exit is the job's outcome, not a tool failure: the model asked for status and
-      // got an honest one; isError here would push a retry reflex at a finished job
+      // A non-zero exit is the job's outcome, not a tool failure: the model asked for status and
+      // got an honest one; isError there would push a retry reflex at a finished job. A spawn
+      // failure is different — the command never ran at all, and that IS an error.
+      if (record.spawnError !== undefined) result.isError = true;
       return result;
     },
   };

@@ -60,5 +60,10 @@ export class RulePolicy implements PermissionPolicy {
  */
 export const defaultRules: PermissionRule[] = [
   { tool: "update_plan", decision: "allow" },
+  // Same shape of gap as update_plan: `bash_job` only observes or stops jobs this session's own
+  // `bash` already got permission to start — there is nothing new to approve. Falling through to
+  // `ask` meant headless mode denied every poll, leaving a running job the session could neither
+  // see nor stop, and interactive mode prompted on each one.
+  { tool: "bash_job", decision: "allow" },
   { class: "read", cwdOnly: true, decision: "allow" },
 ];
