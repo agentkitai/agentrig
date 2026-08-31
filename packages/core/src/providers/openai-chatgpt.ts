@@ -3,7 +3,7 @@ import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { OpenAIChatGPTAuth, type OpenAIChatGPTAuthOptions } from "./openai-chatgpt-auth.js";
-import { errorDetail, fetchWithRetries, type RetryPolicy } from "./retry.js";
+import { errorDetail, fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 
 /**
  * Experimental `openai-chatgpt` provider (PLAN §2.9): reuses a ChatGPT subscription via the same
@@ -37,6 +37,8 @@ export interface OpenAIChatGPTProviderOptions {
   /** Version reported in the User-Agent. */
   clientVersion?: string;
   retry?: RetryPolicy;
+  /** Called when a transient in-stream failure triggers a clean re-request, so a UI can say so. */
+  onRetry?: (info: StreamRetryInfo) => void;
 }
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -289,6 +291,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   private readonly originator: string;
   private readonly clientVersion: string;
   private readonly retry: RetryPolicy;
+  private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
   private readonly sessionId = randomUUID();
   /** call_id -> the raw item group of the response that produced it (for reasoning replay). */
   private readonly rawGroups = new Map<string, RawItemGroup>();
@@ -301,6 +304,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
     this.originator = opts.originator ?? DEFAULT_ORIGINATOR;
     this.clientVersion = opts.clientVersion ?? "0.0.0";
     this.retry = opts.retry ?? {};
+    this.onRetry = opts.onRetry;
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -350,27 +354,34 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
-    // fetchWithRetries covers transient failures (429/5xx/network); the 401 retry below is a
-    // separate token-expiry recovery, since it must re-mint the Authorization header.
+    // fetchWithRetries covers transient failures (429/5xx/network) BEFORE a 200 arrives; the
+    // streamWithRetries wrapper covers "200, then an overload error inside the SSE stream",
+    // which this backend actually does; the 401 retry below is a separate token-expiry
+    // recovery, since it must re-mint the Authorization header.
     const attempt = async (force: boolean): Promise<Response> => {
       const { url, init } = await this.request(req, force);
       return fetchWithRetries(this.fetchFn, "openai-chatgpt", url, init, signal, this.retry);
     };
 
-    let res: Response;
-    try {
-      res = await attempt(false);
-    } catch (err) {
-      if (!(err instanceof Error) || !/HTTP 401/.test(err.message)) throw err;
-      res = await attempt(true);
-    }
-    if (!res.body) throw new Error("openai-chatgpt: empty response body");
+    const openOnce = async function* (this: OpenAIChatGPTProvider): AsyncIterable<ModelEvent> {
+      let res: Response;
+      try {
+        res = await attempt(false);
+      } catch (err) {
+        if (!(err instanceof Error) || !/HTTP 401/.test(err.message)) throw err;
+        res = await attempt(true);
+      }
+      if (!res.body) throw new Error("openai-chatgpt: empty response body");
 
-    const items: JsonObject[] = [];
-    try {
-      yield* parseResponsesSse(res.body, { onRawItem: (item) => items.push(item) });
-    } finally {
-      this.cacheRawItems(items);
-    }
+      // per attempt, so a retried request never caches the failed stream's partial items
+      const items: JsonObject[] = [];
+      try {
+        yield* parseResponsesSse(res.body, { onRawItem: (item) => items.push(item) });
+      } finally {
+        this.cacheRawItems(items);
+      }
+    }.bind(this);
+
+    yield* streamWithRetries(openOnce, signal, this.retry, this.onRetry);
   }
 }

@@ -1,7 +1,7 @@
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
-import { fetchWithRetries, type RetryPolicy } from "./retry.js";
+import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 
 /**
  * OpenAI-compatible Chat Completions adapter: OpenAI itself plus most local servers
@@ -24,6 +24,8 @@ export interface OpenAIProviderOptions {
   maxTokensParam?: "max_tokens" | "max_completion_tokens";
   /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
   retry?: RetryPolicy;
+  /** Called when a transient in-stream failure triggers a clean re-request, so a UI can say so. */
+  onRetry?: (info: StreamRetryInfo) => void;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -216,6 +218,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private readonly fetchFn: typeof fetch;
   private readonly maxTokensParam: "max_tokens" | "max_completion_tokens";
   private readonly retry: RetryPolicy | undefined;
+  private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
 
   constructor(opts: OpenAIProviderOptions) {
     this.model = opts.model;
@@ -225,6 +228,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.maxTokensParam =
       opts.maxTokensParam ?? (this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens");
     this.retry = opts.retry;
+    this.onRetry = opts.onRetry;
     this.capabilities = {
       tools: true,
       parallelTools: true,
@@ -234,21 +238,26 @@ export class OpenAICompatibleProvider implements ModelProvider {
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey !== undefined) headers.authorization = `Bearer ${this.apiKey}`;
-    const res = await fetchWithRetries(
-      this.fetchFn,
-      "openai-compatible",
-      `${this.baseUrl}/chat/completions`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
-      },
-      signal,
-      this.retry ?? {},
-    );
-    if (!res.body) throw new Error("openai-compatible: empty response body");
-    yield* parseOpenAISse(res.body);
+    // streamWithRetries re-requests when the failure arrives INSIDE a 200 stream (an in-band
+    // `error` frame, a mid-handshake disconnect) — but only before anything was yielded
+    const openOnce = async function* (this: OpenAICompatibleProvider): AsyncIterable<ModelEvent> {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (this.apiKey !== undefined) headers.authorization = `Bearer ${this.apiKey}`;
+      const res = await fetchWithRetries(
+        this.fetchFn,
+        "openai-compatible",
+        `${this.baseUrl}/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
+        },
+        signal,
+        this.retry ?? {},
+      );
+      if (!res.body) throw new Error("openai-compatible: empty response body");
+      yield* parseOpenAISse(res.body);
+    }.bind(this);
+    yield* streamWithRetries(openOnce, signal, this.retry ?? {}, this.onRetry);
   }
 }

@@ -3,6 +3,7 @@ import {
   OpenAICompatibleProvider,
   OpenAIChatGPTProvider,
   type ModelProvider,
+  type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
@@ -18,11 +19,27 @@ export interface ProviderOptions {
   maxTokensPerTurnExplicit?: boolean;
 }
 
-export function buildProvider(opts: ProviderOptions): ModelProvider {
+export interface ProviderHooks {
+  /** Where retry notices go — the TUI frame or stderr. Silent retries look like hangs. */
+  onNotice?: (message: string) => void;
+}
+
+/** One phrasing for every provider, so the three adapters cannot drift. */
+export function describeRetry(info: StreamRetryInfo): string {
+  // `attempt` is the one that just FAILED — saying "retrying (attempt 1 of 4)" when attempt 1
+  // is already spent misread as "this is the first try"
+  return `provider error (${info.reason}) — attempt ${info.attempt} of ${info.maxAttempts} failed, retrying in ${Math.round(info.delayMs / 1000)}s`;
+}
+
+export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}): ModelProvider {
+  const onRetry =
+    hooks.onNotice === undefined
+      ? {}
+      : { onRetry: (info: StreamRetryInfo) => hooks.onNotice?.(describeRetry(info)) };
   if (opts.provider === "anthropic") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    return new AnthropicProvider({ apiKey, model: opts.model });
+    return new AnthropicProvider({ apiKey, model: opts.model, ...onRetry });
   }
   if (opts.provider === "openai") {
     if (opts.modelExplicit !== true) {
@@ -36,6 +53,7 @@ export function buildProvider(opts: ProviderOptions): ModelProvider {
       model: opts.model,
       ...(apiKey ? { apiKey } : {}),
       ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
+      ...onRetry,
     });
   }
   if (opts.provider === "openai-chatgpt") {
@@ -49,7 +67,7 @@ export function buildProvider(opts: ProviderOptions): ModelProvider {
     if (opts.maxTokensPerTurnExplicit === true) {
       console.error("Warning: --max-tokens-per-turn is ignored by openai-chatgpt (the backend rejects the parameter).");
     }
-    return new OpenAIChatGPTProvider({ model: opts.model });
+    return new OpenAIChatGPTProvider({ model: opts.model, ...onRetry });
   }
   throw new Error(`unknown provider "${opts.provider}" (anthropic | openai | openai-chatgpt)`);
 }

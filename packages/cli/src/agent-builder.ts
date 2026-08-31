@@ -177,6 +177,8 @@ export interface AgentExtras {
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
   onHookDone?: (message: string) => void;
+  /** Provider-retry notices ("overloaded — retrying in 2s"); silence is what made retries look like hangs. */
+  onNotice?: (message: string) => void;
 }
 
 
@@ -257,7 +259,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
-  const provider = buildProvider(opts);
+  const provider = buildProvider(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];

@@ -3,10 +3,14 @@ import {
   AnthropicProvider,
   fetchWithRetries,
   isQuotaExhaustion,
+  isTransientStreamError,
   parseRetryAfter,
   redactSecrets,
+  RetriesExhaustedError,
+  streamWithRetries,
   type ModelEvent,
   type ModelRequest,
+  type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
 
 const req = (): ModelRequest => ({ system: "s", messages: [], tools: [], maxTokens: 10 });
@@ -240,5 +244,165 @@ describe("edge bot challenges are named, not dumped as markup", () => {
     }).catch((e: Error) => e)) as Error;
     expect(err.message).toContain("bad request");
     expect(err.message).not.toContain("edge bot challenge");
+  });
+});
+
+// ---------------------------------------------------------------- stream-level retry
+
+describe("isTransientStreamError", () => {
+  it("recognises the messages that killed real sessions, and network-level cuts", () => {
+    // verbatim from the ChatGPT backend, delivered inside an HTTP 200 SSE stream
+    expect(isTransientStreamError("openai-chatgpt stream error: Our servers are currently overloaded. Please try again later.")).toBe(true);
+    expect(isTransientStreamError("anthropic stream error: overloaded_error: Overloaded")).toBe(true);
+    expect(isTransientStreamError("fetch failed")).toBe(true);
+    expect(isTransientStreamError("read ECONNRESET")).toBe(true);
+  });
+
+  it("never calls quota exhaustion transient, whatever the phrasing around it", () => {
+    // "try again" appears in the message, but retrying an empty wallet burns attempts for nothing
+    expect(isTransientStreamError("You have exceeded your current quota. Please try again later.")).toBe(false);
+    expect(isTransientStreamError("HTTP 401 invalid api key")).toBe(false);
+    expect(isTransientStreamError("model not found")).toBe(false);
+  });
+
+  it("is not steered by polite server prose inside a deterministic HTTP failure", () => {
+    // server-controlled body text is interpolated into fetchWithRetries error messages; a 400 or
+    // 403 whose page says "try again" is still deterministic and retrying it is pure waste
+    expect(isTransientStreamError("anthropic: HTTP 400 invalid_request_error: tools.0 schema invalid, please fix and try again")).toBe(false);
+    expect(isTransientStreamError("openai-chatgpt: HTTP 403 originator not allowed. If you believe this is an error, try again or contact support.")).toBe(false);
+    expect(isTransientStreamError("anthropic: HTTP 413 request too large, reduce your prompt and try again")).toBe(false);
+    // "terminated" only as undici's whole message (a mid-body connection cut), never as a substring
+    expect(isTransientStreamError("terminated")).toBe(true);
+    expect(isTransientStreamError("openai-chatgpt stream failed: response terminated by moderation")).toBe(false);
+  });
+});
+
+describe("streamWithRetries", () => {
+  const signal = () => new AbortController().signal;
+  const collectAll = async <T>(it: AsyncIterable<T>): Promise<T[]> => {
+    const out: T[] = [];
+    for await (const e of it) out.push(e);
+    return out;
+  };
+
+  function failing(times: number, message: string, events: string[] = ["a", "b"]) {
+    let calls = 0;
+    return {
+      open: async function* (): AsyncIterable<string> {
+        calls += 1;
+        if (calls <= times) throw new Error(message);
+        yield* events;
+      },
+      calls: () => calls,
+    };
+  }
+
+  it("re-requests a transient failure and delivers the clean attempt in full", async () => {
+    const f = failing(2, "stream error: Our servers are currently overloaded.");
+    const delays: number[] = [];
+    const notices: StreamRetryInfo[] = [];
+    const out = await collectAll(
+      streamWithRetries(f.open, signal(), { sleep: async (ms) => void delays.push(ms) }, (i) => notices.push(i)),
+    );
+    expect(out).toEqual(["a", "b"]);
+    expect(f.calls()).toBe(3);
+    // exponential: 1s then 2s
+    expect(delays).toEqual([1000, 2000]);
+    expect(notices.map((n) => `${n.attempt}/${n.maxAttempts}`)).toEqual(["1/4", "2/4"]);
+    expect(notices[0]!.reason).toContain("overloaded");
+  });
+
+  it("NEVER re-requests once an event has been yielded — a retry would replay the prefix", async () => {
+    let calls = 0;
+    const open = async function* (): AsyncIterable<string> {
+      calls += 1;
+      yield "partial reply";
+      throw new Error("stream error: overloaded");
+    };
+    const seen: string[] = [];
+    await expect(async () => {
+      for await (const e of streamWithRetries(open, signal(), { sleep: async () => {} })) seen.push(e);
+    }).rejects.toThrow(/overloaded/);
+    expect(calls).toBe(1);
+    expect(seen).toEqual(["partial reply"]);
+  });
+
+  it("throws a non-transient failure immediately", async () => {
+    const f = failing(1, "HTTP 401 invalid key");
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(/401/);
+    expect(f.calls()).toBe(1);
+  });
+
+  it("does not mistake quota exhaustion for a transient overload", async () => {
+    const f = failing(1, "You have exceeded your current quota. Please try again later.");
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(/quota/);
+    expect(f.calls()).toBe(1);
+  });
+
+  it("gives up after maxRetries with the last error", async () => {
+    const f = failing(99, "temporarily unavailable");
+    await expect(
+      collectAll(streamWithRetries(f.open, signal(), { maxRetries: 2, sleep: async () => {} })),
+    ).rejects.toThrow(/temporarily unavailable/);
+    expect(f.calls()).toBe(3);
+  });
+
+  it("refuses a failure the HTTP layer already retried to exhaustion", async () => {
+    // without the typed refusal, both budgets were spent on one failure: 16 fetches, ~35s
+    const f = {
+      calls: 0,
+      open: async function* (this: void): AsyncIterable<string> {
+        f.calls += 1;
+        throw new RetriesExhaustedError("anthropic: fetch failed (after 4 attempts)");
+        yield "never";
+      },
+    };
+    await expect(collectAll(streamWithRetries(f.open, signal(), { sleep: async () => {} }))).rejects.toThrow(
+      /after 4 attempts/,
+    );
+    expect(f.calls).toBe(1);
+  });
+
+  it("stops retrying when the caller aborts", async () => {
+    const ctl = new AbortController();
+    let calls = 0;
+    const open = async function* (): AsyncIterable<string> {
+      calls += 1;
+      ctl.abort();
+      throw new Error("overloaded");
+      yield "never";
+    };
+    await expect(collectAll(streamWithRetries(open, ctl.signal, { sleep: async () => {} }))).rejects.toThrow(
+      /overloaded/,
+    );
+    expect(calls).toBe(1);
+  });
+});
+
+describe("retry layering through the public provider API", () => {
+  it("spends ONE retry budget on a persistent network failure, not four stream x four HTTP", async () => {
+    let calls = 0;
+    const fetchFn = (async () => {
+      calls += 1;
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    const provider = new AnthropicProvider({ apiKey: "k", model: "m", fetchFn, retry: { sleep: instantSleep } });
+    await expect(async () => {
+      for await (const e of provider.stream(req(), new AbortController().signal)) void e;
+    }).rejects.toThrow(/fetch failed \(after 4 attempts\)/);
+    expect(calls).toBe(4); // 1 + 3 HTTP retries; the stream layer must not multiply it to 16
+  });
+
+  it("spends ONE retry budget on a persistent overloaded 529 too", async () => {
+    let calls = 0;
+    const fetchFn = (async () => {
+      calls += 1;
+      return new Response('{"error":{"type":"overloaded_error","message":"Overloaded"}}', { status: 529 });
+    }) as typeof fetch;
+    const provider = new AnthropicProvider({ apiKey: "k", model: "m", fetchFn, retry: { sleep: instantSleep } });
+    await expect(async () => {
+      for await (const e of provider.stream(req(), new AbortController().signal)) void e;
+    }).rejects.toThrow(/HTTP 529/);
+    expect(calls).toBe(4);
   });
 });
