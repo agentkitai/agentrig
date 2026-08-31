@@ -80,6 +80,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   skills?: string[];
   /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
   shell?: string;
+  /** Canonical root approved by the CLI trust boundary; absent means no project context. */
+  trustedProjectRoot?: string;
 }
 
 const McpServerEntry = z.object({
@@ -239,6 +241,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // rather than wrapped around `onAsk`, so the emitted `permission.request` carries it too:
       // the prompt, the log and `sessions show` then agree on who asked.
       origin: "subagent",
+      ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
       ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
       systemPrompt: (ctx: { cwd: string }) =>
         [
@@ -384,6 +387,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const agent = createAgent({
     provider,
     tools,
+    ...(opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: opts.trustedProjectRoot }),
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
     // a function so a resumed session gets its snapshot's cwd, not this process's

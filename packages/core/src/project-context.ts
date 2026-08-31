@@ -32,14 +32,16 @@ async function readInstructionFile(path: string): Promise<ProjectInstructions | 
 }
 
 /** Find the nearest project instruction file, preferring the canonical name over its alias. */
-export async function discoverProjectInstructions(cwd: string): Promise<ProjectInstructions | null> {
+export async function discoverProjectInstructions(cwd: string, projectRoot?: string): Promise<ProjectInstructions | null> {
   let directory = resolve(cwd);
+  const boundary = projectRoot === undefined ? undefined : resolve(projectRoot);
   while (true) {
     for (const name of INSTRUCTION_FILES) {
       const instructions = await readInstructionFile(join(directory, name));
       if (instructions !== null) return instructions;
     }
 
+    if (boundary !== undefined && directory === boundary) return null;
     const parent = dirname(directory);
     if (parent === directory) return null;
     directory = parent;
