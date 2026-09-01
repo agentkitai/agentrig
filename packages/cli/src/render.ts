@@ -1,4 +1,4 @@
-import type { HarnessEvent, Intervention } from "@agentkitai/agentrig-core";
+import type { EventOf, HarnessEvent, Intervention } from "@agentkitai/agentrig-core";
 
 /**
  * Two views of one event stream.
@@ -35,6 +35,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
+    case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
@@ -59,6 +60,24 @@ function interventionDetail(i: Intervention): string {
     : i.type === "run_grader" ? i.rubric
     : i.type === "checkpoint_rollback" ? `to seq ${i.toSeq}`
     : "";
+}
+
+/** Human-readable prompt bill of materials used by the TUI's `/context` command. */
+export function renderContextManifest(event: EventOf<"context.manifest">): string {
+  const totalBytes = event.blocks.reduce((sum, block) => sum + block.bytes, 0);
+  const totalTokens = event.blocks.reduce((sum, block) => sum + block.tokens, 0);
+  const lines = [
+    `context turn ${event.turn} — ${event.blocks.length} blocks, ${totalBytes} bytes, ~${totalTokens} tokens`,
+    `request hash ${event.requestHash}`,
+  ];
+  for (const block of event.blocks) {
+    const freshness = block.freshness === undefined ? "" : ` fresh=${block.freshness}`;
+    lines.push(
+      `${block.disposition === "evicted" ? "evicted" : "kept"} ${block.source} ${block.authority} ` +
+      `${block.bytes}B ~${block.tokens}t hash=${block.hash}${freshness} origin=${block.origin} — ${block.reason}`,
+    );
+  }
+  return lines.join("\n");
 }
 
 /** Fit a value on one line, for a view that is read rather than grepped. */
@@ -136,6 +155,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.compact":
     case "context.evicted":
     case "context.loaded":
+    case "context.manifest":
     case "context.repo_map":
     case "memory.note":
       return null;

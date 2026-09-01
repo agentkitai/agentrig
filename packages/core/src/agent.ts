@@ -10,9 +10,14 @@ import type { AnyTool, ToolContext } from "./tool.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
-import { appendProjectInstructions, discoverProjectInstructions } from "./project-context.js";
+import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
 import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
+import {
+  buildContextManifest,
+  renderSystemBlocks,
+  type PromptBlock,
+} from "./context-manifest.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -36,7 +41,8 @@ export interface AgentConfig {
   provider: ModelProvider;
   tools: AnyTool[];
   permissions: PermissionPolicy;
-  systemPrompt: string | ((ctx: PromptContext) => string);
+  /** A string remains supported; labelled blocks produce a source-accurate context manifest. */
+  systemPrompt: string | PromptBlock[] | ((ctx: PromptContext) => string | PromptBlock[]);
   /**
    * Canonical project root whose repository-provided instructions may be loaded. Absent means
    * untrusted. Core checks the run cwd itself so another entry point cannot bypass the boundary.
@@ -458,7 +464,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const extra = [...(rewritten === undefined ? [] : [rewritten]), ...h.injects];
         for (const text of extra) messages.push({ role: "user", content: [{ type: "text", text }] });
       }
-      system = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+      const configuredPrompt = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
+      const systemBlocks: PromptBlock[] = typeof configuredPrompt === "string"
+        ? [{
+            content: configuredPrompt,
+            source: "system_prompt",
+            origin: "agent.config.systemPrompt",
+            authority: "instruction",
+            reason: "base agent instructions",
+          }]
+        : configuredPrompt.map((block) => ({ ...block }));
+      system = renderSystemBlocks(systemBlocks);
       // This gate is deliberately adjacent to the read. A caller-provided boolean would be easy to
       // reuse for another cwd; canonical containment keeps aliases within one trusted project.
       const configuredRoot = config.trustedProjectRoot;
@@ -475,7 +491,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         ? await discoverProjectInstructions(canonicalCwd, canonicalRoot)
         : null;
       if (projectInstructions !== null) {
-        system = appendProjectInstructions(system, projectInstructions);
+        systemBlocks.push({
+          content: `===== BEGIN PROJECT INSTRUCTIONS (${projectInstructions.path}) =====\n${projectInstructions.content}\n===== END PROJECT INSTRUCTIONS =====`,
+          source: "project_instructions",
+          origin: projectInstructions.path,
+          authority: "instruction",
+          reason: "nearest trusted project instruction file",
+        });
+        system = renderSystemBlocks(systemBlocks);
         await emit({
           type: "context.loaded",
           path: projectInstructions.path,
@@ -499,10 +522,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             ],
           });
       let repoMapContent = "";
+      let repoMapFreshness: string | undefined;
       const refreshRepoMap = async (): Promise<void> => {
         if (repoMapView === undefined) return;
         const refreshed = await repoMapView.refresh();
         repoMapContent = refreshed.map.content;
+        // This is the marker for the rendered snapshot. Recomputing could race with a filesystem
+        // change and claim freshness newer than the map the model actually receives.
+        repoMapFreshness = refreshed.map.freshness;
         if (refreshed.regenerated) {
           await emit({
             type: "context.repo_map",
@@ -540,12 +567,25 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // Eviction and the repository map are outbound views. `messages` remains the complete
         // conversation used by snapshots, resume, hooks and compaction.
         await refreshRepoMap();
-        const requestSystem = repoMapContent === "" ? system : `${system}\n\n${repoMapContent}`;
+        let requestSystemBlocks: PromptBlock[] = systemBlocks;
+        if (repoMapContent !== "") {
+          requestSystemBlocks = [
+            ...systemBlocks,
+            {
+              content: repoMapContent,
+              source: "repo_map",
+              origin: canonicalCwd ?? cwd,
+              authority: "data",
+              reason: "size-budgeted repository orientation snapshot",
+              ...(repoMapFreshness === undefined ? {} : { freshness: repoMapFreshness }),
+            },
+          ];
+        }
+        const requestSystem = renderSystemBlocks(requestSystemBlocks);
         const eviction = evictToolResults(messages, config.toolResultEviction);
         if (eviction.count > 0) {
           await emit({ type: "context.evicted", count: eviction.count, bytesSaved: eviction.bytesSaved });
         }
-        await emit({ type: "model.request", tokensIn: estimateTokens(requestSystem, eviction.messages) });
 
         const req: ModelRequest = {
           system: requestSystem,
@@ -576,6 +616,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           for (const patch of h.patches) {
             if (patch !== null && typeof patch === "object" && "system" in patch && typeof patch.system === "string") {
               req.system = patch.system;
+              requestSystemBlocks = [{
+                content: patch.system,
+                source: "system_prompt",
+                origin: "hook:pre_model",
+                authority: "instruction",
+                reason: "pre_model hook replaced the rendered system prompt",
+              }];
             } else {
               // the only shape this point accepts; anything else is a plugin bug and silence
               // would leave its author with no way to find out
@@ -587,6 +634,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             }
           }
         }
+
+        // Emitted only after the last request mutation and immediately before the provider call.
+        // It contains hashes and accounting metadata, never prompt content.
+        await emit(buildContextManifest({
+          turn: turns,
+          request: req,
+          systemBlocks: requestSystemBlocks,
+          originalMessages: messages,
+        }));
+        await emit({ type: "model.request", tokensIn: estimateTokens(req.system, req.messages) });
 
         const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
         let usage: Usage = { input: 0, output: 0 };

@@ -1,7 +1,7 @@
 # Status
 
-Current roadmap row: **R1.5e is complete.** R1 is complete (R1a–R1e); R1.5a and R1.5c were
-deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
+Current roadmap row: **R1.5d is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, and R1.5e
+were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -126,7 +126,22 @@ through M7 remain complete, including M2.5's live provider validation.
 |---|---|---|
 | R1.5a | Outbound-view eviction of stale, large tool results with `context.evicted` accounting | done |
 | R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
+| R1.5d | Per-turn prompt bill of materials with hashes, provenance, freshness, and TUI `/context` | done |
 | R1.5e | Budgeted mechanical repository map with mtime refresh, context accounting, and opt-out | done |
+
+- R1.5d emits `context.manifest` immediately before every model request, after outbound eviction,
+  repository-map refresh, and `pre_model` hook patches. Each rendered system/history/tool-result/tool
+  catalogue block records source, origin, instruction-vs-data authority, a 16-hex SHA-256 content hash,
+  load reason, UTF-8 bytes, a conservative bytes/4 token estimate, kept-vs-evicted disposition, and
+  freshness where applicable; the event also hashes the complete unified request. Bodies remain only
+  in the outbound request, never the immutable JSONL log. The exact `context.repo_map.freshness` marker
+  is threaded into the corresponding manifest block rather than recomputed. CLI assembly labels base
+  instructions, skills catalogue, and memory index separately; trusted project instructions and repo
+  maps are labelled in core. TUI `/context` renders the latest manifest.
+- Compactness measurement: a representative first-turn manifest with base prompt, skills, memory,
+  an 8 KiB repo map, one user-history block, and two tool schemas serializes to **1,338 bytes** including
+  the event envelope. Prompt body size does not affect that cost; each later history/tool-result block
+  adds one metadata record rather than duplicating content.
 
 - R1.5e builds an 8 KiB-bounded, deterministically ordered file-and-export map with the TypeScript
   syntax parser only: no module resolution, imports, execution, LSP, or build graph. Conventional

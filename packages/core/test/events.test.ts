@@ -28,6 +28,30 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a compact context.manifest without prompt content", () => {
+    const event = HarnessEvent.parse({
+      seq: 40,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.manifest",
+      turn: 2,
+      requestHash: "request123",
+      blocks: [{
+        source: "repo_map",
+        origin: "/repo",
+        authority: "data",
+        hash: "content123",
+        reason: "repository orientation snapshot",
+        bytes: 4096,
+        tokens: 1024,
+        disposition: "kept",
+        freshness: "fresh123",
+      }],
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(JSON.stringify(event)).not.toContain("secret prompt body");
+  });
+
   it("round-trips a context.repo_map accounting event without carrying map content", () => {
     const event = HarnessEvent.parse({
       seq: 40,

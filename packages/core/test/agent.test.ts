@@ -5,6 +5,7 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   builtinTools,
+  contentHash,
   createAgent as createCoreAgent,
   RulePolicy,
   SessionStore,
@@ -139,6 +140,7 @@ describe("agent loop", () => {
     expect(events.map((e) => e.type)).toEqual([
       "session.start",
       "turn.start",
+      "context.manifest",
       "model.request",
       "model.delta",
       "model.delta",
@@ -149,6 +151,7 @@ describe("agent loop", () => {
       "tool.result",
       "turn.end",
       "turn.start",
+      "context.manifest",
       "model.request",
       "model.delta",
       "model.response",
@@ -207,7 +210,13 @@ describe("agent loop", () => {
     expect(provider.requests[0]!.system).toContain("export function before(): void");
     expect(provider.requests[0]!.system).not.toContain("export function after");
     expect(provider.requests[1]!.system).toContain("export function after(value: string): number");
-    expect(events.filter((event) => event.type === "context.repo_map")).toHaveLength(2);
+    const repoMapEvents = events.filter((event) => event.type === "context.repo_map");
+    const manifests = events.filter((event) => event.type === "context.manifest");
+    expect(repoMapEvents).toHaveLength(2);
+    expect(manifests).toHaveLength(2);
+    expect(manifests.map((manifest) => manifest.blocks.find((block) => block.source === "repo_map")?.freshness))
+      .toEqual(repoMapEvents.map((event) => event.freshness));
+    expect(manifests[0]!.requestHash).toBe(contentHash(provider.requests[0]));
     const rawLog = await readFile(join(root, "sess1.jsonl"), "utf8");
     expect(rawLog).toContain("context.repo_map");
     expect(rawLog).not.toContain("BEGIN REPOSITORY MAP");

@@ -19,6 +19,7 @@ import {
   type Decision,
   type Pricing,
   type PermissionPolicy,
+  type PromptBlock,
   type Skill,
   type SubagentOptions,
 } from "@agentkitai/agentrig-core";
@@ -36,6 +37,41 @@ import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/age
 import { buildProvider, type ProviderOptions } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
+
+function promptBlocks(options: {
+  system: string;
+  systemOrigin: string;
+  skills: string;
+  skillsOrigin: string;
+  memory?: string;
+}): PromptBlock[] {
+  const blocks: PromptBlock[] = [{
+    content: options.system,
+    source: "system_prompt",
+    origin: options.systemOrigin,
+    authority: "instruction",
+    reason: "base agent instructions",
+  }];
+  if (options.skills !== "") {
+    blocks.push({
+      content: options.skills,
+      source: "skills_catalogue",
+      origin: options.skillsOrigin,
+      authority: "instruction",
+      reason: "catalogue of skills available on demand",
+    });
+  }
+  if (options.memory !== undefined && options.memory !== "") {
+    blocks.push({
+      content: options.memory,
+      source: "memory_index",
+      origin: "memory:wiki-index",
+      authority: "data",
+      reason: "compact index of durable project memory",
+    });
+  }
+  return blocks;
+}
 
 /**
  * The one place an agent is assembled.
@@ -264,16 +300,17 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
       repoMap: w.opts.repoMap === false ? false : {},
       ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
-      systemPrompt: (ctx: { cwd: string }) =>
-        [
+      systemPrompt: (ctx: { cwd: string }) => promptBlocks({
+        system: [
           "You are a subagent. You have been given one self-contained task and none of the",
           "parent conversation. Do the task, then reply with the answer and no tool calls —",
           "your final message is all the parent receives.",
           `Working directory: ${ctx.cwd}`,
-          skillsInjection(w.skills),
-        ]
-          .filter((line) => line !== "")
-          .join("\n"),
+        ].join("\n"),
+        systemOrigin: "cli:subagent-default",
+        skills: skillsInjection(w.skills),
+        skillsOrigin: (w.opts.skills ?? []).join(",") || "skills:discovered",
+      }),
       store: new SessionStore({ root: w.opts.root }),
       maxTokensPerTurn: w.maxTokensPerTurn,
     }),
@@ -413,10 +450,13 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
     // a function so a resumed session gets its snapshot's cwd, not this process's
-    systemPrompt: (ctx) =>
-      [opts.system ?? defaultSystemPrompt(ctx.cwd), skillsInjection(skills), memoryIndex]
-        .filter((s) => s !== "")
-        .join("\n\n"),
+    systemPrompt: (ctx) => promptBlocks({
+      system: opts.system ?? defaultSystemPrompt(ctx.cwd),
+      systemOrigin: opts.system === undefined ? "cli:default-system" : "cli:--system",
+      skills: skillsInjection(skills),
+      skillsOrigin: (opts.skills ?? []).join(",") || "skills:discovered",
+      memory: memoryIndex,
+    }),
     store: new SessionStore({ root: opts.root }),
     ...(hooks.length === 0 ? {} : { hooks }),
     budget,
