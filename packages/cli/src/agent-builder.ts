@@ -78,6 +78,12 @@ export interface AgentBuildOptions extends ProviderOptions {
   subagentMaxChildren?: string;
   /** Directories to discover markdown skills in (repeatable). */
   skills?: string[];
+  /**
+   * Whether config resolution appends the conventional `.agentrig/skills` directories (trusted
+   * project root, then home) after the explicit ones. Consumed by `loadRunConfig`, which folds
+   * the discovered dirs into `skills` — by the time an agent is built, `skills` is final.
+   */
+  skillDiscovery?: boolean;
   /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
   shell?: string;
   /** Canonical root approved by the CLI trust boundary; absent means no project context. */

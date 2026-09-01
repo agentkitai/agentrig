@@ -194,6 +194,29 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## Skills auto-discovery — issue #61 (2026-09-01)
+
+Status: **done**.
+
+`loadRunConfig` now appends the conventional skill directories after any explicit `--skills`
+dirs — `<trusted project root>/.agentrig/skills` first, then `~/.agentrig/skills` — so projects
+carry their skills with zero flags and R6b's generated skills get picked up the next session.
+Ordering matters and is pinned: `discoverSkills` is first-root-wins, so explicit dirs shadow
+discovered ones. Trust boundary: the project dir loads only under the same R1d decision as
+AGENTS.md and project config (an untrusted checkout contributes no skills); the user dir is
+skipped when the repository contains the home directory (`userStateSafe`), like user config.
+Opt-out via `skillDiscovery: false` in config or `--no-skill-discovery` (with `--skill-discovery`
+as the positive override, the paired-negation pattern) — named that instead of the issue's
+`--no-skills` because Commander would let `--no-skills` clobber the repeatable `--skills` array
+type. `agentrig doctor` gains a read-only `skills` line naming which dirs a run would load and
+why the skipped ones are skipped — and says "unknown" while config is invalid rather than
+asserting dirs a run would never reach. Discovered dirs are deduped against explicit ones.
+Pinned by discovery-order, untrusted-checkout, home-inside-repo (with and without `--trust`),
+nested-cwd-vs-trusted-root, dedupe, opt-out, flag-override, and doctor tests. Mutation-verified,
+including the two gaps the adversarial review found surviving the first round: discovery removed
+fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
+`join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
+
 ## Tool emit allow-list — issue #63 (2026-09-01)
 
 Status: **done**.

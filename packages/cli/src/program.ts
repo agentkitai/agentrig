@@ -190,6 +190,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
       .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
+      .option(
+        "--skill-discovery",
+        "override config and auto-load .agentrig/skills from the trusted project root and home",
+      )
+      .option("--no-skill-discovery", "do not auto-load conventional .agentrig/skills directories")
       // Config may enable a boolean; paired negations let one invocation still override it.
       .option("--no-dangerously-skip-permissions", "override config and require permission checks")
       .option("--no-yolo", "override config and require permission checks")

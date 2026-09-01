@@ -57,6 +57,8 @@ const ConfigValuesSchema = z
     subagentMaxTurns: positiveSetting.optional(),
     subagentMaxChildren: positiveSetting.optional(),
     skills: stringList.optional(),
+    /** Auto-load conventional `.agentrig/skills` directories (trusted project + home). Default on. */
+    skillDiscovery: z.boolean().optional(),
     shell: z.string().min(1).optional(),
     repoMap: z.boolean().optional(),
   })
@@ -252,8 +254,24 @@ export async function loadRunConfig(
     cli,
     ...(profile === undefined ? {} : { profile }),
   });
+  // Issue #61: conventional skill directories are appended AFTER any explicit dirs, so explicit
+  // ones shadow discovered ones (`discoverSkills` is first-root-wins, and a missing directory is
+  // silently skipped there). Project skills are repo-controlled text that lands verbatim in the
+  // system prompt catalogue, so they load only under the same trust decision as AGENTS.md and
+  // project config; `~/.agentrig/skills` is skipped when the repository contains the home
+  // directory (`userStateSafe`), for the same reason user config is ignored there.
+  const explicitSkills = Array.isArray(resolved.skills) ? (resolved.skills as string[]) : [];
+  const discoveredSkills = resolved.skillDiscovery === false
+    ? []
+    : [
+        ...(trust.trusted ? [join(trust.projectRoot, ".agentrig", "skills")] : []),
+        ...(boundary.userStateSafe ? [join(home, ".agentrig", "skills")] : []),
+      ];
   return {
     ...resolved,
+    // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
+    // emit a per-skill shadowing warning every run
+    skills: [...new Set([...explicitSkills, ...discoveredSkills])],
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),
