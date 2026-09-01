@@ -200,6 +200,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--no-dream-on-end", "override config and skip scheduled session-end dream")
       .option("--no-dream-structural-only", "override config and allow model-backed dream consolidation")
       .option("--no-subagents", "override config and disable subagents")
+      .option("--no-repo-map", "do not inject the mechanical repository structure map")
       .option(
         "--shell <path>",
         "shell for the `bash` tool (default: /bin/sh; on Windows, Git Bash then PowerShell then cmd)",

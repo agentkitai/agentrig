@@ -179,6 +179,7 @@ describe("the flags exist on the commands that build an agent", () => {
       expect(flags).toContain("--subagent-max-turns");
       expect(flags).toContain("--subagent-max-children");
       expect(flags).toContain("--skills");
+      expect(flags).toContain("--no-repo-map");
     }
   });
 

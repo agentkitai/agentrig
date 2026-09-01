@@ -145,7 +145,7 @@ describe("config file boundary", () => {
 describe("both agent entry points use config", () => {
   it("passes the same configured value through run and the default TUI into built agents", async () => {
     const { cwd, home } = await fixture();
-    await configAt(cwd, { shell: "/bin/bash", model: "configured-model" });
+    await configAt(cwd, { shell: "/bin/bash", model: "configured-model", repoMap: false });
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     const received: Array<RunOptions | TuiOptions> = [];
     const dependencies = {
@@ -160,6 +160,7 @@ describe("both agent entry points use config", () => {
     expect(received).toHaveLength(2);
     for (const options of received) {
       expect(options.model).toBe("configured-model");
+      expect(options.repoMap).toBe(false);
       const built = await buildAgent(options as AgentBuildOptions);
       expect(built.tools.find((tool) => tool.name === "bash")?.description).toContain("/bin/bash");
     }

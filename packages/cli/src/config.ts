@@ -58,6 +58,7 @@ const ConfigValuesSchema = z
     subagentMaxChildren: positiveSetting.optional(),
     skills: stringList.optional(),
     shell: z.string().min(1).optional(),
+    repoMap: z.boolean().optional(),
   })
   .strict();
 

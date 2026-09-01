@@ -143,6 +143,13 @@ export const EventPayload = z.discriminatedUnion("type", [
     bytesSaved: z.number().int().positive(),
   }),
   z.object({ type: z.literal("context.loaded"), path: z.string(), bytes: z.number().int().nonnegative() }),
+  z.object({
+    type: z.literal("context.repo_map"),
+    bytes: z.number().int().nonnegative(),
+    files: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    freshness: z.string(),
+  }),
   z.object({ type: z.literal("plan.updated"), items: z.array(PlanItem) }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({

@@ -82,6 +82,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   shell?: string;
   /** Canonical root approved by the CLI trust boundary; absent means no project context. */
   trustedProjectRoot?: string;
+  /** Inject the mechanical repository map. Defaults on; config or `--no-repo-map` may disable it. */
+  repoMap?: boolean;
 }
 
 const McpServerEntry = z.object({
@@ -260,6 +262,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // the prompt, the log and `sessions show` then agree on who asked.
       origin: "subagent",
       ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
+      repoMap: w.opts.repoMap === false ? false : {},
       ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
       systemPrompt: (ctx: { cwd: string }) =>
         [
@@ -406,6 +409,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     provider,
     tools,
     ...(opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: opts.trustedProjectRoot }),
+    repoMap: opts.repoMap === false ? false : {},
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
     // a function so a resumed session gets its snapshot's cwd, not this process's

@@ -35,6 +35,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
+    case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
@@ -135,6 +136,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.compact":
     case "context.evicted":
     case "context.loaded":
+    case "context.repo_map":
     case "memory.note":
       return null;
   }
