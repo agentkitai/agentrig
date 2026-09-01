@@ -122,6 +122,26 @@ export const TOOL_EMITTABLE_EVENTS: ReadonlySet<string> = new Set([
   "subagent.end",
 ]);
 
+/**
+ * Of the emittable types, the ones that carry authority beyond information, keyed to the ONE tool
+ * allowed to emit each (issue #67). `plan.updated` releases the supervisor's force_replan gate and
+ * defines the scope the drift detector enforces; `subagent.spawn`/`subagent.end` assert that a
+ * child session exists. From any other tool those are forgeries — a way to shrug off the one
+ * intervention PLAN §4.2 says cannot be ignored, or to plant phantom children in the trace — so
+ * the loop drops them. `file.changed` is deliberately absent: many tools legitimately write files.
+ * (Its residual — forged progress laundering the loop/stall detectors — is a detector-side
+ * problem, tracked separately.)
+ *
+ * Values are plain strings rather than imports of the tool-name constants: events.ts must not
+ * depend on tool modules, and a mapping change should be a deliberate, visible edit here — the
+ * gate tests pin both the contents and the enforcement.
+ */
+export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
+  ["plan.updated", "update_plan"],
+  ["subagent.spawn", "subagent"],
+  ["subagent.end", "subagent"],
+]);
+
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
