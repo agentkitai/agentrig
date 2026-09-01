@@ -14,7 +14,13 @@ import { TuiController } from "./controller.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { currentGitBranch } from "../git-branch.js";
-import { parseSoft, permissionWarning, supervisorOptions, type SupervisorFlags } from "../run.js";
+import {
+  parseSoft,
+  parseTurnsRemaining,
+  permissionWarning,
+  supervisorOptions,
+  type SupervisorFlags,
+} from "../run.js";
 import { parseBudget } from "../agent-builder.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 
@@ -35,6 +41,10 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   let built;
   const budget = parseBudget(opts);
+  // Validate before a session starts. Parsing inside onSession would let an invalid threshold run
+  // without supervision after the controller caught the attachment error.
+  const supervisorSoft = parseSoft(opts.supervisorSoft ?? "0.8");
+  const supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining ?? "15");
   const controller: TuiController = new TuiController({
     cwd: process.cwd(),
     model: opts.model,
@@ -56,7 +66,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
                 memoryIndex: "",
                 provider: built!.provider,
-                soft: parseSoft(opts.supervisorSoft ?? "0.8"),
+                soft: supervisorSoft,
+                turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),
                 onError: (where: string, err: Error) =>
                   controller.print(`supervisor ${where}: ${err.message}`, "error"),

@@ -90,6 +90,7 @@ describe("argv parsing", () => {
         memoryIndex: "",
         provider: { id: "fake", model: "m" } as never,
         soft: 0.8,
+        turnsRemaining: 15,
       }).capabilities;
 
     for (const argv of [["run", "x"], []]) {

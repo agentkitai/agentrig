@@ -8,6 +8,7 @@ import {
   errorFingerprint,
   inScope,
   initialState,
+  LadderPolicy,
   loopDetector,
   parseTestCounts,
   reduce,
@@ -414,7 +415,7 @@ describe("error_burst detector", () => {
 describe("budget detector", () => {
   it("warns once per dimension at the soft threshold", () => {
     const turns = Array.from({ length: 9 }, () => turnEnd());
-    const { signals } = feed(budgetDetector({ soft: 0.8, maxTurns: 10 }), turns);
+    const { signals } = feed(budgetDetector({ soft: 0.8, turnsRemaining: 1, maxTurns: 10 }), turns);
     expect(signals).toHaveLength(1);
     expect(signals[0]!.type).toBe("budget");
     expect(signals[0]!.evidence[0]).toContain("turns budget");
@@ -422,7 +423,61 @@ describe("budget detector", () => {
 
   it("stays quiet below the threshold", () => {
     const turns = Array.from({ length: 5 }, () => turnEnd());
-    expect(feed(budgetDetector({ soft: 0.8, maxTurns: 10 }), turns).signals).toHaveLength(0);
+    expect(feed(budgetDetector({ soft: 0.8, turnsRemaining: 1, maxTurns: 10 }), turns).signals).toHaveLength(0);
+  });
+
+  it("fires on the turns-remaining floor when the fraction has not tripped", () => {
+    const turns = Array.from({ length: 85 }, () => turnEnd());
+    const { signals } = feed(budgetDetector({ soft: 0.9, turnsRemaining: 15, maxTurns: 100 }), turns);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.evidence[0]).toContain("85%");
+  });
+
+  it("still fires on the fraction when the turns-remaining floor has not tripped", () => {
+    const turns = Array.from({ length: 80 }, () => turnEnd());
+    const { signals } = feed(budgetDetector({ soft: 0.8, turnsRemaining: 15, maxTurns: 100 }), turns);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.evidence[0]).toContain("80%");
+  });
+
+  it("the combined turn threshold remains one-shot for the session", () => {
+    const turns = Array.from({ length: 100 }, () => turnEnd());
+    expect(feed(budgetDetector({ soft: 0.9, turnsRemaining: 15, maxTurns: 100 }), turns).signals).toHaveLength(1);
+  });
+
+  it("scores a small-budget landing-window signal high enough for the default policy", () => {
+    const turns = Array.from({ length: 5 }, () => turnEnd());
+    const { signals } = feed(budgetDetector({ soft: 0.8, turnsRemaining: 15, maxTurns: 20 }), turns);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.confidence).toBeGreaterThanOrEqual(0.8);
+    expect(signals[0]!.evidence[0]).toContain("turns remain");
+    expect(new LadderPolicy().decide(signals, initialState())).toHaveLength(1);
+  });
+
+  it("keeps a configured sub-0.5 landing threshold actionable by the default policy", () => {
+    const turns = Array.from({ length: 5 }, () => turnEnd());
+    const { signals } = feed(budgetDetector({ soft: 0.4, turnsRemaining: 15, maxTurns: 20 }), turns);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.confidence).toBe(0.5);
+    expect(new LadderPolicy().decide(signals, initialState())).toHaveLength(1);
+  });
+
+  it("uses the cumulative turn number before the first model request after resume", () => {
+    const resume = ev({
+      type: "session.resume",
+      task: "continue",
+      cwd: "/w",
+      provider: "fake",
+      model: "m",
+      turns: 285,
+    });
+    const { signals, state } = feed(
+      budgetDetector({ soft: 0.95, turnsRemaining: 15, maxTurns: 300 }),
+      [resume],
+    );
+    expect(state.turns).toBe(285);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.evidence[0]).toContain("15 turns remain");
   });
 
   it("prices tokens into a USD threshold", () => {

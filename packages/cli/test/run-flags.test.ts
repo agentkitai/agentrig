@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseSoft, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
+import { parseSoft, parseTurnsRemaining, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
 
 /**
  * The supervisor CLI surface had no tests at all. These drive `runCommand` directly with no
@@ -37,6 +37,7 @@ function opts(overrides: Partial<RunOptions> = {}): RunOptions {
     maxTurns: "10",
     maxTokensPerTurn: "1024",
     supervisorSoft: "0.8",
+    supervisorTurnsRemaining: "15",
     dreamEverySessions: "10",
     dreamEveryHours: "24",
     ...overrides,
@@ -74,6 +75,25 @@ describe("--supervisor-soft validation", () => {
   it("is validated even when --supervise is off, so a typo is never silently carried", async () => {
     await runCommand("t", opts({ supervisorSoft: "nope" }));
     expect(errors.some((e) => e.includes("--supervisor-soft"))).toBe(true);
+  });
+});
+
+describe("--supervisor-turns-remaining validation", () => {
+  it("accepts a positive integer and rejects fractional or non-positive counts", async () => {
+    await runCommand("t", opts({ supervisorTurnsRemaining: "20" }));
+    expect(errors.some((e) => e.includes("--supervisor-turns-remaining"))).toBe(false);
+    expect(ranWithoutCredentials()).toBe(true);
+
+    for (const bad of ["0", "-1", "1.5", "many"]) {
+      errors = [];
+      await runCommand("t", opts({ supervisorTurnsRemaining: bad }));
+      expect(errors.some((e) => e.includes("--supervisor-turns-remaining"))).toBe(true);
+    }
+  });
+
+  it("parses the configured count for shared run/TUI wiring", () => {
+    expect(parseTurnsRemaining("15")).toBe(15);
+    expect(() => parseTurnsRemaining("2.5")).toThrow(/integer/);
   });
 });
 
@@ -127,6 +147,7 @@ describe("supervisorOptions", () => {
       memoryIndex: "",
       provider: { id: "fake", model: "m" } as never,
       soft: 0.8,
+      turnsRemaining: 15,
       ...over,
     });
 
@@ -171,8 +192,19 @@ describe("supervisorOptions", () => {
   });
 
   it("carries the budget the session is actually running under", () => {
-    const o = wiring({ budget: { maxTurns: 10, maxTokens: 500, maxUsd: 2, maxMinutes: 30 }, soft: 0.5 });
-    expect(o.budget).toEqual({ soft: 0.5, maxTurns: 10, maxTokens: 500, maxUsd: 2, maxMinutes: 30 });
+    const o = wiring({
+      budget: { maxTurns: 10, maxTokens: 500, maxUsd: 2, maxMinutes: 30 },
+      soft: 0.5,
+      turnsRemaining: 7,
+    });
+    expect(o.budget).toEqual({
+      soft: 0.5,
+      turnsRemaining: 7,
+      maxTurns: 10,
+      maxTokens: 500,
+      maxUsd: 2,
+      maxMinutes: 30,
+    });
   });
 });
 

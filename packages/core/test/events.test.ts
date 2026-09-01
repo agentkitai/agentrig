@@ -67,8 +67,13 @@ describe("event schema", () => {
       cwd: "/w",
       provider: "anthropic",
       model: "m",
+      turns: 42,
     });
     expect(parseEvent(serializeEvent(event))).toEqual(event);
+    // Additive field: old immutable logs without cumulative turns still parse.
+    const legacy = { ...event } as Record<string, unknown>;
+    delete legacy.turns;
+    expect(HarnessEvent.parse(legacy)).not.toHaveProperty("turns");
   });
 
   it("round-trips a plan.updated carrying the M4 scope, and keeps scope optional", () => {

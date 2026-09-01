@@ -66,8 +66,9 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   priceOut?: string;
   maxTokensPerTurn: string;
   memory?: string;
-  /** Required here (the flag has a default) while `SupervisorFlags` leaves it optional. */
+  /** Required here (the flags have defaults) while `SupervisorFlags` leaves them optional. */
   supervisorSoft: string;
+  supervisorTurnsRemaining: string;
   ingestOnEnd?: boolean;
   dreamOnEnd?: boolean;
   dreamEverySessions: string;
@@ -160,6 +161,7 @@ export interface SupervisorFlags {
   supervisorAbort?: boolean;
   supervisorNoAbort?: boolean;
   supervisorSoft?: string;
+  supervisorTurnsRemaining?: string;
   supervisorReview?: boolean;
   driftScope?: string[];
   driftContract?: string[];
@@ -173,6 +175,15 @@ export function parseSoft(value: string): number {
   return soft;
 }
 
+/** The absolute turns-remaining warning is a count, so fractions would create ambiguous boundaries. */
+export function parseTurnsRemaining(value: string): number {
+  const turns = positiveNumber("--supervisor-turns-remaining", value);
+  if (!Number.isInteger(turns)) {
+    throw new Error(`--supervisor-turns-remaining must be an integer, got ${JSON.stringify(value)}`);
+  }
+  return turns;
+}
+
 export interface SupervisorWiring {
   opts: SupervisorFlags;
   task: string;
@@ -181,6 +192,7 @@ export interface SupervisorWiring {
   memoryIndex: string;
   provider: ModelProvider;
   soft: number;
+  turnsRemaining: number;
   onEscalate?: SuperviseOptions["onEscalate"];
   onError?: (where: string, err: Error) => void;
 }
@@ -198,6 +210,7 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   return {
     budget: {
       soft: w.soft,
+      turnsRemaining: w.turnsRemaining,
       ...(w.budget.maxTurns === undefined ? {} : { maxTurns: w.budget.maxTurns }),
       ...(w.budget.maxTokens === undefined ? {} : { maxTokens: w.budget.maxTokens }),
       ...(w.budget.maxUsd === undefined ? {} : { maxUsd: w.budget.maxUsd }),
@@ -260,8 +273,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let dreamEverySessions: number;
   let dreamEveryHours: number;
   let supervisorSoft: number;
+  let supervisorTurnsRemaining: number;
   try {
     supervisorSoft = parseSoft(opts.supervisorSoft);
+    supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining);
     dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
     dreamEveryHours = positiveNumber("--dream-every-hours", opts.dreamEveryHours);
   } catch (err) {
@@ -320,6 +335,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             memoryIndex,
             provider,
             soft: supervisorSoft,
+            turnsRemaining: supervisorTurnsRemaining,
             ...(interactive
               ? { onEscalate: (question: string) => console.error(`supervisor escalation: ${question}`) }
               : {}),

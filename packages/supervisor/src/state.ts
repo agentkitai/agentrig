@@ -61,16 +61,23 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
 
   switch (event.type) {
     case "session.start":
-    case "session.resume":
-      // a resumed session restarts the wall clock: the supervisor is only responsible for the
-      // stretch it is actually watching, not for hours the session spent parked
       state.startedAt = event.ts;
+      break;
+    case "session.resume":
+      // A resumed session restarts the wall clock, but its hard turn budget is cumulative. Seeding
+      // this before the first model request lets a near-cap resume receive guidance before it spends
+      // its final turn. `turns` is optional for compatibility with old event logs.
+      state.startedAt = event.ts;
+      state.turns = event.turns ?? state.turns;
       break;
     case "session.end":
       state.ended = true;
       break;
     case "turn.end":
-      state.turns += 1;
+      // `n` is cumulative across resumes, just like core's hard turn budget. Taking the greater of
+      // the event count and the locally observed increment also keeps the fold robust to synthetic
+      // or legacy streams whose turn.end events all used n=1.
+      state.turns = Math.max(state.turns + 1, event.n);
       break;
     case "tool.call":
       state.toolCalls += 1;

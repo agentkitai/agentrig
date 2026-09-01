@@ -1068,7 +1068,7 @@ describe("resume", () => {
 
     expect(summary).toMatchObject({ id: "sess1", reason: "done", turns: 3 });
     expect(summary.usage).toMatchObject({ input: 35, output: 10 });
-    expect(resumedEvents[0]).toMatchObject({ type: "session.resume", task: "now say bye", cwd: "/w" });
+    expect(resumedEvents[0]).toMatchObject({ type: "session.resume", task: "now say bye", cwd: "/w", turns: 2 });
 
     // the resumed model call carries the whole prior conversation plus the new task
     const msgs = second.requests[0]!.messages;

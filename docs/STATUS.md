@@ -125,6 +125,24 @@ provider validation.
 | Row | Deliverable | Status |
 |---|---|---|
 | R1.5a | Outbound-view eviction of stale, large tool results with `context.evicted` accounting | done |
+| R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
+
+- R1.5c keeps the interactive TUI at 50 turns but gives non-interactive `run` and `sessions resume`
+  300 turns by default. A resumed session follows the entry mode doing the new work rather than
+  inheriting its original cap. The split lives in Commander's per-command defaults so config,
+  profiles, environment overlays, and flags keep their existing precedence; explicitness still comes
+  from `getOptionValueSource`, which means a typed `--max-turns 50` remains an explicit choice even
+  though 50 is also the TUI default. Three hundred was chosen over the roadmap's old 200 proposal
+  because observed full-PR runs were already approaching 150 turns and user-side mitigation had
+  validated 300, while raising the interactive cap would make an accidental runaway much costlier.
+- R1.5c's budget warning now trips on the earlier condition of `supervisorSoft` or a fixed
+  `supervisorTurnsRemaining` window (15 turns by default). The fixed window applies only to turns;
+  tokens, USD, and minutes retain proportional thresholds because they have no turn-equivalent unit.
+  Both conditions share the existing per-dimension one-shot latch, and the new value uses the same
+  config/profile/CLI resolution path as `supervisorSoft` via `--supervisor-turns-remaining`. Resume
+  events carry the cumulative completed-turn count (optional for old-log compatibility), so the
+  supervisor can warn before the first new model request instead of learning the count after a
+  near-cap resume has already spent its last turn.
 
 - R1.5a was implemented before nominally-next R1b because the earlier measured work sessions cost
   3.3M and 4.0M input tokens on quadratic full-history resends. The first R1.5a session itself cost
@@ -300,8 +318,9 @@ account has credits.
   OpenAI adapter sends `max_completion_tokens` against api.openai.com (`max_tokens` for other
   base URLs, `maxTokensParam` to override); when a provider reports no usage the loop warns
   once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
-  resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
-  raising the budget.
+  resumes; `maxMinutes` is per-run wall clock. Resuming a budget-ended session requires an
+  effective budget above the exhausted count; that can come from config/an explicit override or
+  from resuming through an entry mode whose default is higher.
 
 ## Post-M2 hardening (from live smoke findings)
 

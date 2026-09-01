@@ -6,6 +6,8 @@ import { signal } from "../types.js";
 export interface BudgetOptions {
   /** Fraction of each hard limit at which the soft threshold trips. */
   soft?: number;
+  /** Absolute turn window that also trips the warning, whichever threshold is reached first. */
+  turnsRemaining?: number;
   maxTurns?: number;
   maxTokens?: number;
   maxUsd?: number;
@@ -22,6 +24,7 @@ export interface BudgetOptions {
  */
 export function budgetDetector(opts: BudgetOptions = {}): Detector {
   const soft = opts.soft ?? 0.8;
+  const turnsRemaining = opts.turnsRemaining ?? 15;
   const fired = new Set<string>();
 
   return {
@@ -41,10 +44,19 @@ export function budgetDetector(opts: BudgetOptions = {}): Detector {
       for (const d of dims) {
         if (d.limit === undefined || d.limit <= 0 || fired.has(d.name)) continue;
         const frac = d.used / d.limit;
-        if (frac < soft) continue;
+        const remaining = d.limit - d.used;
+        const inTurnLandingWindow = d.name === "turns" && remaining <= turnsRemaining;
+        if (frac < soft && !inTurnLandingWindow) continue;
         fired.add(d.name);
-        return signal("budget", Math.min(1, frac), [
-          `${d.name} budget ${Math.round(frac * 100)}% spent: ${d.fmt(d.used)} of ${d.fmt(d.limit)}`,
+        const thresholdEvidence = inTurnLandingWindow
+          ? `${Math.max(0, remaining)} turns remain (configured wrap-up window: ${turnsRemaining})`
+          : `soft threshold ${Math.round(soft * 100)}% reached`;
+        // A landing-window signal can arrive below the policy's default 0.5 confidence floor on a
+        // small budget. Score the configured condition itself, not merely spend, or the policy will
+        // discard the signal after this detector has latched it as fired.
+        const confidence = inTurnLandingWindow ? Math.max(frac, soft, 0.5) : frac;
+        return signal("budget", Math.min(1, confidence), [
+          `${d.name} budget ${Math.round(frac * 100)}% spent: ${d.fmt(d.used)} of ${d.fmt(d.limit)}; ${thresholdEvidence}`,
           "core will stop the session at the hard limit; there is still room to finish deliberately",
         ], [from, event.seq]);
       }

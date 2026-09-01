@@ -128,7 +128,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)");
   }
 
-  function withRunOptions(cmd: Command): Command {
+  const INTERACTIVE_MAX_TURNS = "50";
+  const HEADLESS_MAX_TURNS = "300";
+
+  function withRunOptions(cmd: Command, maxTurnsDefault: string): Command {
     return withProviderOptions(cmd)
       .option("--profile <name>", "named config profile to overlay")
       .option("--trust", "load project instructions and config for this run only")
@@ -157,7 +160,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "allow every tool call without asking, including outside the working directory; --deny still applies",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
-      .option("--max-turns <n>", "turn budget", "50")
+      .option("--max-turns <n>", "turn budget", maxTurnsDefault)
       .option("--max-tokens <n>", "token budget (input + output)")
       .option("--max-minutes <n>", "wall-clock budget in minutes")
       .option("--max-usd <n>", "USD budget; requires --price-in/--price-out")
@@ -168,6 +171,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8")
+      .option(
+        "--supervisor-turns-remaining <n>",
+        "warn when this many turns remain, even if the soft fraction has not tripped",
+        "15",
+      )
       .option(
         "--supervisor-review",
         "enable the LLM-backed supervisor rungs (trajectory reviewer + rubric grader); costs tokens",
@@ -233,6 +241,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
 
   withRunOptions(
     program.command("run <task>").description("Run the agent on a task, non-interactively"),
+    HEADLESS_MAX_TURNS,
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
     .action(async (task: string, opts: RunOptions, cmd: Command) => {
@@ -322,6 +331,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     sessions
       .command("resume <id> [task...]")
       .description("Continue a session from its snapshot; the task becomes the next user message"),
+    HEADLESS_MAX_TURNS,
   ).action(async (id: string, taskWords: string[], opts: RunOptions, cmd: Command) => {
     const resolved = await configured({ ...opts, resume: id }, cmd, false);
     if (resolved !== undefined) await executeRun(taskWords.join(" ") || "Continue the task.", resolved);
@@ -364,7 +374,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    * keeps the TUI's options on the TUI, and preserves Commander's unknown-command error (and its
    * did-you-mean suggestion) instead of dropping a typo into an interactive agent.
    */
-  withRunOptions(program.command("tui", { isDefault: true, hidden: true }).description("Interactive TUI (default)"))
+  withRunOptions(
+    program.command("tui", { isDefault: true, hidden: true }).description("Interactive TUI (default)"),
+    INTERACTIVE_MAX_TURNS,
+  )
     .action(async (opts: RunOptions, cmd: Command) => {
       // `isDefault` catches ANY unmatched argv, so a typo'd subcommand would otherwise drop the
       // user into an interactive agent with their intended command discarded. Reject leftover
