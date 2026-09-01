@@ -1174,9 +1174,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         const replaced = h.patches.filter((patch): patch is string => typeof patch === "string").at(-1);
         const rawInjected = h.injects.join("\n");
-        const injected = rawInjected === ""
-          ? ""
-          : bound(rawInjected, Math.floor(DISPLAY_CAP / 2)).display;
+        const availableAfterError = Math.max(0, DISPLAY_CAP - display.length - 1);
+        const injectedBudget = rawInjected === ""
+          ? 0
+          : availableAfterError > 0
+            ? availableAfterError
+            : Math.min(Math.floor(DISPLAY_CAP / 2), rawInjected.length);
+        const injected = injectedBudget === 0 ? "" : bound(rawInjected, injectedBudget).display;
         const separator = injected === "" ? "" : "\n";
         const base = bound(replaced ?? display, DISPLAY_CAP - separator.length - injected.length).display;
         const body = `${base}${separator}${injected}`;
