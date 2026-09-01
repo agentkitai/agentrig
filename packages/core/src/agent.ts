@@ -405,7 +405,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         totals.output = snap.usage.output;
         if (snap.usage.cacheRead !== undefined) totals.cacheRead = snap.usage.cacheRead;
         if (snap.usage.cacheWrite !== undefined) totals.cacheWrite = snap.usage.cacheWrite;
-        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model });
+        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns });
         messages = snap.messages;
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
       } else {

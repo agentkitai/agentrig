@@ -139,7 +139,10 @@ provider validation.
   `supervisorTurnsRemaining` window (15 turns by default). The fixed window applies only to turns;
   tokens, USD, and minutes retain proportional thresholds because they have no turn-equivalent unit.
   Both conditions share the existing per-dimension one-shot latch, and the new value uses the same
-  config/profile/CLI resolution path as `supervisorSoft` via `--supervisor-turns-remaining`.
+  config/profile/CLI resolution path as `supervisorSoft` via `--supervisor-turns-remaining`. Resume
+  events carry the cumulative completed-turn count (optional for old-log compatibility), so the
+  supervisor can warn before the first new model request instead of learning the count after a
+  near-cap resume has already spent its last turn.
 
 - R1.5a was implemented before nominally-next R1b because the earlier measured work sessions cost
   3.3M and 4.0M input tokens on quadratic full-history resends. The first R1.5a session itself cost
@@ -306,8 +309,9 @@ account has credits.
   OpenAI adapter sends `max_completion_tokens` against api.openai.com (`max_tokens` for other
   base URLs, `maxTokensParam` to override); when a provider reports no usage the loop warns
   once and compaction falls back to estimates. `maxTurns`/`maxTokens`/`maxUsd` bind across
-  resumes; `maxMinutes` is per-run wall clock; resuming a budget-ended session requires
-  raising the budget.
+  resumes; `maxMinutes` is per-run wall clock. Resuming a budget-ended session requires an
+  effective budget above the exhausted count; that can come from config/an explicit override or
+  from resuming through an entry mode whose default is higher.
 
 ## Post-M2 hardening (from live smoke findings)
 

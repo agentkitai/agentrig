@@ -97,7 +97,15 @@ export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
-  z.object({ type: z.literal("session.resume"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
+  z.object({
+    type: z.literal("session.resume"),
+    task: z.string(),
+    cwd: z.string(),
+    provider: z.string(),
+    model: z.string(),
+    /** Cumulative completed turns, additive so pre-R1.5c logs remain readable. */
+    turns: z.number().int().nonnegative().optional(),
+  }),
   z.object({ type: z.literal("session.end"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
   z.object({ type: z.literal("turn.start"), n: z.number().int() }),
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),
