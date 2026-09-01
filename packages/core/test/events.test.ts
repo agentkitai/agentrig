@@ -80,6 +80,7 @@ describe("event schema", () => {
       mode: "inject",
     });
     expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
 
   it("round-trips a skill.used activation record", () => {
     const event = HarnessEvent.parse({
