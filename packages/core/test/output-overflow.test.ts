@@ -18,6 +18,19 @@ import {
   type ModelRequest,
 } from "@agentkitai/agentrig-core";
 
+function expectNoUnpairedSurrogates(text: string): void {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code >= 0xD800 && code <= 0xDBFF) {
+      expect(text.charCodeAt(index + 1)).toBeGreaterThanOrEqual(0xDC00);
+      expect(text.charCodeAt(index + 1)).toBeLessThanOrEqual(0xDFFF);
+      index += 1;
+    } else {
+      expect(code < 0xDC00 || code > 0xDFFF).toBe(true);
+    }
+  }
+}
+
 function textOf(blocks: ContentBlock[]): string {
   return blocks.map((block) => {
     if (block.type === "text") return block.text;
@@ -52,15 +65,19 @@ class OverflowProvider implements ModelProvider {
         ? (typeof prior.content === "string" ? prior.content : textOf(prior.content))
         : "";
       expect(display.length).toBeLessThanOrEqual(30_000);
+      expectNoUnpairedSurrogates(display);
       expect(display).not.toContain("HIDDEN");
       expect(display).toContain("read_output");
-      const seq = Number(/"seq":(\d+)/.exec(display)?.[1]);
+      const handle = /first (\d+) of \d+ UTF-16 code units shown.*\{"seq":(\d+),"from":(\d+),"to":(\d+)\}/.exec(display);
+      const visible = Number(handle?.[1]);
+      const seq = Number(handle?.[2]);
       expect(Number.isSafeInteger(seq)).toBe(true);
+      expect(Number(handle?.[3])).toBe(visible);
       yield {
         type: "tool_use",
         id: "read-1",
         name: "read_output",
-        input: { seq, from: this.fullOutput.length - 6, to: this.fullOutput.length },
+        input: { seq, from: visible, to: this.fullOutput.length },
       };
       yield { type: "stop", reason: "tool_use" };
       return;
@@ -99,7 +116,12 @@ function largeTool(output: string): AnyTool {
   };
 }
 
-function config(provider: ModelProvider, store: SessionStore, tools: AnyTool[]): AgentConfig {
+function config(
+  provider: ModelProvider,
+  store: SessionStore,
+  tools: AnyTool[],
+  overrides: Partial<AgentConfig> = {},
+): AgentConfig {
   return {
     provider,
     store,
@@ -109,6 +131,7 @@ function config(provider: ModelProvider, store: SessionStore, tools: AnyTool[]):
     repoMap: false,
     trustedProjectRoot: root,
     now: (() => { let now = 1_000; return () => now++; })(),
+    ...overrides,
   };
 }
 
@@ -120,23 +143,28 @@ async function collect(events: AsyncIterable<HarnessEvent>): Promise<HarnessEven
 
 describe("output overflow artifacts", () => {
   it("stores oversized output in the immutable log and reads a hidden range without rerunning the tool", async () => {
-    const fullOutput = `${"x".repeat(31_000)}HIDDEN`;
+    const fullOutput = `${"😀".repeat(15_500)}HIDDEN`;
     const provider = new OverflowProvider(fullOutput);
     const store = new SessionStore({ root, newId: () => "overflow-session" });
     const session = createAgent(config(provider, store, [largeTool(fullOutput)])).run("inspect output", { cwd: root });
     const events = await collect(session.events);
-    await session.done;
+    const summary = await session.done;
+    expect(summary.reason).toBe("done");
 
     const largeResult = events.find((event) => event.type === "tool.result" && event.id === "large-1");
     expect(largeResult).toMatchObject({
       type: "tool.result",
       truncated: true,
       output: fullOutput,
+      display: `${fullOutput.slice(0, 30_000)}\n… [truncated 1006 chars]`,
     });
+    expect(events.some(
+      (event) => event.type === "tool.result.patched" && event.id === "large-1" && event.by === "core:output-overflow",
+    )).toBe(true);
     expect(events.filter((event) => event.type === "tool.call" && event.name === "large_output")).toHaveLength(1);
     expect(events.some((event) => event.type === "tool.call" && event.name === "read_output")).toBe(true);
     expect(events.find((event) => event.type === "tool.result" && event.id === "read-1")).toMatchObject({
-      display: "HIDDEN",
+      display: expect.stringMatching(/HIDDEN$/),
     });
 
     const persisted = await store.readAll("overflow-session");
@@ -178,6 +206,145 @@ describe("output overflow artifacts", () => {
       "at most 30000 UTF-16 code units",
     );
     expect(tool.inputSchema.safeParse({ seq: 1, from: 0, to: 30_000 }).success).toBe(true);
+  });
+
+  it("does not advertise read_output in a tool-free agent", async () => {
+    let advertised: string[] | undefined;
+    const provider: ModelProvider = {
+      id: "tool-free-fake",
+      model: "tool-free-fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        advertised = req.tools.map((tool) => tool.name);
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const session = createAgent(config(provider, new SessionStore({ root }), [])).run("answer only", { cwd: root });
+    await collect(session.events);
+    await session.done;
+    expect(advertised).toEqual([]);
+  });
+
+  it("streams to the requested event and rejects invalid runtime and surrogate-splitting bounds", async () => {
+    class StreamingOnlyStore extends SessionStore {
+      override readAll(): Promise<HarnessEvent[]> {
+        throw new Error("readAll must not be used by read_output");
+      }
+    }
+    const store = new StreamingOnlyStore({ root, now: () => 1_000 });
+    await store.append("session-a", {
+      type: "tool.result", id: "unicode", ok: true, display: "partial", durationMs: 1,
+      output: "a😀b", truncated: true,
+    });
+    const tool = readOutputTool(store);
+    const ctx = { cwd: root, sessionId: "session-a", emit: () => {}, signal: new AbortController().signal };
+
+    await expect(tool.execute({ seq: 0, from: 4, to: 5 }, ctx)).resolves.toMatchObject({ isError: true });
+    await expect(tool.execute({ seq: 0, from: 0, to: 5 }, ctx)).resolves.toMatchObject({ isError: true });
+    await expect(tool.execute({ seq: 0, from: 2, to: 4 }, ctx)).resolves.toMatchObject({
+      isError: true,
+      display: expect.stringContaining("set `from` to 1"),
+    });
+    await expect(tool.execute({ seq: 0, from: 0, to: 2 }, ctx)).resolves.toMatchObject({
+      isError: true,
+      display: expect.stringContaining("set `to` to 3"),
+    });
+    await expect(tool.execute({ seq: 0, from: 1, to: 3 }, ctx)).resolves.toMatchObject({ display: "😀" });
+  });
+
+  it("seals an overflow artifact when a post-tool hook has rewritten its display", async () => {
+    const fullOutput = `${"s".repeat(31_000)}SECRET`;
+    const provider: ModelProvider = {
+      id: "redaction-fake",
+      model: "redaction-fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        if (!req.messages.some((message) => message.content.some((block) => block.type === "tool_result"))) {
+          yield { type: "tool_use", id: "secret", name: "large_output", input: {} };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        const transcript = req.messages.map((message) => textOf(message.content)).join("\n");
+        expect(transcript).toContain("[REDACTED]");
+        expect(transcript).not.toContain("read_output");
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const store = new SessionStore({ root, newId: () => "redacted-session" });
+    const session = createAgent(config(provider, store, [largeTool(fullOutput)], {
+      hooks: [{ point: "post_tool", handler: () => ({ action: "modify", patch: "[REDACTED]" }) }],
+    })).run("go", { cwd: root });
+    const events = await collect(session.events);
+    await session.done;
+    const artifact = events.find((event) => event.type === "tool.result" && event.id === "secret");
+    if (artifact?.type !== "tool.result") throw new Error("missing artifact");
+    const result = await readOutputTool(store).execute(
+      { seq: artifact.seq, from: 31_000, to: 31_006 },
+      { cwd: root, sessionId: "redacted-session", emit: () => {}, signal: new AbortController().signal },
+    );
+    expect(result).toMatchObject({
+      isError: true,
+      display: expect.stringContaining("post_tool hook sealed this artifact"),
+    });
+    expect(result.display).not.toContain("SECRET");
+  });
+
+  it("bounds a thrown tool error before persisting or sending it", async () => {
+    const provider: ModelProvider = {
+      id: "throwing-fake",
+      model: "throwing-fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        if (!req.messages.some((message) => message.content.some((block) => block.type === "tool_result"))) {
+          yield { type: "tool_use", id: "throw-1", name: "throwing", input: {} };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        const result = req.messages.flatMap((message) => message.content)
+          .find((block) => block.type === "tool_result" && block.toolUseId === "throw-1");
+        expect(result?.type === "tool_result" && typeof result.content === "string" ? result.content.length : Infinity)
+          .toBeLessThan(31_000);
+        expect(textOf(req.messages.flatMap((message) => message.content))).not.toContain("TAIL");
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const throwing: AnyTool = {
+      ...largeTool("unused"),
+      name: "throwing",
+      execute: async () => { throw new Error(`${"e".repeat(40_000)}TAIL`); },
+    };
+    const session = createAgent(config(provider, new SessionStore({ root }), [throwing])).run("go", { cwd: root });
+    const events = await collect(session.events);
+    await session.done;
+    const result = events.find((event) => event.type === "tool.result" && event.id === "throw-1");
+    expect(result?.type === "tool.result" ? result.display.length : Infinity).toBeLessThan(31_000);
+    expect(result?.type === "tool.result" ? result.display : "").not.toContain("TAIL");
+  });
+
+  it("ignores an empty fullDisplay from a malformed tool result", async () => {
+    const provider: ModelProvider = {
+      id: "malformed-fake",
+      model: "malformed-fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        if (!req.messages.some((message) => message.content.some((block) => block.type === "tool_result"))) {
+          yield { type: "tool_use", id: "malformed-1", name: "malformed", input: {} };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        expect(req.messages.map((message) => textOf(message.content)).join("\n")).not.toContain("read_output");
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const malformed: AnyTool = {
+      ...largeTool("preview"),
+      name: "malformed",
+      execute: async () => ({ output: {}, display: "preview", truncated: true, fullDisplay: "" }),
+    };
+    const session = createAgent(config(provider, new SessionStore({ root }), [malformed])).run("go", { cwd: root });
+    const events = await collect(session.events);
+    await session.done;
+    expect(events.find((event) => event.type === "tool.result" && event.id === "malformed-1")).not.toHaveProperty("output");
   });
 
   it("does not let an artifact handle cross the current session boundary", async () => {

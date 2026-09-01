@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { EventOf } from "../events.js";
 import type { SessionStore } from "../session-store.js";
 import type { Tool, ToolResult } from "../tool.js";
 import { DISPLAY_CAP } from "./shared.js";
@@ -35,10 +36,26 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
     inputSchema: ReadOutputInput,
     permission: "read",
     async execute(input, ctx): Promise<ToolResult<string>> {
-      const event = (await store.readAll(ctx.sessionId)).find((candidate) => candidate.seq === input.seq);
-      if (event?.type !== "tool.result" || event.truncated !== true || event.output === undefined) {
+      let event: EventOf<"tool.result"> | undefined;
+      let sealed = false;
+      for await (const candidate of store.read(ctx.sessionId)) {
+        if (ctx.signal.aborted) return { output: "", display: "read_output aborted", isError: true };
+        if (candidate.seq === input.seq && candidate.type === "tool.result") event = candidate;
+        if (
+          event !== undefined && candidate.type === "tool.result.patched" &&
+          candidate.id === event.id && candidate.by === "post_tool"
+        ) sealed = true;
+      }
+      if (event?.truncated !== true || event.output === undefined) {
         const display = `seq ${input.seq} is not an output artifact; use the seq from a truncated tool result's read_output handle`;
         return { output: "", display, isError: true };
+      }
+      if (sealed) {
+        return {
+          output: "",
+          display: `post_tool hook sealed this artifact; use the patched tool result instead of read_output seq ${input.seq}`,
+          isError: true,
+        };
       }
       if (input.from >= event.output.length) {
         const display =
@@ -51,6 +68,23 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
           `to ${input.to} exceeds output seq ${input.seq} (${event.output.length} UTF-16 code units); ` +
           `set to at most ${event.output.length}`;
         return { output: "", display, isError: true };
+      }
+      const splitsPair = (offset: number): boolean =>
+        offset > 0 && offset < event.output!.length &&
+        /[\uD800-\uDBFF]/.test(event.output![offset - 1]!) && /[\uDC00-\uDFFF]/.test(event.output![offset]!);
+      if (splitsPair(input.from)) {
+        return {
+          output: "",
+          display: `from ${input.from} splits a surrogate pair in output seq ${input.seq}; set \`from\` to ${input.from - 1}`,
+          isError: true,
+        };
+      }
+      if (splitsPair(input.to)) {
+        return {
+          output: "",
+          display: `to ${input.to} splits a surrogate pair in output seq ${input.seq}; set \`to\` to ${input.to + 1}`,
+          isError: true,
+        };
       }
       const output = event.output.slice(input.from, input.to);
       return { output, display: output };

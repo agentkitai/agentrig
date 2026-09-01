@@ -242,6 +242,21 @@ describe("post_tool", () => {
     expect(patched.display).toContain("extra guidance");
   });
 
+  it("bounds a hook injection before it reaches the model", async () => {
+    const provider = new FakeProvider([callEcho("x"), [usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: `${"z".repeat(40_000)}TAIL` }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    const patched = events.find((event) => event.type === "tool.result.patched");
+    expect(patched).toMatchObject({ type: "tool.result.patched", by: "post_tool" });
+    if (patched?.type !== "tool.result.patched") throw new Error("missing patch");
+    expect(patched.display.length).toBeLessThan(31_000);
+    expect(patched.display).not.toContain("TAIL");
+    expect(modelSaw(provider)).not.toContain("TAIL");
+  });
+
   it("does not record a patch event when no hook changed anything", async () => {
     const session = run([callEcho("x"), [usage(1, 1), stop("end_turn")]], []);
     const events = await collect(session);

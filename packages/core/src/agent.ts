@@ -240,26 +240,50 @@ interface OverflowResult {
 
 /** Bound every tool, including third-party tools that forgot to bound their own display. */
 function overflowResult(result: { display: string; output: unknown; truncated?: boolean; fullDisplay?: string }): OverflowResult {
-  let display = result.display;
-  let output = result.truncated === true ? result.fullDisplay : undefined;
-
-  const bounded = bound(display);
-  if (bounded.truncated) {
-    output ??= display;
-    display = bounded.display;
-  }
-
-  return output === undefined ? { display } : { display, output };
+  const output = result.truncated === true && result.fullDisplay !== undefined && result.fullDisplay.length > 0
+    ? result.fullDisplay
+    : undefined;
+  // An already-bounded tool's display is the historical record of what it returned, including its
+  // own truthful truncation count. Core bounds only tools that omitted a usable complete rendering.
+  if (output !== undefined) return { display: result.display, output };
+  return { display: bound(result.display).display };
 }
 
-/** Keep the artifact handle inside the same hard bound as every other model-facing tool result. */
-function displayWithOutputHandle(display: string, seq: number, outputLength: number): string {
-  const exampleTo = Math.min(DISPLAY_CAP, outputLength);
-  const marker =
-    `\n… [output truncated; ${outputLength} UTF-16 code units total. Read ranges with ` +
-    `${READ_OUTPUT_TOOL} {"seq":${seq},"from":0,"to":${exampleTo}}]`;
-  const prefixLength = Math.max(0, DISPLAY_CAP - marker.length);
-  return `${display.slice(0, prefixLength)}${marker}`;
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length);
+  let length = 0;
+  while (length < limit && left.charCodeAt(length) === right.charCodeAt(length)) length += 1;
+  return length;
+}
+
+function safePrefixEnd(text: string, proposed: number): number {
+  if (
+    proposed > 0 && proposed < text.length &&
+    /[\uD800-\uDBFF]/.test(text[proposed - 1]!) && /[\uDC00-\uDFFF]/.test(text[proposed]!)
+  ) return proposed - 1;
+  return proposed;
+}
+
+/** Keep a truthful, directly pageable artifact handle inside the hard model-facing display bound. */
+function displayWithOutputHandle(display: string, output: string, seq: number): string {
+  const availablePrefix = commonPrefixLength(display, output);
+  let visible = Math.min(availablePrefix, DISPLAY_CAP);
+  let marker = "";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const nextTo = safePrefixEnd(output, Math.min(output.length, visible + DISPLAY_CAP));
+    marker =
+      `\n… [output truncated; first ${visible} of ${output.length} UTF-16 code units shown. Read next range with ` +
+      `${READ_OUTPUT_TOOL} {"seq":${seq},"from":${visible},"to":${nextTo}}]`;
+    const nextVisible = safePrefixEnd(output, Math.min(availablePrefix, Math.max(0, DISPLAY_CAP - marker.length)));
+    if (nextVisible === visible) break;
+    visible = nextVisible;
+  }
+  // Re-render once with the stable visible offset so the prose and range are exact.
+  const nextTo = safePrefixEnd(output, Math.min(output.length, visible + DISPLAY_CAP));
+  marker =
+    `\n… [output truncated; first ${visible} of ${output.length} UTF-16 code units shown. Read next range with ` +
+    `${READ_OUTPUT_TOOL} {"seq":${seq},"from":${visible},"to":${nextTo}}]`;
+  return `${output.slice(0, visible)}${marker}`;
 }
 
 export function createAgent(config: AgentConfig): Agent {
@@ -382,7 +406,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
-    const sessionTools = [...config.tools, readOutputTool(store)];
+    const sessionTools = config.tools.length === 0 ? config.tools : [...config.tools, readOutputTool(store)];
     const toolsByName = new Map(sessionTools.map((t) => [t.name, t]));
     const toolSpecs = sessionTools.map(toToolSpec);
     const compaction = config.compaction ?? summarizeOlderTurns();
@@ -1035,7 +1059,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         });
         const modelDisplay = overflow.output === undefined
           ? overflow.display
-          : displayWithOutputHandle(overflow.display, resultEvent.seq, overflow.output.length);
+          : displayWithOutputHandle(overflow.display, overflow.output, resultEvent.seq);
+        if (overflow.output !== undefined) {
+          // The raw result above preserves the tool's own display. This additive event records the
+          // different bounded handle-bearing display the model actually consumes.
+          await emit({ type: "tool.result.patched", id: tu.id, by: "core:output-overflow", display: modelDisplay });
+        }
 
         // post_tool: a hook may rewrite what the MODEL sees (redaction, summarising a huge
         // output) or append to it. The `tool.result` event above is already written, so the log
@@ -1058,7 +1087,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           });
         }
         const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
-        const body = [replaced ?? modelDisplay, ...h.injects].join("\n");
+        const body = bound([replaced ?? modelDisplay, ...h.injects].join("\n")).display;
         if (replaced !== undefined || h.injects.length > 0) {
           // the log keeps what the tool returned; this records that a hook changed what the
           // model consumed, so the two can never diverge unobserved
@@ -1066,12 +1095,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         return resultBlock(body, !ok);
       } catch (err) {
-        const display =
+        const display = bound(
           abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
             ? "aborted"
             : err instanceof Error
               ? err.message
-              : String(err);
+              : String(err),
+        ).display;
         await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
         return resultBlock(display, true);
       }

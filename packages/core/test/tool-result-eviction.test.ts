@@ -60,6 +60,15 @@ describe("tool-result eviction view", () => {
     expect(viewed.count).toBe(1);
   });
 
+  it("preserves an overflow handle when the containing result is later evicted", () => {
+    const handle = 'read_output {"seq":42,"from":29800,"to":31000}';
+    const original = conversation([`${"large".repeat(500)}\n… [output truncated; ${handle}]`]);
+    const viewed = evictToolResults(original, { keepLastTurns: 0, minBytes: 100 });
+    const stub = result(viewed.messages, "call-1");
+    if (stub?.type !== "tool_result" || typeof stub.content !== "string") throw new Error("missing stub");
+    expect(stub.content).toContain(handle);
+  });
+
   it("does not encourage replaying a potentially mutating tool", () => {
     const original: Message[] = [
       { role: "assistant", content: [{ type: "tool_use", id: "deploy", name: "bash", input: { command: "deploy production" } }] },

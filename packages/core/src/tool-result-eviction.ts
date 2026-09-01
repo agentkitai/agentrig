@@ -47,11 +47,25 @@ function targetOf(input: unknown): string {
   return serialized === undefined ? "its prior target" : shortTarget(serialized);
 }
 
-function stubFor(toolUse: ToolUse): string {
+function outputHandle(content: Extract<ContentBlock, { type: "tool_result" }>["content"]): string | undefined {
+  const text = typeof content === "string"
+    ? content
+    : content.filter((block): block is Extract<ContentBlock, { type: "text" }> => block.type === "text")
+      .map((block) => block.text).join("\n");
+  return /read_output \{"seq":\d+,"from":\d+,"to":\d+\}/.exec(text)?.[0];
+}
+
+function stubFor(
+  toolUse: ToolUse,
+  content: Extract<ContentBlock, { type: "tool_result" }>["content"],
+): string {
   const target = targetOf(toolUse.input);
-  if (toolUse.name === "read_file") return `read of ${target} elided — re-read if needed`;
-  // Unknown tools may have side effects, so never suggest replaying them automatically.
-  return `${toolUse.name} of ${target} elided`;
+  const base = toolUse.name === "read_file"
+    ? `read of ${target} elided — re-read if needed`
+    // Unknown tools may have side effects, so never suggest replaying them automatically.
+    : `${toolUse.name} of ${target} elided`;
+  const handle = outputHandle(content);
+  return handle === undefined ? base : `${base} — preserved overflow handle: ${handle}`;
 }
 
 /**
@@ -98,7 +112,7 @@ export function evictToolResults(
       if (toolUse === undefined || assistantTurns - toolUse.turn < keepLastTurns) continue;
       const before = payloadBytes(block.content);
       if (before <= minBytes) continue;
-      const stub = stubFor(toolUse.block);
+      const stub = stubFor(toolUse.block, block.content);
       const saved = before - Buffer.byteLength(JSON.stringify(stub), "utf8");
       if (saved <= 0) continue;
 

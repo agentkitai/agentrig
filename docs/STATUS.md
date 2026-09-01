@@ -147,27 +147,42 @@ through M7 remain complete, including M2.5's live provider validation.
 - R1.5f turns display overflow into a self-describing artifact without adding a second mutable store.
   `tool.result` gained additive `output` and `truncated` fields: only a result whose display actually
   overflowed carries its complete textual rendering, and the event's existing `seq` is the handle.
-  The model-facing prefix remains within the 30,000-code-unit display cap after the handle is appended.
-  `read_output {seq, from, to}` serves a zero-based, half-open range of at most 30,000 UTF-16 code
-  units directly from the validated append-only session log, so hidden output can be inspected without
-  replaying a command.
+  The model-facing prefix remains within the 30,000-code-unit display cap after the handle is appended,
+  says exactly how much of the complete rendering it shows, and offers the immediately following range
+  rather than a duplicate prefix. The distinct handle-bearing model view is recorded as a
+  `tool.result.patched` event by `core:output-overflow` for replay/audit. `read_output {seq, from, to}`
+  serves a zero-based, half-open range of at most 30,000 UTF-16 code units directly from the validated
+  append-only session log, so hidden output can be inspected without replaying a command. Surrogate-pair
+  splits are rejected with corrected offsets rather than returning malformed Unicode.
 - `read_output` is registered by the core agent rather than by CLI/builtin assembly because it must
   capture the exact `SessionStore` used by the active session. Its session id comes only from
   `ToolContext`, never model input; a handle therefore cannot read another session. The name is reserved
   so caller tools cannot shadow this recovery path. It is explicitly allowed by the default policy: like
   `bash_job`, it only exposes data from an already-authorized operation in the same session and has no
-  honest filesystem path with which to satisfy the generic cwd-only read rule. The core also applies the final display bound to
-  third-party tools that forgot it, while `ToolResult.fullDisplay` lets already-bounded builtins and MCP
-  tools distinguish representational overflow from semantic collection caps such as grep's match limit.
+  honest filesystem path with which to satisfy the generic cwd-only read rule. Tool-free agents do not
+  advertise it. Reads stream the log instead of materializing every event and check aborts while scanning.
+  A later `post_tool` patch seals the raw artifact, so a redaction hook cannot be bypassed by range reads;
+  overflow handles survive stale-result eviction. The core also applies the final display bound to
+  third-party tools, thrown errors, and post-hook output, while `ToolResult.fullDisplay` lets already-bounded
+  builtins and MCP tools distinguish representational overflow from semantic collection caps such as
+  grep's match limit. Empty/malformed `fullDisplay` values do not create artifacts.
 - Rejected alternatives: serializing arbitrary structured `ToolResult.output` would not faithfully
   reproduce a tool's rendered text, and copying overflow into sidecar files would duplicate the raw log
   and create a second retention/trust boundary. A complete textual rendering is explicit at the tool
   seam instead. Caveat: ranges use JavaScript string indexing (UTF-16 code units), not UTF-8 byte offsets;
   callers should continue at the prior `to` value.
-- R1.5f dogfood fixture: a 31,006-code-unit output persisted once, exposed a bounded handle, and returned
-  the final six hidden code units through `read_output`; the originating tool had exactly one call.
-  Mutation checks killed removal of `fullDisplay` persistence, replacement of the requested range with a
-  prefix read, substitution of a different session id, and removal of the default-policy allow rule.
+- R1.5f dogfood fixture: a 31,006-code-unit Unicode output persisted once, exposed a bounded next-page
+  handle, and returned all hidden code units through `read_output`; the originating tool had exactly one
+  call and the session ended `done`. Regression fixtures also pin redaction sealing, streaming reads,
+  runtime and surrogate bounds, tool-free catalogues, stale-result handle preservation, core-view audit,
+  thrown/hook output bounds, and malformed tool results. Mutation checks killed removal of `fullDisplay`
+  persistence, replacement of the requested range with a prefix read, substitution of a different session
+  id, removal of the default-policy allow rule, and both post-hook and thrown-error bounds.
+- Review caveat retained deliberately: complete output is unbounded in JSONL and therefore inherits the
+  size and machine-readable disclosure properties of the raw immutable session log. Capping it or hiding
+  it from JSON replay would directly violate R1.5f's “full text from the raw log” contract; operators must
+  protect raw logs accordingly. A future storage row may chunk append-only records atomically, but this
+  row does not introduce a mutable sidecar or silently discard command output.
 
 - R1.5e builds an 8 KiB-bounded, deterministically ordered file-and-export map with the TypeScript
   syntax parser only: no module resolution, imports, execution, LSP, or build graph. Conventional
