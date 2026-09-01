@@ -82,6 +82,21 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a skill.used activation record", () => {
+    const event = HarnessEvent.parse({
+      seq: 41,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "skill.used",
+      name: "dogfood",
+      invokedBy: "model",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    // both invokers are schema-valid; "user" is reserved for a core-side invocation seam
+    expect(() => HarnessEvent.parse({ ...event, invokedBy: "user" })).not.toThrow();
+    expect(() => HarnessEvent.parse({ ...event, invokedBy: "hook" })).toThrow();
+  });
+
   it("round-trips a context.repo_map accounting event without carrying map content", () => {
     const event = HarnessEvent.parse({
       seq: 40,

@@ -43,6 +43,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
+    case "skill.used": return `${p} ${e.name} by=${e.invokedBy}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
@@ -163,6 +164,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.manifest":
     case "context.repo_map":
     case "memory.note":
+    case "skill.used":
       return null;
   }
 }

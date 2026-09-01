@@ -120,6 +120,7 @@ export const TOOL_EMITTABLE_EVENTS: ReadonlySet<string> = new Set([
   "file.changed",
   "subagent.spawn",
   "subagent.end",
+  "skill.used",
 ]);
 
 /**
@@ -140,6 +141,9 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
   ["plan.updated", "update_plan"],
   ["subagent.spawn", "subagent"],
   ["subagent.end", "subagent"],
+  // R9 reads skill.used as the record of which skills actually got activated; a forged one from
+  // another tool would salt that measurement, so it is held to the skill tool.
+  ["skill.used", "skill"],
 ]);
 
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
@@ -242,6 +246,17 @@ export const EventPayload = z.discriminatedUnion("type", [
     freshness: z.string(),
   }),
   z.object({ type: z.literal("plan.updated"), items: z.array(PlanItem) }),
+  z.object({
+    type: z.literal("skill.used"),
+    name: z.string(),
+    /**
+     * Who chose to load the skill (issue #62): "model" is emitted by the `skill` tool when the
+     * model fetches a body; "user" is reserved for a core-side user-invocation seam — today a TUI
+     * `/skill-name` invocation is recorded as the delimited block in the user turn itself, since
+     * the CLI cannot (by design) append events to the session log.
+     */
+    invokedBy: z.enum(["model", "user"]),
+  }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({
     type: z.literal("subagent.end"),

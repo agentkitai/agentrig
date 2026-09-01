@@ -243,6 +243,21 @@ describe("skillTool", () => {
     expect((await skillTool(found).execute({ name: "  DEPLOY " }, ctx)).display).toBe("body");
   });
 
+  it("records a successful load as skill.used invokedBy model — and only a successful one", async () => {
+    await skill("deploy.md", "---\ndescription: d\n---\nbody");
+    const found = await discoverSkills({ roots: [dir] });
+    const emitted: unknown[] = [];
+    const recordingCtx = { ...ctx, emit: (e: unknown) => void emitted.push(e) };
+    const tool = skillTool(found);
+
+    await tool.execute({ name: "deploy" }, recordingCtx);
+    expect(emitted).toEqual([{ type: "skill.used", name: "deploy", invokedBy: "model" }]);
+
+    // a typo'd lookup is not a skill "being used" — R9 would count activations that never happened
+    await tool.execute({ name: "nope" }, recordingCtx);
+    expect(emitted).toHaveLength(1);
+  });
+
   it("lists what IS available when asked for something that is not", async () => {
     await skill("deploy.md", "---\ndescription: d\n---\nbody");
     const found = await discoverSkills({ roots: [dir] });

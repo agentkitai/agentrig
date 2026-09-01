@@ -291,6 +291,33 @@ including the two gaps the adversarial review found surviving the first round: d
 fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
 `join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
 
+## User-invocable skills: /skill-name — issue #62 (2026-09-01)
+
+Status: **done**.
+
+`/<skill-name> [task...]` in the TUI resolves an unclaimed slash-word against the loaded catalogue
+and submits the skill body plus the trailing args as the turn, through the same submit path as any
+task. The body rides inside `BEGIN/END SKILL` banners naming it repository-authored (the R13d
+principal model: user invocation does not promote project-trust content), mirroring the
+project-instructions banner convention. Built-ins always win by construction — `parseCommand`'s
+switch claims its names first and only the default falls through to skill resolution —
+`RESERVED_COMMAND_NAMES` exists so `/skills` can mark shadowed skills, with a guard test pinning
+that every reserved name parses to its built-in. An unmatched `/word` keeps the old typo
+protection: unknown-command treatment with a bounded-Levenshtein did-you-mean over built-ins ∪
+skill names, and no model turn spent. `/skills` lists the catalogue (empty-state message, shadow
+markers, a marker for space-containing names that cannot be slash-invoked).
+
+New core event `skill.used {name, invokedBy: "model"|"user"}` — the issue said "existing" but no
+such event existed; model-side activation was only visible as a generic `tool.call`. The `skill`
+tool now emits it on successful loads only (a typo'd lookup is not an activation), and the event
+is added to `TOOL_EMITTABLE_EVENTS` with `skill` as its sole emitter in `TOOL_EMIT_SOURCES` —
+the first consumer of #67's source axis beyond the original three. `invokedBy: "user"` is
+schema-valid but emitted by no core path yet: the CLI cannot (by design) append events to the
+session log, so a TUI invocation's record is the delimited block in the user turn itself; the
+enum value is reserved for a core-side invocation seam, and R9's user-vs-model comparison reads
+the turn text until then. `buildAgent` now returns the discovered catalogue so the TUI can serve
+it.
+
 ## Source-scoped emit gate — issue #67 (2026-09-01)
 
 Status: **done** for findings 1 and 2; finding 3 (detector-side `file.changed` laundering) is

@@ -197,6 +197,8 @@ export interface BuiltAgent {
   provider: ModelProvider;
   /** The tools the agent was given. Exposed so the wiring can be asserted rather than assumed. */
   tools: AnyTool[];
+  /** The discovered skill catalogue, so the TUI can serve /skills and /<skill-name> (issue #62). */
+  skills: Skill[];
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
   /** Connected MCP servers, so the caller can shut them down when the session ends. */
@@ -471,6 +473,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, tools, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, provider, tools, skills, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

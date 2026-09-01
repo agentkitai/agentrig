@@ -13,7 +13,7 @@ import {
   type ModelProvider,
   type ModelRequest,
 } from "@agentkitai/agentrig-core";
-import { COMMANDS, helpText, parseCommand } from "../src/tui/commands.ts";
+import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
 import { TuiController } from "../src/tui/controller.ts";
 
 describe("parseCommand", () => {
@@ -61,9 +61,21 @@ describe("parseCommand", () => {
     expect(parseCommand("/memory RetryPolicy")).toEqual({ kind: "memory", query: "RetryPolicy" });
   });
 
-  it("reports a typo instead of silently spending a turn on it as a prompt", () => {
-    expect(parseCommand("/memroy")).toEqual({ kind: "unknown", name: "memroy" });
+  it("routes an unclaimed /word to skill resolution, never to the model as a prompt", () => {
+    // the controller resolves it against the catalogue and gives the unknown-command treatment
+    // (with a did-you-mean) when nothing matches — see the controller tests
+    expect(parseCommand("/memroy")).toEqual({ kind: "skill", name: "memroy", args: "" });
+    expect(parseCommand("/dogfood ship issue 62")).toEqual({ kind: "skill", name: "dogfood", args: "ship issue 62" });
     expect(parseCommand("/")).toEqual({ kind: "unknown", name: "" });
+  });
+
+  it("parses /skills, and built-ins always win over a skill of the same name", () => {
+    expect(parseCommand("/skills")).toEqual({ kind: "skills" });
+    for (const name of RESERVED_COMMAND_NAMES) {
+      const parsed = parseCommand(`/${name}`);
+      expect(parsed, `/${name} is reserved but parsed as a skill invocation`).not.toBeNull();
+      expect(parsed!.kind).not.toBe("skill");
+    }
   });
 
   it("helpText lists every command", () => {
@@ -540,6 +552,112 @@ describe("TuiController", () => {
     expect(text(c)).toContain("kept system_prompt instruction");
     expect(text(c)).toContain("kept history instruction");
     expect(text(c)).not.toContain("no context manifest recorded yet");
+  });
+
+  it("/<skill-name> [args] injects the skill body and args as the turn, marked as repo-authored", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "RUN THE RELEASE SCRIPT" }]);
+    await c.submit("/deploy ship the fix");
+
+    expect(provider.requests).toHaveLength(1);
+    const turn = provider.requests[0]!.messages[0]!.content
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .join("\n");
+    expect(turn).toContain('BEGIN SKILL "deploy" (/p/deploy.md) — repository-authored instructions');
+    expect(turn).toContain("RUN THE RELEASE SCRIPT");
+    expect(turn).toContain("Task: ship the fix");
+    expect(text(c)).toContain('skill "deploy" loaded into this turn');
+  });
+
+  it("an unmatched /word gets the unknown treatment with a did-you-mean, spending no turn", async () => {
+    const provider = new FakeProvider([]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+
+    await c.submit("/memroy"); // near a built-in
+    expect(text(c)).toContain("unknown command /memroy");
+    expect(text(c)).toContain("did you mean /memory?");
+
+    await c.submit("/depoly"); // near a skill
+    expect(text(c)).toContain("did you mean /deploy?");
+
+    expect(provider.requests).toHaveLength(0); // neither typo became a model turn
+  });
+
+  it("/skills lists the catalogue and marks names a built-in shadows", async () => {
+    const c = makeController([]);
+    await c.submit("/skills");
+    expect(last(c)).toContain("no skills loaded");
+
+    c.setSkills([
+      { name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" },
+      { name: "plan", description: "planning playbook", path: "/p/plan.md", body: "b" },
+    ]);
+    await c.submit("/skills");
+    expect(last(c)).toContain("/deploy — how to ship");
+    expect(last(c)).toContain("shadowed by the built-in /plan");
+    // and the shadow is real: /plan runs the built-in, not the skill
+    await c.submit("/plan");
+    expect(last(c)).toContain("no plan recorded yet");
+  });
+
+  it("suggestFor stays quiet rather than guessing wildly", () => {
+    expect(suggestFor("xyzzy", ["memory", "deploy"])).toBeNull();
+    expect(suggestFor("memroy", ["memory", "deploy"])).toBe("memory");
+  });
+
+  it("did-you-mean never suggests what cannot be typed back", async () => {
+    const c = makeController([]);
+    c.setSkills([{ name: "a b", description: "spaced", path: "/p/ab.md", body: "b" }]);
+    await c.submit("/z"); // distance 1 from the "?" alias, distance 2 from "a b"
+    expect(text(c)).toContain("unknown command /z");
+    expect(text(c)).not.toContain("did you mean"); // not /?? and not /a b
+  });
+
+  it("/skill-name matches a cased catalogue name case-insensitively", async () => {
+    // frontmatter may declare `name: Deploy`; parseCommand lowercases what the user typed
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "Deploy", description: "how to ship", path: "/p/deploy.md", body: "CASED BODY" }]);
+    await c.submit("/deploy go");
+    expect(provider.requests).toHaveLength(1);
+    expect(JSON.stringify(provider.requests[0]!.messages[0]!.content)).toContain("CASED BODY");
+  });
+
+  it("/skill-name continues the conversation, exactly like a task line", async () => {
+    // a /skill that silently started a FRESH session would drop everything said so far
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+    await c.submit("remember the context");
+    const first = c.snapshot().sessionId;
+    await c.submit("/deploy go");
+    expect(c.snapshot().sessionId).toBe(first);
+    // the model sees the earlier conversation, not just the composed skill turn
+    const history = JSON.stringify(provider.requests.at(-1)!.messages);
+    expect(history).toContain("remember the context");
+    expect(history).toContain("BEGIN SKILL");
+  });
+
+  it("/skill-name mid-run refuses honestly instead of claiming the skill loaded", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+    const running = c.submit("first");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+
+    await c.submit("/deploy go");
+    expect(text(c)).toContain("a turn is already running");
+    expect(text(c)).not.toContain("loaded into this turn"); // the drop must not be dressed as success
+
+    c.answerPermission("deny");
+    await running;
   });
 
   it("/supervisor says no supervisor is attached rather than promising an empty list", async () => {
