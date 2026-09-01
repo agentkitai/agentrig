@@ -34,6 +34,22 @@ describe("renderEvent", () => {
     expect(line).toContain("saved=12345 bytes");
   });
 
+  it("renders the compact context.manifest trace summary", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 14,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.manifest",
+      turn: 3,
+      requestHash: "abc123",
+      blocks: [],
+    }));
+    expect(line).toContain("context.manifest");
+    expect(line).toContain("turn=3");
+    expect(line).toContain("blocks=0");
+    expect(line).toContain("request=abc123");
+  });
+
   it("renders subagent.spawn and subagent.end, including how the child finished", () => {
     const spawned = renderEvent(
       HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files" }),

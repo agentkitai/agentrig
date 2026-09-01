@@ -14,6 +14,8 @@ export interface ToolResultEviction {
   messages: Message[];
   count: number;
   bytesSaved: number;
+  /** Stable identities of result blocks replaced in this outbound view. */
+  evictedToolUseIds: ReadonlySet<string>;
 }
 
 export const DEFAULT_TOOL_RESULT_EVICTION = Object.freeze({
@@ -68,7 +70,7 @@ export function evictToolResults(
   const minBytes = options.minBytes ?? DEFAULT_TOOL_RESULT_EVICTION.minBytes;
   if (!Number.isInteger(keepLastTurns) || keepLastTurns < 0) throw new Error("keepLastTurns must be a non-negative integer");
   if (!Number.isInteger(minBytes) || minBytes < 0) throw new Error("minBytes must be a non-negative integer");
-  if (!enabled) return { messages: messages as Message[], count: 0, bytesSaved: 0 };
+  if (!enabled) return { messages: messages as Message[], count: 0, bytesSaved: 0, evictedToolUseIds: new Set() };
 
   const assistantTurns = messages.reduce(
     (count, message) => count + (message.role === "assistant" ? 1 : 0),
@@ -78,6 +80,7 @@ export function evictToolResults(
   const toolUses = new Map<string, { block: ToolUse; turn: number }>();
   let count = 0;
   let bytesSaved = 0;
+  const evictedToolUseIds = new Set<string>();
   let outbound: Message[] | undefined;
   for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
     const message = messages[messageIndex]!;
@@ -104,9 +107,10 @@ export function evictToolResults(
       content[blockIndex] = { ...block, content: stub };
       count += 1;
       bytesSaved += saved;
+      evictedToolUseIds.add(block.toolUseId);
     }
     if (content !== undefined) outbound![messageIndex] = { ...message, content };
   }
 
-  return { messages: outbound ?? (messages as Message[]), count, bytesSaved };
+  return { messages: outbound ?? (messages as Message[]), count, bytesSaved, evictedToolUseIds };
 }

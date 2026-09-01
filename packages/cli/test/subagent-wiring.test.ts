@@ -6,6 +6,7 @@ import {
   discoverSkills,
   RulePolicy,
   defaultRules,
+  renderSystemBlocks,
   type AgentBuildOptions,
   type ModelProvider,
   type PermissionRequest,
@@ -134,7 +135,8 @@ describe("what a child inherits", () => {
     const config = wiring({ skills }).childConfig();
 
     expect(config.tools.map((t) => t.name)).toContain("skill");
-    const prompt = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : "";
+    const configured = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : config.systemPrompt;
+    const prompt = typeof configured === "string" ? configured : renderSystemBlocks(configured);
     expect(prompt).toContain("- deploy: how to ship");
     // ...and the body is still not in the prompt
     expect(prompt).not.toContain("RUN THE RELEASE SCRIPT");
@@ -143,7 +145,8 @@ describe("what a child inherits", () => {
   it("no skill tool when there are none, rather than an empty catalogue in every request", () => {
     const config = wiring({ skills: [] }).childConfig();
     expect(config.tools.map((t) => t.name)).not.toContain("skill");
-    const prompt = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : "";
+    const configured = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : config.systemPrompt;
+    const prompt = typeof configured === "string" ? configured : renderSystemBlocks(configured);
     expect(prompt).not.toContain("## Skills");
   });
 

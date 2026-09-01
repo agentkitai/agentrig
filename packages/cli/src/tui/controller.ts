@@ -1,13 +1,14 @@
 import type {
   Agent,
   Decision,
+  EventOf,
   HarnessEvent,
   PermissionRequest,
   PlanItem,
   Session,
   Signal,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, renderChatEvent, renderEvent } from "../render.js";
+import { AssistantText, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import { helpText, parseCommand, type TuiCommand } from "./commands.js";
 
 /**
@@ -55,6 +56,8 @@ export interface TuiState {
   escalation: PendingEscalation | null;
   /** Latest plan the agent recorded, for `/plan`. */
   plan: PlanItem[];
+  /** Latest prompt bill of materials, for `/context`. */
+  manifest: EventOf<"context.manifest"> | null;
   /** Signals the supervisor raised this session, for `/supervisor`. */
   signals: Signal[];
   sessionId: string | null;
@@ -129,6 +132,7 @@ export class TuiController {
     queued: 0,
     escalation: null,
     plan: [],
+    manifest: null,
     signals: [],
     sessionId: null,
     turns: 0,
@@ -397,6 +401,14 @@ export class TuiController {
           "system",
         );
         return true;
+      case "context":
+        this.print(
+          this.state.manifest === null
+            ? "no context manifest recorded yet — run a turn first"
+            : renderContextManifest(this.state.manifest),
+          "system",
+        );
+        return true;
       case "supervisor":
         this.print(
           this.opts.supervised !== true
@@ -506,6 +518,7 @@ export class TuiController {
       status: "running",
       activity: null,
       sessionId: session.id,
+      manifest: null,
       ...(opts.resume === undefined ? { plan: [], signals: [] } : {}),
     });
 
@@ -581,6 +594,7 @@ export class TuiController {
   private consume(e: HarnessEvent): void {
     this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
+    if (e.type === "context.manifest") this.set({ manifest: e });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
     if (e.type === "session.start" || e.type === "session.resume") {
       // the event says what is actually running, which beats whatever the flags claimed

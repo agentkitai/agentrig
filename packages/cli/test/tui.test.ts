@@ -531,6 +531,17 @@ describe("TuiController", () => {
     expect(text(c)).toContain("no plan recorded yet");
   });
 
+  it("/context renders the latest manifest after a turn", async () => {
+    const c = makeController([[usage(1, 1), stop("end_turn")]]);
+    await c.submit("inspect context");
+    await c.submit("/context");
+    expect(text(c)).toContain("context turn 1");
+    expect(text(c)).toContain("request hash");
+    expect(text(c)).toContain("kept system_prompt instruction");
+    expect(text(c)).toContain("kept history instruction");
+    expect(text(c)).not.toContain("no context manifest recorded yet");
+  });
+
   it("/supervisor says no supervisor is attached rather than promising an empty list", async () => {
     // /help advertises the command; without a supervisor the only reachable output was "nothing
     // raised", which reads as "all clear" when the truth is "nothing is watching"

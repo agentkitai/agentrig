@@ -496,6 +496,28 @@ describe("pre_model and post_model", () => {
     expect(provider.requests[0]!.system).toBe("REPLACED");
   });
 
+  it("pre_model append preserves existing manifest provenance and adds a hook block", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      {
+        point: "pre_model",
+        handler: (ctx) => ({
+          action: "modify",
+          patch: { system: `${(ctx as { request: { system: string } }).request.system}\n\nHOOK APPEND` },
+        }),
+      },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    const manifest = events.find((event) => event.type === "context.manifest");
+    expect(manifest).toMatchObject({ type: "context.manifest" });
+    if (manifest?.type !== "context.manifest") throw new Error("missing context manifest");
+    expect(manifest.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "system_prompt", origin: "agent.config.systemPrompt" }),
+      expect.objectContaining({ source: "system_prompt", origin: "hook:pre_model", reason: "pre_model hook appended instructions" }),
+    ]));
+  });
+
   it("pre_model reports a patch of the wrong shape", async () => {
     const session = run(
       [[usage(1, 1), stop("end_turn")]],

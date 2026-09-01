@@ -9,6 +9,7 @@ export * from "./agent.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";
 export * from "./repo-map.js";
+export * from "./context-manifest.js";
 export * from "./providers/anthropic.js";
 export * from "./providers/openai.js";
 export * from "./providers/openai-chatgpt.js";
