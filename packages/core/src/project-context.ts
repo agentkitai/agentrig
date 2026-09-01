@@ -47,8 +47,3 @@ export async function discoverProjectInstructions(cwd: string, projectRoot?: str
     directory = parent;
   }
 }
-
-/** Keep the file body untouched between conspicuous boundaries in the system prompt. */
-export function appendProjectInstructions(system: string, instructions: ProjectInstructions): string {
-  return `${system}\n\n===== BEGIN PROJECT INSTRUCTIONS (${instructions.path}) =====\n${instructions.content}\n===== END PROJECT INSTRUCTIONS =====`;
-}

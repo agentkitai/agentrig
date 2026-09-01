@@ -38,7 +38,7 @@ describe("context manifest", () => {
   it("records provenance, authority, freshness and final request hash without content", () => {
     const messages: Message[] = [{ role: "user", content: [{ type: "text", text: "private task body" }] }];
     const req = request(messages);
-    const manifest = buildContextManifest({ turn: 1, request: req, systemBlocks, originalMessages: messages });
+    const manifest = buildContextManifest({ turn: 1, request: req, systemBlocks });
 
     expect(manifest.requestHash).toBe(contentHash(req));
     expect(manifest.blocks).toEqual(expect.arrayContaining([
@@ -50,6 +50,19 @@ describe("context manifest", () => {
     const stored = JSON.stringify(manifest);
     expect(stored).not.toContain("private task body");
     expect(stored).not.toContain("repo map secret body");
+  });
+
+  it("treats a model-generated compaction summary as data, not user authority", () => {
+    const messages: Message[] = [{
+      role: "user",
+      content: [{ type: "text", text: "[context compacted: summary of 4 earlier messages]\nmodel summary" }],
+    }];
+    const manifest = buildContextManifest({ turn: 2, request: request(messages), systemBlocks });
+    expect(manifest.blocks).toContainEqual(expect.objectContaining({
+      source: "history",
+      authority: "data",
+      reason: "model-generated compaction summary retained for turn continuity",
+    }));
   });
 
   it("marks an outbound tool-result stub as evicted and hashes what was actually sent", () => {
@@ -65,14 +78,14 @@ describe("context manifest", () => {
       turn: 6,
       request: request(outbound),
       systemBlocks,
-      originalMessages: original,
+      evictedToolUseIds: new Set(["call-1"]),
     });
 
     expect(manifest.blocks).toContainEqual(expect.objectContaining({
       source: "tool_result",
       origin: "read_file:call-1",
       disposition: "evicted",
-      hash: contentHash(JSON.stringify(outbound[1]!.content[0])),
+      hash: contentHash("read elided"),
     }));
   });
 });

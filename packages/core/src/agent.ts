@@ -615,14 +615,32 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
           for (const patch of h.patches) {
             if (patch !== null && typeof patch === "object" && "system" in patch && typeof patch.system === "string") {
+              const previous = req.system;
               req.system = patch.system;
-              requestSystemBlocks = [{
-                content: patch.system,
-                source: "system_prompt",
-                origin: "hook:pre_model",
-                authority: "instruction",
-                reason: "pre_model hook replaced the rendered system prompt",
-              }];
+              if (patch.system === previous) {
+                // Preserve the original bill of materials exactly.
+              } else if (patch.system.startsWith(`${previous}\n\n`)) {
+                requestSystemBlocks = [
+                  ...requestSystemBlocks,
+                  {
+                    content: patch.system.slice(previous.length + 2),
+                    source: "system_prompt",
+                    origin: "hook:pre_model",
+                    authority: "instruction",
+                    reason: "pre_model hook appended instructions",
+                  },
+                ];
+              } else {
+                // An arbitrary replacement destroys recoverable boundaries; representing the whole
+                // rendered value as one hook block is more honest than stale provenance.
+                requestSystemBlocks = [{
+                  content: patch.system,
+                  source: "system_prompt",
+                  origin: "hook:pre_model",
+                  authority: "instruction",
+                  reason: "pre_model hook replaced the rendered system prompt",
+                }];
+              }
             } else {
               // the only shape this point accepts; anything else is a plugin bug and silence
               // would leave its author with no way to find out
@@ -641,7 +659,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           turn: turns,
           request: req,
           systemBlocks: requestSystemBlocks,
-          originalMessages: messages,
+          evictedToolUseIds: eviction.evictedToolUseIds,
         }));
         await emit({ type: "model.request", tokensIn: estimateTokens(req.system, req.messages) });
 

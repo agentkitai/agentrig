@@ -1,7 +1,8 @@
 import type { EventPayload } from "./events.js";
-import type { ContentBlock, Message } from "./messages.js";
+import type { ContentBlock } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import { contentHash } from "./session-store.js";
+import { isCompactionSummary } from "./compaction.js";
 
 export type ContextManifestEvent = Extract<EventPayload, { type: "context.manifest" }>;
 export type ContextManifestBlock = ContextManifestEvent["blocks"][number];
@@ -18,8 +19,12 @@ export interface PromptBlock {
   freshness?: string;
 }
 
-function serialized(block: ContentBlock): string {
-  return block.type === "text" ? block.text : JSON.stringify(block);
+function payload(block: ContentBlock): string {
+  if (block.type === "text") return block.text;
+  if (block.type === "tool_result") {
+    return typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+  }
+  return JSON.stringify(block);
 }
 
 function measured(
@@ -54,7 +59,7 @@ export function buildContextManifest(options: {
   turn: number;
   request: ModelRequest;
   systemBlocks: readonly PromptBlock[];
-  originalMessages: readonly Message[];
+  evictedToolUseIds?: ReadonlySet<string>;
 }): ContextManifestEvent {
   const blocks: ContextManifestBlock[] = options.systemBlocks
     .filter((block) => block.content !== "")
@@ -77,11 +82,9 @@ export function buildContextManifest(options: {
 
   for (let messageIndex = 0; messageIndex < options.request.messages.length; messageIndex += 1) {
     const message = options.request.messages[messageIndex]!;
-    const original = options.originalMessages[messageIndex];
     for (let blockIndex = 0; blockIndex < message.content.length; blockIndex += 1) {
       const block = message.content[blockIndex]!;
-      const before = original?.content[blockIndex];
-      const evicted = block.type === "tool_result" && before?.type === "tool_result" && serialized(block) !== serialized(before);
+      const evicted = block.type === "tool_result" && options.evictedToolUseIds?.has(block.toolUseId) === true;
       if (block.type === "tool_result") {
         const name = toolNames.get(block.toolUseId) ?? "tool";
         blocks.push(measured(
@@ -89,16 +92,18 @@ export function buildContextManifest(options: {
           `${name}:${block.toolUseId}`,
           "data",
           evicted ? "stale large result replaced by outbound eviction policy" : "tool result retained in conversation",
-          serialized(block),
+          payload(block),
           evicted ? "evicted" : "kept",
         ));
       } else {
         blocks.push(measured(
           "history",
           `message:${messageIndex}:${message.role}:${blockIndex}`,
-          message.role === "user" ? "instruction" : "data",
-          "conversation history required for turn continuity",
-          serialized(block),
+          message.role === "user" && !isCompactionSummary(block) ? "instruction" : "data",
+          isCompactionSummary(block)
+            ? "model-generated compaction summary retained for turn continuity"
+            : "conversation history required for turn continuity",
+          payload(block),
         ));
       }
     }

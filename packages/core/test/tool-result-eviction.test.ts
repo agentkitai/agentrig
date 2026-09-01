@@ -81,6 +81,7 @@ describe("tool-result eviction view", () => {
       messages: original,
       count: 0,
       bytesSaved: 0,
+      evictedToolUseIds: new Set(),
     });
   });
 });

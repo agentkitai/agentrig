@@ -16,6 +16,13 @@ export interface SummarizeOptions {
   maxSummaryTokens?: number;
 }
 
+export const COMPACTION_SUMMARY_PREFIX = "[context compacted: summary of ";
+
+/** Compaction owns this synthetic message, so consumers need not guess from the user role alone. */
+export function isCompactionSummary(block: ContentBlock): boolean {
+  return block.type === "text" && block.text.startsWith(COMPACTION_SUMMARY_PREFIX);
+}
+
 const SUMMARY_SYSTEM =
   "You compress agent conversation history. Summarize the transcript into a dense brief a coding agent " +
   "can resume from: the goal, what has been tried, what worked and failed (with error messages), current " +
@@ -86,7 +93,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
           content: [
             {
               type: "text",
-              text: `[context compacted: summary of ${older.length} earlier messages]\n${summary.trim()}`,
+              text: `${COMPACTION_SUMMARY_PREFIX}${older.length} earlier messages]\n${summary.trim()}`,
             },
           ],
         },

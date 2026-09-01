@@ -853,6 +853,16 @@ describe("tool-result eviction in the loop", () => {
       count: 1,
       bytesSaved: expect.any(Number),
     }));
+    const evictionManifest = enabledEvents.find(
+      (event) => event.type === "context.manifest" && event.turn === 4,
+    );
+    expect(evictionManifest).toMatchObject({ type: "context.manifest" });
+    if (evictionManifest?.type !== "context.manifest") throw new Error("missing eviction manifest");
+    expect(evictionManifest.blocks).toContainEqual(expect.objectContaining({
+      source: "tool_result",
+      origin: "read_file:a",
+      disposition: "evicted",
+    }));
     const stored = await enabledStore.readSnapshot("enabled");
     expect(resultContent(stored!.messages, "a")).toBe(payloads["large-a.ts"]);
 
