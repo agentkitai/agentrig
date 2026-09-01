@@ -291,6 +291,16 @@ including the two gaps the adversarial review found surviving the first round: d
 fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
 `join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
 
+## Dogfood skill: bounded review staleness (2026-09-01)
+
+The first R1.5f dogfood run read §8's staleness rule as "full dual review after every fix
+commit" and looped review→nit→fix→review for five rounds (~25–40 min each) without converging.
+§8 now bounds it: staleness covers the delta only, fix-only commits are verified by their
+fail-first tests rather than a fresh review round, at most one delta re-review, and a
+non-converging reviewer gets its remaining findings recorded in the PR body instead of chased.
+Also hardened the subagent abort test's tmpdir cleanup with rm retries — an aborted child still
+flushing its JSONL raced the recursive delete on macOS CI (ENOTEMPTY, one observed flake).
+
 ## User-invocable skills: /skill-name — issue #62 (2026-09-01)
 
 Status: **done**.

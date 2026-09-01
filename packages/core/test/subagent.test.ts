@@ -51,7 +51,9 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "agentrig-sub-"));
 });
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  // An aborted child can still be flushing its JSONL while this walks the tree; on macOS that
+  // surfaces as ENOTEMPTY (CI flaked exactly so). Retries let the straggler land, then delete.
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 /** Slow enough that an abort can land while the child is mid-tool. */
