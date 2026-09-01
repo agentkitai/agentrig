@@ -18,6 +18,8 @@ export interface ToolResult<O = unknown> {
    * only for overflow artifacts; omit it when `truncated` means the tool stopped collecting data.
    */
   fullDisplay?: string;
+  /** Code units of `fullDisplay` represented by a prefix-style `display`; omit for summaries/headers. */
+  displayPrefixChars?: number;
   /**
    * Expected failure (non-zero exit, file not found, bad pattern): the display still reaches
    * the model, flagged as an error. Throwing is reserved for unexpected failures.

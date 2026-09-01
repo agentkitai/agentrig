@@ -166,9 +166,10 @@ through M7 remain complete, including M2.5's live provider validation.
   range reads; inject-only patches carry an additive mode and leave recovery available. Hook output
   reserves bounded space for both result context and guidance rather than truncating the injection away.
   Overflow handles use one strict core marker and survive stale-result eviction. The core also applies the final display bound to
-  third-party tools, thrown errors, and post-hook output, while `ToolResult.fullDisplay` lets already-bounded
-  builtins and MCP tools distinguish representational overflow from semantic collection caps such as
-  grep's match limit. Empty/malformed `fullDisplay` values do not create artifacts.
+  third-party tools, thrown errors, and post-hook output, while `ToolResult.fullDisplay` plus an optional
+  `displayPrefixChars` cursor lets already-bounded builtins and MCP tools preserve their own smaller caps
+  and distinguish prefix previews from summaries/headers and from semantic collection caps such as grep's
+  match limit. Empty/malformed `fullDisplay` values do not create artifacts.
 - Rejected alternatives: serializing arbitrary structured `ToolResult.output` would not faithfully
   reproduce a tool's rendered text, and copying overflow into sidecar files would duplicate the raw log
   and create a second retention/trust boundary. A complete textual rendering is explicit at the tool

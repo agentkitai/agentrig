@@ -6,7 +6,7 @@ import { DISPLAY_CAP, splitsSurrogatePair } from "./shared.js";
 
 export const READ_OUTPUT_TOOL = "read_output";
 
-const OUTPUT_MARKER = /\n… \[output artifact; cursor (\d+) of (\d+) UTF-16 code units; read next with (read_output \{"seq":\d+,"from":\d+,"to":\d+\})\]$/;
+const OUTPUT_MARKER = /\n… \[output artifact; cursor (\d+) of (\d+) UTF-16 code units; read next with (read_output \{"seq":\d+,"from":\d+,"to":\d+\})\](?=$|\n)/;
 
 export function outputArtifactMarker(seq: number, from: number, to: number, total: number): string {
   return `\n… [output artifact; cursor ${from} of ${total} UTF-16 code units; read next with ` +
@@ -43,7 +43,8 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
     description:
       "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. " +
       "Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, " +
-      `and one read may contain at most ${DISPLAY_CAP} code units.`,
+      `and one read may contain at most ${DISPLAY_CAP} code units. ` +
+      "This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
     inputSchema: ReadOutputInput,
     permission: "read",
     async execute(input, ctx): Promise<ToolResult<string>> {

@@ -236,45 +236,60 @@ export const MAX_REPLAN_REFUSALS = 2;
 interface OverflowResult {
   display: string;
   output?: string;
+  /** Complete-output cursor corresponding to a prefix preview; absent for headers/summaries. */
+  prefixLimit?: number;
 }
 
 /** Bound every tool, and turn both explicit and forgotten representational overflow into artifacts. */
-function overflowResult(result: { display: string; output: unknown; truncated?: boolean; fullDisplay?: string }): OverflowResult {
+function overflowResult(result: {
+  display: string;
+  output: unknown;
+  truncated?: boolean;
+  fullDisplay?: string;
+  displayPrefixChars?: number;
+}): OverflowResult {
   const explicit = result.truncated === true && result.fullDisplay !== undefined && result.fullDisplay.length > 0
     ? result.fullDisplay
     : undefined;
   if (explicit !== undefined && explicit !== result.display) {
-    const prefix = commonPrefixLength(result.display, explicit);
-    // Prefix renderers get a truthful count derived from the complete text. Header/summary renderers
-    // keep their bounded preview; their handle starts at cursor zero over the separate complete text.
-    return { display: prefix > 0 ? bound(explicit).display : bound(result.display).display, output: explicit };
+    const prefixLimit = result.displayPrefixChars !== undefined && result.displayPrefixChars < explicit.length
+      ? result.displayPrefixChars
+      : undefined;
+    return {
+      display: bound(result.display).display,
+      output: explicit,
+      ...(prefixLimit === undefined ? {} : { prefixLimit }),
+    };
   }
   const bounded = bound(result.display);
-  return bounded.truncated ? { display: bounded.display, output: result.display } : { display: bounded.display };
-}
-
-function commonPrefixLength(left: string, right: string): number {
-  const limit = Math.min(left.length, right.length);
-  let length = 0;
-  while (length < limit && left.charCodeAt(length) === right.charCodeAt(length)) length += 1;
-  return length;
+  return bounded.truncated
+    ? { display: bounded.display, output: result.display, prefixLimit: bounded.shown }
+    : { display: bounded.display };
 }
 
 /** Keep a directly pageable artifact handle inside a caller-selected model-facing display bound. */
-function displayWithOutputHandle(display: string, output: string, seq: number, cap = DISPLAY_CAP): string {
-  const availablePrefix = commonPrefixLength(display, output);
-  const preview = availablePrefix > 0 ? output : display;
-  let visible = Math.min(preview.length, cap);
+function displayWithOutputHandle(
+  display: string,
+  output: string,
+  seq: number,
+  prefixLimit: number | undefined,
+  cap = DISPLAY_CAP,
+): string {
+  const preview = prefixLimit === undefined ? display : output;
+  let visible = Math.min(prefixLimit ?? preview.length, cap);
   let marker = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const cursor = availablePrefix > 0 ? visible : 0;
+    const cursor = prefixLimit === undefined ? 0 : visible;
     const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
     marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
-    const nextVisible = safeSliceEnd(preview, Math.min(preview.length, Math.max(0, cap - marker.length)));
+    const nextVisible = safeSliceEnd(
+      preview,
+      Math.min(prefixLimit ?? preview.length, Math.max(0, cap - marker.length)),
+    );
     if (nextVisible === visible) break;
     visible = nextVisible;
   }
-  const cursor = availablePrefix > 0 ? visible : 0;
+  const cursor = prefixLimit === undefined ? 0 : visible;
   const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
   marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
   return `${preview.slice(0, visible)}${marker}`;
@@ -1053,7 +1068,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         });
         const modelDisplay = overflow.output === undefined
           ? overflow.display
-          : displayWithOutputHandle(overflow.display, overflow.output, resultEvent.seq);
+          : displayWithOutputHandle(
+              overflow.display,
+              overflow.output,
+              resultEvent.seq,
+              overflow.prefixLimit,
+            );
         if (overflow.output !== undefined) {
           // The raw result above preserves the tool's own display. This additive event records the
           // different bounded handle-bearing display the model actually consumes.
@@ -1083,18 +1103,28 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
         let body = modelDisplay;
         if (replaced !== undefined || h.injects.length > 0) {
-          // Reserve half the frame for injected guidance so bounding cannot silently discard the
-          // hook's entire influence behind a large result. The other half retains result context
-          // (including an overflow handle when one exists).
-          const injected = h.injects.length === 0
-            ? ""
-            : bound(h.injects.join("\n"), Math.floor(DISPLAY_CAP / 2)).display;
+          // An ordinary bounded result keeps every code unit and the injection shrinks to the
+          // remaining space. An overflow artifact or replacement shares the frame: half remains
+          // available for guidance and half for result context/the recovery handle.
+          const rawInjected = h.injects.join("\n");
+          const injectedBudget = rawInjected === ""
+            ? 0
+            : overflow.output !== undefined || replaced !== undefined
+              ? Math.floor(DISPLAY_CAP / 2)
+              : Math.max(0, DISPLAY_CAP - modelDisplay.length - 1);
+          const injected = injectedBudget === 0 ? "" : bound(rawInjected, injectedBudget).display;
           const separator = injected === "" ? "" : "\n";
           const baseBudget = DISPLAY_CAP - separator.length - injected.length;
           const base = replaced !== undefined
             ? bound(replaced, baseBudget).display
             : overflow.output !== undefined
-              ? displayWithOutputHandle(overflow.display, overflow.output, resultEvent.seq, baseBudget)
+              ? displayWithOutputHandle(
+                  overflow.display,
+                  overflow.output,
+                  resultEvent.seq,
+                  overflow.prefixLimit,
+                  baseBudget,
+                )
               : bound(modelDisplay, baseBudget).display;
           body = `${base}${separator}${injected}`;
           // the log keeps what the tool returned; this records that a hook changed what the
@@ -1109,15 +1139,33 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         return resultBlock(body, !ok);
       } catch (err) {
-        const display = bound(
+        const rawDisplay =
           abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
             ? "aborted"
             : err instanceof Error
               ? err.message
-              : String(err),
-        ).display;
-        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
-        return resultBlock(display, true);
+              : String(err);
+        const overflow = overflowResult({ display: rawDisplay, output: undefined });
+        const resultEvent = await emit({
+          type: "tool.result",
+          id: tu.id,
+          ok: false,
+          display: overflow.display,
+          durationMs: now() - t0,
+          ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
+        });
+        const modelDisplay = overflow.output === undefined
+          ? overflow.display
+          : displayWithOutputHandle(
+              overflow.display,
+              overflow.output,
+              resultEvent.seq,
+              overflow.prefixLimit,
+            );
+        if (overflow.output !== undefined) {
+          await emit({ type: "tool.result.patched", id: tu.id, by: "core:output-overflow", display: modelDisplay });
+        }
+        return resultBlock(modelDisplay, true);
       }
     }
   })();

@@ -14,8 +14,8 @@ export function safeSliceEnd(text: string, proposed: number): number {
   return splitsSurrogatePair(text, proposed) ? proposed - 1 : proposed;
 }
 
-export function bound(text: string, cap = DISPLAY_CAP): { display: string; truncated: boolean } {
-  if (text.length <= cap) return { display: text, truncated: false };
+export function bound(text: string, cap = DISPLAY_CAP): { display: string; truncated: boolean; shown: number } {
+  if (text.length <= cap) return { display: text, truncated: false, shown: text.length };
   let visible = cap;
   let marker = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -25,7 +25,7 @@ export function bound(text: string, cap = DISPLAY_CAP): { display: string; trunc
     visible = next;
   }
   marker = `\n… [truncated ${text.length - visible} UTF-16 code units]`;
-  return { display: `${text.slice(0, visible)}${marker}`.slice(0, cap), truncated: true };
+  return { display: `${text.slice(0, visible)}${marker}`.slice(0, cap), truncated: true, shown: visible };
 }
 
 export function resolveIn(cwd: string, path: string): string {

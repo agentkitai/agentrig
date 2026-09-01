@@ -259,6 +259,26 @@ describe("post_tool", () => {
     expect(modelSaw(provider)).not.toContain("TAIL");
   });
 
+  it("keeps a large in-bound result intact and shrinks injection to the remaining frame", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "large", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const large: AnyTool = {
+      name: "large", description: "large bounded result", inputSchema: z.object({}),
+      permission: "read", paths: () => [],
+      execute: async () => ({ output: {}, display: "r".repeat(29_500) }),
+    };
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: "GUIDANCE".repeat(100) }) },
+    ], [large]);
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    const seen = modelSaw(provider);
+    expect(seen).toContain("r".repeat(29_500));
+    expect(seen).toContain("GUIDANCE");
+  });
+
   it("does not record a patch event when no hook changed anything", async () => {
     const session = run([callEcho("x"), [usage(1, 1), stop("end_turn")]], []);
     const events = await collect(session);

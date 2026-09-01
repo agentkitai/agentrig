@@ -33,7 +33,7 @@ describe("renderEvent", () => {
       output: "visible prefix and SECRET hidden output",
       truncated: true,
     }));
-    expect(line).toContain('artifact={"seq":12}');
+    expect(line).toContain('artifact={"seq":12,"from":0,"to":39}');
     expect(line).not.toContain("SECRET hidden output");
   });
 

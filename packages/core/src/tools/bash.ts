@@ -181,11 +181,12 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       if (aborted) parts.push("[killed: session aborted]");
       if (exitCode !== 0) parts.push(`[exit code ${exitCode ?? "none"}]`);
       const fullDisplay = parts.filter(Boolean).join("\n").trim() || "(no output)";
-      const { display, truncated } = bound(fullDisplay);
+      const { display, truncated, shown } = bound(fullDisplay);
       const result: ToolResult<BashOutput> = { output, display };
       if (truncated) {
         result.truncated = true;
         result.fullDisplay = fullDisplay;
+        result.displayPrefixChars = shown;
       }
       if (exitCode !== 0 || timedOut || aborted) result.isError = true;
       return result;

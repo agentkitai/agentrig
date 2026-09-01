@@ -111,6 +111,7 @@ function largeTool(output: string): AnyTool {
           display: `${output.slice(0, 30_000)}\n… [truncated ${output.length - 30_000} chars]`,
           truncated: true,
           fullDisplay: output,
+          displayPrefixChars: 30_000,
         }
       : { output, display: output },
   };
@@ -208,6 +209,7 @@ describe("output overflow artifacts", () => {
 
   it("rejects empty and over-bound ranges at the tool input boundary", () => {
     const tool = readOutputTool(new SessionStore({ root }));
+    expect(tool.description).toContain("no extra permission is required");
     expect(tool.inputSchema.safeParse({ seq: 1, from: 2, to: 2 }).error?.message).toContain("to must be greater");
     expect(tool.inputSchema.safeParse({ seq: 1, from: 0, to: 30_001 }).error?.message).toContain(
       "at most 30000 UTF-16 code units",
@@ -374,8 +376,41 @@ describe("output overflow artifacts", () => {
     const events = await collect(session.events);
     await session.done;
     const result = events.find((event) => event.type === "tool.result" && event.id === "throw-1");
-    expect(result?.type === "tool.result" ? result.display.length : Infinity).toBeLessThan(31_000);
+    expect(result?.type === "tool.result" ? result.display.length : Infinity).toBeLessThanOrEqual(30_000);
+    expect(result).toMatchObject({ type: "tool.result", truncated: true, output: expect.stringMatching(/TAIL$/) });
     expect(result?.type === "tool.result" ? result.display : "").not.toContain("TAIL");
+  });
+
+  it("creates an artifact when a tool-specific preview truncates below the global cap", async () => {
+    const full = "q".repeat(25_000);
+    const provider: ModelProvider = {
+      id: "sub-cap-fake", model: "sub-cap-fake-1",
+      capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        const prior = req.messages.flatMap((message) => message.content)
+          .find((block) => block.type === "tool_result" && block.toolUseId === "sub-cap-1");
+        if (prior === undefined) {
+          yield { type: "tool_use", id: "sub-cap-1", name: "sub_cap", input: {} };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        const display = prior.type === "tool_result" && typeof prior.content === "string" ? prior.content : "";
+        expect(display.length).toBeLessThanOrEqual(30_000);
+        expect(display).toContain("read_output");
+        expect(display).toContain('"from":');
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const subCap: AnyTool = {
+      ...largeTool("unused"), name: "sub_cap",
+      execute: async () => ({
+        output: {}, display: `${full.slice(0, 20_000)}\n… local truncation`, truncated: true,
+        fullDisplay: full, displayPrefixChars: 20_000,
+      }),
+    };
+    const session = createAgent(config(provider, new SessionStore({ root }), [subCap])).run("go", { cwd: root });
+    await collect(session.events);
+    expect((await session.done).reason).toBe("done");
   });
 
   it("keeps a non-prefix preview while paging complete output from cursor zero", async () => {
