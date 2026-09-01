@@ -489,10 +489,11 @@ export class TuiController {
       case "skill": {
         const skill = this.skills.find((s) => s.name.toLowerCase() === cmd.name.toLowerCase());
         if (skill === undefined) {
-          // same treatment as a typo'd built-in, because from the user's seat it is one
+          // same treatment as a typo'd built-in, because from the user's seat it is one.
+          // Suggest only what can actually be typed back: no "?" alias, no names with spaces.
           const suggestion = suggestFor(cmd.name, [
-            ...RESERVED_COMMAND_NAMES,
-            ...this.skills.map((s) => s.name),
+            ...[...RESERVED_COMMAND_NAMES].filter((n) => n !== "?"),
+            ...this.skills.map((s) => s.name).filter((n) => !/\s/.test(n)),
           ]);
           this.print(
             `unknown command /${cmd.name}${suggestion === null ? "" : ` — did you mean /${suggestion}?`}\n${helpText()}`,
@@ -500,12 +501,15 @@ export class TuiController {
           );
           return true;
         }
+        // Checked HERE, not left to start()'s own guard: printing "loaded" first and letting
+        // start() refuse would tell the user the skill went in when it was silently dropped.
+        if (this.state.status === "running") {
+          this.print("a turn is already running — /abort first", "error");
+          return true;
+        }
         const composed = composeSkillInvocation(skill, cmd.args);
         this.print(`skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
-        await this.start(composed, {
-          cwd: this.opts.cwd,
-          ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
-        });
+        await this.continueConversation(composed);
         return true;
       }
       case "unknown":
@@ -513,13 +517,7 @@ export class TuiController {
         return true;
       case "task":
         this.print(cmd.text, "you");
-        // Continue the session rather than starting a new one. Every prompt used to be its own
-        // session, so nothing the user said was ever in scope for what they said next: the token
-        // count did not grow between turns because no history was being sent.
-        await this.start(cmd.text, {
-          cwd: this.opts.cwd,
-          ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
-        });
+        await this.continueConversation(cmd.text);
         return true;
       case "new":
         this.resumable = false;
@@ -544,6 +542,19 @@ export class TuiController {
     } catch (err) {
       this.print(`/${name} failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
+  }
+
+  /**
+   * One user turn continuing the current conversation (or starting the first session). Tasks and
+   * `/skill-name` invocations share this so the continuation spread cannot drift between them —
+   * every prompt used to be its own session, and nothing the user said was ever in scope for
+   * what they said next.
+   */
+  private continueConversation(text: string): Promise<void> {
+    return this.start(text, {
+      cwd: this.opts.cwd,
+      ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
+    });
   }
 
   private async start(task: string, opts: { cwd?: string; resume?: string }): Promise<void> {

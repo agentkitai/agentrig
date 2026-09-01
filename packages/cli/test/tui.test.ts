@@ -607,6 +607,59 @@ describe("TuiController", () => {
     expect(suggestFor("memroy", ["memory", "deploy"])).toBe("memory");
   });
 
+  it("did-you-mean never suggests what cannot be typed back", async () => {
+    const c = makeController([]);
+    c.setSkills([{ name: "a b", description: "spaced", path: "/p/ab.md", body: "b" }]);
+    await c.submit("/z"); // distance 1 from the "?" alias, distance 2 from "a b"
+    expect(text(c)).toContain("unknown command /z");
+    expect(text(c)).not.toContain("did you mean"); // not /?? and not /a b
+  });
+
+  it("/skill-name matches a cased catalogue name case-insensitively", async () => {
+    // frontmatter may declare `name: Deploy`; parseCommand lowercases what the user typed
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "Deploy", description: "how to ship", path: "/p/deploy.md", body: "CASED BODY" }]);
+    await c.submit("/deploy go");
+    expect(provider.requests).toHaveLength(1);
+    expect(JSON.stringify(provider.requests[0]!.messages[0]!.content)).toContain("CASED BODY");
+  });
+
+  it("/skill-name continues the conversation, exactly like a task line", async () => {
+    // a /skill that silently started a FRESH session would drop everything said so far
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "ok" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+    await c.submit("remember the context");
+    const first = c.snapshot().sessionId;
+    await c.submit("/deploy go");
+    expect(c.snapshot().sessionId).toBe(first);
+    // the model sees the earlier conversation, not just the composed skill turn
+    const history = JSON.stringify(provider.requests.at(-1)!.messages);
+    expect(history).toContain("remember the context");
+    expect(history).toContain("BEGIN SKILL");
+  });
+
+  it("/skill-name mid-run refuses honestly instead of claiming the skill loaded", async () => {
+    const c = makeController([
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    c.setSkills([{ name: "deploy", description: "how to ship", path: "/p/deploy.md", body: "b" }]);
+    const running = c.submit("first");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+
+    await c.submit("/deploy go");
+    expect(text(c)).toContain("a turn is already running");
+    expect(text(c)).not.toContain("loaded into this turn"); // the drop must not be dressed as success
+
+    c.answerPermission("deny");
+    await running;
+  });
+
   it("/supervisor says no supervisor is attached rather than promising an empty list", async () => {
     // /help advertises the command; without a supervisor the only reachable output was "nothing
     // raised", which reads as "all clear" when the truth is "nothing is watching"

@@ -3,6 +3,7 @@
  * a terminal UI is nearly untestable, so everything that can be decided without a screen is
  * decided here, where a test can reach it.
  */
+import { sanitizeLine } from "@agentkitai/agentrig-core";
 
 export type TuiCommand =
   | { kind: "task"; text: string }
@@ -142,10 +143,14 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
  * project-instructions banner style so one convention marks all repo-text-in-prompt seams.
  */
 export function composeSkillInvocation(skill: { name: string; path: string; body: string }, args: string): string {
+  // The name is already sanitized at parse; the path is not, and a filename may legally contain a
+  // newline. The banners are advisory provenance labels (nothing parses them back), but a
+  // multi-line "path" would still make the label lie about where the block starts.
+  const path = sanitizeLine(skill.path, 200);
   return [
     `Follow the ${JSON.stringify(skill.name)} skill for this task.`,
     "",
-    `===== BEGIN SKILL ${JSON.stringify(skill.name)} (${skill.path}) — repository-authored instructions =====`,
+    `===== BEGIN SKILL ${JSON.stringify(skill.name)} (${path}) — repository-authored instructions =====`,
     skill.body,
     `===== END SKILL ${JSON.stringify(skill.name)} =====`,
     "",
