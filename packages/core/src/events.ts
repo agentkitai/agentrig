@@ -99,12 +99,16 @@ export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
  * decisions and requests, session lifecycle (`session.start/resume/end`), supervisor records,
  * turn and model events, `tool.*` — is the loop's or the supervisor's to write, never a tool's.
  *
- * A tool result is external / tool-output trust (a shell command, a fetched page, an MCP server's
- * reply). Without this gate a tool — or a compromised MCP server behind one — can append a forged
- * `permission.decision: allow` or a premature `session.end` to the append-only log (issue #63). It
- * grants no capability: the permission engine still adjudicates every real call from the request,
- * not the log. But the log is what the supervisor's state fold, `sessions show`, trajectory export,
- * and evidence collection read as ground truth, so a forgeable audit trail is its own harm. This is
+ * A tool's output is external / tool-output trust (a shell command, a fetched page, an MCP server's
+ * reply). Without this gate a buggy or malicious in-process tool — or a custom tool that forwards
+ * untrusted content into `ctx.emit` — can append a forged `permission.decision: allow` or a
+ * premature `session.end` to the append-only log (issue #63). (The built-in MCP adapter does not
+ * call `ctx.emit` at all, so a server behind it cannot reach the log this way; the vector is the
+ * tool code itself.) It grants no capability: the permission engine adjudicates every real call
+ * from the request, not the log. But the log is what the supervisor's state fold, `sessions show`,
+ * trajectory export, and evidence collection read as ground truth, so a forgeable audit trail is
+ * its own harm — and a malformed allowed-type event that the store cannot re-parse would corrupt
+ * the whole session log, which is why the loop validates SHAPE as well as type at that seam. This is
  * the tool-side analogue of `record()`'s validation of supervisor writes: the two seams together are
  * why "an observer cannot forge a `tool.call` or a `session.end`" is actually true.
  *

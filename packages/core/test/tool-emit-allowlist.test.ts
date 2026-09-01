@@ -125,6 +125,43 @@ describe("issue #63: tool ctx.emit allow-list", () => {
     expect(events.some((e) => e.type === "error" && /may not emit/i.test(e.message))).toBe(false);
   });
 
+  it("drops a MALFORMED allowed-type event and keeps the on-disk log readable (issue #63 review)", async () => {
+    // A type-only gate would pass `{type:"file.changed"}` (missing path/op/contentHash); the store
+    // appends with a bare JSON.stringify and `read` re-parses with a throwing schema, so one such
+    // line permanently corrupts the immutable log. The seam validates SHAPE too, mirroring record().
+    let t = 1000;
+    const store = new SessionStore({ root, now: () => t, newId: () => "malformed1" });
+    const provider = new FakeProvider([
+      [call("a", "emit_probe", {}), usage(1, 1), stop("tool_use")],
+      [{ type: "text_delta", text: "done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const config: AgentConfig = {
+      provider,
+      tools: [emitter([{ type: "file.changed" } as EventPayload])],
+      permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+      systemPrompt: "test",
+      trustedProjectRoot: root,
+      store,
+      now: () => t++,
+    };
+    const session = createCoreAgent(config).run("go", { cwd: root });
+    for await (const _ of session.events) void _;
+    await session.done;
+
+    // the malformed event was dropped and reported...
+    let readBack: HarnessEvent[] = [];
+    await expect(
+      (async () => {
+        readBack = [];
+        for await (const e of store.read("malformed1")) readBack.push(e);
+      })(),
+      "the on-disk log must stay parseable — this threw before the shape check",
+    ).resolves.not.toThrow();
+    expect(readBack.some((e) => e.type === "file.changed")).toBe(false);
+    expect(readBack.some((e) => e.type === "error" && /malformed and would corrupt the log/i.test(e.message))).toBe(true);
+    expect(readBack.at(-1)?.type).toBe("session.end");
+  });
+
   it("the allow-list is exactly the four informational/state kinds — a guard against drift", () => {
     expect([...TOOL_EMITTABLE_EVENTS].sort()).toEqual(
       ["file.changed", "plan.updated", "subagent.end", "subagent.spawn"].sort(),
