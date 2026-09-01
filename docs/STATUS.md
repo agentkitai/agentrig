@@ -177,6 +177,36 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## R13e injection fixtures (2026-09-01)
+
+Status: **done** (pulled early per the roadmap's "rows, not milestones" note — pure tests, no
+feature dependency on R13a–d).
+
+`packages/core/test/injection-fixtures.test.ts` pins the R13 capability invariants that already
+hold structurally, so a future R13a–d change cannot silently regress them:
+
+- an injected instruction in a tool result cannot authorize a first exec call (headless ask→deny
+  stands; the `run` call is `tool.denied`, never executed);
+- a forged `permission.decision: allow` emitted into the log does not make the real engine skip a
+  later call — the forgery is the adversarial setup, the still-denied exec is the pinned
+  non-behavior;
+- the permission engine decides from a `PermissionRequest` with no field for conversation, memory,
+  or tool output — identical class+paths yield identical verdicts whatever the injected payload;
+- a `pre_tool` hook cannot inject or fabricate an `allow` (the action is not in pre_tool's
+  allow-list — rejected and reported);
+- a forged supervisor audit record is rejected by the validated `record()` seam;
+- a poisoned subagent brief inherits no widened permissions — the child runs under its own policy.
+
+Each was mutation-verified: flipping the `RulePolicy` fallback to `allow` breaks four of them, and
+dropping `record()`'s validation breaks the audit one.
+
+**Finding surfaced, filed separately (not fixed here — out of R13e's pure-test scope):** a tool's
+`ctx.emit` (`emitFromTool` in `agent.ts`) is unfiltered, so a tool can append a forged
+`permission.decision` or `session.end` to the append-only log. It grants no capability (the real
+engine still adjudicates every call — fixture #2 pins exactly that), but it contradicts the
+`record()` comment's stated guarantee that "an observer cannot forge a tool.call or session.end."
+An allow-list on `emitFromTool` is the fix, tracked as its own issue.
+
 ## Roadmap third pass (2026-09-01)
 
 Two unified analyses of the `system_prompts_leaks` prompt-capture corpus were folded into
