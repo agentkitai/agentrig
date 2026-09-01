@@ -2,7 +2,7 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
-import { SupervisorRecord } from "./events.js";
+import { SupervisorRecord, TOOL_EMITTABLE_EVENTS } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -266,7 +266,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // A tool the abort race orphaned may still emit after session.end; those events are dropped
   // so the log's last event is always session.end.
   const emitFromTool = (payload: EventPayload): void => {
-    if (!ended) void emit(payload);
+    if (ended) return;
+    // A tool may only emit the informational/state events tools legitimately produce (see
+    // TOOL_EMITTABLE_EVENTS). Anything else — a forged permission.decision, session.end, or
+    // supervisor record — is dropped and reported, never appended: the log stays a faithful
+    // audit trail no matter what a tool result (or a compromised MCP server) tries to write.
+    if (!TOOL_EMITTABLE_EVENTS.has(payload.type)) {
+      void emit({
+        type: "error",
+        message: `a tool tried to emit a "${payload.type}" event, which tools may not emit; dropped`,
+        fatal: false,
+      });
+      return;
+    }
+    void emit(payload);
   };
 
   /**

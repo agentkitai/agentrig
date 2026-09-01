@@ -94,6 +94,30 @@ export const SupervisorRecord = z.discriminatedUnion("type", [
 ]);
 export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
 
+/**
+ * The only event kinds a TOOL may emit through `ToolContext.emit`. Everything else — permission
+ * decisions and requests, session lifecycle (`session.start/resume/end`), supervisor records,
+ * turn and model events, `tool.*` — is the loop's or the supervisor's to write, never a tool's.
+ *
+ * A tool result is external / tool-output trust (a shell command, a fetched page, an MCP server's
+ * reply). Without this gate a tool — or a compromised MCP server behind one — can append a forged
+ * `permission.decision: allow` or a premature `session.end` to the append-only log (issue #63). It
+ * grants no capability: the permission engine still adjudicates every real call from the request,
+ * not the log. But the log is what the supervisor's state fold, `sessions show`, trajectory export,
+ * and evidence collection read as ground truth, so a forgeable audit trail is its own harm. This is
+ * the tool-side analogue of `record()`'s validation of supervisor writes: the two seams together are
+ * why "an observer cannot forge a `tool.call` or a `session.end`" is actually true.
+ *
+ * Kept as a plain string set (not derived from the schema) so adding it needs a deliberate edit:
+ * a new event type is NOT tool-emittable until someone adds it here on purpose.
+ */
+export const TOOL_EMITTABLE_EVENTS: ReadonlySet<string> = new Set([
+  "plan.updated",
+  "file.changed",
+  "subagent.spawn",
+  "subagent.end",
+]);
+
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
