@@ -291,6 +291,38 @@ including the two gaps the adversarial review found surviving the first round: d
 fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
 `join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
 
+## Self-hosting: `review` and `land` skills (2026-09-01)
+
+The dogfood loop covered only the BUILDER role; the independent final review and the merge
+sequence still lived outside the harness (in the cloud-session workflow that has been reviewing
+and landing these PRs). Two new checked-in skills codify those roles so the whole cycle can run
+through AgentRig itself:
+
+- `review` — independent adversarial review of one PR on its final head: isolated worktree merged
+  with current main, green trio judged by real exit codes, the whole diff read against the repo
+  invariants, test-quality checks, 2–4 mutation probes on the load-bearing lines (serial, never
+  overlapping runs in one worktree), re-verification of at least one of the PR body's fail-first
+  claims, CI checked on the actual head SHA. Verdict is findings (file:line, severity, scenario,
+  fix) or an evidence-listing pass. Hard boundary: never merges, never pushes to the PR branch.
+  Meant to run in a session that shares no context with the author run.
+- `land` — execution of a human merge decision, never the decision: re-check every precondition
+  now (human named this PR; review verdict resolved; CI green on the re-fetched current head,
+  both platforms; mergeable), squash with a final-state body, then WATCH main CI on the merge
+  commit and treat red main as an emergency. One flake re-run permitted under the same rule the
+  drive-to-green flow uses. One merge at a time; open PRs with a moved base get flagged.
+
+- `ship` — the conductor: one session that spawns a builder subagent (dogfood skill), then an
+  independent reviewer subagent (review skill — subagent isolation makes the independence
+  structural: the reviewer gets none of the builder's context by construction), then STOPS and
+  presents the verdict. The human's next message is the only path to landing; a fix request
+  spawns a scoped fix child plus one delta re-review. A ship run that ends waiting at the
+  verdict is a success. A builder child dead at its budget is reported by session id for manual
+  resume, not silently re-spawned — the rough child-resume story is the R4 session-trees row
+  starting to matter.
+
+The remaining role AgentRig cannot self-host is the escape hatch: when a bad merge breaks the
+harness itself, the fix needs a tool that is not the broken tool.
+
 ## Dogfood skill: bounded review staleness (2026-09-01)
 
 The first R1.5f dogfood run read §8's staleness rule as "full dual review after every fix
