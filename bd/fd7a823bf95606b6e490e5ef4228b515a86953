@@ -1,0 +1,48 @@
+docs/ROADMAP.md
+  h_26c5a60a657125 252
+docs/STATUS.md
+  h_26c5a60a657125 3-5,129-144
+packages/cli/src/agent-builder.ts
+  h_26c5a60a657125 85-86,265,412
+packages/cli/src/config.ts
+  h_26c5a60a657125 61
+packages/cli/src/program.ts
+  h_26c5a60a657125 203
+packages/cli/src/render.ts
+  h_26c5a60a657125 38,139
+packages/cli/test/config.test.ts
+  h_26c5a60a657125 148,163
+packages/cli/test/render.test.ts
+  h_26c5a60a657125 132-145
+packages/cli/test/subagent-wiring.test.ts
+  h_26c5a60a657125 182
+packages/core/package.json
+  h_26c5a60a657125 16
+packages/core/src/agent.ts
+  h_26c5a60a657125 15,54-58,452,468-489,512-515,520,523
+packages/core/src/events.ts
+  h_26c5a60a657125 146-152
+packages/core/src/index.ts
+  h_26c5a60a657125 11
+packages/core/src/repo-map.ts
+  h_26c5a60a657125 1-204
+packages/core/test/agent.test.ts
+  h_26c5a60a657125 72-73,183-227
+packages/core/test/events.test.ts
+  h_26c5a60a657125 31-45
+packages/core/test/repo-map.test.ts
+  h_26c5a60a657125 1-72
+pnpm-lock.yaml
+  h_26c5a60a657125 60-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "bdfd7a823bf95606b6e490e5ef4228b515a86953",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
