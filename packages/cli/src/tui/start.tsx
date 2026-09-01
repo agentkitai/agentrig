@@ -14,7 +14,13 @@ import { TuiController } from "./controller.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { currentGitBranch } from "../git-branch.js";
-import { parseSoft, permissionWarning, supervisorOptions, type SupervisorFlags } from "../run.js";
+import {
+  parseSoft,
+  parseTurnsRemaining,
+  permissionWarning,
+  supervisorOptions,
+  type SupervisorFlags,
+} from "../run.js";
 import { parseBudget } from "../agent-builder.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 
@@ -57,6 +63,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 memoryIndex: "",
                 provider: built!.provider,
                 soft: parseSoft(opts.supervisorSoft ?? "0.8"),
+                turnsRemaining: parseTurnsRemaining(opts.supervisorTurnsRemaining ?? "15"),
                 onEscalate: (question: string) => controller.askSupervisor(question),
                 onError: (where: string, err: Error) =>
                   controller.print(`supervisor ${where}: ${err.message}`, "error"),

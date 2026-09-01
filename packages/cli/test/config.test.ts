@@ -132,6 +132,14 @@ describe("config file boundary", () => {
     const path = await configAt(cwd, { supervisorSoft: 0 });
     await expect(readConfigFile(path)).rejects.toThrow(/config\.json at supervisorSoft: must be greater than 0 and at most 1/);
   });
+
+  it("accepts only positive integer supervisor turn floors", async () => {
+    const { cwd } = await fixture();
+    const valid = await configAt(cwd, { supervisorTurnsRemaining: 20 });
+    await expect(readConfigFile(valid)).resolves.toMatchObject({ supervisorTurnsRemaining: "20" });
+    const invalid = await configAt(cwd, { supervisorTurnsRemaining: 2.5 });
+    await expect(readConfigFile(invalid)).rejects.toThrow(/supervisorTurnsRemaining: must be a positive integer/);
+  });
 });
 
 describe("both agent entry points use config", () => {
@@ -155,6 +163,66 @@ describe("both agent entry points use config", () => {
       const built = await buildAgent(options as AgentBuildOptions);
       expect(built.tools.find((tool) => tool.name === "bash")?.description).toContain("/bin/bash");
     }
+  });
+
+  it("uses separate turn defaults for interactive and headless entry modes, including resume", async () => {
+    const { cwd, home } = await fixture();
+    const received: Array<{ entry: string; maxTurns: string }> = [];
+    const dependencies = {
+      config: { cwd, home, env: {} },
+      run: async (_task: string, opts: RunOptions) => void received.push({ entry: opts.resume === undefined ? "run" : "resume", maxTurns: opts.maxTurns }),
+      tui: async (opts: TuiOptions) => void received.push({ entry: "tui", maxTurns: opts.maxTurns }),
+    };
+
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "run", "test"]);
+    await buildProgram(dependencies).parseAsync(["node", "agentrig"]);
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "sessions", "resume", "s1"]);
+
+    expect(received).toEqual([
+      { entry: "run", maxTurns: "300" },
+      { entry: "tui", maxTurns: "50" },
+      { entry: "resume", maxTurns: "300" },
+    ]);
+  });
+
+  it("lets project config override both mode defaults", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { maxTurns: 90 });
+    const received: string[] = [];
+    const dependencies = {
+      config: { cwd, home, env: {} },
+      run: async (_task: string, opts: RunOptions) => void received.push(opts.maxTurns),
+      tui: async (opts: TuiOptions) => void received.push(opts.maxTurns),
+    };
+
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "run", "test"]);
+    await buildProgram(dependencies).parseAsync(["node", "agentrig"]);
+    expect(received).toEqual(["90", "90"]);
+  });
+
+  it("treats a typed old default as explicit and lets it beat the headless default and config", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { maxTurns: 90 });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--max-turns", "50",
+    ]);
+    expect(received?.maxTurns).toBe("50");
+  });
+
+  it("resolves the turn-warning floor through config and explicit CLI precedence", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { supervisorTurnsRemaining: 20 });
+    const received: string[] = [];
+    const dependencies = {
+      config: { cwd, home, env: {} },
+      run: async (_task: string, opts: RunOptions) => void received.push(opts.supervisorTurnsRemaining),
+    };
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "run", "test"]);
+    await buildProgram(dependencies).parseAsync([
+      "node", "agentrig", "run", "test", "--supervisor-turns-remaining", "7",
+    ]);
+    expect(received).toEqual(["20", "7"]);
   });
 
   it("honours --profile through Commander without another layer masking it", async () => {

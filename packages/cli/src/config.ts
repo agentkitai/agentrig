@@ -9,6 +9,7 @@ const positiveSetting = z
   .union([z.string().min(1), z.number().finite()])
   .transform(String)
   .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, "must be a positive number");
+const integerSetting = positiveSetting.refine((value) => Number.isInteger(Number(value)), "must be a positive integer");
 const softSetting = z
   .union([z.string().min(1), z.number().finite()])
   .transform(String)
@@ -37,6 +38,7 @@ const ConfigValuesSchema = z
     supervise: z.boolean().optional(),
     supervisorAbort: z.boolean().optional(),
     supervisorSoft: softSetting.optional(),
+    supervisorTurnsRemaining: integerSetting.optional(),
     supervisorReview: z.boolean().optional(),
     maxTurns: positiveSetting.optional(),
     maxTokens: positiveSetting.optional(),
