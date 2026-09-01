@@ -1,0 +1,28 @@
+packages/core/src/agent.ts
+  h_26c5a60a657125 618,620-643,662
+packages/core/src/compaction.ts
+  h_26c5a60a657125 19-25,96
+packages/core/src/context-manifest.ts
+  h_26c5a60a657125 2,5,22-27,62,87,95,102-106
+packages/core/src/tool-result-eviction.ts
+  h_26c5a60a657125 17-18,73,83,110,115
+packages/core/test/agent.test.ts
+  h_26c5a60a657125 856-865
+packages/core/test/context-manifest.test.ts
+  h_26c5a60a657125 41,55-67,81,88
+packages/core/test/hooks.test.ts
+  h_26c5a60a657125 499-520
+packages/core/test/tool-result-eviction.test.ts
+  h_26c5a60a657125 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "25f057fc01760d38f47f1e2263cc2d0baa7f8a6e",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
