@@ -166,6 +166,20 @@ describe("both agent entry points use config", () => {
     }
   });
 
+  it("passes both repo-map flag polarities through config resolution", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { repoMap: false });
+    const received: RunOptions[] = [];
+    const dependencies = {
+      config: { cwd, home, env: {} },
+      run: async (_task: string, opts: RunOptions) => void received.push(opts),
+    };
+
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "run", "off", "--no-repo-map"]);
+    await buildProgram(dependencies).parseAsync(["node", "agentrig", "run", "on", "--repo-map"]);
+    expect(received.map((opts) => opts.repoMap)).toEqual([false, true]);
+  });
+
   it("uses separate turn defaults for interactive and headless entry modes, including resume", async () => {
     const { cwd, home } = await fixture();
     const received: Array<{ entry: string; maxTurns: string }> = [];

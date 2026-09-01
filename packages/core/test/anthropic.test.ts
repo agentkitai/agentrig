@@ -43,6 +43,18 @@ describe("toAnthropicRequest", () => {
     const body = toAnthropicRequest({ ...baseReq, cacheHints: { systemPrefix: true } }, "m") as Record<string, unknown>;
     expect(body.system).toEqual([{ type: "text", text: "be terse", cache_control: { type: "ephemeral" } }]);
   });
+
+  it("keeps mutable context after the cached system prefix", () => {
+    const body = toAnthropicRequest({
+      ...baseReq,
+      system: "stable\n\nmutable map",
+      cacheHints: { systemPrefix: true, systemPrefixChars: 6 },
+    }, "m") as Record<string, unknown>;
+    expect(body.system).toEqual([
+      { type: "text", text: "stable", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "\n\nmutable map" },
+    ]);
+  });
 });
 
 const sse = (events: Array<[string, unknown]>): string =>

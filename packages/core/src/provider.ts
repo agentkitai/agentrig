@@ -14,7 +14,11 @@ export interface ModelRequest {
   tools: ToolSpec[];
   maxTokens: number;
   temperature?: number;
-  cacheHints?: { systemPrefix?: boolean };
+  cacheHints?: {
+    systemPrefix?: boolean;
+    /** Character boundary for a stable cached prefix when mutable context follows it. */
+    systemPrefixChars?: number;
+  };
 }
 
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";

@@ -147,14 +147,25 @@ describe("what a child inherits", () => {
     expect(prompt).not.toContain("## Skills");
   });
 
-  it("a fresh store per child, and the parent's per-turn cap", () => {
-    const o = wiring({ maxTokensPerTurn: 4096 });
+  it("a fresh store per child, the parent's per-turn cap, and its repo-map opt-out", () => {
+    const o = wiring({
+      maxTokensPerTurn: 4096,
+      opts: {
+        root,
+        maxTurns: "10",
+        maxTokensPerTurn: "1024",
+        provider: "anthropic",
+        model: "m",
+        repoMap: false,
+      } as AgentBuildOptions,
+    });
     const first = o.childConfig();
     const second = o.childConfig();
     expect(first.store.root).toBe(root);
     // a store carries per-session seq state, so children must not share one instance
     expect(first.store).not.toBe(second.store);
     expect(first.maxTokensPerTurn).toBe(4096);
+    expect(first.repoMap).toBe(false);
   });
 });
 
@@ -179,6 +190,7 @@ describe("the flags exist on the commands that build an agent", () => {
       expect(flags).toContain("--subagent-max-turns");
       expect(flags).toContain("--subagent-max-children");
       expect(flags).toContain("--skills");
+      expect(flags).toContain("--repo-map");
       expect(flags).toContain("--no-repo-map");
     }
   });

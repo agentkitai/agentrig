@@ -467,9 +467,19 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
       // Like tool-result eviction, the map is a request view: only its compact accounting event is
       // durable. Refreshing checks path/size/mtime each turn and reparses source only after a change.
-      const repoMapView = config.repoMap === false || canonicalCwd === undefined
+      // Repository-controlled names and type literals are prompt content too, so the map obeys the
+      // same canonical trust boundary as AGENTS.md rather than treating delimiters as authorization.
+      const repoMapView = config.repoMap === false || !mayLoadProjectContext || canonicalCwd === undefined
         ? undefined
-        : new RepoMapView(canonicalCwd, config.repoMap);
+        : new RepoMapView(canonicalCwd, {
+            ...config.repoMap,
+            excludePaths: [
+              ...(config.repoMap?.excludePaths ?? []),
+              config.store.pathFor(id),
+              config.store.snapshotPathFor(id),
+              config.store.lockPathFor(id),
+            ],
+          });
       let repoMapContent = "";
       const refreshRepoMap = async (): Promise<void> => {
         if (repoMapView === undefined) return;
@@ -524,7 +534,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           messages: eviction.messages,
           tools: toolSpecs,
           maxTokens: config.maxTokensPerTurn ?? 8192,
-          cacheHints: { systemPrefix: true },
+          cacheHints: { systemPrefix: true, systemPrefixChars: system.length },
         };
 
         // Assistant content is assembled in stream order so the history replayed to the

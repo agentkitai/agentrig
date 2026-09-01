@@ -35,13 +35,17 @@ describe("repository map", () => {
       export interface Widget { id: string; run(input: number): Promise<void> }
       export function findWidget(id: string, exact?: boolean): Widget { throw new Error("must not run"); }
       export const dangerous: () => never = (() => { throw new Error("must not run"); })();
+      export namespace PublicApi { export function hiddenBody() { return "implementation secret"; } }
+      export default (() => "default implementation secret")();
       const privateValue = 1;
     `;
-    const signatures = exportedSignatures("fixture.ts", source);
-    expect(signatures).toContain("export interface Widget { id: string; run(input: number): Promise<void>; }");
+    const signatures = await exportedSignatures("fixture.ts", source);
+    expect(signatures.join("\n")).toMatch(/export interface Widget[\s\S]*id: string;[\s\S]*run\(input: number\): Promise<void>/);
     expect(signatures).toContain("export function findWidget(id: string, exact?: boolean): Widget");
     expect(signatures).toContain("export const dangerous: () => never");
     expect(signatures.join(" ")).not.toContain("must not run");
+    expect(signatures).toContain("export namespace PublicApi");
+    expect(signatures.join(" ")).not.toContain("implementation secret");
     expect(signatures.join(" ")).not.toContain("privateValue");
   });
 
@@ -65,8 +69,13 @@ describe("repository map", () => {
     expect(changed.map.content).toContain("export const after_: number");
   });
 
-  it("keeps the map of this repository within the dogfood budget", async () => {
+  it("keeps this repository's whole tree visible within the dogfood budget", async () => {
     const map = await generateRepoMap(process.cwd());
     expect(map.bytes).toBeLessThanOrEqual(DEFAULT_REPO_MAP_BYTES);
+    expect(map.files).toBeGreaterThan(100);
+    // A symbol-heavy early package must not starve later packages from the structural tree.
+    expect(map.content).toContain("packages/core/src/agent.ts");
+    expect(map.content).toContain("packages/memory/src/index.ts");
+    expect(map.content).toContain("packages/supervisor/src/index.ts");
   });
 });

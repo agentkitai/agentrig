@@ -135,7 +135,8 @@ through M7 remain complete, including M2.5's live provider validation.
   does not require whole-file reads and executable source cannot run during extraction.
 - The map is appended to each outbound system prompt between conspicuous data-not-instructions
   delimiters. A per-session view compares a SHA-256 freshness marker over sorted path/size/mtime
-  tuples before each turn and reparses only when that marker changes. Only `context.repo_map`
+  tuples before each turn and reparses only when that marker changes. It obeys the same canonical
+  project-trust boundary as instruction files and excludes active session artifacts. Only `context.repo_map`
   accounting (bytes, file count, truncation, and freshness) enters JSONL; map content never enters
   messages or the immutable log. `--no-repo-map` and the boolean `repoMap` config key disable both
   injection and accounting for parent and subagent sessions.
