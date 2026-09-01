@@ -148,8 +148,9 @@ through M7 remain complete, including M2.5's live provider validation.
   `tool.result` gained additive `output` and `truncated` fields: only a result whose display actually
   overflowed carries its complete textual rendering, and the event's existing `seq` is the handle.
   The model-facing prefix remains within the 30,000-code-unit display cap after the handle is appended,
-  says exactly how much of the complete rendering it shows, and offers the immediately following range
-  rather than a duplicate prefix. The distinct handle-bearing model view is recorded as a
+  carries an explicit complete-output cursor, and offers the immediately following range rather than a
+  duplicate prefix. Non-prefix summaries/previews keep their meaning and page complete text from cursor
+  zero. The distinct handle-bearing model view is recorded as a
   `tool.result.patched` event by `core:output-overflow` for replay/audit. `read_output {seq, from, to}`
   serves a zero-based, half-open range of at most 30,000 UTF-16 code units directly from the validated
   append-only session log, so hidden output can be inspected without replaying a command. Surrogate-pair
@@ -161,8 +162,10 @@ through M7 remain complete, including M2.5's live provider validation.
   `bash_job`, it only exposes data from an already-authorized operation in the same session and has no
   honest filesystem path with which to satisfy the generic cwd-only read rule. Tool-free agents do not
   advertise it. Reads stream the log instead of materializing every event and check aborts while scanning.
-  A later `post_tool` patch seals the raw artifact, so a redaction hook cannot be bypassed by range reads;
-  overflow handles survive stale-result eviction. The core also applies the final display bound to
+  A later replacing `post_tool` patch seals the raw artifact, so a redaction hook cannot be bypassed by
+  range reads; inject-only patches carry an additive mode and leave recovery available. Hook output
+  reserves bounded space for both result context and guidance rather than truncating the injection away.
+  Overflow handles use one strict core marker and survive stale-result eviction. The core also applies the final display bound to
   third-party tools, thrown errors, and post-hook output, while `ToolResult.fullDisplay` lets already-bounded
   builtins and MCP tools distinguish representational overflow from semantic collection caps such as
   grep's match limit. Empty/malformed `fullDisplay` values do not create artifacts.

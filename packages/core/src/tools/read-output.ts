@@ -2,9 +2,20 @@ import { z } from "zod";
 import type { EventOf } from "../events.js";
 import type { SessionStore } from "../session-store.js";
 import type { Tool, ToolResult } from "../tool.js";
-import { DISPLAY_CAP } from "./shared.js";
+import { DISPLAY_CAP, splitsSurrogatePair } from "./shared.js";
 
 export const READ_OUTPUT_TOOL = "read_output";
+
+const OUTPUT_MARKER = /\n… \[output artifact; cursor (\d+) of (\d+) UTF-16 code units; read next with (read_output \{"seq":\d+,"from":\d+,"to":\d+\})\]$/;
+
+export function outputArtifactMarker(seq: number, from: number, to: number, total: number): string {
+  return `\n… [output artifact; cursor ${from} of ${total} UTF-16 code units; read next with ` +
+    `${READ_OUTPUT_TOOL} {"seq":${seq},"from":${from},"to":${to}}]`;
+}
+
+export function outputHandleFromDisplay(display: string): string | undefined {
+  return OUTPUT_MARKER.exec(display)?.[3];
+}
 
 const ReadOutputInput = z.object({
   seq: z.number().int().nonnegative().describe("Sequence number from an overflow handle"),
@@ -43,7 +54,7 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
         if (candidate.seq === input.seq && candidate.type === "tool.result") event = candidate;
         if (
           event !== undefined && candidate.type === "tool.result.patched" &&
-          candidate.id === event.id && candidate.by === "post_tool"
+          candidate.id === event.id && candidate.by === "post_tool" && candidate.mode !== "inject"
         ) sealed = true;
       }
       if (event?.truncated !== true || event.output === undefined) {
@@ -69,20 +80,17 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
           `set to at most ${event.output.length}`;
         return { output: "", display, isError: true };
       }
-      const splitsPair = (offset: number): boolean =>
-        offset > 0 && offset < event.output!.length &&
-        /[\uD800-\uDBFF]/.test(event.output![offset - 1]!) && /[\uDC00-\uDFFF]/.test(event.output![offset]!);
-      if (splitsPair(input.from)) {
+      if (splitsSurrogatePair(event.output, input.from)) {
         return {
           output: "",
           display: `from ${input.from} splits a surrogate pair in output seq ${input.seq}; set \`from\` to ${input.from - 1}`,
           isError: true,
         };
       }
-      if (splitsPair(input.to)) {
+      if (splitsSurrogatePair(event.output, input.to)) {
         return {
           output: "",
-          display: `to ${input.to} splits a surrogate pair in output seq ${input.seq}; set \`to\` to ${input.to + 1}`,
+          display: `to ${input.to} splits a surrogate pair in output seq ${input.seq}; set \`to\` to ${input.to - 1}`,
           isError: true,
         };
       }

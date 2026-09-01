@@ -252,8 +252,10 @@ describe("post_tool", () => {
     const patched = events.find((event) => event.type === "tool.result.patched");
     expect(patched).toMatchObject({ type: "tool.result.patched", by: "post_tool" });
     if (patched?.type !== "tool.result.patched") throw new Error("missing patch");
-    expect(patched.display.length).toBeLessThan(31_000);
+    expect(patched.display.length).toBeLessThanOrEqual(30_000);
+    expect(patched.display).toContain("zzzz");
     expect(patched.display).not.toContain("TAIL");
+    expect(modelSaw(provider)).toContain("zzzz");
     expect(modelSaw(provider)).not.toContain("TAIL");
   });
 

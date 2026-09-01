@@ -13,8 +13,8 @@ import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
 import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
-import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
-import { bound, DISPLAY_CAP } from "./tools/shared.js";
+import { outputArtifactMarker, readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
+import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 import {
   buildContextManifest,
   renderSystemBlocks,
@@ -238,15 +238,19 @@ interface OverflowResult {
   output?: string;
 }
 
-/** Bound every tool, including third-party tools that forgot to bound their own display. */
+/** Bound every tool, and turn both explicit and forgotten representational overflow into artifacts. */
 function overflowResult(result: { display: string; output: unknown; truncated?: boolean; fullDisplay?: string }): OverflowResult {
-  const output = result.truncated === true && result.fullDisplay !== undefined && result.fullDisplay.length > 0
+  const explicit = result.truncated === true && result.fullDisplay !== undefined && result.fullDisplay.length > 0
     ? result.fullDisplay
     : undefined;
-  // An already-bounded tool's display is the historical record of what it returned, including its
-  // own truthful truncation count. Core bounds only tools that omitted a usable complete rendering.
-  if (output !== undefined) return { display: result.display, output };
-  return { display: bound(result.display).display };
+  if (explicit !== undefined && explicit !== result.display) {
+    const prefix = commonPrefixLength(result.display, explicit);
+    // Prefix renderers get a truthful count derived from the complete text. Header/summary renderers
+    // keep their bounded preview; their handle starts at cursor zero over the separate complete text.
+    return { display: prefix > 0 ? bound(explicit).display : bound(result.display).display, output: explicit };
+  }
+  const bounded = bound(result.display);
+  return bounded.truncated ? { display: bounded.display, output: result.display } : { display: bounded.display };
 }
 
 function commonPrefixLength(left: string, right: string): number {
@@ -256,34 +260,24 @@ function commonPrefixLength(left: string, right: string): number {
   return length;
 }
 
-function safePrefixEnd(text: string, proposed: number): number {
-  if (
-    proposed > 0 && proposed < text.length &&
-    /[\uD800-\uDBFF]/.test(text[proposed - 1]!) && /[\uDC00-\uDFFF]/.test(text[proposed]!)
-  ) return proposed - 1;
-  return proposed;
-}
-
-/** Keep a truthful, directly pageable artifact handle inside the hard model-facing display bound. */
-function displayWithOutputHandle(display: string, output: string, seq: number): string {
+/** Keep a directly pageable artifact handle inside a caller-selected model-facing display bound. */
+function displayWithOutputHandle(display: string, output: string, seq: number, cap = DISPLAY_CAP): string {
   const availablePrefix = commonPrefixLength(display, output);
-  let visible = Math.min(availablePrefix, DISPLAY_CAP);
+  const preview = availablePrefix > 0 ? output : display;
+  let visible = Math.min(preview.length, cap);
   let marker = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const nextTo = safePrefixEnd(output, Math.min(output.length, visible + DISPLAY_CAP));
-    marker =
-      `\n… [output truncated; first ${visible} of ${output.length} UTF-16 code units shown. Read next range with ` +
-      `${READ_OUTPUT_TOOL} {"seq":${seq},"from":${visible},"to":${nextTo}}]`;
-    const nextVisible = safePrefixEnd(output, Math.min(availablePrefix, Math.max(0, DISPLAY_CAP - marker.length)));
+    const cursor = availablePrefix > 0 ? visible : 0;
+    const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
+    marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
+    const nextVisible = safeSliceEnd(preview, Math.min(preview.length, Math.max(0, cap - marker.length)));
     if (nextVisible === visible) break;
     visible = nextVisible;
   }
-  // Re-render once with the stable visible offset so the prose and range are exact.
-  const nextTo = safePrefixEnd(output, Math.min(output.length, visible + DISPLAY_CAP));
-  marker =
-    `\n… [output truncated; first ${visible} of ${output.length} UTF-16 code units shown. Read next range with ` +
-    `${READ_OUTPUT_TOOL} {"seq":${seq},"from":${visible},"to":${nextTo}}]`;
-  return `${output.slice(0, visible)}${marker}`;
+  const cursor = availablePrefix > 0 ? visible : 0;
+  const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
+  marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
+  return `${preview.slice(0, visible)}${marker}`;
 }
 
 export function createAgent(config: AgentConfig): Agent {
@@ -1087,11 +1081,31 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           });
         }
         const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
-        const body = bound([replaced ?? modelDisplay, ...h.injects].join("\n")).display;
+        let body = modelDisplay;
         if (replaced !== undefined || h.injects.length > 0) {
+          // Reserve half the frame for injected guidance so bounding cannot silently discard the
+          // hook's entire influence behind a large result. The other half retains result context
+          // (including an overflow handle when one exists).
+          const injected = h.injects.length === 0
+            ? ""
+            : bound(h.injects.join("\n"), Math.floor(DISPLAY_CAP / 2)).display;
+          const separator = injected === "" ? "" : "\n";
+          const baseBudget = DISPLAY_CAP - separator.length - injected.length;
+          const base = replaced !== undefined
+            ? bound(replaced, baseBudget).display
+            : overflow.output !== undefined
+              ? displayWithOutputHandle(overflow.display, overflow.output, resultEvent.seq, baseBudget)
+              : bound(modelDisplay, baseBudget).display;
+          body = `${base}${separator}${injected}`;
           // the log keeps what the tool returned; this records that a hook changed what the
           // model consumed, so the two can never diverge unobserved
-          await emit({ type: "tool.result.patched", id: tu.id, by: "post_tool", display: body });
+          await emit({
+            type: "tool.result.patched",
+            id: tu.id,
+            by: "post_tool",
+            display: body,
+            mode: replaced === undefined ? "inject" : "modify",
+          });
         }
         return resultBlock(body, !ok);
       } catch (err) {

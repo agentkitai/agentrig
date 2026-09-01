@@ -68,6 +68,20 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips whether a post-tool patch replaced or injected display text", () => {
+    const event = HarnessEvent.parse({
+      seq: 39,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "tool.result.patched",
+      id: "tool-1",
+      by: "post_tool",
+      display: "preview plus guidance",
+      mode: "inject",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a context.repo_map accounting event without carrying map content", () => {
     const event = HarnessEvent.parse({
       seq: 40,

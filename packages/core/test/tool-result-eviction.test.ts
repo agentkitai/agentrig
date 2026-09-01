@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evictToolResults, type Message } from "@agentkitai/agentrig-core";
+import { evictToolResults, outputArtifactMarker, type Message } from "@agentkitai/agentrig-core";
 
 function conversation(payloads: string[]): Message[] {
   const messages: Message[] = [{ role: "user", content: [{ type: "text", text: "inspect files" }] }];
@@ -62,7 +62,7 @@ describe("tool-result eviction view", () => {
 
   it("preserves an overflow handle when the containing result is later evicted", () => {
     const handle = 'read_output {"seq":42,"from":29800,"to":31000}';
-    const original = conversation([`${"large".repeat(500)}\n… [output truncated; ${handle}]`]);
+    const original = conversation([`${"large".repeat(500)}${outputArtifactMarker(42, 29_800, 31_000, 31_000)}`]);
     const viewed = evictToolResults(original, { keepLastTurns: 0, minBytes: 100 });
     const stub = result(viewed.messages, "call-1");
     if (stub?.type !== "tool_result" || typeof stub.content !== "string") throw new Error("missing stub");

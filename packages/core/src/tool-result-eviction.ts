@@ -1,4 +1,5 @@
 import type { ContentBlock, Message } from "./messages.js";
+import { outputHandleFromDisplay } from "./tools/read-output.js";
 
 /** Outbound-only context policy. Stored conversation messages are never passed here for mutation. */
 export interface ToolResultEvictionOptions {
@@ -52,7 +53,7 @@ function outputHandle(content: Extract<ContentBlock, { type: "tool_result" }>["c
     ? content
     : content.filter((block): block is Extract<ContentBlock, { type: "text" }> => block.type === "text")
       .map((block) => block.text).join("\n");
-  return /read_output \{"seq":\d+,"from":\d+,"to":\d+\}/.exec(text)?.[0];
+  return outputHandleFromDisplay(text);
 }
 
 function stubFor(

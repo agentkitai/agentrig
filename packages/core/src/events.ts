@@ -169,7 +169,14 @@ export const EventPayload = z.discriminatedUnion("type", [
    * what the tool actually returned, so without this the log and the model's conversation could
    * diverge silently — and a hook could steer the model with text no observer ever saw.
    */
-  z.object({ type: z.literal("tool.result.patched"), id: z.string(), by: z.string(), display: z.string() }),
+  z.object({
+    type: z.literal("tool.result.patched"),
+    id: z.string(),
+    by: z.string(),
+    display: z.string(),
+    /** Additive: absent historical post_tool events are conservatively treated as replacement. */
+    mode: z.enum(["modify", "inject"]).optional(),
+  }),
   z.object({ type: z.literal("tool.denied"), id: z.string(), name: z.string() }),
   z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),

@@ -23,7 +23,12 @@ export { editFileTool } from "./edit-file.js";
 export { globTool, isExcludedPath } from "./glob.js";
 export { grepTool, type GrepMatch } from "./grep.js";
 export { readFileTool } from "./read-file.js";
-export { readOutputTool, READ_OUTPUT_TOOL } from "./read-output.js";
+export {
+  outputArtifactMarker,
+  outputHandleFromDisplay,
+  readOutputTool,
+  READ_OUTPUT_TOOL,
+} from "./read-output.js";
 export { writeFileTool } from "./write-file.js";
 export { updatePlanTool } from "./update-plan.js";
 export { subagentTool, SUBAGENT_TOOL, type SubagentOptions } from "./subagent.js";
