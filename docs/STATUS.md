@@ -177,6 +177,26 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## Tool emit allow-list — issue #63 (2026-09-01)
+
+Status: **done**.
+
+`emitFromTool` in `agent.ts` now gates a tool's `ctx.emit` to `TOOL_EMITTABLE_EVENTS` (in
+`events.ts`): `plan.updated`, `file.changed`, `subagent.spawn`, `subagent.end` — the four
+informational/state kinds tools legitimately produce (inventoried across update-plan, edit-file,
+write-file, subagent; the subagent deliberately does not forward child events). Anything else — a
+forged `permission.decision`, `session.end`, or supervisor record — is dropped and reported as a
+non-fatal `error`, mirroring `record()`'s validation of supervisor writes. Together the two seams
+make the `record()` comment's guarantee ("an observer cannot forge a `tool.call` or a
+`session.end`") actually hold. Grants no capability either way — the permission engine adjudicates
+from the request, not the log — but the log is what the supervisor fold, `sessions show`, export,
+and evidence read as truth, so a forgeable audit trail was its own harm. The set is a hand-kept
+string list, not derived from the schema, so a new event type is not tool-emittable until someone
+adds it deliberately. R13e fixture #2 was strengthened from "the forgery is ineffective" to "the
+forgery is rejected AND ineffective". Pinned by `packages/core/test/tool-emit-allowlist.test.ts`
+(both directions + reporting + a drift guard on the set), each verified fail-first against the
+reverted gate.
+
 ## R13e injection fixtures (2026-09-01)
 
 Status: **done** (pulled early per the roadmap's "rows, not milestones" note — pure tests, no

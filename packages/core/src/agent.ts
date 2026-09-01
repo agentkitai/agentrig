@@ -1,8 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Decision, EventPayload, HarnessEvent, PermissionRequest, Usage } from "./events.js";
-import { SupervisorRecord } from "./events.js";
+import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
+import { EventPayload, SupervisorRecord, TOOL_EMITTABLE_EVENTS } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -266,7 +266,25 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // A tool the abort race orphaned may still emit after session.end; those events are dropped
   // so the log's last event is always session.end.
   const emitFromTool = (payload: EventPayload): void => {
-    if (!ended) void emit(payload);
+    if (ended) return;
+    // A tool's emit is untrusted input, so it is gated on BOTH axes, mirroring record():
+    //  1. TYPE — a tool may emit only the informational/state kinds tools legitimately produce
+    //     (TOOL_EMITTABLE_EVENTS). A forged permission.decision, session.end, or supervisor
+    //     record is not one of them.
+    //  2. SHAPE — even an allowed type must be a well-formed EventPayload. The store appends with a
+    //     bare JSON.stringify and `read` re-parses with HarnessEvent.parse, which THROWS on a bad
+    //     line; raw/ is immutable, so one malformed `{type:"file.changed"}` would permanently break
+    //     `sessions show`, resume, and ingest for the session (the same corruption record() guards).
+    // Either failure is dropped and reported, never appended — the log stays readable and faithful
+    // whatever a tool (a buggy one, or one forwarding hostile content) tries to write.
+    const reject = (why: string): void => {
+      const type = typeof (payload as { type?: unknown })?.type === "string" ? (payload as { type: string }).type : "unknown";
+      void emit({ type: "error", message: `a tool tried to emit a "${type}" event, ${why}; dropped`, fatal: false });
+    };
+    if (!TOOL_EMITTABLE_EVENTS.has(payload.type)) return reject("which tools may not emit");
+    const parsed = EventPayload.safeParse(payload);
+    if (!parsed.success) return reject("which is malformed and would corrupt the log");
+    void emit(parsed.data);
   };
 
   /**
