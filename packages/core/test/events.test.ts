@@ -28,6 +28,21 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a context.repo_map accounting event without carrying map content", () => {
+    const event = HarnessEvent.parse({
+      seq: 40,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "context.repo_map",
+      bytes: 4096,
+      files: 87,
+      truncated: true,
+      freshness: "abc123",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(event).not.toHaveProperty("content");
+  });
+
   it("round-trips a model.retry event, so slow turns are explicable from the log alone", () => {
     const event = HarnessEvent.parse({
       seq: 7,

@@ -1,8 +1,8 @@
 # Status
 
-Current roadmap row: **R1 is complete (R1a–R1e).** R1.5a was deliberately taken out of nominal
-order before R1b; the original milestones M0 through M7 remain complete, including M2.5's live
-provider validation.
+Current roadmap row: **R1.5e is complete.** R1 is complete (R1a–R1e); R1.5a and R1.5c were
+deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
+through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -126,6 +126,23 @@ provider validation.
 |---|---|---|
 | R1.5a | Outbound-view eviction of stale, large tool results with `context.evicted` accounting | done |
 | R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
+| R1.5e | Budgeted mechanical repository map with mtime refresh, context accounting, and opt-out | done |
+
+- R1.5e builds an 8 KiB-bounded, deterministically ordered file-and-export map with the TypeScript
+  syntax parser only: no module resolution, imports, execution, LSP, or build graph. Conventional
+  generated/state trees and every symlink are skipped. Function signatures and declared variable
+  types are retained while function bodies and variable initializers are discarded, so orientation
+  does not require whole-file reads and executable source cannot run during extraction.
+- The map is appended to each outbound system prompt between conspicuous data-not-instructions
+  delimiters. A per-session view compares a SHA-256 freshness marker over sorted path/size/mtime
+  tuples before each turn and reparses only when that marker changes. It obeys the same canonical
+  project-trust boundary as instruction files and excludes active session artifacts. Only `context.repo_map`
+  accounting (bytes, file count, truncation, and freshness) enters JSONL; map content never enters
+  messages or the immutable log. `--no-repo-map` and the boolean `repoMap` config key disable both
+  injection and accounting for parent and subagent sessions.
+- Rejected idea: persist the map in the session log and replay it on resume. The map is mutable prompt
+  context, not raw history; persisting its body would inflate every replay, expose stale structure as
+  current, and violate the same outbound-view boundary used by tool-result eviction.
 
 - R1.5c keeps the interactive TUI at 50 turns but gives non-interactive `run` and `sessions resume`
   300 turns by default. A resumed session follows the entry mode doing the new work rather than

@@ -12,6 +12,7 @@ import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { appendProjectInstructions, discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
+import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -50,6 +51,11 @@ export interface AgentConfig {
    * provider and is not metered by the budget — its cost is the price of staying under the window.
    */
   compaction?: CompactionStrategy;
+  /**
+   * Outbound-only structural repository view. Enabled by default; `false` opts out. The generated
+   * content is never appended to the immutable session log.
+   */
+  repoMap?: RepoMapOptions | false;
   /** Outbound-only stale tool-result eviction; enabled with a 5-turn/8-KiB default. */
   toolResultEviction?: ToolResultEvictionOptions;
   /** max_tokens per model response (default 8192). */
@@ -461,9 +467,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const canonicalRoot = configuredRoot === undefined
         ? undefined
         : await realpath(configuredRoot).catch(() => undefined);
-      const canonicalCwd = canonicalRoot === undefined
-        ? undefined
-        : await realpath(cwd).catch(() => undefined);
+      const canonicalCwd = await realpath(cwd).catch(() => undefined);
       const fromRoot = canonicalRoot === undefined || canonicalCwd === undefined ? ".." : relative(canonicalRoot, canonicalCwd);
       const mayLoadProjectContext = canonicalRoot !== undefined && canonicalCwd !== undefined
         && fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
@@ -478,6 +482,38 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           bytes: projectInstructions.bytes,
         });
       }
+
+      // Like tool-result eviction, the map is a request view: only its compact accounting event is
+      // durable. Refreshing checks path/size/mtime each turn and reparses source only after a change.
+      // Repository-controlled names and type literals are prompt content too, so the map obeys the
+      // same canonical trust boundary as AGENTS.md rather than treating delimiters as authorization.
+      const repoMapView = config.repoMap === false || !mayLoadProjectContext || canonicalCwd === undefined
+        ? undefined
+        : new RepoMapView(canonicalCwd, {
+            ...config.repoMap,
+            excludePaths: [
+              ...(config.repoMap?.excludePaths ?? []),
+              config.store.pathFor(id),
+              config.store.snapshotPathFor(id),
+              config.store.lockPathFor(id),
+            ],
+          });
+      let repoMapContent = "";
+      const refreshRepoMap = async (): Promise<void> => {
+        if (repoMapView === undefined) return;
+        const refreshed = await repoMapView.refresh();
+        repoMapContent = refreshed.map.content;
+        if (refreshed.regenerated) {
+          await emit({
+            type: "context.repo_map",
+            bytes: refreshed.map.bytes,
+            files: refreshed.map.files,
+            truncated: refreshed.map.truncated,
+            freshness: refreshed.map.freshness,
+          });
+        }
+      };
+      await refreshRepoMap();
 
       loop: while (true) {
         await gate.wait();
@@ -501,20 +537,22 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         turnsThisRun += 1;
         await emit({ type: "turn.start", n: turns });
 
-        // Eviction is only an outbound view. `messages` remains the complete conversation used by
-        // snapshots, resume, hooks and compaction; tool-result stubs exist solely in this request.
+        // Eviction and the repository map are outbound views. `messages` remains the complete
+        // conversation used by snapshots, resume, hooks and compaction.
+        await refreshRepoMap();
+        const requestSystem = repoMapContent === "" ? system : `${system}\n\n${repoMapContent}`;
         const eviction = evictToolResults(messages, config.toolResultEviction);
         if (eviction.count > 0) {
           await emit({ type: "context.evicted", count: eviction.count, bytesSaved: eviction.bytesSaved });
         }
-        await emit({ type: "model.request", tokensIn: estimateTokens(system, eviction.messages) });
+        await emit({ type: "model.request", tokensIn: estimateTokens(requestSystem, eviction.messages) });
 
         const req: ModelRequest = {
-          system,
+          system: requestSystem,
           messages: eviction.messages,
           tools: toolSpecs,
           maxTokens: config.maxTokensPerTurn ?? 8192,
-          cacheHints: { systemPrefix: true },
+          cacheHints: { systemPrefix: true, systemPrefixChars: system.length },
         };
 
         // Assistant content is assembled in stream order so the history replayed to the

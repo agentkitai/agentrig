@@ -129,6 +129,20 @@ describe("renderEvent", () => {
     expect(line).toContain("in_progress:write the tests");
   });
 
+  it("renders repo-map accounting without requiring its outbound-only content", () => {
+    const event = HarnessEvent.parse({
+      seq: 6,
+      sessionId: "s",
+      ts: 1,
+      type: "context.repo_map",
+      bytes: 4096,
+      files: 42,
+      truncated: false,
+      freshness: "1234567890abcdef",
+    });
+    expect(renderEvent(event)).toContain("files=42 bytes=4096 truncated=false freshness=1234567890ab");
+  });
+
   it("renders context.loaded with its path and byte count", () => {
     const e = HarnessEvent.parse({
       seq: 12,

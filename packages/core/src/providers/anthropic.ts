@@ -30,7 +30,12 @@ export function toAnthropicRequest(req: ModelRequest, model: string): JsonObject
     model,
     max_tokens: req.maxTokens,
     system: req.cacheHints?.systemPrefix
-      ? [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }]
+      ? req.cacheHints.systemPrefixChars !== undefined && req.cacheHints.systemPrefixChars < req.system.length
+        ? [
+            { type: "text", text: req.system.slice(0, req.cacheHints.systemPrefixChars), cache_control: { type: "ephemeral" } },
+            { type: "text", text: req.system.slice(req.cacheHints.systemPrefixChars) },
+          ]
+        : [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }]
       : req.system,
     messages: req.messages.map(toAnthropicMessage),
     tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })),
