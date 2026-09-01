@@ -1,7 +1,7 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { z } from "zod";
-import type { AnyTool, ToolResult } from "../tool.js";
+import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
 /**
  * Skills: markdown instructions a project keeps on disk, listed to the model cheaply and loaded
@@ -190,7 +190,7 @@ export function skillTool(skills: Skill[]): AnyTool {
     // reads a file the harness itself chose, from a fixed set — not a path the model supplies,
     // so there is nothing here for a cwdOnly rule to confine
     permission: "read",
-    execute: async (input: z.infer<typeof SkillInput>): Promise<ToolResult<unknown>> => {
+    execute: async (input: z.infer<typeof SkillInput>, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       const skill = byName.get(input.name.trim().toLowerCase());
       if (skill === undefined) {
         const known = [...byName.values()].map((s) => s.name).join(", ");
@@ -200,6 +200,9 @@ export function skillTool(skills: Skill[]): AnyTool {
           isError: true,
         };
       }
+      // the activation record R9 measures against — only successful loads, so a typo'd lookup
+      // does not count as a skill "being used"
+      ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model" });
       return { output: { name: skill.name, path: skill.path }, display: skill.body };
     },
   } as AnyTool;

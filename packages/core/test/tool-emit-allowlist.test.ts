@@ -268,18 +268,26 @@ describe("issue #63: tool ctx.emit allow-list", () => {
     expect(readBack.at(-1)?.type).toBe("session.end");
   });
 
-  it("the allow-list is exactly the four informational/state kinds — a guard against drift", () => {
+  it("drops a skill.used forged by a tool that is not the skill tool (issue #62)", async () => {
+    // R9 measures skill activation from these events; a tool salting them would skew the metric
+    const events = await run(emitter([{ type: "skill.used", name: "dogfood", invokedBy: "model" }]));
+    expect(events.some((e) => e.type === "skill.used")).toBe(false);
+    expect(events.some((e) => e.type === "error" && /"skill.used".*only the "skill" tool may emit/i.test(e.message))).toBe(true);
+  });
+
+  it("the allow-list is exactly the five informational/state kinds — a guard against drift", () => {
     expect([...TOOL_EMITTABLE_EVENTS].sort()).toEqual(
-      ["file.changed", "plan.updated", "subagent.end", "subagent.spawn"].sort(),
+      ["file.changed", "plan.updated", "skill.used", "subagent.end", "subagent.spawn"].sort(),
     );
   });
 
   it("the sole-emitter map is exactly the authority-bearing kinds — a guard against drift", () => {
-    // file.changed must stay ABSENT (any tool may write files); the three below each carry
+    // file.changed must stay ABSENT (any tool may write files); the four below each carry
     // authority a forgery could abuse. Adding or dropping an entry is a security decision.
     expect([...TOOL_EMIT_SOURCES.entries()].sort()).toEqual(
       [
         ["plan.updated", "update_plan"],
+        ["skill.used", "skill"],
         ["subagent.end", "subagent"],
         ["subagent.spawn", "subagent"],
       ].sort(),

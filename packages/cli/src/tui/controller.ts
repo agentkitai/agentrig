@@ -7,9 +7,17 @@ import type {
   PlanItem,
   Session,
   Signal,
+  Skill,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
-import { helpText, parseCommand, type TuiCommand } from "./commands.js";
+import {
+  RESERVED_COMMAND_NAMES,
+  composeSkillInvocation,
+  helpText,
+  parseCommand,
+  suggestFor,
+  type TuiCommand,
+} from "./commands.js";
 
 /**
  * The TUI's brain, deliberately headless.
@@ -193,8 +201,14 @@ export class TuiController {
     this.dream = fn;
   }
 
+  /** The loaded catalogue, for `/skills` and `/<skill-name>`. Set after buildAgent discovers it. */
+  setSkills(skills: Skill[]): void {
+    this.skills = skills;
+  }
+
   private memory: ((query: string) => Promise<string[]>) | undefined;
   private dream: ((auto: boolean) => Promise<string[]>) | undefined;
+  private skills: Skill[] = [];
 
   subscribe(fn: (s: TuiState) => void): () => void {
     this.listeners.add(fn);
@@ -453,6 +467,45 @@ export class TuiController {
             : "verbose: off — showing the conversation only",
           "system",
         );
+        return true;
+      }
+      case "skills": {
+        if (this.skills.length === 0) {
+          this.print("no skills loaded — add .agentrig/skills/ to the project or configure `skills` dirs", "system");
+          return true;
+        }
+        const lines = this.skills.map((s) => {
+          const first = s.name.split(/\s+/)[0]!.toLowerCase();
+          const marker = RESERVED_COMMAND_NAMES.has(s.name.toLowerCase())
+            ? ` (shadowed by the built-in /${s.name.toLowerCase()} — invoke via the skill tool only)`
+            : first !== s.name.toLowerCase()
+            ? " (name has spaces — not /-invocable)"
+            : "";
+          return `  /${s.name}${marker} — ${s.description}`;
+        });
+        this.print(["loaded skills (run one with /<skill-name> [task...]):", ...lines].join("\n"), "system");
+        return true;
+      }
+      case "skill": {
+        const skill = this.skills.find((s) => s.name.toLowerCase() === cmd.name.toLowerCase());
+        if (skill === undefined) {
+          // same treatment as a typo'd built-in, because from the user's seat it is one
+          const suggestion = suggestFor(cmd.name, [
+            ...RESERVED_COMMAND_NAMES,
+            ...this.skills.map((s) => s.name),
+          ]);
+          this.print(
+            `unknown command /${cmd.name}${suggestion === null ? "" : ` — did you mean /${suggestion}?`}\n${helpText()}`,
+            "error",
+          );
+          return true;
+        }
+        const composed = composeSkillInvocation(skill, cmd.args);
+        this.print(`skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
+        await this.start(composed, {
+          cwd: this.opts.cwd,
+          ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
+        });
         return true;
       }
       case "unknown":

@@ -18,6 +18,13 @@ export type TuiCommand =
   | { kind: "new" }
   | { kind: "permissions"; reset: boolean }
   | { kind: "resume"; id: string }
+  | { kind: "skills" }
+  /**
+   * `/<word>` that is no built-in: an attempted skill invocation (issue #62). Resolution against
+   * the loaded catalogue happens in the controller — this module stays pure — and a name that
+   * matches no skill either gets the unknown-command treatment there, with a did-you-mean.
+   */
+  | { kind: "skill"; name: string; args: string }
   | { kind: "unknown"; name: string };
 
 export interface CommandSpec {
@@ -36,6 +43,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
   { name: "permissions", args: "[reset]", summary: "show the standing allow/deny answers, or clear them" },
+  { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "new", summary: "forget this conversation and start a new session" },
   { name: "abort", summary: "stop the running turn" },
@@ -97,9 +105,89 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "new" };
     case "permissions":
       return { kind: "permissions", reset: /(^|\s)reset(\s|$)/.test(args) };
+    case "skills":
+      return { kind: "skills" };
     default:
-      return { kind: "unknown", name };
+      // Built-ins always win: only a name NO case above claimed can reach the catalogue, so a
+      // skill named "plan" can never override /plan (it is marked shadowed in /skills instead).
+      return { kind: "skill", name, args };
   }
+}
+
+/**
+ * Every name (and alias) the switch above claims. `/skills` uses it to mark shadowed skills, and
+ * a test pins that each entry really parses to its built-in rather than a skill invocation —
+ * without that, adding a case without updating this set would silently unmark a shadow.
+ */
+export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
+  "help", "?",
+  "quit", "exit",
+  "abort", "stop",
+  "memory",
+  "dream",
+  "supervisor",
+  "plan",
+  "context",
+  "verbose", "trace",
+  "resume",
+  "new",
+  "permissions",
+  "skills",
+]);
+
+/**
+ * The user turn a `/skill-name [args...]` invocation submits (issue #62). The body is
+ * repository-authored text riding in a user message — the banners label that provenance (the
+ * R13d principal model: user invocation does not promote project-trust content), mirroring the
+ * project-instructions banner style so one convention marks all repo-text-in-prompt seams.
+ */
+export function composeSkillInvocation(skill: { name: string; path: string; body: string }, args: string): string {
+  return [
+    `Follow the ${JSON.stringify(skill.name)} skill for this task.`,
+    "",
+    `===== BEGIN SKILL ${JSON.stringify(skill.name)} (${skill.path}) — repository-authored instructions =====`,
+    skill.body,
+    `===== END SKILL ${JSON.stringify(skill.name)} =====`,
+    "",
+    args === "" ? "Proceed as the skill directs." : `Task: ${args}`,
+  ].join("\n");
+}
+
+/**
+ * Closest candidate within a small edit distance, for the unknown-command did-you-mean. Returns
+ * null rather than guessing wildly: a suggestion that is far off is worse than none.
+ */
+export function suggestFor(name: string, candidates: Iterable<string>): string | null {
+  const target = name.toLowerCase();
+  let best: string | null = null;
+  let bestCost = 3; // suggestions stop at distance 2 — beyond that it's noise
+  for (const candidate of candidates) {
+    const cost = editDistance(target, candidate.toLowerCase(), bestCost);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+/** Bounded Levenshtein: gives up (returns `limit`) once a row's minimum reaches the limit. */
+function editDistance(a: string, b: string, limit: number): number {
+  if (Math.abs(a.length - b.length) >= limit) return limit;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      const value = Math.min(prev[j]! + 1, row[j - 1]! + 1, prev[j - 1]! + cost);
+      row.push(value);
+      if (value < rowMin) rowMin = value;
+    }
+    if (rowMin >= limit) return limit;
+    prev = row;
+  }
+  return Math.min(prev[b.length]!, limit);
 }
 
 /** Rendered by `/help`, and on an unknown command so the answer is always in reach. */

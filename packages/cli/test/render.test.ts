@@ -74,6 +74,20 @@ describe("renderEvent", () => {
     expect(line).toContain("request=abc123");
   });
 
+  it("renders skill.used with who invoked it", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 15,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "skill.used",
+      name: "dogfood",
+      invokedBy: "model",
+    }));
+    expect(line).toContain("skill.used");
+    expect(line).toContain("dogfood");
+    expect(line).toContain("by=model");
+  });
+
   it("renders subagent.spawn and subagent.end, including how the child finished", () => {
     const spawned = renderEvent(
       HarnessEvent.parse({ seq: 1, sessionId: "p", ts: 1, type: "subagent.spawn", id: "c1", task: "counting files" }),

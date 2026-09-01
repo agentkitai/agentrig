@@ -93,6 +93,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   controller.attach(built.agent);
+  controller.setSkills(built.skills);
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
   if (warning !== null) controller.print(warning, "error");
