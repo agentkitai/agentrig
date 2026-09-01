@@ -273,6 +273,61 @@ describe("both agent entry points use config", () => {
     expect(received?.skills).toContain(join(home, ".agentrig", "skills"));
   });
 
+  it("skips ~/.agentrig/skills when the repository contains the home directory (issue #61 review F1)", async () => {
+    // When the checkout contains $HOME, ~/.agentrig/skills is repo-controlled text. The gate must
+    // hold both without trust AND with --trust — trusting the project does not make the home dir
+    // any less checkout-controlled. (Mutation-surviving gap: an unconditional home append passed
+    // the whole suite before this test.)
+    const base = await realpath(await mkdtemp(join(tmpdir(), "agentrig-config-")));
+    dirs.push(base);
+    const cwd = join(base, "project");
+    const home = join(cwd, "home"); // home INSIDE the project boundary
+    await Promise.all([mkdir(join(cwd, ".agentrig"), { recursive: true }), mkdir(join(home, ".agentrig"), { recursive: true })]);
+    let received: RunOptions | undefined;
+    const deps = { config: { cwd, home, env: {} }, run: async (_t: string, opts: RunOptions) => void (received = opts) };
+
+    await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test"]);
+    expect(received?.skills).not.toContain(join(home, ".agentrig", "skills"));
+
+    await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test", "--trust"]);
+    expect(received?.skills).toContain(join(cwd, ".agentrig", "skills"));
+    expect(received?.skills).not.toContain(join(home, ".agentrig", "skills"));
+  });
+
+  it("discovers the TRUSTED ROOT's skills dir from a nested cwd, not the cwd's (issue #61 review F2)", async () => {
+    // cwd deep inside the repo: discovery must key off trust.projectRoot (the .git root the trust
+    // record names), not wherever the session happens to run. (Mutation-surviving gap: join(cwd,...)
+    // passed the whole suite because every fixture ran at the project root.)
+    const base = await realpath(await mkdtemp(join(tmpdir(), "agentrig-config-")));
+    dirs.push(base);
+    const repo = join(base, "repo");
+    const cwd = join(repo, "deep", "nested");
+    const home = join(base, "home");
+    await Promise.all([
+      mkdir(join(repo, ".git"), { recursive: true }),
+      mkdir(cwd, { recursive: true }),
+      mkdir(join(home, ".agentrig"), { recursive: true }),
+    ]);
+    await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [repo]: true } }), "utf8");
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_t, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test",
+    ]);
+    expect(received?.skills).toContain(join(repo, ".agentrig", "skills"));
+    expect(received?.skills).not.toContain(join(cwd, ".agentrig", "skills"));
+  });
+
+  it("deduplicates an explicit dir that names a conventional one (issue #61 review F5)", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, {});
+    const conventional = join(cwd, ".agentrig", "skills");
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_t, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--skills", conventional,
+    ]);
+    expect(received?.skills?.filter((d) => d === conventional)).toHaveLength(1);
+  });
+
   it("skillDiscovery: false disables the conventional dirs while explicit ones survive (issue #61)", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { skillDiscovery: false });

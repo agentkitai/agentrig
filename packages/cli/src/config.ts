@@ -269,7 +269,9 @@ export async function loadRunConfig(
       ];
   return {
     ...resolved,
-    skills: [...explicitSkills, ...discoveredSkills],
+    // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
+    // emit a per-skill shadowing warning every run
+    skills: [...new Set([...explicitSkills, ...discoveredSkills])],
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),

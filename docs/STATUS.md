@@ -209,9 +209,13 @@ Opt-out via `skillDiscovery: false` in config or `--no-skill-discovery` (with `-
 as the positive override, the paired-negation pattern) — named that instead of the issue's
 `--no-skills` because Commander would let `--no-skills` clobber the repeatable `--skills` array
 type. `agentrig doctor` gains a read-only `skills` line naming which dirs a run would load and
-why the skipped ones are skipped. Pinned by discovery-order, untrusted-checkout, opt-out,
-flag-override, and doctor tests; mutation-verified (discovery removed fails 3, trust gate removed
-fails 1, order inverted fails 1).
+why the skipped ones are skipped — and says "unknown" while config is invalid rather than
+asserting dirs a run would never reach. Discovered dirs are deduped against explicit ones.
+Pinned by discovery-order, untrusted-checkout, home-inside-repo (with and without `--trust`),
+nested-cwd-vs-trusted-root, dedupe, opt-out, flag-override, and doctor tests. Mutation-verified,
+including the two gaps the adversarial review found surviving the first round: discovery removed
+fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
+`join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
 
 ## Tool emit allow-list — issue #63 (2026-09-01)
 

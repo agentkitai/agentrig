@@ -358,21 +358,27 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
 
   // Issue #61: say which skill directories a run would load and why — explicit dirs first
   // (they shadow), then the trusted project's .agentrig/skills, then ~/.agentrig/skills.
-  // Read-only like everything here: existence is probed, nothing is parsed or loaded.
-  {
+  // Read-only like everything here: existence is probed, nothing is parsed or loaded. Doctor
+  // registers no --skills flags, so the explicit count reflects config files only — a real
+  // invocation's --skills dirs load in addition to what this line shows.
+  if (configInvalid) {
+    checks.push(line("skip", "skills", "skill directories are unknown until the failed config above is fixed"));
+  } else if (boundary === undefined) {
+    checks.push(line("skip", "skills", "skipped because the project boundary is unavailable"));
+  } else {
     const explicit = Array.isArray(effective.skills) ? (effective.skills as string[]) : [];
     if (effective.skillDiscovery === false) {
-      checks.push(line("skip", "skills", `discovery disabled — only ${explicit.length} explicit --skills dir(s) load`));
+      checks.push(line("skip", "skills", `discovery disabled — only explicit dirs load (${explicit.length} from config; any --skills dirs load too)`));
     } else {
       const parts: string[] = [];
-      if (explicit.length > 0) parts.push(`${explicit.length} explicit dir(s) first`);
-      if (boundary !== undefined && trust.trusted) {
+      if (explicit.length > 0) parts.push(`${explicit.length} config dir(s) first`);
+      if (trust.trusted) {
         const projectSkills = join(boundary.projectRoot, ".agentrig", "skills");
         parts.push(`project ${display(projectSkills)}${(await exists(probes, projectSkills)) ? "" : " (absent, skipped)"}`);
       } else {
         parts.push("project skills skipped (untrusted)");
       }
-      if (boundary !== undefined && boundary.userStateSafe) {
+      if (boundary.userStateSafe) {
         const userSkills = join(home, ".agentrig", "skills");
         parts.push(`user ${display(userSkills)}${(await exists(probes, userSkills)) ? "" : " (absent, skipped)"}`);
       } else {

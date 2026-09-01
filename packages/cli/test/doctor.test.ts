@@ -199,6 +199,13 @@ describe("agentrig doctor", () => {
     untrusted.files.set(TRUST, JSON.stringify({ projects: {} }));
     result = await diagnose(untrusted.options);
     expect(find(result.lines, "skills")).toContain("project skills skipped (untrusted)");
+
+    // invalid config: the line must not assert dirs a run would never reach (review F3) —
+    // same contract as the credentials line in that state
+    const invalid = fixture();
+    invalid.files.set(USER_CONFIG, JSON.stringify({ supervise: "yes" }));
+    result = await diagnose(invalid.options);
+    expect(find(result.lines, "skills")).toContain("unknown until the failed config");
   });
 
   it("honours a --profile placed before the doctor subcommand (issue #56)", async () => {
