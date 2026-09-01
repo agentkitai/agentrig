@@ -1132,7 +1132,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
               : bound(modelDisplay, baseBudget).display;
           // Keep the strict recovery marker last even when guidance is injected; stale-result
           // eviction can then preserve the real core marker rather than marker-shaped tool text.
-          body = overflow.output !== undefined && injected !== ""
+          body = overflow.output !== undefined && replaced === undefined && injected !== ""
             ? `${injected}${separator}${base}`
             : `${base}${separator}${injected}`;
           // the log keeps what the tool returned; this records that a hook changed what the
@@ -1165,8 +1165,21 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           tool: { name: tu.name, input },
           result: { ok: false, display, output: undefined },
         });
+        for (const bad of h.patches.filter((patch) => typeof patch !== "string")) {
+          await emit({
+            type: "error",
+            message: `post_tool patch for ${tu.name} must be a string (got ${typeof bad}); ignoring`,
+            fatal: false,
+          });
+        }
         const replaced = h.patches.filter((patch): patch is string => typeof patch === "string").at(-1);
-        const body = bound([replaced ?? display, ...h.injects].join("\n")).display;
+        const rawInjected = h.injects.join("\n");
+        const injected = rawInjected === ""
+          ? ""
+          : bound(rawInjected, Math.floor(DISPLAY_CAP / 2)).display;
+        const separator = injected === "" ? "" : "\n";
+        const base = bound(replaced ?? display, DISPLAY_CAP - separator.length - injected.length).display;
+        const body = `${base}${separator}${injected}`;
         if (replaced !== undefined || h.injects.length > 0) {
           await emit({
             type: "tool.result.patched",

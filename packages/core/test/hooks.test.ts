@@ -259,6 +259,23 @@ describe("post_tool", () => {
     expect(modelSaw(provider)).not.toContain("TAIL");
   });
 
+  it("preserves bounded guidance after a tool throws an oversized error", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "throwing", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const throwing: AnyTool = {
+      name: "throwing", description: "throws", inputSchema: z.object({}), permission: "read", paths: () => [],
+      execute: async () => { throw new Error("e".repeat(40_000)); },
+    };
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: "THROWN GUIDANCE" }) },
+    ], [throwing]);
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    expect(modelSaw(provider)).toContain("THROWN GUIDANCE");
+  });
+
   it("keeps a large in-bound result intact and shrinks injection to the remaining frame", async () => {
     const provider = new FakeProvider([
       [{ type: "tool_use", id: "t1", name: "large", input: {} }, usage(1, 1), stop("tool_use")],

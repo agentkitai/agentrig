@@ -274,14 +274,17 @@ describe("output overflow artifacts", () => {
           return;
         }
         const transcript = req.messages.map((message) => textOf(message.content)).join("\n");
-        expect(transcript).toContain("[REDACTED]");
+        expect(transcript).toContain("[REDACTED]\nAFTER REDACTION");
         expect(transcript).not.toContain("read_output");
         yield { type: "stop", reason: "end_turn" };
       },
     };
     const store = new SessionStore({ root, newId: () => "redacted-session" });
     const session = createAgent(config(provider, store, [largeTool(fullOutput)], {
-      hooks: [{ point: "post_tool", handler: () => ({ action: "modify", patch: "[REDACTED]" }) }],
+      hooks: [
+        { point: "post_tool", handler: () => ({ action: "modify", patch: "[REDACTED]" }) },
+        { point: "post_tool", handler: () => ({ action: "inject", message: "AFTER REDACTION" }) },
+      ],
     })).run("go", { cwd: root });
     const events = await collect(session.events);
     await session.done;
@@ -374,7 +377,10 @@ describe("output overflow artifacts", () => {
       execute: async () => { throw new Error(`${"e".repeat(40_000)}TAIL`); },
     };
     const session = createAgent(config(provider, new SessionStore({ root }), [throwing], {
-      hooks: [{ point: "post_tool", handler: () => ({ action: "modify", patch: "[ERROR REDACTED]" }) }],
+      hooks: [
+        { point: "post_tool", handler: () => ({ action: "modify", patch: { malformed: true } }) },
+        { point: "post_tool", handler: () => ({ action: "modify", patch: "[ERROR REDACTED]" }) },
+      ],
     })).run("go", { cwd: root });
     const events = await collect(session.events);
     await session.done;
@@ -385,6 +391,9 @@ describe("output overflow artifacts", () => {
     expect(result?.type === "tool.result" ? result.display : "").not.toContain("TAIL");
     expect(events).toContainEqual(expect.objectContaining({
       type: "tool.result.patched", id: "throw-1", display: "[ERROR REDACTED]", mode: "modify",
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "error", message: expect.stringContaining("must be a string"), fatal: false,
     }));
   });
 
