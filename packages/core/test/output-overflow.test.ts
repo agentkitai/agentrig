@@ -363,6 +363,7 @@ describe("output overflow artifacts", () => {
           .find((block) => block.type === "tool_result" && block.toolUseId === "throw-1");
         expect(result?.type === "tool_result" && typeof result.content === "string" ? result.content.length : Infinity)
           .toBeLessThan(31_000);
+        expect(textOf(req.messages.flatMap((message) => message.content))).toContain("[ERROR REDACTED]");
         expect(textOf(req.messages.flatMap((message) => message.content))).not.toContain("TAIL");
         yield { type: "stop", reason: "end_turn" };
       },
@@ -372,13 +373,19 @@ describe("output overflow artifacts", () => {
       name: "throwing",
       execute: async () => { throw new Error(`${"e".repeat(40_000)}TAIL`); },
     };
-    const session = createAgent(config(provider, new SessionStore({ root }), [throwing])).run("go", { cwd: root });
+    const session = createAgent(config(provider, new SessionStore({ root }), [throwing], {
+      hooks: [{ point: "post_tool", handler: () => ({ action: "modify", patch: "[ERROR REDACTED]" }) }],
+    })).run("go", { cwd: root });
     const events = await collect(session.events);
     await session.done;
     const result = events.find((event) => event.type === "tool.result" && event.id === "throw-1");
     expect(result?.type === "tool.result" ? result.display.length : Infinity).toBeLessThanOrEqual(30_000);
-    expect(result).toMatchObject({ type: "tool.result", truncated: true, output: expect.stringMatching(/TAIL$/) });
+    expect(result).not.toHaveProperty("output");
+    expect(result).not.toHaveProperty("truncated");
     expect(result?.type === "tool.result" ? result.display : "").not.toContain("TAIL");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool.result.patched", id: "throw-1", display: "[ERROR REDACTED]", mode: "modify",
+    }));
   });
 
   it("creates an artifact when a tool-specific preview truncates below the global cap", async () => {
@@ -437,6 +444,7 @@ describe("output overflow artifacts", () => {
       execute: async () => ({
         output: {}, display: "10 matches found\n… truncated", truncated: true,
         fullDisplay: "first complete match\nsecond complete match",
+        displayPrefixChars: -1,
       }),
     };
     const session = createAgent(config(provider, new SessionStore({ root }), [header])).run("go", { cwd: root });

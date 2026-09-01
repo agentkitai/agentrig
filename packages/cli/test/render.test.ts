@@ -35,6 +35,13 @@ describe("renderEvent", () => {
     }));
     expect(line).toContain('artifact={"seq":12,"from":0,"to":39}');
     expect(line).not.toContain("SECRET hidden output");
+
+    const unicode = renderEvent(HarnessEvent.parse({
+      seq: 13, sessionId: "abc", ts: 1_700_000_000_000, type: "tool.result",
+      id: "tool-2", ok: true, display: "prefix", durationMs: 1,
+      output: `${"x".repeat(29_999)}😀z`, truncated: true,
+    }));
+    expect(unicode).toContain('artifact={"seq":13,"from":0,"to":29999}');
   });
 
   it("renders context.evicted count and bytes saved", () => {

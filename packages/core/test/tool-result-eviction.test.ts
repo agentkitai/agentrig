@@ -63,7 +63,8 @@ describe("tool-result eviction view", () => {
   it("preserves an overflow handle when the containing result is later evicted", () => {
     const handle = 'read_output {"seq":42,"from":29800,"to":31000}';
     const original = conversation([
-      `${"large".repeat(500)}${outputArtifactMarker(42, 29_800, 31_000, 31_000)}\ninjected guidance`,
+      `${"large".repeat(500)}${outputArtifactMarker(7, 0, 10, 10)}\ninjected guidance` +
+      `${outputArtifactMarker(42, 29_800, 31_000, 31_000)}`,
     ]);
     const viewed = evictToolResults(original, { keepLastTurns: 0, minBytes: 100 });
     const stub = result(viewed.messages, "call-1");

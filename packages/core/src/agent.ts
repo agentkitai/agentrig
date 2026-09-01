@@ -252,7 +252,8 @@ function overflowResult(result: {
     ? result.fullDisplay
     : undefined;
   if (explicit !== undefined && explicit !== result.display) {
-    const prefixLimit = result.displayPrefixChars !== undefined && result.displayPrefixChars < explicit.length
+    const prefixLimit = Number.isSafeInteger(result.displayPrefixChars) && result.displayPrefixChars! >= 0 &&
+      result.displayPrefixChars! < explicit.length
       ? result.displayPrefixChars
       : undefined;
     return {
@@ -1107,11 +1108,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           // remaining space. An overflow artifact or replacement shares the frame: half remains
           // available for guidance and half for result context/the recovery handle.
           const rawInjected = h.injects.join("\n");
+          const availableAfterResult = Math.max(0, DISPLAY_CAP - modelDisplay.length - 1);
           const injectedBudget = rawInjected === ""
             ? 0
             : overflow.output !== undefined || replaced !== undefined
               ? Math.floor(DISPLAY_CAP / 2)
-              : Math.max(0, DISPLAY_CAP - modelDisplay.length - 1);
+              : availableAfterResult > 0
+                ? availableAfterResult
+                : Math.min(Math.floor(DISPLAY_CAP / 2), rawInjected.length);
           const injected = injectedBudget === 0 ? "" : bound(rawInjected, injectedBudget).display;
           const separator = injected === "" ? "" : "\n";
           const baseBudget = DISPLAY_CAP - separator.length - injected.length;
@@ -1126,7 +1130,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
                   baseBudget,
                 )
               : bound(modelDisplay, baseBudget).display;
-          body = `${base}${separator}${injected}`;
+          // Keep the strict recovery marker last even when guidance is injected; stale-result
+          // eviction can then preserve the real core marker rather than marker-shaped tool text.
+          body = overflow.output !== undefined && injected !== ""
+            ? `${injected}${separator}${base}`
+            : `${base}${separator}${injected}`;
           // the log keeps what the tool returned; this records that a hook changed what the
           // model consumed, so the two can never diverge unobserved
           await emit({
@@ -1145,27 +1153,30 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             : err instanceof Error
               ? err.message
               : String(err);
-        const overflow = overflowResult({ display: rawDisplay, output: undefined });
-        const resultEvent = await emit({
-          type: "tool.result",
-          id: tu.id,
-          ok: false,
-          display: overflow.display,
-          durationMs: now() - t0,
-          ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
+        // A throw is an unexpected failure, not a successful complete rendering: bound it but do
+        // not persist its unbounded message as an artifact. Still run post_tool so redaction hooks
+        // cover errors exactly as they cover ordinary tool results.
+        const display = bound(rawDisplay).display;
+        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
+        const h = await hook("post_tool", {
+          sessionId: id,
+          cwd,
+          turn: turns,
+          tool: { name: tu.name, input },
+          result: { ok: false, display, output: undefined },
         });
-        const modelDisplay = overflow.output === undefined
-          ? overflow.display
-          : displayWithOutputHandle(
-              overflow.display,
-              overflow.output,
-              resultEvent.seq,
-              overflow.prefixLimit,
-            );
-        if (overflow.output !== undefined) {
-          await emit({ type: "tool.result.patched", id: tu.id, by: "core:output-overflow", display: modelDisplay });
+        const replaced = h.patches.filter((patch): patch is string => typeof patch === "string").at(-1);
+        const body = bound([replaced ?? display, ...h.injects].join("\n")).display;
+        if (replaced !== undefined || h.injects.length > 0) {
+          await emit({
+            type: "tool.result.patched",
+            id: tu.id,
+            by: "post_tool",
+            display: body,
+            mode: replaced === undefined ? "inject" : "modify",
+          });
         }
-        return resultBlock(modelDisplay, true);
+        return resultBlock(body, true);
       }
     }
   })();

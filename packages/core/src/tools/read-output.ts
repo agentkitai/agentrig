@@ -6,7 +6,7 @@ import { DISPLAY_CAP, splitsSurrogatePair } from "./shared.js";
 
 export const READ_OUTPUT_TOOL = "read_output";
 
-const OUTPUT_MARKER = /\n… \[output artifact; cursor (\d+) of (\d+) UTF-16 code units; read next with (read_output \{"seq":\d+,"from":\d+,"to":\d+\})\](?=$|\n)/;
+const OUTPUT_MARKER = /\n… \[output artifact; cursor (\d+) of (\d+) UTF-16 code units; read next with (read_output \{"seq":\d+,"from":\d+,"to":\d+\})\]$/;
 
 export function outputArtifactMarker(seq: number, from: number, to: number, total: number): string {
   return `\n… [output artifact; cursor ${from} of ${total} UTF-16 code units; read next with ` +

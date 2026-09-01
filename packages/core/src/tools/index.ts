@@ -30,6 +30,7 @@ export {
   READ_OUTPUT_TOOL,
 } from "./read-output.js";
 export { writeFileTool } from "./write-file.js";
+export { safeSliceEnd } from "./shared.js";
 export { updatePlanTool } from "./update-plan.js";
 export { subagentTool, SUBAGENT_TOOL, type SubagentOptions } from "./subagent.js";
 export * from "./skills.js";

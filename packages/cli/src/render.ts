@@ -1,4 +1,4 @@
-import type { EventOf, HarnessEvent, Intervention } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention } from "@agentkitai/agentrig-core";
 
 /**
  * Two views of one event stream.
@@ -27,7 +27,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash} ${JSON.stringify(e.input)}`;
     case "tool.result": {
       const artifact = e.truncated === true && e.output !== undefined
-        ? ` artifact={"seq":${e.seq},"from":0,"to":${Math.min(30_000, e.output.length)}}`
+        ? ` artifact={"seq":${e.seq},"from":0,"to":${safeSliceEnd(e.output, Math.min(30_000, e.output.length))}}`
         : "";
       return `${p} #${e.id} ok=${e.ok} ${e.durationMs}ms${artifact} ${JSON.stringify(e.display.slice(0, 80))}`;
     }
