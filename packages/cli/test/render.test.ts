@@ -20,6 +20,23 @@ describe("renderEvent", () => {
     expect(line).toContain('"keep going"');
   });
 
+  it("renders a tool-result overflow handle without dumping the complete output", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 12,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "tool.result",
+      id: "tool-1",
+      ok: true,
+      display: "visible prefix",
+      durationMs: 4,
+      output: "visible prefix and SECRET hidden output",
+      truncated: true,
+    }));
+    expect(line).toContain('artifact={"seq":12}');
+    expect(line).not.toContain("SECRET hidden output");
+  });
+
   it("renders context.evicted count and bytes saved", () => {
     const line = renderEvent(HarnessEvent.parse({
       seq: 13,

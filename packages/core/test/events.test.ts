@@ -52,6 +52,22 @@ describe("event schema", () => {
     expect(JSON.stringify(event)).not.toContain("secret prompt body");
   });
 
+  it("round-trips complete text on a tool-result overflow artifact", () => {
+    const event = HarnessEvent.parse({
+      seq: 39,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "tool.result",
+      id: "tool-1",
+      ok: true,
+      display: "partial",
+      durationMs: 12,
+      output: "partial plus hidden text",
+      truncated: true,
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a context.repo_map accounting event without carrying map content", () => {
     const event = HarnessEvent.parse({
       seq: 40,

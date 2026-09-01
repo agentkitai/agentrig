@@ -108,7 +108,7 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
       return {
         output: result,
         display: truncated ? `${rendered.slice(0, maxDisplay)}\n…(truncated)` : rendered,
-        ...(truncated ? { truncated: true } : {}),
+        ...(truncated ? { truncated: true, fullDisplay: rendered } : {}),
         // a server reporting a tool error is an EXPECTED failure: the model should see it and
         // adapt, exactly as it does for a non-zero exit from bash
         ...(result.isError === true ? { isError: true } : {}),

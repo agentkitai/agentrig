@@ -13,6 +13,8 @@ import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
 import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
+import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
+import { bound, DISPLAY_CAP } from "./tools/shared.js";
 import {
   buildContextManifest,
   renderSystemBlocks,
@@ -231,7 +233,39 @@ export const PLAN_TOOL = "update_plan";
  */
 export const MAX_REPLAN_REFUSALS = 2;
 
+interface OverflowResult {
+  display: string;
+  output?: string;
+}
+
+/** Bound every tool, including third-party tools that forgot to bound their own display. */
+function overflowResult(result: { display: string; output: unknown; truncated?: boolean; fullDisplay?: string }): OverflowResult {
+  let display = result.display;
+  let output = result.truncated === true ? result.fullDisplay : undefined;
+
+  const bounded = bound(display);
+  if (bounded.truncated) {
+    output ??= display;
+    display = bounded.display;
+  }
+
+  return output === undefined ? { display } : { display, output };
+}
+
+/** Keep the artifact handle inside the same hard bound as every other model-facing tool result. */
+function displayWithOutputHandle(display: string, seq: number, outputLength: number): string {
+  const exampleTo = Math.min(DISPLAY_CAP, outputLength);
+  const marker =
+    `\n… [output truncated; ${outputLength} UTF-16 code units total. Read ranges with ` +
+    `${READ_OUTPUT_TOOL} {"seq":${seq},"from":0,"to":${exampleTo}}]`;
+  const prefixLength = Math.max(0, DISPLAY_CAP - marker.length);
+  return `${display.slice(0, prefixLength)}${marker}`;
+}
+
 export function createAgent(config: AgentConfig): Agent {
+  if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
+    throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
+  }
   return { run: (task, opts) => runSession(config, task, opts ?? {}) };
 }
 
@@ -348,8 +382,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
-    const toolsByName = new Map(config.tools.map((t) => [t.name, t]));
-    const toolSpecs = config.tools.map(toToolSpec);
+    const sessionTools = [...config.tools, readOutputTool(store)];
+    const toolsByName = new Map(sessionTools.map((t) => [t.name, t]));
+    const toolSpecs = sessionTools.map(toToolSpec);
     const compaction = config.compaction ?? summarizeOlderTurns();
     const startedAt = now();
     let messages: Message[] = [];
@@ -989,7 +1024,18 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       try {
         const r = await raceAbort(tool.execute(input, ctx));
         const ok = r.isError !== true;
-        await emit({ type: "tool.result", id: tu.id, ok, display: r.display, durationMs: now() - t0 });
+        const overflow = overflowResult(r);
+        const resultEvent = await emit({
+          type: "tool.result",
+          id: tu.id,
+          ok,
+          display: overflow.display,
+          durationMs: now() - t0,
+          ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
+        });
+        const modelDisplay = overflow.output === undefined
+          ? overflow.display
+          : displayWithOutputHandle(overflow.display, resultEvent.seq, overflow.output.length);
 
         // post_tool: a hook may rewrite what the MODEL sees (redaction, summarising a huge
         // output) or append to it. The `tool.result` event above is already written, so the log
@@ -1000,9 +1046,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           cwd,
           turn: turns,
           tool: { name: tu.name, input },
-          // `display` is the string the model sees and the one a patch replaces; `output` is the
-          // tool's own value, which is very often not a string
-          result: { ok, display: r.display, output: r.output },
+          // `display` includes the immutable-log handle when output overflowed; `output` remains
+          // the tool's own value, which is very often not a string.
+          result: { ok, display: modelDisplay, output: r.output },
         });
         for (const bad of h.patches.filter((p) => typeof p !== "string")) {
           await emit({
@@ -1012,7 +1058,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           });
         }
         const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
-        const body = [replaced ?? r.display, ...h.injects].join("\n");
+        const body = [replaced ?? modelDisplay, ...h.injects].join("\n");
         if (replaced !== undefined || h.injects.length > 0) {
           // the log keeps what the tool returned; this records that a hook changed what the
           // model consumed, so the two can never diverge unobserved

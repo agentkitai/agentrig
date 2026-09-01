@@ -65,5 +65,9 @@ export const defaultRules: PermissionRule[] = [
   // `ask` meant headless mode denied every poll, leaving a running job the session could neither
   // see nor stop, and interactive mode prompted on each one.
   { tool: "bash_job", decision: "allow" },
+  // `read_output` can only read an artifact from this session's validated append-only log. It has
+  // no honest filesystem path to declare, so the cwdOnly rule cannot match it; prompting would
+  // make overflow recovery unavailable in headless mode despite granting no new read capability.
+  { tool: "read_output", decision: "allow" },
   { class: "read", cwdOnly: true, decision: "allow" },
 ];

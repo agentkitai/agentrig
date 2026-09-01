@@ -35,6 +35,7 @@ export function readFileTool(): Tool<ReadFileInput, string> {
       const numbered = slice.map((l, i) => `${String(start + i + 1).padStart(width)}\t${l}`).join("\n");
       const { display, truncated } = bound(numbered);
       const result: ToolResult<string> = { output: text, display };
+      if (truncated) result.fullDisplay = numbered;
       if (truncated || input.limit !== undefined && start + slice.length < lines.length) result.truncated = true;
       return result;
     },

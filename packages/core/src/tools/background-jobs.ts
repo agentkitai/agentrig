@@ -256,11 +256,13 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
           output: drained.output,
           droppedBytes: drained.droppedBytes,
         };
-        const { display, truncated } = bound(
-          [`killed ${input.id}`, drained.output].filter(Boolean).join("\n"),
-        );
+        const fullDisplay = [`killed ${input.id}`, drained.output].filter(Boolean).join("\n");
+        const { display, truncated } = bound(fullDisplay);
         const result: ToolResult<BashJobOutput> = { output, display };
-        if (truncated) result.truncated = true;
+        if (truncated) {
+          result.truncated = true;
+          result.fullDisplay = fullDisplay;
+        }
         return result;
       }
 
@@ -312,9 +314,13 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
       // detector matches this exact line to tell an empty poll from real progress. Reword it and
       // empty-poll loop detection silently dies — change both together.
       else if (running || record.spawnError === undefined) parts.push("(no new output)");
-      const { display, truncated } = bound(parts.join("\n").trim());
+      const fullDisplay = parts.join("\n").trim();
+      const { display, truncated } = bound(fullDisplay);
       const result: ToolResult<BashJobOutput> = { output, display };
-      if (truncated) result.truncated = true;
+      if (truncated) {
+        result.truncated = true;
+        result.fullDisplay = fullDisplay;
+      }
       // A non-zero exit is the job's outcome, not a tool failure: the model asked for status and
       // got an honest one; isError there would push a retry reflex at a finished job. A spawn
       // failure is different — the command never ran at all, and that IS an error.

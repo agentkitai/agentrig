@@ -1,7 +1,7 @@
 # Status
 
-Current roadmap row: **R1.5d is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, and R1.5e
-were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
+Current roadmap row: **R1.5f is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, R1.5d,
+R1.5e, and R1.5f were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -128,6 +128,7 @@ through M7 remain complete, including M2.5's live provider validation.
 | R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
 | R1.5d | Per-turn prompt bill of materials with hashes, provenance, freshness, and TUI `/context` | done |
 | R1.5e | Budgeted mechanical repository map with mtime refresh, context accounting, and opt-out | done |
+| R1.5f | Immutable-log overflow artifacts with bounded `read_output` range reads | done |
 
 - R1.5d emits `context.manifest` immediately before every model request, after outbound eviction,
   repository-map refresh, and `pre_model` hook patches. Each rendered system/history/tool-result/tool
@@ -142,6 +143,31 @@ through M7 remain complete, including M2.5's live provider validation.
   an 8 KiB repo map, one user-history block, and two tool schemas serializes to **1,338 bytes** including
   the event envelope. Prompt body size does not affect that cost; each later history/tool-result block
   adds one metadata record rather than duplicating content.
+
+- R1.5f turns display overflow into a self-describing artifact without adding a second mutable store.
+  `tool.result` gained additive `output` and `truncated` fields: only a result whose display actually
+  overflowed carries its complete textual rendering, and the event's existing `seq` is the handle.
+  The model-facing prefix remains within the 30,000-code-unit display cap after the handle is appended.
+  `read_output {seq, from, to}` serves a zero-based, half-open range of at most 30,000 UTF-16 code
+  units directly from the validated append-only session log, so hidden output can be inspected without
+  replaying a command.
+- `read_output` is registered by the core agent rather than by CLI/builtin assembly because it must
+  capture the exact `SessionStore` used by the active session. Its session id comes only from
+  `ToolContext`, never model input; a handle therefore cannot read another session. The name is reserved
+  so caller tools cannot shadow this recovery path. It is explicitly allowed by the default policy: like
+  `bash_job`, it only exposes data from an already-authorized operation in the same session and has no
+  honest filesystem path with which to satisfy the generic cwd-only read rule. The core also applies the final display bound to
+  third-party tools that forgot it, while `ToolResult.fullDisplay` lets already-bounded builtins and MCP
+  tools distinguish representational overflow from semantic collection caps such as grep's match limit.
+- Rejected alternatives: serializing arbitrary structured `ToolResult.output` would not faithfully
+  reproduce a tool's rendered text, and copying overflow into sidecar files would duplicate the raw log
+  and create a second retention/trust boundary. A complete textual rendering is explicit at the tool
+  seam instead. Caveat: ranges use JavaScript string indexing (UTF-16 code units), not UTF-8 byte offsets;
+  callers should continue at the prior `to` value.
+- R1.5f dogfood fixture: a 31,006-code-unit output persisted once, exposed a bounded handle, and returned
+  the final six hidden code units through `read_output`; the originating tool had exactly one call.
+  Mutation checks killed removal of `fullDisplay` persistence, replacement of the requested range with a
+  prefix read, substitution of a different session id, and removal of the default-policy allow rule.
 
 - R1.5e builds an 8 KiB-bounded, deterministically ordered file-and-export map with the TypeScript
   syntax parser only: no module resolution, imports, execution, LSP, or build graph. Conventional

@@ -153,7 +153,17 @@ export const EventPayload = z.discriminatedUnion("type", [
     reason: z.string(),
   }),
   z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string() }),
-  z.object({ type: z.literal("tool.result"), id: z.string(), ok: z.boolean(), display: z.string(), durationMs: z.number().int() }),
+  z.object({
+    type: z.literal("tool.result"),
+    id: z.string(),
+    ok: z.boolean(),
+    display: z.string(),
+    durationMs: z.number().int(),
+    /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
+    output: z.string().optional(),
+    /** Additive for compatibility with logs written before output artifacts existed. */
+    truncated: z.boolean().optional(),
+  }),
   /**
    * M7: a `post_tool` hook rewrote or appended to what the MODEL consumed. `tool.result` keeps
    * what the tool actually returned, so without this the log and the model's conversation could
