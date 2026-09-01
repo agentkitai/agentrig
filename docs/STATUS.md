@@ -1,7 +1,7 @@
 # Status
 
-Current roadmap row: **R1.5d is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, and R1.5e
-were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
+Current roadmap row: **R1.5f is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, R1.5d,
+R1.5e, and R1.5f were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -128,6 +128,7 @@ through M7 remain complete, including M2.5's live provider validation.
 | R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
 | R1.5d | Per-turn prompt bill of materials with hashes, provenance, freshness, and TUI `/context` | done |
 | R1.5e | Budgeted mechanical repository map with mtime refresh, context accounting, and opt-out | done |
+| R1.5f | Immutable-log overflow artifacts with bounded `read_output` range reads | done |
 
 - R1.5d emits `context.manifest` immediately before every model request, after outbound eviction,
   repository-map refresh, and `pre_model` hook patches. Each rendered system/history/tool-result/tool
@@ -142,6 +143,50 @@ through M7 remain complete, including M2.5's live provider validation.
   an 8 KiB repo map, one user-history block, and two tool schemas serializes to **1,338 bytes** including
   the event envelope. Prompt body size does not affect that cost; each later history/tool-result block
   adds one metadata record rather than duplicating content.
+
+- R1.5f turns display overflow into a self-describing artifact without adding a second mutable store.
+  `tool.result` gained additive `output` and `truncated` fields: only a result whose display actually
+  overflowed carries its complete textual rendering, and the event's existing `seq` is the handle.
+  The model-facing prefix remains within the 30,000-code-unit display cap after the handle is appended,
+  carries an explicit complete-output cursor, and offers the immediately following range rather than a
+  duplicate prefix. Non-prefix summaries/previews keep their meaning and page complete text from cursor
+  zero. The distinct handle-bearing model view is recorded as a
+  `tool.result.patched` event by `core:output-overflow` for replay/audit. `read_output {seq, from, to}`
+  serves a zero-based, half-open range of at most 30,000 UTF-16 code units directly from the validated
+  append-only session log, so hidden output can be inspected without replaying a command. Surrogate-pair
+  splits are rejected with corrected offsets rather than returning malformed Unicode.
+- `read_output` is registered by the core agent rather than by CLI/builtin assembly because it must
+  capture the exact `SessionStore` used by the active session. Its session id comes only from
+  `ToolContext`, never model input; a handle therefore cannot read another session. The name is reserved
+  so caller tools cannot shadow this recovery path. It is explicitly allowed by the default policy: like
+  `bash_job`, it only exposes data from an already-authorized operation in the same session and has no
+  honest filesystem path with which to satisfy the generic cwd-only read rule. Tool-free agents do not
+  advertise it. Reads stream the log instead of materializing every event and check aborts while scanning.
+  A later replacing `post_tool` patch seals the raw artifact, so a redaction hook cannot be bypassed by
+  range reads; inject-only patches carry an additive mode and leave recovery available. Hook output
+  reserves bounded space for both result context and guidance rather than truncating the injection away.
+  Overflow handles use one strict core marker and survive stale-result eviction. The core also applies the final display bound to
+  third-party tools, thrown errors, and post-hook output, while `ToolResult.fullDisplay` plus an optional
+  `displayPrefixChars` cursor lets already-bounded builtins and MCP tools preserve their own smaller caps
+  and distinguish prefix previews from summaries/headers and from semantic collection caps such as grep's
+  match limit. Empty/malformed `fullDisplay` values do not create artifacts.
+- Rejected alternatives: serializing arbitrary structured `ToolResult.output` would not faithfully
+  reproduce a tool's rendered text, and copying overflow into sidecar files would duplicate the raw log
+  and create a second retention/trust boundary. A complete textual rendering is explicit at the tool
+  seam instead. Caveat: ranges use JavaScript string indexing (UTF-16 code units), not UTF-8 byte offsets;
+  callers should continue at the prior `to` value.
+- R1.5f dogfood fixture: a 31,006-code-unit Unicode output persisted once, exposed a bounded next-page
+  handle, and returned all hidden code units through `read_output`; the originating tool had exactly one
+  call and the session ended `done`. Regression fixtures also pin redaction sealing, streaming reads,
+  runtime and surrogate bounds, tool-free catalogues, stale-result handle preservation, core-view audit,
+  thrown/hook output bounds, and malformed tool results. Mutation checks killed removal of `fullDisplay`
+  persistence, replacement of the requested range with a prefix read, substitution of a different session
+  id, removal of the default-policy allow rule, and both post-hook and thrown-error bounds.
+- Review caveat retained deliberately: complete output is unbounded in JSONL and therefore inherits the
+  size and machine-readable disclosure properties of the raw immutable session log. Capping it or hiding
+  it from JSON replay would directly violate R1.5f's “full text from the raw log” contract; operators must
+  protect raw logs accordingly. A future storage row may chunk append-only records atomically, but this
+  row does not introduce a mutable sidecar or silently discard command output.
 
 - R1.5e builds an 8 KiB-bounded, deterministically ordered file-and-export map with the TypeScript
   syntax parser only: no module resolution, imports, execution, LSP, or build graph. Conventional

@@ -242,6 +242,78 @@ describe("post_tool", () => {
     expect(patched.display).toContain("extra guidance");
   });
 
+  it("bounds a hook injection before it reaches the model", async () => {
+    const provider = new FakeProvider([callEcho("x"), [usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: `${"z".repeat(40_000)}TAIL` }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    const patched = events.find((event) => event.type === "tool.result.patched");
+    expect(patched).toMatchObject({ type: "tool.result.patched", by: "post_tool" });
+    if (patched?.type !== "tool.result.patched") throw new Error("missing patch");
+    expect(patched.display.length).toBeLessThanOrEqual(30_000);
+    expect(patched.display).toContain("zzzz");
+    expect(patched.display).not.toContain("TAIL");
+    expect(modelSaw(provider)).toContain("zzzz");
+    expect(modelSaw(provider)).not.toContain("TAIL");
+  });
+
+  it("preserves bounded guidance after a tool throws an oversized error", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "throwing", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const throwing: AnyTool = {
+      name: "throwing", description: "throws", inputSchema: z.object({}), permission: "read", paths: () => [],
+      execute: async () => { throw new Error("e".repeat(40_000)); },
+    };
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: "THROWN GUIDANCE" }) },
+    ], [throwing]);
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    expect(modelSaw(provider)).toContain("THROWN GUIDANCE");
+  });
+
+  it("keeps fitting guidance intact after a short thrown error", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "throwing", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const guidance = `${"g".repeat(20_000)}TAIL`;
+    const throwing: AnyTool = {
+      name: "throwing", description: "throws", inputSchema: z.object({}), permission: "read", paths: () => [],
+      execute: async () => { throw new Error("short error"); },
+    };
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: guidance }) },
+    ], [throwing]);
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    expect(modelSaw(provider)).toContain(guidance);
+  });
+
+  it("keeps a large in-bound result intact and shrinks injection to the remaining frame", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "t1", name: "large", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const large: AnyTool = {
+      name: "large", description: "large bounded result", inputSchema: z.object({}),
+      permission: "read", paths: () => [],
+      execute: async () => ({ output: {}, display: "r".repeat(29_500) }),
+    };
+    const session = runWith(provider, [
+      { point: "post_tool", handler: () => ({ action: "inject", message: "GUIDANCE".repeat(100) }) },
+    ], [large]);
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    const seen = modelSaw(provider);
+    expect(seen).toContain("r".repeat(29_500));
+    expect(seen).toContain("GUIDANCE");
+  });
+
   it("does not record a patch event when no hook changed anything", async () => {
     const session = run([callEcho("x"), [usage(1, 1), stop("end_turn")]], []);
     const events = await collect(session);

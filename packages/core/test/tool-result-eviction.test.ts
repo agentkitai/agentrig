@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evictToolResults, type Message } from "@agentkitai/agentrig-core";
+import { evictToolResults, outputArtifactMarker, type Message } from "@agentkitai/agentrig-core";
 
 function conversation(payloads: string[]): Message[] {
   const messages: Message[] = [{ role: "user", content: [{ type: "text", text: "inspect files" }] }];
@@ -58,6 +58,18 @@ describe("tool-result eviction view", () => {
     expect(viewed.messages[1]!.content[0]).toMatchObject({ content: "read of old.ts elided — re-read if needed" });
     expect(viewed.messages[3]!.content[0]).toEqual(original[3]!.content[0]);
     expect(viewed.count).toBe(1);
+  });
+
+  it("preserves an overflow handle when the containing result is later evicted", () => {
+    const handle = 'read_output {"seq":42,"from":29800,"to":31000}';
+    const original = conversation([
+      `${"large".repeat(500)}${outputArtifactMarker(7, 0, 10, 10)}\ninjected guidance` +
+      `${outputArtifactMarker(42, 29_800, 31_000, 31_000)}`,
+    ]);
+    const viewed = evictToolResults(original, { keepLastTurns: 0, minBytes: 100 });
+    const stub = result(viewed.messages, "call-1");
+    if (stub?.type !== "tool_result" || typeof stub.content !== "string") throw new Error("missing stub");
+    expect(stub.content).toContain(handle);
   });
 
   it("does not encourage replaying a potentially mutating tool", () => {

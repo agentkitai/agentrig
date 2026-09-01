@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { AnyTool, Tool, ToolContext, ToolResult } from "../tool.js";
+import { bound } from "../tools/shared.js";
 import type { McpClient } from "./client.js";
 import { renderContent, type McpToolSpec } from "./protocol.js";
 
@@ -104,11 +105,13 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
     execute: async (input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       const result = await opts.client.callTool(opts.spec.name, input, ctx.signal);
       const rendered = renderContent(result.content);
-      const truncated = rendered.length > maxDisplay;
+      const bounded = bound(rendered, maxDisplay);
       return {
         output: result,
-        display: truncated ? `${rendered.slice(0, maxDisplay)}\n…(truncated)` : rendered,
-        ...(truncated ? { truncated: true } : {}),
+        display: bounded.display,
+        ...(bounded.truncated
+          ? { truncated: true, fullDisplay: rendered, displayPrefixChars: bounded.shown }
+          : {}),
         // a server reporting a tool error is an EXPECTED failure: the model should see it and
         // adapt, exactly as it does for a non-zero exit from bash
         ...(result.isError === true ? { isError: true } : {}),

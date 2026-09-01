@@ -10,9 +10,16 @@ export interface ToolContext {
 
 export interface ToolResult<O = unknown> {
   output: O;
-  /** What the model sees. Keep it bounded; set `truncated` if you cut it. */
+  /** What the model sees. Core applies its final display bound before sending it. */
   display: string;
   truncated?: boolean;
+  /**
+   * Complete text from which `display` was truncated by a tool-specific bound. Core persists this
+   * only for overflow artifacts; omit it when `truncated` means the tool stopped collecting data.
+   */
+  fullDisplay?: string;
+  /** Code units of `fullDisplay` represented by a prefix-style `display`; omit for summaries/headers. */
+  displayPrefixChars?: number;
   /**
    * Expected failure (non-zero exit, file not found, bad pattern): the display still reaches
    * the model, flagged as an error. Throwing is reserved for unexpected failures.

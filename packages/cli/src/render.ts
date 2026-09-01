@@ -1,4 +1,4 @@
-import type { EventOf, HarnessEvent, Intervention } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention } from "@agentkitai/agentrig-core";
 
 /**
  * Two views of one event stream.
@@ -25,7 +25,12 @@ export function renderEvent(e: HarnessEvent): string {
     case "model.response": return `${p} in=${e.usage.input} out=${e.usage.output} stop=${e.stop}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
     case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash} ${JSON.stringify(e.input)}`;
-    case "tool.result": return `${p} #${e.id} ok=${e.ok} ${e.durationMs}ms ${JSON.stringify(e.display.slice(0, 80))}`;
+    case "tool.result": {
+      const artifact = e.truncated === true && e.output !== undefined
+        ? ` artifact={"seq":${e.seq},"from":0,"to":${safeSliceEnd(e.output, Math.min(30_000, e.output.length))}}`
+        : "";
+      return `${p} #${e.id} ok=${e.ok} ${e.durationMs}ms${artifact} ${JSON.stringify(e.display.slice(0, 80))}`;
+    }
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
     case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;

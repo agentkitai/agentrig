@@ -180,9 +180,14 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       if (timedOut) parts.push(`[killed: timed out after ${timeoutMs}ms]`);
       if (aborted) parts.push("[killed: session aborted]");
       if (exitCode !== 0) parts.push(`[exit code ${exitCode ?? "none"}]`);
-      const { display, truncated } = bound(parts.filter(Boolean).join("\n").trim() || "(no output)");
+      const fullDisplay = parts.filter(Boolean).join("\n").trim() || "(no output)";
+      const { display, truncated, shown } = bound(fullDisplay);
       const result: ToolResult<BashOutput> = { output, display };
-      if (truncated) result.truncated = true;
+      if (truncated) {
+        result.truncated = true;
+        result.fullDisplay = fullDisplay;
+        result.displayPrefixChars = shown;
+      }
       if (exitCode !== 0 || timedOut || aborted) result.isError = true;
       return result;
     },
