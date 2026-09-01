@@ -2,7 +2,7 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
-import { EventPayload, SupervisorRecord, TOOL_EMITTABLE_EVENTS } from "./events.js";
+import { EventPayload, SupervisorRecord, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
@@ -262,7 +262,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   let chain: Promise<unknown> = Promise.resolve();
   let ended = false;
   const emit = (payload: EventPayload): Promise<HarnessEvent> => {
-    // a plan landing satisfies the gate, no matter which tool or path produced it
+    // A plan landing satisfies the force_replan gate. Every path to this clearing is authorised:
+    // the loop's own emits, or `update_plan` through emitFromTool — whose SOURCE axis drops a
+    // `plan.updated` from any other tool before it reaches here (issue #67).
     if (payload.type === "plan.updated") {
       replanReason = null;
       replanRefusals = 0;
@@ -277,23 +279,34 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
   // A tool the abort race orphaned may still emit after session.end; those events are dropped
   // so the log's last event is always session.end.
-  const emitFromTool = (payload: EventPayload): void => {
+  // A factory rather than one shared closure: the loop binds the executing tool's registered name
+  // (never a name the payload claims), so the gate can hold tools to the events that are theirs.
+  const emitFromTool = (toolName: string) => (payload: EventPayload): void => {
     if (ended) return;
-    // A tool's emit is untrusted input, so it is gated on BOTH axes, mirroring record():
+    // A tool's emit is untrusted input, so it is gated on THREE axes, mirroring record():
     //  1. TYPE — a tool may emit only the informational/state kinds tools legitimately produce
     //     (TOOL_EMITTABLE_EVENTS). A forged permission.decision, session.end, or supervisor
     //     record is not one of them.
-    //  2. SHAPE — even an allowed type must be a well-formed EventPayload. The store appends with a
+    //  2. SOURCE — an emittable type that carries authority is held to its one legitimate emitter
+    //     (TOOL_EMIT_SOURCES): `plan.updated` releases the force_replan gate below and rewrites the
+    //     scope the drift detector enforces, `subagent.*` asserts a child session exists. Any tool
+    //     could otherwise emit one `plan.updated` and shrug off the intervention PLAN §4.2 promises
+    //     cannot be ignored (issue #67).
+    //  3. SHAPE — even an allowed type must be a well-formed EventPayload. The store appends with a
     //     bare JSON.stringify and `read` re-parses with HarnessEvent.parse, which THROWS on a bad
     //     line; raw/ is immutable, so one malformed `{type:"file.changed"}` would permanently break
     //     `sessions show`, resume, and ingest for the session (the same corruption record() guards).
-    // Either failure is dropped and reported, never appended — the log stays readable and faithful
+    // Any failure is dropped and reported, never appended — the log stays readable and faithful
     // whatever a tool (a buggy one, or one forwarding hostile content) tries to write.
     const reject = (why: string): void => {
       const type = typeof (payload as { type?: unknown })?.type === "string" ? (payload as { type: string }).type : "unknown";
-      void emit({ type: "error", message: `a tool tried to emit a "${type}" event, ${why}; dropped`, fatal: false });
+      void emit({ type: "error", message: `the "${toolName}" tool tried to emit a "${type}" event, ${why}; dropped`, fatal: false });
     };
     if (!TOOL_EMITTABLE_EVENTS.has(payload.type)) return reject("which tools may not emit");
+    const soleEmitter = TOOL_EMIT_SOURCES.get(payload.type);
+    if (soleEmitter !== undefined && soleEmitter !== toolName) {
+      return reject(`which only the "${soleEmitter}" tool may emit`);
+    }
     const parsed = EventPayload.safeParse(payload);
     if (!parsed.success) return reject("which is malformed and would corrupt the log");
     void emit(parsed.data);
@@ -982,7 +995,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const ctx: ToolContext = {
         cwd,
         sessionId: id,
-        emit: emitFromTool,
+        // bound to the REGISTERED tool's name (the one resolved from toolsByName), which is also
+        // what tool.call recorded — not anything the tool or model could claim later
+        emit: emitFromTool(tool.name),
         signal: abortController.signal,
       };
       const t0 = now();

@@ -246,6 +246,32 @@ including the two gaps the adversarial review found surviving the first round: d
 fails 3, trust gate removed fails 1, order inverted fails 1, unconditional home append fails 1,
 `join(cwd)` instead of the trusted root fails 1, dedupe removed fails 1.
 
+## Source-scoped emit gate — issue #67 (2026-09-01)
+
+Status: **done** for findings 1 and 2; finding 3 (detector-side `file.changed` laundering) is
+tracked separately — it needs detector changes, not a tighter emit gate.
+
+The #63 gate was type-scoped: any tool could emit any of the four allowed kinds. Two of those
+kinds carry authority beyond information, so `emitFromTool` now checks a third axis, SOURCE,
+between TYPE and SHAPE: `TOOL_EMIT_SOURCES` in `events.ts` maps `plan.updated` to `update_plan`
+and `subagent.spawn`/`subagent.end` to `subagent`; an emit of a mapped type from any other tool is
+dropped and reported (`the "<tool>" tool tried to emit a "<type>" event, which only the "<sole>"
+tool may emit; dropped` — all rejections now name the emitting tool). The bound name is the
+REGISTERED tool's (`tool.name` from the loop's own lookup, the same identity `tool.call` records),
+never anything the payload claims. `file.changed` deliberately stays open to every tool.
+
+Why it matters: `emit` clears the supervisor's `force_replan` gate on any `plan.updated`, and the
+forged plan also rewrites the scope the drift detector enforces — so under the old gate any tool
+could release the one intervention PLAN §4.2 promises "cannot be ignored". The regression test
+stages exactly that attack (gate raised mid-execution, tool forges `plan.updated`) and pins that
+the gate survives; the constraint direction pins that `update_plan`'s own emit still lands and
+still releases the gate. Both were verified fail-first against the gate with the SOURCE axis
+removed. Decisions: the map lives in `events.ts` as plain strings rather than importing the tool
+name constants (no events→tools dependency; a mapping change is a deliberate, visible edit guarded
+by a drift test); an in-process tool that registers under a sole-emitter's name inherits its emit
+right knowingly — tool registration is config-level trust, and the MCP adapter never calls
+`ctx.emit` at all.
+
 ## Tool emit allow-list — issue #63 (2026-09-01)
 
 Status: **done**.
