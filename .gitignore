@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.tsbuildinfo
-.agentrig/
+**/.agentrig/*
+!/.agentrig/skills/
+!/.agentrig/skills/**
 .env
 .DS_Store
