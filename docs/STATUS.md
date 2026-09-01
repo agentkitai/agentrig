@@ -311,6 +311,15 @@ through AgentRig itself:
   commit and treat red main as an emergency. One flake re-run permitted under the same rule the
   drive-to-green flow uses. One merge at a time; open PRs with a moved base get flagged.
 
+- `ship` — the conductor: one session that spawns a builder subagent (dogfood skill), then an
+  independent reviewer subagent (review skill — subagent isolation makes the independence
+  structural: the reviewer gets none of the builder's context by construction), then STOPS and
+  presents the verdict. The human's next message is the only path to landing; a fix request
+  spawns a scoped fix child plus one delta re-review. A ship run that ends waiting at the
+  verdict is a success. A builder child dead at its budget is reported by session id for manual
+  resume, not silently re-spawned — the rough child-resume story is the R4 session-trees row
+  starting to matter.
+
 The remaining role AgentRig cannot self-host is the escape hatch: when a bad merge breaks the
 harness itself, the fix needs a tool that is not the broken tool.
 
