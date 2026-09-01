@@ -16,11 +16,23 @@ export function formatTokens(n: number): string {
   return `${floored % 1 === 0 ? floored.toFixed(0) : floored.toFixed(1)}${unit}`;
 }
 
-export function statusLine(state: Pick<TuiState, "model" | "sessionId" | "status" | "turns" | "context" | "branch">): string {
+export function statusLine(
+  state: Pick<TuiState, "model" | "sessionId" | "status" | "activity" | "turns" | "context" | "branch">,
+  now = Date.now(),
+): string {
   const parts: string[] = [];
   if (state.model !== null) parts.push(state.model);
   parts.push(state.sessionId ?? "no session");
   parts.push(state.status);
+  if (state.activity !== null) {
+    const elapsed = Math.max(0, Math.floor((now - state.activity.startedAt) / 1_000));
+    if (state.activity.kind === "thinking") {
+      parts.push(`thinking ${elapsed}s`);
+    } else {
+      const detail = state.activity.detail === undefined ? "" : ` ${state.activity.detail}`;
+      parts.push(`${state.activity.name}${detail} ${elapsed}s`);
+    }
+  }
   if (state.turns > 0) parts.push(`turn ${state.turns}`);
   if (state.context !== null) parts.push(`ctx ${formatTokens(state.context)}`);
   if (state.branch !== null) parts.push(`⎇ ${state.branch}`);

@@ -8,6 +8,7 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  type HarnessEvent,
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
@@ -35,7 +36,15 @@ describe("formatTokens", () => {
 });
 
 describe("statusLine", () => {
-  const base = { model: null, sessionId: null, status: "idle" as const, turns: 0, context: null, branch: null };
+  const base = {
+    model: null,
+    sessionId: null,
+    status: "idle" as const,
+    activity: null,
+    turns: 0,
+    context: null,
+    branch: null,
+  };
 
   it("says the minimum before anything has run", () => {
     expect(statusLine(base)).toBe("no session · idle · /help");
@@ -47,11 +56,34 @@ describe("statusLine", () => {
         model: "gpt-5.6-sol",
         sessionId: "331e27b5",
         status: "running",
+        activity: null,
         turns: 3,
         context: 45_210,
         branch: "feat/r15a-eviction",
       }),
     ).toBe("gpt-5.6-sol · 331e27b5 · running · turn 3 · ctx 45.2k · ⎇ feat/r15a-eviction · /help");
+  });
+
+  it("shows wall-clock elapsed time for thinking and clamps clock skew", () => {
+    expect(
+      statusLine({ ...base, status: "running", activity: { kind: "thinking", startedAt: 10_000 } }, 13_999),
+    ).toContain("running · thinking 3s");
+    expect(
+      statusLine({ ...base, status: "running", activity: { kind: "thinking", startedAt: 10_000 } }, 9_000),
+    ).toContain("thinking 0s");
+  });
+
+  it("shows the running tool and optional command prefix", () => {
+    expect(
+      statusLine(
+        {
+          ...base,
+          status: "running",
+          activity: { kind: "tool", id: "call-1", name: "bash", detail: "pnpm test", startedAt: 1_000 },
+        },
+        48_900,
+      ),
+    ).toContain("bash pnpm test 47s");
   });
 
   it("omits a segment it does not know rather than printing a placeholder", () => {
@@ -180,6 +212,104 @@ describe("TuiController statusline state", () => {
     });
     return controller;
   }
+
+  const consume = (controller: TuiController, event: HarnessEvent): void => {
+    (controller as unknown as { consume: (next: HarnessEvent) => void }).consume(event);
+  };
+
+  it("tracks thinking until first output, then a tool until its matching result", () => {
+    const c = make([]);
+    consume(c, { type: "model.request", seq: 1, sessionId: "s1", ts: 1_000, tokensIn: 12 });
+    expect(c.snapshot().activity).toEqual({ kind: "thinking", startedAt: 1_000 });
+
+    consume(c, { type: "model.delta", seq: 2, sessionId: "s1", ts: 1_200, text: "hello" });
+    expect(c.snapshot().activity).toBeNull();
+
+    consume(c, {
+      type: "tool.call",
+      seq: 3,
+      sessionId: "s1",
+      ts: 2_000,
+      id: "call-1",
+      name: "bash",
+      input: { command: "pnpm   test --filter a-command-that-is-deliberately-long" },
+      inputHash: "hash",
+    });
+    expect(c.snapshot().activity).toEqual({
+      kind: "tool",
+      id: "call-1",
+      name: "bash",
+      startedAt: 2_000,
+      detail: "pnpm test --filter a-command-th…",
+    });
+
+    consume(c, {
+      type: "tool.result",
+      seq: 4,
+      sessionId: "s1",
+      ts: 2_100,
+      id: "another-call",
+      ok: true,
+      display: "ok",
+      durationMs: 100,
+    });
+    expect(c.snapshot().activity?.kind).toBe("tool");
+
+    consume(c, {
+      type: "tool.result",
+      seq: 5,
+      sessionId: "s1",
+      ts: 2_200,
+      id: "call-1",
+      ok: true,
+      display: "ok",
+      durationMs: 200,
+    });
+    expect(c.snapshot().activity).toBeNull();
+  });
+
+  it("clears thinking on a response even when the provider emitted no text delta", () => {
+    const c = make([]);
+    consume(c, { type: "model.request", seq: 1, sessionId: "s1", ts: 1_000, tokensIn: 12 });
+    consume(c, {
+      type: "model.response",
+      seq: 2,
+      sessionId: "s1",
+      ts: 1_200,
+      usage: { input: 1, output: 0 },
+      stop: "tool_use",
+    });
+    expect(c.snapshot().activity).toBeNull();
+  });
+
+  it("clears stale activity when a request terminates without its normal closer", () => {
+    const c = make([]);
+    consume(c, { type: "model.request", seq: 1, sessionId: "s1", ts: 1_000, tokensIn: 12 });
+    consume(c, {
+      type: "error",
+      seq: 2,
+      sessionId: "s1",
+      ts: 1_200,
+      message: "provider failed before output",
+      fatal: true,
+    });
+    expect(c.snapshot().activity).toBeNull();
+
+    consume(c, { type: "model.request", seq: 3, sessionId: "s1", ts: 2_000, tokensIn: 12 });
+    consume(c, {
+      type: "error",
+      seq: 4,
+      sessionId: "s1",
+      ts: 2_100,
+      message: "model request refused by hook: policy",
+      fatal: false,
+    });
+    expect(c.snapshot().activity).toBeNull();
+
+    consume(c, { type: "model.request", seq: 5, sessionId: "s1", ts: 3_000, tokensIn: 12 });
+    consume(c, { type: "turn.end", seq: 6, sessionId: "s1", ts: 3_200, n: 1 });
+    expect(c.snapshot().activity).toBeNull();
+  });
 
   it("learns the model from session.start, overriding what the flags claimed", async () => {
     const c = make([[usage(1, 1), stop()]], { model: "from-flags" });

@@ -27,6 +27,14 @@ provider validation.
 | R1d | Realpath-keyed, fail-closed consent gate for project instructions and config, shared by run and TUI | done |
 | R1e | Read-only `agentrig doctor` with actionable local diagnostics and scriptable exit status | done |
 
+### Post-R1 TUI refinements
+
+- Issue #55 adds a statusline working indicator derived entirely from the controller's live event
+  stream: model requests show wall-clock `thinking Ns` until first output, and tool calls show the
+  tool name (plus a bounded one-line command prefix for bash) until the matching result. A 1 Hz view
+  clock updates elapsed time without adding core events. Its writes are suspended while bracketed
+  paste framing is open or partial and coalesced into the existing quiet-point draw after completion.
+
 - R1e ships the complete local checklist: effective provider credentials (environment presence or
   readable ChatGPT token source and expiry/time remaining), user/project config validity, active
   profile and provider/model precedence sources, trusted/untrusted/undecided project state, writable

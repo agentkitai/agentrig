@@ -33,6 +33,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
+  const [clock, setClock] = useState(Date.now());
+  const deferredState = useRef<TuiState | null>(null);
   /**
    * The authoritative buffer. Two reasons it is not the `input` state variable:
    *
@@ -45,7 +47,16 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
    * `input` exists only to trigger a re-render when the buffer is drawn.
    */
   const buffer = useRef<InputBuffer | null>(null);
-  buffer.current ??= new InputBuffer(setInput);
+  buffer.current ??= new InputBuffer((next) => {
+    setInput(next);
+    // Controller events and clock ticks share the input quiet point. React batches these updates,
+    // producing one paste-safe render with the freshest state once terminal input has completed.
+    if (deferredState.current !== null) {
+      setState(deferredState.current);
+      deferredState.current = null;
+    }
+    setClock(Date.now());
+  });
   const buf = buffer.current;
   const pasteDecoder = useRef<BracketedPasteDecoder | null>(null);
   pasteDecoder.current ??= new BracketedPasteDecoder();
@@ -56,7 +67,28 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   // reply, the event lines, the status, the permission prompt. Without it the TUI still accepts
   // input and still runs the agent — it just never shows any of it, which is not a failure any
   // test that counts bytes can see. `test/tui-visible.test.ts` asserts the content instead.
-  useEffect(() => controller.subscribe(setState), [controller]);
+  useEffect(
+    () =>
+      controller.subscribe((next) => {
+        if (paste.isPasting || paste.hasPendingMarker || buf.hasPendingDraw) {
+          deferredState.current = next;
+        } else {
+          setState(next);
+        }
+      }),
+    [buf, controller, paste],
+  );
+
+  useEffect(() => {
+    if (state.activity === null) return;
+    const timer = setInterval(() => {
+      // A terminal can block if the TUI writes while it is still delivering input. Bracketed paste
+      // state covers arbitrarily slow framed pastes; InputBuffer covers unframed bursts and the
+      // final quiet window. Its next safe draw flushes the clock through the callback above.
+      if (!paste.isPasting && !paste.hasPendingMarker && !buf.hasPendingDraw) setClock(Date.now());
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [buf, paste, state.activity]);
 
   useRawInput((raw, char, key) => {
     const decoded = paste.feed(raw);
@@ -243,7 +275,7 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
           sized to hold
         */}
         <Text dimColor wrap="truncate-end">
-          {statusLine(state)}
+          {statusLine(state, clock)}
         </Text>
       </Box>
     </Box>
