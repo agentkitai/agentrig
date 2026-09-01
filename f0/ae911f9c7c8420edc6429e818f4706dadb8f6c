@@ -1,0 +1,34 @@
+docs/STATUS.md
+  h_26c5a60a657125 138-139
+packages/cli/src/program.ts
+  h_26c5a60a657125 203
+packages/cli/test/config.test.ts
+  h_26c5a60a657125 169-182
+packages/cli/test/subagent-wiring.test.ts
+  h_26c5a60a657125 150-161,168,193
+packages/core/src/agent.ts
+  h_26c5a60a657125 470-472,474-482,537
+packages/core/src/provider.ts
+  h_26c5a60a657125 17-21
+packages/core/src/providers/anthropic.ts
+  h_26c5a60a657125 33-38
+packages/core/src/repo-map.ts
+  h_26c5a60a657125 2-3,5-7,14-15,36-37,46,48,61,88,92,100-108,136-141,146-149,154-155,165,167-171,176,178,181-186,190-211,213-215,217-219,221-222,227,238-239,246,251-253
+packages/core/test/agent.test.ts
+  h_26c5a60a657125 217-268,284-285,292
+packages/core/test/anthropic.test.ts
+  h_26c5a60a657125 46-57
+packages/core/test/repo-map.test.ts
+  h_26c5a60a657125 38-39,42-43,47-48,72,75-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f0ae911f9c7c8420edc6429e818f4706dadb8f6c",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
