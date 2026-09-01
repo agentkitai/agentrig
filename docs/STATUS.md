@@ -177,6 +177,15 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## Roadmap third pass (2026-09-01)
+
+Two unified analyses of the `system_prompts_leaks` prompt-capture corpus were folded into
+`docs/ROADMAP.md`: a new "third corpus" section (with per-capture confidence tiers and CC0
+reuse caveats), new rows R1.5f, R5e, R6d–R6g, R12e, R13d–R13e, R14d, an amended R1.5d
+(prompt bill of materials + freshness markers), and renunciations №10–12 (no prompt-compiler
+subsystem, no mode state machine, no verbatim reuse of captured prompt text). Rows, not
+milestones — the sequencing diagram is unchanged.
+
 ## CLI: leading --profile (issue #56)
 
 Status: **done**.
