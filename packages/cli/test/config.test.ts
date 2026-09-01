@@ -240,6 +240,62 @@ describe("both agent entry points use config", () => {
     expect(received).toEqual(["20", "7"]);
   });
 
+  it("appends discovered .agentrig/skills dirs AFTER explicit ones, so explicit shadows (issue #61)", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, {});
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_t, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--skills", "/explicit/one", "--skills", "/explicit/two",
+    ]);
+    // explicit dirs first (discoverSkills is first-root-wins), then trusted project, then home
+    expect(received?.skills).toEqual([
+      "/explicit/one",
+      "/explicit/two",
+      join(cwd, ".agentrig", "skills"),
+      join(home, ".agentrig", "skills"),
+    ]);
+  });
+
+  it("contributes no project skills dir from an untrusted checkout (issue #61)", async () => {
+    // Same fixture minus the trust record: headless run, no --trust, so the project is untrusted.
+    // Project skills are repo-controlled prompt text and must ride the same R1d boundary.
+    const base = await realpath(await mkdtemp(join(tmpdir(), "agentrig-config-")));
+    dirs.push(base);
+    const cwd = join(base, "project");
+    const home = join(base, "home");
+    await Promise.all([mkdir(join(cwd, ".agentrig"), { recursive: true }), mkdir(join(home, ".agentrig"), { recursive: true })]);
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_t, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test",
+    ]);
+    expect(received?.skills).not.toContain(join(cwd, ".agentrig", "skills"));
+    // the user-level dir is still safe to load — home is outside the project boundary
+    expect(received?.skills).toContain(join(home, ".agentrig", "skills"));
+  });
+
+  it("skillDiscovery: false disables the conventional dirs while explicit ones survive (issue #61)", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { skillDiscovery: false });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_t, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--skills", "/explicit/only",
+    ]);
+    expect(received?.skills).toEqual(["/explicit/only"]);
+  });
+
+  it("--no-skill-discovery beats a config that enables it, and --skill-discovery beats one that disables it", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { skillDiscovery: true });
+    let received: RunOptions | undefined;
+    const deps = { config: { cwd, home, env: {} }, run: async (_t: string, opts: RunOptions) => void (received = opts) };
+    await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test", "--no-skill-discovery"]);
+    expect(received?.skills).toEqual([]);
+
+    await configAt(cwd, { skillDiscovery: false });
+    await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test", "--skill-discovery"]);
+    expect(received?.skills).toContain(join(cwd, ".agentrig", "skills"));
+  });
+
   it("honours --profile through Commander without another layer masking it", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });

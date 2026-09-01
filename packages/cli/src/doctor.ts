@@ -60,6 +60,15 @@ function line(status: Status, label: string, detail: string): CheckLine {
   return { status, label, detail };
 }
 
+/** Existence probe for informational lines; any error reads as absent. */
+async function exists(probes: DoctorProbes, path: string): Promise<boolean> {
+  try {
+    return (await probes.stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function enoent(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
@@ -344,6 +353,32 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     } else {
       checks.push(line("pass", "config:effective", `provider ${display(provider)} from ${display(providerSource)}; model ${display(model)} from ${display(modelSource)}`));
       checks.push(await credentialCheck(effective, env, home, now, probes));
+    }
+  }
+
+  // Issue #61: say which skill directories a run would load and why — explicit dirs first
+  // (they shadow), then the trusted project's .agentrig/skills, then ~/.agentrig/skills.
+  // Read-only like everything here: existence is probed, nothing is parsed or loaded.
+  {
+    const explicit = Array.isArray(effective.skills) ? (effective.skills as string[]) : [];
+    if (effective.skillDiscovery === false) {
+      checks.push(line("skip", "skills", `discovery disabled — only ${explicit.length} explicit --skills dir(s) load`));
+    } else {
+      const parts: string[] = [];
+      if (explicit.length > 0) parts.push(`${explicit.length} explicit dir(s) first`);
+      if (boundary !== undefined && trust.trusted) {
+        const projectSkills = join(boundary.projectRoot, ".agentrig", "skills");
+        parts.push(`project ${display(projectSkills)}${(await exists(probes, projectSkills)) ? "" : " (absent, skipped)"}`);
+      } else {
+        parts.push("project skills skipped (untrusted)");
+      }
+      if (boundary !== undefined && boundary.userStateSafe) {
+        const userSkills = join(home, ".agentrig", "skills");
+        parts.push(`user ${display(userSkills)}${(await exists(probes, userSkills)) ? "" : " (absent, skipped)"}`);
+      } else {
+        parts.push("user skills skipped (home inside project boundary)");
+      }
+      checks.push(line("pass", "skills", parts.join("; ")));
     }
   }
 

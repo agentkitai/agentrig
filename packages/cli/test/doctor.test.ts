@@ -180,6 +180,27 @@ describe("agentrig doctor", () => {
     expect(result.lines.join("\n")).not.toContain("MALICIOUS_PROJECT_SECRET");
   });
 
+  it("reports the skill directories a run would load, and why (issue #61)", async () => {
+    const trusted = fixture();
+    let result = await diagnose(trusted.options);
+    const skills = find(result.lines, "skills");
+    expect(skills).toContain("pass");
+    expect(skills).toContain("project");
+    expect(skills).toContain("user");
+
+    // discovery disabled by config: the line says so instead of listing conventional dirs
+    const disabled = fixture();
+    disabled.files.set(USER_CONFIG, JSON.stringify({ skillDiscovery: false }));
+    result = await diagnose(disabled.options);
+    expect(find(result.lines, "skills")).toContain("discovery disabled");
+
+    // untrusted project: the project dir is named as skipped, never silently included
+    const untrusted = fixture();
+    untrusted.files.set(TRUST, JSON.stringify({ projects: {} }));
+    result = await diagnose(untrusted.options);
+    expect(find(result.lines, "skills")).toContain("project skills skipped (untrusted)");
+  });
+
   it("honours a --profile placed before the doctor subcommand (issue #56)", async () => {
     // the root-level --profile is scanned out of argv before dispatch, so doctor's own opts
     // never see it; the action must recover it via optsWithGlobals or diagnose the wrong profile
