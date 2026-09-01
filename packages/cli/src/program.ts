@@ -83,6 +83,39 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   const executeTui = dependencies.tui ?? startTui;
   const program = new Command();
   program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
+  /**
+   * `--profile` is ALSO registered on the root, so it can precede a subcommand — the shape an
+   * alias produces (`alias rigp='agentrig --profile personal'` broke every subcommand with
+   * "unknown command 'sessions' (Did you mean sessions?)").
+   *
+   * This is the pattern that once caused the root-option regression documented above, contained
+   * two ways: only this one option is dual-registered (Commander scans root options out of argv
+   * wherever they appear, so a root option swallows the SAME flag from subcommands — every other
+   * flag still parses on its subcommand exactly as before), and the value is recovered where
+   * config is resolved via `optsWithGlobals()`, which `program.test.ts` and `config.test.ts` pin
+   * in both positions. On subcommands that never consult config (`sessions ls`, `login`, …) a
+   * --profile in ANY position is accepted, and the preAction hook below says it is ignored —
+   * erroring instead would break the very alias shape this exists for, since a wrapper appends
+   * the flag to every subcommand it forwards.
+   *
+   * Known, accepted cost (adversarial review, PR #57): the root scan also consumes a literal
+   * "--profile" appearing as another option's VALUE (`--system "--profile"`), erroring about a
+   * flag the user never set. The escape hatches work: `--system=--profile` and anything after
+   * `--` are never scanned. `enablePositionalOptions()` would remove the whole class but forbids
+   * the pinned bare-launch shape `agentrig --yolo`, so it is not worth that trade.
+   */
+  program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
+  /** The entry points whose actions resolve config and therefore honour --profile. */
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume"]);
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    // A profile aimed at a command that never consults config is accepted so aliases keep
+    // working, but never silently: an ignored flag the user typed deserves a note (the same
+    // contract bash's background timeoutMs settled on).
+    const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
+    if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name())) {
+      console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read config profiles`);
+    }
+  });
 
   function withProviderOptions(cmd: Command): Command {
     return cmd
@@ -180,6 +213,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   }
 
   async function configured(opts: RunOptions, cmd: Command, interactive: boolean): Promise<RunOptions | undefined> {
+    // The root-level --profile is scanned out of argv wherever it appears, so the subcommand's
+    // own opts may not carry it even when the user typed it after the subcommand; optsWithGlobals
+    // recovers the value (the subcommand's own, were it ever set, wins).
+    const globalProfile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+    if (opts.profile === undefined && globalProfile !== undefined) opts = { ...opts, profile: globalProfile };
     try {
       return (await loadRunConfig(cmd, opts as unknown as Record<string, unknown>, {
         ...dependencies.config,
@@ -269,7 +307,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--profile <name>", "named config profile to diagnose")
     .option("--memory <dir>", "memory directory override")
     .option("--mcp-config <path>", "MCP config override")
-    .action(async (opts: DoctorCliValues) => {
+    .action(async (opts: DoctorCliValues, cmd: Command) => {
+      // same recovery as `configured`: a root-level --profile is invisible in this command's opts
+      const globalProfile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      if (opts.profile === undefined && globalProfile !== undefined) opts = { ...opts, profile: globalProfile };
       const result = await diagnose({ ...dependencies.doctor, cli: opts });
       for (const diagnostic of result.lines) console.log(diagnostic);
       if (result.exitCode !== 0) process.exitCode = result.exitCode;

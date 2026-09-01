@@ -151,6 +151,33 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## CLI: leading --profile (issue #56)
+
+Status: **done**.
+
+- `--profile` is now also a root-level option, so the alias shape `agentrig --profile personal
+  <subcommand>` dispatches correctly instead of dying in the default TUI command's stray-operand
+  check with "unknown command 'sessions' (Did you mean sessions?)".
+- Deliberately the ONLY dual-registered flag: Commander scans root options out of argv wherever
+  they appear (the shipped root-option regression documented in `program.ts`), so the root copy
+  swallows the subcommand's `--profile` token — the value is recovered at the config seam via
+  `optsWithGlobals()` (`configured` and the doctor action). A test pins that the root option set
+  is exactly `["--profile"]` so no other flag quietly migrates up.
+- Behavior note: subcommands that never consult config (`sessions ls`, `login`, `dream`,
+  `memory ingest`, …) accept `--profile` in ANY position (the root scan reaches trailing flags
+  too) where they previously errored "unknown option". Never silently: a preAction hook prints
+  `note: --profile is ignored by \`<command>\`` — erroring instead would break the alias shape
+  this exists for, since a wrapper function appends the flag to every forwarded subcommand.
+- Known accepted cost (adversarial review): a literal `"--profile"` used as another option's
+  VALUE (`--system "--profile"`) is stolen by the root scan and errors misleadingly. The escape
+  hatches work and are documented in `program.ts`: the `=` form (`--system=--profile`) and
+  anything after `--` are never scanned. `enablePositionalOptions()` would remove the class but
+  forbids the pinned bare-launch shape `agentrig --yolo`.
+- Pinned by dispatch, both-positions value flow, run/TUI/doctor end-to-end profile resolution,
+  nested `sessions resume` recovery (a `cmd.parent?.opts()` mutant survived the original suite),
+  the ignored-note behavior, and root-option confinement tests; each verified to fail with the
+  corresponding code reverted.
+
 ## Supervisor refinement
 
 Status: **done**.

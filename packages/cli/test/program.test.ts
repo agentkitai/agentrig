@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
 import { supervisorOptions, type SupervisorFlags } from "../src/run.ts";
@@ -132,6 +132,66 @@ describe("argv parsing", () => {
     expect((await run(["run", "fix the bug"]))?.args[0]).toBe("fix the bug");
     expect((await run(["sessions", "show", "abc"]))?.args[0]).toBe("abc");
     expect((await run(["memory", "search", "retry", "policy"]))?.args[0]).toEqual(["retry", "policy"]);
+  });
+
+  it("a leading --profile no longer hijacks subcommand dispatch (issue #56)", async () => {
+    // the alias shape: `alias rigp='agentrig --profile personal'` + any subcommand used to die
+    // with "unknown command 'sessions' (Did you mean sessions?)" because argv fell through to
+    // the default TUI command with the subcommand words as stray operands
+    const { run } = stub(buildProgram());
+    expect((await run(["--profile", "p", "sessions", "ls"]))?.path).toBe("sessions ls");
+    expect((await run(["--profile", "p", "run", "x"]))?.path).toBe("run");
+    expect((await run(["--profile", "p", "doctor"]))?.path).toBe("doctor");
+    expect((await run(["--profile", "p"]))?.path).toBe("tui");
+  });
+
+  it("the --profile value survives both positions where config reads it", async () => {
+    // The root option is scanned out of argv wherever it appears, so the leaf's own opts may not
+    // carry it; the config seam reads optsWithGlobals, so THAT is the contract to pin.
+    const capture = async (argv: string[]): Promise<string | undefined> => {
+      const program = buildProgram();
+      let merged: string | undefined;
+      program.commands.find((c) => c.name() === "run")!.action(function (this: Command) {
+        merged = (this.optsWithGlobals() as { profile?: string }).profile;
+      });
+      program.exitOverride((err) => { throw err; });
+      program.configureOutput({ writeErr: () => {}, writeOut: () => {} });
+      await program.parseAsync(argv, { from: "user" }).catch(() => {});
+      return merged;
+    };
+    expect(await capture(["run", "x", "--profile", "trailing"])).toBe("trailing");
+    expect(await capture(["--profile", "leading", "run", "x"])).toBe("leading");
+  });
+
+  it("says --profile is ignored on commands that never consult config, instead of silence", async () => {
+    // an alias appends --profile to EVERY forwarded subcommand, so these paths are hit
+    // constantly; accepted-but-silently-dead is the timeoutMs failure mode all over again
+    const notes: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => void notes.push(a.join(" ")));
+    // a fresh program per parse: commander keeps parsed option values on the command object,
+    // so a reused tree would leak the earlier --profile into the silent cases below
+    const parse = async (argv: string[]) => stub(buildProgram()).run(argv);
+    try {
+      await parse(["--profile", "p", "memory", "ls"]);
+      await parse(["dream", "--profile", "p", "--structural-only"]);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `ls`"))).toHaveLength(1);
+      expect(notes.filter((n) => n.includes("--profile is ignored by `dream`"))).toHaveLength(1);
+      notes.length = 0;
+      await parse(["--profile", "p", "run", "x"]);
+      await parse(["--profile", "p"]);
+      await parse(["memory", "ls"]);
+      expect(notes.filter((n) => n.includes("--profile is ignored"))).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("dual registration is confined to --profile — no other flag moved to the root", () => {
+    // Every root option is scanned out of argv anywhere it appears, swallowing the same flag
+    // from subcommands (the shipped regression this file exists for). --profile accepts that
+    // deliberately, with optsWithGlobals recovery; anything else appearing here is a regression.
+    const rootFlags = buildProgram().options.map((o) => o.long);
+    expect(rootFlags).toEqual(["--profile"]);
   });
 
   it("bare agentrig reaches the TUI", async () => {

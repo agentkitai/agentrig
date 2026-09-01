@@ -167,6 +167,42 @@ describe("both agent entry points use config", () => {
     expect(received?.model).toBe("profile");
   });
 
+  it("honours a --profile placed before the subcommand — the alias shape (issue #56)", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "--profile", "fast", "run", "test",
+    ]);
+    expect(received?.model).toBe("profile");
+  });
+
+  it("recovers --profile through sessions resume, the only two-level config entry point", async () => {
+    // adversarial-review finding F3: a plausible mutant (cmd.parent?.opts() instead of
+    // optsWithGlobals — the parent is `sessions`, not the root) survived the whole suite,
+    // because no test covered profile recovery on a NESTED subcommand
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
+    let received: RunOptions | undefined;
+    let task: string | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (t, opts) => { task = t; received = opts; } }).parseAsync([
+      "node", "agentrig", "sessions", "resume", "s1", "keep", "going", "--profile", "fast",
+    ]);
+    expect(received?.model).toBe("profile");
+    expect(received?.resume).toBe("s1");
+    expect(task).toBe("keep going");
+  });
+
+  it("honours a leading --profile on the default TUI launch", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { model: "base", profiles: { fast: { model: "profile" } } });
+    let received: TuiOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, tui: async (opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "--profile", "fast",
+    ]);
+    expect(received?.model).toBe("profile");
+  });
+
   it("treats a typed value equal to the built-in default as an explicit CLI override", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { model: "project-model" });
