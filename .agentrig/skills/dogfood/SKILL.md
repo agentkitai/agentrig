@@ -73,7 +73,9 @@ Start both with `bash` `background: true` and poll with `bash_job` using `waitMs
 loop, never a foreground command that a timeout can kill):
 
 - `codex review` over the full diff against `origin/main`.
-- A `claude` review of the same diff.
+- A `claude` review of the same diff, pinned to Opus: `claude -p --model claude-opus-5 …`.
+  Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
+  review spend independent of whatever model the main session happens to be running.
 
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
