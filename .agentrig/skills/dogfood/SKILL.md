@@ -77,8 +77,14 @@ loop, never a foreground command that a timeout can kill):
 
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
-If you push more commits after starting a review, the review is stale for the new diff — extend
-or re-run it over the delta before treating its verdict as covering the branch.
+
+Staleness, bounded: if you push more commits after a review ran, the review is stale for the
+**delta only** — re-review the diff since the last reviewed commit, never the whole branch again,
+and never a fresh full dual review per commit. A fix-only commit that addresses review findings
+is verified by its fail-first regression tests, not by another review round. Cap the cycle at
+**one delta re-review** after the findings round; if a reviewer keeps producing new findings on
+each pass (non-converging), stop pushing for it and record what is still flagged in the PR body
+instead. Per-commit full-review loops have burned hours of budget on nits without converging.
 
 ## 9. Fix everything both reviews found
 
