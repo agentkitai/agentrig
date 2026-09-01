@@ -194,6 +194,20 @@ Status: **done**.
   "verification"; comparing input identity preserves the ladder's teeth without command-name
   special cases.
 
+## First checked-in skill: `dogfood` (2026-09-01)
+
+Status: **done**.
+
+`.agentrig/skills/dogfood/SKILL.md` — the end-to-end shipping flow (fresh branch → green trio by
+real exit codes → docs → PR → two parallel external reviews via background jobs → fix all
+findings fail-first → stop at the PR, never merge), distilled from this project's accumulated
+dogfood lessons. Auto-loaded in every trusted session via #61's discovery. `.gitignore` was
+restructured (`**/.agentrig/*` + re-includes) because git cannot re-include below an excluded
+directory — session logs and wikis stay ignored at every depth, only `/.agentrig/skills/` is
+tracked. A core test now guards the repo's own skills: frontmatter must parse and names and
+descriptions must fit the catalogue bounds untruncated, so a skill edit that would degrade every
+future run fails CI instead.
+
 ## Skills auto-discovery — issue #61 (2026-09-01)
 
 Status: **done**.

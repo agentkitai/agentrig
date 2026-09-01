@@ -265,4 +265,17 @@ describe("skillTool", () => {
   it("rejects an empty name", () => {
     expect(skillTool([]).inputSchema.safeParse({ name: "" }).success).toBe(false);
   });
+
+  it("the repository's own checked-in skills parse and fit the catalogue bounds", async () => {
+    // .agentrig/skills is auto-discovered in every trusted session (issue #61), so a skill whose
+    // frontmatter breaks or whose description overruns the 200-char catalogue line (truncated
+    // with an ellipsis) would degrade every future dogfood run. vitest runs from the repo root.
+    const found = await discoverSkills({ roots: [".agentrig/skills"] });
+    expect(found.length).toBeGreaterThan(0);
+    for (const s of found) {
+      expect(s.description.endsWith("…"), `${s.name}'s description overruns the catalogue line`).toBe(false);
+      expect(s.name.endsWith("…"), `${s.name} overruns the name bound`).toBe(false);
+      expect(s.body.trim().length).toBeGreaterThan(0);
+    }
+  });
 });
