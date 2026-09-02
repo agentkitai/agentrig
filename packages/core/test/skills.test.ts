@@ -308,10 +308,12 @@ describe("skillTool", () => {
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
     expect(body).toContain("Never pass the builder's report");
-    expect(body).toContain("each with a concrete proposed fix, gets exactly one repair round");
-    expect(body).toContain("the bound on this train is the number of rounds, not the severity of a fixable defect");
+    expect(body).toContain("A verdict whose findings each carry a concrete proposed fix gets exactly one repair round");
+    expect(body).toContain("a HIGH with a one-line fix and a test is repair work, a MEDIUM with no fix is a halt");
+    expect(body).toContain("The bound on this train is the number of rounds, not the severity of a fixable defect");
     expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
-    expect(body).toContain("reports a HIGH finding, reports a finding it labels design, contract, or authorization");
+    expect(body).toContain("sort its findings, never by severity");
+    expect(body).toContain("If any finding is a contract or authorization one, arbitrate");
     expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
     expect(body).toContain("watch `main` CI on the exact merge commit");
