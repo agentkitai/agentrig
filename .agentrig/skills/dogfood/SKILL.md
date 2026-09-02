@@ -73,9 +73,13 @@ Start both with `bash` `background: true` and poll with `bash_job` using `waitMs
 loop, never a foreground command that a timeout can kill):
 
 - `codex review` over the full diff against `origin/main`.
-- A `claude` review of the same diff, pinned to Opus: `claude -p --model claude-opus-5 …`.
+- A `claude` review of the same diff, pinned to Opus and given the tools to VERIFY, not just read:
+  `claude -p --model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash' "…"`.
   Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
-  review spend independent of whatever model the main session happens to be running.
+  review spend independent of whatever model the main session happens to be running. Without
+  `--allowedTools` including Bash the reviewer cannot run vitest or probe built output, and its
+  first line becomes "I could not execute the test suite" — a read-only review that verifies
+  nothing, which the brief below explicitly forbids.
 
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
