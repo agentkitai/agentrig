@@ -1,18 +1,57 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import {
   DockerSandboxProvider,
   NoneSandboxProvider,
   SeatbeltSandboxProvider,
+  type ModelEvent,
 } from "@agentkitai/agentrig-core";
-import { buildSandbox } from "../src/agent-builder.ts";
+import { buildAgent, buildSandbox } from "../src/agent-builder.ts";
 
 describe("CLI sandbox wiring", () => {
-  it("proves the CI host's configured sandbox seam, including Windows none", () => {
-    const mode = process.env.AGENTRIG_CI_SANDBOX;
-    if (mode === undefined) return;
-    const sandbox = buildSandbox(mode, process.platform);
-    expect(sandbox.mode).toBe(mode);
-    if (process.platform === "win32") expect(sandbox.provider).toBeInstanceOf(NoneSandboxProvider);
+  it("routes the assembled parent agent through the selected provider, including Windows none", async () => {
+    const mode = process.env.AGENTRIG_CI_SANDBOX ?? "none";
+    const root = await mkdtemp(join(tmpdir(), "agentrig-sandbox-wire-"));
+    const fixture = join(root, "fixture.txt");
+    await writeFile(fixture, "sandbox reached", "utf8");
+    process.env.ANTHROPIC_API_KEY ??= "test-key";
+    const prepare = vi.spyOn(NoneSandboxProvider.prototype, "prepare");
+
+    try {
+      const built = await buildAgent({
+        root,
+        provider: "anthropic",
+        model: "m",
+        sandbox: mode,
+        maxTurns: "2",
+        maxTokensPerTurn: "1024",
+        repoMap: false,
+      } as never);
+      let turn = 0;
+      built.provider.stream = async function* (): AsyncIterable<ModelEvent> {
+        turn += 1;
+        if (turn === 1) {
+          yield { type: "tool_use", id: "read-1", name: "read_file", input: { path: fixture } };
+          yield { type: "usage", usage: { input: 1, output: 1 } };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        yield { type: "text_delta", text: "done" };
+        yield { type: "usage", usage: { input: 1, output: 1 } };
+        yield { type: "stop", reason: "end_turn" };
+      };
+
+      await built.agent.run("read the fixture", { cwd: root }).done;
+
+      expect(mode).toBe("none");
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(prepare.mock.calls[0]?.[1]).toEqual({ mode: "none", cwd: root });
+    } finally {
+      prepare.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("selects the platform provider without coupling sandbox mode to approvals", () => {
