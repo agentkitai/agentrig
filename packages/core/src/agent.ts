@@ -32,6 +32,9 @@ export interface Budget {
 export interface Pricing {
   inputUsdPerMTok: number;
   outputUsdPerMTok: number;
+  /** Explicit provider/model cache prices override capability multipliers when supplied. */
+  cacheReadUsdPerMTok?: number;
+  cacheWriteUsdPerMTok?: number;
 }
 
 /** All Usage fields are disjoint, so each contributes exactly once to a token budget. */
@@ -43,9 +46,20 @@ export function usageTokens(usage: Usage): number {
  * Price one usage record. Cache writes are input tokens at the normal input rate; cache reads use
  * the provider's advertised discount. An unadvertised discount safely falls back to full price.
  */
-export function usageUsd(usage: Usage, pricing: Pricing, cacheReadDiscount = 1): number {
-  const input = usage.input + (usage.cacheWrite ?? 0) + (usage.cacheRead ?? 0) * cacheReadDiscount;
-  return (input * pricing.inputUsdPerMTok + usage.output * pricing.outputUsdPerMTok) / 1e6;
+export function usageUsd(
+  usage: Usage,
+  pricing: Pricing,
+  cacheReadDiscount = 1,
+  cacheWriteMultiplier = 1,
+): number {
+  const readPrice = pricing.cacheReadUsdPerMTok ?? pricing.inputUsdPerMTok * cacheReadDiscount;
+  const writePrice = pricing.cacheWriteUsdPerMTok ?? pricing.inputUsdPerMTok * cacheWriteMultiplier;
+  return (
+    usage.input * pricing.inputUsdPerMTok
+    + (usage.cacheRead ?? 0) * readPrice
+    + (usage.cacheWrite ?? 0) * writePrice
+    + usage.output * pricing.outputUsdPerMTok
+  ) / 1e6;
 }
 
 export interface PromptContext {
@@ -822,7 +836,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (usage.cacheRead !== undefined) totals.cacheRead = (totals.cacheRead ?? 0) + usage.cacheRead;
         if (usage.cacheWrite !== undefined) totals.cacheWrite = (totals.cacheWrite ?? 0) + usage.cacheWrite;
         if (config.pricing) {
-          usd += usageUsd(usage, config.pricing, provider.capabilities.cacheReadDiscount);
+          usd += usageUsd(
+            usage,
+            config.pricing,
+            provider.capabilities.cacheReadDiscount,
+            provider.capabilities.cacheWriteMultiplier,
+          );
         }
         if (usageTokens(usage) === 0 && stop !== "error" && !warnedNoUsage) {
           // e.g. an OpenAI-compatible server ignoring stream_options: budgets can't bind on zeros

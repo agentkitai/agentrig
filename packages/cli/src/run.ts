@@ -64,6 +64,8 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   maxUsd?: string;
   priceIn?: string;
   priceOut?: string;
+  priceCacheRead?: string;
+  priceCacheWrite?: string;
   maxTokensPerTurn: string;
   memory?: string;
   /** Required here (the flags have defaults) while `SupervisorFlags` leaves them optional. */
@@ -223,6 +225,12 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     },
     task: w.task,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
+    ...(w.provider.capabilities?.cacheReadDiscount === undefined
+      ? {}
+      : { cacheReadDiscount: w.provider.capabilities.cacheReadDiscount }),
+    ...(w.provider.capabilities?.cacheWriteMultiplier === undefined
+      ? {}
+      : { cacheWriteMultiplier: w.provider.capabilities.cacheWriteMultiplier }),
     ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
     ...(o.supervisorReview === true
       ? {

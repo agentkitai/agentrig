@@ -30,7 +30,15 @@ export interface StateOptions {
   /** How many events to retain in `recent`. Bounded so a long session cannot grow without limit. */
   windowSize?: number;
   /** USD per million tokens, so the budget detector can price a soft threshold. */
-  pricing?: { inputUsdPerMTok: number; outputUsdPerMTok: number };
+  pricing?: {
+    inputUsdPerMTok: number;
+    outputUsdPerMTok: number;
+    cacheReadUsdPerMTok?: number;
+    cacheWriteUsdPerMTok?: number;
+  };
+  /** Provider fallbacks when pricing does not give explicit cache rates. */
+  cacheReadDiscount?: number;
+  cacheWriteMultiplier?: number;
 }
 
 export const DEFAULT_WINDOW = 400;
@@ -91,10 +99,23 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
     case "model.response":
       state.usage.input += event.usage.input;
       state.usage.output += event.usage.output;
+      if (event.usage.cacheRead !== undefined) {
+        state.usage.cacheRead = (state.usage.cacheRead ?? 0) + event.usage.cacheRead;
+      }
+      if (event.usage.cacheWrite !== undefined) {
+        state.usage.cacheWrite = (state.usage.cacheWrite ?? 0) + event.usage.cacheWrite;
+      }
       if (opts.pricing !== undefined) {
-        state.usd +=
-          (event.usage.input * opts.pricing.inputUsdPerMTok) / 1e6 +
-          (event.usage.output * opts.pricing.outputUsdPerMTok) / 1e6;
+        const readPrice = opts.pricing.cacheReadUsdPerMTok
+          ?? opts.pricing.inputUsdPerMTok * (opts.cacheReadDiscount ?? 1);
+        const writePrice = opts.pricing.cacheWriteUsdPerMTok
+          ?? opts.pricing.inputUsdPerMTok * (opts.cacheWriteMultiplier ?? 1);
+        state.usd += (
+          event.usage.input * opts.pricing.inputUsdPerMTok
+          + (event.usage.cacheRead ?? 0) * readPrice
+          + (event.usage.cacheWrite ?? 0) * writePrice
+          + event.usage.output * opts.pricing.outputUsdPerMTok
+        ) / 1e6;
       }
       break;
     case "plan.updated":

@@ -134,19 +134,22 @@ validation.
 - R1.5b completes the cached-token path that already populated and accumulated the disjoint
   `Usage.cacheRead` field. Hard token budgets now count uncached input, cache reads, cache writes,
   and output exactly once. USD budgets charge cache reads at the provider-advertised input-price
-  fraction (Anthropic 0.1; official OpenAI and openai-chatgpt 0.5), charge cache writes as ordinary
-  input, and conservatively use full input price when an OpenAI-compatible endpoint advertises no
-  discount. The same accounting is used when reconciling bounded subagent pools and when deciding
-  compaction from reported usage.
+  fraction (Anthropic reads 0.1 and writes 1.25; official OpenAI/openai-chatgpt reads use a
+  model-family fallback of 0.1, 0.25, or 0.5), and conservatively use full input price when no
+  provider/model discount is known. Explicit `--price-cache-read` / `--price-cache-write` rates
+  override those defaults. The same accounting is used in the supervisor's soft limits, when
+  reconciling bounded subagent pools, and when deciding compaction from reported usage.
 - Human-facing headless, TUI, and event-trace usage lines show total input and identify a nonzero
-  cache-read subset, for example `3.3M in (2.9M cached) / 12.3k out`; logs and JSON remain schema-
-  compatible. Counts are floored to one decimal so summaries never overstate measured use.
+  cache-read and cache-write subsets, for example `3.3M in (2.9M cached) / 12.3k out` and
+  `182k in (180k written) / 500 out`; JSON remains schema-compatible and trace fields stay
+  machine-readable (`in=`, `cached=`, `cacheWrite=`, `out=`). Counts are floored to one decimal so
+  summaries never overstate measured use.
 - Decisions beyond the row: cache discounts are additive optional provider capability metadata, so
   existing third-party `ModelProvider` implementations remain source-compatible. Unknown discounts
   deliberately fall back to full price rather than silently under-enforcing a USD budget. Cache
-  writes are not labelled “cached” in the display because they are charged writes, not discounted
-  reads. Tests pin both sides of discounted USD pricing (neither full-price nor free), exact-once
-  token-budget accounting, provider metadata, and the requested compact display.
+  writes are labelled separately because they are charged writes, not discounted reads. Tests pin
+  both sides of discounted USD pricing (neither full-price nor free), explicit-rate overrides,
+  exact-once hard and soft token-budget accounting, provider metadata, and compact displays.
 
 - R1.5d emits `context.manifest` immediately before every model request, after outbound eviction,
   repository-map refresh, and `pre_model` hook patches. Each rendered system/history/tool-result/tool

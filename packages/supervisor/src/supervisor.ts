@@ -96,6 +96,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
   if (opts.pricing !== undefined) stateOpts.pricing = opts.pricing;
+  if (opts.cacheReadDiscount !== undefined) stateOpts.cacheReadDiscount = opts.cacheReadDiscount;
+  if (opts.cacheWriteMultiplier !== undefined) stateOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
 
   let detached = false;
   const report = (where: string, err: unknown): void => {

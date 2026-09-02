@@ -46,6 +46,8 @@ const ConfigValuesSchema = z
     maxUsd: positiveSetting.optional(),
     priceIn: positiveSetting.optional(),
     priceOut: positiveSetting.optional(),
+    priceCacheRead: positiveSetting.optional(),
+    priceCacheWrite: positiveSetting.optional(),
     maxTokensPerTurn: positiveSetting.optional(),
     ingestOnEnd: z.boolean().optional(),
     dreamOnEnd: z.boolean().optional(),

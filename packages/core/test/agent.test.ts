@@ -14,6 +14,7 @@ import {
   summarizeOlderTurns,
   toToolSpec,
   updatePlanTool,
+  usageUsd,
   type Session,
   type Agent,
   type AgentConfig,
@@ -567,6 +568,20 @@ describe("agent loop", () => {
     // Discounted cost is $3.80. Omitting cache reads from USD accounting produces $3 and would
     // incorrectly permit a second turn.
     expect((await session.done).turns).toBe(1);
+  });
+
+  it("lets explicit cache prices override provider multipliers", () => {
+    expect(usageUsd(
+      { input: 100_000, cacheRead: 800_000, cacheWrite: 100_000, output: 0 },
+      {
+        inputUsdPerMTok: 10,
+        outputUsdPerMTok: 20,
+        cacheReadUsdPerMTok: 0.5,
+        cacheWriteUsdPerMTok: 15,
+      },
+      0.1,
+      1.25,
+    )).toBeCloseTo(2.9);
   });
 
   it("surfaces provider failures as a fatal error and ends the session", async () => {

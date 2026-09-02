@@ -8,12 +8,29 @@ describe("formatUsage", () => {
       .toBe("3.3M in (2.9M cached) / 12.3k out");
   });
 
-  it("keeps the compatible uncached form when no cache read was reported", () => {
+  it("identifies cache writes separately from discounted cache reads", () => {
+    expect(formatUsage({ input: 2_000, cacheWrite: 180_000, output: 500 }))
+      .toBe("182k in (180k written) / 500 out");
+  });
+
+  it("keeps the compatible uncached form when no cache activity was reported", () => {
     expect(formatUsage({ input: 42, output: 7 })).toBe("42 in / 7 out");
   });
 });
 
 describe("renderEvent", () => {
+  it("preserves labelled fields while adding cached usage to model.response traces", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 1,
+      sessionId: "s",
+      ts: 1_700_000_000_000,
+      type: "model.response",
+      usage: { input: 400_000, cacheRead: 2_900_000, output: 12_345 },
+      stop: "end_turn",
+    }));
+    expect(line).toContain("in=3.3M cached=2.9M out=12.3k stop=end_turn");
+  });
+
   it("renders session.resume", () => {
     const e = HarnessEvent.parse({
       seq: 12,

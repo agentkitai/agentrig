@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseSoft, parseTurnsRemaining, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
+import { parseBudget } from "../src/agent-builder.ts";
 
 /**
  * The supervisor CLI surface had no tests at all. These drive `runCommand` directly with no
@@ -131,6 +132,22 @@ describe("budget flag validation still holds alongside the supervisor flags", ()
     await runCommand("t", opts({ maxUsd: "5" }));
     expect(errors.some((e) => e.includes("--max-usd requires"))).toBe(true);
   });
+
+  it("accepts explicit cache prices as overrides and requires base pricing", () => {
+    const parsed = parseBudget(opts({
+      priceIn: "10",
+      priceOut: "20",
+      priceCacheRead: "0.7",
+      priceCacheWrite: "12.5",
+    }));
+    expect(parsed.pricing).toEqual({
+      inputUsdPerMTok: 10,
+      outputUsdPerMTok: 20,
+      cacheReadUsdPerMTok: 0.7,
+      cacheWriteUsdPerMTok: 12.5,
+    });
+    expect(() => parseBudget(opts({ priceCacheRead: "0.7" }))).toThrow(/--price-in and --price-out/);
+  });
 });
 
 /**
@@ -189,6 +206,25 @@ describe("supervisorOptions", () => {
     const reviewed = wiring({ opts: { supervisorReview: true } });
     expect(reviewed.reviewer).toBeDefined();
     expect(reviewed.grader).toBeDefined();
+  });
+
+  it("carries provider cache pricing into the supervisor", () => {
+    const o = wiring({
+      provider: {
+        id: "fake",
+        model: "m",
+        capabilities: {
+          tools: true,
+          parallelTools: false,
+          caching: true,
+          contextWindow: 1_000,
+          cacheReadDiscount: 0.1,
+          cacheWriteMultiplier: 1.25,
+        },
+      } as never,
+    });
+    expect(o.cacheReadDiscount).toBe(0.1);
+    expect(o.cacheWriteMultiplier).toBe(1.25);
   });
 
   it("carries the budget the session is actually running under", () => {

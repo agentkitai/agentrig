@@ -231,7 +231,12 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         const spentUsd =
           usage === undefined || pricing === undefined
             ? reservedUsd
-            : usageUsd(usage, pricing, config.provider.capabilities.cacheReadDiscount);
+            : usageUsd(
+                usage,
+                pricing,
+                config.provider.capabilities.cacheReadDiscount,
+                config.provider.capabilities.cacheWriteMultiplier,
+              );
         for (const p of chain) {
           p.tokens += spentTokens - reservedTokens;
           p.usd += spentUsd - reservedUsd;

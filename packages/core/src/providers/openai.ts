@@ -2,6 +2,7 @@ import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
+import { openAiCacheReadDiscount } from "./cache-pricing.js";
 
 /**
  * OpenAI-compatible Chat Completions adapter: OpenAI itself plus most local servers
@@ -229,11 +230,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
       opts.maxTokensParam ?? (this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens");
     this.retry = opts.retry;
     this.onRetry = opts.onRetry;
+    const officialOpenAi = new URL(this.baseUrl).hostname === "api.openai.com";
+    const cacheReadDiscount = officialOpenAi ? openAiCacheReadDiscount(this.model) : undefined;
     this.capabilities = {
       tools: true,
       parallelTools: true,
-      caching: false,
-      ...(this.baseUrl.includes("api.openai.com") ? { cacheReadDiscount: 0.5 } : {}),
+      caching: officialOpenAi,
+      ...(cacheReadDiscount === undefined ? {} : { cacheReadDiscount }),
       contextWindow: opts.contextWindow ?? 128_000,
     };
   }

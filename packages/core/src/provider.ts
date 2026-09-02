@@ -45,8 +45,9 @@ export interface ModelProvider {
     parallelTools: boolean;
     caching: boolean;
     contextWindow: number;
-    /** Fraction of the normal input-token price charged for a cache read (for example, 0.1). */
+    /** Fractions of normal input price; model-derived defaults used only when explicit rates are absent. */
     cacheReadDiscount?: number;
+    cacheWriteMultiplier?: number;
   };
   stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
   countTokens?(req: ModelRequest): Promise<number>;
