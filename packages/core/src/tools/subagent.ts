@@ -128,10 +128,14 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
   return {
     name: SUBAGENT_TOOL,
     description:
-      "Run a self-contained task in a separate agent with its own context, and get back only its " +
-      "final answer. Use this for work that would otherwise fill this conversation with detail " +
-      "you do not need to keep — a broad search, reading many files to answer one question. " +
-      "The subagent sees none of this conversation, so the task must stand alone.",
+      "Run a self-contained task in a separate child session and get back only its final answer. " +
+      "This is THE way to run a child from here: it inherits this session's provider, permissions, " +
+      "skills and tools, its start and end are recorded in this session's log, and the supervisor " +
+      "knows it is running. Never launch a nested `agentrig run` from bash for that — it gets none " +
+      "of this wiring and this session cannot see it. Use it both to keep bulk work out of this " +
+      "conversation (a broad search, reading many files for one answer) and to delegate a whole " +
+      "job to an isolated worker (implement something, review something). The subagent sees none " +
+      "of this conversation, so the task must stand alone.",
     inputSchema: Input,
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
