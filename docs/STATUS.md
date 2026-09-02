@@ -39,6 +39,13 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
   merge pauses; it does not add OS isolation. Use this mode only in an environment whose current
   unsandboxed execution risk is acceptable, and treat any halt as a successful safe outcome.
 
+Second `/topic R2` run (halted at R2b on a HIGH contract finding): the halt rule keyed on severity,
+and severity is not fixability. The rule is now: any finding that carries a concrete proposed fix
+is repair work whatever its severity; a contract/authorization finding is arbitrated first and the
+fixer carries the verdict; an unverifiable claim is fixed with evidence or by deleting the claim;
+only a finding with no fix, or an arbiter "needs the human", halts. `ship` says the same for its
+human-requested fix round.
+
 ## Abort grace: a parent waits for the children its abort orphaned (#86)
 
 `control.abort()` raced past a running tool via `raceAbort`, so a parent's `session.done` resolved
