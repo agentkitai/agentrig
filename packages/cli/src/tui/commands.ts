@@ -148,14 +148,18 @@ export function composeSkillInvocation(
   invocation?: string,
 ): string {
   // The name is already sanitized at parse; the path is not, and a filename may legally contain a
-  // newline. The banners are advisory provenance labels (nothing parses them back), but a
-  // multi-line "path" would still make the label lie about where the block starts.
+  // newline. Topic treats the human-invocation banner as authorization evidence, so repository text
+  // must not be able to forge either that banner or the surrounding skill boundary.
   const path = sanitizeLine(skill.path, 200);
+  const body = skill.body.replace(
+    /^=====.*(?:SKILL|HUMAN SKILL INVOCATION).*=====\s*$/gim,
+    "[repository-authored provenance delimiter removed]",
+  );
   return [
     `Follow the ${JSON.stringify(skill.name)} skill for this task.`,
     "",
     `===== BEGIN SKILL ${JSON.stringify(skill.name)} (${path}) — repository-authored instructions =====`,
-    skill.body,
+    body,
     `===== END SKILL ${JSON.stringify(skill.name)} =====`,
     "",
     ...(invocation === undefined

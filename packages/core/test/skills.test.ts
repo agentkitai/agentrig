@@ -234,6 +234,7 @@ describe("skillTool", () => {
     const found = await discoverSkills({ roots: [dir] });
     const r = await skillTool(found).execute({ name: "deploy" }, ctx);
     expect(r.display).toBe("Run the release script.");
+    expect(r.display).not.toContain("HUMAN SKILL INVOCATION");
     expect(r.isError).toBeUndefined();
   });
 
@@ -312,7 +313,10 @@ describe("skillTool", () => {
     expect(body).toContain("watch `main` CI on the exact merge commit");
     expect(body).toContain("never replace it with a fresh builder");
     expect(body).toContain("Reserve five children per row");
+    expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
+    expect(body).toContain("Report the exact head SHA you reviewed");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
+    expect(body).toContain("restate it in your own reply text in that same turn");
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");

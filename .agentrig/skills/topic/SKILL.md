@@ -29,9 +29,11 @@ all of those children; do not do their work in this parent session. Keep your ow
   named session instead of spawning over it; if no resumable session is known, halt for the human.
 - Preflight child capacity before creating a branch. Reserve five children per row (builder, full
   reviewer, possible LOW fixer, possible delta reviewer, lander), set `--subagent-max-turns` to at
-  least 60 so dogfood/review children can finish, and ensure the parent has enough token budget for
-  those children. If the configured child pool, turn cap, or token budget is insufficient, halt up
-  front and name the exact setting to raise. Never fall back to doing child work in the parent.
+  least 60, and ensure the parent has enough token budget. Each child's token cap is `--max-tokens ÷
+  --subagent-max-children`, and all children share the parent's total: raise `--max-tokens`
+  proportionally when raising the pool, or leave it unset. If the child pool, turn cap, or resulting
+  per-child/total allowance is insufficient, halt up front and name the exact settings to change.
+  Never fall back to doing child work in the parent.
 
 ## 2. Build and independently review one row
 
@@ -49,10 +51,13 @@ For each recorded row, in order:
 3. If the builder dies at its budget or leaves a half-pushed branch, halt. Report its recorded
    session id for `agentrig sessions resume <id>`; never replace it with a fresh builder.
 4. Spawn a new reviewer subagent with only: “Review PR #NN on its current head. Follow the review
-   skill.” Never pass the builder's report, reasoning, findings, or claimed evidence to this
+   skill. Report the exact head SHA you reviewed.” Never pass the builder's report, reasoning,
+   findings, or claimed evidence to this
    reviewer. The PR and repository are its only evidence. Record the reviewer id from the tool
    result immediately.
-5. Record every child session id from its tool result. Bind the verdict to the head SHA the reviewer
+5. Record every child session id from its tool result and restate it in your own reply text in that
+   same turn; tool results older than five turns may be elided from context. Bind the verdict to the
+   head SHA the reviewer
    reports; if the PR head changes after review except through the LOW repair path below, halt as
    stale. If the reviewer dies at budget, cannot verify any claim, sees a merge conflict, finds red
    CI on the actual head, or reports a MEDIUM or HIGH finding, halt without rebutting or fixing it.
