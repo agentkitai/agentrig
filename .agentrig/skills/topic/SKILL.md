@@ -107,7 +107,9 @@ For each recorded row, in order:
   it to review only that delta under the review skill's standards, and do not pass either author's
   report. Record its id from the tool result. Land only on a clean, fully verified delta verdict.
   Any finding of any severity, or any
-  claim it cannot verify, halts the train for the human. There is no second fix or review round.
+  claim it cannot verify, halts the train for the human. There is no second fix or review round,
+  and no post-delta fix either: dogfood §8's labelled self-verified fix exists for an attended PR,
+  where a human reads the label at merge; an unattended train has no such reader.
 - The train never rebuts, downgrades, waives, or silently skips a review finding.
 
 ## 4. Conditional land and continue

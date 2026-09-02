@@ -343,5 +343,8 @@ describe("skillTool", () => {
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
+    expect(dogfood.body).toContain("The cap bounds review rounds, not fixes");
+    expect(dogfood.body).toContain("post-delta, self-verified, not re-reviewed");
+    expect(body).toContain("no post-delta fix either");
   });
 });

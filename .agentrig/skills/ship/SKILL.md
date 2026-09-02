@@ -41,7 +41,10 @@ Do not implement, review, or fix anything in this session yourself.
   those findings on the same branch, then ONE delta re-review of what changed, then stop again.
   Severity never decides fixability: any finding with a concrete proposed fix is fixer work. A
   contract or authorization finding goes to an `arbiter` subagent first, exactly as `topic` §3
-  does, and the fixer carries the verdict.
+  does, and the fixer carries the verdict. LOWs the delta reviewer finds may be fixed post-delta
+  under dogfood §8's labelled rule (fail-first test, killed mutant, "post-delta, self-verified"
+  in the PR body) before you stop; a MEDIUM or HIGH from the delta reviewer is recorded and the
+  human decides.
 - No answer is an answer: never treat silence, a timeout, or your own confidence as approval.
   A ship run that ends waiting at the verdict is a success.
 

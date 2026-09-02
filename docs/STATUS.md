@@ -140,6 +140,11 @@ Changes:
   gated behind `docker info` *and* a locally present fixture image, never pulling, because tests
   are network-free and `docker run` would implicitly pull; R2d's CI pre-pull makes the live test
   run on the ubuntu leg. The R2 acceptance text carries the arbiter's RECORD line.
+- Skill change riding along (attended PR, human-visible): dogfood §8's "record, never fix" cap
+  now bounds review rounds, not fixes — a LOW the delta reviewer finds may be fixed post-delta
+  with a fail-first test and a killed mutant, labelled "post-delta, self-verified, not
+  re-reviewed" in the PR body; MEDIUM and above stay record-only; `topic` stays record-only
+  because nobody reads a label on an unattended train. `ship` mirrors it.
 - Review repairs: no provider can authenticate a child's stderr, so classification is narrowed to
   what the active policy would produce — generic "operation not permitted" is never a denial, and
   "network is unreachable" only counts when the policy denies network — and the denial reason is
