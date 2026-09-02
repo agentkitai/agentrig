@@ -14,18 +14,8 @@ jobs:
       # both platforms report, rather than the first failure cancelling the other's evidence
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            sandbox: workspace-write
-          - os: macos-latest
-            sandbox: workspace-write
-          # Windows has no OS provider in R2. Running the same suite with the seam explicitly set
-          # to none proves no-op is a real provider path rather than a missing-sandbox special case.
-          - os: windows-latest
-            sandbox: none
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    env:
-      AGENTRIG_CI_SANDBOX: ${{ matrix.sandbox }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -41,3 +31,21 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+
+  windows-sandbox-none:
+    runs-on: windows-latest
+    env:
+      AGENTRIG_CI_SANDBOX: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      # F3 is the Windows no-op seam proof, not a claim that POSIX process integration tests run on
+      # Windows. This test uses process.platform and fails unless `none` selects the identity provider.
+      - run: pnpm exec vitest run packages/cli/test/sandbox-wiring.test.ts

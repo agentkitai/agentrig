@@ -132,9 +132,10 @@ Changes:
 - The `--yolo` warning now distinguishes an absent boundary from an active sandbox and explicitly
   recommends skipping approvals inside `workspace-write` for unattended runs. Boundary escalation
   remains a separate explicit prompt even when ordinary approvals are skipped.
-- CI pre-pulls `alpine:3.20` on Ubuntu so the network-free Docker integration test runs live, adds
-  Windows to the build/typecheck/test matrix with `sandbox=none`, and exercises that Windows identity
-  seam. The local Docker test still skips loudly when Docker or the pre-existing fixture is absent.
+- CI pre-pulls `alpine:3.20` on Ubuntu so the network-free Docker integration test runs live. A
+  Windows job builds and typechecks all packages, then runs the focused `sandbox=none` identity-seam
+  proof; it does not misrepresent POSIX-only process integration tests as Windows coverage. The local
+  Docker test still skips loudly when Docker or the pre-existing fixture is absent.
 - R2d's focused wiring/config/warning tests passed, the existing fake-provider outside-cwd acceptance
   and single-retry tests passed, and a mutant permitting a second unsandboxed retry was killed by the
   cap test. No Landlock is introduced in R2.
