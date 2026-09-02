@@ -76,18 +76,28 @@ For each recorded row, in order:
 5. Record every child session id from its tool result and restate it in your own reply text in that
    same turn; tool results older than five turns may be elided from context. Bind the verdict to the
    head SHA the reviewer
-   reports; if the PR head changes after review except through the LOW repair path below, halt as
+   reports; if the PR head changes after review except through the repair path below, halt as
    stale. If the reviewer dies at budget, cannot verify any claim, sees a merge conflict, finds red
-   CI on the actual head, reports a HIGH finding, reports a finding it labels design, contract, or
-   authorization (an unapproved deviation included), or reports any claim it could not verify, halt
-   without rebutting or fixing it. LOW and MEDIUM findings that come with a concrete proposed fix go
-   to the repair round below: the bound on this train is the number of rounds, not the severity of
-   a fixable defect.
+   CI on the actual head, halt. Otherwise sort its findings, never by severity: a finding of ANY
+   severity that carries a concrete proposed fix goes to the repair round below; a finding it labels
+   contract or authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it
+   could not verify is a finding whose fix is reproducible evidence in the PR body or deletion of
+   the claim. Halt only on a finding that comes with no concrete fix, or when the arbiter answers
+   "needs the human". The bound on this train is the number of rounds, not the severity of a
+   fixable defect: a HIGH with a one-line fix and a test is repair work, a MEDIUM with no fix is a
+   halt.
 
 ## 3. One repair round
 
-- A clean verdict proceeds to landing. A verdict whose findings are all LOW or MEDIUM, each with a
-  concrete proposed fix, gets exactly one repair round: spawn one fix subagent on the same PR branch, scoped verbatim to those findings and
+- A clean verdict proceeds to landing. A verdict whose findings each carry a concrete proposed fix
+  gets exactly one repair round. If any finding is a contract or authorization one, arbitrate
+  BEFORE fixing: spawn an `arbiter` subagent with the deviation exactly as the reviewer described
+  it, the row text from §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE` the fixer's
+  task carries the verdict block, the arbiter's session id, and "record it under `## Deviations`
+  in the PR body and make the roadmap edit match its RECORD line"; on `VERDICT: REJECT` the
+  fixer's task carries "revert to the row as written" with the rejection; on "needs the human",
+  halt. This shares the one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED`
+  path. Then the repair round: spawn one fix subagent on the same PR branch, scoped verbatim to those findings and
   no unrelated code changes. Tell it not to rebut or skip a finding, to add fail-first proof where
   behavior changes, run the green trio, push, update the PR description with every independent
   finding and its resolution, and report the old/new head SHAs. Record its id from the tool result.

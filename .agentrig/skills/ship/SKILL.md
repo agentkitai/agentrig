@@ -39,6 +39,9 @@ Do not implement, review, or fix anything in this session yourself.
 - The human's next message decides: a merge instruction means run the `land` skill's steps (in
   this session or a third subagent); a fix request means spawn a fix subagent scoped to exactly
   those findings on the same branch, then ONE delta re-review of what changed, then stop again.
+  Severity never decides fixability: any finding with a concrete proposed fix is fixer work. A
+  contract or authorization finding goes to an `arbiter` subagent first, exactly as `topic` §3
+  does, and the fixer carries the verdict.
 - No answer is an answer: never treat silence, a timeout, or your own confidence as approval.
   A ship run that ends waiting at the verdict is a success.
 
