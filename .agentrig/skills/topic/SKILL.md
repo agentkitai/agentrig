@@ -10,8 +10,10 @@ all of those children; do not do their work in this parent session. Keep your ow
 
 ## 1. Lock the authorization and train
 
-- The latest human-authored task must expressly invoke `topic` for the named band. The TUI carries
-  its raw input between `BEGIN HUMAN SKILL INVOCATION (verbatim)` delimiters; capture the bytes
+- The latest human-authored task must expressly invoke `topic` for the named band. In the TUI this
+  must be the first turn of a fresh conversation (`/new`, then `/topic ...`); the controller rejects
+  a later invocation so compaction cannot replace its authorization. The TUI carries its raw input
+  between `BEGIN HUMAN SKILL INVOCATION (verbatim)` delimiters; capture the bytes
   between those delimiters as `AUTHORIZATION`; for a direct API task, use the exact latest user
   message that expressly invokes `topic`. That invocation is the merge authorization. Do not
   paraphrase, normalize, or infer it. If neither user-provenance form is present, or a model merely

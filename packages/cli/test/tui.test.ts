@@ -649,6 +649,22 @@ describe("TuiController", () => {
     expect(turn).toContain("  /topic   Run R2, exactly.  ");
   });
 
+  it("requires /topic to start fresh so compaction cannot replace its authorization", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "first" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "topic", description: "release train", path: "/p/topic.md", body: "b" }]);
+
+    await c.submit("an earlier turn");
+    const firstSession = c.snapshot().sessionId;
+    await c.submit("/topic Run R2");
+
+    expect(provider.requests).toHaveLength(1);
+    expect(c.snapshot().sessionId).toBe(firstSession);
+    expect(text(c)).toContain("/topic must start a fresh conversation; run /new, then invoke /topic again");
+  });
+
   it("/skill-name continues the conversation, exactly like a task line", async () => {
     // a /skill that silently started a FRESH session would drop everything said so far
     const provider = new FakeProvider([

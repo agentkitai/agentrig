@@ -304,6 +304,7 @@ describe("skillTool", () => {
 
     expect(rawDescription?.length).toBeLessThanOrEqual(200);
     expect(topic).toBeDefined();
+    expect(body).toContain("must be the first turn of a fresh conversation (`/new`, then `/topic ...`)");
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
     expect(body).toContain("Never pass the builder's report");
