@@ -280,19 +280,18 @@ question 1.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R2a | `SandboxProvider` seam in core: `prepare(cmd, policy) → cmd'` wrapping tool execution; modes `read-only` / `workspace-write` / `none`; `sandbox.denied` event when the OS blocks an action; the permission layer unchanged and orthogonal | core |
-| R2b | Providers: `none` (today's behaviour, default), `docker` (portable: bind-mount cwd rw, rootfs ro, `--network none` unless `net` allowed), `seatbelt` (macOS `sandbox-exec` profile: cwd-write, deny-net-by-default) | core |
+| R2b | `SeatbeltSandboxProvider` (macOS `sandbox-exec`) + `BubblewrapSandboxProvider` (Linux `bwrap`); startup probe; doctor integration; actionable install/fallback message | core, cli |
 | R2c | Escalation path: a tool call that fails **inside** the sandbox emits a `permission.request` with `origin: "sandbox-escalation"`; approval retries the same call unsandboxed once. TUI renders it distinctly ("blocked by sandbox — run outside it?") | core + cli |
-| R2d | Wiring: `--sandbox <mode>` + config key; `--yolo` composes (skip approvals *inside* a sandbox is the recommended unattended posture and the warning says so); Linux runner lands `docker` in CI; **F3**: Windows CI job added with sandbox=none, proving the seam's no-op path | cli, .github |
+| R2d | Wiring: `--sandbox <mode>` + config key; `--yolo` composes (skip approvals *inside* a sandbox is the recommended unattended posture and the warning says so); Linux runner exercises `bwrap` in CI; **F3**: Windows CI job added with sandbox=none, proving the seam's no-op path | cli, .github |
 
 Acceptance: a test drives a fake provider to write outside cwd under `workspace-write` and
-observes `sandbox.denied` + escalation request + (on approval) retry; docker provider gets an
-integration test gated behind `docker info` availability (skipped, not failed, where absent —
-and the skip prints loudly); the seatbelt profile string is unit-tested for shape since macOS CI
-can't always nest sandboxes. Mutation: dropping the single-retry cap must fail a test (unbounded
-escalate-retry is a prompt-fatigue machine).
+observes `sandbox.denied` + escalation request + (on approval) retry. The seatbelt profile and
+Bubblewrap invocation are unit-tested for least-authority shape since CI cannot always nest either
+sandbox. Mutation: dropping the single-retry cap must fail a test (unbounded escalate-retry is a
+prompt-fatigue machine).
 
 Renunciation, recorded now: **no Landlock in R2.** Landlock needs a native addon or a helper
-binary; `docker` covers Linux correctness first. Landlock is R2-follow-up if dogfooding demands.
+binary; Bubblewrap covers Linux correctness first. Landlock is R2-follow-up if dogfooding demands.
 
 ### R3 — Session trees: fork, search, replay
 

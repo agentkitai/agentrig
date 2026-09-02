@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R2a is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R2b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -44,6 +44,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 | Row | Deliverable | Status |
 |---|---|---|
 | R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
+| R2b | macOS Seatbelt and Linux Bubblewrap providers, startup probes, and doctor diagnostics | done |
 
 - R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
   core passes that command and `{ mode, cwd }` policy to the configured provider and executes the
@@ -59,8 +60,32 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
   permissions can produce those without a sandbox, so only the boundary provider can classify the
   failure honestly. Also rejected: invoking the sandbox before permission policy, which would make
   denied calls enter an execution layer despite never being approved.
-- Caveat: R2a establishes and tests the boundary but supplies no enforcing provider, so unattended
-  runs remain unsandboxed until the later R2 rows land.
+- R2b's recorded contract now names Linux Bubblewrap rather than the earlier Docker draft; this
+  keeps the enforcement local to the process host and gives doctor a direct kernel-capability probe.
+- R2b adds `SeatbeltSandboxProvider` for macOS and `BubblewrapSandboxProvider` for Linux. Both
+  perform one cached, harmless startup probe before their first active (`read-only` or
+  `workspace-write`) command and fail closed when the binary or kernel facility is unavailable;
+  `none` remains an identity path and does not probe.
+- Process-launching core tools carry the prepared boundary through async execution. Seatbelt uses a
+  deny-by-default profile with readable files, no network, and a single cwd write allowance only in
+  `workspace-write`; Bubblewrap uses an unshared namespace, read-only root, no shared network, and
+  adds a writable cwd bind only in `workspace-write`. Foreground and background shell processes are
+  wrapped, and backend-shaped denials are converted to `SandboxDeniedError` without treating every
+  generic child `permission denied` message as a sandbox event.
+- `agentrig doctor` invokes the core-owned native startup probe and reports pass/fail/unsupported.
+  Failure text names how to install Bubblewrap (or repair macOS) and explicitly identifies the
+  `none` provider as an unsandboxed fallback. Provider command construction and diagnostics stay in
+  core so the CLI remains a renderer over an injected probe seam.
+- Decision beyond the row: the active process wrapper uses async-local state rather than mutable
+  process globals. Concurrent tools therefore cannot leak cwd/profile authority into each other,
+  and the existing deferred-command `SandboxProvider` interface remains unchanged.
+- Rejected: silently selecting `none` after a failed native startup probe. The fallback must be an
+  explicit caller choice because availability is not authority. Also rejected: classifying every
+  `EPERM`/`permission denied` child failure as sandbox-caused; Bubblewrap classification is limited
+  to boundary-shaped read-only-root, disconnected-network, and wrapper diagnostics.
+- Caveat: R2b exports providers and diagnostics but intentionally adds no CLI sandbox selection or
+  config. Runs remain on today's unsandboxed default until R2d wires an explicit provider; R2c owns
+  escalation and one approved unsandboxed retry, neither of which is pulled into this row.
 
 ## R1 notes
 

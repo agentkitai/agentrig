@@ -49,6 +49,7 @@ function fixture(): Fixture {
     },
     async boundary() { return { projectRoot: ROOT, userStateSafe: true }; },
     async commandExists() { return true; },
+    async sandbox() { return { backend: "bubblewrap", available: true, detail: "bwrap startup probe passed" }; },
     async gitState() { return { inside: true, branch: "feat/test", detached: false }; },
   };
   return {
@@ -83,6 +84,23 @@ describe("agentrig doctor", () => {
     expect(doctor!.options.map((option) => option.long)).toEqual(expect.arrayContaining([
       "--provider", "--model", "--profile", "--memory", "--mcp-config",
     ]));
+  });
+
+  it("reports the native sandbox startup probe", async () => {
+    const passing = fixture();
+    let result = await diagnose(passing.options);
+    expect(find(result.lines, "sandbox")).toBe("pass sandbox — bubblewrap: bwrap startup probe passed");
+
+    const missingBackend = fixture();
+    missingBackend.probes.sandbox = async () => ({
+      backend: "bubblewrap",
+      available: false,
+      detail: "install bubblewrap, or use the none provider (unsandboxed fallback)",
+    });
+    result = await diagnose(missingBackend.options);
+    expect(find(result.lines, "sandbox")).toContain("install bubblewrap");
+    expect(find(result.lines, "sandbox")).toContain("none provider (unsandboxed fallback)");
+    expect(result.exitCode).toBe(1);
   });
 
   it("passes provider credentials without printing their value", async () => {

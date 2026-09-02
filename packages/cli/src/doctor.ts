@@ -4,7 +4,13 @@ import { access, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue } from "@agentkitai/agentrig-core";
+import {
+  ChatGPTTokens,
+  decodeJwtClaims,
+  probeNativeSandbox,
+  tokensFromEnvValue,
+  type SandboxProbeResult,
+} from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
 import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
@@ -34,6 +40,7 @@ export interface DoctorProbes {
   stat(path: string): Promise<DoctorFileInfo>;
   boundary(cwd: string, home: string): Promise<ProjectBoundary>;
   commandExists(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<boolean>;
+  sandbox(): Promise<SandboxProbeResult>;
   gitState(cwd: string): Promise<DoctorGitState>;
 }
 
@@ -135,6 +142,7 @@ function defaultProbes(): DoctorProbes {
     stat,
     boundary: resolveProjectBoundary,
     commandExists: defaultCommandExists,
+    sandbox: () => probeNativeSandbox(),
     gitState: defaultGitState,
   };
 }
@@ -433,6 +441,17 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
         ? line("pass", label, `command ${display(server.command)} exists on PATH`)
         : line("fail", label, `command ${display(server.command)} is unavailable — install it or put ${display(server.command)} on PATH`));
     }
+  }
+
+  try {
+    const sandbox = await probes.sandbox();
+    checks.push(sandbox.backend === "none"
+      ? line("skip", "sandbox", sandbox.detail)
+      : sandbox.available
+        ? line("pass", "sandbox", `${sandbox.backend}: ${sandbox.detail}`)
+        : line("fail", "sandbox", `${sandbox.backend}: ${sandbox.detail}`));
+  } catch {
+    checks.push(line("fail", "sandbox", "startup probe failed unexpectedly — use the none provider (unsandboxed fallback) and inspect the sandbox installation"));
   }
 
   try {
