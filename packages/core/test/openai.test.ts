@@ -186,6 +186,16 @@ describe("OpenAICompatibleProvider.stream", () => {
     expect(JSON.parse(body).max_completion_tokens).toBeUndefined();
   });
 
+  it("does not grant official pricing metadata to a lookalike hostname", () => {
+    const provider = new OpenAICompatibleProvider({
+      model: "gpt-5",
+      baseUrl: "https://api.openai.com.evil.example/v1",
+      fetchFn: async () => new Response(),
+    });
+    expect(provider.capabilities.cacheReadDiscount).toBeUndefined();
+    expect(provider.capabilities.caching).toBe(false);
+  });
+
   it("omits the auth header for keyless local servers", async () => {
     let headers: Record<string, string> = {};
     const fetchFn: typeof fetch = async (_url, init) => {

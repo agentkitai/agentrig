@@ -1287,6 +1287,29 @@ describe("resume", () => {
     expect(all.some((e) => e.type === "session.resume")).toBe(true);
   });
 
+  it("reprices cached usage from an old snapshot before enforcing a resumed USD budget", async () => {
+    const provider = new FakeProvider([], 0.1);
+    const config = makeConfig(provider, {
+      budget: { maxUsd: 3.5 },
+      pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 20 },
+    });
+    await config.store.writeSnapshot({
+      sessionId: "sess1",
+      task: "old",
+      cwd: "/w",
+      turns: 1,
+      usage: { input: 100_000, cacheRead: 800_000, output: 100_000 },
+      usd: 3, // legacy math omitted the $0.80 discounted cache read
+      messages: [{ role: "user", content: [{ type: "text", text: "old" }] }],
+      ts: 1,
+    });
+
+    const resumed = createAgent(config).run("continue", { resume: "sess1" });
+    await collect(resumed);
+    expect((await resumed.done).reason).toBe("budget");
+    expect(provider.requests).toHaveLength(0);
+  });
+
   it("keeps a max_tokens-truncated tool call resumable by synthesizing an error tool_result", async () => {
     const first = new FakeProvider([
       // truncated mid-tool-call: tool_use emitted, but stop is max_tokens so it never runs

@@ -540,11 +540,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
         cwd = opts.cwd ?? snap.cwd;
         turns = snap.turns;
-        usd = snap.usd ?? 0;
         totals.input = snap.usage.input;
         totals.output = snap.usage.output;
         if (snap.usage.cacheRead !== undefined) totals.cacheRead = snap.usage.cacheRead;
         if (snap.usage.cacheWrite !== undefined) totals.cacheWrite = snap.usage.cacheWrite;
+        // Price restored token counts under the current complete pricing contract. Old snapshots'
+        // `usd` omitted cache activity, and explicit rates may legitimately change between runs.
+        usd = config.pricing === undefined
+          ? (snap.usd ?? 0)
+          : usageUsd(
+              totals,
+              config.pricing,
+              provider.capabilities.cacheReadDiscount,
+              provider.capabilities.cacheWriteMultiplier,
+            );
         await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns });
         messages = snap.messages;
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
