@@ -248,7 +248,10 @@ export class TuiController {
       // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
       // every single write in a twenty-file task is how a permission prompt stops being read at
       // all, which is worse than not having one.
-      const standing = this.standing.get(req.tool);
+      // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
+      // auto-approve it, and an escalation answer must never become permission for later calls.
+      const sandboxEscalation = req.origin === "sandbox-escalation";
+      const standing = sandboxEscalation ? undefined : this.standing.get(req.tool);
       if (standing !== undefined) {
         resolve(standing);
         return;
@@ -256,7 +259,7 @@ export class TuiController {
       const entry: PendingPermission = {
         req,
         resolve: (d, remember) => {
-          if (remember === true) {
+          if (remember === true && !sandboxEscalation) {
             this.standing.set(req.tool, d);
             this.print(
               `${d === "allow" ? "allowing" : "denying"} ${req.tool} for the rest of this session (/permissions to review)`,
