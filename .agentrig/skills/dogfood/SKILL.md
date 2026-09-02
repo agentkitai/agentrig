@@ -84,13 +84,20 @@ loop, never a foreground command that a timeout can kill):
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
 
+**Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
+the PR (§7) and does NOT run external reviews: the conductor spawns an independent reviewer
+child (fresh worktree, mutants, no shared context) that IS the review, and running both was
+measured at four review passes per PR — ~90 minutes for a skill file, with no extra eyes on the
+code. Your task text says when you are a child. Standalone dogfood keeps both reviews because
+nothing else reviews it.
+
 Staleness, bounded: if you push more commits after a review ran, the review is stale for the
 **delta only** — re-review the diff since the last reviewed commit, never the whole branch again,
 and never a fresh full dual review per commit. A fix-only commit that addresses review findings
 is verified by its fail-first regression tests, not by another review round. Cap the cycle at
-**one delta re-review** after the findings round; if a reviewer keeps producing new findings on
-each pass (non-converging), stop pushing for it and record what is still flagged in the PR body
-instead. Per-commit full-review loops have burned hours of budget on nits without converging.
+**one delta re-review** after the findings round — ONE reviewer over the delta, never a fresh dual
+round; if a reviewer keeps producing new findings on each pass (non-converging), stop pushing
+for it and record what is still flagged in the PR body instead. Per-commit full-review loops have burned hours of budget on nits without converging.
 
 ## 9. Fix everything both reviews found
 

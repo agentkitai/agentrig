@@ -12,8 +12,9 @@ Do not implement, review, or fix anything in this session yourself.
 ## 1. Build
 
 - Spawn a subagent with a self-contained task: the issue/roadmap row to implement, plus
-  "Follow the dogfood skill." Include everything it needs in the task text — a subagent gets
-  none of this conversation.
+  "Follow the dogfood skill. You are a ship child: stop at the PR and skip the external reviews —
+  an independent reviewer follows." Include everything it needs in the task text — a subagent
+  gets none of this conversation.
 - Its report should name the PR it opened and what the two external reviews found. If it died
   at its turn budget instead, report its session id so the human can resume it
   (`agentrig sessions resume <id>`), and stop — do not re-spawn a fresh builder over a
