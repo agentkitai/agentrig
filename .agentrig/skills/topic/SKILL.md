@@ -1,6 +1,6 @@
 ---
 name: topic
-description: Run one authorized roadmap band as a sequential release train - dogfood each row, independently review, fix LOWs once, conditionally land, and halt on unsafe or unverifiable state.
+description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, one repair round, arbitrate deviations, land conditionally, halt when unsafe.
 ---
 
 # Topic flow — one authorized roadmap band, landed row by row
@@ -24,13 +24,18 @@ all of those children; do not do their work in this parent session. Keep your ow
   and stop criteria. Silence, confidence, a review verdict, or a prior unrelated merge instruction
   is never authorization.
 - Read the roadmap and expand exactly one named band before spawning work. For example, `R2` expands
-  to R2a, R2b, R2c, and R2d in roadmap order. Record the fixed row list and identify rows already
-  merged on `main`; count those as completed predecessors, never rebuild them. If the band or
+  to R2a, R2b, R2c, and R2d in roadmap order. Record the fixed row list with each row's text copied
+  verbatim from `docs/ROADMAP.md` on `origin/main` — deliverable, acceptance, renunciations — and
+  identify rows already merged on `main`; count those as completed predecessors, never rebuild
+  them. That verbatim text is the contract every child receives. You never reinterpret, modernize,
+  or substitute a row at expansion time; a row you believe is wrong goes through the deviation path
+  in §3, and a child that rewrites its row without an arbiter record has produced a HIGH finding. If the band or
   invocation sentence is ambiguous, stop and ask the human before any child or branch is created.
 - Check that no row already has a half-pushed branch or open PR from an interrupted run. Resume its
   named session instead of spawning over it; if no resumable session is known, halt for the human.
 - Preflight child capacity before creating a branch. Reserve five children per row (builder, full
-  reviewer, possible LOW fixer, possible delta reviewer, lander), set `--subagent-max-turns` to at
+  reviewer, possible fixer, possible delta reviewer, lander) plus two per deviation you are willing
+  to arbitrate (arbiter, continuation builder), set `--subagent-max-turns` to at
   least 60, and ensure the parent has enough token budget. Each child's token cap is `--max-tokens ÷
   --subagent-max-children`, and all children share the parent's total: raise `--max-tokens`
   proportionally when raising the pool, or leave it unset. If the child pool, turn cap, or resulting
@@ -44,8 +49,8 @@ For each recorded row, in order:
 1. Fetch current `origin/main`, confirm it contains the preceding row's merge (unless this is the
    first unlanded row), and confirm CI is green on that exact current commit. Never stack PRs and
    never begin while the prior land check is pending.
-2. Spawn a builder subagent with a self-contained task containing the exact roadmap-row contract,
-   `AUTHORIZATION`, and: “Follow the dogfood skill. Start from current `origin/main`. Put the quoted
+2. Spawn a builder subagent with a self-contained task containing the exact roadmap-row contract
+   (the verbatim row text from §1, quoted, never summarized), `AUTHORIZATION`, and: “Follow the dogfood skill. Start from current `origin/main`. Put the quoted
    authorization verbatim in the PR description. Report the PR, current head SHA and CI. You are a
    topic child: stop at the PR and skip the external reviews — an independent reviewer follows.”
    The dogfood child stops at its PR and never merges. Record the session id
@@ -53,6 +58,16 @@ For each recorded row, in order:
    children cannot reliably report their own ids.
 3. If the builder dies at its budget or leaves a half-pushed branch, halt. Report its recorded
    session id for `agentrig sessions resume <id>`; never replace it with a fresh builder.
+   The one exception is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
+   of its report: it has pushed its work and is asking to change its contract. Do not judge the
+   proposal yourself. Spawn an `arbiter` subagent with the proposal verbatim, the row text from
+   §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE`, spawn a continuation builder on
+   the same branch carrying the verdict block, the arbiter's session id, and "record this under
+   `## Deviations` in the PR body and make the roadmap edit match its RECORD line". On
+   `VERDICT: REJECT`, spawn a continuation builder carrying the rejection and "build the row as
+   written" — unless the builder stated the row as written is infeasible, in which case halt for
+   the human with both the proposal and the rejection. One arbitration per row; a second
+   `DEVIATION REQUESTED` on the same row halts.
 4. Spawn a new reviewer subagent with only: “Review PR #NN on its current head. Follow the review
    skill. Report the exact head SHA you reviewed.” Never pass the builder's report, reasoning,
    findings, or claimed evidence to this
@@ -63,16 +78,20 @@ For each recorded row, in order:
    head SHA the reviewer
    reports; if the PR head changes after review except through the LOW repair path below, halt as
    stale. If the reviewer dies at budget, cannot verify any claim, sees a merge conflict, finds red
-   CI on the actual head, or reports a MEDIUM or HIGH finding, halt without rebutting or fixing it.
+   CI on the actual head, reports a HIGH finding, reports a finding it labels design, contract, or
+   authorization (an unapproved deviation included), or reports any claim it could not verify, halt
+   without rebutting or fixing it. LOW and MEDIUM findings that come with a concrete proposed fix go
+   to the repair round below: the bound on this train is the number of rounds, not the severity of
+   a fixable defect.
 
-## 3. One LOW-only repair round
+## 3. One repair round
 
-- A clean verdict proceeds to landing. A verdict containing only LOW findings gets exactly one
-  repair round: spawn one fix subagent on the same PR branch, scoped verbatim to those findings and
+- A clean verdict proceeds to landing. A verdict whose findings are all LOW or MEDIUM, each with a
+  concrete proposed fix, gets exactly one repair round: spawn one fix subagent on the same PR branch, scoped verbatim to those findings and
   no unrelated code changes. Tell it not to rebut or skip a finding, to add fail-first proof where
   behavior changes, run the green trio, push, update the PR description with every independent
   finding and its resolution, and report the old/new head SHAs. Record its id from the tool result.
-- If that child cannot close every LOW, dies at budget, encounters a conflict, or leaves CI red on
+- If that child cannot close every finding, dies at budget, encounters a conflict, or leaves CI red on
   the new actual head, halt. Never spawn a replacement over its branch.
 - Otherwise spawn one fresh delta-review subagent. Give it the PR number and old/new head SHAs, ask
   it to review only that delta under the review skill's standards, and do not pass either author's
@@ -102,7 +121,9 @@ Always report:
 - `AUTHORIZATION` as a verbatim quote;
 - the fixed band and row list, rows landed with PR/head/merge SHAs and main-CI results, the current
   halted row, and untouched rows;
-- every builder, reviewer, fixer, delta-reviewer, and lander session id, labeled by row and role;
+- every builder, reviewer, fixer, delta-reviewer, arbiter, and lander session id, labeled by row
+  and role;
+- every deviation proposed, with the arbiter's verdict block and how the train continued;
 - every finding and whether it was fixed, plus the exact halt reason and resumable session id when
   a child exhausted its budget.
 

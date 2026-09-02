@@ -28,6 +28,23 @@ Repository rules that bind (each has bitten before):
   decision (names, descriptions, file content) is untrusted input: sanitize and bound it.
 - Error messages and tool descriptions are model-facing API: a refusal must name the exact fix.
 
+**Deviation gate — you do not change your own contract.** If the row, issue, or task you were
+given turns out to be wrong, infeasible, or worse than an alternative (a different backend, a
+dropped acceptance criterion, a wider scope), you may propose a change but never decide it:
+
+- Write the proposal: the contract verbatim, what you want instead, why (a fact you can show, not
+  a preference), what is lost, alternatives, and the exact roadmap/issue text you would write.
+- Standalone: spawn an `arbiter` subagent with that proposal, the contract, and the human's
+  authorization sentence, and proceed only on `VERDICT: APPROVE`. Under `ship` or `topic` you
+  cannot spawn (children do not nest): commit and push what you have, stop, and end your report
+  with the proposal under a `DEVIATION REQUESTED` heading — the conductor arbitrates and continues.
+- An approved deviation is recorded three times: the arbiter's verdict block plus its session id
+  under `## Deviations` in the PR body, the roadmap/issue edit matching the verdict's RECORD line,
+  and the commit message that makes that edit. Never edit the row you are implementing without
+  that record; a contract change without one is a HIGH review finding.
+- `VERDICT: REJECT` means build the contract as written. If you believe that is infeasible, stop
+  and report — the human decides, not you and not the arbiter.
+
 ## 3. Prove it green — real exit codes, no exceptions
 
 ```
@@ -64,8 +81,9 @@ pnpm build && pnpm test && pnpm typecheck
 ## 7. Open the PR — after green, not before
 
 `gh pr create` with a body that lists: summary, **every design decision beyond the spec** (with
-the reasoning), verification (test count, what the new tests pin, which mutants were killed), and
-known caveats. If the implementation diverged from the issue, say where and why.
+the reasoning), `## Deviations` (every approved contract change with its arbiter verdict block and
+session id, or "none"), verification (test count, what the new tests pin, which mutants were
+killed), and known caveats. If the implementation diverged from the issue, say where and why.
 
 ## 8. Two external reviews, in parallel, as background jobs
 

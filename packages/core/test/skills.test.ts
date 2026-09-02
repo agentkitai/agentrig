@@ -308,8 +308,11 @@ describe("skillTool", () => {
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
     expect(body).toContain("Never pass the builder's report");
-    expect(body).toContain("only LOW findings gets exactly one repair round");
-    expect(body).toContain("reports a MEDIUM or HIGH finding, halt");
+    expect(body).toContain("each with a concrete proposed fix, gets exactly one repair round");
+    expect(body).toContain("the bound on this train is the number of rounds, not the severity of a fixable defect");
+    expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
+    expect(body).toContain("reports a HIGH finding, reports a finding it labels design, contract, or authorization");
+    expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
     expect(body).toContain("watch `main` CI on the exact merge commit");
     expect(body).toContain("never replace it with a fresh builder");
@@ -327,5 +330,16 @@ describe("skillTool", () => {
     const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
     expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
+    expect(review.body).toContain("A deviation without that record is a HIGH finding");
+
+    const arbiter = found.find((candidate) => candidate.name === "arbiter");
+    expect(arbiter).toBeDefined();
+    expect(arbiter?.body).toContain("VERDICT: APPROVE");
+    expect(arbiter?.body).toContain("Your approval never extends the human's authorization");
+
+    const dogfoodText = await readFile(".agentrig/skills/dogfood/SKILL.md", "utf8");
+    const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
+    expect(dogfood.body).toContain("Never edit the row you are implementing without");
+    expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
   });
 });
