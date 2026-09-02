@@ -7,7 +7,7 @@ describe("sandbox provider contract", () => {
     expect(SandboxMode.safeParse("full-access").success).toBe(false);
   });
 
-  it("marks only explicit provider denials for the agent boundary", () => {
+  it("constructs an explicit provider denial with its cause", () => {
     const denial = new SandboxDeniedError("operation not permitted", { cause: new Error("EPERM") });
     expect(denial).toBeInstanceOf(Error);
     expect(denial.name).toBe("SandboxDeniedError");

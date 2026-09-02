@@ -248,6 +248,46 @@ describe("agent loop", () => {
       .toBeLessThan(events.findIndex((event) => event.type === "sandbox.denied"));
   });
 
+  it("marks only explicit provider denials at the agent boundary", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "ordinary-failure-1", name: "echo", input: { text: "bug" } },
+        usage(3, 1),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "failed" }, usage(2, 1), stop("end_turn")],
+    ]);
+    const sandbox: SandboxProvider = {
+      prepare<T>(_cmd: SandboxCommand<T>): SandboxCommand<T> {
+        return async () => {
+          throw new Error("ordinary tool failure");
+        };
+      },
+    };
+
+    const session = createAgent(makeConfig(provider, {
+      sandbox: { provider: sandbox, mode: "workspace-write" },
+    })).run("run buggy tool", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.some((event) => event.type === "sandbox.denied")).toBe(false);
+    expect(events.find((event) => event.type === "tool.result")).toMatchObject({
+      id: "ordinary-failure-1",
+      ok: false,
+      display: "ordinary tool failure",
+    });
+    expect(provider.requests[1]!.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{
+        type: "tool_result",
+        toolUseId: "ordinary-failure-1",
+        content: "ordinary tool failure",
+        isError: true,
+      }],
+    });
+  });
+
   it("does not prepare a permission-denied tool in the independent sandbox layer", async () => {
     const provider = new FakeProvider([
       [
