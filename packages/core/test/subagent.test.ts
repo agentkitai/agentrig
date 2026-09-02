@@ -696,20 +696,26 @@ describe("a subagent cannot run away", () => {
   it("a child gets half its parent's grace, so a hung leaf never leaves the parent recording a live child (#86)", async () => {
     // abort reaches parent and child on the same signal; a child that waited as long as its
     // parent would always finish its log AFTER the parent gave up waiting for it
+    // the hung leaf aborts the PARENT from inside itself, so the abort provably lands while the
+    // child is mid-tool whatever the host's speed (a fixed delay was too short on a loaded runner)
+    let abortParent: () => void = () => {};
     const hang: AnyTool = {
       name: "hang",
       description: "never returns and ignores its signal",
       inputSchema: z.object({}),
       permission: "read",
       paths: () => [],
-      execute: () => new Promise(() => {}),
+      execute: () => {
+        setTimeout(() => abortParent(), 10);
+        return new Promise(() => {});
+      },
     };
     const provider = new ScriptedProvider([
       spawn("long job"),
       [{ type: "tool_use", id: "h", name: "hang", input: {} }, usage(1, 1), stop("tool_use")],
     ]);
     const session = harness(provider, { childExtraTools: [hang] }).run("do it", { cwd: root });
-    setTimeout(() => session.control.abort(), 80);
+    abortParent = () => session.control.abort();
     const events = await collect(session);
     const summary = await session.done;
 
