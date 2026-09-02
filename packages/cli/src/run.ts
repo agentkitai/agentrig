@@ -139,17 +139,31 @@ export function buildPermissionPolicy(opts: {
  * in the frame and `run` can put it on stderr, and so a test can assert on it.
  */
 export function permissionWarning(
-  opts: { dangerouslySkipPermissions?: boolean; yolo?: boolean; deny?: string[] },
+  opts: {
+    dangerouslySkipPermissions?: boolean;
+    yolo?: boolean;
+    deny?: string[];
+    sandbox?: "read-only" | "workspace-write" | "none";
+  },
   cwd: string,
 ): string | null {
   if (!skipsPermissions(opts)) return null;
   const denied = (opts.deny ?? []).length === 0 ? "" : ` (except --deny ${(opts.deny ?? []).join(", ")})`;
+  const mode = opts.sandbox ?? "none";
+  if (mode !== "none") {
+    return (
+      `permissions are OFF${denied}, but the ${mode} sandbox is ON for ${cwd}. ` +
+      `Skipping approvals inside a sandbox is the recommended unattended posture; sandbox ` +
+      `boundary crossings still require a separate escalation approval. The session log records every call.`
+    );
+  }
   // the cwd is named because "skip permissions" is abstract and "it may delete anything under
   // /Users/you/work" is not
   return (
     `permissions are OFF${denied}: every tool call is allowed without asking, including writing ` +
-    `and deleting outside ${cwd} and running any shell command. The session log still records ` +
-    `every one of them.`
+    `and deleting outside ${cwd} and running any shell command. Prefer --yolo --sandbox workspace-write: ` +
+    `skipping approvals inside a sandbox is the recommended unattended posture. The session log still ` +
+    `records every call.`
   );
 }
 

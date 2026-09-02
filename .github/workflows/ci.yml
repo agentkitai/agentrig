@@ -14,8 +14,18 @@ jobs:
       # both platforms report, rather than the first failure cancelling the other's evidence
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            sandbox: workspace-write
+          - os: macos-latest
+            sandbox: workspace-write
+          # Windows has no OS provider in R2. Running the same suite with the seam explicitly set
+          # to none proves no-op is a real provider path rather than a missing-sandbox special case.
+          - os: windows-latest
+            sandbox: none
     runs-on: ${{ matrix.os }}
+    env:
+      AGENTRIG_CI_SANDBOX: ${{ matrix.sandbox }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -24,6 +34,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The integration test never pulls. CI supplies its predeclared local fixture so the Ubuntu
+      # leg must report a live Docker pass, while hosts without Docker skip loudly.
+      - if: runner.os == 'Linux'
+        run: docker pull alpine:3.20
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test

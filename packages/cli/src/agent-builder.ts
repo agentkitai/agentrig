@@ -4,6 +4,10 @@ import {
   builtinTools,
   createAgent,
   defaultRules,
+  DockerSandboxProvider,
+  NoneSandboxProvider,
+  SandboxMode as SandboxModeSchema,
+  SeatbeltSandboxProvider,
   RulePolicy,
   SessionStore,
   discoverSkills,
@@ -20,6 +24,8 @@ import {
   type Pricing,
   type PermissionPolicy,
   type PromptBlock,
+  type SandboxConfig,
+  type SandboxMode,
   type Skill,
   type SubagentOptions,
 } from "@agentkitai/agentrig-core";
@@ -73,6 +79,26 @@ function promptBlocks(options: {
   return blocks;
 }
 
+/** Select the concrete OS boundary while keeping approval policy as an independent axis. */
+export function buildSandbox(
+  value: string,
+  platform: NodeJS.Platform = process.platform,
+): SandboxConfig {
+  const parsed = SandboxModeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `invalid --sandbox mode ${JSON.stringify(value)}; expected read-only, workspace-write, or none`,
+    );
+  }
+  const mode: SandboxMode = parsed.data;
+  if (mode === "none") return { mode, provider: new NoneSandboxProvider() };
+  if (platform === "linux") return { mode, provider: new DockerSandboxProvider() };
+  if (platform === "darwin") return { mode, provider: new SeatbeltSandboxProvider() };
+  throw new Error(
+    `--sandbox ${mode} is not supported on ${platform}; use --sandbox none on this platform`,
+  );
+}
+
 /**
  * The one place an agent is assembled.
  *
@@ -93,6 +119,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   dangerouslySkipPermissions?: boolean;
   /** The same thing, spelled the way people type it. */
   yolo?: boolean;
+  /** OS execution boundary, independent of permission approvals. Defaults to none. */
+  sandbox?: SandboxMode;
   maxTurns: string;
   maxTokens?: string;
   maxMinutes?: string;
@@ -268,6 +296,7 @@ export interface SubagentWiring {
   pricing?: Pricing;
   provider: ModelProvider;
   permissionPolicy: PermissionPolicy;
+  sandbox?: SandboxConfig;
   skills: Skill[];
   maxTokensPerTurn: number;
   /** The tools a child inherits, minus skills — rebuilt per child so nothing is shared by accident. */
@@ -311,6 +340,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // load them, and the catalogue costs one line each
       tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
       permissions: w.permissionPolicy,
+      ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
       // The same policy object, and the same asker. A child that could do MORE than its parent
       // is a permission bypass; a child that can do LESS is the failure this originally had —
       // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
@@ -383,6 +413,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   async function assemble(): Promise<BuiltAgent> {
   // one policy object, shared by parent and children: a subagent that could do more than its
   // parent would be a permission bypass with extra steps
+  const sandbox = buildSandbox(opts.sandbox ?? "none");
   const permissionPolicy = buildPermissionPolicy({
     ...(opts.allow === undefined ? {} : { allow: opts.allow }),
     ...(opts.deny === undefined ? {} : { deny: opts.deny }),
@@ -455,6 +486,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           ...(pricing === undefined ? {} : { pricing }),
           provider,
           permissionPolicy,
+          sandbox,
           skills,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
@@ -470,6 +502,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     repoMap: opts.repoMap === false ? false : {},
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
+    sandbox,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({
       system: opts.system ?? defaultSystemPrompt(ctx.cwd),

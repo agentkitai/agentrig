@@ -160,6 +160,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "allow every tool call without asking, including outside the working directory; --deny still applies",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
+      .option(
+        "--sandbox <mode>",
+        "execution boundary: read-only, workspace-write, or none",
+        "none",
+      )
       .option("--max-turns <n>", "turn budget", maxTurnsDefault)
       .option("--max-tokens <n>", "token budget (input + cache read/write + output)")
       .option("--max-minutes <n>", "wall-clock budget in minutes")

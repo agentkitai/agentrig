@@ -65,6 +65,13 @@ describe("argv parsing", () => {
     expect((await run(["sessions", "resume", "s1", "--max-turns", "7"]))?.opts.maxTurns).toBe("7");
   });
 
+  it("carries sandbox modes on every entry point that runs an agent", async () => {
+    const { run } = stub(buildProgram());
+    expect((await run(["run", "x", "--sandbox", "workspace-write"]))?.opts.sandbox).toBe("workspace-write");
+    expect((await run(["--sandbox", "read-only"]))?.opts.sandbox).toBe("read-only");
+    expect((await run(["sessions", "resume", "s1", "--sandbox", "none"]))?.opts.sandbox).toBe("none");
+  });
+
   it("carries the skip-permissions flags on every entry point that runs an agent", async () => {
     const { run } = stub(buildProgram());
     // A flag the parser accepts and the wiring drops is the shape `--supervise` had in the TUI
