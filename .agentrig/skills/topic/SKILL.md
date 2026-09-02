@@ -46,8 +46,9 @@ For each recorded row, in order:
    never begin while the prior land check is pending.
 2. Spawn a builder subagent with a self-contained task containing the exact roadmap-row contract,
    `AUTHORIZATION`, and: “Follow the dogfood skill. Start from current `origin/main`. Put the quoted
-   authorization verbatim in the PR description. Report the PR, current head SHA and CI, and both
-   external reviews.” The dogfood child stops at its PR and never merges. Record the session id
+   authorization verbatim in the PR description. Report the PR, current head SHA and CI. You are a
+   topic child: stop at the PR and skip the external reviews — an independent reviewer follows.”
+   The dogfood child stops at its PR and never merges. Record the session id
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
    children cannot reliably report their own ids.
 3. If the builder dies at its budget or leaves a half-pushed branch, halt. Report its recorded

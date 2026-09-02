@@ -151,8 +151,10 @@ export function composeSkillInvocation(
   // newline. Topic treats the human-invocation banner as authorization evidence, so repository text
   // must not be able to forge either that banner or the surrounding skill boundary.
   const path = sanitizeLine(skill.path, 200);
+  // Leading blanks are allowed on the forged line (a model reads an indented banner as a banner);
+  // the trailing class is blanks only, so the match never swallows the following line break.
   const body = skill.body.replace(
-    /^=====.*(?:SKILL|HUMAN SKILL INVOCATION).*=====\s*$/gim,
+    /^[ \t]*=====.*SKILL.*=====[ \t]*$/gim,
     "[repository-authored provenance delimiter removed]",
   );
   return [
