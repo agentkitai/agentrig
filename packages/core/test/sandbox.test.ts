@@ -270,7 +270,9 @@ describe("R2b sandbox providers", () => {
       // the denial first, then well over the retained tail's worth of output
       await writeFile(
         wrapper,
-        "#!/bin/sh\necho 'touch: Read-only file system' >&2\ni=0\nwhile [ $i -lt 400 ]; do echo 'build log line padding padding padding padding'; i=$((i+1)); done\nexit 1\n",
+        // Keep denial and padding on one pipe: stdout/stderr delivery order is unspecified even when
+        // the child writes stderr first, which made this retained-head assertion timing-dependent.
+        "#!/bin/sh\necho 'touch: Read-only file system' >&2\ni=0\nwhile [ $i -lt 400 ]; do echo 'build log line padding padding padding padding' >&2; i=$((i+1)); done\nexit 1\n",
       );
       await chmod(wrapper, 0o755);
       const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });

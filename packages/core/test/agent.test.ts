@@ -248,6 +248,133 @@ describe("agent loop", () => {
       .toBeLessThan(events.findIndex((event) => event.type === "sandbox.denied"));
   });
 
+  it("escalates an outside-cwd sandbox denial and retries the same call unsandboxed on approval", async () => {
+    const workspace = join(root, "workspace");
+    const outside = join(root, "outside.txt");
+    await mkdir(workspace);
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "write-1", name: "write_fixture", input: { path: outside, text: "approved" } },
+        usage(4, 1),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "done" }, usage(2, 1), stop("end_turn")],
+    ]);
+    let sandboxAttempts = 0;
+    let writes = 0;
+    const sandbox: SandboxProvider = {
+      prepare<T>(_cmd: SandboxCommand<T>): SandboxCommand<T> {
+        return async () => {
+          sandboxAttempts += 1;
+          throw new SandboxDeniedError("outside-cwd write blocked by fake sandbox");
+        };
+      },
+    };
+    const writeTool: AnyTool = {
+      name: "write_fixture",
+      description: "write a test fixture",
+      inputSchema: z.object({ path: z.string(), text: z.string() }),
+      permission: "write",
+      paths: (input: { path: string }) => [input.path],
+      execute: async (input: { path: string; text: string }) => {
+        writes += 1;
+        await writeFile(input.path, input.text);
+        return { output: "written", display: "written" };
+      },
+    };
+    const asked: unknown[] = [];
+
+    const session = createAgent(makeConfig(provider, {
+      tools: [writeTool],
+      permissions: new RulePolicy([{ class: "write", decision: "allow" }]),
+      sandbox: { provider: sandbox, mode: "workspace-write" },
+      onAsk: async (req) => {
+        asked.push(req);
+        return "allow";
+      },
+    })).run("write outside cwd", { cwd: workspace });
+    const events = await collect(session);
+    await session.done;
+
+    expect(sandboxAttempts).toBe(1);
+    expect(writes).toBe(1);
+    expect(await readFile(outside, "utf8")).toBe("approved");
+    expect(events.filter((event) => event.type === "sandbox.denied")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "permission.request")).toHaveLength(2);
+    expect(events.filter((event) => event.type === "permission.request").at(-1)).toMatchObject({
+      type: "permission.request",
+      req: {
+        tool: "write_fixture",
+        class: "write",
+        cwd: workspace,
+        paths: [outside],
+        origin: "sandbox-escalation",
+      },
+    });
+    expect(events.filter((event) => event.type === "permission.decision").map((event) =>
+      event.type === "permission.decision" ? event.d : undefined
+    )).toEqual(["allow", "ask", "allow"]);
+    expect(asked).toEqual([expect.objectContaining({ tool: "write_fixture", origin: "sandbox-escalation" })]);
+    expect(events.find((event) => event.type === "tool.result")).toMatchObject({
+      id: "write-1",
+      ok: true,
+      display: "written",
+    });
+  });
+
+  it("caps sandbox escalation at one unsandboxed retry", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "cap-1", name: "denied_again", input: {} },
+        usage(3, 1),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "stopped" }, usage(2, 1), stop("end_turn")],
+    ]);
+    let unsandboxedAttempts = 0;
+    let asks = 0;
+    const sandbox: SandboxProvider = {
+      prepare<T>(_cmd: SandboxCommand<T>): SandboxCommand<T> {
+        return async () => {
+          throw new SandboxDeniedError("initial sandbox denial");
+        };
+      },
+    };
+    const deniedAgain: AnyTool = {
+      name: "denied_again",
+      description: "throws the same error outside the sandbox",
+      inputSchema: z.object({}),
+      permission: "exec",
+      execute: async () => {
+        unsandboxedAttempts += 1;
+        throw new SandboxDeniedError("unsandboxed tool error");
+      },
+    };
+
+    const session = createAgent(makeConfig(provider, {
+      tools: [deniedAgain],
+      permissions: new RulePolicy([{ class: "exec", decision: "allow" }]),
+      sandbox: { provider: sandbox, mode: "workspace-write" },
+      onAsk: async () => {
+        asks += 1;
+        return "allow";
+      },
+    })).run("try once", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(asks).toBe(1);
+    expect(unsandboxedAttempts).toBe(1);
+    expect(events.filter((event) => event.type === "sandbox.denied")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "permission.request" && event.req.origin === "sandbox-escalation"))
+      .toHaveLength(1);
+    expect(events.find((event) => event.type === "tool.result")).toMatchObject({
+      id: "cap-1",
+      ok: false,
+      display: "unsandboxed tool error",
+    });
+  });
+
   it("marks only explicit provider denials at the agent boundary", async () => {
     const provider = new FakeProvider([
       [

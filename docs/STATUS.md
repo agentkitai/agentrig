@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R2b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R2c is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -122,6 +122,22 @@ Changes:
 |---|---|---|
 | R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
 | R2b | Concrete no-op, Docker, and macOS Seatbelt providers | done |
+| R2c | Sandbox-denial escalation with one approved unsandboxed retry and distinct TUI prompt | done |
+
+- R2c turns an explicit provider `SandboxDeniedError` into a second-axis permission request with
+  `origin: "sandbox-escalation"`. Core records the denial, asks explicitly, and on approval invokes
+  the original validated command outside the provider exactly once; denial retains the failed tool
+  result. A provider-shaped failure from the unsandboxed retry is an ordinary tool failure and cannot
+  reopen the prompt, pinning the single-retry cap.
+- TUI sandbox escalation says “blocked by sandbox — run outside it?” and offers only a one-call grant.
+  Standing allow/deny answers for the tool neither answer this prompt nor get replaced by its answer,
+  preserving sandbox and ordinary permission as independent axes. Headless runs have no `onAsk`, so
+  escalation fails closed. No Landlock is introduced in R2.
+- Acceptance coverage uses a fake model and sandbox to attempt an actual write outside the run cwd,
+  observes `sandbox.denied` and the escalation request, approves it, and verifies the outside file and
+  successful retry. A second-denial mutant is pinned to one prompt and one unsandboxed execution. The
+  R2b Docker prerequisite gate and Seatbelt profile-shape tests remain the provider acceptance seams.
+- R2c dogfood token usage is unavailable in this API-runner session rather than fabricated.
 
 - R2b adds an explicit identity provider while keeping omitted sandbox configuration equivalent to
   today's behavior. Docker runs process tools with a read-only root, a cwd bind that follows the

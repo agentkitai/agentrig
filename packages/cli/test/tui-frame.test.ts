@@ -187,6 +187,26 @@ describe("the test harness itself", () => {
 });
 
 describe("the live frame", () => {
+  it("renders sandbox escalation as an outside-sandbox approval", async () => {
+    const h = mount(0);
+    await settle();
+    h.reset();
+
+    const answer = h.controller.ask({
+      tool: "bash",
+      input: { command: "touch /outside" },
+      class: "exec",
+      cwd: root,
+      origin: "sandbox-escalation",
+    });
+    await settle();
+
+    expect(h.writes.join("")).toContain("blocked by sandbox — run outside it?");
+    h.controller.answerPermission("deny");
+    await expect(answer).resolves.toBe("deny");
+    h.stop();
+  });
+
   it("never repaints the whole terminal because of a long paste", async () => {
     const h = mount(300);
     await settle();

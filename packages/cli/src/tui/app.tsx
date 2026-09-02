@@ -240,13 +240,21 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       {state.pending !== null ? (
         <Box marginTop={1} flexDirection="column">
           <Text color="yellow">
-            allow {state.pending.req.tool} [{state.pending.req.class}]
-            {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}
-            {state.pending.req.origin === undefined ? "" : ` (asked by ${state.pending.req.origin})`}?
+            {state.pending.req.origin === "sandbox-escalation" ? (
+              <>blocked by sandbox — run outside it?</>
+            ) : (
+              <>
+                allow {state.pending.req.tool} [{state.pending.req.class}]
+                {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}
+                {state.pending.req.origin === undefined ? "" : ` (asked by ${state.pending.req.origin})`}?
+              </>
+            )}
           </Text>
           <Text dimColor>
-            y = allow once, a = allow {state.pending.req.tool} all session, n / esc = deny, d = deny
-            all session{state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
+            {state.pending.req.origin === "sandbox-escalation"
+              ? "y = run outside once, n / esc = deny"
+              : `y = allow once, a = allow ${state.pending.req.tool} all session, n / esc = deny, d = deny all session`}
+            {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>
         </Box>
       ) : state.escalation !== null ? (

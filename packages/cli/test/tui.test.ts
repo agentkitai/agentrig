@@ -866,6 +866,27 @@ describe("review regressions", () => {
     expect(c.snapshot().pending).toBeNull();
   });
 
+  it("never applies or records standing permission answers for sandbox escalation", async () => {
+    const c = makeController([]);
+    const ordinary = c.ask({ tool: "bash", input: {}, class: "exec", cwd: root });
+    c.answerPermission("allow", true);
+    expect(await ordinary).toBe("allow");
+
+    const escalation = c.ask({
+      tool: "bash",
+      input: {},
+      class: "exec",
+      cwd: root,
+      origin: "sandbox-escalation",
+    });
+    expect(c.snapshot().pending?.req.origin).toBe("sandbox-escalation");
+    c.answerPermission("deny", true);
+    expect(await escalation).toBe("deny");
+
+    // The attempted remembered escalation answer did not replace the ordinary standing grant.
+    await expect(c.ask({ tool: "bash", input: {}, class: "exec", cwd: root })).resolves.toBe("allow");
+  });
+
   it("shutdown settles every outstanding request rather than dropping it", async () => {
     const c = makeController([]);
     const pending = c.ask({ tool: "a", input: {}, class: "exec", cwd: root });

@@ -1168,6 +1168,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         signal: abortController.signal,
       };
       const t0 = now();
+      let sandboxDenialRecorded = false;
+      let sandboxRetryDenied = false;
       try {
         const command = () => tool.execute(input, ctx);
         // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
@@ -1179,7 +1181,43 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
               cwd,
               ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
             });
-        const r = await raceAbort(prepared(), `tool ${tool.name}`);
+        let r;
+        try {
+          r = await raceAbort(prepared(), `tool ${tool.name}`);
+        } catch (err) {
+          if (config.sandbox === undefined || !(err instanceof SandboxDeniedError)) throw err;
+
+          const reason = bound(err.message).display;
+          await emit({
+            type: "sandbox.denied",
+            id: tu.id,
+            name: tu.name,
+            mode: config.sandbox.mode,
+            reason,
+          });
+          sandboxDenialRecorded = true;
+
+          // A sandbox grant is not a standing tool permission: it crosses a second security axis and
+          // must be answered explicitly. The retry bypasses only the sandbox, not input validation,
+          // hooks, logging, or the original permission decision, and this non-looping branch gives
+          // one call exactly one opportunity to run outside the boundary.
+          const escalationReq: PermissionRequest = { ...permReq, origin: "sandbox-escalation" };
+          await emit({ type: "permission.request", req: escalationReq });
+          await emit({ type: "permission.decision", d: "ask" });
+          const escalationDecision = config.onAsk === undefined
+            ? "deny"
+            : await config.onAsk(escalationReq);
+          await emit({ type: "permission.decision", d: escalationDecision });
+          if (escalationDecision !== "allow") {
+            sandboxRetryDenied = true;
+            throw err;
+          }
+
+          // Deliberately call the original deferred command, never `prepared`, and never catch this
+          // as another escalation. A provider-shaped error from this one retry is an ordinary tool
+          // failure because no sandbox was active for it.
+          r = await raceAbort(command(), `tool ${tool.name} outside sandbox`);
+        }
         const ok = r.isError !== true;
         const overflow = overflowResult(r);
         const resultEvent = await emit({
@@ -1270,7 +1308,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         return resultBlock(body, !ok);
       } catch (err) {
-        const sandboxDenied = config.sandbox !== undefined && err instanceof SandboxDeniedError;
+        const sandboxDenied = err instanceof SandboxDeniedError && (
+          sandboxRetryDenied || (config.sandbox !== undefined && !sandboxDenialRecorded)
+        );
         const rawReason =
           abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
             ? "aborted"
@@ -1282,7 +1322,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // cover errors exactly as they cover ordinary tool results.
         const reason = bound(rawReason).display;
         const display = bound(sandboxDenied ? `sandbox denied: ${rawReason}` : rawReason).display;
-        if (sandboxDenied && config.sandbox !== undefined) {
+        if (sandboxDenied && config.sandbox !== undefined && !sandboxDenialRecorded) {
           await emit({
             type: "sandbox.denied",
             id: tu.id,
