@@ -228,6 +228,92 @@ describe("R2b sandbox providers", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("the poll that reports a denial leaves its own drain for the next poll", async () => {
+    // classification runs before read(): output that arrived since the previous poll must not be
+    // consumed by the throw and then reported as "(no new output)"
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg2-")));
+    const registry = new JobRegistry();
+    try {
+      const wrapper = join(root, "docker");
+      await writeFile(wrapper, "#!/bin/sh\necho 'touch: Read-only file system' >&2\nsleep 0.3\necho FINAL-STDOUT-LINE\nexit 1\n");
+      await chmod(wrapper, 0o755);
+      const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
+      const ctx = { cwd: root, sessionId: "sandbox-test", emit: () => {}, signal: new AbortController().signal };
+      const policy = { mode: "workspace-write" as const, cwd: root };
+      const started = await provider.prepare(
+        () => bashTool({ jobs: registry }).execute({ command: "touch /outside", background: true }, ctx),
+        policy,
+      )();
+      const id = /started background job (job-\d+)/u.exec(started.display)![1]!;
+      const status = (waitMs?: number) =>
+        provider.prepare(
+          () => bashJobTool(registry).execute({ id, action: "status", ...(waitMs === undefined ? {} : { waitMs }) }, ctx),
+          policy,
+        )();
+      await new Promise((r) => setTimeout(r, 120));
+      await status(); // drains the early denial line while the job runs
+      await expect(status(2_000)).rejects.toBeInstanceOf(SandboxDeniedError);
+      const after = await status();
+      expect(after.output.output).toContain("FINAL-STDOUT-LINE");
+    } finally {
+      registry.disposeAll();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a denial buried under a long log is still classified from the retained head", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg3-")));
+    const registry = new JobRegistry();
+    try {
+      const wrapper = join(root, "docker");
+      // the denial first, then well over the retained tail's worth of output
+      await writeFile(
+        wrapper,
+        "#!/bin/sh\necho 'touch: Read-only file system' >&2\ni=0\nwhile [ $i -lt 400 ]; do echo 'build log line padding padding padding padding'; i=$((i+1)); done\nexit 1\n",
+      );
+      await chmod(wrapper, 0o755);
+      const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
+      const ctx = { cwd: root, sessionId: "sandbox-test", emit: () => {}, signal: new AbortController().signal };
+      const policy = { mode: "workspace-write" as const, cwd: root };
+      const started = await provider.prepare(
+        () => bashTool({ jobs: registry }).execute({ command: "touch /outside", background: true }, ctx),
+        policy,
+      )();
+      const id = /started background job (job-\d+)/u.exec(started.display)![1]!;
+      await expect(
+        provider.prepare(() => bashJobTool(registry).execute({ id, action: "status", waitMs: 3_000 }, ctx), policy)(),
+      ).rejects.toBeInstanceOf(SandboxDeniedError);
+    } finally {
+      registry.disposeAll();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("seatbelt ignores a network denial under a network grant", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-seatbelt-net-")));
+    try {
+      const wrapper = join(root, "sandbox-exec");
+      await writeFile(wrapper, "#!/bin/sh\necho 'sandbox-exec: deny network-outbound' >&2\nexit 1\n");
+      await chmod(wrapper, 0o755);
+      const provider = new SeatbeltSandboxProvider({ command: wrapper });
+      const run = (policy: { mode: "workspace-write"; cwd: string; network?: boolean }) =>
+        provider.prepare(
+          () => bashTool().execute({ command: "curl example" }, {
+            cwd: root,
+            sessionId: "sandbox-test",
+            emit: () => {},
+            signal: new AbortController().signal,
+          }),
+          policy,
+        )();
+      const granted = await run({ mode: "workspace-write", cwd: root, network: true });
+      expect(granted.output.exitCode).toBe(1);
+      await expect(run({ mode: "workspace-write", cwd: root })).rejects.toBeInstanceOf(SandboxDeniedError);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("docker provider integration", () => {

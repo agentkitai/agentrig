@@ -140,6 +140,13 @@ Changes:
   child output as the sandbox speaking. Background jobs classify from a retained tail of
   everything the job wrote, not from the last poll's drain, so a denial printed early and drained
   by an intermediate `bash_job` status is still reported at exit, once.
+- Post-delta-review fixes (self-verified with fail-first tests and mutants, not re-reviewed by a
+  second agent — the human saw that label at merge): classification runs before the poll drains,
+  so the poll that reports a denial no longer swallows the output that arrived with it; the
+  registry retains the job's first 4 KiB as well as its last, so a denial ahead of a long log is
+  still classified; seatbelt drops a network denial under a network grant, matching docker. Not
+  fixed, inherent: a forged or ambiguous "read-only file system" line under `workspace-write`
+  still classifies — the provenance label is the mitigation, and R2c must keep it in the prompt.
 
 - R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
   core passes that command and `{ mode, cwd }` policy to the configured provider and executes the

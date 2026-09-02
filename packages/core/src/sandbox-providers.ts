@@ -66,10 +66,16 @@ export function throwIfSandboxDenied(stderr: string): void {
   throw new SandboxDeniedError(`reported by the command's own stderr (unauthenticated): ${excerpt}`);
 }
 
-/** First line of `stderr` matching any of `patterns`, for a bounded, provenance-labelled reason. */
-function firstDenialLine(stderr: string, patterns: readonly RegExp[]): string | undefined {
+/**
+ * First line of `stderr` matching any of `patterns` and not `unless`, for a bounded,
+ * provenance-labelled reason. `unless` lets a provider drop a denial its policy could not have
+ * produced (a network denial under a network grant).
+ */
+function firstDenialLine(stderr: string, patterns: readonly RegExp[], unless?: RegExp): string | undefined {
   for (const line of stderr.split(/\r?\n/u)) {
-    if (patterns.some((p) => p.test(line))) return line;
+    if (!patterns.some((p) => p.test(line))) continue;
+    if (unless !== undefined && unless.test(line)) continue;
+    return line;
   }
   return undefined;
 }
@@ -194,7 +200,13 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
     return { command: this.command, args: ["-p", seatbeltProfile(policy), command, ...args] };
   }
 
-  protected denied(stderr: string, _policy: SandboxPolicy): string | undefined {
-    return firstDenialLine(stderr, [/sandbox(?:-exec)?:?.*deny/iu]);
+  protected denied(stderr: string, policy: SandboxPolicy): string | undefined {
+    // a network denial cannot come from a profile that allows network: under a grant such a
+    // line is the command's own words, not the sandbox's
+    return firstDenialLine(
+      stderr,
+      [/sandbox(?:-exec)?:?.*deny/iu],
+      policy.network === true ? /network/iu : undefined,
+    );
   }
 }
