@@ -90,7 +90,7 @@ describe("native sandbox providers", () => {
       const wrapper = join(root, "fake-bwrap");
       await writeFile(wrapper, "#!/bin/sh\necho wrapped-by-bwrap >&2\nwhile [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n");
       await chmod(wrapper, 0o755);
-      const provider = new BubblewrapSandboxProvider({ command: wrapper });
+      const provider = new BubblewrapSandboxProvider({ command: wrapper, probeRunner: async () => {} });
       const result = await provider.prepare(
         () => bashTool().execute({ command: "printf sandboxed" }, {
           cwd: root,
