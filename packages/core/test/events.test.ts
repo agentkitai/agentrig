@@ -16,6 +16,21 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a sandbox.denied event and rejects unknown modes", () => {
+    const event = HarnessEvent.parse({
+      seq: 4,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "sandbox.denied",
+      id: "t2",
+      name: "write_file",
+      mode: "workspace-write",
+      reason: "outside workspace",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(HarnessEvent.safeParse({ ...event, mode: "unrestricted" }).success).toBe(false);
+  });
+
   it("round-trips a context.loaded event with its source path and byte count", () => {
     const event = HarnessEvent.parse({
       seq: 39,

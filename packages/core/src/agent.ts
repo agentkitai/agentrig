@@ -7,6 +7,7 @@ import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
+import { SandboxDeniedError, type SandboxConfig } from "./sandbox.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
@@ -71,6 +72,8 @@ export interface AgentConfig {
   provider: ModelProvider;
   tools: AnyTool[];
   permissions: PermissionPolicy;
+  /** Optional OS sandbox, applied after permission approval as an independent execution boundary. */
+  sandbox?: SandboxConfig;
   /** A string remains supported; labelled blocks produce a source-accurate context manifest. */
   systemPrompt: string | PromptBlock[] | ((ctx: PromptContext) => string | PromptBlock[]);
   /**
@@ -1112,7 +1115,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       };
       const t0 = now();
       try {
-        const r = await raceAbort(tool.execute(input, ctx));
+        const command = () => tool.execute(input, ctx);
+        // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
+        // and selecting `none` still traverses the provider seam so providers own mode semantics.
+        const prepared = config.sandbox === undefined
+          ? command
+          : config.sandbox.provider.prepare(command, { mode: config.sandbox.mode, cwd });
+        const r = await raceAbort(prepared());
         const ok = r.isError !== true;
         const overflow = overflowResult(r);
         const resultEvent = await emit({
@@ -1203,7 +1212,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         return resultBlock(body, !ok);
       } catch (err) {
-        const rawDisplay =
+        const sandboxDenied = config.sandbox !== undefined && err instanceof SandboxDeniedError;
+        const rawReason =
           abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
             ? "aborted"
             : err instanceof Error
@@ -1212,7 +1222,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // A throw is an unexpected failure, not a successful complete rendering: bound it but do
         // not persist its unbounded message as an artifact. Still run post_tool so redaction hooks
         // cover errors exactly as they cover ordinary tool results.
-        const display = bound(rawDisplay).display;
+        const reason = bound(rawReason).display;
+        const display = bound(sandboxDenied ? `sandbox denied: ${rawReason}` : rawReason).display;
+        if (sandboxDenied && config.sandbox !== undefined) {
+          await emit({
+            type: "sandbox.denied",
+            id: tu.id,
+            name: tu.name,
+            mode: config.sandbox.mode,
+            reason,
+          });
+        }
         await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
         const h = await hook("post_tool", {
           sessionId: id,
