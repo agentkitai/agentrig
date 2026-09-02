@@ -115,6 +115,14 @@ export interface AgentConfig {
   hookTimeoutMs?: number;
   /** Wall clock for ALL `session_end` hooks together; they run after the work is done. */
   sessionEndBudgetMs?: number;
+  /**
+   * After an abort, how long the loop waits for the tool executions the abort orphaned (a running
+   * subagent above all) to settle before it writes `session.end` (default 1s). An aborted child
+   * finishes its own log in milliseconds (snapshot + `session.end`; its hooks are skipped), so the
+   * default is a wide margin for that case while an abort of a tool that ignores its signal still
+   * lands promptly. Past the grace the parent ends anyway and records what was still running.
+   */
+  abortGraceMs?: number;
   now?: () => number;
 }
 
@@ -438,15 +446,50 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     );
   };
 
+  /**
+   * Work an abort raced past and left running. The loop must not report itself ended while a
+   * subagent it started is still writing its own log: a parent summary that resolves before the
+   * child's `session.end` lands made "aborting a session leaves no running children" true only
+   * in wall time, and a reader of the child's log (the abort test, `sessions show`) saw a session
+   * with no end. Settled entries remove themselves.
+   */
+  const orphans = new Set<Promise<unknown>>();
+  const orphan = (work: Promise<unknown>): void => {
+    orphans.add(work);
+    work.then(() => orphans.delete(work), () => orphans.delete(work));
+  };
+  const settleOrphans = async (): Promise<void> => {
+    if (orphans.size === 0) return;
+    const graceMs = config.abortGraceMs ?? 1_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<"expired">((res) => {
+      timer = setTimeout(() => res("expired"), graceMs);
+      timer.unref?.();
+    });
+    const outcome = await Promise.race([Promise.allSettled([...orphans]).then(() => "settled" as const), expired]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (outcome === "expired") {
+      await emit({
+        type: "error",
+        message: `${orphans.size} tool execution(s) still running ${graceMs}ms after abort; session.end written without waiting for them`,
+        fatal: false,
+      }).catch(() => {});
+    }
+  };
+
   /** Lets `control.abort()` win over a tool that ignores its signal. */
   const raceAbort = <T>(work: Promise<T>): Promise<T> => {
     const signal = abortController.signal;
     if (signal.aborted) {
       work.catch(() => {});
+      orphan(work);
       return Promise.reject(new DOMException("aborted", "AbortError"));
     }
     return new Promise<T>((res, rej) => {
-      const onAbort = () => rej(new DOMException("aborted", "AbortError"));
+      const onAbort = () => {
+        orphan(work);
+        rej(new DOMException("aborted", "AbortError"));
+      };
       signal.addEventListener("abort", onAbort, { once: true });
       work.then(res, rej).finally(() => signal.removeEventListener("abort", onAbort));
       work.catch(() => {});
@@ -963,6 +1006,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
+      // everything below (snapshot, session_end hooks, session.end) describes a session whose
+      // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.
+      await settleOrphans();
       // A resumed run that never completed a turn (lock-free failure, immediate budget stop)
       // must not clobber the previous good snapshot with its own mutations.
       if (resume === undefined || turnsThisRun > 0) await saveSnapshot();

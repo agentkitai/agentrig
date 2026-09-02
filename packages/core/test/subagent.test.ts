@@ -85,6 +85,10 @@ interface HarnessOptions {
   childExtraTools?: AnyTool[];
   /** Every config `createAgent` was called with, in order: child, then grandchild. */
   created?: AgentConfig[];
+  /** The child's store, when a test needs to hold its log open (see `GatedStore`). */
+  childStore?: () => SessionStore;
+  /** Overrides applied to the PARENT's config only. */
+  parent?: Partial<AgentConfig>;
 }
 
 /** The tool alone, plus a context to drive it with — no parent agent between test and tool. */
@@ -143,6 +147,7 @@ function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
     store: new SessionStore({ root }),
     maxTokensPerTurn: 100,
     ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
+    ...(opts.childStore === undefined ? {} : { store: opts.childStore() }),
   });
   const tool = subagentTool({
     createAgent: (config) => {
@@ -167,7 +172,29 @@ function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
     store: new SessionStore({ root }),
     budget: { maxTurns: 10 },
     maxTokensPerTurn: 100,
+    ...(opts.parent ?? {}),
   });
+}
+
+/**
+ * A store whose `session.end` append waits on a gate: the one deterministic way to hold a
+ * session's end open from outside it (an aborted session skips its hooks, so a slow
+ * `session_end` hook cannot do it).
+ */
+class GatedStore extends SessionStore {
+  entered = false;
+  release!: () => void;
+  private readonly gate = new Promise<void>((r) => (this.release = r));
+  constructor() {
+    super({ root });
+  }
+  override async append(sessionId: string, payload: Parameters<SessionStore["append"]>[1]): Promise<HarnessEvent> {
+    if (payload.type === "session.end") {
+      this.entered = true;
+      await this.gate;
+    }
+    return super.append(sessionId, payload);
+  }
 }
 
 async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promise<HarnessEvent[]> {
@@ -563,6 +590,83 @@ describe("a subagent cannot run away", () => {
     const end = childEvents.at(-1) as { type: string; reason?: string };
     expect(end.type).toBe("session.end");
     expect(end.reason).toBe("aborted");
+  });
+
+  it("the parent does not report itself ended until its aborted child has (#86)", async () => {
+    // The abort races past the subagent tool, so without a grace the parent's summary resolved
+    // while the child was still writing snapshot + session.end — and a reader of the child's log
+    // saw a session with no end. Hold the child's end open at its store and check the parent
+    // waits for it.
+    const childStore = new GatedStore();
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, { slow: true, childStore: () => childStore }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    let parentDone = false;
+    const done = session.done.then((s) => {
+      parentDone = true;
+      return s;
+    });
+    const eventsP = collect(session);
+
+    const deadline = Date.now() + 5_000;
+    while (!childStore.entered && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    expect(childStore.entered).toBe(true);
+    // the child is about to write session.end and cannot: the parent must still be waiting
+    await new Promise((r) => setTimeout(r, 150));
+    expect(parentDone).toBe(false);
+
+    childStore.release();
+    const summary = await done;
+    const events = await eventsP;
+    expect(summary.reason).toBe("aborted");
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of new SessionStore({ root }).read(spawned.id)) childEvents.push(e);
+    expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+  });
+
+  it("the abort grace is bounded, and running past it is recorded (#86)", async () => {
+    // a child whose end never comes must not hold the parent forever: past `abortGraceMs` the
+    // parent ends anyway and says what it left running
+    const childStore = new GatedStore();
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, {
+      slow: true,
+      parent: { abortGraceMs: 100 },
+      childStore: () => childStore,
+    }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    const note = events.find(
+      (e) => e.type === "error" && (e as { message: string }).message.includes("still running 100ms after abort"),
+    ) as { fatal: boolean } | undefined;
+    expect(note).toBeDefined();
+    expect(note!.fatal).toBe(false);
+    // and the child really had not ended: the parent went first, as the note says
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of new SessionStore({ root }).read(spawned.id)) childEvents.push(e);
+    expect((childEvents.at(-1) as { type: string }).type).not.toBe("session.end");
+    // let the child finish so the tmpdir teardown does not race its last append
+    childStore.release();
+    await new Promise((r) => setTimeout(r, 200));
   });
 
   it("records the child's end in the parent's log even when the parent is the one aborting", async () => {
