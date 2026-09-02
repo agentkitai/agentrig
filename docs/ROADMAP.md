@@ -286,8 +286,12 @@ question 1.*
 
 Acceptance: a test drives a fake provider to write outside cwd under `workspace-write` and
 observes `sandbox.denied` + escalation request + (on approval) retry; docker provider gets an
-integration test gated behind `docker info` availability (skipped, not failed, where absent —
-and the skip prints loudly); the seatbelt profile string is unit-tested for shape since macOS CI
+integration test gated behind `docker info` availability *and* the local presence of the fixture
+image (`docker image inspect alpine:3.20`; overridable via `AGENTRIG_DOCKER_TEST_IMAGE`) — the
+test never pulls, because tests are network-free; it is skipped, not failed, where either
+prerequisite is absent, and the skip prints loudly naming which one; R2d's Linux runner
+pre-pulls the fixture image (`docker pull alpine:3.20`) in `.github/workflows/ci.yml`, so from
+R2d on the live docker test runs — reported as passed, not skipped — on the ubuntu leg of CI; the seatbelt profile string is unit-tested for shape since macOS CI
 can't always nest sandboxes. Mutation: dropping the single-retry cap must fail a test (unbounded
 escalate-retry is a prompt-fatigue machine).
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { bound } from "./shared.js";
 import type { JobRegistry } from "./background-jobs.js";
+import { sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
 
 const BashInput = z.object({
   command: z.string().min(1).describe("The shell command to run"),
@@ -89,9 +90,10 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
         // Auto-killing at the deadline instead would quietly resurrect the ten-minute review
         // massacre this feature exists to end, since the inserted values are capped at 600s.
         // The note keeps the ignore honest; a model that truly wants a bound has bash_job kill.
+        const sandboxed = sandboxSpawnInvocation(shell.path, ["-c", input.command], ctx.cwd);
         const { id, pid } = opts.jobs.start({
-          command: input.command,
-          shellPath: shell.path,
+          command: sandboxed.sandboxed ? sandboxed.command : input.command,
+          ...(sandboxed.sandboxed ? { args: sandboxed.args } : { shellPath: shell.path }),
           cwd: ctx.cwd,
           isWindows,
           killTree,
@@ -106,10 +108,21 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
           display: `started background job ${id}${pid === undefined ? "" : ` (pid ${pid})`} — check it with bash_job {"id":"${id}","action":"status"}${timeoutNote}`,
         };
       }
+      // Providers wrap the actual shell process rather than the command string. Outside a prepared
+      // sandbox this remains the historical spawn-with-shell path byte for byte.
+      const sandboxed = sandboxSpawnInvocation(shell.path, ["-c", input.command], ctx.cwd);
       // detached puts the shell in its own process group, so kill reaches the
       // command's children too — a plain child.kill orphans them and they keep
       // the stdio pipes (and the session) open past any timeout.
-      const child = spawn(input.command, {
+      const child = sandboxed.sandboxed
+        ? spawn(sandboxed.command, sandboxed.args, {
+            cwd: ctx.cwd,
+            env: process.env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: !isWindows,
+            windowsHide: true,
+          })
+        : spawn(input.command, {
         shell: shell.path,
         cwd: ctx.cwd,
         env: process.env,
@@ -174,6 +187,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       });
 
       const aborted = ctx.signal.aborted;
+      if (!timedOut && !aborted && exitCode !== 0) throwIfSandboxDenied(stderr);
       const output: BashOutput = { exitCode, stdout, stderr, timedOut };
       const parts = [stdout];
       if (stderr) parts.push(`[stderr]\n${stderr}`);

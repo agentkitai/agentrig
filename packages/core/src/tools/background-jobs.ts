@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
+import { throwIfSandboxDenied } from "../sandbox-providers.js";
 import { bound } from "./shared.js";
 
 /**
@@ -25,7 +26,8 @@ const MAX_UNREAD_BYTES = 512 * 1024;
 
 interface JobSpawnOptions {
   command: string;
-  shellPath: string;
+  args?: readonly string[];
+  shellPath?: string;
   cwd: string;
   isWindows: boolean;
   killTree: (pid: number) => void;
@@ -33,11 +35,28 @@ interface JobSpawnOptions {
   signal: AbortSignal;
 }
 
+/** Output retained for end-of-job classification, whatever the polls drained: first and last. */
+const RETAINED_HEAD_CHARS = 4096;
+const RETAINED_TAIL_CHARS = 4096;
+
 interface JobRecord {
   id: string;
   command: string;
   pid: number | undefined;
   unread: string;
+  /**
+   * The last RETAINED_TAIL_CHARS of everything the job ever wrote, independent of draining.
+   * `read()` hands each poll only what is new, so a sandbox denial printed early and drained by
+   * an intermediate poll was gone by the time the exit could be classified.
+   */
+  tail: string;
+  /**
+   * The first RETAINED_HEAD_CHARS the job wrote. A denial is usually the failing command's first
+   * complaint; a long build log after it would push it out of the tail alone.
+   */
+  head: string;
+  /** A denial is surfaced once; later polls of the same exited job report plainly. */
+  denialReported: boolean;
   droppedBytes: number;
   exited: boolean;
   exitCode: number | null;
@@ -67,15 +86,23 @@ export class JobRegistry {
 
   start(opts: JobSpawnOptions): { id: string; pid: number | undefined } {
     const id = `job-${this.nextId++}`;
-    const child = spawn(opts.command, {
-      shell: opts.shellPath,
-      cwd: opts.cwd,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      // same grouping rationale as the foreground path: kill must reach the command's children
-      detached: !opts.isWindows,
-      windowsHide: true,
-    });
+    const child = opts.args === undefined
+      ? spawn(opts.command, {
+          shell: opts.shellPath,
+          cwd: opts.cwd,
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          // same grouping rationale as the foreground path: kill must reach the command's children
+          detached: !opts.isWindows,
+          windowsHide: true,
+        })
+      : spawn(opts.command, [...opts.args], {
+          cwd: opts.cwd,
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: !opts.isWindows,
+          windowsHide: true,
+        });
 
     const killGroup = (): void => {
       const pid = child.pid;
@@ -101,6 +128,9 @@ export class JobRegistry {
       command: opts.command,
       pid: child.pid,
       unread: "",
+      tail: "",
+      head: "",
+      denialReported: false,
       droppedBytes: 0,
       exited: false,
       exitCode: null,
@@ -110,7 +140,10 @@ export class JobRegistry {
     };
 
     const append = (chunk: Buffer): void => {
-      record.unread += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      record.tail = (record.tail + text).slice(-RETAINED_TAIL_CHARS);
+      if (record.head.length < RETAINED_HEAD_CHARS) record.head = (record.head + text).slice(0, RETAINED_HEAD_CHARS);
+      record.unread += text;
       const beforeBytes = Buffer.byteLength(record.unread, "utf8");
       if (beforeBytes > MAX_UNREAD_BYTES) {
         // Drop the oldest unread output, but never silently — the count reaches the next status.
@@ -168,6 +201,23 @@ export class JobRegistry {
 
   ids(): string[] {
     return [...this.jobs.keys()];
+  }
+
+  /**
+   * What the job wrote, bounded to its first RETAINED_HEAD_CHARS plus its last
+   * RETAINED_TAIL_CHARS, regardless of what polls already drained. Returns undefined once a
+   * denial from this job has been reported.
+   */
+  classifiable(id: string): string | undefined {
+    const record = this.jobs.get(id);
+    if (record === undefined || record.denialReported) return undefined;
+    return `${record.head}\n${record.tail}`;
+  }
+
+  /** Marks the job's denial as surfaced so a later poll does not raise it again. */
+  markDenialReported(id: string): void {
+    const record = this.jobs.get(id);
+    if (record !== undefined) record.denialReported = true;
   }
 
   /** Hands over everything unread and resets the buffer — each poll sees only what is new. */
@@ -293,8 +343,23 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
         ]);
       }
 
-      const drained = registry.read(input.id)!;
       const running = !record.exited;
+      if (!running && record.exitCode !== 0) {
+        // classify from the retained head+tail, not from this poll's drain: the denial may have
+        // been printed early and handed to an earlier status call. Classified BEFORE draining, so
+        // a throw here leaves this poll's unread output for the next status call instead of
+        // consuming it on the way out.
+        const retained = registry.classifiable(input.id);
+        if (retained !== undefined) {
+          try {
+            throwIfSandboxDenied(retained);
+          } catch (err) {
+            registry.markDenialReported(input.id);
+            throw err;
+          }
+        }
+      }
+      const drained = registry.read(input.id)!;
       const output: BashJobOutput = {
         id: input.id,
         running,

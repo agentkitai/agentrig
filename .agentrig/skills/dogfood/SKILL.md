@@ -114,12 +114,17 @@ Staleness, bounded: if you push more commits after a review ran, the review is s
 and never a fresh full dual review per commit. A fix-only commit that addresses review findings
 is verified by its fail-first regression tests, not by another review round. Cap the cycle at
 **one delta re-review** after the findings round — ONE reviewer over the delta, never a fresh dual
-round. **The cap is absolute**: whatever that delta reviewer finds is recorded in the PR body
-(finding, severity, your assessment), never fixed and never re-reviewed — §9's "fix everything"
-applies to the findings round only. Fixing after the delta round would need a third pass to
-verify the fix, and the human reviews the recorded list at merge time anyway. Per-commit
-full-review loops have burned hours of budget on nits without converging: the #82 run spent two
-hours on a skill file because "fix everything" and "one delta round" were read as compatible.
+round. **The cap bounds review rounds, not fixes**: whatever that delta reviewer finds is recorded
+in the PR body (finding, severity, your assessment) and is never re-reviewed by a second agent —
+§9's "fix everything" applies to the findings round only. A LOW with a concrete fix may still be
+fixed after the delta round when the fix carries a fail-first test and a killed mutant: commit it
+separately, label it in the PR body as **post-delta, self-verified, not re-reviewed**, and let the
+human see that label at merge. A MEDIUM or HIGH the delta reviewer finds is recorded, never fixed
+post-delta: it needs eyes a self-check cannot give. Under `topic` nobody reads a label, so there
+the delta round is record-only and any finding halts. Per-commit full-review loops have burned
+hours of budget on nits without converging: the #82 run spent two hours on a skill file because
+"fix everything" and "one delta round" were read as compatible; PR #90 is the shape this rule
+describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
 
 ## 9. Fix everything both reviews found
 

@@ -5,6 +5,7 @@ export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./permissions.js";
 export * from "./sandbox.js";
+export * from "./sandbox-providers.js";
 export * from "./hooks.js";
 export * from "./agent.js";
 export * from "./compaction.js";

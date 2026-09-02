@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R2a is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R2b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -121,6 +121,44 @@ Changes:
 | Row | Deliverable | Status |
 |---|---|---|
 | R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
+| R2b | Concrete no-op, Docker, and macOS Seatbelt providers | done |
+
+- R2b adds an explicit identity provider while keeping omitted sandbox configuration equivalent to
+  today's behavior. Docker runs process tools with a read-only root, a cwd bind that follows the
+  selected filesystem mode, and `--network none` unless network is separately granted. Seatbelt's
+  generated deny-default profile permits reads/processes, scopes writes to cwd only in
+  `workspace-write`, and denies network unless separately granted.
+- Foreground and background shell launches consult the active provider at the process boundary.
+  Backend-specific denial text is converted to `SandboxDeniedError`; ordinary non-zero command
+  exits retain their existing tool-result behavior. Docker's live integration test first requires
+  `docker info` and a local fixture image, prints a prominent reason, and skips rather than failing
+  when either prerequisite is absent; it never pulls during the test. Seatbelt profile shape is
+  tested without requiring nested macOS sandbox support.
+- R2b does not add selection flags/config or the outside-sandbox retry path: those remain R2d and
+  R2c respectively. No Landlock or substitute Linux-native backend was added.
+- Deviation, arbitrated and recorded (see PR #90 `## Deviations`): the docker integration test is
+  gated behind `docker info` *and* a locally present fixture image, never pulling, because tests
+  are network-free and `docker run` would implicitly pull; R2d's CI pre-pull makes the live test
+  run on the ubuntu leg. The R2 acceptance text carries the arbiter's RECORD line.
+- Skill change riding along (attended PR, human-visible): dogfood §8's "record, never fix" cap
+  now bounds review rounds, not fixes — a LOW the delta reviewer finds may be fixed post-delta
+  with a fail-first test and a killed mutant, labelled "post-delta, self-verified, not
+  re-reviewed" in the PR body; MEDIUM and above stay record-only; `topic` stays record-only
+  because nobody reads a label on an unattended train. `ship` mirrors it.
+- Review repairs: no provider can authenticate a child's stderr, so classification is narrowed to
+  what the active policy would produce — generic "operation not permitted" is never a denial, and
+  "network is unreachable" only counts when the policy denies network — and the denial reason is
+  labelled as the command's own unauthenticated words, so the R2c escalation prompt cannot present
+  child output as the sandbox speaking. Background jobs classify from a retained tail of
+  everything the job wrote, not from the last poll's drain, so a denial printed early and drained
+  by an intermediate `bash_job` status is still reported at exit, once.
+- Post-delta-review fixes (self-verified with fail-first tests and mutants, not re-reviewed by a
+  second agent — the human saw that label at merge): classification runs before the poll drains,
+  so the poll that reports a denial no longer swallows the output that arrived with it; the
+  registry retains the job's first 4 KiB as well as its last, so a denial ahead of a long log is
+  still classified; seatbelt drops a network denial under a network grant, matching docker. Not
+  fixed, inherent: a forged or ambiguous "read-only file system" line under `workspace-write`
+  still classifies — the provenance label is the mitigation, and R2c must keep it in the prompt.
 
 - R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
   core passes that command and `{ mode, cwd }` policy to the configured provider and executes the
