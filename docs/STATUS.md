@@ -39,6 +39,40 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
   merge pauses; it does not add OS isolation. Use this mode only in an environment whose current
   unsandboxed execution risk is acceptable, and treat any halt as a successful safe outcome.
 
+## Deviation gate and repair-round change (skills)
+
+The first `/topic R2` run landed R2a and halted on R2b. Two things went wrong in the halt and both
+were process, not code:
+
+- The train rewrote its own contract. The R2b row said `docker` + `seatbelt`; the expansion listed
+  "Seatbelt and Bubblewrap", the builder implemented that and edited the roadmap row to match,
+  calling the original a "superseded draft". Nothing on `main` had ever mentioned Bubblewrap. The
+  reviewer saw the roadmap diff and did not flag it.
+- The train halted on two MEDIUM findings that came with concrete fixes. The halt rule was
+  severity-based; the thing worth bounding is the number of repair rounds.
+
+Changes:
+
+- New `arbiter` skill: a second agent with fresh context judges one proposed deviation from a
+  contract (row, issue, task) and returns `VERDICT: APPROVE|REJECT` with a RECORD line naming the
+  exact roadmap/issue text. Its bar: intent preserved, inside the human's authorization, reason is
+  a verifiable fact, change recorded as a reviewable diff. Scope reductions and security-posture
+  changes are always "needs the human".
+- `dogfood` §2 deviation gate: a builder never edits the row it implements without an arbiter
+  record. Standalone it spawns the arbiter itself; under `ship`/`topic` it cannot (children do not
+  nest — `maxDepth` is 1 and there is no flag), so it pushes, stops, and ends its report with
+  `DEVIATION REQUESTED`; the conductor arbitrates and spawns a continuation builder. PR bodies gain
+  a `## Deviations` section.
+- `review` §4 contract fidelity: a deviation without an arbiter record is a HIGH finding regardless
+  of merit; merit is judged separately so the human sees both.
+- `topic`: rows are copied verbatim from `origin/main` at expansion and quoted to children; one
+  arbitration per row; the repair round now covers LOW and MEDIUM findings that carry a concrete
+  fix, while HIGH, design/contract/authorization findings, and unverifiable claims still halt. The
+  one-round cap and "any delta finding halts" are unchanged.
+- Consequence to know: under `topic`, an arbiter-approved deviation lands without the human. The
+  PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
+  make `DEVIATION REQUESTED` a halt instead of an arbitration.
+
 ## R2 notes
 
 | Row | Deliverable | Status |

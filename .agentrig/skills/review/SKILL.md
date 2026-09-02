@@ -44,6 +44,14 @@ Run this in a session that shares no context with the run that wrote the PR.
   input: check it is sanitized, bounded, and (for tool emits) allowed by the emit gates.
 - Security-adjacent seams get extra weight: permission rules, trust gates, session confinement,
   the tool-emit allow-list/source map, redaction paths.
+- **Contract fidelity.** Compare what was built with the row/issue the PR claims to implement, as
+  it stood on `origin/main` before this branch. A different deliverable than the row names, a
+  dropped acceptance criterion or renunciation, or an edit to that row's text in `docs/ROADMAP.md`
+  is a deviation. Each one needs a matching `## Deviations` entry in the PR body carrying an
+  `arbiter` verdict block with a session id, and the roadmap edit must match that block's RECORD
+  line. A deviation without that record is a HIGH finding ("unapproved deviation") regardless of
+  its technical merit — say so, then judge the merit separately so the human has both. A PR body
+  that calls the original row a "draft" or "superseded" is the usual tell.
 
 ## 5. Test quality and mutation probes
 
