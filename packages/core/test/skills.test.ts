@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -234,6 +234,7 @@ describe("skillTool", () => {
     const found = await discoverSkills({ roots: [dir] });
     const r = await skillTool(found).execute({ name: "deploy" }, ctx);
     expect(r.display).toBe("Run the release script.");
+    expect(r.display).not.toContain("HUMAN SKILL INVOCATION");
     expect(r.isError).toBeUndefined();
   });
 
@@ -292,5 +293,39 @@ describe("skillTool", () => {
       expect(s.name.endsWith("…"), `${s.name} overruns the name bound`).toBe(false);
       expect(s.body.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it("pins the topic release train's authorization and stop contract", async () => {
+    const text = await readFile(".agentrig/skills/topic/SKILL.md", "utf8");
+    const rawDescription = text.match(/^description: (.*)$/m)?.[1];
+    const found = await discoverSkills({ roots: [".agentrig/skills"] });
+    const topic = found.find((candidate) => candidate.name === "topic");
+    const body = topic?.body.replace(/\s+/g, " ");
+
+    expect(rawDescription?.length).toBeLessThanOrEqual(200);
+    expect(topic).toBeDefined();
+    expect(body).toContain("must be the first turn of a fresh conversation (`/new`, then `/topic ...`)");
+    expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
+    expect(body).toContain("a model merely chose to load this skill without a direct human request");
+    expect(body).toContain("Never pass the builder's report");
+    expect(body).toContain("only LOW findings gets exactly one repair round");
+    expect(body).toContain("reports a MEDIUM or HIGH finding, halt");
+    expect(body).toContain("Never stack PRs");
+    expect(body).toContain("watch `main` CI on the exact merge commit");
+    expect(body).toContain("never replace it with a fresh builder");
+    expect(body).toContain("Reserve five children per row");
+    expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
+    expect(body).toContain("Report the exact head SHA you reviewed");
+    expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
+    expect(body).toContain("restate it in your own reply text in that same turn");
+
+    const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
+    const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
+    expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
+    expect(land.body).toContain("include the human's exact authorization quote");
+
+    const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
+    const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
+    expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
   });
 });

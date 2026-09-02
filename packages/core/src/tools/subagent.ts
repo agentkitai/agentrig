@@ -284,16 +284,17 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
           answerIsFinal || text === ""
             ? text
             : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
+        const sessionLine = `subagent session ${session.id}`;
         if (summary.reason !== "done") {
           return {
             output: summary,
-            display: `subagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}`,
+            display: `${sessionLine}\nsubagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}`,
             isError: true,
           };
         }
         return {
           output: summary,
-          display: answerText === "" ? "(the subagent finished without a final message)" : answerText,
+          display: `${sessionLine}\n${answerText === "" ? "(the subagent finished without a final message)" : answerText}`,
         };
       } finally {
         // a throw anywhere above must still release the reservation, or one failed spawn would

@@ -190,6 +190,8 @@ describe("subagents are context isolation, not parallelism", () => {
     await session.done;
 
     const result = events.find((e) => e.type === "tool.result") as { display: string };
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    expect(result.display).toContain(`subagent session ${spawned.id}`);
     expect(result.display).toContain("the answer is 42");
   });
 
@@ -407,7 +409,9 @@ describe("a subagent cannot run away", () => {
     await session.done;
 
     const result = events.find((e) => e.type === "tool.result") as { ok: boolean; display: string };
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
     expect(result.ok).toBe(false);
+    expect(result.display).toContain(`subagent session ${spawned.id}`);
     expect(result.display).toMatch(/budget/);
     expect((events.find((e) => e.type === "subagent.end") as { reason?: string }).reason).toBe("budget");
   });
@@ -494,7 +498,7 @@ describe("a subagent cannot run away", () => {
     const displays = [first.display, second.display];
     expect(displays.filter((d) => d.includes("token allowance"))).toHaveLength(1);
     // exactly one ran; charging only on completion let both through
-    expect(displays.filter((d) => d === "a" || d === "b")).toHaveLength(1);
+    expect(displays.filter((d) => d.endsWith("\na") || d.endsWith("\nb"))).toHaveLength(1);
   });
 
   it("gives the reservation back when the child spends less than its cap", async () => {

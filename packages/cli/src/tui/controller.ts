@@ -507,7 +507,13 @@ export class TuiController {
           this.print("a turn is already running — /abort first", "error");
           return true;
         }
-        const composed = composeSkillInvocation(skill, cmd.args);
+        // Topic carries merge authorization for a long train. Compaction preserves the first user
+        // message, so never append authorization to history where a summary could replace it.
+        if (skill.name.toLowerCase() === "topic" && this.state.sessionId !== null) {
+          this.print("/topic must start a fresh conversation; run /new, then invoke /topic again", "error");
+          return true;
+        }
+        const composed = composeSkillInvocation(skill, cmd.args, cmd.invocation);
         this.print(`skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
         await this.continueConversation(composed);
         return true;
