@@ -17,6 +17,23 @@ validation.
 | 6 | Supervisor v2: trajectory reviewer + rubric grader, force_replan | done (2026-08-29) |
 | 7 | TUI, hooks, MCP client, subagents, skills — as dogfooding demands | done (2026-08-30) |
 
+## Release-train policy
+
+- The checked-in `topic` skill changes multi-row roadmap bands from a per-PR merge word to one
+  explicit human authorization up front. That invocation applies only to the named band's fixed,
+  ordered row list and is preserved verbatim in each landed PR description, squash body, and the
+  parent's final report. Each row still gets its own branch from the CI-green merged predecessor,
+  dogfood builder, isolated independent review, conditional land, and post-merge `main` CI watch;
+  this is sequential land-as-you-go, never a stack of open PRs.
+- The authorization is bounded by fail-closed stop conditions. MEDIUM/HIGH findings, unverifiable
+  review claims, merge conflicts, red CI on the actual PR head or post-land `main`, and children that
+  exhaust their budget all halt the train for a human. LOW findings are never waived or skipped: the
+  train gives them one narrowly scoped fix child and one delta re-review, then lands only on a clean
+  result or halts. The train never rebuts a finding on its own.
+- Caveat: unattended bands run unsandboxed until R2 lands. Up-front authorization removes repeated
+  merge pauses; it does not add OS isolation. Use this mode only in an environment whose current
+  unsandboxed execution risk is acceptable, and treat any halt as a successful safe outcome.
+
 ## R1 notes
 
 | Row | Deliverable | Status |

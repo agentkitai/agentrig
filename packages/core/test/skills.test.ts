@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -292,5 +292,24 @@ describe("skillTool", () => {
       expect(s.name.endsWith("…"), `${s.name} overruns the name bound`).toBe(false);
       expect(s.body.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it("pins the topic release train's authorization and stop contract", async () => {
+    const text = await readFile(".agentrig/skills/topic/SKILL.md", "utf8");
+    const topic = parseSkill(text, ".agentrig/skills/topic/SKILL.md");
+
+    expect(topic.description.length).toBeLessThanOrEqual(200);
+    expect(topic.body).toContain("Capture that sentence byte-for-byte as `AUTHORIZATION`");
+    expect(topic.body).toContain("Never pass the builder's report");
+    expect(topic.body).toContain("A verdict containing only LOW findings gets exactly one");
+    expect(topic.body).toContain("reports a MEDIUM or\n   HIGH finding, halt");
+    expect(topic.body).toContain("Never stack PRs");
+    expect(topic.body).toContain("watch `main` CI on the exact\n  merge commit");
+    expect(topic.body).toContain("never replace it with a fresh builder");
+
+    const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
+    const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
+    expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
+    expect(land.body).toContain("include the human's exact authorization quote");
   });
 });
