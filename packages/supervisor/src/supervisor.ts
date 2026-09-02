@@ -285,6 +285,8 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   reviewTimeoutMs?: number;
   onError?: (where: string, err: Error) => void;
   pricing?: StateOptions["pricing"];
+  cacheReadDiscount?: number;
+  cacheWriteMultiplier?: number;
   windowSize?: number;
 }
 
@@ -335,6 +337,8 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
   if (opts.escalateTimeoutMs !== undefined) attachOpts.escalateTimeoutMs = opts.escalateTimeoutMs;
   if (opts.onError !== undefined) attachOpts.onError = opts.onError;
   if (opts.pricing !== undefined) attachOpts.pricing = opts.pricing;
+  if (opts.cacheReadDiscount !== undefined) attachOpts.cacheReadDiscount = opts.cacheReadDiscount;
+  if (opts.cacheWriteMultiplier !== undefined) attachOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
   if (opts.windowSize !== undefined) attachOpts.windowSize = opts.windowSize;
   return attach(session, attachOpts);
 }
