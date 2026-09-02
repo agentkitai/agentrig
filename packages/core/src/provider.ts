@@ -40,7 +40,14 @@ export type ModelEvent =
 export interface ModelProvider {
   id: string;
   model: string;
-  capabilities: { tools: boolean; parallelTools: boolean; caching: boolean; contextWindow: number };
+  capabilities: {
+    tools: boolean;
+    parallelTools: boolean;
+    caching: boolean;
+    contextWindow: number;
+    /** Fraction of the normal input-token price charged for a cache read (for example, 0.1). */
+    cacheReadDiscount?: number;
+  };
   stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
   countTokens?(req: ModelRequest): Promise<number>;
 }

@@ -156,6 +156,7 @@ describe("AnthropicProvider.stream", () => {
       return new Response(toolUseStream, { status: 200 });
     };
     const provider = new AnthropicProvider({ apiKey: "k", model: "claude-test", fetchFn });
+    expect(provider.capabilities.cacheReadDiscount).toBe(0.1);
     const events = await collect(provider.stream(baseReq, new AbortController().signal));
 
     expect(captured!.url).toBe("https://api.anthropic.com/v1/messages");

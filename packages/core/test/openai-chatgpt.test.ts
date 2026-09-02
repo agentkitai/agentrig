@@ -145,6 +145,7 @@ describe("OpenAIChatGPTProvider.stream", () => {
     };
     const auth = new OpenAIChatGPTAuth({ store: new MemoryStore({ accessToken: futureJwt(), refreshToken: "r", accountId: "acct_7" }) });
     const provider = new OpenAIChatGPTProvider({ model: "gpt-5.6-sol", auth, fetchFn });
+    expect(provider.capabilities.cacheReadDiscount).toBe(0.5);
     const events = await collect(provider.stream(baseReq, new AbortController().signal));
 
     expect(captured!.url).toBe("https://chatgpt.com/backend-api/codex/responses");

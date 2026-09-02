@@ -16,7 +16,7 @@ import {
   type Pricing,
   type Session,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, renderChatEvent, renderEvent } from "./render.js";
+import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
@@ -374,7 +374,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     if (opts.json !== true) {
       console.log(
         `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +
-          `${summary.usage.input} in / ${summary.usage.output} out tokens`,
+          `${formatUsage(summary.usage)} tokens`,
       );
     }
     process.exitCode = summary.reason === "done" ? 0 : 1;

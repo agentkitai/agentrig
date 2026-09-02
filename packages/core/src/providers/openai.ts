@@ -233,6 +233,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       tools: true,
       parallelTools: true,
       caching: false,
+      ...(this.baseUrl.includes("api.openai.com") ? { cacheReadDiscount: 0.5 } : {}),
       contextWindow: opts.contextWindow ?? 128_000,
     };
   }

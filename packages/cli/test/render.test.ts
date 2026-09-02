@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
-import { AssistantText, renderChatEvent, renderEvent } from "../src/render.ts";
+import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+
+describe("formatUsage", () => {
+  it("shows total input and its cached subset in compact user-facing form", () => {
+    expect(formatUsage({ input: 400_000, cacheRead: 2_900_000, output: 12_345 }))
+      .toBe("3.3M in (2.9M cached) / 12.3k out");
+  });
+
+  it("keeps the compatible uncached form when no cache read was reported", () => {
+    expect(formatUsage({ input: 42, output: 7 })).toBe("42 in / 7 out");
+  });
+});
 
 describe("renderEvent", () => {
   it("renders session.resume", () => {

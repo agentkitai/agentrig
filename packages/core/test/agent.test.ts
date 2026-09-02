@@ -29,9 +29,17 @@ import {
 class FakeProvider implements ModelProvider {
   readonly id = "fake";
   readonly model = "fake-1";
-  readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
+  readonly capabilities: ModelProvider["capabilities"];
   readonly requests: ModelRequest[] = [];
-  constructor(private readonly turns: ModelEvent[][]) {}
+  constructor(private readonly turns: ModelEvent[][], cacheReadDiscount?: number) {
+    this.capabilities = {
+      tools: true,
+      parallelTools: true,
+      caching: false,
+      contextWindow: 100_000,
+      ...(cacheReadDiscount === undefined ? {} : { cacheReadDiscount }),
+    };
+  }
   async *stream(req: ModelRequest, _signal: AbortSignal): AsyncIterable<ModelEvent> {
     this.requests.push(structuredClone(req));
     const turn = this.turns.shift();
@@ -48,7 +56,15 @@ const echoTool = (): AnyTool => ({
   execute: async (input: { text: string }) => ({ output: input.text, display: `echo: ${input.text}` }),
 });
 
-const usage = (input: number, output: number): ModelEvent => ({ type: "usage", usage: { input, output } });
+const usage = (input: number, output: number, cacheRead?: number, cacheWrite?: number): ModelEvent => ({
+  type: "usage",
+  usage: {
+    input,
+    output,
+    ...(cacheRead === undefined ? {} : { cacheRead }),
+    ...(cacheWrite === undefined ? {} : { cacheWrite }),
+  },
+});
 const stop = (reason: "end_turn" | "tool_use" | "max_tokens" | "error"): ModelEvent => ({ type: "stop", reason });
 
 let root: string;
@@ -498,6 +514,59 @@ describe("agent loop", () => {
     const summary = await session.done;
     expect(summary.reason).toBe("budget");
     expect(summary.turns).toBe(2); // 700 tokens after turn 1 < 1000; 1400 after turn 2 trips it
+  });
+
+  it("counts each cached token exactly once toward the token budget", async () => {
+    const alwaysToolUse = Array.from({ length: 5 }, (): ModelEvent[] => [
+      { type: "tool_use", id: "t", name: "echo", input: { text: "x" } },
+      usage(100, 100, 500),
+      stop("tool_use"),
+    ]);
+    const session = createAgent(makeConfig(new FakeProvider(alwaysToolUse), { budget: { maxTokens: 1000 } })).run("t");
+    await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("budget");
+    // 700 after turn one is below the cap; 1,400 after turn two reaches it. Counting the API's
+    // cached subset twice would stop after one, while omitting it would run five turns.
+    expect(summary.turns).toBe(2);
+    expect(summary.usage).toMatchObject({ input: 200, cacheRead: 1000, output: 200 });
+  });
+
+  it("charges cache reads at the provider discount for the USD budget", async () => {
+    const provider = new FakeProvider(Array.from({ length: 5 }, (): ModelEvent[] => [
+      { type: "tool_use", id: "t", name: "echo", input: { text: "x" } },
+      usage(100_000, 100_000, 800_000),
+      stop("tool_use"),
+    ]), 0.1);
+    const session = createAgent(makeConfig(provider, {
+      budget: { maxUsd: 5 },
+      pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 20 },
+    })).run("t");
+    await collect(session);
+    const summary = await session.done;
+
+    // Each turn costs $3.80: $1 uncached input + $0.80 cache read + $2 output. Charging cached
+    // tokens at the full $10/M input rate would incorrectly exhaust the budget after one turn.
+    expect(summary.reason).toBe("budget");
+    expect(summary.turns).toBe(2);
+  });
+
+  it("does not treat discounted cache reads as free", async () => {
+    const provider = new FakeProvider(Array.from({ length: 5 }, (): ModelEvent[] => [
+      { type: "tool_use", id: "t", name: "echo", input: { text: "x" } },
+      usage(100_000, 100_000, 800_000),
+      stop("tool_use"),
+    ]), 0.1);
+    const session = createAgent(makeConfig(provider, {
+      budget: { maxUsd: 3.5 },
+      pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 20 },
+    })).run("t");
+    await collect(session);
+
+    // Discounted cost is $3.80. Omitting cache reads from USD accounting produces $3 and would
+    // incorrectly permit a second turn.
+    expect((await session.done).turns).toBe(1);
   });
 
   it("surfaces provider failures as a fatal error and ends the session", async () => {

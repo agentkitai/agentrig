@@ -309,6 +309,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       tools: true,
       parallelTools: true,
       caching: true,
+      cacheReadDiscount: 0.5,
       contextWindow: opts.contextWindow ?? 200_000,
     };
   }

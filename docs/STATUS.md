@@ -1,8 +1,8 @@
 # Status
 
-Current roadmap row: **R1.5f is complete.** R1 is complete (R1a–R1e); R1.5a, R1.5c, R1.5d,
-R1.5e, and R1.5f were deliberately taken out of nominal order before the remaining R1.5 rows. The original milestones M0
-through M7 remain complete, including M2.5's live provider validation.
+Current roadmap row: **R1.5b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are now
+complete. The original milestones M0 through M7 remain complete, including M2.5's live provider
+validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -125,10 +125,28 @@ through M7 remain complete, including M2.5's live provider validation.
 | Row | Deliverable | Status |
 |---|---|---|
 | R1.5a | Outbound-view eviction of stale, large tool results with `context.evicted` accounting | done |
+| R1.5b | Discounted cache-read budget accounting and cached-token usage displays | done |
 | R1.5c | Mode-split turn defaults and fixed turns-remaining soft-warning threshold (issue #54) | done |
 | R1.5d | Per-turn prompt bill of materials with hashes, provenance, freshness, and TUI `/context` | done |
 | R1.5e | Budgeted mechanical repository map with mtime refresh, context accounting, and opt-out | done |
 | R1.5f | Immutable-log overflow artifacts with bounded `read_output` range reads | done |
+
+- R1.5b completes the cached-token path that already populated and accumulated the disjoint
+  `Usage.cacheRead` field. Hard token budgets now count uncached input, cache reads, cache writes,
+  and output exactly once. USD budgets charge cache reads at the provider-advertised input-price
+  fraction (Anthropic 0.1; official OpenAI and openai-chatgpt 0.5), charge cache writes as ordinary
+  input, and conservatively use full input price when an OpenAI-compatible endpoint advertises no
+  discount. The same accounting is used when reconciling bounded subagent pools and when deciding
+  compaction from reported usage.
+- Human-facing headless, TUI, and event-trace usage lines show total input and identify a nonzero
+  cache-read subset, for example `3.3M in (2.9M cached) / 12.3k out`; logs and JSON remain schema-
+  compatible. Counts are floored to one decimal so summaries never overstate measured use.
+- Decisions beyond the row: cache discounts are additive optional provider capability metadata, so
+  existing third-party `ModelProvider` implementations remain source-compatible. Unknown discounts
+  deliberately fall back to full price rather than silently under-enforcing a USD budget. Cache
+  writes are not labelled “cached” in the display because they are charged writes, not discounted
+  reads. Tests pin both sides of discounted USD pricing (neither full-price nor free), exact-once
+  token-budget accounting, provider metadata, and the requested compact display.
 
 - R1.5d emits `context.manifest` immediately before every model request, after outbound eviction,
   repository-map refresh, and `pre_model` hook patches. Each rendered system/history/tool-result/tool

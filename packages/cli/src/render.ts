@@ -1,4 +1,4 @@
-import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
 
 /**
  * Two views of one event stream.
@@ -9,6 +9,23 @@ import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention } from
  * `model.request` and `model.response`, and burying the answer in them is how the answer went
  * missing entirely — the deltas that carry it were dropped by both surfaces.
  */
+
+/** Compact token count for usage summaries; floors so a display never overstates spend. */
+function formatTokens(n: number): string {
+  if (n < 1_000) return String(n);
+  const [value, unit] = n < 1_000_000 ? [n / 1_000, "k"] : [n / 1_000_000, "M"];
+  const floored = Math.floor(value * 10) / 10;
+  return `${floored % 1 === 0 ? floored.toFixed(0) : floored.toFixed(1)}${unit}`;
+}
+
+/** User-facing usage: total input first, with cache reads identified as its discounted subset. */
+export function formatUsage(usage: Usage): string {
+  const input = usage.input + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+  const cached = usage.cacheRead === undefined || usage.cacheRead === 0
+    ? ""
+    : ` (${formatTokens(usage.cacheRead)} cached)`;
+  return `${formatTokens(input)} in${cached} / ${formatTokens(usage.output)} out`;
+}
 
 /** One line per event. Kept dumb on purpose: the TUI (M7) replaces this. */
 export function renderEvent(e: HarnessEvent): string {
@@ -22,7 +39,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "turn.end": return `${p} n=${e.n}`;
     case "model.request": return `${p} tokensIn=${e.tokensIn}`;
     case "model.delta": return `${p} ${JSON.stringify(e.text)}`;
-    case "model.response": return `${p} in=${e.usage.input} out=${e.usage.output} stop=${e.stop}`;
+    case "model.response": return `${p} ${formatUsage(e.usage)} stop=${e.stop}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
     case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash} ${JSON.stringify(e.input)}`;
     case "tool.result": {
