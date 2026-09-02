@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SandboxMode } from "./sandbox.js";
 
 /**
  * The event spine. Every session is an append-only log of these events.
@@ -202,6 +203,13 @@ export const EventPayload = z.discriminatedUnion("type", [
     mode: z.enum(["modify", "inject"]).optional(),
   }),
   z.object({ type: z.literal("tool.denied"), id: z.string(), name: z.string() }),
+  z.object({
+    type: z.literal("sandbox.denied"),
+    id: z.string(),
+    name: z.string(),
+    mode: SandboxMode,
+    reason: z.string(),
+  }),
   z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),

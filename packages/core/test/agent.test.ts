@@ -8,6 +8,7 @@ import {
   contentHash,
   createAgent as createCoreAgent,
   RulePolicy,
+  SandboxDeniedError,
   SessionStore,
   defaultRules,
   MAX_REPLAN_REFUSALS,
@@ -24,6 +25,9 @@ import {
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
+  type SandboxCommand,
+  type SandboxPolicy,
+  type SandboxProvider,
 } from "@agentkitai/agentrig-core";
 
 /** Scripted provider: each run() turn consumes the next ModelEvent[] — no network anywhere. */
@@ -198,6 +202,120 @@ describe("agent loop", () => {
     ]);
     expect(provider.requests[0]!.system).toBe("test system");
     expect(events.some((e) => e.type === "context.loaded")).toBe(false);
+  });
+
+  it("wraps an approved tool with the sandbox provider and records an OS denial", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "sandboxed-1", name: "echo", input: { text: "outside" } },
+        usage(10, 2),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "blocked" }, usage(5, 1), stop("end_turn")],
+    ]);
+    const policies: SandboxPolicy[] = [];
+    let commandRan = false;
+    const sandbox: SandboxProvider = {
+      prepare<T>(_cmd: SandboxCommand<T>, policy: SandboxPolicy): SandboxCommand<T> {
+        policies.push(policy);
+        return async () => {
+          commandRan = true;
+          throw new SandboxDeniedError("write outside workspace blocked by test OS");
+        };
+      },
+    };
+
+    const session = createAgent(makeConfig(provider, {
+      sandbox: { provider: sandbox, mode: "workspace-write" },
+    })).run("write outside cwd", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(commandRan).toBe(true);
+    expect(policies).toEqual([{ mode: "workspace-write", cwd: root }]);
+    expect(events.find((event) => event.type === "sandbox.denied")).toMatchObject({
+      id: "sandboxed-1",
+      name: "echo",
+      mode: "workspace-write",
+      reason: "write outside workspace blocked by test OS",
+    });
+    expect(events.find((event) => event.type === "tool.result")).toMatchObject({
+      id: "sandboxed-1",
+      ok: false,
+      display: "sandbox denied: write outside workspace blocked by test OS",
+    });
+    expect(events.findIndex((event) => event.type === "permission.decision"))
+      .toBeLessThan(events.findIndex((event) => event.type === "sandbox.denied"));
+  });
+
+  it("marks only explicit provider denials at the agent boundary", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "ordinary-failure-1", name: "echo", input: { text: "bug" } },
+        usage(3, 1),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "failed" }, usage(2, 1), stop("end_turn")],
+    ]);
+    const sandbox: SandboxProvider = {
+      prepare<T>(_cmd: SandboxCommand<T>): SandboxCommand<T> {
+        return async () => {
+          throw new Error("ordinary tool failure");
+        };
+      },
+    };
+
+    const session = createAgent(makeConfig(provider, {
+      sandbox: { provider: sandbox, mode: "workspace-write" },
+    })).run("run buggy tool", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(events.some((event) => event.type === "sandbox.denied")).toBe(false);
+    expect(events.find((event) => event.type === "tool.result")).toMatchObject({
+      id: "ordinary-failure-1",
+      ok: false,
+      display: "ordinary tool failure",
+    });
+    expect(provider.requests[1]!.messages.at(-1)).toMatchObject({
+      role: "user",
+      content: [{
+        type: "tool_result",
+        toolUseId: "ordinary-failure-1",
+        content: "ordinary tool failure",
+        isError: true,
+      }],
+    });
+  });
+
+  it("does not prepare a permission-denied tool in the independent sandbox layer", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "tool_use", id: "denied-1", name: "echo", input: { text: "no" } },
+        usage(2, 1),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "done" }, usage(2, 1), stop("end_turn")],
+    ]);
+    let prepares = 0;
+    const sandbox: SandboxProvider = {
+      prepare<T>(cmd: SandboxCommand<T>): SandboxCommand<T> {
+        prepares += 1;
+        return cmd;
+      },
+    };
+
+    const session = createAgent(makeConfig(provider, {
+      permissions: new RulePolicy([{ class: "read", decision: "deny" }]),
+      sandbox: { provider: sandbox, mode: "none" },
+    })).run("try denied tool", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(prepares).toBe(0);
+    expect(events.some((event) => event.type === "tool.denied")).toBe(true);
+    expect(events.some((event) => event.type === "tool.call")).toBe(false);
+    expect(events.some((event) => event.type === "sandbox.denied")).toBe(false);
   });
 
   it("injects the repo map as a view, regenerates it after a tool changes an mtime, and logs only accounting", async () => {

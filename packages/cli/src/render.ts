@@ -60,6 +60,7 @@ export function renderEvent(e: HarnessEvent): string {
     }
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
+    case "sandbox.denied": return `${p} ${e.name}#${e.id} mode=${e.mode} ${JSON.stringify(e.reason)}`;
     case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
     case "permission.request":
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
@@ -192,6 +193,9 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.repo_map":
     case "memory.note":
     case "skill.used":
+    // The adjacent failed tool.result carries the model-facing sandbox error. R2c will add the
+    // distinct interactive escalation rendering; do not print this bookkeeping event twice now.
+    case "sandbox.denied":
       return null;
   }
 }

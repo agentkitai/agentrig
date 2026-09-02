@@ -1,8 +1,7 @@
 # Status
 
-Current roadmap row: **R1.5b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are now
-complete. The original milestones M0 through M7 remain complete, including M2.5's live provider
-validation.
+Current roadmap row: **R2a is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
 |---|---|---|
@@ -39,6 +38,29 @@ validation.
 - Caveat: unattended bands run unsandboxed until R2 lands. Up-front authorization removes repeated
   merge pauses; it does not add OS isolation. Use this mode only in an environment whose current
   unsandboxed execution risk is acceptable, and treat any halt as a successful safe outcome.
+
+## R2 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
+
+- R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
+  core passes that command and `{ mode, cwd }` policy to the configured provider and executes the
+  returned wrapper. A denied permission never reaches `SandboxProvider.prepare`, keeping approval
+  and OS isolation independent rather than letting either layer stand in for the other.
+- Providers identify an OS-enforced block by throwing `SandboxDeniedError`. Core then appends a
+  bounded `sandbox.denied` record (tool id/name, active mode, and reason) before the ordinary failed
+  `tool.result`; unrelated tool exceptions retain their existing behavior and are not mislabeled.
+- Sandbox configuration is optional in R2a, preserving today's execution when no provider is wired.
+  The `none` mode still traverses a configured provider seam. Concrete no-op, Docker, and seatbelt
+  providers remain R2b; escalation/retry remains R2c; CLI/config wiring remains R2d.
+- Rejected: infer sandbox denial from generic `EACCES`/`EPERM` tool exceptions. Host filesystem
+  permissions can produce those without a sandbox, so only the boundary provider can classify the
+  failure honestly. Also rejected: invoking the sandbox before permission policy, which would make
+  denied calls enter an execution layer despite never being approved.
+- Caveat: R2a establishes and tests the boundary but supplies no enforcing provider, so unattended
+  runs remain unsandboxed until the later R2 rows land.
 
 ## R1 notes
 

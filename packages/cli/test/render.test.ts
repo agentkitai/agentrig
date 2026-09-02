@@ -31,6 +31,22 @@ describe("renderEvent", () => {
     expect(line).toContain("in=3.3M cached=2.9M out=12.3k stop=end_turn");
   });
 
+  it("renders sandbox denials with mode and reason", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 2,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "sandbox.denied",
+      id: "t2",
+      name: "write_file",
+      mode: "workspace-write",
+      reason: "outside workspace",
+    }));
+    expect(line).toContain("sandbox.denied");
+    expect(line).toContain("write_file#t2 mode=workspace-write");
+    expect(line).toContain('"outside workspace"');
+  });
+
   it("renders session.resume", () => {
     const e = HarnessEvent.parse({
       seq: 12,
