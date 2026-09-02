@@ -73,20 +73,35 @@ Start both with `bash` `background: true` and poll with `bash_job` using `waitMs
 loop, never a foreground command that a timeout can kill):
 
 - `codex review` over the full diff against `origin/main`.
-- A `claude` review of the same diff, pinned to Opus: `claude -p --model claude-opus-5 …`.
+- A `claude` review of the same diff, pinned to Opus and given the tools to VERIFY, not just read:
+  `claude -p --model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash' "…"`.
   Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
-  review spend independent of whatever model the main session happens to be running.
+  review spend independent of whatever model the main session happens to be running. Without
+  `--allowedTools` including Bash the reviewer cannot run vitest or probe built output, and its
+  first line becomes "I could not execute the test suite" — a read-only review that verifies
+  nothing, which the brief below explicitly forbids.
 
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
+
+**Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
+the PR (§7) and does NOT run external reviews: the conductor spawns an independent reviewer
+child (fresh worktree, mutants, no shared context) that IS the review, and running both was
+measured at four review passes per PR — ~90 minutes for a skill file, with no extra eyes on the
+code. Your task text says when you are a child. Standalone dogfood keeps both reviews because
+nothing else reviews it.
 
 Staleness, bounded: if you push more commits after a review ran, the review is stale for the
 **delta only** — re-review the diff since the last reviewed commit, never the whole branch again,
 and never a fresh full dual review per commit. A fix-only commit that addresses review findings
 is verified by its fail-first regression tests, not by another review round. Cap the cycle at
-**one delta re-review** after the findings round; if a reviewer keeps producing new findings on
-each pass (non-converging), stop pushing for it and record what is still flagged in the PR body
-instead. Per-commit full-review loops have burned hours of budget on nits without converging.
+**one delta re-review** after the findings round — ONE reviewer over the delta, never a fresh dual
+round. **The cap is absolute**: whatever that delta reviewer finds is recorded in the PR body
+(finding, severity, your assessment), never fixed and never re-reviewed — §9's "fix everything"
+applies to the findings round only. Fixing after the delta round would need a third pass to
+verify the fix, and the human reviews the recorded list at merge time anyway. Per-commit
+full-review loops have burned hours of budget on nits without converging: the #82 run spent two
+hours on a skill file because "fix everything" and "one delta round" were read as compatible.
 
 ## 9. Fix everything both reviews found
 
