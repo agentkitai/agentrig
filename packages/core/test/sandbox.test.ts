@@ -13,6 +13,8 @@ import {
   bashTool,
   sandboxSpawnInvocation,
   seatbeltProfile,
+  JobRegistry,
+  bashJobTool,
 } from "@agentkitai/agentrig-core";
 
 const execFileAsync = promisify(execFile);
@@ -128,6 +130,101 @@ describe("R2b sandbox providers", () => {
       );
       await expect(command()).rejects.toBeInstanceOf(SandboxDeniedError);
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a generic 'operation not permitted' is an ordinary failure, never a sandbox denial", async () => {
+    // every EPERM a command can hit reads this way, sandbox or not — and a command can print it
+    // on purpose to talk its way into an escalation prompt
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-eperm-")));
+    try {
+      const wrapper = join(root, "docker");
+      await writeFile(wrapper, "#!/bin/sh\necho 'rm: cannot remove: Operation not permitted' >&2\nexit 1\n");
+      await chmod(wrapper, 0o755);
+      const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
+      const result = await provider.prepare(
+        () => bashTool().execute({ command: "echo must-not-run" }, {
+          cwd: root,
+          sessionId: "sandbox-test",
+          emit: () => {},
+          signal: new AbortController().signal,
+        }),
+        { mode: "workspace-write", cwd: root },
+      )();
+      expect(result.output.exitCode).toBe(1);
+      expect(result.isError).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a network denial counts only under a policy that denies network, and names its provenance", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-net-")));
+    try {
+      const wrapper = join(root, "docker");
+      await writeFile(wrapper, "#!/bin/sh\necho 'wget: network is unreachable' >&2\nexit 1\n");
+      await chmod(wrapper, 0o755);
+      const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
+      const run = (policy: { mode: "workspace-write"; cwd: string; network?: boolean }) =>
+        provider.prepare(
+          () => bashTool().execute({ command: "wget example" }, {
+            cwd: root,
+            sessionId: "sandbox-test",
+            emit: () => {},
+            signal: new AbortController().signal,
+          }),
+          policy,
+        )();
+      // network granted: the sandbox could not have produced this, so it is the command's problem
+      const granted = await run({ mode: "workspace-write", cwd: root, network: true });
+      expect(granted.output.exitCode).toBe(1);
+      // network denied (the default): a boundary denial, with the words attributed to the command
+      await expect(run({ mode: "workspace-write", cwd: root })).rejects.toMatchObject({
+        name: "SandboxDeniedError",
+        message: expect.stringMatching(/^reported by the command's own stderr \(unauthenticated\): wget: network is unreachable/u),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a background job's denial survives an intermediate poll and is reported once", async () => {
+    // bash_job hands each poll only what is new; a denial printed early and drained by a status
+    // call must still classify the exit
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg-")));
+    const registry = new JobRegistry();
+    try {
+      const wrapper = join(root, "docker");
+      await writeFile(wrapper, "#!/bin/sh\necho 'touch: Read-only file system' >&2\nsleep 0.4\nexit 1\n");
+      await chmod(wrapper, 0o755);
+      const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
+      const ctx = { cwd: root, sessionId: "sandbox-test", emit: () => {}, signal: new AbortController().signal };
+      const policy = { mode: "workspace-write" as const, cwd: root };
+      const started = await provider.prepare(
+        () => bashTool({ jobs: registry }).execute({ command: "touch /outside", background: true }, ctx),
+        policy,
+      )();
+      const id = /started background job (job-\d+)/u.exec(started.display)?.[1];
+      expect(id).toBeDefined();
+      const status = (waitMs?: number) =>
+        provider.prepare(
+          () => bashJobTool(registry).execute({ id: id!, action: "status", ...(waitMs === undefined ? {} : { waitMs }) }, ctx),
+          policy,
+        )();
+      // give the early line time to arrive, then drain it while the job is still running
+      await new Promise((r) => setTimeout(r, 150));
+      const early = await status();
+      expect(early.output.running).toBe(true);
+      expect(early.output.output).toContain("Read-only file system");
+      // the exit poll sees no new output — and must still classify the denial
+      await expect(status(2_000)).rejects.toBeInstanceOf(SandboxDeniedError);
+      // once: a later poll of the same exited job reports plainly
+      const after = await status();
+      expect(after.output.running).toBe(false);
+      expect(after.output.exitCode).toBe(1);
+    } finally {
+      registry.disposeAll();
       await rm(root, { recursive: true, force: true });
     }
   });

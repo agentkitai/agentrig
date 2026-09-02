@@ -20,8 +20,12 @@ type WrappedInvocation = Omit<SandboxSpawnInvocation, "sandboxed">;
 type ActiveSandbox = {
   policy: SandboxPolicy;
   wrap(command: string, args: readonly string[], policy: SandboxPolicy): WrappedInvocation;
-  denied(stderr: string): boolean;
+  /** The line of stderr that reads as a boundary denial under `policy`, or undefined. */
+  denied(stderr: string, policy: SandboxPolicy): string | undefined;
 };
+
+/** How much of the child's own words the denial reason may carry. */
+const DENIAL_EXCERPT_CHARS = 200;
 
 const activeSandbox = new AsyncLocalStorage<ActiveSandbox>();
 
@@ -44,12 +48,30 @@ export function sandboxSpawnInvocation(
   };
 }
 
-/** Convert only backend-shaped process failures into the denial understood by the agent loop. */
+/**
+ * Convert only backend-shaped process failures into the denial understood by the agent loop.
+ *
+ * No provider can authenticate a child's stderr: a command can print "Read-only file system" and
+ * exit 1 on purpose. So classification is narrowed to messages the ACTIVE policy would actually
+ * produce (a network denial is not one under `network: true`), generic EPERM text is never
+ * enough, and the reason carries its provenance so an escalation prompt (R2c) shows the human
+ * that the words came from the command, not from the sandbox.
+ */
 export function throwIfSandboxDenied(stderr: string): void {
   const active = activeSandbox.getStore();
-  if (active?.denied(stderr) === true) {
-    throw new SandboxDeniedError(stderr.trim() || "operation denied by the OS sandbox");
+  if (active === undefined) return;
+  const line = active.denied(stderr, active.policy);
+  if (line === undefined) return;
+  const excerpt = line.trim().slice(0, DENIAL_EXCERPT_CHARS);
+  throw new SandboxDeniedError(`reported by the command's own stderr (unauthenticated): ${excerpt}`);
+}
+
+/** First line of `stderr` matching any of `patterns`, for a bounded, provenance-labelled reason. */
+function firstDenialLine(stderr: string, patterns: readonly RegExp[]): string | undefined {
+  for (const line of stderr.split(/\r?\n/u)) {
+    if (patterns.some((p) => p.test(line))) return line;
   }
+  return undefined;
 }
 
 /** Explicit identity provider. Omitting AgentConfig.sandbox remains the default and is equivalent. */
@@ -70,7 +92,7 @@ abstract class ProcessSandboxProvider implements SandboxProvider {
     policy: SandboxPolicy,
   ): WrappedInvocation;
 
-  protected abstract denied(stderr: string): boolean;
+  protected abstract denied(stderr: string, policy: SandboxPolicy): string | undefined;
 
   prepare<T>(cmd: SandboxCommand<T>, policy: SandboxPolicy): SandboxCommand<T> {
     if (policy.mode === "none") return cmd;
@@ -78,7 +100,7 @@ abstract class ProcessSandboxProvider implements SandboxProvider {
     return () => activeSandbox.run({
       policy: normalized,
       wrap: (command, args, executionPolicy) => this.wrap(command, args, executionPolicy),
-      denied: (stderr) => this.denied(stderr),
+      denied: (stderr, executionPolicy) => this.denied(stderr, executionPolicy),
     }, cmd);
   }
 }
@@ -123,8 +145,12 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
     };
   }
 
-  protected denied(stderr: string): boolean {
-    return /read-only file system|operation not permitted|network is unreachable/iu.test(stderr);
+  protected denied(stderr: string, policy: SandboxPolicy): string | undefined {
+    // "operation not permitted" is deliberately absent: it is every EPERM a command can hit,
+    // sandbox or not, and would turn ordinary failures (and forged ones) into denials.
+    const patterns = [/read-only file system/iu];
+    if (policy.network !== true) patterns.push(/network is unreachable/iu);
+    return firstDenialLine(stderr, patterns);
   }
 }
 
@@ -168,7 +194,7 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
     return { command: this.command, args: ["-p", seatbeltProfile(policy), command, ...args] };
   }
 
-  protected denied(stderr: string): boolean {
-    return /sandbox(?:-exec)?:?.*deny/iu.test(stderr);
+  protected denied(stderr: string, _policy: SandboxPolicy): string | undefined {
+    return firstDenialLine(stderr, [/sandbox(?:-exec)?:?.*deny/iu]);
   }
 }

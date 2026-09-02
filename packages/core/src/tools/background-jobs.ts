@@ -35,11 +35,22 @@ interface JobSpawnOptions {
   signal: AbortSignal;
 }
 
+/** Output retained for end-of-job classification, whatever the polls drained. */
+const RETAINED_TAIL_CHARS = 4096;
+
 interface JobRecord {
   id: string;
   command: string;
   pid: number | undefined;
   unread: string;
+  /**
+   * The last RETAINED_TAIL_CHARS of everything the job ever wrote, independent of draining.
+   * `read()` hands each poll only what is new, so a sandbox denial printed early and drained by
+   * an intermediate poll was gone by the time the exit could be classified.
+   */
+  tail: string;
+  /** A denial is surfaced once; later polls of the same exited job report plainly. */
+  denialReported: boolean;
   droppedBytes: number;
   exited: boolean;
   exitCode: number | null;
@@ -111,6 +122,8 @@ export class JobRegistry {
       command: opts.command,
       pid: child.pid,
       unread: "",
+      tail: "",
+      denialReported: false,
       droppedBytes: 0,
       exited: false,
       exitCode: null,
@@ -120,7 +133,9 @@ export class JobRegistry {
     };
 
     const append = (chunk: Buffer): void => {
-      record.unread += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      record.tail = (record.tail + text).slice(-RETAINED_TAIL_CHARS);
+      record.unread += text;
       const beforeBytes = Buffer.byteLength(record.unread, "utf8");
       if (beforeBytes > MAX_UNREAD_BYTES) {
         // Drop the oldest unread output, but never silently — the count reaches the next status.
@@ -178,6 +193,22 @@ export class JobRegistry {
 
   ids(): string[] {
     return [...this.jobs.keys()];
+  }
+
+  /**
+   * Everything the job wrote, bounded to its last RETAINED_TAIL_CHARS, regardless of what polls
+   * already drained. Returns undefined once a denial from this job has been reported.
+   */
+  classifiable(id: string): string | undefined {
+    const record = this.jobs.get(id);
+    if (record === undefined || record.denialReported) return undefined;
+    return record.tail;
+  }
+
+  /** Marks the job's denial as surfaced so a later poll does not raise it again. */
+  markDenialReported(id: string): void {
+    const record = this.jobs.get(id);
+    if (record !== undefined) record.denialReported = true;
   }
 
   /** Hands over everything unread and resets the buffer — each poll sees only what is new. */
@@ -305,7 +336,19 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
 
       const drained = registry.read(input.id)!;
       const running = !record.exited;
-      if (!running && record.exitCode !== 0) throwIfSandboxDenied(drained.output);
+      if (!running && record.exitCode !== 0) {
+        // classify from the retained tail, not from this poll's drain: the denial may have been
+        // printed early and handed to an earlier status call
+        const retained = registry.classifiable(input.id);
+        if (retained !== undefined) {
+          try {
+            throwIfSandboxDenied(retained);
+          } catch (err) {
+            registry.markDenialReported(input.id);
+            throw err;
+          }
+        }
+      }
       const output: BashJobOutput = {
         id: input.id,
         running,

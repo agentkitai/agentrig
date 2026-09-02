@@ -129,6 +129,17 @@ Changes:
   tested without requiring nested macOS sandbox support.
 - R2b does not add selection flags/config or the outside-sandbox retry path: those remain R2d and
   R2c respectively. No Landlock or substitute Linux-native backend was added.
+- Deviation, arbitrated and recorded (see PR #90 `## Deviations`): the docker integration test is
+  gated behind `docker info` *and* a locally present fixture image, never pulling, because tests
+  are network-free and `docker run` would implicitly pull; R2d's CI pre-pull makes the live test
+  run on the ubuntu leg. The R2 acceptance text carries the arbiter's RECORD line.
+- Review repairs: no provider can authenticate a child's stderr, so classification is narrowed to
+  what the active policy would produce — generic "operation not permitted" is never a denial, and
+  "network is unreachable" only counts when the policy denies network — and the denial reason is
+  labelled as the command's own unauthenticated words, so the R2c escalation prompt cannot present
+  child output as the sandbox speaking. Background jobs classify from a retained tail of
+  everything the job wrote, not from the last poll's drain, so a denial printed early and drained
+  by an intermediate `bash_job` status is still reported at exit, once.
 
 - R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
   core passes that command and `{ mode, cwd }` policy to the configured provider and executes the
