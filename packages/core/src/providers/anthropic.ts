@@ -199,6 +199,8 @@ export class AnthropicProvider implements ModelProvider {
       tools: true,
       parallelTools: true,
       caching: true,
+      cacheReadDiscount: 0.1,
+      cacheWriteMultiplier: 1.25,
       contextWindow: opts.contextWindow ?? 200_000,
     };
   }

@@ -36,7 +36,12 @@ export function budgetDetector(opts: BudgetOptions = {}): Detector {
 
       const dims: Array<{ name: string; used: number; limit: number | undefined; fmt: (n: number) => string }> = [
         { name: "turns", used: state.turns, limit: opts.maxTurns, fmt: (n) => `${n}` },
-        { name: "tokens", used: state.usage.input + state.usage.output, limit: opts.maxTokens, fmt: (n) => `${n}` },
+        {
+          name: "tokens",
+          used: state.usage.input + (state.usage.cacheRead ?? 0) + (state.usage.cacheWrite ?? 0) + state.usage.output,
+          limit: opts.maxTokens,
+          fmt: (n) => `${n}`,
+        },
         { name: "usd", used: state.usd, limit: opts.maxUsd, fmt: (n) => `$${n.toFixed(2)}` },
         { name: "minutes", used: minutes, limit: opts.maxMinutes, fmt: (n) => `${n.toFixed(1)}m` },
       ];

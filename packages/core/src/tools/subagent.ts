@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Agent, AgentConfig, Budget, Pricing } from "../agent.js";
+import { usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
 import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
@@ -231,11 +231,16 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       const settle = (usage?: Usage): void => {
         if (settled) return;
         settled = true;
-        const spentTokens = usage === undefined ? reservedTokens : usage.input + usage.output;
+        const spentTokens = usage === undefined ? reservedTokens : usageTokens(usage);
         const spentUsd =
           usage === undefined || pricing === undefined
             ? reservedUsd
-            : (usage.input * pricing.inputUsdPerMTok + usage.output * pricing.outputUsdPerMTok) / 1e6;
+            : usageUsd(
+                usage,
+                pricing,
+                config.provider.capabilities.cacheReadDiscount,
+                config.provider.capabilities.cacheWriteMultiplier,
+              );
         for (const p of chain) {
           p.tokens += spentTokens - reservedTokens;
           p.usd += spentUsd - reservedUsd;

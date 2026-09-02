@@ -32,6 +32,34 @@ export interface Budget {
 export interface Pricing {
   inputUsdPerMTok: number;
   outputUsdPerMTok: number;
+  /** Explicit provider/model cache prices override capability multipliers when supplied. */
+  cacheReadUsdPerMTok?: number;
+  cacheWriteUsdPerMTok?: number;
+}
+
+/** All Usage fields are disjoint, so each contributes exactly once to a token budget. */
+export function usageTokens(usage: Usage): number {
+  return usage.input + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) + usage.output;
+}
+
+/**
+ * Price one usage record. Cache writes are input tokens at the normal input rate; cache reads use
+ * the provider's advertised discount. An unadvertised discount safely falls back to full price.
+ */
+export function usageUsd(
+  usage: Usage,
+  pricing: Pricing,
+  cacheReadDiscount = 1,
+  cacheWriteMultiplier = 1,
+): number {
+  const readPrice = pricing.cacheReadUsdPerMTok ?? pricing.inputUsdPerMTok * cacheReadDiscount;
+  const writePrice = pricing.cacheWriteUsdPerMTok ?? pricing.inputUsdPerMTok * cacheWriteMultiplier;
+  return (
+    usage.input * pricing.inputUsdPerMTok
+    + (usage.cacheRead ?? 0) * readPrice
+    + (usage.cacheWrite ?? 0) * writePrice
+    + usage.output * pricing.outputUsdPerMTok
+  ) / 1e6;
 }
 
 export interface PromptContext {
@@ -498,7 +526,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const b = config.budget;
       if (!b) return null;
       if (b.maxTurns !== undefined && turns >= b.maxTurns) return `turn budget reached (${b.maxTurns})`;
-      if (b.maxTokens !== undefined && totals.input + totals.output >= b.maxTokens)
+      if (b.maxTokens !== undefined && usageTokens(totals) >= b.maxTokens)
         return `token budget reached (${b.maxTokens})`;
       if (b.maxUsd !== undefined && usd >= b.maxUsd) return `USD budget reached ($${b.maxUsd})`;
       if (b.maxMinutes !== undefined && now() - startedAt >= b.maxMinutes * 60_000)
@@ -512,11 +540,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
         cwd = opts.cwd ?? snap.cwd;
         turns = snap.turns;
-        usd = snap.usd ?? 0;
         totals.input = snap.usage.input;
         totals.output = snap.usage.output;
         if (snap.usage.cacheRead !== undefined) totals.cacheRead = snap.usage.cacheRead;
         if (snap.usage.cacheWrite !== undefined) totals.cacheWrite = snap.usage.cacheWrite;
+        // Price restored token counts under the current complete pricing contract. Old snapshots'
+        // `usd` omitted cache activity, and explicit rates may legitimately change between runs.
+        usd = config.pricing === undefined
+          ? (snap.usd ?? 0)
+          : usageUsd(
+              totals,
+              config.pricing,
+              provider.capabilities.cacheReadDiscount,
+              provider.capabilities.cacheWriteMultiplier,
+            );
         await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns });
         messages = snap.messages;
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
@@ -808,10 +845,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (usage.cacheRead !== undefined) totals.cacheRead = (totals.cacheRead ?? 0) + usage.cacheRead;
         if (usage.cacheWrite !== undefined) totals.cacheWrite = (totals.cacheWrite ?? 0) + usage.cacheWrite;
         if (config.pricing) {
-          usd +=
-            (usage.input * config.pricing.inputUsdPerMTok + usage.output * config.pricing.outputUsdPerMTok) / 1e6;
+          usd += usageUsd(
+            usage,
+            config.pricing,
+            provider.capabilities.cacheReadDiscount,
+            provider.capabilities.cacheWriteMultiplier,
+          );
         }
-        if (usage.input + usage.output === 0 && stop !== "error" && !warnedNoUsage) {
+        if (usageTokens(usage) === 0 && stop !== "error" && !warnedNoUsage) {
           // e.g. an OpenAI-compatible server ignoring stream_options: budgets can't bind on zeros
           warnedNoUsage = true;
           await emit({
@@ -865,7 +906,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
-        const contextTokens = usage.input + usage.output || estimateTokens(
+        const contextTokens = usageTokens(usage) || estimateTokens(
           system,
           evictToolResults(messages, config.toolResultEviction).messages,
         );

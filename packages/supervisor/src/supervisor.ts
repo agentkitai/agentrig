@@ -96,6 +96,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
   if (opts.pricing !== undefined) stateOpts.pricing = opts.pricing;
+  if (opts.cacheReadDiscount !== undefined) stateOpts.cacheReadDiscount = opts.cacheReadDiscount;
+  if (opts.cacheWriteMultiplier !== undefined) stateOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
 
   let detached = false;
   const report = (where: string, err: unknown): void => {
@@ -283,6 +285,8 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   reviewTimeoutMs?: number;
   onError?: (where: string, err: Error) => void;
   pricing?: StateOptions["pricing"];
+  cacheReadDiscount?: number;
+  cacheWriteMultiplier?: number;
   windowSize?: number;
 }
 
@@ -333,6 +337,8 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
   if (opts.escalateTimeoutMs !== undefined) attachOpts.escalateTimeoutMs = opts.escalateTimeoutMs;
   if (opts.onError !== undefined) attachOpts.onError = opts.onError;
   if (opts.pricing !== undefined) attachOpts.pricing = opts.pricing;
+  if (opts.cacheReadDiscount !== undefined) attachOpts.cacheReadDiscount = opts.cacheReadDiscount;
+  if (opts.cacheWriteMultiplier !== undefined) attachOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
   if (opts.windowSize !== undefined) attachOpts.windowSize = opts.windowSize;
   return attach(session, attachOpts);
 }

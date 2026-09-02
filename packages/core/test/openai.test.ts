@@ -161,7 +161,9 @@ describe("OpenAICompatibleProvider.stream", () => {
       captured = { url: String(url), init: init! };
       return new Response(toolCallStream, { status: 200 });
     };
-    const provider = new OpenAICompatibleProvider({ apiKey: "sk-k", model: "gpt-test", fetchFn });
+    const provider = new OpenAICompatibleProvider({ apiKey: "sk-k", model: "gpt-5-test", fetchFn });
+    expect(provider.capabilities.cacheReadDiscount).toBe(0.1);
+    expect(provider.capabilities.caching).toBe(true);
     const events = await collect(provider.stream(baseReq, new AbortController().signal));
 
     expect(captured!.url).toBe("https://api.openai.com/v1/chat/completions");
@@ -177,9 +179,21 @@ describe("OpenAICompatibleProvider.stream", () => {
       return new Response(sse([{ choices: [{ delta: { content: "hi" }, finish_reason: "stop" }] }]), { status: 200 });
     };
     const provider = new OpenAICompatibleProvider({ model: "local", baseUrl: "http://localhost:11434/v1", fetchFn });
+    expect(provider.capabilities.cacheReadDiscount).toBeUndefined();
+    expect(provider.capabilities.caching).toBe(false);
     await collect(provider.stream(baseReq, new AbortController().signal));
     expect(JSON.parse(body).max_tokens).toBe(1024);
     expect(JSON.parse(body).max_completion_tokens).toBeUndefined();
+  });
+
+  it("does not grant official pricing metadata to a lookalike hostname", () => {
+    const provider = new OpenAICompatibleProvider({
+      model: "gpt-5",
+      baseUrl: "https://api.openai.com.evil.example/v1",
+      fetchFn: async () => new Response(),
+    });
+    expect(provider.capabilities.cacheReadDiscount).toBeUndefined();
+    expect(provider.capabilities.caching).toBe(false);
   });
 
   it("omits the auth header for keyless local servers", async () => {

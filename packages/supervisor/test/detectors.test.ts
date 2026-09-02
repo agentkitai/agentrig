@@ -488,6 +488,25 @@ describe("budget detector", () => {
     expect(signals[0]!.evidence[0]).toContain("usd budget");
   });
 
+  it("uses cache reads and writes in token and discounted USD soft thresholds", () => {
+    const events = [ev({
+      type: "model.response",
+      usage: { input: 100_000, cacheRead: 800_000, cacheWrite: 100_000, output: 0 },
+      stop: "end_turn",
+    })];
+    const tokenResult = feed(budgetDetector({ soft: 0.8, maxTokens: 1_100_000 }), events);
+    const usdResult = feed(budgetDetector({ soft: 0.8, maxUsd: 2 }), events, {
+      pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 20 },
+      cacheReadDiscount: 0.1,
+      cacheWriteMultiplier: 1.25,
+    });
+
+    expect(tokenResult.signals[0]!.evidence[0]).toContain("tokens budget");
+    // $1 uncached + $0.80 cache read + $1.25 cache write = $3.05, so 80% of $2 is crossed.
+    expect(usdResult.signals[0]!.evidence[0]).toContain("usd budget");
+    expect(usdResult.state.usage).toMatchObject({ input: 100_000, cacheRead: 800_000, cacheWrite: 100_000 });
+  });
+
   it("uses wall clock from session.start, and a resume restarts it", () => {
     const start = ev({ type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" }, 0);
     const late = ev({ type: "turn.end", n: 1 }, 9 * 60_000);

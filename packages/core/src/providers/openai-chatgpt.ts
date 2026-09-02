@@ -4,6 +4,7 @@ import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../pro
 import type { Usage } from "../events.js";
 import { OpenAIChatGPTAuth, type OpenAIChatGPTAuthOptions } from "./openai-chatgpt-auth.js";
 import { errorDetail, fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
+import { openAiCacheReadDiscount } from "./cache-pricing.js";
 
 /**
  * Experimental `openai-chatgpt` provider (PLAN §2.9): reuses a ChatGPT subscription via the same
@@ -305,10 +306,12 @@ export class OpenAIChatGPTProvider implements ModelProvider {
     this.clientVersion = opts.clientVersion ?? "0.0.0";
     this.retry = opts.retry ?? {};
     this.onRetry = opts.onRetry;
+    const cacheReadDiscount = openAiCacheReadDiscount(this.model);
     this.capabilities = {
       tools: true,
       parallelTools: true,
       caching: true,
+      ...(cacheReadDiscount === undefined ? {} : { cacheReadDiscount }),
       contextWindow: opts.contextWindow ?? 200_000,
     };
   }

@@ -40,7 +40,15 @@ export type ModelEvent =
 export interface ModelProvider {
   id: string;
   model: string;
-  capabilities: { tools: boolean; parallelTools: boolean; caching: boolean; contextWindow: number };
+  capabilities: {
+    tools: boolean;
+    parallelTools: boolean;
+    caching: boolean;
+    contextWindow: number;
+    /** Fractions of normal input price; model-derived defaults used only when explicit rates are absent. */
+    cacheReadDiscount?: number;
+    cacheWriteMultiplier?: number;
+  };
   stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
   countTokens?(req: ModelRequest): Promise<number>;
 }

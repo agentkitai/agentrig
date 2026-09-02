@@ -9,7 +9,7 @@ import type {
   Signal,
   Skill,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
+import { AssistantText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
@@ -597,7 +597,7 @@ export class TuiController {
       const summary = await session.done;
       this.set({ turns: summary.turns });
       this.print(
-        `${summary.reason} after ${summary.turns} turn(s), ${summary.usage.input} in / ${summary.usage.output} out`,
+        `${summary.reason} after ${summary.turns} turn(s), ${formatUsage(summary.usage)}`,
         summary.reason === "done" ? "system" : "error",
       );
       if (summary.error !== undefined) this.print(summary.error, "error");

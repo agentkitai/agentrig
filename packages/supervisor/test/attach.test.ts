@@ -134,6 +134,36 @@ async function drain(session: Session): Promise<HarnessEvent[]> {
 }
 
 describe("attach", () => {
+  it("supervise carries cache multipliers through to USD soft-budget state", async () => {
+    let turns = 0;
+    const provider: ModelProvider = {
+      id: "cache",
+      model: "m",
+      capabilities: { tools: true, parallelTools: false, caching: true, contextWindow: 100_000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        turns += 1;
+        if (turns > 1) {
+          yield { type: "stop", reason: "end_turn" };
+          return;
+        }
+        yield { type: "tool_use", id: "t", name: "spin", input: { same: "input" } };
+        yield { type: "usage", usage: { input: 100_000, cacheRead: 800_000, output: 0 } };
+        yield { type: "stop", reason: "tool_use" };
+      },
+    };
+    const session = run(provider);
+    const sup = supervise(session, {
+      budget: { soft: 0.8, maxUsd: 5 },
+      pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 20 },
+      cacheReadDiscount: 0.1,
+    });
+    const events = await drain(session);
+    await sup.done;
+
+    expect(events.some((e) => e.type === "supervisor.signal"
+      && e.signal.evidence.some((line) => line.includes("usd budget")))).toBe(false);
+  });
+
   it("catches a real looping session and aborts it well short of the turn budget", async () => {
     const provider = new LoopingProvider();
     const session = run(provider, 40);

@@ -16,7 +16,7 @@ import {
   type Pricing,
   type Session,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, renderChatEvent, renderEvent } from "./render.js";
+import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
@@ -64,6 +64,8 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   maxUsd?: string;
   priceIn?: string;
   priceOut?: string;
+  priceCacheRead?: string;
+  priceCacheWrite?: string;
   maxTokensPerTurn: string;
   memory?: string;
   /** Required here (the flags have defaults) while `SupervisorFlags` leaves them optional. */
@@ -223,6 +225,12 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     },
     task: w.task,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
+    ...(w.provider.capabilities?.cacheReadDiscount === undefined
+      ? {}
+      : { cacheReadDiscount: w.provider.capabilities.cacheReadDiscount }),
+    ...(w.provider.capabilities?.cacheWriteMultiplier === undefined
+      ? {}
+      : { cacheWriteMultiplier: w.provider.capabilities.cacheWriteMultiplier }),
     ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
     ...(o.supervisorReview === true
       ? {
@@ -374,7 +382,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     if (opts.json !== true) {
       console.log(
         `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +
-          `${summary.usage.input} in / ${summary.usage.output} out tokens`,
+          `${formatUsage(summary.usage)} tokens`,
       );
     }
     process.exitCode = summary.reason === "done" ? 0 : 1;

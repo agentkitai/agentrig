@@ -102,7 +102,10 @@ class FakeProvider implements ModelProvider {
   }
 }
 
-const usage = (i: number, o: number): ModelEvent => ({ type: "usage", usage: { input: i, output: o } });
+const usage = (i: number, o: number, cacheRead?: number): ModelEvent => ({
+  type: "usage",
+  usage: { input: i, output: o, ...(cacheRead === undefined ? {} : { cacheRead }) },
+});
 const stop = (r: "end_turn" | "tool_use"): ModelEvent => ({ type: "stop", reason: r });
 
 /** Declares no paths, so the cwdOnly default rule cannot cover it — it must reach `ask`. */
@@ -152,12 +155,13 @@ const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text)
 const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
-  it("runs a task and reports how it finished", async () => {
-    const c = makeController([[usage(1, 1), stop("end_turn")]]);
+  it("runs a task and reports how it finished with cached usage", async () => {
+    const c = makeController([[usage(400_000, 12_345, 2_900_000), stop("end_turn")]]);
     expect(await c.submit("do the thing")).toBe(true);
 
     expect(text(c)).toContain("do the thing");
     expect(text(c)).toContain("done after");
+    expect(text(c)).toContain("3.3M in (2.9M cached) / 12.3k out");
     expect(c.snapshot().status).toBe("idle");
     expect(c.snapshot().sessionId).not.toBeNull();
   });

@@ -99,6 +99,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   maxUsd?: string;
   priceIn?: string;
   priceOut?: string;
+  priceCacheRead?: string;
+  priceCacheWrite?: string;
   maxTokensPerTurn: string;
   ingestOnEnd?: boolean;
   dreamOnEnd?: boolean;
@@ -216,13 +218,24 @@ export function parseBudget(opts: AgentBuildOptions): {
   if (opts.maxMinutes !== undefined) budget.maxMinutes = positiveNumber("--max-minutes", opts.maxMinutes);
 
   let pricing: Pricing | undefined;
-  if (opts.priceIn !== undefined || opts.priceOut !== undefined) {
+  if (
+    opts.priceIn !== undefined
+    || opts.priceOut !== undefined
+    || opts.priceCacheRead !== undefined
+    || opts.priceCacheWrite !== undefined
+  ) {
     if (opts.priceIn === undefined || opts.priceOut === undefined) {
       throw new Error("--price-in and --price-out must be given together");
     }
     pricing = {
       inputUsdPerMTok: positiveNumber("--price-in", opts.priceIn),
       outputUsdPerMTok: positiveNumber("--price-out", opts.priceOut),
+      ...(opts.priceCacheRead === undefined
+        ? {}
+        : { cacheReadUsdPerMTok: positiveNumber("--price-cache-read", opts.priceCacheRead) }),
+      ...(opts.priceCacheWrite === undefined
+        ? {}
+        : { cacheWriteUsdPerMTok: positiveNumber("--price-cache-write", opts.priceCacheWrite) }),
     };
   }
   if (opts.maxUsd !== undefined) {
