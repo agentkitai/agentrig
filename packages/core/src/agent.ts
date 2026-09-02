@@ -1174,7 +1174,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // and selecting `none` still traverses the provider seam so providers own mode semantics.
         const prepared = config.sandbox === undefined
           ? command
-          : config.sandbox.provider.prepare(command, { mode: config.sandbox.mode, cwd });
+          : config.sandbox.provider.prepare(command, {
+              mode: config.sandbox.mode,
+              cwd,
+              ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
+            });
         const r = await raceAbort(prepared(), `tool ${tool.name}`);
         const ok = r.isError !== true;
         const overflow = overflowResult(r);

@@ -8,6 +8,8 @@ export type SandboxMode = z.infer<typeof SandboxMode>;
 export interface SandboxPolicy {
   mode: SandboxMode;
   cwd: string;
+  /** Network access is a separate grant and is denied by container/OS providers by default. */
+  network?: boolean;
 }
 
 /**
@@ -36,4 +38,6 @@ export class SandboxDeniedError extends Error {
 export interface SandboxConfig {
   provider: SandboxProvider;
   mode: SandboxMode;
+  /** Grant network inside providers that otherwise deny it. */
+  network?: boolean;
 }

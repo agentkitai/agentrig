@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R2a is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R2b is complete.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -114,6 +114,21 @@ Changes:
 | Row | Deliverable | Status |
 |---|---|---|
 | R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
+| R2b | Concrete no-op, Docker, and macOS Seatbelt providers | done |
+
+- R2b adds an explicit identity provider while keeping omitted sandbox configuration equivalent to
+  today's behavior. Docker runs process tools with a read-only root, a cwd bind that follows the
+  selected filesystem mode, and `--network none` unless network is separately granted. Seatbelt's
+  generated deny-default profile permits reads/processes, scopes writes to cwd only in
+  `workspace-write`, and denies network unless separately granted.
+- Foreground and background shell launches consult the active provider at the process boundary.
+  Backend-specific denial text is converted to `SandboxDeniedError`; ordinary non-zero command
+  exits retain their existing tool-result behavior. Docker's live integration test first requires
+  `docker info` and a local fixture image, prints a prominent reason, and skips rather than failing
+  when either prerequisite is absent; it never pulls during the test. Seatbelt profile shape is
+  tested without requiring nested macOS sandbox support.
+- R2b does not add selection flags/config or the outside-sandbox retry path: those remain R2d and
+  R2c respectively. No Landlock or substitute Linux-native backend was added.
 
 - R2a models a sandbox command as a deferred tool execution. After ordinary permission approval,
   core passes that command and `{ mode, cwd }` policy to the configured provider and executes the

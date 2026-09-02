@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
+import { throwIfSandboxDenied } from "../sandbox-providers.js";
 import { bound } from "./shared.js";
 
 /**
@@ -25,7 +26,8 @@ const MAX_UNREAD_BYTES = 512 * 1024;
 
 interface JobSpawnOptions {
   command: string;
-  shellPath: string;
+  args?: readonly string[];
+  shellPath?: string;
   cwd: string;
   isWindows: boolean;
   killTree: (pid: number) => void;
@@ -67,15 +69,23 @@ export class JobRegistry {
 
   start(opts: JobSpawnOptions): { id: string; pid: number | undefined } {
     const id = `job-${this.nextId++}`;
-    const child = spawn(opts.command, {
-      shell: opts.shellPath,
-      cwd: opts.cwd,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      // same grouping rationale as the foreground path: kill must reach the command's children
-      detached: !opts.isWindows,
-      windowsHide: true,
-    });
+    const child = opts.args === undefined
+      ? spawn(opts.command, {
+          shell: opts.shellPath,
+          cwd: opts.cwd,
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          // same grouping rationale as the foreground path: kill must reach the command's children
+          detached: !opts.isWindows,
+          windowsHide: true,
+        })
+      : spawn(opts.command, [...opts.args], {
+          cwd: opts.cwd,
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: !opts.isWindows,
+          windowsHide: true,
+        });
 
     const killGroup = (): void => {
       const pid = child.pid;
@@ -295,6 +305,7 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
 
       const drained = registry.read(input.id)!;
       const running = !record.exited;
+      if (!running && record.exitCode !== 0) throwIfSandboxDenied(drained.output);
       const output: BashJobOutput = {
         id: input.id,
         running,
