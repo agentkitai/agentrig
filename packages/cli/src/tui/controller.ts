@@ -507,7 +507,7 @@ export class TuiController {
           this.print("a turn is already running — /abort first", "error");
           return true;
         }
-        const composed = composeSkillInvocation(skill, cmd.args);
+        const composed = composeSkillInvocation(skill, cmd.args, cmd.invocation);
         this.print(`skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
         await this.continueConversation(composed);
         return true;

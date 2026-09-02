@@ -25,7 +25,7 @@ export type TuiCommand =
    * the loaded catalogue happens in the controller — this module stays pure — and a name that
    * matches no skill either gets the unknown-command treatment there, with a did-you-mean.
    */
-  | { kind: "skill"; name: string; args: string }
+  | { kind: "skill"; name: string; args: string; invocation: string }
   | { kind: "unknown"; name: string };
 
 export interface CommandSpec {
@@ -111,7 +111,7 @@ export function parseCommand(line: string): TuiCommand | null {
     default:
       // Built-ins always win: only a name NO case above claimed can reach the catalogue, so a
       // skill named "plan" can never override /plan (it is marked shadowed in /skills instead).
-      return { kind: "skill", name, args };
+      return { kind: "skill", name, args, invocation: line };
   }
 }
 
@@ -142,7 +142,11 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
  * R13d principal model: user invocation does not promote project-trust content), mirroring the
  * project-instructions banner style so one convention marks all repo-text-in-prompt seams.
  */
-export function composeSkillInvocation(skill: { name: string; path: string; body: string }, args: string): string {
+export function composeSkillInvocation(
+  skill: { name: string; path: string; body: string },
+  args: string,
+  invocation?: string,
+): string {
   // The name is already sanitized at parse; the path is not, and a filename may legally contain a
   // newline. The banners are advisory provenance labels (nothing parses them back), but a
   // multi-line "path" would still make the label lie about where the block starts.
@@ -154,6 +158,10 @@ export function composeSkillInvocation(skill: { name: string; path: string; body
     skill.body,
     `===== END SKILL ${JSON.stringify(skill.name)} =====`,
     "",
+    ...(invocation === undefined
+      ? []
+      : ["===== BEGIN HUMAN SKILL INVOCATION (verbatim) =====", invocation,
+          "===== END HUMAN SKILL INVOCATION =====", ""]),
     args === "" ? "Proceed as the skill directs." : `Task: ${args}`,
   ].join("\n");
 }

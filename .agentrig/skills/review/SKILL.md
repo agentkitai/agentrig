@@ -67,5 +67,7 @@ Run this in a session that shares no context with the run that wrote the PR.
 ## 7. Boundaries
 
 - **Never merge, never approve-and-merge, never push to the PR branch.** The verdict goes to the
-  human; landing is a separate decision and a separate flow (the `land` skill).
+  human, or to the `topic` conductor executing the human's already-authorized fixed band; landing is
+  a separate flow under the `land` skill either way. The reviewer never treats its own verdict as
+  merge authorization.
 - Remove the worktree when done. Leave the main working tree exactly as you found it.

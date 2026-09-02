@@ -29,7 +29,10 @@ validation.
   review claims, merge conflicts, red CI on the actual PR head or post-land `main`, and children that
   exhaust their budget all halt the train for a human. LOW findings are never waived or skipped: the
   train gives them one narrowly scoped fix child and one delta re-review, then lands only on a clean
-  result or halts. The train never rebuts a finding on its own.
+  result or halts. The train never rebuts a finding on its own. A preflight reserves five child
+  slots per row and requires at least 60 turns per child; undersized runs halt before branching.
+  TUI skill turns now preserve the raw human invocation in a provenance-labeled block, and subagent
+  results expose the child's session id so authorization and resume/audit reports are not guessed.
 - Caveat: unattended bands run unsandboxed until R2 lands. Up-front authorization removes repeated
   merge pauses; it does not add OS isolation. Use this mode only in an environment whose current
   unsandboxed execution risk is acceptable, and treat any halt as a successful safe outcome.

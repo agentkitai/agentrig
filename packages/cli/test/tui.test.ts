@@ -64,8 +64,10 @@ describe("parseCommand", () => {
   it("routes an unclaimed /word to skill resolution, never to the model as a prompt", () => {
     // the controller resolves it against the catalogue and gives the unknown-command treatment
     // (with a did-you-mean) when nothing matches — see the controller tests
-    expect(parseCommand("/memroy")).toEqual({ kind: "skill", name: "memroy", args: "" });
-    expect(parseCommand("/dogfood ship issue 62")).toEqual({ kind: "skill", name: "dogfood", args: "ship issue 62" });
+    expect(parseCommand("/memroy")).toEqual({ kind: "skill", name: "memroy", args: "", invocation: "/memroy" });
+    expect(parseCommand("/dogfood ship issue 62")).toEqual({
+      kind: "skill", name: "dogfood", args: "ship issue 62", invocation: "/dogfood ship issue 62",
+    });
     expect(parseCommand("/")).toEqual({ kind: "unknown", name: "" });
   });
 
@@ -627,6 +629,18 @@ describe("TuiController", () => {
     await c.submit("/deploy go");
     expect(provider.requests).toHaveLength(1);
     expect(JSON.stringify(provider.requests[0]!.messages[0]!.content)).toContain("CASED BODY");
+  });
+
+  it("preserves the human's skill invocation byte-for-byte in the model turn", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const c = makeControllerWith(provider);
+    c.setSkills([{ name: "topic", description: "release train", path: "/p/topic.md", body: "b" }]);
+
+    await c.submit("  /topic   Run R2, exactly.  ");
+
+    const turn = JSON.stringify(provider.requests[0]!.messages[0]!.content);
+    expect(turn).toContain("===== BEGIN HUMAN SKILL INVOCATION (verbatim) =====");
+    expect(turn).toContain("  /topic   Run R2, exactly.  ");
   });
 
   it("/skill-name continues the conversation, exactly like a task line", async () => {

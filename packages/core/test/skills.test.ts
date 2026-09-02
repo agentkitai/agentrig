@@ -296,20 +296,31 @@ describe("skillTool", () => {
 
   it("pins the topic release train's authorization and stop contract", async () => {
     const text = await readFile(".agentrig/skills/topic/SKILL.md", "utf8");
-    const topic = parseSkill(text, ".agentrig/skills/topic/SKILL.md");
+    const rawDescription = text.match(/^description: (.*)$/m)?.[1];
+    const found = await discoverSkills({ roots: [".agentrig/skills"] });
+    const topic = found.find((candidate) => candidate.name === "topic");
+    const body = topic?.body.replace(/\s+/g, " ");
 
-    expect(topic.description.length).toBeLessThanOrEqual(200);
-    expect(topic.body).toContain("Capture that sentence byte-for-byte as `AUTHORIZATION`");
-    expect(topic.body).toContain("Never pass the builder's report");
-    expect(topic.body).toContain("A verdict containing only LOW findings gets exactly one");
-    expect(topic.body).toContain("reports a MEDIUM or\n   HIGH finding, halt");
-    expect(topic.body).toContain("Never stack PRs");
-    expect(topic.body).toContain("watch `main` CI on the exact\n  merge commit");
-    expect(topic.body).toContain("never replace it with a fresh builder");
+    expect(rawDescription?.length).toBeLessThanOrEqual(200);
+    expect(topic).toBeDefined();
+    expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
+    expect(body).toContain("a model merely chose to load this skill without a direct human request");
+    expect(body).toContain("Never pass the builder's report");
+    expect(body).toContain("only LOW findings gets exactly one repair round");
+    expect(body).toContain("reports a MEDIUM or HIGH finding, halt");
+    expect(body).toContain("Never stack PRs");
+    expect(body).toContain("watch `main` CI on the exact merge commit");
+    expect(body).toContain("never replace it with a fresh builder");
+    expect(body).toContain("Reserve five children per row");
+    expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
     expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
     expect(land.body).toContain("include the human's exact authorization quote");
+
+    const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
+    const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
+    expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
   });
 });
