@@ -179,8 +179,15 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
 
       const budget: Budget = { ...(opts.childBudget ?? {}), maxTurns };
       const pricing = opts.pricing ?? config.pricing;
+      // A child's abort grace is half its parent's: abort reaches both on the same signal, so a
+      // child waiting as long as its parent always finishes its log AFTER the parent gave up
+      // waiting — and the parent would record a child "still running" that ends a moment later.
+      const parentGrace = Number.isFinite(config.abortGraceMs) && (config.abortGraceMs as number) >= 0
+        ? (config.abortGraceMs as number)
+        : 1_000;
       const child = opts.createAgent({
         ...config,
+        abortGraceMs: Math.floor(parentGrace / 2),
         tools: childTools,
         // NOT `{...config.budget}`: a child inherits no allowance it was not explicitly given
         budget,
@@ -222,6 +229,10 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         end("aborted");
       };
       ctx.signal.addEventListener("abort", onAbort, { once: true });
+      // A listener added to an already-aborted signal never fires. The parent can abort between
+      // its top-of-loop check and this call (a pre_tool hook, a permission prompt), and a child
+      // spawned into that window would otherwise run its full budget with nobody able to stop it.
+      if (ctx.signal.aborted) onAbort();
 
       /**
        * Reconciles the reservation with what the child actually spent, once. Called with the

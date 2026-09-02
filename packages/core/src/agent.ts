@@ -453,41 +453,48 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
    * in wall time, and a reader of the child's log (the abort test, `sessions show`) saw a session
    * with no end. Settled entries remove themselves.
    */
-  const orphans = new Set<Promise<unknown>>();
-  const orphan = (work: Promise<unknown>): void => {
-    orphans.add(work);
+  const orphans = new Map<Promise<unknown>, string>();
+  const orphan = (work: Promise<unknown>, label: string): void => {
+    orphans.set(work, label);
     work.then(() => orphans.delete(work), () => orphans.delete(work));
   };
+  // A negative, NaN, or non-finite grace is a configuration mistake, not a request for a
+  // never-ending wait: fall back to the default rather than hand setTimeout nonsense.
+  const graceMs = Number.isFinite(config.abortGraceMs) && (config.abortGraceMs as number) >= 0
+    ? (config.abortGraceMs as number)
+    : 1_000;
   const settleOrphans = async (): Promise<void> => {
     if (orphans.size === 0) return;
-    const graceMs = config.abortGraceMs ?? 1_000;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // NOT unref'd: this timer may be the only handle keeping the process alive while a tool that
+    // ignores its signal blocks on nothing. Unref'd, Node exited mid-grace with no snapshot and no
+    // session.end written — a worse outcome than the wait, and one no in-process test can see.
     const expired = new Promise<"expired">((res) => {
       timer = setTimeout(() => res("expired"), graceMs);
-      timer.unref?.();
     });
-    const outcome = await Promise.race([Promise.allSettled([...orphans]).then(() => "settled" as const), expired]);
+    const outcome = await Promise.race([Promise.allSettled([...orphans.keys()]).then(() => "settled" as const), expired]);
     if (timer !== undefined) clearTimeout(timer);
     if (outcome === "expired") {
+      const labels = [...orphans.values()].join(", ");
       await emit({
         type: "error",
-        message: `${orphans.size} tool execution(s) still running ${graceMs}ms after abort; session.end written without waiting for them`,
+        message: `orphaned work still running ${graceMs}ms after abort (${labels}); session.end written without waiting for it`,
         fatal: false,
       }).catch(() => {});
     }
   };
 
   /** Lets `control.abort()` win over a tool that ignores its signal. */
-  const raceAbort = <T>(work: Promise<T>): Promise<T> => {
+  const raceAbort = <T>(work: Promise<T>, label: string): Promise<T> => {
     const signal = abortController.signal;
     if (signal.aborted) {
       work.catch(() => {});
-      orphan(work);
+      orphan(work, label);
       return Promise.reject(new DOMException("aborted", "AbortError"));
     }
     return new Promise<T>((res, rej) => {
       const onAbort = () => {
-        orphan(work);
+        orphan(work, label);
         rej(new DOMException("aborted", "AbortError"));
       };
       signal.addEventListener("abort", onAbort, { once: true });
@@ -970,7 +977,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             compactionExhausted = true;
           } else try {
             // raced so control.abort() wins over a hung summarization call, same as tools
-            const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal));
+            const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal), "compaction");
             const after = estimateTokens(system, compacted);
             if (compacted !== messages && after < before * 0.9) {
               messages = compacted;
@@ -1168,7 +1175,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const prepared = config.sandbox === undefined
           ? command
           : config.sandbox.provider.prepare(command, { mode: config.sandbox.mode, cwd });
-        const r = await raceAbort(prepared());
+        const r = await raceAbort(prepared(), `tool ${tool.name}`);
         const ok = r.isError !== true;
         const overflow = overflowResult(r);
         const resultEvent = await emit({

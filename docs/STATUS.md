@@ -60,7 +60,20 @@ be recorded as still running, which is honest but worth revisiting then.
   abort open for the hook's full budget; the grace keeps abort responsive and the record honest.
 - Tests hold the child's end open at its store (`GatedStore`), not with a slow `session_end` hook:
   an aborted session skips its hooks entirely (`runHooks` returns at once on an aborted signal),
-  which also means memory ingest never runs for an aborted session — filed separately.
+  which also means memory ingest never runs for an aborted session — filed as #88.
+- Review findings folded in: the grace timer is deliberately NOT unref'd — a first draft unref'd
+  it, and in a bare process (not under vitest) Node exited mid-grace with no snapshot and no
+  `session.end`, exit code 0; a subprocess test (`test/fixtures/abort-exit.ts` under tsx) pins it.
+  A subagent child gets half its parent's grace, otherwise a child waiting as long as its parent
+  always finished after the parent gave up on it. The subagent tool now aborts a child spawned
+  into an already-aborted signal (a listener added to an aborted signal never fires; the child ran
+  its whole budget). The record names what was orphaned (`tool <name>` or `compaction`).
+- Costs to know: aborting a tool that ignores its signal, or a hung compaction call, now takes up
+  to the grace (1s) and records one non-fatal `error`; the bash tool honours its signal, so a
+  Ctrl-C on a normal command still lands in milliseconds. A tool orphaned by the abort can still
+  emit during the grace, so its events (a `file.changed`, a `subagent.end`) land after `turn.end`
+  and before `session.end` — more faithful than dropping them, and the supervisor's detectors do
+  not count `error` events, so the record cannot escalate a normal abort.
 
 ## Deviation gate and repair-round change (skills)
 

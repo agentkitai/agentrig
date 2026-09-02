@@ -1,6 +1,8 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -655,7 +657,7 @@ describe("a subagent cannot run away", () => {
 
     expect(summary.reason).toBe("aborted");
     const note = events.find(
-      (e) => e.type === "error" && (e as { message: string }).message.includes("still running 100ms after abort"),
+      (e) => e.type === "error" && /still running 100ms after abort \(tool subagent\)/.test((e as { message: string }).message),
     ) as { fatal: boolean } | undefined;
     expect(note).toBeDefined();
     expect(note!.fatal).toBe(false);
@@ -667,6 +669,100 @@ describe("a subagent cannot run away", () => {
     // let the child finish so the tmpdir teardown does not race its last append
     childStore.release();
     await new Promise((r) => setTimeout(r, 200));
+  });
+
+  it("an abort always writes session.end, even when the grace timer is the only live handle (#86)", async () => {
+    // Vitest keeps the event loop alive, so this can only be seen from a bare process: with the
+    // grace timer unref'd, Node exited during the grace with no snapshot and no session.end and
+    // exit code 0 — a silently truncated log, the exact drop #86 named as its worse candidate.
+    const script = fileURLToPath(new URL("./fixtures/abort-exit.ts", import.meta.url));
+    const tsx = fileURLToPath(new URL("../../../node_modules/.bin/tsx", import.meta.url));
+    const r = spawnSync(tsx, [script, root, "300"], { encoding: "utf8", timeout: 15_000 });
+    expect(r.error).toBeUndefined();
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout.trim().split("\n").at(-1) ?? "{}") as { id?: string; reason?: string };
+    expect(out.reason).toBe("aborted");
+    expect(out.id).toBeDefined();
+    const logEvents: HarnessEvent[] = [];
+    for await (const e of new SessionStore({ root }).read(out.id!)) logEvents.push(e);
+    const end = logEvents.at(-1) as { type: string; reason?: string };
+    expect(end.type).toBe("session.end");
+    expect(end.reason).toBe("aborted");
+    expect(logEvents.some((e) => e.type === "error" && /still running 300ms after abort \(tool hang\)/.test((e as { message: string }).message))).toBe(true);
+  });
+
+  it("a child gets half its parent's grace, so a hung leaf never leaves the parent recording a live child (#86)", async () => {
+    // abort reaches parent and child on the same signal; a child that waited as long as its
+    // parent would always finish its log AFTER the parent gave up waiting for it
+    const hang: AnyTool = {
+      name: "hang",
+      description: "never returns and ignores its signal",
+      inputSchema: z.object({}),
+      permission: "read",
+      paths: () => [],
+      execute: () => new Promise(() => {}),
+    };
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      [{ type: "tool_use", id: "h", name: "hang", input: {} }, usage(1, 1), stop("tool_use")],
+    ]);
+    const session = harness(provider, { childExtraTools: [hang] }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    const stillRunning = (e: HarnessEvent) => e.type === "error" && /still running/.test((e as { message: string }).message);
+    // the parent waited its child out: nothing left running from its point of view
+    expect(events.some(stillRunning)).toBe(false);
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of new SessionStore({ root }).read(spawned.id)) childEvents.push(e);
+    expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+    // the child is the one that gave up on its hung tool, at half the default grace
+    expect(childEvents.some((e) => stillRunning(e) && /500ms after abort \(tool hang\)/.test((e as { message: string }).message))).toBe(true);
+  });
+
+  it("a child spawned after the abort already landed is aborted at once (#86)", async () => {
+    // an abort between the loop's top-of-turn check and the tool call (here: inside pre_tool)
+    // reaches the subagent tool with its signal already aborted, and a listener added to an
+    // already-aborted signal never fires — the child ran its whole budget with nobody to stop it
+    let sessionRef: { control: { abort(): void } } | undefined;
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 5 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, {
+      slow: true,
+      parent: {
+        hooks: [{
+          point: "pre_tool",
+          id: "abort-now",
+          handler: () => {
+            sessionRef?.control.abort();
+            return { action: "continue" };
+          },
+        }],
+      },
+    }).run("do it", { cwd: root });
+    sessionRef = session;
+    const events = await collect(session);
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string } | undefined;
+    expect(spawned).toBeDefined();
+    const childEvents: HarnessEvent[] = [];
+    for await (const e of new SessionStore({ root }).read(spawned!.id)) childEvents.push(e);
+    const end = childEvents.at(-1) as { type: string; reason?: string };
+    expect(end.type).toBe("session.end");
+    expect(end.reason).toBe("aborted");
+    // it did not get to run its budget of five slow turns
+    expect(childEvents.filter((e) => e.type === "tool.call").length).toBeLessThanOrEqual(1);
   });
 
   it("records the child's end in the parent's log even when the parent is the one aborting", async () => {
