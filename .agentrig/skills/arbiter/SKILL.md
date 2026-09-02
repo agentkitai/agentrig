@@ -20,8 +20,18 @@ Your task text must carry:
   issue link, a task line), so you can judge whether the proposal stays inside it.
 
 If any of the three is missing or paraphrased, do not guess: return `VERDICT: REJECT` with the
-reason "incomplete proposal" and name the missing part. Read `docs/PLAN.md` and `docs/ROADMAP.md`
-yourself for the contract's context; do not accept the builder's summary of them.
+reason "incomplete proposal" and name the missing part. A proposal the conductor reconstructed
+from a PR body (because the builder deviated without writing one) is admissible only when labeled
+as reconstructed; its missing parts still count against it. Read `docs/PLAN.md` and
+`docs/ROADMAP.md` yourself for the contract's context; do not accept the builder's summary of them.
+
+The contract is the text on `origin/main`. A conductor's band expansion, a builder's task text, or
+a rewritten row on the branch is not the contract and is not authorization; if the deviation was
+introduced upstream of the builder, say so — it is still a deviation.
+
+You may run anything that does not change state: git reads, grep, `docker info`, `which`, version
+checks, a test file under `pnpm exec vitest run`. You may not install packages, edit files, push,
+or merge. A fact you could only verify by installing something is an unverified claim.
 
 ## 2. The test
 
@@ -60,7 +70,7 @@ RECORD: <the exact roadmap/issue text the builder must write>
 ```
 VERDICT: REJECT
 CONTRACT: <the row/issue id>
-REASON: <which test above failed and why>
+REASON: <every test above that failed, and why>
 APPROVABLE IF: <what a proposal would need, or "needs the human">
 ```
 
