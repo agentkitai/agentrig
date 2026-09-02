@@ -676,7 +676,9 @@ describe("a subagent cannot run away", () => {
     // grace timer unref'd, Node exited during the grace with no snapshot and no session.end and
     // exit code 0 — a silently truncated log, the exact drop #86 named as its worse candidate.
     const script = fileURLToPath(new URL("./fixtures/abort-exit.ts", import.meta.url));
-    const tsx = fileURLToPath(new URL("../../../node_modules/.bin/tsx", import.meta.url));
+    // core's own devDependency, so the path holds under a frozen-lockfile install too (the root
+    // .bin only carried tsx by hoisting, which CI did not reproduce)
+    const tsx = fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url));
     const r = spawnSync(tsx, [script, root, "300"], { encoding: "utf8", timeout: 15_000 });
     expect(r.error).toBeUndefined();
     expect(r.status).toBe(0);
