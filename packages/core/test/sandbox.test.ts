@@ -443,16 +443,18 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
   });
 
   it("a dangling chain with deep targets is followed link by link, inside the syscall budget", async () => {
-    // forty links, each pointing at the next one sixty directories down, the last dangling to the
-    // outside: resolving the chain with a realpath per hop made the kernel re-walk the remainder
-    // every time — 820 traversals per path, a hundred seconds per classification
+    // twenty links, each pointing at the next one sixty directories down, the last dangling to
+    // the outside: resolving the chain with a realpath per hop made the kernel re-walk the
+    // remainder every time — quadratic in the hops, a hundred seconds per classification at forty
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-")));
     const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-out-")));
     try {
       const deepDir = join(root, ...Array.from({ length: 60 }, () => "d"));
       await mkdir(deepDir, { recursive: true });
-      for (let i = 0; i < 40; i += 1) {
-        const target = i === 39 ? join(outside, "newfile") : join(deepDir, `link${i + 1}`);
+      // twenty hops: macOS resolves at most 32 symlinks (Linux 40), and past that limit a write
+      // fails with ELOOP rather than EROFS, so a longer chain is judged by string — and dropped
+      for (let i = 0; i < 20; i += 1) {
+        const target = i === 19 ? join(outside, "newfile") : join(deepDir, `link${i + 1}`);
         await symlink(target, join(deepDir, `link${i}`));
       }
       const ww = { mode: "workspace-write" as const, cwd: root };
