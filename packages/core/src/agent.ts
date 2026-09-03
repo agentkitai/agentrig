@@ -1197,6 +1197,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // what tool.call recorded — not anything the tool or model could claim later
         emit: emitFromTool(tool.name),
         signal: abortController.signal,
+        endSignal: endController.signal,
       };
       const t0 = now();
       let sandboxDenialRecorded = false;

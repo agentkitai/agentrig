@@ -143,8 +143,24 @@ Changes:
   reaches hooks as `summary.reason`. A second abort once the session is ending aborts that
   controller too, so ctrl-C twice means "stop waiting" rather than "run ingest for fifteen
   minutes". Tests: an aborted session's `session_end` hook runs with reason `aborted` and a live
-  signal; a second abort stops a hook that would otherwise wait out its budget. Mutants killed:
-  the session's signal for the point; ignoring the second abort.
+  signal; a second abort stops a hook that would otherwise wait out its budget; a session abort
+  still stops a hanging `pre_tool` hook. Mutants killed: the session's signal for the point;
+  ignoring the second abort; every point under the end signal.
+- Children (review finding): the parent's signal fires once, and that once is the child's first
+  abort, so a child's `session_end` hooks could outlive the parent's grace with nothing able to
+  stop them. The subagent tool now cuts them with a second abort at the child's grace, and
+  forwards the parent's own second abort through a new optional `ToolContext.endSignal` (a
+  field added, never repurposed) so ctrl-C twice reaches the child's hooks too. The CLI's
+  children carry no hooks today, so this binds SDK embedders; CLI children still leave no
+  ingest behind (unchanged, noted). Mutants killed: no grace cut; second abort not forwarded.
+- Both entry points say what each abort does: the TUI prints "session_end hooks still run;
+  abort again to skip them" then "skipping session_end hooks", and keeps answering SIGINT until
+  shutdown has finished (it used to remove the handler first, so a ctrl-C during the hooks went
+  to Node's default handler and killed the process mid-hook with no `session.end`); headless
+  `run` prints the same on the first SIGINT.
+- Semantics, stated: an abort that lands while the session is already ending (a normally
+  finished session in its end hooks) counts as the second abort and stops them — that is what a
+  person pressing ctrl-C during a long ingest means.
 - **#100 — the malformed-injection test could not tell "ignored" from "injected an empty
   message".** It now pins the exact provider conversation (the task alone), the exact appended
   messages (the reply alone), and the snapshot and materialized lists. Mutant killed: reporting

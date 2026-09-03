@@ -6,6 +6,12 @@ export interface ToolContext {
   sessionId: string;
   emit(payload: EventPayload): void;
   signal: AbortSignal;
+  /**
+   * Fires on the session's SECOND abort — the one that means "stop waiting for session_end hooks"
+   * (#88). A tool that runs a child session forwards it, so ctrl-C twice reaches the child's end
+   * hooks too. Optional: contexts built by hand (tests, embedders) may omit it.
+   */
+  endSignal?: AbortSignal;
 }
 
 export interface ToolResult<O = unknown> {

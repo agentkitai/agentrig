@@ -13,6 +13,7 @@ import {
   subagentTool,
   type AnyTool,
   type HarnessEvent,
+  type Hook,
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
@@ -146,6 +147,7 @@ function makeController(turns: Array<ModelEvent[] | Error>, extra: Partial<Const
 function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
+  hooks: Hook[] = [],
 ) {
   const controller: TuiController = new TuiController({
     cwd: root,
@@ -158,6 +160,7 @@ function makeControllerWith(
       budget: { maxTurns: 5 },
       maxTokensPerTurn: 100,
       onAsk: (req) => controller.ask(req),
+      ...(hooks.length === 0 ? {} : { hooks }),
     }),
     ...extra,
   });
@@ -547,6 +550,27 @@ describe("TuiController", () => {
     await running;
     expect(c.snapshot().pending).toBeNull();
     expect(c.snapshot().status).toBe("idle");
+  });
+
+  it("a second /abort reaches the session's end hooks, and says what each abort does (#88)", async () => {
+    let hookOutcome = "not run";
+    const provider = new FakeProvider([[{ type: "text_delta", text: "hi" }, usage(1, 1), stop("end_turn")]]);
+    const c = makeControllerWith(provider, {}, [{
+      point: "session_end",
+      handler: (ctx) =>
+        new Promise((resolve) => {
+          hookOutcome = "running";
+          ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; resolve({ action: "continue" }); }, { once: true });
+        }),
+    }]);
+    const running = c.submit("hello");
+    await vi.waitFor(() => expect(hookOutcome).toBe("running"));
+    c.abort();
+    expect(last(c)).toContain("session_end hooks still run; abort again to skip them");
+    c.abort();
+    expect(last(c)).toContain("skipping session_end hooks");
+    await running;
+    expect(hookOutcome).toBe("cut");
   });
 
   it("/abort with nothing running says so instead of throwing", async () => {

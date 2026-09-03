@@ -199,6 +199,8 @@ export class TuiController {
    */
   private resumable = false;
   private session: Session | null = null;
+  /** The session `abort()` last aborted, so a repeat is recognised as the second abort. */
+  private aborted: Session | null = null;
   /** Requests waiting behind the one on screen. */
   private readonly queue: PendingPermission[] = [];
   private running: Promise<void> | null = null;
@@ -426,10 +428,14 @@ export class TuiController {
       this.print("nothing running", "system");
       return;
     }
+    const again = this.aborted === this.session;
+    this.aborted = this.session;
     this.session.control.abort();
     // a pending prompt would otherwise hold the loop open waiting for an answer nobody will give
     this.denyAllPending();
-    this.print("aborting…", "error");
+    // The first abort stops the work; session_end hooks (memory ingest, the dream trigger) still
+    // run for the aborted session (#88). The second abort stops those too.
+    this.print(again ? "aborting again — skipping session_end hooks" : "aborting… (session_end hooks still run; abort again to skip them)", "error");
   }
 
   /**

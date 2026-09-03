@@ -463,6 +463,30 @@ describe("session_end", () => {
     expect(events.at(-1)!.type).toBe("session.end");
   });
 
+  it("a session abort still stops a hanging pre_tool hook — only session_end has its own signal", async () => {
+    let hookStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { hookStarted = r; });
+    let hookSignalFired = false;
+    const session = run(
+      [[{ type: "tool_use", id: "t1", name: "echo", input: { text: "x" } }, usage(1, 1), stop("tool_use")]],
+      [{
+        point: "pre_tool",
+        handler: (ctx) =>
+          new Promise((resolve) => {
+            hookStarted();
+            ctx.signal.addEventListener("abort", () => { hookSignalFired = true; resolve({ action: "continue" }); }, { once: true });
+          }),
+      }],
+    );
+    const collecting = collect(session);
+    await started;
+    session.control.abort();
+    await collecting;
+    const summary = await session.done;
+    expect(summary.reason).toBe("aborted");
+    expect(hookSignalFired).toBe(true);
+  });
+
   it("a second abort while session_end hooks run stops them — ctrl-C twice means stop waiting", async () => {
     let hookStarted: () => void = () => {};
     const started = new Promise<void>((r) => { hookStarted = r; });

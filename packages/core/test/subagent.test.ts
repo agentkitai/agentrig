@@ -91,6 +91,8 @@ interface HarnessOptions {
   childStore?: () => SessionStore;
   /** Overrides applied to the PARENT's config only. */
   parent?: Partial<AgentConfig>;
+  /** Extra fields on the config `childConfig()` returns (hooks, grace). */
+  childExtra?: Partial<AgentConfig>;
 }
 
 /** The tool alone, plus a context to drive it with — no parent agent between test and tool. */
@@ -150,6 +152,7 @@ function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
     maxTokensPerTurn: 100,
     ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
     ...(opts.childStore === undefined ? {} : { store: opts.childStore() }),
+    ...(opts.childExtra ?? {}),
   });
   const tool = subagentTool({
     createAgent: (config) => {
@@ -632,6 +635,87 @@ describe("a subagent cannot run away", () => {
     const childEvents: HarnessEvent[] = [];
     for await (const e of new SessionStore({ root }).read(spawned.id)) childEvents.push(e);
     expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+  });
+
+  it("a child's session_end hooks run on the parent's abort, and are cut at the child's grace (#88, #86)", async () => {
+    // the child's end hooks would otherwise outlive the parent's grace with nothing able to stop
+    // them: the parent's signal fires once, and that once is the child's FIRST abort
+    let hookOutcome = "not run";
+    let hookReason: string | undefined;
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, {
+      slow: true,
+      childExtra: {
+        abortGraceMs: 200,
+        hooks: [{
+          point: "session_end",
+          handler: (ctx) =>
+            new Promise((resolve) => {
+              hookReason = (ctx.summary as { reason: string }).reason;
+              hookOutcome = "running";
+              ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; resolve({ action: "continue" }); }, { once: true });
+              setTimeout(() => { if (hookOutcome === "running") { hookOutcome = "finished"; resolve({ action: "continue" }); } }, 5_000);
+            }),
+        }],
+      },
+    }).run("do it", { cwd: root });
+    setTimeout(() => session.control.abort(), 80);
+    const events = await collect(session);
+    const summary = await session.done;
+    expect(summary.reason).toBe("aborted");
+    // the child's hook ran (it used to be skipped outright), saw the abort, and was cut at the
+    // child's grace (100ms here) rather than running its five seconds
+    await new Promise((r) => setTimeout(r, 300));
+    expect(hookReason).toBe("aborted");
+    expect(hookOutcome).toBe("cut");
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents = await new SessionStore({ root }).readAll(spawned.id);
+    expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+  });
+
+  it("the parent's second abort reaches a child's session_end hooks before the grace runs out", async () => {
+    let hookOutcome = "not run";
+    let cutAt = 0;
+    const provider = new ScriptedProvider([
+      spawn("long job"),
+      ...Array.from({ length: 20 }, () => [
+        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        usage(1, 1),
+        stop("tool_use"),
+      ]),
+    ]);
+    const session = harness(provider, {
+      slow: true,
+      parent: { abortGraceMs: 4_000 },
+      childExtra: {
+        abortGraceMs: 4_000,
+        hooks: [{
+          point: "session_end",
+          handler: (ctx) =>
+            new Promise((resolve) => {
+              hookOutcome = "running";
+              ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; cutAt = Date.now(); resolve({ action: "continue" }); }, { once: true });
+            }),
+        }],
+      },
+    }).run("do it", { cwd: root });
+    const startedAt = Date.now();
+    setTimeout(() => session.control.abort(), 80);
+    // the second abort, well inside the 2s child grace: it must be what cuts the hook
+    setTimeout(() => session.control.abort(), 250);
+    await collect(session);
+    const summary = await session.done;
+    expect(summary.reason).toBe("aborted");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(hookOutcome).toBe("cut");
+    expect(cutAt - startedAt).toBeLessThan(1_500);
   });
 
   it("the abort grace is bounded, and running past it is recorded (#86)", async () => {

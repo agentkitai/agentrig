@@ -365,7 +365,14 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
           }),
         );
 
-  const onSigint = (): void => session.control.abort();
+  let sigints = 0;
+  const onSigint = (): void => {
+    sigints += 1;
+    // the first abort stops the work; session_end hooks still run for the aborted session (#88),
+    // and the second abort stops those too — say so, or a person waits on an ingest they cannot see
+    if (sigints === 1) console.error("aborting… session_end hooks still run; ctrl-C again to skip them");
+    session.control.abort();
+  };
   process.on("SIGINT", onSigint);
   try {
     const assistant = new AssistantText();

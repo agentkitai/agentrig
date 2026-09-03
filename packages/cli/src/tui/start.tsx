@@ -178,9 +178,16 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       await waitUntilExit();
     });
   } finally {
-    process.removeListener("SIGINT", onSigint);
-    // a session still running when the UI closes would keep billing with nothing watching it
-    await controller.shutdown();
+    // The UI is gone but the session may still be running, or running its session_end hooks
+    // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second
+    // abort that skips the hooks rather than Node's default handler killing the process mid-hook
+    // with no session.end written.
+    stopForSigint = () => controller.abort();
+    try {
+      await controller.shutdown();
+    } finally {
+      process.removeListener("SIGINT", onSigint);
+    }
     for (const server of built.mcp) await server.close().catch(() => {});
   }
 }

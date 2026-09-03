@@ -185,9 +185,10 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       const parentGrace = Number.isFinite(config.abortGraceMs) && (config.abortGraceMs as number) >= 0
         ? (config.abortGraceMs as number)
         : 1_000;
+      const childGrace = Math.floor(parentGrace / 2);
       const child = opts.createAgent({
         ...config,
-        abortGraceMs: Math.floor(parentGrace / 2),
+        abortGraceMs: childGrace,
         tools: childTools,
         // NOT `{...config.budget}`: a child inherits no allowance it was not explicitly given
         budget,
@@ -224,11 +225,21 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // running and billing. `subagent.end` is emitted HERE rather than after the loop: by the
       // time the loop unwinds the parent is ending, and events from a finished session are
       // dropped — which is how a spawn came to be logged with no matching end.
+      let cut: ReturnType<typeof setTimeout> | undefined;
       const onAbort = (): void => {
         session.control.abort();
         end("aborted");
+        // The child's session_end hooks (#88) get the child's grace and are then cut with a
+        // second abort: the parent stops waiting at its own grace (#86), and a child still
+        // ingesting after that would be exactly the orphan the parent's note reports.
+        cut = setTimeout(() => session.control.abort(), childGrace);
+        void session.done.then(() => clearTimeout(cut), () => clearTimeout(cut));
       };
+      // the parent's SECOND abort — stop waiting for end hooks — reaches the child's end hooks too
+      const onEndAbort = (): void => session.control.abort();
       ctx.signal.addEventListener("abort", onAbort, { once: true });
+      ctx.endSignal?.addEventListener("abort", onEndAbort, { once: true });
+      if (ctx.endSignal?.aborted === true) onEndAbort();
       // A listener added to an already-aborted signal never fires. The parent can abort between
       // its top-of-loop check and this call (a pre_tool hook, a permission prompt), and a child
       // spawned into that window would otherwise run its full budget with nobody able to stop it.
@@ -312,6 +323,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         // leave a pool permanently `live` (never evictable) and permanently charged
         settle();
         ctx.signal.removeEventListener("abort", onAbort);
+        ctx.endSignal?.removeEventListener("abort", onEndAbort);
       }
     },
   } as AnyTool;
