@@ -206,6 +206,43 @@ describe("liveChildren", () => {
     expect(nodes[0]!.children[1]!.task).toBe("g2");
   });
 
+  it("a record the named session's own log disputes is never placed, at any depth (#104)", async () => {
+    const store = new SessionStore({ root });
+    const startAs = (id: string, parent: string) =>
+      store.append(id, { type: "session.start", task: id, cwd: "/w", provider: "p", model: "m", parent });
+    await start(store, "parent", "p");
+    await startAs("kid1", "parent");
+    await startAs("kid2", "parent");
+    await startAs("g1", "kid1");
+    await startAs("g2", "kid2");
+    await startAs("h", "g2");
+    await store.append("kid1", { type: "subagent.spawn", id: "g1", task: "g1" });
+    await store.append("kid2", { type: "subagent.spawn", id: "g2", task: "g2" });
+    // g1 forges a record for h, which truly belongs one level deeper under g2 — and says so
+    await store.append("g1", { type: "subagent.spawn", id: "h", task: "forged" });
+    await store.append("g2", { type: "subagent.spawn", id: "h", task: "h" });
+    const nodes = await liveChildren(store, [{ id: "kid1", task: "k1" }, { id: "kid2", task: "k2" }], { parent: "parent" });
+    const g1 = nodes[0]!.children[0]!;
+    const g2 = nodes[1]!.children[0]!;
+    expect(g1.id).toBe("g1");
+    expect(g1.children).toEqual([]);
+    expect(g2.children.map((n) => n.id)).toEqual(["h"]);
+    expect(g2.children[0]!.status?.parent).toBe("g2");
+    // a top-level record for a session that names another parent is disputed too
+    const stolen = await liveChildren(store, [{ id: "g2", task: "mine" }], { parent: "parent" });
+    expect(stolen).toEqual([]);
+  });
+
+  it("a log without a parent field, or no log yet, cannot testify and is accepted", async () => {
+    const store = new SessionStore({ root });
+    await start(store, "kid", "k");
+    await start(store, "legacy", "written before the field");
+    await store.append("kid", { type: "subagent.spawn", id: "legacy", task: "legacy" });
+    await store.append("kid", { type: "subagent.spawn", id: "unborn", task: "not yet" });
+    const nodes = await liveChildren(store, [{ id: "kid", task: "k" }], { parent: "parent" });
+    expect(nodes[0]!.children.map((n) => n.id)).toEqual(["legacy", "unborn"]);
+  });
+
   it("an id that is not a session id is marked invalid rather than read", async () => {
     const store = new SessionStore({ root });
     const [node] = await liveChildren(store, [{ id: "../../etc/passwd", task: "t" }]);

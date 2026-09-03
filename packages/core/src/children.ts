@@ -11,6 +11,8 @@ export interface ChildStatus {
   id: string;
   /** From the child's `session.start`; absent while the child has not written one yet. */
   task?: string;
+  /** The parent its own `session.start` names (#104); absent for logs written before that field. */
+  parent?: string;
   /** Timestamp of the child's first event, or null before it has written anything. */
   startedAt: number | null;
   /** Timestamp of the latest event read. */
@@ -46,6 +48,7 @@ export function summarizeSession(id: string, events: readonly HarnessEvent[]): C
     switch (e.type) {
       case "session.start":
         status.task = e.task;
+        if (e.parent !== undefined) status.parent = e.parent;
         break;
       case "turn.start":
         status.turns = e.n;
@@ -119,13 +122,30 @@ export async function liveChildren(
 ): Promise<ChildNode[]> {
   const claimed = new Set<string>();
   if (opts.parent !== undefined) claimed.add(opts.parent);
-  const place = (
+  /**
+   * A record is accepted only if the named session does not contradict it (#104): a log whose
+   * `session.start` names a different parent belongs to that parent, whatever this record says.
+   * A log that is missing (starting) or predates the field cannot testify and is accepted.
+   */
+  const disputed = async (id: string, claimant: string | undefined): Promise<boolean> => {
+    if (claimant === undefined || !isValidSessionId(id)) return false;
+    let first: HarnessEvent | null;
+    try {
+      first = await store.firstEvent(id);
+    } catch {
+      return false;
+    }
+    return first?.type === "session.start" && first.parent !== undefined && first.parent !== claimant;
+  };
+  const place = async (
     into: ChildNode[],
     records: ReadonlyArray<{ id: string; task: string; reason?: string }>,
-  ): ChildNode[] => {
+    claimant: string | undefined,
+  ): Promise<ChildNode[]> => {
     const placed: ChildNode[] = [];
     for (const r of records) {
       if (claimed.has(r.id)) continue;
+      if (await disputed(r.id, claimant)) continue;
       claimed.add(r.id);
       const node: ChildNode = {
         id: r.id,
@@ -141,15 +161,16 @@ export async function liveChildren(
   };
 
   const roots: ChildNode[] = [];
-  let level = place(roots, spawned);
+  let level = await place(roots, spawned, opts.parent);
   while (level.length > 0) {
     // read the whole depth first: what each log claims is only placed once every log at this
-    // depth has been read, so the earliest record wins by depth, never by branch order
+    // depth has been read, so the earliest record wins by depth, never by branch order — and a
+    // record the named session's own log disputes is never placed at all
     for (const node of level) await fill(store, node);
     const next: ChildNode[] = [];
     for (const node of level) {
       if (node.status === null) continue;
-      next.push(...place(node.children, node.status.children));
+      next.push(...(await place(node.children, node.status.children, node.id)));
     }
     level = next;
   }

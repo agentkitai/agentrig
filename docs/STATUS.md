@@ -134,6 +134,18 @@ Changes:
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
 
+- **#104 — a forged spawn record naming a deeper session was undecidable.** `session.start`
+  gains an optional `parent` (schema-added, never repurposed); the subagent tool passes
+  `parent: ctx.sessionId` into the child's `run`, so a child's own log names its parent.
+  `liveChildren` now accepts a spawn record only if the named session's log does not dispute it:
+  a `session.start` naming a different parent belongs to that parent, whatever the record says. A
+  missing log (starting) or one written before the field cannot testify and is accepted, so old
+  logs keep rendering. `renderEvent` prints the parent. Mutants killed: dropping the dispute
+  check; not recording the parent.
+- **#96 — child abort grace floored to 0; the clamp lived twice.** `abortGraceOf(config)` is the
+  one clamp (finite, non-negative, else 1000ms), used by the loop and the subagent tool; a child
+  gets `max(1, floor(parent / 2))`. Mutant killed: dropping the floor.
+
 ## R3 notes
 
 | Row | Deliverable | Status |

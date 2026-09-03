@@ -85,6 +85,8 @@ interface HarnessOptions {
   configBudget?: Budget;
   /** Extra tools the caller's `childConfig()` hands the child. */
   childExtraTools?: AnyTool[];
+  /** Extra fields on the config `childConfig()` returns — what the tool derives a child's grace from. */
+  childExtra?: Partial<AgentConfig>;
   /** Every config `createAgent` was called with, in order: child, then grandchild. */
   created?: AgentConfig[];
   /** The child's store, when a test needs to hold its log open (see `GatedStore`). */
@@ -119,6 +121,7 @@ function harnessTool(provider: ModelProvider, opts: HarnessOptions = {}) {
     store: new SessionStore({ root }),
     maxTokensPerTurn: 100,
     ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
+    ...(opts.childExtra ?? {}),
   });
   return subagentTool({
     createAgent: (config) => {
@@ -150,6 +153,7 @@ function harness(provider: ModelProvider, opts: HarnessOptions = {}) {
     maxTokensPerTurn: 100,
     ...(opts.configBudget === undefined ? {} : { budget: opts.configBudget }),
     ...(opts.childStore === undefined ? {} : { store: opts.childStore() }),
+    ...(opts.childExtra ?? {}),
   });
   const tool = subagentTool({
     createAgent: (config) => {
@@ -632,6 +636,39 @@ describe("a subagent cannot run away", () => {
     const childEvents: HarnessEvent[] = [];
     for await (const e of new SessionStore({ root }).read(spawned.id)) childEvents.push(e);
     expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+  });
+
+  it("a child's own session.start names its parent, so its log can dispute a forged spawn record (#104)", async () => {
+    const provider = new ScriptedProvider([
+      spawn("say hi"),
+      [say("hi"), usage(1, 1), stop("end_turn")],
+      [say("done"), usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider).run("do it", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents = await new SessionStore({ root }).readAll(spawned.id);
+    expect(childEvents[0]).toMatchObject({ type: "session.start", parent: session.id });
+    // the parent's own start names nobody
+    expect(events[0]).toMatchObject({ type: "session.start" });
+    expect(events[0]).not.toHaveProperty("parent");
+  });
+
+  it("a child's abort grace is half its parent's, floored at 1ms, from the one clamp (#96)", async () => {
+    for (const [parentGrace, expected] of [[100, 50], [1, 1], [0, 1], [Number.NaN, 500], [-5, 500]] as const) {
+      const created: AgentConfig[] = [];
+      const provider = new ScriptedProvider([
+        spawn("x"),
+        [say("hi"), usage(1, 1), stop("end_turn")],
+        [say("done"), usage(1, 1), stop("end_turn")],
+      ]);
+      // the tool derives the child's grace from the config `childConfig()` returns
+      const session = harness(provider, { created, childExtra: { abortGraceMs: parentGrace } }).run("do it", { cwd: root });
+      await collect(session);
+      await session.done;
+      expect(created[0]!.abortGraceMs, `parent ${parentGrace}`).toBe(expected);
+    }
   });
 
   it("the abort grace is bounded, and running past it is recorded (#86)", async () => {
