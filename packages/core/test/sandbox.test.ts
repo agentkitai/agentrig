@@ -420,13 +420,15 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     // cost one syscall per existing component, quadratic over the budget — minutes per stderr
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-deeptree-")));
     try {
-      const deepDir = join(root, ...Array.from({ length: 700 }, () => "d"));
+      // 300 levels: past the sixty-four-component cap by a wide margin, under macOS's 1024-byte
+      // PATH_MAX (a 700-level tree failed there with ENAMETOOLONG on mkdir)
+      const deepDir = join(root, ...Array.from({ length: 300 }, () => "d"));
       await mkdir(deepDir, { recursive: true });
       const ww = { mode: "workspace-write" as const, cwd: root };
       const leaves = Array.from({ length: 16 }, (_, i) => `'${deepDir}/${i}'`).join(" ");
       const line = `touch: cannot touch ${leaves}: Read-only file system`;
       const t0 = Date.now();
-      for (let i = 0; i < 50; i += 1) expect(writeDenialPlausible(line, ww)).toBe(false);
+      for (let i = 0; i < 100; i += 1) expect(writeDenialPlausible(line, ww)).toBe(false);
       expect(Date.now() - t0).toBeLessThan(1_500);
       // the string judgement past the cap: an outside string stays outside
       expect(writeDenialPlausible(`touch: cannot touch '/etc/${"d/".repeat(70)}x': Read-only file system`, ww)).toBe(true);
