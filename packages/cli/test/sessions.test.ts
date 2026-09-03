@@ -67,6 +67,17 @@ describe("session CLI operations", () => {
     expect(hits.map((hit) => hit.id)).not.toContain("beta");
   });
 
+  it("searches a fork through matching content found only in its materialized parent prefix", async () => {
+    const store = new SessionStore({ root, newId: () => "child" });
+    await start(store, "parent", "investigate inherited pulsar signature");
+    const child = await forkSession(store, "parent", 0);
+    await store.append(child, { type: "model.delta", text: "unrelated continuation" });
+
+    const hits = await searchSessions(store, "inherited pulsar signature");
+
+    expect(hits.map((hit) => hit.id)).toContain(child);
+  });
+
   it("rejects a default fork of an empty session instead of inventing sequence zero", async () => {
     const store = new SessionStore({ root });
     await writeFile(store.pathFor("empty"), "", "utf8");

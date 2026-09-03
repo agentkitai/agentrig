@@ -152,6 +152,8 @@ describe("argv parsing", () => {
     for (const argv of [
       ["sessions", "fork", "abc", "--at", "-1"],
       ["sessions", "replay", "abc", "--until", "1.5"],
+      ["sessions", "fork", "abc", "--at", "9007199254740992"],
+      ["sessions", "replay", "abc", "--until", "9007199254740992"],
     ]) {
       const cli = stub(buildProgram());
       expect(await cli.run(argv)).toBeNull();
