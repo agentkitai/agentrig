@@ -117,8 +117,8 @@ is verified by its fail-first regression tests, not by another review round. Cap
 round. **The cap bounds review rounds, not fixes**: whatever that delta reviewer finds is never
 re-reviewed by a second agent — §9's "fix everything" applies to the findings round only. A LOW
 with a concrete fix may still be fixed after the delta round when the fix carries a fail-first
-test and a killed mutant: commit it separately, label it in the PR body as **post-delta,
-self-verified, not re-reviewed**, and let the human see that label at merge. Anything the delta
+test and a killed mutant: commit it separately, label it in the PR body as
+**post-delta, self-verified, not re-reviewed**, and let the human see that label at merge. Anything the delta
 reviewer finds that you do not fix — a MEDIUM or HIGH (which needs eyes a self-check cannot
 give), or a LOW you judge inherent — becomes **one GitHub issue per finding** via
 `gh issue create` (title `[review residual] <one line>`, label `review-residual`, body: severity,
