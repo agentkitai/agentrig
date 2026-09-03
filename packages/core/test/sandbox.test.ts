@@ -470,9 +470,11 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       await symlink(join(root, "b"), join(root, "a"));
       await symlink(join(root, "a"), join(root, "b"));
       expect(writeDenialPlausible(`touch: cannot touch '${root}/a/x': Read-only file system`, ww)).toBe(false);
-      // an EXISTING chain whose every target is a long `w/../` walk costs its distinct paths, not
-      // the platform realpath's re-walk of the whole chain per call: one classification stays fast
-      const wobble = "w/../".repeat(800);
+      // an EXISTING chain whose every target is a long `w/../` walk through a link (`w -> .`)
+      // costs its distinct paths, not the platform realpath's re-walk of every hop's every
+      // component per call: one classification stays fast
+      await symlink(".", join(root, "w"));
+      const wobble = "w/../".repeat(25);
       for (let i = 0; i < 20; i += 1) {
         const target = i === 19 ? outside : `${root}/${wobble}e${i + 1}`;
         await symlink(target, join(root, `e${i}`));
@@ -530,6 +532,15 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       expect(writeDenialPlausible(`touch: cannot touch '${root}/link/a': Read-only file system`, ww, { budget: probeBudget(0) })).toBe(false);
       // a sibling of the real directory is outside in both forms
       expect(writeDenialPlausible(`touch: cannot touch '${root}/other/a': Read-only file system`, ww)).toBe(true);
+      // `..` after a link climbs from the link's TARGET, as the kernel does: `out/../x` with
+      // `out -> <outside>` lands beside the outside directory, not inside the workspace
+      const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-dotdot-")));
+      try {
+        await symlink(outside, join(root, "real", "out"));
+        expect(writeDenialPlausible(`touch: cannot touch '${root}/real/out/../x': Read-only file system`, ww)).toBe(true);
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

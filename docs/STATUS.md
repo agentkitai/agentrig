@@ -213,8 +213,11 @@ Changes:
   (budget, hops, caps, a component the filesystem rejects) is judged by string. The chain
   fixture is forty levels and twenty hops, under the sixty-four-component cap with macOS's
   seven-component tmpdir and under its thirty-two-link resolution limit — past either, a write
-  fails with ELOOP or is judged by string, and the test says so. Mutants killed: no memo; probes
-  not charged; the platform `realpath` per link (timing).
+  fails with ELOOP or is judged by string, and the test says so. The walk takes the path as
+  written: a `..` after a symlink climbs from the link's target, as the kernel does (`out/../x`
+  with `out -> /outside` is `/x`), where a lexical collapse had judged it inside. Mutants
+  killed: no memo; probes not charged; the platform `realpath` per link (timing); a lexical
+  `..` collapse.
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the

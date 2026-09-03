@@ -258,22 +258,31 @@ export function deniedPath(line: string): string | undefined {
  * hops, or a component the filesystem rejects is returned as it stands: a string judgement.
  */
 function canonical(path: string, budget: ProbeBudget): string {
-  let current = path;
+  // Components are walked as written — `.` and `..` included — because a `..` after a symlink
+  // component climbs from the LINK'S TARGET, as the kernel does, not from the name: `w/../x`
+  // with `w -> /etc` is `/x`, and a lexical collapse would have judged it inside.
+  let parts = path.split(sep).filter((p) => p !== "");
   for (let hop = 0; hop <= MAX_LINK_HOPS; hop += 1) {
-    if (current.length > MAX_PATH_CHARS) return current;
-    const parts = current.split(sep).filter((p) => p !== "");
-    if (parts.length > MAX_PATH_COMPONENTS) return current;
+    if (parts.length > MAX_PATH_COMPONENTS || parts.join(sep).length > MAX_PATH_CHARS) return sep + parts.join(sep);
     let resolved: string = sep;
     let restarted = false;
     for (let i = 0; i < parts.length; i += 1) {
-      const candidate = join(resolved, parts[i]!);
+      const part = parts[i]!;
+      if (part === ".") continue;
+      if (part === "..") {
+        resolved = dirname(resolved);
+        continue;
+      }
+      const candidate = join(resolved, part);
       const rest = parts.slice(i + 1);
       const seen = probe(candidate, budget);
-      if (seen === undefined) return join(candidate, ...rest);
-      if (seen.kind === "missing") return join(candidate, ...rest);
+      // budget spent, or nothing there: where the write would land, lexically from here down
+      if (seen === undefined || seen.kind === "missing") return resolve(candidate, ...rest);
       if (seen.kind === "link") {
-        // restart on the target (relative to the link's directory) with the rest re-joined
-        current = resolve(dirname(candidate), seen.target, ...rest);
+        // restart on the target — relative to the link's directory — with the rest re-joined
+        const target = seen.target.split(sep).filter((p) => p !== "");
+        const base = isAbsolute(seen.target) ? [] : resolved.split(sep).filter((p) => p !== "");
+        parts = [...base, ...target, ...rest];
         restarted = true;
         break;
       }
@@ -281,7 +290,7 @@ function canonical(path: string, budget: ProbeBudget): string {
     }
     if (!restarted) return resolved;
   }
-  return current;
+  return sep + parts.join(sep);
 }
 
 /** Whether `target` is `cwd` or beneath it, for any of the cwd's forms (literal and canonical). */
@@ -325,12 +334,14 @@ export function writeDenialPlausible(
   const cwds = [literalCwd, canonical(literalCwd, probeBudget(256))];
   return named.some((path) => {
     if (!isAbsolute(path)) return true;
+    // the string judgement is lexical (`resolve` collapses `..`); the walk gets the path as
+    // written, because a `..` after a symlink climbs from the link's target, not from its name
     const literal = resolve(path);
     const literalInside = under(literal, cwds);
     if (!fs) return !literalInside;
     // docker shares only the workspace bind, so an outside string is judged as written
     if (!literalInside && opts.sharedFilesystem !== true) return true;
-    return !under(canonical(literal, budget), cwds);
+    return !under(canonical(path, budget), cwds);
   });
 }
 
