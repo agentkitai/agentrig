@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -58,6 +58,18 @@ describe("SessionStore", () => {
     const { appendFile } = await import("node:fs/promises");
     await appendFile(store.pathFor(id), JSON.stringify({ seq: 5, sessionId: id, ts: 1, type: "turn.end", n: 1 }) + "\n");
     await expect(store.readAll(id)).rejects.toThrow(/expected seq 1, got 5/);
+  });
+});
+
+describe("list", () => {
+  it("skips an entry it cannot stat, so a dangling symlink does not hide every session", async () => {
+    const store = new SessionStore({ root, newId: () => "real" });
+    await store.append("real", { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" });
+    await symlink(join(root, "nope.jsonl"), join(root, "dangling.jsonl"));
+
+    expect((await store.list()).map((r) => r.id)).toEqual(["real"]);
+    // and the R3c tree walk over the listing survives it too
+    expect((await store.tree("real")).ancestry).toEqual(["real"]);
   });
 });
 

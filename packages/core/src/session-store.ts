@@ -425,7 +425,14 @@ export class SessionStore {
     for (const name of names) {
       if (!name.endsWith(".jsonl")) continue;
       const path = join(this.root, name);
-      const s = await stat(path);
+      let s;
+      try {
+        s = await stat(path);
+      } catch {
+        // a dangling symlink or a file removed between readdir and stat is not a session; one such
+        // entry must not take `sessions ls` and `/tree` away from every healthy session
+        continue;
+      }
       refs.push({ id: name.slice(0, -".jsonl".length), path, updatedAt: s.mtimeMs, bytes: s.size });
     }
     return refs.sort((a, b) => b.updatedAt - a.updatedAt);
