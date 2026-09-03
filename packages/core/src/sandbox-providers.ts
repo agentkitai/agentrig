@@ -132,7 +132,7 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
 
   protected wrap(command: string, args: readonly string[], policy: SandboxPolicy): WrappedInvocation {
     const cwd = resolve(policy.cwd);
-    const bindMode = policy.mode === "workspace-write" ? "rw" : "readonly";
+    const bindMode = policy.mode === "workspace-write" ? "" : ",readonly";
     return {
       command: this.command,
       args: [
@@ -141,7 +141,7 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
         "--read-only",
         ...(policy.network === true ? [] : ["--network", "none"]),
         "--mount",
-        `type=bind,src=${cwd},dst=${cwd},${bindMode}`,
+        `type=bind,src=${cwd},dst=${cwd}${bindMode}`,
         "--workdir",
         cwd,
         this.image,

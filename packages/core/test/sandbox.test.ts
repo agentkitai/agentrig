@@ -60,13 +60,13 @@ describe("R2b sandbox providers", () => {
     expect(writable.command).toBe("docker");
     expect(writable.args).toEqual(expect.arrayContaining([
       "run", "--rm", "--read-only", "--network", "none",
-      "--mount", "type=bind,src=/work/project,dst=/work/project,rw",
+      "--mount", "type=bind,src=/work/project,dst=/work/project",
       "--workdir", "/work/project", "agentrig-test:local", "/bin/sh", "-c", "echo ok",
     ]));
 
     const readOnly = await invocation("read-only");
     expect(readOnly.args).toContain("type=bind,src=/work/project,dst=/work/project,readonly");
-    expect(readOnly.args).not.toContain("type=bind,src=/work/project,dst=/work/project,rw");
+    expect(readOnly.args).not.toContain("type=bind,src=/work/project,dst=/work/project");
 
     const networked = await invocation("workspace-write", true);
     expect(networked.args).not.toEqual(expect.arrayContaining(["--network", "none"]));

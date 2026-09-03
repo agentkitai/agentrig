@@ -133,6 +133,14 @@ describe("config file boundary", () => {
     await expect(readConfigFile(path)).rejects.toThrow(/config\.json at supervisorSoft: must be greater than 0 and at most 1/);
   });
 
+  it("accepts sandbox modes and rejects unknown ones at the config boundary", async () => {
+    const { cwd } = await fixture();
+    const valid = await configAt(cwd, { sandbox: "workspace-write" });
+    await expect(readConfigFile(valid)).resolves.toMatchObject({ sandbox: "workspace-write" });
+    const invalid = await configAt(cwd, { sandbox: "landlock" });
+    await expect(readConfigFile(invalid)).rejects.toThrow(/config\.json at sandbox: invalid value/);
+  });
+
   it("accepts only positive integer supervisor turn floors", async () => {
     const { cwd } = await fixture();
     const valid = await configAt(cwd, { supervisorTurnsRemaining: 20 });

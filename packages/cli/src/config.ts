@@ -33,6 +33,7 @@ const ConfigValuesSchema = z
     deny: stringList.optional(),
     dangerouslySkipPermissions: z.boolean().optional(),
     yolo: z.boolean().optional(),
+    sandbox: z.enum(["read-only", "workspace-write", "none"]).optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),

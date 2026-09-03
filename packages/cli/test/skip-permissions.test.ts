@@ -70,4 +70,11 @@ describe("permissionWarning", () => {
     expect(w).toContain("bash");
     expect(w).toContain("write:anywhere");
   });
+
+  it("recommends skipping approvals inside a sandbox, not without a boundary", () => {
+    expect(permissionWarning({ yolo: true, sandbox: "none" }, "/work")).toContain("--sandbox workspace-write");
+    const bounded = permissionWarning({ yolo: true, sandbox: "workspace-write" }, "/work");
+    expect(bounded).toContain("workspace-write sandbox is ON");
+    expect(bounded).toContain("recommended unattended posture");
+  });
 });

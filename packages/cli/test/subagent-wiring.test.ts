@@ -10,6 +10,7 @@ import {
   type AgentBuildOptions,
   type ModelProvider,
   type PermissionRequest,
+  type SandboxConfig,
   type Skill,
 } from "@agentkitai/agentrig-core";
 import { subagentOptions, type AgentExtras } from "../src/agent-builder.ts";
@@ -105,6 +106,14 @@ describe("what a child inherits", () => {
   it("the same permission policy object — a child that could do more would be a bypass", () => {
     const permissionPolicy = new RulePolicy(defaultRules);
     expect(wiring({ permissionPolicy }).childConfig().permissions).toBe(permissionPolicy);
+  });
+
+  it("the exact parent sandbox configuration — a child without it would bypass the boundary", () => {
+    const sandbox: SandboxConfig = {
+      mode: "workspace-write",
+      provider: { prepare: (command) => command },
+    };
+    expect(wiring({ sandbox }).childConfig().sandbox).toBe(sandbox);
   });
 
   it("the parent's asker, so an interactive parent's child is not silently deny-only", async () => {

@@ -24,6 +24,28 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The integration test never pulls. CI supplies its predeclared local fixture so the Ubuntu
+      # leg must report a live Docker pass, while hosts without Docker skip loudly.
+      - if: runner.os == 'Linux'
+        run: docker pull alpine:3.20
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+
+  windows-sandbox-none:
+    runs-on: windows-latest
+    env:
+      AGENTRIG_CI_SANDBOX: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      # F3 is the Windows no-op seam proof, not a claim that POSIX process integration tests run on
+      # Windows. This test uses process.platform and fails unless `none` selects the identity provider.
+      - run: pnpm exec vitest run packages/cli/test/sandbox-wiring.test.ts

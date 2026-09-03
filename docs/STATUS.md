@@ -123,6 +123,23 @@ Changes:
 | R2a | Core `SandboxProvider` execution seam, three sandbox modes, and `sandbox.denied` event | done |
 | R2b | Concrete no-op, Docker, and macOS Seatbelt providers | done |
 | R2c | Sandbox-denial escalation with one approved unsandboxed retry and distinct TUI prompt | done |
+| R2d | CLI/config sandbox selection, composed `--yolo` guidance, Docker fixture CI, and Windows no-op CI | done |
+
+- R2d adds `--sandbox read-only|workspace-write|none` and the matching validated config key to both
+  agent entry points. Linux selects Docker, macOS selects Seatbelt, and `none` selects the explicit
+  identity provider on every host; unsupported enforcing modes fail closed. Parent and subagent
+  configurations carry the same boundary independently of their shared approval policy.
+- The `--yolo` warning now distinguishes an absent boundary from an active sandbox and explicitly
+  recommends skipping approvals inside `workspace-write` for unattended runs. Boundary escalation
+  remains a separate explicit prompt even when ordinary approvals are skipped.
+- CI pre-pulls `alpine:3.20` on Ubuntu so the network-free Docker integration test runs live. A
+  Windows job builds and typechecks all packages, then runs the focused `sandbox=none` identity-seam
+  proof; it does not misrepresent POSIX-only process integration tests as Windows coverage. The local
+  Docker test still skips loudly when Docker or the pre-existing fixture is absent.
+- R2d's focused wiring/config/warning tests passed, the existing fake-provider outside-cwd acceptance
+  and single-retry tests passed, and a mutant permitting a second unsandboxed retry was killed by the
+  cap test. No Landlock is introduced in R2.
+- R2d dogfood token usage is unavailable in this API-runner session rather than fabricated.
 
 - R2c turns an explicit provider `SandboxDeniedError` into a second-axis permission request with
   `origin: "sandbox-escalation"`. Core records the denial, asks explicitly, and on approval invokes
