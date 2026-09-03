@@ -47,6 +47,21 @@ describe("renderEvent", () => {
     expect(line).toContain('"outside workspace"');
   });
 
+  it("renders session.fork ancestry", () => {
+    const e = HarnessEvent.parse({
+      seq: 0,
+      sessionId: "child",
+      ts: 1_700_000_000_000,
+      type: "session.fork",
+      parent: "parent",
+      atSeq: 17,
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("session.fork");
+    expect(line).toContain("parent=parent");
+    expect(line).toContain("atSeq=17");
+  });
+
   it("renders session.resume", () => {
     const e = HarnessEvent.parse({
       seq: 12,

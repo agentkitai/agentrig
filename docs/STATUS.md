@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R2 is complete (R2a–R2d); R3a is next.** R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3a is complete; R3b is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -129,6 +129,27 @@ Changes:
 - Consequence to know: under `topic`, an arbiter-approved deviation lands without the human. The
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
+
+## R3 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R3a | `session.fork` event, append-only child creation, and recursive event/message materialization | done |
+| R3b | Session fork/search CLI and bounded replay | next |
+| R3c | TUI `/fork` and `/tree` | pending |
+| R3d | Live `/children` tree | pending |
+
+- R3a adds `SessionStore.fork(parent, atSeq)`: the child log contains only its seq-0
+  `session.fork` record, while the parent log and existing snapshot behavior remain untouched.
+  Fork points address the named parent's physical log, so recursive materialization naturally
+  supports forks of forks without flattening or copying ancestry.
+- `SessionStore.materialize` returns inherited recorded events followed by the child's records;
+  `materializeMessages` folds that stream into provider-neutral messages. Recorded `tool.result`
+  events become tool-result blocks directly and tools are never looked up or executed during replay.
+- Acceptance coverage diffs parent/child message lists at the fork point, follows two levels of
+  ancestry, hashes the parent file across child creation, rejects nonexistent fork points before a
+  child is written, and uses a counter tool fixture to prove materialization does not repeat effects.
+  No roadmap deviation was needed.
 
 ## R2 notes
 

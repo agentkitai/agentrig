@@ -34,6 +34,7 @@ export function renderEvent(e: HarnessEvent): string {
   const p = `${String(e.seq).padStart(4)} ${t} ${e.type.padEnd(22)}`;
   switch (e.type) {
     case "session.start": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
+    case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "turn.start":
@@ -136,7 +137,7 @@ function toolSummary(name: string, input: unknown): string {
 /**
  * The conversation view: what a person watching needs, or `null` for plumbing they do not.
  *
- * Hidden: session start/resume/end, turn boundaries, model requests and responses, permission
+ * Hidden: session start/fork/resume/end, turn boundaries, model requests and responses, permission
  * decisions, compaction, memory notes. Each is real and each is in the log; none of them is
  * something a person reads while waiting for an answer.
  */
@@ -176,6 +177,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       // "done" is already said by the summary line; anything else is why it stopped
       return e.reason === "done" ? null : `— session ${e.reason}`;
     case "session.start":
+    case "session.fork":
     case "session.resume":
     case "turn.start":
     case "turn.end":

@@ -156,6 +156,19 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips a session.fork event without overloading session.resume", () => {
+    const event = HarnessEvent.parse({
+      seq: 0,
+      sessionId: "child",
+      ts: 123,
+      type: "session.fork",
+      parent: "parent",
+      atSeq: 17,
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(() => HarnessEvent.parse({ ...event, atSeq: -1 })).toThrow();
+  });
+
   it("round-trips a session.resume event", () => {
     const event = HarnessEvent.parse({
       seq: 40,
