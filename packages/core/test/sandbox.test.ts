@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +11,7 @@ import {
   SandboxMode,
   SeatbeltSandboxProvider,
   bashTool,
+  classifiable,
   deniedPath,
   deniedPaths,
   sandboxSpawnInvocation,
@@ -336,14 +337,21 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     expect(deniedPaths("touch: cannot touch 'notes/x.md': Read-only file system")).toEqual(["notes/x.md"]);
     expect(deniedPaths("mv: cannot move '/work/proj/a' to '../../etc/x': Read-only file system")).toEqual(["/work/proj/a", "../../etc/x"]);
     expect(deniedPaths("/work/proj/deploy.sh: line 5: ../../etc/x: Read-only file system")).toEqual(["/work/proj/deploy.sh", "../../etc/x"]);
-    expect(deniedPaths("touch: cannot touch 'notes.md': Read-only file system")).toEqual([]);
+    // a quoted word without a slash is a target the boundary cannot judge — unknown, kept
+    expect(deniedPaths("touch: cannot touch 'notes.md': Read-only file system")).toEqual(["notes.md"]);
+    expect(deniedPaths("error: 'Read-only file system'")).toEqual(["Read-only file system"]);
+    // so is the unquoted operand right before the errno text
+    expect(deniedPaths("/work/proj/deploy.sh: line 5: hosts: Read-only file system")).toEqual(["/work/proj/deploy.sh", "hosts"]);
+    expect(deniedPaths("/work/proj/deploy.sh: line 5: build/x: Read-only file system")).toEqual(["/work/proj/deploy.sh", "build/x"]);
+    expect(deniedPaths("mv: cannot move '/work/proj/a' to 'x': Read-only file system")).toEqual(["/work/proj/a", "x"]);
+    // the same path quoted and bare is one path
+    expect(deniedPaths("cp: '/etc/x' -> /etc/x: Read-only file system")).toEqual(["/etc/x"]);
     // an unbalanced apostrophe elsewhere cannot hide a quoted path from the bare pass
     expect(deniedPaths("Can't write '/etc/x' from '/work/proj/a': Read-only file system")).toContain("/etc/x");
     expect(deniedPaths("ln: failed to create hard link '/etc/x' => '/work/proj/a': Read-only file system")).toEqual(["/etc/x", "/work/proj/a"]);
     expect(deniedPaths("EROFS: read-only file system, rename -> /etc/x")).toEqual(["/etc/x"]);
     // bounded: a line naming a thousand paths yields sixteen
     expect(deniedPaths(Array.from({ length: 1_000 }, (_, i) => `'/p/${i}'`).join(" "))).toHaveLength(16);
-    expect(deniedPaths("error: 'Read-only file system'")).toEqual([]);
     expect(deniedPaths("touch: Read-only file system")).toEqual([]);
     expect(deniedPaths("wget: network is unreachable")).toEqual([]);
     expect(deniedPath("tee: /etc/x: Read-only file system")).toBe("/etc/x");
@@ -373,19 +381,49 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     expect(writeDenialPlausible("mv: cannot move '/work/proj/a' to '../../etc/x': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("/work/proj/deploy.sh: line 5: ../../etc/x: Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("Error: EROFS: read-only file system, copyfile '/work/proj/a' -> '../../etc/x'", ww)).toBe(true);
+    // an unprefixed relative target after a cd, beside an inside script or source path
+    expect(writeDenialPlausible("/work/proj/deploy.sh: line 5: hosts: Read-only file system", ww)).toBe(true);
+    expect(writeDenialPlausible("/work/proj/deploy.sh: line 5: build/x: Read-only file system", ww)).toBe(true);
+    expect(writeDenialPlausible("mv: cannot move '/work/proj/a' to 'x': Read-only file system", ww)).toBe(true);
     // the outside path first, an unbalanced apostrophe, a bare arrow target: all kept
     expect(writeDenialPlausible("ln: failed to create hard link '/etc/x' => '/work/proj/a': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("Can't write '/etc/x' from '/work/proj/a': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("EROFS: read-only file system, rename '/work/proj/a' -> /etc/x", ww)).toBe(true);
     expect(writeDenialPlausible("touch: Read-only file system", ww)).toBe(true);
-    // a path longer than any filesystem accepts is judged by its string, quickly
+    // a path longer than any filesystem accepts is judged by its string
     const huge = `/work/proj/${"a/".repeat(5_000)}x`;
-    const t0 = Date.now();
     expect(writeDenialPlausible(`touch: cannot touch '${huge}': Read-only file system`, ww)).toBe(false);
     expect(writeDenialPlausible(`touch: cannot touch '/etc/${"a/".repeat(5_000)}x': Read-only file system`, ww)).toBe(true);
-    expect(Date.now() - t0).toBeLessThan(500);
     // read-only mode denies every path, the workspace included
     expect(writeDenialPlausible("touch: cannot touch '/work/proj/a': Read-only file system", { mode: "read-only", cwd })).toBe(true);
+  });
+
+  it("deep paths under the length cap are resolved in logarithmic probes: a corroboration budget's worth stays fast", async () => {
+    // sixteen 1900-component inside paths per line, fifty corroborated lines: the worst case the
+    // budget allows. One lstat per component was 1.1s per LINE; binary search is milliseconds.
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-deep-")));
+    try {
+      const ww = { mode: "workspace-write" as const, cwd: root };
+      const deep = Array.from({ length: 16 }, (_, i) => `'${root}/${"d/".repeat(1_900)}${i}'`).join(" ");
+      expect(`${root}/${"d/".repeat(1_900)}0`.length).toBeLessThan(4_096);
+      const line = `touch: cannot touch ${deep}: Read-only file system`;
+      const t0 = Date.now();
+      for (let i = 0; i < 50; i += 1) expect(writeDenialPlausible(line, ww)).toBe(false);
+      expect(Date.now() - t0).toBeLessThan(3_000);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("the classifier reads the head and the tail of a huge stderr, never the middle", () => {
+    const head = "touch: cannot touch '/etc/head': Read-only file system\n";
+    const tail = "\ntouch: cannot touch '/etc/tail': Read-only file system";
+    const big = head + "x".repeat(400_000) + tail;
+    const seen = classifiable(big);
+    expect(seen.length).toBeLessThan(140_000);
+    expect(seen.startsWith(head)).toBe(true);
+    expect(seen.endsWith(tail)).toBe(true);
+    expect(classifiable("small")).toBe("small");
   });
 
   it("a symlink inside the workspace that points outside is outside to the boundary", async () => {
@@ -405,6 +443,17 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       await mkdir(join(root, "real"));
       await symlink(join(root, "real"), join(root, "alias"));
       expect(writeDenialPlausible(`touch: cannot touch '${root}/alias/x': Read-only file system`, ww)).toBe(false);
+      // a chain of existing links (inside → inside → outside) resolves to the outside
+      await symlink(join(root, "link2"), join(root, "link1"));
+      await symlink(outside, join(root, "link2"));
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/link1/x': Read-only file system`, ww)).toBe(true);
+      // a dangling chain (d1 → d2 → outside/newfile) is followed hop by hop
+      await symlink(join(root, "d2"), join(root, "d1"));
+      await symlink(join(outside, "newfile"), join(root, "d2"));
+      expect(writeDenialPlausible(`sh: ${root}/d1: Read-only file system`, ww)).toBe(true);
+      // a dangling link with a RELATIVE target resolves against the link's own directory
+      await symlink(join("..", basename(outside), "newfile"), join(root, "rel"));
+      expect(writeDenialPlausible(`sh: ${root}/rel: Read-only file system`, ww)).toBe(true);
       // a host link from OUTSIDE into the workspace: seatbelt (host filesystem) resolves it inside
       // and drops the line; docker (only the bind is shared) judges the string and keeps it
       await symlink(root, join(outside, "back"));
@@ -463,14 +512,18 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       .rejects.toBeInstanceOf(SandboxDeniedError);
   });
 
-  it("only the first two hundred lines of stderr are classified — a child cannot make the scan expensive", async () => {
+  it("corroboration is spent on at most fifty matching lines; a matching line past that is kept as a denial", async () => {
     const inside = "touch: cannot touch 'CWD/a': Read-only file system";
     const outside = "touch: cannot touch '/etc/x': Read-only file system";
-    const early = [...Array.from({ length: 150 }, () => inside), outside].join("\n");
-    await expect(dockerRun(early, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
+    // a genuine denial after chatty inside lines is still classified, however late
     const late = [...Array.from({ length: 250 }, () => inside), outside].join("\n");
-    const result = await dockerRun(late, "workspace-write");
-    expect(result.output.exitCode).toBe(1);
+    await expect(dockerRun(late, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
+    // forty inside-only lines: every one corroborated and dropped — an ordinary failure
+    const forty = Array.from({ length: 40 }, () => inside).join("\n");
+    expect((await dockerRun(forty, "workspace-write")).output.exitCode).toBe(1);
+    // sixty: the budget runs out and the fifty-first is kept uncorroborated — narrowing only
+    const sixty = Array.from({ length: 60 }, () => inside).join("\n");
+    await expect(dockerRun(sixty, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
   });
 
   it("docker: the same line about a path outside the workspace, or under read-only, is still a denial", async () => {

@@ -167,6 +167,19 @@ Changes:
   dangling link not followed; docker canonicalising outside strings; quote and arrow boundaries
   dropped; last-path-only; no line bound; bare tokens inside a taken quoted span. Not killable by
   test: the length cap (the one-pass walk is already fast; the cap is defence in depth).
+- Third delta round found that "one pass" still meant one throwing `lstat` per component — a
+  child printing sixteen 4KB paths per line froze the process for a second per line, minutes
+  per stderr. The deepest existing prefix is now found by binary search with a non-throwing
+  stat (eleven probes for two thousand components); the classifier reads the head and tail of
+  stderr (64KB each, `classifiable`) and spends corroboration on at most fifty matching lines —
+  a matching line past that budget is kept as a denial, uncorroborated, so a genuine late denial
+  after chatty output is still classified and a forger past the budget gets at worst a prompt.
+  Symlink chains resolve again (`realpath` on the existing prefix first, then a dangling link's
+  target through the same walk with a hop budget), and an unprefixed relative operand (`sh:
+  line 5: hosts: Read-only file system`, a quoted bare word) is unknown, keeping the line.
+  Mutants killed: linear probing (timing); one hop only; no operand pass; no corroboration
+  budget; no byte bound; quoted bare words gated again. Not observable: `realpath`-first on an
+  existing link (the hop-by-hop path reaches the same target).
 - **#104 — a forged spawn record naming a deeper session was undecidable.** `session.start`
   gains an optional `parent` (schema-added, never repurposed); the subagent tool passes
   `parent: ctx.sessionId` into the child's `run`, so a child's own log names its parent.
