@@ -470,11 +470,12 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       await symlink(join(root, "b"), join(root, "a"));
       await symlink(join(root, "a"), join(root, "b"));
       expect(writeDenialPlausible(`touch: cannot touch '${root}/a/x': Read-only file system`, ww)).toBe(false);
-      // an EXISTING chain whose every target is a long `w/../` walk through a link (`w -> .`)
-      // costs its distinct paths, not the platform realpath's re-walk of every hop's every
-      // component per call: one classification stays fast
-      await symlink(".", join(root, "w"));
-      const wobble = "w/../".repeat(25);
+      // an EXISTING chain whose every target is a long `w/x/../` walk through a link back to
+      // the workspace (`w -> root`, `x` a real directory) costs its distinct paths — the memo —
+      // not the platform realpath's re-walk of every hop's every component per call
+      await mkdir(join(root, "x"));
+      await symlink(root, join(root, "w"));
+      const wobble = "w/x/../".repeat(16);
       for (let i = 0; i < 20; i += 1) {
         const target = i === 19 ? outside : `${root}/${wobble}e${i + 1}`;
         await symlink(target, join(root, `e${i}`));
