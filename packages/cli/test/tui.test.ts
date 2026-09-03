@@ -148,12 +148,13 @@ function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
   hooks: Hook[] = [],
+  tools: AnyTool[] = [],
 ) {
   const controller: TuiController = new TuiController({
     cwd: root,
     agent: createAgent({
       provider,
-      tools: [askingTool()],
+      tools: [askingTool(), ...tools],
       permissions: new RulePolicy(defaultRules),
       systemPrompt: "test",
       store: new SessionStore({ root }),
@@ -553,8 +554,25 @@ describe("TuiController", () => {
   });
 
   it("a second /abort reaches the session's end hooks, and says what each abort does (#88)", async () => {
+    // aborted mid-tool: the end hooks then RUN for the aborted session, and only the second
+    // abort cuts them — which is what the controller's two messages promise
     let hookOutcome = "not run";
-    const provider = new FakeProvider([[{ type: "text_delta", text: "hi" }, usage(1, 1), stop("end_turn")]]);
+    let toolStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { toolStarted = r; });
+    const slow: AnyTool = {
+      name: "slow",
+      description: "waits for the abort",
+      inputSchema: z.object({}),
+      permission: "read",
+      paths: () => [],
+      execute: async (_i, ctx) => {
+        toolStarted();
+        await new Promise<void>((r) => ctx.signal.addEventListener("abort", () => r(), { once: true }));
+        ctx.signal.throwIfAborted();
+        return { output: "", display: "" };
+      },
+    };
+    const provider = new FakeProvider([[{ type: "tool_use", id: "t1", name: "slow", input: {} }, usage(1, 1), stop("tool_use")]]);
     const c = makeControllerWith(provider, {}, [{
       point: "session_end",
       handler: (ctx) =>
@@ -562,11 +580,12 @@ describe("TuiController", () => {
           hookOutcome = "running";
           ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; resolve({ action: "continue" }); }, { once: true });
         }),
-    }]);
+    }], [slow]);
     const running = c.submit("hello");
-    await vi.waitFor(() => expect(hookOutcome).toBe("running"));
+    await started;
     c.abort();
-    expect(last(c)).toContain("session_end hooks still run; abort again to skip them");
+    expect(last(c)).toContain("aborting… (abort again to skip session_end hooks)");
+    await vi.waitFor(() => expect(hookOutcome).toBe("running"));
     c.abort();
     expect(last(c)).toContain("skipping session_end hooks");
     await running;

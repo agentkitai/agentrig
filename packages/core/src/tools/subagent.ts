@@ -229,10 +229,13 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       const onAbort = (): void => {
         session.control.abort();
         end("aborted");
-        // The child's session_end hooks (#88) get the child's grace and are then cut with a
-        // second abort: the parent stops waiting at its own grace (#86), and a child still
-        // ingesting after that would be exactly the orphan the parent's note reports.
-        cut = setTimeout(() => session.control.abort(), childGrace);
+        // The child's session_end hooks (#88) are cut with a second abort before the parent
+        // stops waiting at its own grace (#86): a child still ingesting after that would be
+        // exactly the orphan the parent's note reports. The cut lands at 1.5× the child's grace:
+        // the child may first spend its whole grace waiting for a tool that ignores the abort,
+        // and its hooks must still get at least half a grace after that — armed at the child's
+        // grace, a child mid-tool at abort ran no end hooks at all.
+        cut = setTimeout(() => session.control.abort(), Math.floor(childGrace * 1.5));
         void session.done.then(() => clearTimeout(cut), () => clearTimeout(cut));
       };
       // the parent's SECOND abort — stop waiting for end hooks — reaches the child's end hooks too

@@ -434,8 +434,13 @@ export class TuiController {
     // a pending prompt would otherwise hold the loop open waiting for an answer nobody will give
     this.denyAllPending();
     // The first abort stops the work; session_end hooks (memory ingest, the dream trigger) still
-    // run for the aborted session (#88). The second abort stops those too.
-    this.print(again ? "aborting again — skipping session_end hooks" : "aborting… (session_end hooks still run; abort again to skip them)", "error");
+    // run for a session aborted mid-turn (#88), and the second abort stops those. A session that
+    // had already finished its turn and was in its hooks is cut by the first — the controller
+    // cannot tell the two apart, so the first message promises nothing about the hooks.
+    this.print(
+      again ? "aborting again — skipping session_end hooks" : "aborting… (abort again to skip session_end hooks)",
+      "error",
+    );
   }
 
   /**

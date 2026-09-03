@@ -148,16 +148,22 @@ Changes:
   ignoring the second abort; every point under the end signal.
 - Children (review finding): the parent's signal fires once, and that once is the child's first
   abort, so a child's `session_end` hooks could outlive the parent's grace with nothing able to
-  stop them. The subagent tool now cuts them with a second abort at the child's grace, and
-  forwards the parent's own second abort through a new optional `ToolContext.endSignal` (a
-  field added, never repurposed) so ctrl-C twice reaches the child's hooks too. The CLI's
-  children carry no hooks today, so this binds SDK embedders; CLI children still leave no
-  ingest behind (unchanged, noted). Mutants killed: no grace cut; second abort not forwarded.
-- Both entry points say what each abort does: the TUI prints "session_end hooks still run;
-  abort again to skip them" then "skipping session_end hooks", and keeps answering SIGINT until
-  shutdown has finished (it used to remove the handler first, so a ctrl-C during the hooks went
-  to Node's default handler and killed the process mid-hook with no `session.end`); headless
-  `run` prints the same on the first SIGINT.
+  stop them. The subagent tool now cuts them with a second abort at 1.5× the child's grace —
+  the child may first spend its whole grace waiting for a tool that ignores the abort, and its
+  hooks still get half a grace after that, ending before the parent's own grace (2×) expires;
+  armed at the child's grace, a child mid-tool at abort ran no end hooks at all — and forwards
+  the parent's own second abort through a new optional `ToolContext.endSignal` (a field added,
+  never repurposed) so ctrl-C twice reaches the child's hooks too. The CLI's children carry no
+  hooks today, so this binds SDK embedders; CLI children still leave no ingest behind
+  (unchanged, noted). Mutants killed: no grace cut; second abort not forwarded; cut at the
+  child's grace; cut at the parent's grace.
+- Both entry points say what each abort does: "aborting… (abort again to skip session_end
+  hooks)" then "skipping session_end hooks" — the first promises nothing about the hooks, because
+  a session that had already finished its turn and was in its hooks is cut by the first abort
+  and the controller cannot tell that case from a mid-turn abort. The TUI keeps answering SIGINT
+  until shutdown has finished (it used to remove the handler first, so a ctrl-C during the hooks
+  went to Node's default handler and killed the process mid-hook with no `session.end`) and says
+  so on stderr, since the frame is gone by then; headless `run` prints the same two lines.
 - Semantics, stated: an abort that lands while the session is already ending (a normally
   finished session in its end hooks) counts as the second abort and stops them — that is what a
   person pressing ctrl-C during a long ingest means.

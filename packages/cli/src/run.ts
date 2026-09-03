@@ -370,7 +370,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     sigints += 1;
     // the first abort stops the work; session_end hooks still run for the aborted session (#88),
     // and the second abort stops those too — say so, or a person waits on an ingest they cannot see
-    if (sigints === 1) console.error("aborting… session_end hooks still run; ctrl-C again to skip them");
+    if (sigints === 1) console.error("aborting… (ctrl-C again to skip session_end hooks)");
+    else if (sigints === 2) console.error("skipping session_end hooks");
     session.control.abort();
   };
   process.on("SIGINT", onSigint);

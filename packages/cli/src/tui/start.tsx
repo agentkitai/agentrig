@@ -182,7 +182,14 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second
     // abort that skips the hooks rather than Node's default handler killing the process mid-hook
     // with no session.end written.
-    stopForSigint = () => controller.abort();
+    // the frame is gone, so say it on stderr: the controller's own message lands in a buffer
+    // nothing renders any more
+    let sigints = 0;
+    stopForSigint = () => {
+      sigints += 1;
+      console.error(sigints === 1 ? "aborting… (ctrl-C again to skip session_end hooks)" : "skipping session_end hooks");
+      controller.abort();
+    };
     try {
       await controller.shutdown();
     } finally {
