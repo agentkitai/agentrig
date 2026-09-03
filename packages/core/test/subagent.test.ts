@@ -979,8 +979,24 @@ describe("a subagent cannot run away", () => {
         stop("tool_use"),
       ]),
     ]);
-    const session = harness(provider, { slow: true }).run("do it", { cwd: root });
-    setTimeout(() => session.control.abort(), 80);
+    // the abort lands while the child is inside its first tool, by construction: an 80ms timer
+    // raced the spawn on a loaded macOS runner and found no child to record
+    let abort: () => void = () => {};
+    const slowThenAbort: AnyTool = {
+      name: "echo",
+      description: "slow echo that aborts the parent",
+      inputSchema: z.object({ text: z.string() }),
+      permission: "read",
+      paths: () => [],
+      execute: async (i: { text: string }, ctx) => {
+        abort();
+        await new Promise((r) => setTimeout(r, 60));
+        ctx.signal.throwIfAborted();
+        return { output: i.text, display: `echo: ${i.text}` };
+      },
+    };
+    const session = harness(provider, { childExtra: { tools: [slowThenAbort] } }).run("do it", { cwd: root });
+    abort = () => session.control.abort();
     const events = await collect(session);
     await session.done;
 
