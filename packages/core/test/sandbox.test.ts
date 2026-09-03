@@ -490,8 +490,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // the forger's shape: a ten-hop chain that ends INSIDE, so no path short-circuits and all
       // sixteen leaves of all fifty lines are walked from a warm memo. Every step is charged,
       // memo hit or not, so the shared budget is SPENT and the classification stays fast
+      // plain hops, no `..`: the only work is memo hits, which must cost like any other step
       for (let i = 0; i < 10; i += 1) {
-        const target = i === 9 ? join(root, "x") : `${root}/${wobble}f${i + 1}`;
+        const target = i === 9 ? join(root, "x") : join(root, `f${i + 1}`);
         await symlink(target, join(root, `f${i}`));
       }
       const insideChain = Array.from({ length: 16 }, (_, i) => `'${root}/f0/y${i}'`).join(" ");
