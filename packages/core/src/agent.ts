@@ -185,6 +185,11 @@ export interface RunOptions {
    * Ignored when `resume` is set.
    */
   id?: string;
+  /**
+   * The session spawning this one, recorded in its `session.start` (#104). The subagent tool sets
+   * it; a caller starting a top-level session leaves it unset. Ignored when `resume` is set.
+   */
+  parent?: string;
 }
 
 export interface Agent {
@@ -193,6 +198,18 @@ export interface Agent {
    * (seq continues), prior messages restored, `task` appended as a fresh user message.
    */
   run(task: string, opts?: RunOptions): Session;
+}
+
+export const DEFAULT_ABORT_GRACE_MS = 1_000;
+
+/**
+ * The abort grace a config asks for: finite and non-negative, else the default (#96). One
+ * definition, used by the loop and by the subagent tool when it derives a child's grace, so the
+ * two cannot drift apart.
+ */
+export function abortGraceOf(config: { abortGraceMs?: number | undefined }): number {
+  const ms = config.abortGraceMs;
+  return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_ABORT_GRACE_MS;
 }
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
@@ -348,6 +365,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // a resumed id is user input (`--resume <id>`) and becomes a filename; reject it here rather
   // than letting it reach the filesystem or a session_end hook that builds a path from it
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
+  const parent = opts.parent === undefined ? undefined : assertSessionId(opts.parent);
   const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
   // A fresh run owns its log for its lifetime. Two runs appending to one id would restart `seq`
   // and leave a log that cannot be read back at all — which a caller-supplied `id` makes possible
@@ -460,9 +478,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   };
   // A negative, NaN, or non-finite grace is a configuration mistake, not a request for a
   // never-ending wait: fall back to the default rather than hand setTimeout nonsense.
-  const graceMs = Number.isFinite(config.abortGraceMs) && (config.abortGraceMs as number) >= 0
-    ? (config.abortGraceMs as number)
-    : 1_000;
+  const graceMs = abortGraceOf(config);
   const settleOrphans = async (): Promise<void> => {
     if (orphans.size === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -616,7 +632,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         messages = resumableMessages();
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
       } else {
-        await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
+        await emit({
+          type: "session.start",
+          task,
+          cwd,
+          provider: provider.id,
+          model: provider.model,
+          ...(parent === undefined ? {} : { parent }),
+        });
         messages = [{ role: "user", content: [{ type: "text", text: task }] }];
       }
 
