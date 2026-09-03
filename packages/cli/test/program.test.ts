@@ -129,6 +129,9 @@ describe("argv parsing", () => {
   it("dispatches to the command that was named", async () => {
     const { run } = stub(buildProgram());
     expect((await run(["sessions", "ls"]))?.path).toBe("sessions ls");
+    expect((await run(["sessions", "replay", "abc"]))?.path).toBe("sessions replay");
+    expect((await run(["sessions", "fork", "abc"]))?.path).toBe("sessions fork");
+    expect((await run(["sessions", "search", "needle"]))?.path).toBe("sessions search");
     expect((await run(["memory", "lint"]))?.path).toBe("memory lint");
     expect((await run(["dream"]))?.path).toBe("dream");
     expect((await run(["run", "do it"]))?.path).toBe("run");
@@ -139,7 +142,20 @@ describe("argv parsing", () => {
     const { run } = stub(buildProgram());
     expect((await run(["run", "fix the bug"]))?.args[0]).toBe("fix the bug");
     expect((await run(["sessions", "show", "abc"]))?.args[0]).toBe("abc");
+    expect((await run(["sessions", "fork", "abc", "--at", "3"]))?.opts.at).toBe(3);
+    expect((await run(["sessions", "replay", "abc", "--until", "4"]))?.opts.until).toBe(4);
+    expect((await run(["sessions", "search", "retry", "policy"]))?.args[0]).toEqual(["retry", "policy"]);
     expect((await run(["memory", "search", "retry", "policy"]))?.args[0]).toEqual(["retry", "policy"]);
+  });
+
+  it("rejects invalid session sequence bounds during argument parsing", async () => {
+    for (const argv of [
+      ["sessions", "fork", "abc", "--at", "-1"],
+      ["sessions", "replay", "abc", "--until", "1.5"],
+    ]) {
+      const cli = stub(buildProgram());
+      expect(await cli.run(argv)).toBeNull();
+    }
   });
 
   it("a leading --profile no longer hijacks subcommand dispatch (issue #56)", async () => {

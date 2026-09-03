@@ -1,7 +1,8 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { renderEvent } from "./render.js";
+import { forkSession, replaySession, searchSessions } from "./sessions.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
@@ -69,6 +70,13 @@ function distance(a: string, b: string): number {
     }
   }
   return rows[a.length]![b.length]!;
+}
+
+function sequence(value: string): number {
+  if (!/^\d+$/.test(value)) throw new InvalidArgumentError("expected a non-negative integer");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new InvalidArgumentError("expected a non-negative safe integer");
+  return parsed;
 }
 
 export interface ProgramDependencies {
@@ -350,6 +358,35 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     const resolved = await configured({ ...opts, resume: id }, cmd, false);
     if (resolved !== undefined) await executeRun(taskWords.join(" ") || "Continue the task.", resolved);
   });
+
+  sessions
+    .command("fork <id>")
+    .description("Fork a session at a sequence in its own event log (defaults to its latest event)")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .option("--at <seq>", "parent sequence to include", sequence)
+    .action(async (id: string, opts: { root: string; at?: number }) => {
+      const child = await forkSession(new SessionStore({ root: opts.root }), id, opts.at);
+      console.log(child);
+    });
+
+  sessions
+    .command("search <query...>")
+    .description("Search rendered session transcripts with BM25")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .action(async (query: string[], opts: { root: string }) => {
+      const text = query.join(" ");
+      const hits = await searchSessions(new SessionStore({ root: opts.root }), text);
+      for (const hit of hits) console.log(`${hit.id}\t${hit.score.toFixed(3)}\t${hit.snippet}`);
+    });
+
+  sessions
+    .command("replay <id>")
+    .description("Replay a materialized session tree without re-executing tools")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .option("--until <seq>", "last sequence to include from the named session's own log", sequence)
+    .action(async (id: string, opts: { root: string; until?: number }) => {
+      for (const line of await replaySession(new SessionStore({ root: opts.root }), id, opts.until)) console.log(line);
+    });
 
   sessions
     .command("ls")
