@@ -115,8 +115,8 @@ export interface ChildNode {
  *
  * Authority (#104): a session's own `session.start.parent` is believed. A record naming a
  * session whose log names a different parent is dropped; a log without the field (written
- * before it) or not yet written cannot testify and is accepted, so the breadth-first claims are
- * the only protection for those. The limit is the pointer itself: a log that names the wrong
+ * before it), not yet written, or unreadable cannot testify and is accepted, so the breadth-first
+ * claims are the only protection for those. The limit is the pointer itself: a log that names the wrong
  * parent places the session under that parent — and only whoever spawned the session writes it
  * (the subagent tool sets it from its own session id; it is not model-controllable).
  */
@@ -130,7 +130,8 @@ export async function liveChildren(
   /**
    * A record is accepted only if the named session does not contradict it (#104): a log whose
    * `session.start` names a different parent belongs to that parent, whatever this record says.
-   * A log that is missing (starting) or predates the field cannot testify and is accepted.
+   * A log that is missing (starting), predates the field, or cannot be read cannot testify and
+   * is accepted; an unreadable one has its trouble reported on the node by `fill`.
    */
   const disputed = async (id: string, claimant: string | undefined): Promise<boolean> => {
     if (claimant === undefined || !isValidSessionId(id)) return false;
