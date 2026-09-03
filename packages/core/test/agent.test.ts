@@ -248,6 +248,38 @@ describe("agent loop", () => {
     ]);
   });
 
+  it("ignores a malformed hook injection without corrupting provider, snapshot, or log messages", async () => {
+    const store = new SessionStore({ root, newId: () => "malformed-hook" });
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "done" }, usage(3, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      store,
+      hooks: [{
+        point: "user_prompt",
+        handler: () => ({ action: "inject", message: { poison: true } }) as never,
+      }],
+    });
+    const session = createAgent(config).run("original task", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(JSON.stringify(provider.requests)).not.toContain("poison");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "error",
+      fatal: false,
+      message: expect.stringMatching(/inject message must be a string.*object.*ignoring/i),
+    }));
+    expect(events.some((event) => event.type === "message.append"
+      && JSON.stringify(event.message).includes("poison"))).toBe(false);
+
+    const snapshot = await store.readSnapshot(session.id);
+    expect(snapshot).not.toBeNull();
+    expect(JSON.stringify(snapshot!.messages)).not.toContain("poison");
+    expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
+    expect(await store.readAll(session.id)).toEqual(events);
+  });
+
   it("wraps an approved tool with the sandbox provider and records an OS denial", async () => {
     const provider = new FakeProvider([
       [

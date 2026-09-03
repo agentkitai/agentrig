@@ -211,7 +211,13 @@ export async function runHooks(
 
     if (result.action === "deny") return { denied: result.reason, patches, injects };
     if (result.action === "modify") patches.push(result.patch);
-    if (result.action === "inject") injects.push(result.message);
+    if (result.action === "inject") {
+      if (typeof result.message !== "string") {
+        opts.onError(`hook ${name} inject message must be a string (got ${typeof result.message}); ignoring`);
+        continue;
+      }
+      injects.push(result.message);
+    }
   }
   return { patches, injects };
 }
