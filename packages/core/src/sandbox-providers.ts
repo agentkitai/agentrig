@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { isAbsolute, resolve, sep } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   SandboxDeniedError,
   type SandboxCommand,
@@ -85,33 +86,72 @@ function firstDenialLine(
 }
 
 /**
- * The filesystem path a denial line names, if it names one: a quoted path first (`touch: cannot
- * touch '/etc/x': Read-only file system`), else the first absolute-path token (`sandbox-exec:
- * deny file-write-create /etc/x`, `EROFS: read-only file system, open /etc/x`). Undefined when
- * the line carries no recognisable path, in which case the caller falls back to the pattern alone.
+ * Every absolute filesystem path a denial line names, in order: quoted paths first (`touch:
+ * cannot touch '/etc/x': Read-only file system`), then bare absolute tokens (`sandbox-exec: deny
+ * file-write-create /etc/x`, `EROFS: read-only file system, open /etc/x`), trailing punctuation
+ * stripped. Relative paths are deliberately not returned: a command may have `cd`'d first, so
+ * `build/x` cannot be resolved against anything the provider knows, and a bare quoted word could
+ * be any phrase. Empty when the line carries no recognisable path.
  */
+export function deniedPaths(line: string): string[] {
+  const found: string[] = [];
+  const quoted = /['"‘’`]([^'"‘’`\s][^'"‘’`]*)['"‘’`]/gu;
+  for (const m of line.matchAll(quoted)) if (m[1] !== undefined && isAbsolute(m[1])) found.push(m[1]);
+  const bare = /(?:^|[\s(=,:>])(\/[^\s'"`‘’,;)]+)/gu;
+  for (const m of line.matchAll(bare)) if (m[1] !== undefined) found.push(m[1].replace(/[:.,;]+$/u, ""));
+  return found;
+}
+
+/** The first path a denial line names, for callers that want one; see `deniedPaths`. */
 export function deniedPath(line: string): string | undefined {
-  const quoted = /['"‘’`]([^'"‘’`\s]*\/[^'"‘’`]*?)['"‘’`]/u.exec(line);
-  if (quoted?.[1] !== undefined) return quoted[1];
-  const absolute = /(?:^|[\s(=,:])(\/[^\s'"`,;)]+)/u.exec(line);
-  return absolute?.[1];
+  return deniedPaths(line)[0];
 }
 
 /**
- * Whether a write denial naming `path` is one the ACTIVE policy could have produced (#95). Under
- * `workspace-write` the workspace is writable, so a "read-only" line about a path inside it did
+ * Where `path` really points on the host: the longest existing prefix is resolved through its
+ * symlinks and the rest re-joined. A symlink inside the workspace that points outside names an
+ * inside path in the denial line but an outside one to the boundary — docker binds the workspace
+ * at the same host path, so host and container agree on where it leads.
+ */
+function canonical(path: string): string {
+  let prefix = path;
+  let rest = "";
+  while (!existsSync(prefix)) {
+    const parent = dirname(prefix);
+    if (parent === prefix) return path;
+    rest = rest === "" ? relative(parent, prefix) : join(relative(parent, prefix), rest);
+    prefix = parent;
+  }
+  try {
+    const real = realpathSync(prefix);
+    return rest === "" ? real : join(real, rest);
+  } catch {
+    return path;
+  }
+}
+
+function insideWorkspace(path: string, cwd: string): boolean {
+  const target = canonical(resolve(path));
+  return target === cwd || target.startsWith(cwd + sep);
+}
+
+/**
+ * Whether a write denial line is one the ACTIVE policy could have produced (#95). Under
+ * `workspace-write` the workspace is writable, so a "read-only" line about paths inside it did
  * not come from the boundary: it is the command's own words (forged, or a host mount that is
- * read-only for reasons of its own), and classifying it would earn a forger an escalation prompt.
- * Under `read-only` every path is denied. A line naming no path keeps today's classification:
- * corroboration narrows, it never widens.
+ * read-only for reasons of its own), and classifying it would earn a forger an escalation
+ * prompt. The line is dropped only when EVERY path it names is inside the workspace: a real
+ * denial often names an inside source before the outside target (`copyfile '/work/a' -> '/etc/x'`,
+ * `/work/script.sh: line 3: /etc/x: Read-only file system`), and one outside path is the
+ * boundary speaking. Under `read-only` every path is denied. A line naming no absolute path
+ * keeps today's classification: corroboration narrows, it never widens.
  */
 export function writeDenialPlausible(line: string, policy: SandboxPolicy): boolean {
   if (policy.mode !== "workspace-write") return true;
-  const named = deniedPath(line);
-  if (named === undefined) return true;
-  const cwd = resolve(policy.cwd);
-  const target = isAbsolute(named) ? resolve(named) : resolve(cwd, named);
-  return !(target === cwd || target.startsWith(cwd + sep));
+  const named = deniedPaths(line);
+  if (named.length === 0) return true;
+  const cwd = canonical(resolve(policy.cwd));
+  return named.some((path) => !insideWorkspace(path, cwd));
 }
 
 /** Explicit identity provider. Omitting AgentConfig.sandbox remains the default and is equivalent. */

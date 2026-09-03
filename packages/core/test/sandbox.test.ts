@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -12,6 +12,7 @@ import {
   SeatbeltSandboxProvider,
   bashTool,
   deniedPath,
+  deniedPaths,
   sandboxSpawnInvocation,
   writeDenialPlausible,
   seatbeltProfile,
@@ -321,34 +322,64 @@ describe("R2b sandbox providers", () => {
 });
 
 describe("a denial is corroborated against the policy before it counts (#95)", () => {
-  it("deniedPath reads a quoted path, else the first absolute token, else nothing", () => {
-    expect(deniedPath("touch: cannot touch '/etc/x': Read-only file system")).toBe("/etc/x");
-    expect(deniedPath('mkdir: cannot create directory "/opt/a b": Read-only file system')).toBe("/opt/a b");
-    expect(deniedPath("touch: cannot touch 'notes/x.md': Read-only file system")).toBe("notes/x.md");
-    expect(deniedPath("sandbox-exec: deny(1) file-write-create /Users/me/work/out.txt")).toBe("/Users/me/work/out.txt");
-    expect(deniedPath("EROFS: read-only file system, open /var/lib/thing")).toBe("/var/lib/thing");
+  it("deniedPaths reads every absolute path a line names: quoted first, then bare tokens; never a relative one", () => {
+    expect(deniedPaths("touch: cannot touch '/etc/x': Read-only file system")).toEqual(["/etc/x"]);
+    expect(deniedPaths('mkdir: cannot create directory "/opt/a b": Read-only file system')).toEqual(["/opt/a b"]);
+    expect(deniedPaths("mkdir: cannot create directory ‘/etc/y’: Read-only file system")).toEqual(["/etc/y"]);
+    expect(deniedPaths("sandbox-exec: deny(1) file-write-create /Users/me/work/out.txt")).toEqual(["/Users/me/work/out.txt"]);
+    expect(deniedPaths("EROFS: read-only file system, open /var/lib/thing")).toEqual(["/var/lib/thing"]);
+    expect(deniedPaths("Error: EROFS: read-only file system, copyfile '/work/proj/a' -> '/etc/x'")).toEqual(["/work/proj/a", "/etc/x"]);
+    expect(deniedPaths("/work/proj/scripts/install.sh: line 12: /etc/x: Read-only file system")).toEqual(["/work/proj/scripts/install.sh", "/etc/x"]);
+    expect(deniedPaths("tee: /etc/x: Read-only file system")).toEqual(["/etc/x"]);
+    // relative paths are not resolved: the command may have cd'd, and a quoted word is any phrase
+    expect(deniedPaths("touch: cannot touch 'notes/x.md': Read-only file system")).toEqual([]);
+    expect(deniedPaths("touch: cannot touch 'notes.md': Read-only file system")).toEqual([]);
+    expect(deniedPaths("error: 'Read-only file system'")).toEqual([]);
+    expect(deniedPaths("touch: Read-only file system")).toEqual([]);
+    expect(deniedPaths("wget: network is unreachable")).toEqual([]);
+    expect(deniedPath("tee: /etc/x: Read-only file system")).toBe("/etc/x");
     expect(deniedPath("touch: Read-only file system")).toBeUndefined();
-    expect(deniedPath("touch: cannot touch 'notes.md': Read-only file system")).toBeUndefined();
-    expect(deniedPath("error: 'Read-only file system'")).toBeUndefined();
-    expect(deniedPath("wget: network is unreachable")).toBeUndefined();
   });
 
-  it("writeDenialPlausible: inside a writable workspace is implausible, everything else stays a denial", () => {
+  it("writeDenialPlausible: dropped only when every named path is inside the writable workspace", () => {
     const cwd = "/work/proj";
     const ww = { mode: "workspace-write" as const, cwd };
     expect(writeDenialPlausible("touch: cannot touch '/work/proj/a': Read-only file system", ww)).toBe(false);
-    expect(writeDenialPlausible("touch: cannot touch 'sub/a': Read-only file system", ww)).toBe(false);
     expect(writeDenialPlausible("touch: cannot touch '/work/proj': Read-only file system", ww)).toBe(false);
+    expect(writeDenialPlausible("tee: /work/proj: Read-only file system", ww)).toBe(false);
     // a sibling that merely shares the prefix is outside
     expect(writeDenialPlausible("touch: cannot touch '/work/proj2/a': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("touch: cannot touch '/etc/a': Read-only file system", ww)).toBe(true);
     // .. cannot smuggle an outside path in as inside, nor the reverse
     expect(writeDenialPlausible("touch: cannot touch '/work/proj/../proj2/a': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("touch: cannot touch '/etc/../work/proj/a': Read-only file system", ww)).toBe(false);
-    // no path: the pattern alone decides, as before
+    // an inside source named before the outside target is still the boundary speaking
+    expect(writeDenialPlausible("Error: EROFS: read-only file system, copyfile '/work/proj/a' -> '/etc/x'", ww)).toBe(true);
+    expect(writeDenialPlausible("Error: EROFS: read-only file system, rename '/work/proj/tmp' -> '/etc/x'", ww)).toBe(true);
+    expect(writeDenialPlausible("/work/proj/scripts/install.sh: line 12: /etc/x: Read-only file system", ww)).toBe(true);
+    expect(writeDenialPlausible("mv: cannot move '/work/proj/a' to '/etc/x': Read-only file system", ww)).toBe(true);
+    expect(writeDenialPlausible("/work/proj/bin/tool: open /etc/x: read-only file system", ww)).toBe(true);
+    // no absolute path (relative, bare word, nothing): the pattern alone decides, as before
+    expect(writeDenialPlausible("touch: cannot touch 'sub/a': Read-only file system", ww)).toBe(true);
     expect(writeDenialPlausible("touch: Read-only file system", ww)).toBe(true);
     // read-only mode denies every path, the workspace included
     expect(writeDenialPlausible("touch: cannot touch '/work/proj/a': Read-only file system", { mode: "read-only", cwd })).toBe(true);
+  });
+
+  it("a symlink inside the workspace that points outside is outside to the boundary", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-symlink-")));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-outside-")));
+    try {
+      await symlink(outside, join(root, "etclink"));
+      const ww = { mode: "workspace-write" as const, cwd: root };
+      // the named path is inside by string; the boundary sees where it leads
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/etclink/x': Read-only file system`, ww)).toBe(true);
+      // a path under a not-yet-existing inside directory is still inside
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/new/dir/x': Read-only file system`, ww)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   const dockerRun = async (stderrLine: string, mode: "workspace-write" | "read-only") => {
@@ -356,7 +387,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     try {
       const wrapper = join(root, "docker");
       const line = stderrLine.replace("CWD", root);
-      await writeFile(wrapper, `#!/bin/sh\necho "${line}" >&2\nexit 1\n`);
+      // the line rides in an environment variable: no shell expansion of $, backticks or quotes
+      await writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n' "$AGENTRIG_TEST_STDERR" >&2\nexit 1\n`);
+      process.env.AGENTRIG_TEST_STDERR = line;
       await chmod(wrapper, 0o755);
       const provider = new DockerSandboxProvider({ command: wrapper, image: "unused" });
       return await provider.prepare(
@@ -369,6 +402,7 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
         { mode, cwd: root },
       )();
     } finally {
+      delete process.env.AGENTRIG_TEST_STDERR;
       await rm(root, { recursive: true, force: true });
     }
   };
@@ -379,11 +413,14 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     const result = await dockerRun("touch: cannot touch 'CWD/notes.md': Read-only file system", "workspace-write");
     expect(result.output.exitCode).toBe(1);
     expect(result.isError).toBe(true);
-    const relative = await dockerRun("touch: cannot touch 'sub/notes.md': Read-only file system", "workspace-write");
-    expect(relative.output.exitCode).toBe(1);
-    // a bare quoted word is not a recognisable path (the quoted phrase could be anything), so the
-    // pattern alone decides and it stays a denial — corroboration narrows, never widens
+    // a relative path is not corroborated (the command may have cd'd first), so the pattern alone
+    // decides and it stays a denial — corroboration narrows, never widens
+    await expect(dockerRun("touch: cannot touch 'sub/notes.md': Read-only file system", "workspace-write"))
+      .rejects.toBeInstanceOf(SandboxDeniedError);
     await expect(dockerRun("touch: cannot touch 'notes.md': Read-only file system", "workspace-write"))
+      .rejects.toBeInstanceOf(SandboxDeniedError);
+    // a line with $ and backticks reaches the classifier verbatim
+    await expect(dockerRun("sh: cannot create /etc/$HOME/`id`: Read-only file system", "workspace-write"))
       .rejects.toBeInstanceOf(SandboxDeniedError);
   });
 
@@ -402,7 +439,8 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     try {
       const run = async (line: string) => {
         const wrapper = join(root, "sandbox-exec");
-        await writeFile(wrapper, `#!/bin/sh\necho "${line.replace("CWD", root)}" >&2\nexit 1\n`);
+        process.env.AGENTRIG_TEST_STDERR = line.replace("CWD", root);
+        await writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n' "$AGENTRIG_TEST_STDERR" >&2\nexit 1\n`);
         await chmod(wrapper, 0o755);
         const provider = new SeatbeltSandboxProvider({ command: wrapper });
         return provider.prepare(
@@ -418,9 +456,11 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       const inside = await run("sandbox-exec: deny(1) file-write-create CWD/x");
       expect(inside.output.exitCode).toBe(1);
       await expect(run("sandbox-exec: deny(1) file-write-create /etc/x")).rejects.toBeInstanceOf(SandboxDeniedError);
-      // a non-write denial is untouched by the path check
+      // a non-write denial is untouched by the path check, even one naming an inside path
       await expect(run("sandbox-exec: deny(1) network-outbound")).rejects.toBeInstanceOf(SandboxDeniedError);
+      await expect(run("sandbox-exec: deny(1) process-exec CWD/bin/x")).rejects.toBeInstanceOf(SandboxDeniedError);
     } finally {
+      delete process.env.AGENTRIG_TEST_STDERR;
       await rm(root, { recursive: true, force: true });
     }
   });

@@ -134,19 +134,26 @@ Changes:
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
 
-- **#95 — a forged or host-caused "read-only file system" line classified as a denial.** No
-  provider can authenticate a child's stderr, so classification is now corroborated against the
-  policy: `deniedPath(line)` reads the path a denial names (quoted, else the first absolute
-  token), and `writeDenialPlausible(line, policy)` rejects a write denial naming a path inside a
-  `workspace-write` workspace, which is writable and so could not have produced it (docker's
-  "read-only file system", seatbelt's `file-write*` denials). Paths are normalised (`..`, relative
-  to cwd) and the boundary is the directory, never its prefix. A line naming no recognisable path
-  keeps today's classification: corroboration narrows, never widens. A forged line naming a path
-  outside the workspace still classifies, and that is the boundary's own verdict on that path: the
-  sandbox would deny that write, and the escalation prompt (which yolo never auto-answers: it goes
-  to `onAsk`, denied headless) shows the provenance label. Mutants killed: docker ignoring the
-  corroboration; a prefix sibling counting as inside; no path normalisation; seatbelt ignoring
-  the corroboration.
+- **#95 (partial) — a forged or host-caused "read-only file system" line classified as a
+  denial.** No provider can authenticate a child's stderr, so classification is now corroborated
+  against the policy: `deniedPaths(line)` reads every absolute path a denial names (quoted, then
+  bare tokens, trailing punctuation stripped; relative paths never, because the command may have
+  `cd`'d), and `writeDenialPlausible(line, policy)` drops a write denial only when EVERY path it
+  names is inside a `workspace-write` workspace, which is writable and so could not have produced
+  it (docker's "read-only file system", seatbelt's `file-write*` denials). A real denial often
+  names an inside source before the outside target (`copyfile '/work/a' -> '/etc/x'`, a script
+  path before a redirect target), so one outside path keeps the line. Paths are normalised
+  (`..`) and canonicalised through the host's symlinks for their longest existing prefix (a link
+  inside the workspace that points outside is outside to the boundary; docker binds the workspace
+  at the same host path); the boundary is the directory, never its prefix. A line naming no
+  absolute path keeps today's classification: corroboration narrows, never widens. What remains,
+  and why #95 stays open: a forged line naming a path outside the workspace still classifies —
+  the boundary's own verdict on that path, since the sandbox would deny the write, and the
+  escalation prompt (which yolo never auto-answers: it goes to `onAsk`, denied headless) shows the
+  provenance label — and the provider-controlled signal the issue asks for needs a boundary
+  redesign. Mutants killed: docker ignoring the corroboration; a prefix sibling counting as
+  inside; no `..` normalisation; seatbelt ignoring the corroboration; first-path-only; no symlink
+  canonicalisation; trailing punctuation kept; relative quoted paths corroborated.
 
 ## R3 notes
 
