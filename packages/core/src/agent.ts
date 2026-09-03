@@ -634,7 +634,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // registration is the more specific one by convention
         const rewritten = h.patches.filter((p): p is string => typeof p === "string").at(-1);
         const extra = [...(rewritten === undefined ? [] : [rewritten]), ...h.injects];
-        for (const text of extra) messages.push({ role: "user", content: [{ type: "text", text }] });
+        for (const text of extra) {
+          const message: Message = { role: "user", content: [{ type: "text", text }] };
+          messages.push(message);
+          await emit({ type: "message.append", message });
+        }
       }
       const configuredPrompt = typeof config.systemPrompt === "function" ? config.systemPrompt({ task, cwd }) : config.systemPrompt;
       const systemBlocks: PromptBlock[] = typeof configuredPrompt === "string"

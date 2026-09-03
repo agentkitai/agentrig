@@ -207,6 +207,47 @@ describe("agent loop", () => {
     expect(events.some((e) => e.type === "context.loaded")).toBe(false);
   });
 
+  it("materializes user_prompt modify and inject messages exactly, including at a fork point", async () => {
+    const ids = ["hook-parent", "hook-child"];
+    const store = new SessionStore({ root, newId: () => ids.shift()! });
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "done" }, usage(3, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      store,
+      hooks: [
+        { point: "user_prompt", handler: () => ({ action: "modify", patch: "rewritten task context" }) },
+        { point: "user_prompt", handler: () => ({ action: "inject", message: "also remember X" }) },
+      ],
+    });
+    const session = createAgent(config).run("original task", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const snapshot = await store.readSnapshot(session.id);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.messages).toContainEqual({
+      role: "user",
+      content: [{ type: "text", text: "also remember X" }],
+    });
+    expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
+
+    const injection = events.find(
+      (event) => event.type === "message.append"
+        && event.message.role === "user"
+        && event.message.content.some((block) => block.type === "text" && block.text === "also remember X"),
+    );
+    expect(injection?.type).toBe("message.append");
+    if (injection?.type !== "message.append") throw new Error("missing injected user message event");
+
+    const child = await store.fork(session.id, injection.seq);
+    expect(await store.materializeMessages(child)).toEqual([
+      { role: "user", content: [{ type: "text", text: "original task" }] },
+      { role: "user", content: [{ type: "text", text: "rewritten task context" }] },
+      { role: "user", content: [{ type: "text", text: "also remember X" }] },
+    ]);
+  });
+
   it("wraps an approved tool with the sandbox provider and records an OS denial", async () => {
     const provider = new FakeProvider([
       [
