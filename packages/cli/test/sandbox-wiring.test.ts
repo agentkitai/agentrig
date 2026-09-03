@@ -54,6 +54,66 @@ describe("CLI sandbox wiring", () => {
     }
   });
 
+  it("an enforcing --sandbox reaches the assembled agent as that mode on the platform provider", async () => {
+    // the delta reviewer's mutant: `buildSandbox(opts.sandbox ?? "none")` -> `buildSandbox("none")`
+    // survived every CLI test, so a requested read-only/workspace-write boundary could silently
+    // become unsandboxed. This pins the enforcing path end to end: request workspace-write, run
+    // one tool call through the assembled agent, and see the PLATFORM provider prepared with
+    // exactly that mode. Portable: on win32 the same request must fail closed instead.
+    const root = await mkdtemp(join(tmpdir(), "agentrig-sandbox-enforce-"));
+    const fixture = join(root, "fixture.txt");
+    await writeFile(fixture, "sandbox reached", "utf8");
+    process.env.ANTHROPIC_API_KEY ??= "test-key";
+    const platformProvider =
+      process.platform === "linux" ? DockerSandboxProvider
+      : process.platform === "darwin" ? SeatbeltSandboxProvider
+      : undefined;
+    const build = () =>
+      buildAgent({
+        root,
+        provider: "anthropic",
+        model: "m",
+        sandbox: "workspace-write",
+        maxTurns: "2",
+        maxTokensPerTurn: "1024",
+        repoMap: false,
+      } as never);
+    try {
+      if (platformProvider === undefined) {
+        await expect(build()).rejects.toThrow(/not supported on .*--sandbox none/);
+        return;
+      }
+      const prepare = vi.spyOn(platformProvider.prototype, "prepare");
+      const nonePrepare = vi.spyOn(NoneSandboxProvider.prototype, "prepare");
+      try {
+        const built = await build();
+        let turn = 0;
+        built.provider.stream = async function* (): AsyncIterable<ModelEvent> {
+          turn += 1;
+          if (turn === 1) {
+            yield { type: "tool_use", id: "read-1", name: "read_file", input: { path: fixture } };
+            yield { type: "usage", usage: { input: 1, output: 1 } };
+            yield { type: "stop", reason: "tool_use" };
+            return;
+          }
+          yield { type: "text_delta", text: "done" };
+          yield { type: "usage", usage: { input: 1, output: 1 } };
+          yield { type: "stop", reason: "end_turn" };
+        };
+        const summary = await built.agent.run("read the fixture", { cwd: root }).done;
+        expect(summary.reason).toBe("done");
+        expect(prepare).toHaveBeenCalledTimes(1);
+        expect(prepare.mock.calls[0]?.[1]).toMatchObject({ mode: "workspace-write", cwd: root });
+        expect(nonePrepare).not.toHaveBeenCalled();
+      } finally {
+        prepare.mockRestore();
+        nonePrepare.mockRestore();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("selects the platform provider without coupling sandbox mode to approvals", () => {
     expect(buildSandbox("workspace-write", "linux")).toMatchObject({
       mode: "workspace-write",
