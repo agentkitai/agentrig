@@ -473,11 +473,13 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // an EXISTING chain whose every target is a long `w/x/../` walk through a link back to
       // the workspace (`w -> root`, `x` a real directory) costs its distinct paths — the memo —
       // not the platform realpath's re-walk of every hop's every component per call
+      // ten hops, each through one `w/x/..` wobble: twenty link follows, under macOS's limit of
+      // thirty-two (a chain past the kernel's limit fails ELOOP, not EROFS, and is judged by string)
       await mkdir(join(root, "x"));
       await symlink(root, join(root, "w"));
-      const wobble = "w/x/../".repeat(16);
-      for (let i = 0; i < 20; i += 1) {
-        const target = i === 19 ? outside : `${root}/${wobble}e${i + 1}`;
+      const wobble = "w/x/../";
+      for (let i = 0; i < 10; i += 1) {
+        const target = i === 9 ? outside : `${root}/${wobble}e${i + 1}`;
         await symlink(target, join(root, `e${i}`));
       }
       const existingChain = Array.from({ length: 16 }, (_, i) => `'${root}/e0/y${i}'`).join(" ");
