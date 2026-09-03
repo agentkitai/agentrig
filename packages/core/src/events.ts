@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MessageSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
 
 /**
@@ -170,6 +171,8 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
   z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string() }),
+  /** Authoritative conversation boundary persisted after the in-memory message is appended. */
+  z.object({ type: z.literal("message.append"), message: MessageSchema }),
   /**
    * A transient provider failure was retried before anything streamed. Informational, but
    * load-bearing for diagnosis: two real sessions died on overload errors and the logs said
@@ -218,7 +221,13 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
-  z.object({ type: z.literal("context.compact"), before: z.number().int(), after: z.number().int() }),
+  z.object({
+    type: z.literal("context.compact"),
+    before: z.number().int(),
+    after: z.number().int(),
+    /** Additive authoritative post-compaction state; absent on historical logs. */
+    messages: z.array(MessageSchema).optional(),
+  }),
   z.object({
     type: z.literal("context.evicted"),
     count: z.number().int().positive(),

@@ -224,9 +224,39 @@ export class SessionStore {
       throw new Error(`cannot fork session ${parent} atSeq ${atSeq}: parent log ends at seq ${parentEvents.length - 1}`);
     }
 
-    const child = this.create();
-    await this.append(child, { type: "session.fork", parent, atSeq });
-    return child;
+    const child = await this.reserveSessionLog();
+    try {
+      await this.append(child, { type: "session.fork", parent, atSeq });
+      return child;
+    } catch (err) {
+      this.knownIds.delete(child);
+      this.seqs.delete(child);
+      await rm(this.pathFor(child), { force: true });
+      throw err;
+    }
+  }
+
+  /** Atomically reserve a fresh on-disk log name so reopened stores cannot reuse an existing id. */
+  private async reserveSessionLog(): Promise<string> {
+    await mkdir(this.root, { recursive: true });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const id = assertSessionId(this.newId());
+      if (this.knownIds.has(id) || this.seqs.has(id) || this.claimed.has(id)) continue;
+      try {
+        const handle = await open(this.pathFor(id), "wx");
+        await handle.close();
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+          this.knownIds.add(id);
+          continue;
+        }
+        throw err;
+      }
+      this.knownIds.add(id);
+      this.seqs.set(id, 0);
+      return id;
+    }
+    throw new Error("could not allocate an unused session id in 100 attempts");
   }
 
   /**
@@ -328,7 +358,31 @@ function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
     return undefined;
   };
 
+  let authoritativeMessages = false;
   for (const event of events) {
+    if (event.type === "message.append") {
+      if (!authoritativeMessages && event.message.role === "assistant" && messages.at(-1)?.role === "assistant") {
+        messages.pop();
+      }
+      messages.push(structuredClone(event.message));
+      streamedText = "";
+      activeAssistant = undefined;
+      authoritativeMessages = true;
+      continue;
+    }
+    if (event.type === "context.compact" && event.messages !== undefined) {
+      messages.splice(0, messages.length, ...structuredClone(event.messages));
+      streamedText = "";
+      activeAssistant = undefined;
+      authoritativeMessages = true;
+      continue;
+    }
+    if (
+      authoritativeMessages &&
+      (event.type === "model.request" || event.type === "model.delta" || event.type === "model.response" ||
+        event.type === "tool.call" || event.type === "tool.result" || event.type === "tool.result.patched")
+    ) continue;
+
     switch (event.type) {
       case "session.start":
         pushUserText(event.task);

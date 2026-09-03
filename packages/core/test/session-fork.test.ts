@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -123,5 +123,55 @@ describe("session forks", () => {
 
     await expect(store.fork(parent, 1)).rejects.toThrow(/atSeq 1.*parent/);
     await expect(readFile(store.pathFor("child"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not append into an existing child log after the store is reopened", async () => {
+    const initial = new SessionStore({ root, newId: () => "parent" });
+    const parent = initial.create();
+    await initial.append(parent, { type: "session.start", task: "root", cwd: "/w", provider: "fake", model: "m" });
+    const childPath = initial.pathFor("child");
+    const existing = `${JSON.stringify({
+      seq: 0,
+      ts: 1,
+      sessionId: "child",
+      type: "session.start",
+      task: "existing",
+      cwd: "/w",
+      provider: "fake",
+      model: "m",
+    })}\n`;
+    await writeFile(childPath, existing);
+
+    const ids = ["child", "fresh-child"];
+    const reopened = new SessionStore({ root, newId: () => ids.shift() ?? "unexpected" });
+    const forked = await reopened.fork(parent, 0);
+
+    expect(forked).toBe("fresh-child");
+    expect(await readFile(childPath, "utf8")).toBe(existing);
+    expect(await reopened.readAll(forked)).toMatchObject([
+      { seq: 0, sessionId: "fresh-child", type: "session.fork", parent: "parent", atSeq: 0 },
+    ]);
+  });
+
+  it.each([
+    { mode: "modify" as const, patched: "[REDACTED]" },
+    { mode: "inject" as const, patched: "safe follow-up", expected: "sensitive original\n\nsafe follow-up" },
+  ])("replays the final $mode tool-result patch", async ({ mode, patched, expected }) => {
+    const store = new SessionStore({ root, newId: () => "parent" });
+    const parent = store.create();
+    await store.append(parent, { type: "session.start", task: "root", cwd: "/w", provider: "fake", model: "m" });
+    await store.append(parent, { type: "tool.call", id: "t1", name: "secret", input: {}, inputHash: contentHash({}) });
+    await store.append(parent, { type: "tool.result", id: "t1", ok: true, display: "sensitive original", durationMs: 1 });
+    await store.append(parent, { type: "tool.result.patched", id: "t1", by: "review", display: patched, mode });
+
+    const replay = await store.materializeMessages(parent);
+    const result = replay.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result" && block.toolUseId === "t1",
+    );
+    expect(result).toMatchObject({
+      type: "tool_result",
+      content: expected ?? patched,
+    });
+    if (mode === "modify") expect(JSON.stringify(replay)).not.toContain("sensitive original");
   });
 });

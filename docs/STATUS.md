@@ -144,12 +144,18 @@ Changes:
   Fork points address the named parent's physical log, so recursive materialization naturally
   supports forks of forks without flattening or copying ancestry.
 - `SessionStore.materialize` returns inherited recorded events followed by the child's records;
-  `materializeMessages` folds that stream into provider-neutral messages. Recorded `tool.result`
-  events become tool-result blocks directly and tools are never looked up or executed during replay.
+  `materializeMessages` folds that stream into provider-neutral messages. Additive `message.append`
+  records preserve the exact assistant/tool-result boundaries used by the model, and
+  `context.compact.messages` preserves authoritative post-compaction state. Historical logs retain
+  the original event fold. Recorded tool results and both `modify`/`inject` patches replay directly;
+  tools are never looked up or executed during replay.
+- Fork child ids are reserved with exclusive on-disk creation. Reopened stores retry collisions
+  without changing the existing log, preventing a second seq-0 record from entering another session.
 - Acceptance coverage diffs parent/child message lists at the fork point, follows two levels of
   ancestry, hashes the parent file across child creation, rejects nonexistent fork points before a
-  child is written, and uses a counter tool fixture to prove materialization does not repeat effects.
-  No roadmap deviation was needed.
+  child is written, compares a real parallel-tool plus compaction run to its stored message state,
+  preserves colliding files byte-for-byte, covers both patch modes, and uses a counter tool fixture
+  to prove materialization does not repeat effects. No roadmap deviation was needed.
 
 ## R2 notes
 

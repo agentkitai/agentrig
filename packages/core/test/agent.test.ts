@@ -166,16 +166,19 @@ describe("agent loop", () => {
       "model.delta",
       "model.delta",
       "model.response",
+      "message.append",
       "permission.request",
       "permission.decision",
       "tool.call",
       "tool.result",
+      "message.append",
       "turn.end",
       "turn.start",
       "context.manifest",
       "model.request",
       "model.delta",
       "model.response",
+      "message.append",
       "turn.end",
       "session.end",
     ]);
@@ -1103,6 +1106,59 @@ describe("agent loop", () => {
 });
 
 describe("compaction in the loop", () => {
+  it("materializes the exact stored message state after parallel tool calls and compaction", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "text_delta", text: "checking both" },
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "first result with enough text to compact" } },
+        { type: "tool_use", id: "t2", name: "echo", input: { text: "second result with enough text to compact" } },
+        usage(90_000, 20),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "final answer" }, usage(10, 3), stop("end_turn")],
+    ]);
+    const store = new SessionStore({ root, newId: () => "materialized" });
+    const config = makeConfig(provider, {
+      store,
+      compaction: {
+        shouldCompact: () => true,
+        compact: async (messages) => [
+          messages[0]!,
+          { role: "assistant", content: [{ type: "text", text: "[compacted exact state]" }] },
+        ],
+      },
+    });
+    const session = createAgent(config).run("compare replay", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const compact = events.find((event) => event.type === "context.compact");
+    expect(compact?.type).toBe("context.compact");
+    if (compact?.type !== "context.compact") throw new Error("missing context.compact");
+    expect(await store.materializeMessages("materialized", compact.seq - 1)).toEqual([
+      { role: "user", content: [{ type: "text", text: "compare replay" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "checking both" },
+          { type: "tool_use", id: "t1", name: "echo", input: { text: "first result with enough text to compact" } },
+          { type: "tool_use", id: "t2", name: "echo", input: { text: "second result with enough text to compact" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact" },
+          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact" },
+        ],
+      },
+    ]);
+
+    const snapshot = await store.readSnapshot("materialized");
+    expect(snapshot).not.toBeNull();
+    expect(await store.materializeMessages("materialized")).toEqual(snapshot!.messages);
+  });
+
   it("compacts past the window threshold and emits context.compact", async () => {
     const provider = new FakeProvider([
       // turn 1: small usage, no compaction

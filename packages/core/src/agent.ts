@@ -916,7 +916,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
 
         flushText();
-        if (assistantContent.length > 0) messages.push({ role: "assistant", content: assistantContent });
+        if (assistantContent.length > 0) {
+          const message: Message = { role: "assistant", content: assistantContent };
+          messages.push(message);
+          await emit({ type: "message.append", message });
+        }
 
         if (stop === "error") {
           reason = "error";
@@ -955,7 +959,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
           results.push(await runTool(tu));
         }
-        messages.push({ role: "user", content: results });
+        const resultMessage: Message = { role: "user", content: results };
+        messages.push(resultMessage);
+        await emit({ type: "message.append", message: resultMessage });
 
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
@@ -979,13 +985,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             // raced so control.abort() wins over a hung summarization call, same as tools
             const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal), "compaction");
             const after = estimateTokens(system, compacted);
-            if (compacted !== messages && after < before * 0.9) {
+            const changed = compacted !== messages;
+            if (changed) {
               messages = compacted;
-              await emit({ type: "context.compact", before, after });
+              await emit({ type: "context.compact", before, after, messages });
+            }
+            if (changed && after < before * 0.9) {
+              // The compacted state and its authoritative replacement event were persisted above.
             } else {
               // no progress possible (tail alone exceeds the window): warn once, stop retrying —
               // a summarization call every turn that can't shrink anything is pure burn
-              if (compacted !== messages) messages = compacted;
               compactionExhausted = true;
               await emit({
                 type: "error",

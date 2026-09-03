@@ -51,6 +51,7 @@ export function renderEvent(e: HarnessEvent): string {
         : ` cacheWrite=${formatTokens(e.usage.cacheWrite)}`;
       return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}`;
     }
+    case "message.append": return `${p} role=${e.message.role} blocks=${e.message.content.length}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
     case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash} ${JSON.stringify(e.input)}`;
     case "tool.result": {
@@ -184,6 +185,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "model.request":
     case "model.delta":
     case "model.response":
+    case "message.append":
     // the provider's onNotice already prints the friendly retry line; a chat line here would double it
     case "model.retry":
     case "permission.request":
