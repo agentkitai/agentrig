@@ -216,8 +216,16 @@ Changes:
   fails with ELOOP or is judged by string, and the test says so. The walk takes the path as
   written: a `..` after a symlink climbs from the link's target, as the kernel does (`out/../x`
   with `out -> /outside` is `/x`), where a lexical collapse had judged it inside. Mutants
-  killed: no memo; probes not charged; the platform `realpath` per link (timing); a lexical
-  `..` collapse.
+  killed: no memo; probes not charged; a lexical `..` collapse. Not observable within the
+  platform limits: a platform `realpath` per link (a chain short enough to resolve on macOS is
+  also cheap for the kernel).
+- Seventh delta round: with the memo warm a probe cost nothing, so a chain ending inside the
+  workspace was walked for free, restart after restart — eighteen seconds of pure string work
+  inside the budget. Every step of the walk now costs one unit, memo hit and `..` included, so
+  the budget bounds the work itself (four thousand steps, tens of milliseconds); the memo saves
+  syscalls only. A relative link target inside the workspace is pinned as resolving inside.
+  Mutants killed: memo hits free; relative target base ignored. A free `..` is not observable:
+  every restart costs a charged link probe, so dots alone cannot walk far.
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the

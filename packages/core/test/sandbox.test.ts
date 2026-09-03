@@ -475,7 +475,7 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // an EXISTING chain whose every target is a long `w/x/../` walk through a link back to
       // the workspace (`w -> root`, `x` a real directory) costs its distinct paths — the memo —
       // not the platform realpath's re-walk of every hop's every component per call
-      // ten hops, each through one `w/x/..` wobble: twenty link follows, under macOS's limit of
+      // ten hops, nine through a `w/x/..` wobble: nineteen link follows, under macOS's limit of
       // thirty-two (a chain past the kernel's limit fails ELOOP, not EROFS, and is judged by string)
       await mkdir(join(root, "x"));
       await symlink(root, join(root, "w"));
@@ -485,13 +485,22 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
         await symlink(target, join(root, `e${i}`));
       }
       const existingChain = Array.from({ length: 16 }, (_, i) => `'${root}/e0/y${i}'`).join(" ");
+      const chainLine = `touch: cannot touch ${existingChain}: Read-only file system`;
+      expect(writeDenialPlausible(chainLine, ww, { budget: probeBudget() })).toBe(true);
+      // the forger's shape: a ten-hop chain that ends INSIDE, so no path short-circuits and all
+      // sixteen leaves of all fifty lines are walked from a warm memo. Every step is charged,
+      // memo hit or not, so the shared budget is SPENT and the classification stays fast
+      for (let i = 0; i < 10; i += 1) {
+        const target = i === 9 ? join(root, "x") : `${root}/${wobble}f${i + 1}`;
+        await symlink(target, join(root, `f${i}`));
+      }
+      const insideChain = Array.from({ length: 16 }, (_, i) => `'${root}/f0/y${i}'`).join(" ");
+      const insideLine = `touch: cannot touch ${insideChain}: Read-only file system`;
       const t1 = Date.now();
       const budget = probeBudget();
-      for (let i = 0; i < 50; i += 1) {
-        expect(writeDenialPlausible(`touch: cannot touch ${existingChain}: Read-only file system`, ww, { budget })).toBe(true);
-      }
+      for (let i = 0; i < 50; i += 1) expect(writeDenialPlausible(insideLine, ww, { budget })).toBe(false);
       expect(Date.now() - t1).toBeLessThan(1_500);
-      expect(budget.remaining).toBeGreaterThan(0);
+      expect(budget.remaining).toBe(0);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });
@@ -601,6 +610,12 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // a dangling link with a RELATIVE target resolves against the link's own directory
       await symlink(join("..", basename(outside), "newfile"), join(root, "rel"));
       expect(writeDenialPlausible(`sh: ${root}/rel: Read-only file system`, ww)).toBe(true);
+      // and a relative target that stays inside resolves inside — the link's directory is the
+      // base, not the filesystem root
+      await mkdir(join(root, "sub"));
+      await mkdir(join(root, "x2"));
+      await symlink(join("..", "x2"), join(root, "sub", "rel"));
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/sub/rel/f': Read-only file system`, ww)).toBe(false);
       // a host link from OUTSIDE into the workspace: seatbelt (host filesystem) resolves it inside
       // and drops the line; docker (only the bind is shared) judges the string and keeps it
       await symlink(root, join(outside, "back"));

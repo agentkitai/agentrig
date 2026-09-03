@@ -151,25 +151,32 @@ const MAX_PROBES_PER_CLASSIFICATION = 4_000;
 type Probed = { kind: "missing" } | { kind: "entry" } | { kind: "link"; target: string };
 
 /**
- * The probe budget threaded through one classification, with a memo of every path probed: the
- * sixteen leaves of one line share their prefixes, and a chain that keeps landing on the same
- * directories costs its distinct paths, not its hops times its depth.
+ * The budget threaded through one classification: every component step of the walk costs one
+ * unit — a memo hit, a `.` or `..`, and a real probe alike — so the budget bounds the work, not
+ * just the syscalls. The memo saves syscalls: the sixteen leaves of one line share their
+ * prefixes, and a chain that keeps landing on the same directories is walked from memory.
  */
 export interface ProbeBudget {
   remaining: number;
   memo: Map<string, Probed>;
 }
 
+/** One unit of work; false once the budget is spent. */
+function step(budget: ProbeBudget): boolean {
+  if (budget.remaining <= 0) return false;
+  budget.remaining -= 1;
+  return true;
+}
+
 export function probeBudget(remaining = MAX_PROBES_PER_CLASSIFICATION): ProbeBudget {
   return { remaining, memo: new Map() };
 }
 
-/** One filesystem probe, memoised and charged; `undefined` once the budget is spent. */
+/** One filesystem probe, memoised and charged (a memo hit too); `undefined` once spent. */
 function probe(path: string, budget: ProbeBudget): Probed | undefined {
+  if (!step(budget)) return undefined;
   const known = budget.memo.get(path);
   if (known !== undefined) return known;
-  if (budget.remaining <= 0) return undefined;
-  budget.remaining -= 1;
   let result: Probed;
   try {
     // `throwIfNoEntry: false` silences ENOENT only; ENOTDIR (a path through a regular file) and
@@ -178,8 +185,7 @@ function probe(path: string, budget: ProbeBudget): Probed | undefined {
     if (st === undefined) result = { kind: "missing" };
     else if (!st.isSymbolicLink()) result = { kind: "entry" };
     else {
-      if (budget.remaining <= 0) return undefined;
-      budget.remaining -= 1;
+      if (!step(budget)) return undefined;
       result = { kind: "link", target: readlinkSync(path) };
     }
   } catch {
@@ -262,7 +268,7 @@ function canonical(path: string, budget: ProbeBudget): string {
   // component climbs from the LINK'S TARGET, as the kernel does, not from the name: `w/../x`
   // with `w -> /etc` is `/x`, and a lexical collapse would have judged it inside.
   let parts = path.split(sep).filter((p) => p !== "");
-  for (let hop = 0; hop <= MAX_LINK_HOPS; hop += 1) {
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
     if (parts.length > MAX_PATH_COMPONENTS || parts.join(sep).length > MAX_PATH_CHARS) return sep + parts.join(sep);
     let resolved: string = sep;
     let restarted = false;
@@ -270,19 +276,20 @@ function canonical(path: string, budget: ProbeBudget): string {
       const part = parts[i]!;
       if (part === ".") continue;
       if (part === "..") {
+        // a step of work like any other: a path of dots must not walk for free
+        if (!step(budget)) return resolve(resolved, ...parts.slice(i));
         resolved = dirname(resolved);
         continue;
       }
       const candidate = join(resolved, part);
-      const rest = parts.slice(i + 1);
       const seen = probe(candidate, budget);
       // budget spent, or nothing there: where the write would land, lexically from here down
-      if (seen === undefined || seen.kind === "missing") return resolve(candidate, ...rest);
+      if (seen === undefined || seen.kind === "missing") return resolve(candidate, ...parts.slice(i + 1));
       if (seen.kind === "link") {
         // restart on the target — relative to the link's directory — with the rest re-joined
         const target = seen.target.split(sep).filter((p) => p !== "");
         const base = isAbsolute(seen.target) ? [] : resolved.split(sep).filter((p) => p !== "");
-        parts = [...base, ...target, ...rest];
+        parts = [...base, ...target, ...parts.slice(i + 1)];
         restarted = true;
         break;
       }
