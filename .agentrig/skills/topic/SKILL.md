@@ -1,6 +1,6 @@
 ---
 name: topic
-description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, repair until clean in a bounded converging loop, arbitrate deviations, land, and halt only when a human is needed.
+description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, repair to clean in a bounded converging loop, arbitrate deviations, land; halt only for a human.
 ---
 
 # Topic flow — one authorized roadmap band, landed row by row
@@ -57,9 +57,11 @@ For each recorded row, in order:
    The dogfood child stops at its PR and never merges. Record the session id
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
    children cannot reliably report their own ids.
-3. If the builder dies at its budget or leaves a half-pushed branch, halt. Report its recorded
-   session id for `agentrig sessions resume <id>`; never replace it with a fresh builder.
-   The one exception is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
+3. If the builder dies at its budget, spawn ONE continuation builder from whatever it pushed (its
+   branch, its PR if any, and its last report are the task text; nothing pushed means a fresh
+   builder loses nothing); a second death halts with both session ids for
+   `agentrig sessions resume <id>`. Never spawn a third builder over the same branch.
+   A different case is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
    of its report: it has pushed its work and is asking to change its contract. Do not judge the
    proposal yourself. Spawn an `arbiter` subagent with the proposal verbatim, the row text from
    §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE`, spawn a continuation builder on

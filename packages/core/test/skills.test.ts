@@ -315,12 +315,12 @@ describe("skillTool", () => {
     expect(body).toContain("LOW or MEDIUM residual lands with that record; any HIGH residual halts");
     expect(body).toContain("Everything else is a child's job");
     expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
-    expect(body).toContain("sort its findings, never by severity");
+    expect(body).toContain("Sort its findings, never by severity");
     expect(body).toContain("Arbitrate first, once per row");
     expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
     expect(body).toContain("watch `main` CI on the exact merge commit");
-    expect(body).toContain("never replace it with a fresh builder");
+    expect(body).toContain("spawn ONE continuation builder from whatever it pushed");
     expect(body).toContain("The minimum is three children per remaining");
     expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
     expect(body).toContain("Report the exact head SHA you reviewed");
