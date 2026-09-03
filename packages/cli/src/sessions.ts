@@ -123,7 +123,7 @@ export function renderChildLine(node: ChildNode, now: number): string {
   const torn = node.torn === true ? " · log still being written" : "";
   const s = node.status;
   if (s === null || s.startedAt === null) {
-    return node.reason === undefined ? `${head} · starting` : `${head} · ${node.reason} before writing a log`;
+    return node.reason === undefined ? `${head} · starting${torn}` : `${head} · ${node.reason} before writing a log${torn}`;
   }
   const finished = node.reason ?? s.ended?.reason;
   if (finished !== undefined) {

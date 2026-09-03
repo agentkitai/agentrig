@@ -222,8 +222,11 @@ Changes:
   line or a seq gap is still an error; `/resume <other>` drops the previous session's children and
   seeds the list from that session's own log (`onSpawned`), or starts empty when nothing is
   wired; a child log whose spawn record names the parent or a sibling cannot pull that session
-  under itself (the parent and every direct child are claimed before the walk), and an id that
-  is not a session id renders as "invalid id"; every `subagent.end` reason the log can carry is
+  under itself — the walk is breadth-first and every id found at one depth is claimed across
+  all branches before the next depth is read, so a record cannot steal a session of the same or
+  a shallower depth from another branch either; a record naming a session that truly belongs
+  strictly deeper in another branch is undecidable from child logs alone (residual issue, see
+  the PR) — and an id that is not a session id renders as "invalid id"; every `subagent.end` reason the log can carry is
   recorded, "ended" when it carries none (`applyChildEvent`, exported and tested directly).
 - Mutants killed: a session that ended still "in" its last tool; a `tool.result` leaving the
   call open; dropping the visited guard on looping spawn records; a torn tail throwing; no

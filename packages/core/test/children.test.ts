@@ -182,6 +182,30 @@ describe("liveChildren", () => {
     expect(nodes[1]!.children).toEqual([]);
   });
 
+  it("a record in one branch cannot pull a session of the same depth out of another branch", async () => {
+    const store = new SessionStore({ root });
+    for (const [id, task] of [["kid1", "k1"], ["kid2", "k2"], ["g1", "g1"], ["g2", "g2"]] as const) await start(store, id, task);
+    await store.append("kid1", { type: "subagent.spawn", id: "g1", task: "g1" });
+    await store.append("kid2", { type: "subagent.spawn", id: "g2", task: "g2" });
+    await store.append("g1", { type: "subagent.spawn", id: "g2", task: "forged" });
+    const nodes = await liveChildren(store, [{ id: "kid1", task: "k1" }, { id: "kid2", task: "k2" }], { parent: "parent" });
+    expect(nodes[0]!.children.map((n) => n.id)).toEqual(["g1"]);
+    expect(nodes[0]!.children[0]!.children).toEqual([]);
+    expect(nodes[1]!.children.map((n) => n.id)).toEqual(["g2"]);
+  });
+
+  it("a grandchild cannot claim its own sibling grandchild", async () => {
+    const store = new SessionStore({ root });
+    for (const id of ["kid", "g", "g2"]) await start(store, id, id);
+    await store.append("kid", { type: "subagent.spawn", id: "g", task: "g" });
+    await store.append("kid", { type: "subagent.spawn", id: "g2", task: "g2" });
+    await store.append("g", { type: "subagent.spawn", id: "g2", task: "forged sibling" });
+    const nodes = await liveChildren(store, [{ id: "kid", task: "kid" }]);
+    expect(nodes[0]!.children.map((n) => n.id)).toEqual(["g", "g2"]);
+    expect(nodes[0]!.children[0]!.children).toEqual([]);
+    expect(nodes[0]!.children[1]!.task).toBe("g2");
+  });
+
   it("an id that is not a session id is marked invalid rather than read", async () => {
     const store = new SessionStore({ root });
     const [node] = await liveChildren(store, [{ id: "../../etc/passwd", task: "t" }]);

@@ -110,7 +110,6 @@ export async function startTui(opts: TuiOptions): Promise<void> {
         summarizeSession(id, (await sessions.readPrefix(id)).events).children.map((c) => ({
           id: c.id,
           task: c.task,
-          spawnedAt: 0,
           ...(c.reason === undefined ? {} : { reason: c.reason }),
         })),
     });

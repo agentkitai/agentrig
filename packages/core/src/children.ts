@@ -104,62 +104,74 @@ export interface ChildNode {
 
 /**
  * The live tree under one parent: each child's log is read (never written) and its own
- * `subagent.spawn` records lead to grandchildren. Bounded by the ids already visited, so a
- * forged or looping spawn record cannot recurse forever.
+ * `subagent.spawn` records lead to grandchildren. The walk is breadth-first and every id found at
+ * one depth is claimed — across all branches — before the next depth is read, so a record in one
+ * branch cannot pull a session that belongs at the same or a shallower depth under itself, and a
+ * loop is visited once. Records are model-emitted through a gated tool, but a log on disk is
+ * untrusted input all the same. What remains undecidable from the child logs alone is a record
+ * naming a session that truly belongs strictly deeper in another branch; that would need a
+ * parent pointer in the child's own log.
  */
 export async function liveChildren(
   store: SessionStore,
   spawned: ReadonlyArray<{ id: string; task: string; reason?: string }>,
   opts: { parent?: string } = {},
 ): Promise<ChildNode[]> {
-  // The parent and every direct child are claimed up front: a child log whose spawn record names
-  // the parent, or a sibling, cannot pull that session under itself. Records are model-emitted
-  // through a gated tool, but a log on disk is untrusted input all the same.
-  const visited = new Set<string>(spawned.map((c) => c.id));
-  if (opts.parent !== undefined) visited.add(opts.parent);
-  return walk(store, spawned, visited, new Set());
+  const claimed = new Set<string>();
+  if (opts.parent !== undefined) claimed.add(opts.parent);
+  const place = (
+    into: ChildNode[],
+    records: ReadonlyArray<{ id: string; task: string; reason?: string }>,
+  ): ChildNode[] => {
+    const placed: ChildNode[] = [];
+    for (const r of records) {
+      if (claimed.has(r.id)) continue;
+      claimed.add(r.id);
+      const node: ChildNode = {
+        id: r.id,
+        task: r.task,
+        ...(r.reason === undefined ? {} : { reason: r.reason }),
+        status: null,
+        children: [],
+      };
+      into.push(node);
+      placed.push(node);
+    }
+    return placed;
+  };
+
+  const roots: ChildNode[] = [];
+  let level = place(roots, spawned);
+  while (level.length > 0) {
+    // read the whole depth first: what each log claims is only placed once every log at this
+    // depth has been read, so the earliest record wins by depth, never by branch order
+    for (const node of level) await fill(store, node);
+    const next: ChildNode[] = [];
+    for (const node of level) {
+      if (node.status === null) continue;
+      next.push(...place(node.children, node.status.children));
+    }
+    level = next;
+  }
+  return roots;
 }
 
-async function walk(
-  store: SessionStore,
-  spawned: ReadonlyArray<{ id: string; task: string; reason?: string }>,
-  claimed: ReadonlySet<string>,
-  rendered: Set<string>,
-): Promise<ChildNode[]> {
-  const nodes: ChildNode[] = [];
-  for (const child of spawned) {
-    if (rendered.has(child.id)) continue;
-    rendered.add(child.id);
-    const node: ChildNode = {
-      id: child.id,
-      task: child.task,
-      ...(child.reason === undefined ? {} : { reason: child.reason }),
-      status: null,
-      children: [],
-    };
-    if (!isValidSessionId(child.id)) {
-      node.invalid = true;
-      node.error = "not a session id";
-      nodes.push(node);
-      continue;
-    }
-    let read: { events: HarnessEvent[]; torn: boolean } | null = null;
-    try {
-      read = await store.readPrefix(child.id);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        node.error = err instanceof Error ? err.message : String(err);
-      }
-    }
-    if (read !== null) {
-      node.status = summarizeSession(child.id, read.events);
-      if (read.torn) node.torn = true;
-      // a grandchild record naming a session already placed in the tree is not followed
-      const own = node.status.children.filter((c) => !claimed.has(c.id));
-      const nextClaimed = new Set([...claimed, ...own.map((c) => c.id)]);
-      node.children = await walk(store, own, nextClaimed, rendered);
-    }
-    nodes.push(node);
+/** Reads one child's own log into its node; a missing log is "starting", a torn tail is flagged. */
+async function fill(store: SessionStore, node: ChildNode): Promise<void> {
+  if (!isValidSessionId(node.id)) {
+    node.invalid = true;
+    node.error = "not a session id";
+    return;
   }
-  return nodes;
+  let read: { events: HarnessEvent[]; torn: boolean } | null = null;
+  try {
+    read = await store.readPrefix(node.id);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      node.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+  if (read === null) return;
+  node.status = summarizeSession(node.id, read.events);
+  if (read.torn) node.torn = true;
 }

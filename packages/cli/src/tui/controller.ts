@@ -55,7 +55,8 @@ export type TuiActivity =
 export interface TuiChild {
   id: string;
   task: string;
-  spawnedAt: number;
+  /** From the live stream; absent when the list was seeded from a log on resume. */
+  spawnedAt?: number;
   reason?: string;
 }
 

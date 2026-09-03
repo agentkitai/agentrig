@@ -1107,7 +1107,7 @@ describe("/children (R3d)", () => {
       [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
       [{ type: "text_delta", text: "resumed" }, usage(1, 1), stop("end_turn")],
     ]);
-    const seeded: TuiChild[] = [{ id: "old-kid", task: "from the log", spawnedAt: 0, reason: "done" }];
+    const seeded: TuiChild[] = [{ id: "old-kid", task: "from the log", reason: "done" }];
     const asked: string[] = [];
     const { controller: c, store } = makeParent(provider, ["p1", "kid"], {
       onSpawned: async (id) => { asked.push(id); return seeded; },

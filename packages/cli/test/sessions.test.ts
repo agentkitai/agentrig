@@ -221,6 +221,9 @@ describe("children rendering (R3d)", () => {
 
   it("a child with no log yet, an unreadable one, and one that ended before writing are each named", () => {
     expect(renderChildLine({ id: "c2", task: "t", status: null, children: [] }, 0)).toBe("c2 · t · starting");
+    // a log whose only line is still being written is "starting", and says the write is in flight
+    const tornOnly = { id: "c2", task: "t", torn: true as const, children: [], status: { id: "c2", startedAt: null, lastTs: null, turns: 0, tool: null, plan: null, ended: null, children: [] } };
+    expect(renderChildLine(tornOnly, 0)).toBe("c2 · t · starting · log still being written");
     expect(renderChildLine({ id: "c2", task: "t", status: null, reason: "error", children: [] }, 0))
       .toBe("c2 · t · error before writing a log");
     expect(renderChildLine({ id: "c3", task: "t", status: null, error: "Unexpected token", children: [] }, 0))
