@@ -32,6 +32,9 @@ issue is not recorded — refuse to land and say which entry needs its issue. Fi
   proves nothing.
 - The PR is mergeable with no conflict. A conflict goes back to the author flow; never resolve it
   inside a land run.
+- A PR that completes a roadmap row marks that row `*(done)*` in `docs/ROADMAP.md` on its head
+  (dogfood §5). An unmarked row is a row the next train rebuilds: stop and report which row needs
+  its marker — the author flow adds it, never the lander.
 
 One permitted flake re-run: a failure that is green on the base branch, names nothing the diff
 touches, and passed for this same commit before may be re-run ONCE; a second failure is real and

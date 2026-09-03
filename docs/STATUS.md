@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3b is complete; R3c is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3c is complete; R3d is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -140,8 +140,8 @@ Changes:
 |---|---|---|
 | R3a | `session.fork` event, append-only child creation, and recursive event/message materialization | done |
 | R3b | Session fork/search CLI and bounded replay | done |
-| R3c | TUI `/fork` and `/tree` | next |
-| R3d | Live `/children` tree | pending |
+| R3c | TUI `/fork` and `/tree` | done |
+| R3d | Live `/children` tree | next |
 
 - R3a adds `SessionStore.fork(parent, atSeq)`: the child log contains only its seq-0
   `session.fork` record, while the parent log and existing snapshot behavior remain untouched.
@@ -166,6 +166,27 @@ Changes:
   scorer over those same rendered materialized transcripts. Sequence options reject non-negative
   integer violations at argument parsing, and no scorer move or dependency-boundary change was
   needed.
+- R3c adds `/fork [seq]` and `/tree` to the TUI. `/fork` writes a child log holding only its
+  `session.fork` marker and switches the conversation to the child; the next prompt resumes the
+  child, so the parent's log never gains a byte (the controller test hashes it across the fork and
+  the child's first turn). `/tree` prints the root-to-current ancestry and every fork under the
+  root, found by reading the first event of each log in the store — the parent records nothing
+  about its forks, because it is never written. The renderer is the one R3d will drive with live
+  state. Both are injected into the controller like `/memory` and `/dream`, so it stays free of
+  stores; the TUI wires them to a `SessionStore` on the same root the agent writes.
+- Decision beyond the row, in core: a fork child had no snapshot until it completed a turn, so
+  `sessions fork` produced an id that could be replayed but never continued — `run --resume
+  <child>` died with "no snapshot found", and `/fork` would have too. Resume now falls back to
+  `SessionStore.materializeSnapshot(id)`, which exists only for logs opening with `session.fork`
+  and folds the materialized tree into a snapshot (messages, task, cwd, turns from the last
+  `turn.end`, usage summed over `model.response`). A plain session with no snapshot is still an
+  error — "died before its first turn.end" must not become "resumable from nothing" — and the
+  restored messages go through the same open-tool-call synthesis a written snapshot gets, because
+  a fork point can sit between a `tool.call` and its result. Nothing executes: it is the R3a
+  materializer. Mutants killed: dropping the fallback, dropping the tail synthesis, widening the
+  fallback to non-forks, not switching the TUI session, allowing `/fork` mid-turn.
+- Skills: the land skill now checks the completed row carries `*(done)*` (the LOW #101's delta
+  review found, made a precondition rather than a memory).
 
 ## R2 notes
 

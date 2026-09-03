@@ -278,6 +278,59 @@ export class SessionStore {
     return messagesFromEvents(await this.materialize(sessionId, atSeq));
   }
 
+  /**
+   * A resume snapshot derived from the log, for a fork child that has not completed a turn of its
+   * own (R3c). A fork writes only its `session.fork` marker, so it has no snapshot to resume from
+   * until its first turn ends; without this, a forked conversation could be replayed but never
+   * continued. Null for anything that is not a fork: a plain session with no snapshot stays an
+   * error, because "died before its first turn.end" must not silently become "resumable from an
+   * empty conversation". Pure replay — recorded tool results are folded in, nothing executes.
+   */
+  async materializeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+    assertSessionId(sessionId);
+    let first: HarnessEvent | undefined;
+    try {
+      for await (const event of this.read(sessionId)) {
+        first = event;
+        break;
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+    if (first?.type !== "session.fork") return null;
+
+    const events = await this.materialize(sessionId);
+    let task = "";
+    let cwd = "";
+    let turns = 0;
+    const usage: Usage = { input: 0, output: 0 };
+    for (const event of events) {
+      if (event.type === "session.start") {
+        if (task === "") task = event.task;
+        cwd = event.cwd;
+      } else if (event.type === "session.resume") {
+        cwd = event.cwd;
+      } else if (event.type === "turn.end") {
+        turns = Math.max(turns, event.n);
+      } else if (event.type === "model.response") {
+        usage.input += event.usage.input;
+        usage.output += event.usage.output;
+        if (event.usage.cacheRead !== undefined) usage.cacheRead = (usage.cacheRead ?? 0) + event.usage.cacheRead;
+        if (event.usage.cacheWrite !== undefined) usage.cacheWrite = (usage.cacheWrite ?? 0) + event.usage.cacheWrite;
+      }
+    }
+    return {
+      sessionId,
+      task,
+      cwd,
+      turns,
+      usage,
+      messages: messagesFromEvents(events),
+      ts: this.now(),
+    };
+  }
+
   async list(): Promise<SessionRef[]> {
     let names: string[];
     try {
