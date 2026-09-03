@@ -738,6 +738,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // a non-write denial is untouched by the path check, even one naming an inside path
       await expect(run("sandbox-exec: deny(1) network-outbound")).rejects.toBeInstanceOf(SandboxDeniedError);
       await expect(run("sandbox-exec: deny(1) process-exec CWD/bin/x")).rejects.toBeInstanceOf(SandboxDeniedError);
+      // the word `deny` alone is not a seatbelt denial: the `sandbox…deny` shape is required
+      const bareDeny = await run("error: permission deny for the config file");
+      expect(bareDeny.output.exitCode).toBe(1);
       // a line of eight thousand `sandbox:` with no `deny` is matched by the cheap literal first,
       // never by the backtracking `.*` from every `sandbox`
       const t0 = Date.now();
