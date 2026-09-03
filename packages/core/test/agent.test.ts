@@ -166,16 +166,19 @@ describe("agent loop", () => {
       "model.delta",
       "model.delta",
       "model.response",
+      "message.append",
       "permission.request",
       "permission.decision",
       "tool.call",
       "tool.result",
+      "message.append",
       "turn.end",
       "turn.start",
       "context.manifest",
       "model.request",
       "model.delta",
       "model.response",
+      "message.append",
       "turn.end",
       "session.end",
     ]);
@@ -202,6 +205,79 @@ describe("agent loop", () => {
     ]);
     expect(provider.requests[0]!.system).toBe("test system");
     expect(events.some((e) => e.type === "context.loaded")).toBe(false);
+  });
+
+  it("materializes user_prompt modify and inject messages exactly, including at a fork point", async () => {
+    const ids = ["hook-parent", "hook-child"];
+    const store = new SessionStore({ root, newId: () => ids.shift()! });
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "done" }, usage(3, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      store,
+      hooks: [
+        { point: "user_prompt", handler: () => ({ action: "modify", patch: "rewritten task context" }) },
+        { point: "user_prompt", handler: () => ({ action: "inject", message: "also remember X" }) },
+      ],
+    });
+    const session = createAgent(config).run("original task", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const snapshot = await store.readSnapshot(session.id);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.messages).toContainEqual({
+      role: "user",
+      content: [{ type: "text", text: "also remember X" }],
+    });
+    expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
+
+    const injection = events.find(
+      (event) => event.type === "message.append"
+        && event.message.role === "user"
+        && event.message.content.some((block) => block.type === "text" && block.text === "also remember X"),
+    );
+    expect(injection?.type).toBe("message.append");
+    if (injection?.type !== "message.append") throw new Error("missing injected user message event");
+
+    const child = await store.fork(session.id, injection.seq);
+    expect(await store.materializeMessages(child)).toEqual([
+      { role: "user", content: [{ type: "text", text: "original task" }] },
+      { role: "user", content: [{ type: "text", text: "rewritten task context" }] },
+      { role: "user", content: [{ type: "text", text: "also remember X" }] },
+    ]);
+  });
+
+  it("ignores a malformed hook injection without corrupting provider, snapshot, or log messages", async () => {
+    const store = new SessionStore({ root, newId: () => "malformed-hook" });
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "done" }, usage(3, 1), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, {
+      store,
+      hooks: [{
+        point: "user_prompt",
+        handler: () => ({ action: "inject", message: { poison: true } }) as never,
+      }],
+    });
+    const session = createAgent(config).run("original task", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    expect(JSON.stringify(provider.requests)).not.toContain("poison");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "error",
+      fatal: false,
+      message: expect.stringMatching(/inject message must be a string.*object.*ignoring/i),
+    }));
+    expect(events.some((event) => event.type === "message.append"
+      && JSON.stringify(event.message).includes("poison"))).toBe(false);
+
+    const snapshot = await store.readSnapshot(session.id);
+    expect(snapshot).not.toBeNull();
+    expect(JSON.stringify(snapshot!.messages)).not.toContain("poison");
+    expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
+    expect(await store.readAll(session.id)).toEqual(events);
   });
 
   it("wraps an approved tool with the sandbox provider and records an OS denial", async () => {
@@ -1103,6 +1179,59 @@ describe("agent loop", () => {
 });
 
 describe("compaction in the loop", () => {
+  it("materializes the exact stored message state after parallel tool calls and compaction", async () => {
+    const provider = new FakeProvider([
+      [
+        { type: "text_delta", text: "checking both" },
+        { type: "tool_use", id: "t1", name: "echo", input: { text: "first result with enough text to compact" } },
+        { type: "tool_use", id: "t2", name: "echo", input: { text: "second result with enough text to compact" } },
+        usage(90_000, 20),
+        stop("tool_use"),
+      ],
+      [{ type: "text_delta", text: "final answer" }, usage(10, 3), stop("end_turn")],
+    ]);
+    const store = new SessionStore({ root, newId: () => "materialized" });
+    const config = makeConfig(provider, {
+      store,
+      compaction: {
+        shouldCompact: () => true,
+        compact: async (messages) => [
+          messages[0]!,
+          { role: "assistant", content: [{ type: "text", text: "[compacted exact state]" }] },
+        ],
+      },
+    });
+    const session = createAgent(config).run("compare replay", { cwd: root });
+    const events = await collect(session);
+    await session.done;
+
+    const compact = events.find((event) => event.type === "context.compact");
+    expect(compact?.type).toBe("context.compact");
+    if (compact?.type !== "context.compact") throw new Error("missing context.compact");
+    expect(await store.materializeMessages("materialized", compact.seq - 1)).toEqual([
+      { role: "user", content: [{ type: "text", text: "compare replay" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "checking both" },
+          { type: "tool_use", id: "t1", name: "echo", input: { text: "first result with enough text to compact" } },
+          { type: "tool_use", id: "t2", name: "echo", input: { text: "second result with enough text to compact" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact" },
+          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact" },
+        ],
+      },
+    ]);
+
+    const snapshot = await store.readSnapshot("materialized");
+    expect(snapshot).not.toBeNull();
+    expect(await store.materializeMessages("materialized")).toEqual(snapshot!.messages);
+  });
+
   it("compacts past the window threshold and emits context.compact", async () => {
     const provider = new FakeProvider([
       // turn 1: small usage, no compaction

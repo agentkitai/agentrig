@@ -97,6 +97,20 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("round-trips an authoritative message.append boundary", () => {
+    const event = HarnessEvent.parse({
+      seq: 40,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "message.append",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "t1", name: "read_file", input: { path: "README.md" } }],
+      },
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
   it("round-trips a skill.used activation record", () => {
     const event = HarnessEvent.parse({
       seq: 41,
@@ -154,6 +168,19 @@ describe("event schema", () => {
       bytesSaved: 42_000,
     });
     expect(parseEvent(serializeEvent(event))).toEqual(event);
+  });
+
+  it("round-trips a session.fork event without overloading session.resume", () => {
+    const event = HarnessEvent.parse({
+      seq: 0,
+      sessionId: "child",
+      ts: 123,
+      type: "session.fork",
+      parent: "parent",
+      atSeq: 17,
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(() => HarnessEvent.parse({ ...event, atSeq: -1 })).toThrow();
   });
 
   it("round-trips a session.resume event", () => {

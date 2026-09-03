@@ -47,6 +47,34 @@ describe("renderEvent", () => {
     expect(line).toContain('"outside workspace"');
   });
 
+  it("renders session.fork ancestry", () => {
+    const e = HarnessEvent.parse({
+      seq: 0,
+      sessionId: "child",
+      ts: 1_700_000_000_000,
+      type: "session.fork",
+      parent: "parent",
+      atSeq: 17,
+    });
+    const line = renderEvent(e);
+    expect(line).toContain("session.fork");
+    expect(line).toContain("parent=parent");
+    expect(line).toContain("atSeq=17");
+  });
+
+  it("renders message.append without dumping conversation content", () => {
+    const line = renderEvent(HarnessEvent.parse({
+      seq: 8,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "message.append",
+      message: { role: "assistant", content: [{ type: "text", text: "secret answer" }] },
+    }));
+    expect(line).toContain("message.append");
+    expect(line).toContain("role=assistant blocks=1");
+    expect(line).not.toContain("secret answer");
+  });
+
   it("renders session.resume", () => {
     const e = HarnessEvent.parse({
       seq: 12,

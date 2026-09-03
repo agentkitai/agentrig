@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { z } from "zod";
 import { type EventPayload, type HarnessEvent, Usage, parseEvent, serializeEvent } from "./events.js";
-import { MessageSchema } from "./messages.js";
+import { MessageSchema, type ContentBlock, type Message } from "./messages.js";
 
 export interface SessionRef {
   id: string;
@@ -73,6 +73,8 @@ export class SessionStore {
   private readonly now: () => number;
   private readonly newId: () => string;
   private readonly seqs = new Map<string, number>();
+  /** Ids observed on disk or allocated here, including logs whose next sequence is not cached. */
+  private readonly knownIds = new Set<string>();
   /** Sessions a live `run()` is appending to. See `claim`. */
   private readonly claimed = new Set<string>();
 
@@ -92,7 +94,8 @@ export class SessionStore {
   create(): string {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const id = assertSessionId(this.newId());
-      if (this.seqs.has(id) || this.claimed.has(id)) continue;
+      if (this.knownIds.has(id) || this.seqs.has(id) || this.claimed.has(id)) continue;
+      this.knownIds.add(id);
       this.seqs.set(id, 0);
       return id;
     }
@@ -187,6 +190,7 @@ export class SessionStore {
 
   /** Stream a session's events in order. */
   async *read(sessionId: string): AsyncGenerator<HarnessEvent> {
+    this.knownIds.add(assertSessionId(sessionId));
     const rl = createInterface({ input: createReadStream(this.pathFor(sessionId), "utf8"), crlfDelay: Infinity });
     let expected = 0;
     for await (const line of rl) {
@@ -206,6 +210,74 @@ export class SessionStore {
     return out;
   }
 
+  /**
+   * Create an append-only child whose sole initial event points at an event in the parent's own
+   * log. No parent bytes or snapshots are copied: ancestry is resolved only when materialized.
+   */
+  async fork(parent: string, atSeq: number): Promise<string> {
+    assertSessionId(parent);
+    if (!Number.isInteger(atSeq) || atSeq < 0) {
+      throw new Error(`invalid fork atSeq ${atSeq}: expected a non-negative integer`);
+    }
+    const parentEvents = await this.readAll(parent);
+    if (parentEvents[atSeq]?.seq !== atSeq) {
+      throw new Error(`cannot fork session ${parent} atSeq ${atSeq}: parent log ends at seq ${parentEvents.length - 1}`);
+    }
+
+    const child = await this.reserveSessionLog();
+    try {
+      await this.append(child, { type: "session.fork", parent, atSeq });
+      return child;
+    } catch (err) {
+      this.knownIds.delete(child);
+      this.seqs.delete(child);
+      await rm(this.pathFor(child), { force: true });
+      throw err;
+    }
+  }
+
+  /** Atomically reserve a fresh on-disk log name so reopened stores cannot reuse an existing id. */
+  private async reserveSessionLog(): Promise<string> {
+    await mkdir(this.root, { recursive: true });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const id = assertSessionId(this.newId());
+      if (this.knownIds.has(id) || this.seqs.has(id) || this.claimed.has(id)) continue;
+      try {
+        const handle = await open(this.pathFor(id), "wx");
+        await handle.close();
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+          this.knownIds.add(id);
+          continue;
+        }
+        throw err;
+      }
+      this.knownIds.add(id);
+      this.seqs.set(id, 0);
+      return id;
+    }
+    throw new Error("could not allocate an unused session id in 100 attempts");
+  }
+
+  /**
+   * Resolve a session tree into recorded events. `atSeq` always addresses the named session's own
+   * physical log; a fork marker recursively supplies the inherited prefix. Events retain their
+   * original envelopes, so callers can distinguish inherited records from child records.
+   */
+  async materialize(sessionId: string, atSeq?: number): Promise<HarnessEvent[]> {
+    assertSessionId(sessionId);
+    return this.materializeFrom(sessionId, atSeq, new Set());
+  }
+
+  /**
+   * Fold a materialized event stream into the provider-neutral conversation it records. This is a
+   * pure replay: in particular, `tool.result` records become tool_result blocks and no tool is
+   * looked up or executed.
+   */
+  async materializeMessages(sessionId: string, atSeq?: number): Promise<Message[]> {
+    return messagesFromEvents(await this.materialize(sessionId, atSeq));
+  }
+
   async list(): Promise<SessionRef[]> {
     let names: string[];
     try {
@@ -223,6 +295,36 @@ export class SessionStore {
     return refs.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
+  private async materializeFrom(
+    sessionId: string,
+    atSeq: number | undefined,
+    ancestors: Set<string>,
+  ): Promise<HarnessEvent[]> {
+    if (ancestors.has(sessionId)) {
+      throw new Error(`session fork cycle detected at ${sessionId}`);
+    }
+    if (atSeq !== undefined && (!Number.isInteger(atSeq) || atSeq < 0)) {
+      throw new Error(`invalid materialization atSeq ${atSeq}: expected a non-negative integer`);
+    }
+
+    const own = await this.readAll(sessionId);
+    if (atSeq !== undefined && own[atSeq]?.seq !== atSeq) {
+      throw new Error(`cannot materialize session ${sessionId} atSeq ${atSeq}: log ends at seq ${own.length - 1}`);
+    }
+    const prefix = atSeq === undefined ? own : own.slice(0, atSeq + 1);
+    const misplacedFork = own.slice(1).findIndex((event) => event.type === "session.fork");
+    if (misplacedFork >= 0) {
+      throw new Error(`session ${sessionId}: session.fork must be the first event`);
+    }
+    const first = prefix[0];
+    if (first?.type !== "session.fork") return prefix;
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(sessionId);
+    const inherited = await this.materializeFrom(first.parent, first.atSeq, nextAncestors);
+    return [...inherited, ...prefix];
+  }
+
   private async nextSeq(sessionId: string): Promise<number> {
     const cached = this.seqs.get(sessionId);
     if (cached !== undefined) return cached;
@@ -236,6 +338,117 @@ export class SessionStore {
     this.seqs.set(sessionId, n);
     return n;
   }
+}
+
+function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
+  const messages: Message[] = [];
+  let streamedText = "";
+  let activeAssistant: Message | undefined;
+
+  const pushUserText = (text: string): void => {
+    messages.push({ role: "user", content: [{ type: "text", text }] });
+    activeAssistant = undefined;
+  };
+  const latestToolResult = (id: string): Extract<ContentBlock, { type: "tool_result" }> | undefined => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      for (const block of messages[i]!.content) {
+        if (block.type === "tool_result" && block.toolUseId === id) return block;
+      }
+    }
+    return undefined;
+  };
+
+  let authoritativeMessages = false;
+  for (const event of events) {
+    if (event.type === "message.append") {
+      if (!authoritativeMessages && event.message.role === "assistant" && messages.at(-1)?.role === "assistant") {
+        messages.pop();
+      }
+      messages.push(structuredClone(event.message));
+      streamedText = "";
+      activeAssistant = undefined;
+      authoritativeMessages = true;
+      continue;
+    }
+    if (event.type === "context.compact" && event.messages !== undefined) {
+      messages.splice(0, messages.length, ...structuredClone(event.messages));
+      streamedText = "";
+      activeAssistant = undefined;
+      authoritativeMessages = true;
+      continue;
+    }
+    if (
+      authoritativeMessages &&
+      (event.type === "model.request" || event.type === "model.delta" || event.type === "model.response" ||
+        event.type === "tool.call" || event.type === "tool.result" || event.type === "tool.result.patched")
+    ) continue;
+
+    switch (event.type) {
+      case "session.start":
+        pushUserText(event.task);
+        break;
+      case "session.resume":
+        if (event.task !== "") pushUserText(event.task);
+        break;
+      case "steer":
+        pushUserText(event.message);
+        break;
+      case "model.request":
+        activeAssistant = undefined;
+        break;
+      case "model.delta":
+        streamedText += event.text;
+        break;
+      case "model.response": {
+        if (streamedText !== "") {
+          activeAssistant = { role: "assistant", content: [{ type: "text", text: streamedText }] };
+          messages.push(activeAssistant);
+        } else {
+          activeAssistant = undefined;
+        }
+        streamedText = "";
+        break;
+      }
+      case "tool.call": {
+        if (activeAssistant === undefined) {
+          activeAssistant = { role: "assistant", content: [] };
+          messages.push(activeAssistant);
+        }
+        activeAssistant.content.push({ type: "tool_use", id: event.id, name: event.name, input: event.input });
+        break;
+      }
+      case "tool.result": {
+        const block: Extract<ContentBlock, { type: "tool_result" }> = {
+          type: "tool_result",
+          toolUseId: event.id,
+          content: event.display,
+          ...(!event.ok ? { isError: true } : {}),
+        };
+        const last = messages.at(-1);
+        if (last?.role === "user" && last.content.every((item) => item.type === "tool_result")) {
+          last.content.push(block);
+        } else {
+          messages.push({ role: "user", content: [block] });
+        }
+        activeAssistant = undefined;
+        break;
+      }
+      case "tool.result.patched": {
+        const block = latestToolResult(event.id);
+        if (block === undefined) break;
+        if (event.mode === "inject") {
+          const prior = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+          block.content = `${prior}\n\n${event.display}`;
+        } else {
+          block.content = event.display;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return messages;
 }
 
 /** Stable content hash used for `tool.call.inputHash` and `file.changed.contentHash`. */
