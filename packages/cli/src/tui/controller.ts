@@ -51,6 +51,14 @@ export type TuiActivity =
   | { kind: "thinking"; startedAt: number }
   | { kind: "tool"; id: string; name: string; startedAt: number; detail?: string };
 
+/** A subagent this session spawned, as its own log recorded it: id, label, and how it ended. */
+export interface TuiChild {
+  id: string;
+  task: string;
+  spawnedAt: number;
+  reason?: string;
+}
+
 export interface TuiState {
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
@@ -68,6 +76,8 @@ export interface TuiState {
   manifest: EventOf<"context.manifest"> | null;
   /** Signals the supervisor raised this session, for `/supervisor`. */
   signals: Signal[];
+  /** Subagents this session spawned, in spawn order, for `/children`. */
+  children: TuiChild[];
   sessionId: string | null;
   turns: number;
   /** The model in use, from session.start (or the flags, before the first task runs). */
@@ -115,6 +125,11 @@ export interface TuiControllerOptions {
    */
   onFork?: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
   onTree?: (id: string) => Promise<string[]>;
+  /**
+   * `/children` (R3d): given what this session's log recorded at spawn and end, returns the
+   * rendered live tree read from each child's own log. Read-only by contract.
+   */
+  onChildren?: (children: ReadonlyArray<TuiChild>, now: number) => Promise<string[]>;
   /** Whether a supervisor is attached; `/supervisor` says so rather than promising an empty list. */
   supervised?: boolean;
   /**
@@ -149,6 +164,7 @@ export class TuiController {
     plan: [],
     manifest: null,
     signals: [],
+    children: [],
     sessionId: null,
     turns: 0,
     model: null,
@@ -182,6 +198,7 @@ export class TuiController {
     this.dream = opts.onDream;
     this.fork = opts.onFork;
     this.tree = opts.onTree;
+    this.children = opts.onChildren;
     if (opts.model !== undefined) this.state = { ...this.state, model: opts.model };
     this.refreshBranch();
   }
@@ -213,9 +230,11 @@ export class TuiController {
   setSessions(fns: {
     fork: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
     tree: (id: string) => Promise<string[]>;
+    children?: (children: ReadonlyArray<TuiChild>, now: number) => Promise<string[]>;
   }): void {
     this.fork = fns.fork;
     this.tree = fns.tree;
+    if (fns.children !== undefined) this.children = fns.children;
   }
 
   /** The loaded catalogue, for `/skills` and `/<skill-name>`. Set after buildAgent discovers it. */
@@ -227,6 +246,7 @@ export class TuiController {
   private dream: ((auto: boolean) => Promise<string[]>) | undefined;
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
   private tree: ((id: string) => Promise<string[]>) | undefined;
+  private children: ((children: ReadonlyArray<TuiChild>, now: number) => Promise<string[]>) | undefined;
   private skills: Skill[] = [];
 
   subscribe(fn: (s: TuiState) => void): () => void {
@@ -552,6 +572,20 @@ export class TuiController {
         await this.delegate("tree", () => this.tree?.(id));
         return true;
       }
+      case "children": {
+        if (this.state.children.length === 0) {
+          this.print(
+            this.state.sessionId === null
+              ? "no session yet — /children shows this session's subagents once it has some"
+              : "this session has spawned no subagents",
+            "system",
+          );
+          return true;
+        }
+        const children = this.state.children;
+        await this.delegate("children", () => this.children?.(children, Date.now()));
+        return true;
+      }
       case "unknown":
         this.print(`unknown command ${cmd.name === "" ? "/" : `/${cmd.name}`}\n${helpText()}`, "error");
         return true;
@@ -562,7 +596,7 @@ export class TuiController {
       case "new":
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
-        this.set({ sessionId: null, plan: [], signals: [], turns: 0, context: null });
+        this.set({ sessionId: null, plan: [], signals: [], children: [], turns: 0, context: null });
         this.print("starting fresh — the next task begins a new session", "system");
         return true;
       default:
@@ -669,7 +703,7 @@ export class TuiController {
       activity: null,
       sessionId: session.id,
       manifest: null,
-      ...(opts.resume === undefined ? { plan: [], signals: [] } : {}),
+      ...(opts.resume === undefined ? { plan: [], signals: [], children: [] } : {}),
     });
 
     const work = this.drive(session);
@@ -746,6 +780,15 @@ export class TuiController {
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "context.manifest") this.set({ manifest: e });
     if (e.type === "supervisor.signal") this.set({ signals: [...this.state.signals, e.signal] });
+    // the parent's log is the record of which children exist; their state lives in their own logs
+    if (e.type === "subagent.spawn") {
+      this.set({ children: [...this.state.children, { id: e.id, task: e.task, spawnedAt: e.ts }] });
+    }
+    if (e.type === "subagent.end") {
+      this.set({
+        children: this.state.children.map((c) => (c.id === e.id ? { ...c, reason: e.reason ?? "ended" } : c)),
+      });
+    }
     if (e.type === "session.start" || e.type === "session.resume") {
       // the event says what is actually running, which beats whatever the flags claimed
       this.set({ model: e.model });

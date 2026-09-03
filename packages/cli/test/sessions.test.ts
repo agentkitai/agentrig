@@ -1,9 +1,11 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionStore } from "@agentkitai/agentrig-core";
+import { SessionStore, type ChildNode } from "@agentkitai/agentrig-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { forkSession, forkSessionAt, renderSessionTree, replaySession, searchSessions } from "../src/sessions.ts";
+import {
+  forkSession, forkSessionAt, formatElapsed, renderChildLine, renderChildren, renderSessionTree, replaySession, searchSessions,
+} from "../src/sessions.ts";
 
 let root: string;
 
@@ -180,5 +182,58 @@ describe("session tree (R3c)", () => {
     await start(store, "p", "x");
     await store.append("p", { type: "model.delta", text: "y" });
     expect(await forkSessionAt(store, "p")).toEqual({ id: "f", atSeq: 1 });
+  });
+});
+
+describe("children rendering (R3d)", () => {
+  it("formatElapsed floors and never overstates", () => {
+    expect(formatElapsed(999)).toBe("0s");
+    expect(formatElapsed(12_400)).toBe("12s");
+    expect(formatElapsed(65_000)).toBe("1m05s");
+    expect(formatElapsed(3_600_000 + 5 * 60_000)).toBe("1h05m");
+    expect(formatElapsed(-5)).toBe("0s");
+  });
+
+  const running: ChildNode = {
+    id: "c1",
+    task: "review the diff",
+    status: {
+      id: "c1", task: "review the diff", startedAt: 100_000, lastTs: 160_000, turns: 3,
+      tool: { name: "bash", sinceTs: 148_000 }, plan: "write findings", ended: null, children: [],
+    },
+    children: [],
+  };
+
+  it("a running child shows turn, current tool, latest plan item and elapsed time", () => {
+    expect(renderChildLine(running, 160_000)).toBe("c1 · review the diff · turn 3 · bash 12s · plan: write findings · 1m00s");
+    const thinking = { ...running, status: { ...running.status!, tool: null, plan: null } };
+    expect(renderChildLine(thinking, 160_000)).toBe("c1 · review the diff · turn 3 · thinking · 1m00s");
+  });
+
+  it("a finished child shows the parent's subagent.end reason and how long it took", () => {
+    const done = { ...running, reason: "budget", status: { ...running.status!, ended: { reason: "budget", ts: 190_000 } } };
+    expect(renderChildLine(done, 999_999)).toBe("c1 · review the diff · budget after 3 turn(s) · 1m30s");
+    // the parent's reason wins over the child's own session.end when they disagree (an abort the
+    // child recorded as its own reason is still "aborted" to the parent)
+    const disagree = { ...done, reason: "aborted" };
+    expect(renderChildLine(disagree, 0)).toContain("aborted after 3 turn(s)");
+  });
+
+  it("a child with no log yet, an unreadable one, and one that ended before writing are each named", () => {
+    expect(renderChildLine({ id: "c2", task: "t", status: null, children: [] }, 0)).toBe("c2 · t · starting");
+    expect(renderChildLine({ id: "c2", task: "t", status: null, reason: "error", children: [] }, 0))
+      .toBe("c2 · t · error before writing a log");
+    expect(renderChildLine({ id: "c3", task: "t", status: null, error: "Unexpected end of JSON input", children: [] }, 0))
+      .toBe("c3 · t · log unreadable right now (Unexpected end of JSON input)");
+  });
+
+  it("renders nested children as an indented tree — /tree with live state", () => {
+    const grand: ChildNode = { ...running, id: "g1", task: "grandchild", children: [] };
+    const lines = renderChildren([{ ...running, children: [grand] }, { ...running, id: "c2", task: "second" }], 160_000);
+    expect(lines).toEqual([
+      "c1 · review the diff · turn 3 · bash 12s · plan: write findings · 1m00s",
+      "└─ g1 · grandchild · turn 3 · bash 12s · plan: write findings · 1m00s",
+      "c2 · second · turn 3 · bash 12s · plan: write findings · 1m00s",
+    ]);
   });
 });

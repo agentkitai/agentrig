@@ -9,6 +9,8 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  liveChildren,
+  subagentTool,
   type AnyTool,
   type ModelEvent,
   type ModelProvider,
@@ -16,7 +18,7 @@ import {
 } from "@agentkitai/agentrig-core";
 import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
 import { TuiController } from "../src/tui/controller.ts";
-import { forkSessionAt, renderSessionTree } from "../src/sessions.ts";
+import { forkSessionAt, renderChildren, renderSessionTree } from "../src/sessions.ts";
 
 describe("parseCommand", () => {
   it("treats anything not starting with / as a task", () => {
@@ -86,6 +88,7 @@ describe("parseCommand", () => {
     expect(parseCommand("/fork")).toEqual({ kind: "fork", at: "" });
     expect(parseCommand("/fork 12")).toEqual({ kind: "fork", at: "12" });
     expect(parseCommand("/tree")).toEqual({ kind: "tree" });
+    expect(parseCommand("/children")).toEqual({ kind: "children" });
   });
 
   it("helpText lists every command", () => {
@@ -995,6 +998,111 @@ describe("/fork and /tree (R3c)", () => {
     expect(last(c)).toContain("/fork is not available in this session");
     await c.submit("/tree");
     expect(last(c)).toContain("/tree is not available in this session");
+  });
+});
+
+describe("/children (R3d)", () => {
+  const spawnTurn = (task: string): ModelEvent[] => [
+    { type: "tool_use", id: "s1", name: "subagent", input: { task, label: "worker" } },
+    usage(1, 1),
+    stop("tool_use"),
+  ];
+
+  /** A parent with a real subagent tool whose children log to the same store root. */
+  function makeParent(provider: FakeProvider, ids: string[], extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {}) {
+    const store = new SessionStore({ root, newId: () => ids.shift() ?? "unexpected" });
+    const childConfig = () => ({
+      provider,
+      tools: [],
+      permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
+      systemPrompt: "child",
+      store,
+      maxTokensPerTurn: 100,
+    });
+    const controller: TuiController = new TuiController({
+      cwd: root,
+      agent: createAgent({
+        provider,
+        tools: [subagentTool({ childConfig, createAgent, maxTurns: 3 })],
+        permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
+        systemPrompt: "test",
+        store,
+        budget: { maxTurns: 5 },
+        maxTokensPerTurn: 100,
+        onAsk: (req) => controller.ask(req),
+      }),
+      onChildren: async (children, now) => renderChildren(await liveChildren(store, children), now),
+      ...extra,
+    });
+    return { controller, store };
+  }
+
+  it("tracks spawn and end from the parent's stream and reads the child's own log for the rest", async () => {
+    const provider = new FakeProvider([
+      spawnTurn("count the files"),
+      [{ type: "text_delta", text: "child answer" }, usage(1, 1), stop("end_turn")], // the child's turn
+      [{ type: "text_delta", text: "parent done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeParent(provider, ["parent", "kid"]);
+    await c.submit("/children");
+    expect(last(c)).toContain("no session yet");
+
+    await c.submit("delegate it");
+    expect(c.snapshot().children).toEqual([{ id: "kid", task: "worker", spawnedAt: expect.any(Number), reason: "done" }]);
+    const parentBytes = (await store.list()).find((r) => r.id === "parent")!.bytes;
+
+    await c.submit("/children");
+    expect(last(c)).toMatch(/^kid · worker · done after 1 turn\(s\) · \d+s$/);
+    // read-only: the parent's log gained nothing from /children
+    expect((await store.list()).find((r) => r.id === "parent")!.bytes).toBe(parentBytes);
+    // and the child's log is where the turn count came from
+    expect((await store.readAll("kid")).some((e) => e.type === "turn.start")).toBe(true);
+  });
+
+  it("a session with no subagents says so; /new forgets them", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "plain" }, usage(1, 1), stop("end_turn")],
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeParent(provider, ["p1", "p2", "kid"]);
+    await c.submit("no delegation");
+    await c.submit("/children");
+    expect(last(c)).toContain("spawned no subagents");
+    await c.submit("/new");
+    await c.submit("delegate");
+    expect(c.snapshot().children.map((k) => k.id)).toEqual(["kid"]);
+    await c.submit("/new");
+    expect(c.snapshot().children).toEqual([]);
+  });
+
+  it("renders live state through the injected reader, and says so when none is wired", async () => {
+    const seen: Array<{ ids: string[]; now: number }> = [];
+    const provider = new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeParent(provider, ["p", "kid"], {
+      onChildren: async (children, now) => {
+        seen.push({ ids: children.map((k) => k.id), now });
+        return ["kid · x · turn 2 · bash 3s · 40s"];
+      },
+    });
+    await c.submit("delegate");
+    await c.submit("/children");
+    expect(seen).toEqual([{ ids: ["kid"], now: expect.any(Number) }]);
+    expect(last(c)).toBe("kid · x · turn 2 · bash 3s · 40s");
+
+    const bare = makeParent(new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]), ["p2", "kid2"], { onChildren: undefined });
+    await bare.controller.submit("delegate");
+    await bare.controller.submit("/children");
+    expect(last(bare.controller)).toContain("/children is not available in this session");
   });
 });
 

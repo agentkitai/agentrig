@@ -3,6 +3,7 @@ export * from "./messages.js";
 export * from "./provider.js";
 export * from "./tool.js";
 export * from "./session-store.js";
+export * from "./children.js";
 export * from "./permissions.js";
 export * from "./sandbox.js";
 export * from "./sandbox-providers.js";
