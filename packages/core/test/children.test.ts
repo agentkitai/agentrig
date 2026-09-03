@@ -233,6 +233,30 @@ describe("liveChildren", () => {
     expect(stolen).toEqual([]);
   });
 
+  it("a named log that cannot be read is accepted, and its trouble is reported on the node", async () => {
+    // rejecting would let corruption hide a child; accepting keeps it visible with its error, and
+    // a forger cannot exploit that because they cannot write the victim's log
+    const store = new SessionStore({ root });
+    await start(store, "kid", "k");
+    await store.append("kid", { type: "subagent.spawn", id: "corrupt", task: "c" });
+    await store.append("kid", { type: "subagent.spawn", id: "torn", task: "t" });
+    await writeFile(join(root, "corrupt.jsonl"), "not json\n", "utf8");
+    await writeFile(join(root, "torn.jsonl"), '{"seq":0,"sessionId":"torn","ts":1,"type":"session.st', "utf8");
+    const nodes = await liveChildren(store, [{ id: "kid", task: "k" }], { parent: "parent" });
+    expect(nodes[0]!.children.map((n) => n.id)).toEqual(["corrupt", "torn"]);
+    expect(nodes[0]!.children[0]!.error).toMatch(/JSON|token|parse/i);
+    expect(nodes[0]!.children[1]!.torn).toBe(true);
+  });
+
+  it("a walk without a parent of its own accepts a parent-bearing top-level log", async () => {
+    // production always passes `parent`; a caller that does not must not see every child that
+    // names a parent disputed away
+    const store = new SessionStore({ root });
+    await store.append("kid", { type: "session.start", task: "k", cwd: "/w", provider: "p", model: "m", parent: "someone" });
+    const nodes = await liveChildren(store, [{ id: "kid", task: "k" }]);
+    expect(nodes.map((n) => n.id)).toEqual(["kid"]);
+  });
+
   it("a log without a parent field, or no log yet, cannot testify and is accepted", async () => {
     const store = new SessionStore({ root });
     await start(store, "kid", "k");

@@ -111,9 +111,14 @@ export interface ChildNode {
  * one depth is claimed — across all branches — before the next depth is read, so a record in one
  * branch cannot pull a session that belongs at the same or a shallower depth under itself, and a
  * loop is visited once. Records are model-emitted through a gated tool, but a log on disk is
- * untrusted input all the same. What remains undecidable from the child logs alone is a record
- * naming a session that truly belongs strictly deeper in another branch; that would need a
- * parent pointer in the child's own log.
+ * untrusted input all the same.
+ *
+ * Authority (#104): a session's own `session.start.parent` is believed. A record naming a
+ * session whose log names a different parent is dropped; a log without the field (written
+ * before it) or not yet written cannot testify and is accepted, so the breadth-first claims are
+ * the only protection for those. The limit is the pointer itself: a log that names the wrong
+ * parent places the session under that parent — and only whoever spawned the session writes it
+ * (the subagent tool sets it from its own session id; it is not model-controllable).
  */
 export async function liveChildren(
   store: SessionStore,

@@ -1782,6 +1782,9 @@ describe("abortGraceOf", () => {
     expect(abortGraceOf({ abortGraceMs: 7 })).toBe(7);
   });
 
+});
+
+describe("session.start parent (#104)", () => {
   it("run() records a parent in session.start only when given, and validates it", async () => {
     const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
     const config = makeConfig(provider, { store: new SessionStore({ root, newId: () => "kid" }) });
