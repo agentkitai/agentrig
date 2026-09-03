@@ -264,19 +264,27 @@ describe("agent loop", () => {
     const events = await collect(session);
     await session.done;
 
-    expect(JSON.stringify(provider.requests)).not.toContain("poison");
     expect(events).toContainEqual(expect.objectContaining({
       type: "error",
       fatal: false,
       message: expect.stringMatching(/inject message must be a string.*object.*ignoring/i),
     }));
-    expect(events.some((event) => event.type === "message.append"
-      && JSON.stringify(event.message).includes("poison"))).toBe(false);
 
+    // Ignored means IGNORED (#100): the exact conversation the model saw is the task alone — not
+    // the task plus an empty user message, not the task plus a stringified object. A mutant that
+    // reported the error and then injected "" passed the old "poison is absent" assertions.
+    const task = { role: "user", content: [{ type: "text", text: "original task" }] };
+    expect(provider.requests).toHaveLength(1);
+    expect(provider.requests[0]!.messages).toEqual([task]);
+
+    // and the durable record agrees, message by message: the task comes from session.start, the
+    // only appended message is the reply — no injected user message of any kind
+    const reply = { role: "assistant", content: [{ type: "text", text: "done" }] };
+    const appended = events.filter((event) => event.type === "message.append").map((event) => event.message);
+    expect(appended).toEqual([reply]);
     const snapshot = await store.readSnapshot(session.id);
-    expect(snapshot).not.toBeNull();
-    expect(JSON.stringify(snapshot!.messages)).not.toContain("poison");
-    expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
+    expect(snapshot!.messages).toEqual([task, reply]);
+    expect(await store.materializeMessages(session.id)).toEqual([task, reply]);
     expect(await store.readAll(session.id)).toEqual(events);
   });
 

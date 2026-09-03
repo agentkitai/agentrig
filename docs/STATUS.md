@@ -134,6 +134,22 @@ Changes:
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
 
+## Open-issue sweep (2026-09-03)
+
+- **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the
+  session's own signal, which an abort has fired by definition, and `runHooks` skips a point whose
+  signal is already aborted; so the ingest and dream trigger that hang off `session_end` never saw
+  a cut-off session. `session_end` now runs under its own controller; the abort reason still
+  reaches hooks as `summary.reason`. A second abort once the session is ending aborts that
+  controller too, so ctrl-C twice means "stop waiting" rather than "run ingest for fifteen
+  minutes". Tests: an aborted session's `session_end` hook runs with reason `aborted` and a live
+  signal; a second abort stops a hook that would otherwise wait out its budget. Mutants killed:
+  the session's signal for the point; ignoring the second abort.
+- **#100 — the malformed-injection test could not tell "ignored" from "injected an empty
+  message".** It now pins the exact provider conversation (the task alone), the exact appended
+  messages (the reply alone), and the snapshot and materialized lists. Mutant killed: reporting
+  the error and then injecting `""`.
+
 ## R3 notes
 
 | Row | Deliverable | Status |
