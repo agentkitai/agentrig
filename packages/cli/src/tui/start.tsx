@@ -17,6 +17,7 @@ import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
 import { currentGitBranch } from "../git-branch.js";
 import {
+  abortNotice,
   parseSoft,
   parseTurnsRemaining,
   permissionWarning,
@@ -178,9 +179,24 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       await waitUntilExit();
     });
   } finally {
-    process.removeListener("SIGINT", onSigint);
-    // a session still running when the UI closes would keep billing with nothing watching it
-    await controller.shutdown();
+    // The UI is gone but the session may still be running, or running its session_end hooks
+    // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second
+    // abort that skips the hooks rather than Node's default handler killing the process mid-hook
+    // with no session.end written.
+    // the frame is gone, so say it on stderr: the controller's own message lands in a buffer
+    // nothing renders any more
+    let sigints = 0;
+    stopForSigint = () => {
+      sigints += 1;
+      const notice = abortNotice(sigints, "ctrl-C");
+      if (notice !== null) console.error(notice);
+      controller.abort();
+    };
+    try {
+      await controller.shutdown();
+    } finally {
+      process.removeListener("SIGINT", onSigint);
+    }
     for (const server of built.mcp) await server.close().catch(() => {});
   }
 }

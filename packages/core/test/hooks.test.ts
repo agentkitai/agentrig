@@ -416,6 +416,107 @@ describe("session_end", () => {
     expect(events.at(-1)!.type).toBe("session.end");
   });
 
+  it("runs for an aborted session too, with the abort as the summary's reason (#88)", async () => {
+    // a slow tool so the abort lands mid-turn; the session's own signal is then aborted, which
+    // used to make runHooks skip the point entirely — no ingest, no dream trigger, ever, for
+    // exactly the sessions whose transcript a memory most wants
+    let toolStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { toolStarted = r; });
+    const slow: AnyTool = {
+      name: "echo",
+      description: "waits",
+      inputSchema: z.object({ text: z.string() }),
+      permission: "read",
+      paths: () => [],
+      execute: async (_i, ctx) => {
+        toolStarted();
+        await new Promise<void>((r) => ctx.signal.addEventListener("abort", () => r(), { once: true }));
+        ctx.signal.throwIfAborted();
+        return { output: "", display: "" };
+      },
+    };
+    let sawSummary: { reason: string } | undefined;
+    let hookSignalAborted: boolean | undefined;
+    const session = run(
+      [[{ type: "tool_use", id: "t1", name: "echo", input: { text: "x" } }, usage(1, 1), stop("tool_use")]],
+      [{
+        point: "session_end",
+        handler: (ctx) => {
+          sawSummary = ctx.summary as { reason: string };
+          hookSignalAborted = ctx.signal.aborted;
+          return { action: "continue" };
+        },
+      }],
+      [slow],
+    );
+    const collecting = collect(session);
+    await started;
+    session.control.abort();
+    const events = await collecting;
+    const summary = await session.done;
+
+    expect(summary.reason).toBe("aborted");
+    expect(sawSummary).toMatchObject({ reason: "aborted" });
+    // the hook got a live signal, not the session's already-fired one
+    expect(hookSignalAborted).toBe(false);
+    expect(events.some((e) => e.type === "error" && (e as { message: string }).message.includes("hooks at session_end stopped"))).toBe(false);
+    expect(events.at(-1)!.type).toBe("session.end");
+  });
+
+  it("a session abort still stops a hanging pre_tool hook — only session_end has its own signal", async () => {
+    let hookStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { hookStarted = r; });
+    let hookSignalFired = false;
+    const session = run(
+      [[{ type: "tool_use", id: "t1", name: "echo", input: { text: "x" } }, usage(1, 1), stop("tool_use")]],
+      [{
+        point: "pre_tool",
+        handler: (ctx) =>
+          new Promise((resolve) => {
+            hookStarted();
+            ctx.signal.addEventListener("abort", () => { hookSignalFired = true; resolve({ action: "continue" }); }, { once: true });
+          }),
+      }],
+    );
+    const collecting = collect(session);
+    await started;
+    session.control.abort();
+    await collecting;
+    const summary = await session.done;
+    expect(summary.reason).toBe("aborted");
+    expect(hookSignalFired).toBe(true);
+  });
+
+  it("a second abort while session_end hooks run stops them — ctrl-C twice means stop waiting", async () => {
+    let hookStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { hookStarted = r; });
+    let hookOutcome = "not run";
+    const session = run(
+      [[usage(1, 1), stop("end_turn")]],
+      [{
+        point: "session_end",
+        id: "ingest",
+        handler: (ctx) =>
+          new Promise((resolve) => {
+            hookStarted();
+            ctx.signal.addEventListener("abort", () => { hookOutcome = "aborted"; resolve({ action: "continue" }); }, { once: true });
+            // never resolves on its own: only the second abort (or the budget) can end it
+          }),
+      }],
+    );
+    const collecting = collect(session);
+    await started;
+    hookOutcome = "running";
+    session.control.abort();
+    const events = await collecting;
+    const summary = await session.done;
+
+    expect(hookOutcome).toBe("aborted");
+    // the session finished its work before the hook ran; the abort stopped the hook, not the session
+    expect(summary.reason).toBe("done");
+    expect(events.at(-1)!.type).toBe("session.end");
+  });
+
   it("a failing session_end hook does not change the session's outcome", async () => {
     const session = run(
       [[usage(1, 1), stop("end_turn")]],

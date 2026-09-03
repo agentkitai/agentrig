@@ -100,6 +100,19 @@ export function toRules(values: string[] | undefined, decision: "allow" | "deny"
 }
 
 /**
+ * What each abort does, for the person who pressed it (#88): the first stops the work, and the
+ * session_end hooks (memory ingest, the dream trigger) still run for a session aborted mid-turn;
+ * the second stops those too. The first promises nothing about the hooks, because a session that
+ * had already finished its turn and was in its hooks is cut by the first abort and the caller
+ * cannot tell that case apart. A third abort changes nothing and says nothing.
+ */
+export function abortNotice(nth: number, key: string): string | null {
+  if (nth === 1) return `aborting… (${key} again to skip session_end hooks)`;
+  if (nth === 2) return "skipping session_end hooks";
+  return null;
+}
+
+/**
  * Whether this run skips the permission prompt entirely.
  *
  * Two spellings for one thing: `--dangerously-skip-permissions` is the name that says what it
@@ -365,7 +378,13 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
           }),
         );
 
-  const onSigint = (): void => session.control.abort();
+  let sigints = 0;
+  const onSigint = (): void => {
+    sigints += 1;
+    const notice = abortNotice(sigints, "ctrl-C");
+    if (notice !== null) console.error(notice);
+    session.control.abort();
+  };
   process.on("SIGINT", onSigint);
   try {
     const assistant = new AssistantText();
