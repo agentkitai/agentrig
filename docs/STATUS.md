@@ -134,6 +134,104 @@ Changes:
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
 
+- **#95 (partial) — a forged or host-caused "read-only file system" line classified as a
+  denial.** No provider can authenticate a child's stderr, so classification is now corroborated
+  against the policy: `deniedPaths(line)` reads every absolute path a denial names (quoted, then
+  bare tokens, trailing punctuation stripped; relative paths never, because the command may have
+  `cd`'d), and `writeDenialPlausible(line, policy)` drops a write denial only when EVERY path it
+  names is inside a `workspace-write` workspace, which is writable and so could not have produced
+  it (docker's "read-only file system", seatbelt's `file-write*` denials). A real denial often
+  names an inside source before the outside target (`copyfile '/work/a' -> '/etc/x'`, a script
+  path before a redirect target), so one outside path keeps the line. Paths are normalised
+  (`..`) and canonicalised through the host's symlinks for their longest existing prefix (a link
+  inside the workspace that points outside is outside to the boundary; docker binds the workspace
+  at the same host path); the boundary is the directory, never its prefix. A line naming no
+  absolute path keeps today's classification: corroboration narrows, never widens. What remains,
+  and why #95 stays open: a forged line naming a path outside the workspace still classifies —
+  the boundary's own verdict on that path, since the sandbox would deny the write, and the
+  escalation prompt (which yolo never auto-answers: it goes to `onAsk`, denied headless) shows the
+  provenance label — and the provider-controlled signal the issue asks for needs a boundary
+  redesign. Mutants killed: docker ignoring the corroboration; a prefix sibling counting as
+  inside; no `..` normalisation; seatbelt ignoring the corroboration; first-path-only; no symlink
+  canonicalisation; trailing punctuation kept; relative quoted paths corroborated.
+- Second delta round on the same: a relative path is now *unknown* rather than ignored, so a line
+  naming an inside absolute source and a relative outside target (`mv '/work/a' '../../etc/x'`,
+  a `$0`-prefixed script with a relative redirect) is kept; the canonical walk is one pass over
+  the components, refuses tokens longer than any filesystem accepts, and the classifier reads at
+  most sixteen paths per line and two hundred lines per stderr, so a child cannot make the
+  synchronous scan expensive; a dangling link inside the workspace is followed to its target
+  (`lstat`, then `readlink`); docker canonicalises only strings already inside the workspace,
+  because a host link from outside into the bind does not exist in the container (seatbelt,
+  host-native, canonicalises both ways); quote characters bound bare tokens so an unbalanced
+  apostrophe (`can't`) cannot hide a quoted path. Mutants killed: relative treated as inside;
+  dangling link not followed; docker canonicalising outside strings; quote and arrow boundaries
+  dropped; last-path-only; no line bound; bare tokens inside a taken quoted span. Not killable by
+  test: the length cap (the one-pass walk is already fast; the cap is defence in depth).
+- Third delta round found that "one pass" still meant one throwing `lstat` per component — a
+  child printing sixteen 4KB paths per line froze the process for a second per line, minutes
+  per stderr. The deepest existing prefix is now found by binary search with a non-throwing
+  stat (eleven probes for two thousand components); the classifier reads the head and tail of
+  stderr (64KB each, `classifiable`) and spends corroboration on at most fifty matching lines —
+  a matching line past that budget is kept as a denial, uncorroborated, so a genuine late denial
+  after chatty output is still classified and a forger past the budget gets at worst a prompt.
+  Symlink chains resolve again (`realpath` on the existing prefix first, then a dangling link's
+  target through the same walk with a hop budget), and an unprefixed relative operand (`sh:
+  line 5: hosts: Read-only file system`, a quoted bare word) is unknown, keeping the line.
+  Mutants killed: linear probing (timing); one hop only; no operand pass; no corroboration
+  budget; no byte bound; quoted bare words gated again. Not observable: `realpath`-first on an
+  existing link (the hop-by-hop path reaches the same target).
+- Fourth delta round: the probe count was bounded but each probe and the final `realpath` cost
+  one syscall per EXISTING component, so a child that built a two-thousand-level tree inside
+  the workspace made each classification a three-minute block. The walk now judges a path deeper
+  than sixty-four components by its string (drop-only), uses the native `realpath`, and a test
+  builds a real seven-hundred-level tree and bounds fifty lines of sixteen leaves. Past the
+  fifty-line corroboration budget a matching line is judged by string alone rather than kept,
+  so printing a forged inside line fifty-one times no longer buys a prompt; identical lines are
+  folded first; a late genuine outside denial is still kept. The head/tail cut of a huge stderr
+  lands on line boundaries so no denial line is split into an inside-only fragment. ENOTDIR
+  and ENAMETOOLONG probes are pinned as absent, not thrown. Mutants killed: no depth cap
+  (timing); past-budget lines kept; no catch around the probe; cut not line-aligned.
+- Fifth delta round: the per-axis caps each bound one dimension and a child could still buy
+  their product — a forty-hop dangling chain whose every target is sixty directories deep cost a
+  `realpath` per hop, each re-walking the remaining chain, a hundred seconds per classification.
+  The structural fix: one syscall budget per classification (`probeBudget`, two thousand
+  filesystem calls across every line and path), threaded from `firstDenialLine` through
+  `writeDenialPlausible` into the walk; once spent, the rest of the stderr is judged by string.
+  A dangling chain is now followed with one `readlink` per hop and resolved once at its end, and
+  a `realpath` failure other than ENOENT (ELOOP, ENOTDIR) is judged by string because a write
+  there fails with that errno, not EROFS. The string judgement tests membership against both
+  forms of the workspace (literal and real), so a symlinked `policy.cwd` cannot make it keep a
+  line. The deep-tree fixture is three hundred levels (macOS PATH_MAX is 1024). Mutants killed:
+  a `realpath` per hop (timing); the workspace in one form only; probes not budgeted.
+- Sixth delta round: the budget counted calls, not cost — one platform `realpath` over an
+  EXISTING forty-hop chain whose targets were long `w/../` walks made the kernel do thirty
+  thousand readlinks for one budget unit. The platform `realpath` is gone from the child-path
+  walk: every component is one memoised `lstat` (plus one `readlink` for a link), charged to
+  the budget; a link restarts the walk on its target with the rest re-joined, up to the hop
+  budget; the memo makes a chain cost its distinct paths rather than its hops times its depth,
+  and the sixteen leaves of one line share their prefixes. A path the walk cannot finish
+  (budget, hops, caps, a component the filesystem rejects) is judged by string. The chain
+  fixture is forty levels and twenty hops, under the sixty-four-component cap with macOS's
+  seven-component tmpdir and under its thirty-two-link resolution limit — past either, a write
+  fails with ELOOP or is judged by string, and the test says so. The walk takes the path as
+  written: a `..` after a symlink climbs from the link's target, as the kernel does (`out/../x`
+  with `out -> /outside` is `/x`), where a lexical collapse had judged it inside. Mutants
+  killed: no memo; probes not charged; a lexical `..` collapse. Not observable within the
+  platform limits: a platform `realpath` per link (a chain short enough to resolve on macOS is
+  also cheap for the kernel).
+- Seventh delta round: with the memo warm a probe cost nothing, so a chain ending inside the
+  workspace was walked for free, restart after restart — eighteen seconds of pure string work
+  inside the budget. Every step of the walk now costs one unit, memo hit and `..` included, so
+  the budget bounds the work itself (four thousand steps, tens of milliseconds); the memo saves
+  syscalls only. A relative link target inside the workspace is pinned as resolving inside.
+  Mutants killed: memo hits free; relative target base ignored. A free `..` is not observable:
+  every restart costs a charged link probe, so dots alone cannot walk far.
+- Eighth delta round: two regexes ran before the budget and backtracked — the trailing-punctuation
+  strip (`/[:.,;]+$/`, four seconds on a token of sixty thousand colons) is now a scan from the
+  end, and the seatbelt matcher (`sandbox…deny` with `.*`, backtracking from every `sandbox` on
+  a line that never says `deny`) is gated by the cheap literal first. A budget that dies on a
+  `..` is pinned to keep the `..` in the string it hands back. Mutants killed: the regex strip
+  restored (timing); the seatbelt gate removed (timing); the `..` dropped from the dying return.
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the
