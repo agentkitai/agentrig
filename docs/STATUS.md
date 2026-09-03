@@ -154,6 +154,30 @@ Changes:
   redesign. Mutants killed: docker ignoring the corroboration; a prefix sibling counting as
   inside; no `..` normalisation; seatbelt ignoring the corroboration; first-path-only; no symlink
   canonicalisation; trailing punctuation kept; relative quoted paths corroborated.
+- Second delta round on the same: a relative path is now *unknown* rather than ignored, so a line
+  naming an inside absolute source and a relative outside target (`mv '/work/a' '../../etc/x'`,
+  a `$0`-prefixed script with a relative redirect) is kept; the canonical walk is one pass over
+  the components, refuses tokens longer than any filesystem accepts, and the classifier reads at
+  most sixteen paths per line and two hundred lines per stderr, so a child cannot make the
+  synchronous scan expensive; a dangling link inside the workspace is followed to its target
+  (`lstat`, then `readlink`); docker canonicalises only strings already inside the workspace,
+  because a host link from outside into the bind does not exist in the container (seatbelt,
+  host-native, canonicalises both ways); quote characters bound bare tokens so an unbalanced
+  apostrophe (`can't`) cannot hide a quoted path. Mutants killed: relative treated as inside;
+  dangling link not followed; docker canonicalising outside strings; quote and arrow boundaries
+  dropped; last-path-only; no line bound; bare tokens inside a taken quoted span. Not killable by
+  test: the length cap (the one-pass walk is already fast; the cap is defence in depth).
+- **#104 — a forged spawn record naming a deeper session was undecidable.** `session.start`
+  gains an optional `parent` (schema-added, never repurposed); the subagent tool passes
+  `parent: ctx.sessionId` into the child's `run`, so a child's own log names its parent.
+  `liveChildren` now accepts a spawn record only if the named session's log does not dispute it:
+  a `session.start` naming a different parent belongs to that parent, whatever the record says. A
+  missing log (starting) or one written before the field cannot testify and is accepted, so old
+  logs keep rendering. `renderEvent` prints the parent. Mutants killed: dropping the dispute
+  check; not recording the parent.
+- **#96 — child abort grace floored to 0; the clamp lived twice.** `abortGraceOf(config)` is the
+  one clamp (finite, non-negative, else 1000ms), used by the loop and the subagent tool; a child
+  gets `max(1, floor(parent / 2))`. Mutant killed: dropping the floor.
 
 ## R3 notes
 

@@ -170,6 +170,14 @@ describe("event schema", () => {
     expect(parseEvent(serializeEvent(event))).toEqual(event);
   });
 
+  it("session.start carries an optional parent that must be a session id (#104)", () => {
+    const base = { seq: 0, sessionId: "kid", ts: 1, type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" };
+    const withParent = HarnessEvent.parse({ ...base, parent: "parent-1" });
+    expect(parseEvent(serializeEvent(withParent))).toEqual(withParent);
+    expect(HarnessEvent.parse(base)).not.toHaveProperty("parent");
+    expect(() => HarnessEvent.parse({ ...base, parent: "../escape" })).toThrow();
+  });
+
   it("round-trips a session.fork event without overloading session.resume", () => {
     const event = HarnessEvent.parse({
       seq: 0,
