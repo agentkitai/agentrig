@@ -92,9 +92,11 @@ export function throwIfSandboxDenied(stderr: string): void {
  * provenance-labelled reason. `unless` lets a provider drop a denial its policy could not have
  * produced (a network denial under a network grant; a write denial inside a writable workspace).
  */
+type LinePattern = RegExp | ((line: string) => boolean);
+
 function firstDenialLine(
   stderr: string,
-  patterns: readonly RegExp[],
+  patterns: readonly LinePattern[],
   unless?: RegExp | ((line: string, spent: boolean, budget: ProbeBudget) => boolean),
 ): string | undefined {
   const budget = probeBudget();
@@ -106,7 +108,7 @@ function firstDenialLine(
   let corroborated = 0;
   const seen = new Set<string>();
   for (const line of stderr.split(/\r?\n/u)) {
-    if (!patterns.some((p) => p.test(line))) continue;
+    if (!patterns.some((p) => (p instanceof RegExp ? p.test(line) : p(line)))) continue;
     if (unless === undefined) return line;
     if (unless instanceof RegExp) {
       if (unless.test(line)) continue;
@@ -241,12 +243,23 @@ export function deniedPaths(line: string): string[] {
     if (m[1] === undefined) continue;
     const at = m.index + m[0].length - m[1].length;
     if (quotedSpans.some(([start, end]) => at >= start && at < end)) continue;
-    if (add(m[1].replace(/[:.,;]+$/u, ""))) return found;
+    if (add(stripTrailingPunctuation(m[1]))) return found;
   }
   // last, the unquoted operand right before the errno text: a word the boundary cannot judge
   const operand = operandBeforeErrno(line);
-  if (operand !== undefined) add(operand);
+  if (operand !== undefined) add(stripTrailingPunctuation(operand));
   return found;
+}
+
+/**
+ * Trailing `:.,;` removed by a scan from the end. Not a regex: `/[:.,;]+$/` backtracks over a
+ * run of punctuation at every start position, and a child printing sixty thousand colons in one
+ * token made the strip alone a four-second block.
+ */
+function stripTrailingPunctuation(token: string): string {
+  let end = token.length;
+  while (end > 0 && ":.,;".includes(token[end - 1]!)) end -= 1;
+  return token.slice(0, end);
 }
 
 /** The first path a denial line names, for callers that want one; see `deniedPaths`. */
@@ -268,7 +281,7 @@ function canonical(path: string, budget: ProbeBudget): string {
   // component climbs from the LINK'S TARGET, as the kernel does, not from the name: `w/../x`
   // with `w -> /etc` is `/x`, and a lexical collapse would have judged it inside.
   let parts = path.split(sep).filter((p) => p !== "");
-  for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
+  for (let hop = 0; hop <= MAX_LINK_HOPS; hop += 1) {
     if (parts.length > MAX_PATH_COMPONENTS || parts.join(sep).length > MAX_PATH_CHARS) return sep + parts.join(sep);
     let resolved: string = sep;
     let restarted = false;
@@ -483,9 +496,11 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
     // a network denial cannot come from a profile that allows network: under a grant such a
     // line is the command's own words, not the sandbox's
     // likewise a file-write denial inside the workspace the profile allows writes to
+    // the cheap literal first: `sandbox…deny` with `.*` backtracks from every `sandbox` on a line
+    // that never says `deny`, and a child can print eight thousand of them in one line
     return firstDenialLine(
       stderr,
-      [/sandbox(?:-exec)?:?.*deny/iu],
+      [(line) => /deny/iu.test(line) && /sandbox(?:-exec)?:?.*deny/iu.test(line)],
       (line, spent, budget) =>
         (policy.network === true && /network/iu.test(line)) ||
         (/file-write/iu.test(line) &&

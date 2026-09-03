@@ -226,6 +226,12 @@ Changes:
   syscalls only. A relative link target inside the workspace is pinned as resolving inside.
   Mutants killed: memo hits free; relative target base ignored. A free `..` is not observable:
   every restart costs a charged link probe, so dots alone cannot walk far.
+- Eighth delta round: two regexes ran before the budget and backtracked — the trailing-punctuation
+  strip (`/[:.,;]+$/`, four seconds on a token of sixty thousand colons) is now a scan from the
+  end, and the seatbelt matcher (`sandbox…deny` with `.*`, backtracking from every `sandbox` on
+  a line that never says `deny`) is gated by the cheap literal first. A budget that dies on a
+  `..` is pinned to keep the `..` in the string it hands back. Mutants killed: the regex strip
+  restored (timing); the seatbelt gate removed (timing); the `..` dropped from the dying return.
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the

@@ -353,6 +353,11 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     expect(deniedPaths("EROFS: read-only file system, rename -> /etc/x")).toEqual(["/etc/x"]);
     // bounded: a line naming a thousand paths yields sixteen
     expect(deniedPaths(Array.from({ length: 1_000 }, (_, i) => `'/p/${i}'`).join(" "))).toHaveLength(16);
+    // a token made of sixty thousand colons is stripped by a scan, not a backtracking regex
+    const t0 = Date.now();
+    expect(deniedPaths(`touch: cannot touch /${":".repeat(60_000)}a: Read-only file system`)).toEqual([`/${":".repeat(60_000)}a`]);
+    expect(deniedPaths(`tee: /etc/x${".".repeat(60_000)}: Read-only file system`)).toEqual(["/etc/x"]);
+    expect(Date.now() - t0).toBeLessThan(200);
     expect(deniedPaths("touch: Read-only file system")).toEqual([]);
     expect(deniedPaths("wget: network is unreachable")).toEqual([]);
     expect(deniedPath("tee: /etc/x: Read-only file system")).toBe("/etc/x");
@@ -526,6 +531,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       expect(tiny.remaining).toBe(0);
       // an outside string is kept either way
       expect(writeDenialPlausible("touch: cannot touch '/etc/x': Read-only file system", ww, { budget: probeBudget(0) })).toBe(true);
+      // a budget that dies exactly on a `..` keeps the `..` in the string it hands back
+      const dying = { mode: "workspace-write" as const, cwd: "/work/proj" };
+      expect(writeDenialPlausible("touch: cannot touch '/usr/../work/proj/x': Read-only file system", dying, { budget: probeBudget(1) })).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });
@@ -730,6 +738,12 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // a non-write denial is untouched by the path check, even one naming an inside path
       await expect(run("sandbox-exec: deny(1) network-outbound")).rejects.toBeInstanceOf(SandboxDeniedError);
       await expect(run("sandbox-exec: deny(1) process-exec CWD/bin/x")).rejects.toBeInstanceOf(SandboxDeniedError);
+      // a line of eight thousand `sandbox:` with no `deny` is matched by the cheap literal first,
+      // never by the backtracking `.*` from every `sandbox`
+      const t0 = Date.now();
+      const chatter = await run("sandbox: ".repeat(8_000));
+      expect(chatter.output.exitCode).toBe(1);
+      expect(Date.now() - t0).toBeLessThan(1_000);
     } finally {
       delete process.env.AGENTRIG_TEST_STDERR;
       await rm(root, { recursive: true, force: true });
