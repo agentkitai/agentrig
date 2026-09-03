@@ -1,5 +1,5 @@
 import type { HarnessEvent } from "./events.js";
-import type { SessionStore } from "./session-store.js";
+import { isValidSessionId, type SessionStore } from "./session-store.js";
 
 /**
  * Live status of a child session, read from its own log (R3d). The parent's log records only
@@ -92,8 +92,12 @@ export interface ChildNode {
   reason?: string;
   /** Read from the child's own log; null when the log does not exist yet. */
   status: ChildStatus | null;
-  /** Set when the child's log could not be read (a line still being written, a corrupt line). */
+  /** Set when the child's log could not be read at all (a corrupt line, an invalid id). */
   error?: string;
+  /** The id is not a session id at all — a forged spawn record; permanent, unlike a torn log. */
+  invalid?: true;
+  /** The log's last line was still being written; `status` folds every line before it. */
+  torn?: true;
   /** The child's own children, recursively — `/tree` with live state. */
   children: ChildNode[];
 }
@@ -106,12 +110,26 @@ export interface ChildNode {
 export async function liveChildren(
   store: SessionStore,
   spawned: ReadonlyArray<{ id: string; task: string; reason?: string }>,
-  visited: Set<string> = new Set(),
+  opts: { parent?: string } = {},
+): Promise<ChildNode[]> {
+  // The parent and every direct child are claimed up front: a child log whose spawn record names
+  // the parent, or a sibling, cannot pull that session under itself. Records are model-emitted
+  // through a gated tool, but a log on disk is untrusted input all the same.
+  const visited = new Set<string>(spawned.map((c) => c.id));
+  if (opts.parent !== undefined) visited.add(opts.parent);
+  return walk(store, spawned, visited, new Set());
+}
+
+async function walk(
+  store: SessionStore,
+  spawned: ReadonlyArray<{ id: string; task: string; reason?: string }>,
+  claimed: ReadonlySet<string>,
+  rendered: Set<string>,
 ): Promise<ChildNode[]> {
   const nodes: ChildNode[] = [];
   for (const child of spawned) {
-    if (visited.has(child.id)) continue;
-    visited.add(child.id);
+    if (rendered.has(child.id)) continue;
+    rendered.add(child.id);
     const node: ChildNode = {
       id: child.id,
       task: child.task,
@@ -119,17 +137,27 @@ export async function liveChildren(
       status: null,
       children: [],
     };
-    let events: HarnessEvent[] | null = null;
+    if (!isValidSessionId(child.id)) {
+      node.invalid = true;
+      node.error = "not a session id";
+      nodes.push(node);
+      continue;
+    }
+    let read: { events: HarnessEvent[]; torn: boolean } | null = null;
     try {
-      events = await store.readAll(child.id);
+      read = await store.readPrefix(child.id);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         node.error = err instanceof Error ? err.message : String(err);
       }
     }
-    if (events !== null) {
-      node.status = summarizeSession(child.id, events);
-      node.children = await liveChildren(store, node.status.children, visited);
+    if (read !== null) {
+      node.status = summarizeSession(child.id, read.events);
+      if (read.torn) node.torn = true;
+      // a grandchild record naming a session already placed in the tree is not followed
+      const own = node.status.children.filter((c) => !claimed.has(c.id));
+      const nextClaimed = new Set([...claimed, ...own.map((c) => c.id)]);
+      node.children = await walk(store, own, nextClaimed, rendered);
     }
     nodes.push(node);
   }

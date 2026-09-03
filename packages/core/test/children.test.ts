@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -52,6 +52,26 @@ describe("summarizeSession", () => {
       ended: null,
       children: [],
     });
+  });
+
+  it("a tool.result closes the open call: a child thinking after bash is not 'in bash'", () => {
+    const base = [
+      ev({ type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" }),
+      ev({ type: "turn.start", n: 1 }),
+      ev({ type: "tool.call", id: "t1", name: "bash", input: {}, inputHash: "h" }),
+    ];
+    expect(summarizeSession("c", base).tool).toEqual({ name: "bash", sinceTs: expect.any(Number) });
+    const closed = [...base, ev({ type: "tool.result", id: "t1", ok: true, display: "", durationMs: 1 })];
+    expect(summarizeSession("c", closed).tool).toBeNull();
+    const again = [
+      ...closed,
+      ev({ type: "turn.end", n: 1 }),
+      ev({ type: "turn.start", n: 2 }),
+      ev({ type: "tool.call", id: "t2", name: "read_file", input: {}, inputHash: "h" }),
+      ev({ type: "tool.result", id: "t2", ok: false, display: "", durationMs: 1 }),
+    ];
+    expect(summarizeSession("c", again).tool).toBeNull();
+    expect(summarizeSession("c", again).turns).toBe(2);
   });
 
   it("a denied call is not still open, and the first pending item stands in when none is in progress", () => {
@@ -121,12 +141,51 @@ describe("liveChildren", () => {
     expect(await store.list()).toEqual(before);
   });
 
-  it("a log that cannot be parsed is reported on its node, not thrown at the prompt", async () => {
+  it("a torn last line keeps every line before it and is flagged; a corrupt terminated line is an error", async () => {
     const store = new SessionStore({ root });
-    await writeFile(join(root, "torn.jsonl"), '{"seq":0,"sessionId":"torn","ts":1,"type":"session.start","ta', "utf8");
-    const nodes = await liveChildren(store, [{ id: "torn", task: "t" }]);
-    expect(nodes[0]!.status).toBeNull();
-    expect(nodes[0]!.error).toMatch(/JSON|token|parse/i);
+    await start(store, "torn", "still writing");
+    await store.append("torn", { type: "turn.start", n: 2 });
+    await appendFile(join(root, "torn.jsonl"), '{"seq":2,"sessionId":"torn","ts":1,"type":"tool.result","id":"t","ok":true,"display":"a very long', "utf8");
+    const [node] = await liveChildren(store, [{ id: "torn", task: "t" }]);
+    expect(node!.error).toBeUndefined();
+    expect(node!.torn).toBe(true);
+    expect(node!.status).toMatchObject({ task: "still writing", turns: 2 });
+
+    await writeFile(join(root, "corrupt.jsonl"), 'this is not json\n{"seq":1}\n', "utf8");
+    const [bad] = await liveChildren(store, [{ id: "corrupt", task: "t" }]);
+    expect(bad!.status).toBeNull();
+    expect(bad!.torn).toBeUndefined();
+    expect(bad!.error).toMatch(/JSON|token|parse/i);
+  });
+
+  it("readPrefix rejects a seq gap even with a torn tail, and reads a clean log whole", async () => {
+    const store = new SessionStore({ root });
+    await start(store, "clean", "t");
+    await store.append("clean", { type: "turn.start", n: 1 });
+    expect(await store.readPrefix("clean")).toMatchObject({ torn: false, events: [{ seq: 0 }, { seq: 1 }] });
+    await writeFile(join(root, "gap.jsonl"), '{"seq":0,"sessionId":"gap","ts":1,"type":"turn.start","n":1}\n{"seq":5,"sessionId":"gap","ts":1,"type":"turn.start","n":2}\n{"seq":6,"sess', "utf8");
+    await expect(store.readPrefix("gap")).rejects.toThrow(/expected seq 1, got 5/);
+  });
+
+  it("a child claiming the parent or a sibling as its own child does not pull them under itself", async () => {
+    const store = new SessionStore({ root });
+    await start(store, "parent", "p");
+    await start(store, "kid", "k");
+    await store.append("kid", { type: "subagent.spawn", id: "parent", task: "forged parent" });
+    await store.append("kid", { type: "subagent.spawn", id: "sib", task: "forged sibling" });
+    await store.append("kid", { type: "subagent.spawn", id: "real-grand", task: "real" });
+    await start(store, "sib", "s");
+    await start(store, "real-grand", "g");
+    const nodes = await liveChildren(store, [{ id: "kid", task: "k" }, { id: "sib", task: "s" }], { parent: "parent" });
+    expect(nodes.map((n) => n.id)).toEqual(["kid", "sib"]);
+    expect(nodes[0]!.children.map((n) => n.id)).toEqual(["real-grand"]);
+    expect(nodes[1]!.children).toEqual([]);
+  });
+
+  it("an id that is not a session id is marked invalid rather than read", async () => {
+    const store = new SessionStore({ root });
+    const [node] = await liveChildren(store, [{ id: "../../etc/passwd", task: "t" }]);
+    expect(node).toMatchObject({ invalid: true, status: null, error: "not a session id" });
   });
 
   it("a spawn record that loops back is visited once", async () => {

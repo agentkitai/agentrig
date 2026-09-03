@@ -118,7 +118,9 @@ const oneLine = (text: string, max: number): string => {
 /** One line per child: turn, current tool, latest plan item, elapsed — or how it finished. */
 export function renderChildLine(node: ChildNode, now: number): string {
   const head = `${node.id} · ${oneLine(node.task, 48)}`;
-  if (node.error !== undefined) return `${head} · log unreadable right now (${oneLine(node.error, 60)})`;
+  if (node.invalid === true) return `${head} · invalid id (a spawn record that names no session)`;
+  if (node.error !== undefined) return `${head} · log unreadable (${oneLine(node.error, 60)})`;
+  const torn = node.torn === true ? " · log still being written" : "";
   const s = node.status;
   if (s === null || s.startedAt === null) {
     return node.reason === undefined ? `${head} · starting` : `${head} · ${node.reason} before writing a log`;
@@ -126,14 +128,14 @@ export function renderChildLine(node: ChildNode, now: number): string {
   const finished = node.reason ?? s.ended?.reason;
   if (finished !== undefined) {
     const endTs = s.ended?.ts ?? s.lastTs ?? s.startedAt;
-    return `${head} · ${finished} after ${s.turns} turn(s) · ${formatElapsed(endTs - s.startedAt)}`;
+    return `${head} · ${finished} after ${s.turns} turn(s) · ${formatElapsed(endTs - s.startedAt)}${torn}`;
   }
   const parts = [`turn ${s.turns}`];
   if (s.tool !== null) parts.push(`${s.tool.name} ${formatElapsed(now - s.tool.sinceTs)}`);
   else parts.push("thinking");
   if (s.plan !== null) parts.push(`plan: ${oneLine(s.plan, 48)}`);
   parts.push(formatElapsed(now - s.startedAt));
-  return `${head} · ${parts.join(" · ")}`;
+  return `${head} · ${parts.join(" · ")}${torn}`;
 }
 
 /** The live children tree — `/tree` with live state — as lines. */

@@ -215,9 +215,21 @@ Changes:
   at that moment; a self-refreshing block would need the live frame to hold N growing lines,
   which the viewport design (`viewport.ts`) budgets against, and the scrollback is `Static`. A
   timer-driven view is a follow-up if dogfooding asks for it.
-- Mutants killed: a session that ended still "in" its last tool; dropping the visited guard on
-  looping spawn records; throwing on an unreadable child log; not recording `subagent.end`;
-  preferring the child's own end reason over the parent's; not clearing children on a new session.
+- Review fixes, each pinned: a `tool.result` closes the open call (a child thinking after `bash`
+  is not "in bash"); `/children` has no running-turn guard, and a test invokes it while the child
+  is blocked inside a tool; a torn last line — a child mid-write — keeps every line before it and
+  is flagged "log still being written" (`SessionStore.readPrefix`), while a corrupt terminated
+  line or a seq gap is still an error; `/resume <other>` drops the previous session's children and
+  seeds the list from that session's own log (`onSpawned`), or starts empty when nothing is
+  wired; a child log whose spawn record names the parent or a sibling cannot pull that session
+  under itself (the parent and every direct child are claimed before the walk), and an id that
+  is not a session id renders as "invalid id"; every `subagent.end` reason the log can carry is
+  recorded, "ended" when it carries none (`applyChildEvent`, exported and tested directly).
+- Mutants killed: a session that ended still "in" its last tool; a `tool.result` leaving the
+  call open; dropping the visited guard on looping spawn records; a torn tail throwing; no
+  up-front claims for parent and siblings; throwing on an unreadable child log; not recording
+  `subagent.end`; a hard-coded end reason; a resume keeping the previous session's children; a
+  running-turn guard on `/children`; preferring the child's own end reason over the parent's.
 
 ## R2 notes
 

@@ -223,8 +223,13 @@ describe("children rendering (R3d)", () => {
     expect(renderChildLine({ id: "c2", task: "t", status: null, children: [] }, 0)).toBe("c2 · t · starting");
     expect(renderChildLine({ id: "c2", task: "t", status: null, reason: "error", children: [] }, 0))
       .toBe("c2 · t · error before writing a log");
-    expect(renderChildLine({ id: "c3", task: "t", status: null, error: "Unexpected end of JSON input", children: [] }, 0))
-      .toBe("c3 · t · log unreadable right now (Unexpected end of JSON input)");
+    expect(renderChildLine({ id: "c3", task: "t", status: null, error: "Unexpected token", children: [] }, 0))
+      .toBe("c3 · t · log unreadable (Unexpected token)");
+    expect(renderChildLine({ id: "../x", task: "t", status: null, invalid: true, error: "not a session id", children: [] }, 0))
+      .toBe("../x · t · invalid id (a spawn record that names no session)");
+    // a torn tail still shows everything the log said before it
+    expect(renderChildLine({ ...running, torn: true }, 160_000))
+      .toBe("c1 · review the diff · turn 3 · bash 12s · plan: write findings · 1m00s · log still being written");
   });
 
   it("renders nested children as an indented tree — /tree with live state", () => {
