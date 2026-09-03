@@ -299,6 +299,15 @@ describe("renderEvent", () => {
 const at = (seq: number, payload: Record<string, unknown>): HarnessEvent =>
   HarnessEvent.parse({ seq, sessionId: "s", ts: 1_700_000_000_000, ...payload });
 
+describe("renderEvent — session.start parent (#104)", () => {
+  it("names the parent when the session has one, and nothing when it does not", () => {
+    const top = at(0, { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" });
+    const child = at(0, { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m", parent: "mum" });
+    expect(renderEvent(top)).not.toContain("parent=");
+    expect(renderEvent(child)).toContain(" parent=mum ");
+  });
+});
+
 describe("renderChatEvent — the conversation, not the trace", () => {
   it("hides the plumbing a person waiting for an answer does not read", () => {
     const plumbing = [

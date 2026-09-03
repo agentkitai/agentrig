@@ -7,6 +7,8 @@ import {
   builtinTools,
   contentHash,
   createAgent as createCoreAgent,
+  abortGraceOf,
+  DEFAULT_ABORT_GRACE_MS,
   RulePolicy,
   SandboxDeniedError,
   SessionStore,
@@ -1774,6 +1776,31 @@ describe("resume", () => {
     expect(summary.reason).toBe("error");
     expect(events.some((e) => e.type === "error" && e.fatal && /no snapshot/.test(e.message))).toBe(true);
     expect(provider.requests).toHaveLength(0);
+  });
+});
+
+describe("abortGraceOf", () => {
+  it("is the configured grace when finite and non-negative, else the default", () => {
+    expect(abortGraceOf({})).toBe(DEFAULT_ABORT_GRACE_MS);
+    expect(abortGraceOf({ abortGraceMs: undefined })).toBe(DEFAULT_ABORT_GRACE_MS);
+    expect(abortGraceOf({ abortGraceMs: Number.NaN })).toBe(DEFAULT_ABORT_GRACE_MS);
+    expect(abortGraceOf({ abortGraceMs: Number.POSITIVE_INFINITY })).toBe(DEFAULT_ABORT_GRACE_MS);
+    expect(abortGraceOf({ abortGraceMs: -1 })).toBe(DEFAULT_ABORT_GRACE_MS);
+    expect(abortGraceOf({ abortGraceMs: 0 })).toBe(0);
+    expect(abortGraceOf({ abortGraceMs: 7 })).toBe(7);
+  });
+
+});
+
+describe("session.start parent (#104)", () => {
+  it("run() records a parent in session.start only when given, and validates it", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const config = makeConfig(provider, { store: new SessionStore({ root, newId: () => "kid" }) });
+    const session = createAgent(config).run("t", { cwd: root, parent: "the-parent" });
+    const events = await collect(session);
+    await session.done;
+    expect(events[0]).toMatchObject({ type: "session.start", parent: "the-parent" });
+    expect(() => createAgent(config).run("t", { cwd: root, parent: "../x" })).toThrow(/invalid session id/);
   });
 });
 

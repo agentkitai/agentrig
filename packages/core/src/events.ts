@@ -150,7 +150,19 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
 
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("session.start"), task: z.string(), cwd: z.string(), provider: z.string(), model: z.string() }),
+  z.object({
+    type: z.literal("session.start"),
+    task: z.string(),
+    cwd: z.string(),
+    provider: z.string(),
+    model: z.string(),
+    /**
+     * The session that spawned this one (#104): a subagent's own log names its parent, so a
+     * `subagent.spawn` record in some other log claiming this session can be checked against the
+     * session's own word. Absent for a top-level session and for logs written before this field.
+     */
+    parent: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+  }),
   z.object({
     type: z.literal("session.fork"),
     parent: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),

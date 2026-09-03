@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
+import { abortGraceOf, usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
 import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
@@ -182,10 +182,9 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // A child's abort grace is half its parent's: abort reaches both on the same signal, so a
       // child waiting as long as its parent always finishes its log AFTER the parent gave up
       // waiting — and the parent would record a child "still running" that ends a moment later.
-      const parentGrace = Number.isFinite(config.abortGraceMs) && (config.abortGraceMs as number) >= 0
-        ? (config.abortGraceMs as number)
-        : 1_000;
-      const childGrace = Math.floor(parentGrace / 2);
+      // Floored at 1ms (#96): a parent at 1ms would otherwise hand its child 0 and record
+      // "still running 0ms after abort" without waiting a tick.
+      const childGrace = Math.max(1, Math.floor(abortGraceOf(config) / 2));
       const child = opts.createAgent({
         ...config,
         abortGraceMs: childGrace,
@@ -212,7 +211,8 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       }
       ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
 
-      const session = child.run(input.task, { cwd: ctx.cwd, id });
+      // the child's own log names its parent, so a spawn record elsewhere can be checked against it
+      const session = child.run(input.task, { cwd: ctx.cwd, id, parent: ctx.sessionId });
 
       let ended = false;
       const end = (reason: "done" | "aborted" | "error" | "budget"): void => {
