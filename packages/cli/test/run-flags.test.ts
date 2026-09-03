@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseSoft, parseTurnsRemaining, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
+import { abortNotice, parseSoft, parseTurnsRemaining, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
 import { parseBudget } from "../src/agent-builder.ts";
 
 /**
@@ -250,5 +250,15 @@ describe("parseSoft", () => {
     expect(parseSoft("1")).toBe(1);
     expect(() => parseSoft("80")).toThrow(/fraction of the budget/);
     expect(() => parseSoft("lots")).toThrow(/--supervisor-soft/);
+  });
+});
+
+describe("abortNotice (#88)", () => {
+  it("says what the first and second abort do, and nothing for a third", () => {
+    expect(abortNotice(1, "ctrl-C")).toBe("aborting… (ctrl-C again to skip session_end hooks)");
+    expect(abortNotice(2, "ctrl-C")).toBe("skipping session_end hooks");
+    expect(abortNotice(3, "ctrl-C")).toBeNull();
+    // the first never claims the hooks are running: a finished session in its hooks is cut by it
+    expect(abortNotice(1, "ctrl-C")).not.toMatch(/still run/);
   });
 });

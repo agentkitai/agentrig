@@ -687,6 +687,8 @@ describe("a subagent cannot run away", () => {
     ]);
     const session = harness(provider, {
       slow: true,
+      // the parent's real grace, so its orphan note (or its absence) can be asserted
+      parent: { abortGraceMs: 200 },
       childExtra: {
         abortGraceMs: 200,
         hooks: [{
@@ -712,6 +714,8 @@ describe("a subagent cannot run away", () => {
     expect(hookReason).toBe("aborted");
     expect(hookOutcome).toBe("cut");
     expect(cutAt - abortedAt).toBeLessThan(200);
+    // and the parent never had to report the child as still running
+    expect(events.some((e) => e.type === "error" && /orphaned work still running/.test((e as { message: string }).message))).toBe(false);
     const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
     const childEvents = await new SessionStore({ root }).readAll(spawned.id);
     expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
@@ -741,7 +745,7 @@ describe("a subagent cannot run away", () => {
       ]),
     ]);
     const session = harness(provider, {
-      childExtraTools: [stubborn],
+      parent: { abortGraceMs: 400 },
       childExtra: {
         abortGraceMs: 400,
         tools: [stubborn],
@@ -757,11 +761,32 @@ describe("a subagent cannot run away", () => {
       },
     }).run("do it", { cwd: root });
     setTimeout(() => session.control.abort(), 80);
-    await collect(session);
+    const events = await collect(session);
     expect((await session.done).reason).toBe("aborted");
-    await new Promise((r) => setTimeout(r, 400));
-    // the child's grace is 200; its orphan wait spends it all; the hooks still ran and were cut
+    // the child's grace is 200; its orphan wait spent it all (its own log says so); the hooks
+    // still ran and were cut, and the parent never reported the child as still running
     expect(hookOutcome).toBe("cut");
+    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
+    const childEvents = await new SessionStore({ root }).readAll(spawned.id);
+    expect(childEvents.some((e) => e.type === "error" && /orphaned work still running 200ms/.test((e as { message: string }).message))).toBe(true);
+    expect(events.some((e) => e.type === "error" && /orphaned work still running/.test((e as { message: string }).message))).toBe(false);
+  });
+
+  it("a grandchild's grace derives from its parent's, so its end-hook cut lands inside the child's wait", async () => {
+    // read from the root config, a grandchild got the SAME grace as its parent, and its cut
+    // (1.5x) landed after the child had stopped waiting (2x of the grandchild's = 1x of the child's)
+    const created: AgentConfig[] = [];
+    const provider = new ScriptedProvider([
+      spawn("outer"),
+      spawn("inner"), // the child spawns a grandchild
+      [say("grandchild done"), usage(1, 1), stop("end_turn")],
+      [say("child done"), usage(1, 1), stop("end_turn")],
+      [say("parent done"), usage(1, 1), stop("end_turn")],
+    ]);
+    const session = harness(provider, { maxDepth: 2, created, childExtra: { abortGraceMs: 1_000 } }).run("do it", { cwd: root });
+    await collect(session);
+    expect((await session.done).reason).toBe("done");
+    expect(created.map((c) => c.abortGraceMs)).toEqual([500, 250]);
   });
 
   it("the parent's second abort reaches a child's session_end hooks before the grace runs out", async () => {

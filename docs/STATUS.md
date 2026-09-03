@@ -155,15 +155,21 @@ Changes:
   the parent's own second abort through a new optional `ToolContext.endSignal` (a field added,
   never repurposed) so ctrl-C twice reaches the child's hooks too. The CLI's children carry no
   hooks today, so this binds SDK embedders; CLI children still leave no ingest behind
-  (unchanged, noted). Mutants killed: no grace cut; second abort not forwarded; cut at the
-  child's grace; cut at the parent's grace.
+  (unchanged, noted). A grandchild's grace now derives from its parent's (the nested tool's
+  `childConfig` carries the child's halved grace), where it used to read the root config and
+  get the same grace as its parent, so its cut landed after the child had stopped waiting. The
+  tests set the parent's real grace and assert it never reports the child as still running, and
+  that the stubborn-tool case really spent the child's grace (its own log carries the orphan
+  note). Mutants killed: no grace cut; second abort not forwarded; cut at the child's grace; cut
+  at the parent's deadline; grandchild reading the root grace.
 - Both entry points say what each abort does: "aborting… (abort again to skip session_end
   hooks)" then "skipping session_end hooks" — the first promises nothing about the hooks, because
   a session that had already finished its turn and was in its hooks is cut by the first abort
   and the controller cannot tell that case from a mid-turn abort. The TUI keeps answering SIGINT
   until shutdown has finished (it used to remove the handler first, so a ctrl-C during the hooks
   went to Node's default handler and killed the process mid-hook with no `session.end`) and says
-  so on stderr, since the frame is gone by then; headless `run` prints the same two lines.
+  so on stderr, since the frame is gone by then; headless `run` prints the same two lines. Both
+  read `abortNotice(nth, key)`, tested; the SIGINT wiring itself is code-read only.
 - Semantics, stated: an abort that lands while the session is already ending (a normally
   finished session in its end hooks) counts as the second abort and stops them — that is what a
   person pressing ctrl-C during a long ingest means.

@@ -17,6 +17,7 @@ import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
 import { currentGitBranch } from "../git-branch.js";
 import {
+  abortNotice,
   parseSoft,
   parseTurnsRemaining,
   permissionWarning,
@@ -187,7 +188,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     let sigints = 0;
     stopForSigint = () => {
       sigints += 1;
-      console.error(sigints === 1 ? "aborting… (ctrl-C again to skip session_end hooks)" : "skipping session_end hooks");
+      const notice = abortNotice(sigints, "ctrl-C");
+      if (notice !== null) console.error(notice);
       controller.abort();
     };
     try {

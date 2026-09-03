@@ -106,6 +106,19 @@ export function toRules(values: string[] | undefined, decision: "allow" | "deny"
  * does, `--yolo` is the name people actually type. Read through this helper rather than either
  * flag, so a caller cannot honour one and miss the other.
  */
+/**
+ * What each abort does, for the person who pressed it (#88): the first stops the work, and the
+ * session_end hooks (memory ingest, the dream trigger) still run for a session aborted mid-turn;
+ * the second stops those too. The first promises nothing about the hooks, because a session that
+ * had already finished its turn and was in its hooks is cut by the first abort and the caller
+ * cannot tell that case apart. A third abort changes nothing and says nothing.
+ */
+export function abortNotice(nth: number, key: string): string | null {
+  if (nth === 1) return `aborting… (${key} again to skip session_end hooks)`;
+  if (nth === 2) return "skipping session_end hooks";
+  return null;
+}
+
 export function skipsPermissions(opts: { dangerouslySkipPermissions?: boolean; yolo?: boolean }): boolean {
   return opts.dangerouslySkipPermissions === true || opts.yolo === true;
 }
@@ -368,10 +381,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let sigints = 0;
   const onSigint = (): void => {
     sigints += 1;
-    // the first abort stops the work; session_end hooks still run for the aborted session (#88),
-    // and the second abort stops those too — say so, or a person waits on an ingest they cannot see
-    if (sigints === 1) console.error("aborting… (ctrl-C again to skip session_end hooks)");
-    else if (sigints === 2) console.error("skipping session_end hooks");
+    const notice = abortNotice(sigints, "ctrl-C");
+    if (notice !== null) console.error(notice);
     session.control.abort();
   };
   process.on("SIGINT", onSigint);
