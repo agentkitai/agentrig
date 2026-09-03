@@ -308,17 +308,22 @@ describe("skillTool", () => {
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
     expect(body).toContain("Never pass the builder's report");
-    expect(body).toContain("A verdict whose findings each carry a concrete proposed fix gets exactly one repair round");
-    expect(body).toContain("a HIGH with a one-line fix and a test is repair work, a MEDIUM with no fix is a halt");
-    expect(body).toContain("The bound on this train is the number of rounds, not the severity of a fixable defect");
+    expect(body).toContain("The train does not stop on a finding");
+    expect(body).toContain("at most THREE repair rounds");
+    expect(body).toContain("a HIGH with a one-line fix and a test is repair work");
+    expect(body).toContain("A round that reopens a closed finding");
+    expect(body).toContain("one GitHub issue per finding");
+    expect(body).toContain("A LOW or MEDIUM residual lands once its issue exists; a HIGH residual halts");
+    expect(body).toContain("The lander refuses a PR whose `## Residuals` names a finding without an issue number");
+    expect(body).toContain("Everything else is a child's job");
     expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
-    expect(body).toContain("sort its findings, never by severity");
-    expect(body).toContain("If any finding is a contract or authorization one, arbitrate");
+    expect(body).toContain("Sort its findings, never by severity");
+    expect(body).toContain("Arbitrate first, once per row");
     expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
     expect(body).toContain("watch `main` CI on the exact merge commit");
-    expect(body).toContain("never replace it with a fresh builder");
-    expect(body).toContain("Reserve five children per row");
+    expect(body).toContain("spawn ONE continuation builder from whatever it pushed");
+    expect(body).toContain("The minimum is three children per remaining");
     expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
     expect(body).toContain("Report the exact head SHA you reviewed");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
@@ -328,6 +333,7 @@ describe("skillTool", () => {
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
     expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
     expect(land.body).toContain("include the human's exact authorization quote");
+    expect(land.body).toContain("Residuals are issues, not prose");
 
     const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
@@ -345,6 +351,7 @@ describe("skillTool", () => {
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
     expect(dogfood.body).toContain("The cap bounds review rounds, not fixes");
     expect(dogfood.body).toContain("post-delta, self-verified, not re-reviewed");
-    expect(body).toContain("no post-delta fix either");
+    expect(dogfood.body).toContain("A finding that lives only in a PR body is a finding nobody");
+    expect(body).toContain("filing a residual as an issue after three rounds is not skipping it");
   });
 });

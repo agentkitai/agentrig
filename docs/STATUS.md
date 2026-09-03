@@ -46,6 +46,20 @@ fixer carries the verdict; an unverifiable claim is fixed with evidence or by de
 only a finding with no fix, or an arbiter "needs the human", halts. `ship` says the same for its
 human-requested fix round.
 
+Third `/topic R2` run: R2c landed unattended, R2d halted after its one repair round because the
+delta reviewer found a second test gap — with the fix in its own report. That halt was the rule
+being wrong, not the train: the train had stopped on a finding a child could close. `topic` §3 is
+now a bounded converging loop (at most three repair rounds per row, each must close the previous
+round's findings, residual LOW/MEDIUM lands recorded, residual HIGH halts), a reviewer or fixer that
+dies is replaced once, a stale head gets a fresh reviewer, a finding with no proposed fix is the
+fixer's to find. The only halts left are listed at the end of the skill. The child pool is sized for
+the band rather than reserved per row; set `subagentMaxChildren` to at least nine per row you want
+to survive three rounds.
+Residuals are GitHub issues, never PR-body prose: after the third round the last fixer files one
+`review-residual` issue per open finding and lists the numbers under `## Residuals`; the lander
+refuses a PR whose residuals lack issue numbers. dogfood and ship say the same for anything a
+review found that the PR does not fix.
+
 ## Abort grace: a parent waits for the children its abort orphaned (#86)
 
 `control.abort()` raced past a running tool via `raceAbort`, so a parent's `session.done` resolved

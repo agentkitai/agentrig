@@ -1,6 +1,6 @@
 ---
 name: topic
-description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, one repair round, arbitrate deviations, land conditionally, halt when unsafe.
+description: Run one authorized roadmap band as a sequential release train - dogfood each row, review independently, repair to clean in a bounded converging loop, arbitrate deviations, land; halt only for a human.
 ---
 
 # Topic flow — one authorized roadmap band, landed row by row
@@ -33,9 +33,10 @@ all of those children; do not do their work in this parent session. Keep your ow
   invocation sentence is ambiguous, stop and ask the human before any child or branch is created.
 - Check that no row already has a half-pushed branch or open PR from an interrupted run. Resume its
   named session instead of spawning over it; if no resumable session is known, halt for the human.
-- Preflight child capacity before creating a branch. Reserve five children per row (builder, full
-  reviewer, possible fixer, possible delta reviewer, lander) plus two per deviation you are willing
-  to arbitrate (arbiter, continuation builder), set `--subagent-max-turns` to at
+- Preflight child capacity before creating a branch. The minimum is three children per remaining
+  row (builder, full reviewer, lander); repair rounds, arbitration and continuations draw on the
+  same pool as needed — a row that exhausts the pool mid-loop halts there, so size the pool for
+  the band (a row that goes three rounds costs nine). Set `--subagent-max-turns` to at
   least 60, and ensure the parent has enough token budget. Each child's token cap is `--max-tokens ÷
   --subagent-max-children`, and all children share the parent's total: raise `--max-tokens`
   proportionally when raising the pool, or leave it unset. If the child pool, turn cap, or resulting
@@ -56,9 +57,11 @@ For each recorded row, in order:
    The dogfood child stops at its PR and never merges. Record the session id
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
    children cannot reliably report their own ids.
-3. If the builder dies at its budget or leaves a half-pushed branch, halt. Report its recorded
-   session id for `agentrig sessions resume <id>`; never replace it with a fresh builder.
-   The one exception is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
+3. If the builder dies at its budget, spawn ONE continuation builder from whatever it pushed (its
+   branch, its PR if any, and its last report are the task text; nothing pushed means a fresh
+   builder loses nothing); a second death halts with both session ids for
+   `agentrig sessions resume <id>`. Never spawn a third builder over the same branch.
+   A different case is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
    of its report: it has pushed its work and is asking to change its contract. Do not judge the
    proposal yourself. Spawn an `arbiter` subagent with the proposal verbatim, the row text from
    §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE`, spawn a continuation builder on
@@ -75,42 +78,55 @@ For each recorded row, in order:
    result immediately.
 5. Record every child session id from its tool result and restate it in your own reply text in that
    same turn; tool results older than five turns may be elided from context. Bind the verdict to the
-   head SHA the reviewer
-   reports; if the PR head changes after review except through the repair path below, halt as
-   stale. If the reviewer dies at budget, cannot verify any claim, sees a merge conflict, finds red
-   CI on the actual head, halt. Otherwise sort its findings, never by severity: a finding of ANY
-   severity that carries a concrete proposed fix goes to the repair round below; a finding it labels
-   contract or authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it
-   could not verify is a finding whose fix is reproducible evidence in the PR body or deletion of
-   the claim. Halt only on a finding that comes with no concrete fix, or when the arbiter answers
-   "needs the human". The bound on this train is the number of rounds, not the severity of a
-   fixable defect: a HIGH with a one-line fix and a test is repair work, a MEDIUM with no fix is a
-   halt.
+   head SHA the reviewer reports; a head that changes other than through §3's loop is stale —
+   spawn a fresh reviewer on the new head rather than halting. If the reviewer dies at budget,
+   spawn one more on the same head. Sort its findings, never by severity: every finding that
+   carries a concrete proposed fix is repair work for §3; a finding it labels contract or
+   authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it could not
+   verify is a finding whose fix is reproducible evidence in the PR body or deletion of the claim;
+   a finding with no proposed fix is repair work too — the fixer's task is "find the fix or explain
+   in the PR body exactly why none exists", and only a HIGH that the fixer reports unfixable halts.
+   The bound on this train is rounds and convergence (§3), never the severity of a fixable defect:
+   a HIGH with a one-line fix and a test is repair work.
 
-## 3. One repair round
+## 3. Repair until clean — a bounded, converging loop
 
-- A clean verdict proceeds to landing. A verdict whose findings each carry a concrete proposed fix
-  gets exactly one repair round. If any finding is a contract or authorization one, arbitrate
-  BEFORE fixing: spawn an `arbiter` subagent with the deviation exactly as the reviewer described
-  it, the row text from §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE` the fixer's
-  task carries the verdict block, the arbiter's session id, and "record it under `## Deviations`
-  in the PR body and make the roadmap edit match its RECORD line"; on `VERDICT: REJECT` the
-  fixer's task carries "revert to the row as written" with the rejection; on "needs the human",
-  halt. This shares the one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED`
-  path. Then the repair round: spawn one fix subagent on the same PR branch, scoped verbatim to those findings and
+The train does not stop on a finding. It stops when it has run out of rounds, when a round stops
+converging, or when something needs a human. Per row, at most THREE repair rounds:
+
+- **Arbitrate first, once per row**, if any finding is a contract or authorization one: spawn an
+  `arbiter` subagent with the deviation exactly as the reviewer described it, the row text from
+  §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE` the fixer's task carries the
+  verdict block, the arbiter's session id, and "record it under `## Deviations` in the PR body and
+  make the roadmap edit match its RECORD line"; on `VERDICT: REJECT` it carries "revert to the row
+  as written" with the rejection; on "needs the human", halt. This shares the
+  one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED` path.
+- **Fix**: spawn one fix subagent on the same PR branch, scoped verbatim to every open finding and
   no unrelated code changes. Tell it not to rebut or skip a finding, to add fail-first proof where
-  behavior changes, run the green trio, push, update the PR description with every independent
-  finding and its resolution, and report the old/new head SHAs. Record its id from the tool result.
-- If that child cannot close every finding, dies at budget, encounters a conflict, or leaves CI red on
-  the new actual head, halt. Never spawn a replacement over its branch.
-- Otherwise spawn one fresh delta-review subagent. Give it the PR number and old/new head SHAs, ask
-  it to review only that delta under the review skill's standards, and do not pass either author's
-  report. Record its id from the tool result. Land only on a clean, fully verified delta verdict.
-  Any finding of any severity, or any
-  claim it cannot verify, halts the train for the human. There is no second fix or review round,
-  and no post-delta fix either: dogfood §8's labelled self-verified fix exists for an attended PR,
-  where a human reads the label at merge; an unattended train has no such reader.
-- The train never rebuts, downgrades, waives, or silently skips a review finding.
+  behavior changes (reuse the reviewer's exact mutant as the fail-first check when one was given),
+  run the green trio, push, update the PR description with every finding and its resolution, and
+  report the old/new head SHAs. Record its id. If it dies at budget, spawn ONE continuation fixer
+  from its pushed branch carrying the same findings; a second death halts. A merge conflict is the
+  fixer's to resolve (merge `main` in, never rebase); red CI on the new head is a finding for the
+  next round, not a halt.
+- **Re-review the delta**: spawn one fresh delta-review subagent with the PR number and old/new
+  head SHAs; it reviews only that delta under the review skill's standards and never sees either
+  author's report. Record its id. A clean, fully verified delta verdict lands (§4). Findings on the
+  delta open the next round.
+- **Convergence**: a round must close every finding from the previous round. A round that reopens
+  a closed finding, or that ends with as many or more open findings than it started with, is not
+  converging: halt with the full trace, because a fourth round would be the #82 treadmill. New
+  findings in code the fix touched are normal and go to the next round.
+- **After the third round**, whatever the delta reviewer still finds becomes **one GitHub issue
+  per finding**, never a note in the PR body: the last fixer files each with `gh issue create`
+  (title `[review residual] <one line>`, label `review-residual`, body: severity, file:line, the
+  concrete scenario, the reviewer's proposed fix, the PR number, the head SHA, the reviewer's
+  session id), then lists the issue numbers under `## Residuals` in the PR body. A LOW or MEDIUM
+  residual lands once its issue exists; a HIGH residual halts. The lander refuses a PR whose
+  `## Residuals` names a finding without an issue number.
+- The train never rebuts, downgrades, waives, or silently skips a review finding; filing a
+  residual as an issue after three rounds is not skipping it, it is the bound doing its job with
+  a place the finding can be picked up from.
 
 ## 4. Conditional land and continue
 
@@ -136,8 +152,12 @@ Always report:
 - every builder, reviewer, fixer, delta-reviewer, arbiter, and lander session id, labeled by row
   and role;
 - every deviation proposed, with the arbiter's verdict block and how the train continued;
-- every finding and whether it was fixed, plus the exact halt reason and resumable session id when
-  a child exhausted its budget.
+- every finding and whether it was fixed, per repair round, with the convergence count for each
+  round, plus the exact halt reason and resumable session id when a child exhausted its budget.
+
+The only halts left are: the arbiter answers "needs the human"; a HIGH the fixer reports
+unfixable or that survives three rounds; a round that does not converge; a child that dies twice;
+the child pool exhausted; a red post-merge `main`. Everything else is a child's job.
 
 Do not claim a train completed unless every row landed sequentially and `main` CI was green on the
 last merge commit. Do not merge anything after a stop condition.
