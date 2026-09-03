@@ -25,6 +25,7 @@ import {
 let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "agentrig-fork-resume-"));
+  calls = 0;
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
@@ -45,12 +46,17 @@ class FakeProvider implements ModelProvider {
 const usage = (i: number, o: number): ModelEvent => ({ type: "usage", usage: { input: i, output: o } });
 const stop = (r: "end_turn" | "tool_use"): ModelEvent => ({ type: "stop", reason: r });
 
+/** Counts executions: R3 acceptance says materializing a fork re-executes nothing. */
+let calls = 0;
 const echoTool = (): AnyTool => ({
   name: "echo",
   description: "echoes",
   inputSchema: z.object({ text: z.string() }),
   permission: "read",
-  execute: async (input: { text: string }) => ({ output: input.text, display: input.text }),
+  execute: async (input: { text: string }) => {
+    calls += 1;
+    return { output: input.text, display: input.text };
+  },
 });
 
 function config(provider: ModelProvider, store: SessionStore): AgentConfig {
@@ -89,6 +95,7 @@ describe("resuming a fork", () => {
     const child = await store.fork("parent", (await store.readAll("parent")).at(-1)!.seq);
     expect(await store.readSnapshot(child)).toBeNull();
     const parentHash = await hashFile(store.pathFor("parent"));
+    expect(calls).toBe(1);
 
     const second = new FakeProvider([[{ type: "text_delta", text: "child reply" }, usage(5, 2), stop("end_turn")]]);
     const s2 = createAgent(config(second, store)).run("now say bye", { resume: child });
@@ -107,10 +114,40 @@ describe("resuming a fork", () => {
     expect(msgs.some((m) => m.content.some((b) => b.type === "text" && b.text === "parent done"))).toBe(true);
     expect(msgs.at(-1)!.content[0]).toMatchObject({ type: "text", text: "now say bye" });
 
+    // the recorded tool result was consumed; the tool did not run again for the child
+    expect(calls).toBe(1);
     // the child wrote only its own log, and now has a snapshot of its own for the next resume
     expect(await hashFile(store.pathFor("parent"))).toBe(parentHash);
     expect((await store.readAll(child))[0]).toMatchObject({ type: "session.fork", parent: "parent" });
     expect(await store.readSnapshot(child)).not.toBeNull();
+  });
+
+  it("materializes the fields a written snapshot carries, task included, after a parent resume", async () => {
+    const ids = ["parent", "child"];
+    const store = new SessionStore({ root, newId: () => ids.shift() ?? "unexpected" });
+    const first = new FakeProvider([[{ type: "text_delta", text: "one" }, usage(3, 1), stop("end_turn")]]);
+    const s1 = createAgent(config(first, store)).run("first task", { cwd: root });
+    await collect(s1);
+    await s1.done;
+    const second = new FakeProvider([[{ type: "text_delta", text: "two" }, usage(4, 2), stop("end_turn")]]);
+    const s2 = createAgent(config(second, store)).run("second task", { resume: "parent" });
+    await collect(s2);
+    await s2.done;
+
+    const written = (await store.readSnapshot("parent"))!;
+    const child = await store.fork("parent", (await store.readAll("parent")).at(-1)!.seq);
+    const materialized = (await store.materializeSnapshot(child))!;
+    // the task is the latest run's, as the written snapshot records it — not the first
+    expect(materialized.task).toBe("second task");
+    expect(materialized).toMatchObject({
+      task: written.task,
+      cwd: written.cwd,
+      turns: written.turns,
+      usage: written.usage,
+      messages: written.messages,
+    });
+    // usd is the one field not derivable from the log (no event carries spend); documented
+    expect(materialized.usd).toBeUndefined();
   });
 
   it("closes a tool call left open at the fork point so the resumed request is acceptable", async () => {

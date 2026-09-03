@@ -14,7 +14,7 @@ import { TuiController } from "./controller.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
-import { forkSessionAt, renderSessionTree, sessionTree } from "../sessions.js";
+import { forkSessionAt, renderSessionTree } from "../sessions.js";
 import { currentGitBranch } from "../git-branch.js";
 import {
   parseSoft,
@@ -102,7 +102,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     const sessions = new SessionStore({ root: opts.root });
     controller.setSessions({
       fork: (parent, atSeq) => forkSessionAt(sessions, parent, atSeq),
-      tree: async (id) => renderSessionTree(await sessionTree(sessions, id), id),
+      tree: async (id) => renderSessionTree(await sessions.tree(id), id),
     });
   }
   // in the frame rather than on stderr: stderr would be overwritten by the first render

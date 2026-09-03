@@ -170,21 +170,32 @@ Changes:
   `session.fork` marker and switches the conversation to the child; the next prompt resumes the
   child, so the parent's log never gains a byte (the controller test hashes it across the fork and
   the child's first turn). `/tree` prints the root-to-current ancestry and every fork under the
-  root, found by reading the first event of each log in the store — the parent records nothing
-  about its forks, because it is never written. The renderer is the one R3d will drive with live
-  state. Both are injected into the controller like `/memory` and `/dream`, so it stays free of
-  stores; the TUI wires them to a `SessionStore` on the same root the agent writes.
+  root. Discovery is `SessionStore.tree(id)` in core (the CLI keeps only the renderer, which R3d
+  will drive with live state): the parent records nothing about its forks because it is never
+  written, so children are found by reading the first event of every log in the store. A log
+  that does not parse is skipped and named under `unreadable`, never fatal — one stray file must
+  not take `/tree` away from every healthy session — while the named session and its ancestors
+  must parse. Cycles terminate: a marker naming itself is nobody's child, and two markers naming
+  each other render once. Both commands are injected into the controller like `/memory` and
+  `/dream`, so it stays free of stores; the TUI wires them to a `SessionStore` on the agent's root.
 - Decision beyond the row, in core: a fork child had no snapshot until it completed a turn, so
   `sessions fork` produced an id that could be replayed but never continued — `run --resume
   <child>` died with "no snapshot found", and `/fork` would have too. Resume now falls back to
   `SessionStore.materializeSnapshot(id)`, which exists only for logs opening with `session.fork`
-  and folds the materialized tree into a snapshot (messages, task, cwd, turns from the last
-  `turn.end`, usage summed over `model.response`). A plain session with no snapshot is still an
+  and folds the materialized tree into a snapshot (messages, the latest task and cwd from
+  `session.start`/`session.resume`, turns from the last `turn.end`, usage summed over
+  `model.response`; a test compares every field against a written snapshot). Caveat: `usd` is
+  the one field no event records, so a fork child resumed without explicit pricing starts its
+  USD budget at zero where a written snapshot carries the parent's figure — token budgets are
+  unaffected. A plain session with no snapshot is still an
   error — "died before its first turn.end" must not become "resumable from nothing" — and the
   restored messages go through the same open-tool-call synthesis a written snapshot gets, because
   a fork point can sit between a `tool.call` and its result. Nothing executes: it is the R3a
-  materializer. Mutants killed: dropping the fallback, dropping the tail synthesis, widening the
-  fallback to non-forks, not switching the TUI session, allowing `/fork` mid-turn.
+  materializer, and the call-counter fixture pins that the resumed child runs no recorded tool
+  again. Mutants killed: dropping the fallback, dropping the tail synthesis, widening the
+  fallback to non-forks, not switching the TUI session, allowing `/fork` mid-turn, dropping the
+  cycle guard, keeping a self-parent as a child, making an unreadable log fatal, taking the first
+  task instead of the latest, not marking the fork resumable.
 - Skills: the land skill now checks the completed row carries `*(done)*` (the LOW #101's delta
   review found, made a precondition rather than a memory).
 

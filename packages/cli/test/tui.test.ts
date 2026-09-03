@@ -16,7 +16,7 @@ import {
 } from "@agentkitai/agentrig-core";
 import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
 import { TuiController } from "../src/tui/controller.ts";
-import { forkSessionAt, renderSessionTree, sessionTree } from "../src/sessions.ts";
+import { forkSessionAt, renderSessionTree } from "../src/sessions.ts";
 
 describe("parseCommand", () => {
   it("treats anything not starting with / as a task", () => {
@@ -871,7 +871,7 @@ describe("/fork and /tree (R3c)", () => {
         onAsk: (req) => controller.ask(req),
       }),
       onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq),
-      onTree: async (id) => renderSessionTree(await sessionTree(store, id), id),
+      onTree: async (id) => renderSessionTree(await store.tree(id), id),
     });
     return { controller, store };
   }
@@ -908,6 +908,28 @@ describe("/fork and /tree (R3c)", () => {
     expect(childEvents.some((e) => e.type === "session.resume")).toBe(true);
     // the plan and signals on screen belong to the inherited conversation, so they are kept
     expect(c.snapshot().turns).toBe(2);
+  });
+
+  it("a fork of a session that never finished a turn is still continued, not replaced", async () => {
+    // the parent dies before its first turn.end: the controller marks it non-resumable and would
+    // start a fresh session on the next prompt — but a fork is continued, whatever its parent was
+    const provider = new FakeProvider([
+      new Error("HTTP 400 Unsupported parameter: max_output_tokens"),
+      [{ type: "text_delta", text: "recovered" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeForking(provider, ["parent", "child"]);
+    await c.submit("this one breaks");
+    expect(c.snapshot().sessionId).toBe("parent");
+
+    await c.submit("/fork");
+    expect(c.snapshot().sessionId).toBe("child");
+    await c.submit("try again");
+    expect(c.snapshot().sessionId).toBe("child");
+    expect((await store.readAll("child")).some((e) => e.type === "session.resume")).toBe(true);
+    const sent = JSON.stringify(provider.requests.at(-1)!.messages);
+    expect(sent).toContain("this one breaks");
+    expect(sent).toContain("try again");
+    expect(text(c)).toContain("recovered");
   });
 
   it("/fork <seq> branches at that event of the current session's own log", async () => {

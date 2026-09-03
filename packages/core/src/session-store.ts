@@ -30,6 +30,25 @@ export const SessionSnapshot = z.object({
 });
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>;
 
+/** One node of a session tree: a session and, when it is a fork, where in its parent it branched. */
+export interface SessionTreeNode {
+  id: string;
+  /** Present when this session opened with `session.fork`. */
+  atSeq?: number;
+  children: SessionTreeNode[];
+}
+
+export interface SessionTree {
+  /** The oldest ancestor reachable from the named session. */
+  root: SessionTreeNode;
+  /** Root first, the named session last. */
+  ancestry: string[];
+  /** Ancestors named by a fork marker whose log is not in the store. */
+  missing: string[];
+  /** Logs in the store whose first line does not parse; skipped, never fatal. Sorted. */
+  unreadable: string[];
+}
+
 export interface SessionStoreOptions {
   /** Directory that will contain `<id>.jsonl` files. Created on first write. */
   root: string;
@@ -285,6 +304,10 @@ export class SessionStore {
    * continued. Null for anything that is not a fork: a plain session with no snapshot stays an
    * error, because "died before its first turn.end" must not silently become "resumable from an
    * empty conversation". Pure replay — recorded tool results are folded in, nothing executes.
+   *
+   * `usd` is absent: no event records accumulated spend, so a fork child resumed without explicit
+   * pricing starts its USD budget at zero where a written snapshot would carry the parent's figure.
+   * Token usage is carried, so `maxTokens` budgets are unaffected.
    */
   async materializeSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
     assertSessionId(sessionId);
@@ -306,10 +329,9 @@ export class SessionStore {
     let turns = 0;
     const usage: Usage = { input: 0, output: 0 };
     for (const event of events) {
-      if (event.type === "session.start") {
-        if (task === "") task = event.task;
-        cwd = event.cwd;
-      } else if (event.type === "session.resume") {
+      if (event.type === "session.start" || event.type === "session.resume") {
+        // the latest task, as a written snapshot carries the task of the run that wrote it
+        if (event.task !== "") task = event.task;
         cwd = event.cwd;
       } else if (event.type === "turn.end") {
         turns = Math.max(turns, event.n);
@@ -329,6 +351,67 @@ export class SessionStore {
       messages: messagesFromEvents(events),
       ts: this.now(),
     };
+  }
+
+  /** The first event of a session's own log; null when the log does not exist. Reads one line. */
+  async firstEvent(sessionId: string): Promise<HarnessEvent | null> {
+    assertSessionId(sessionId);
+    try {
+      for await (const event of this.read(sessionId)) return event;
+      return null;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+  }
+
+  /**
+   * Ancestry and descendants of one session, from `session.fork` markers alone (R3c). A parent's
+   * log records nothing about its forks — it is never written — so children are found by reading
+   * the first event of every log in the store. The named session and its ancestors must parse;
+   * any other log that does not is skipped and named in `unreadable`, so one stray file in the
+   * directory cannot take the tree away from every healthy session.
+   */
+  async tree(sessionId: string): Promise<SessionTree> {
+    assertSessionId(sessionId);
+    const ancestry: string[] = [];
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null = sessionId;
+    while (cursor !== null && !seen.has(cursor)) {
+      seen.add(cursor);
+      ancestry.unshift(cursor);
+      const first = await this.firstEvent(cursor);
+      if (first === null && cursor !== sessionId) missing.push(cursor);
+      cursor = first?.type === "session.fork" ? first.parent : null;
+    }
+
+    const byParent = new Map<string, Array<{ id: string; atSeq: number }>>();
+    const unreadable: string[] = [];
+    for (const ref of await this.list()) {
+      let first: HarnessEvent | null;
+      try {
+        first = await this.firstEvent(ref.id);
+      } catch {
+        unreadable.push(ref.id);
+        continue;
+      }
+      if (first?.type !== "session.fork") continue;
+      const siblings = byParent.get(first.parent) ?? [];
+      siblings.push({ id: ref.id, atSeq: first.atSeq });
+      byParent.set(first.parent, siblings);
+    }
+
+    const build = (nodeId: string, atSeq: number | undefined, path: Set<string>): SessionTreeNode => {
+      // `here` includes this node: a marker naming itself as parent is a child of nobody
+      const here = new Set([...path, nodeId]);
+      const children = (byParent.get(nodeId) ?? [])
+        .filter((c) => !here.has(c.id))
+        .sort((a, b) => a.atSeq - b.atSeq || a.id.localeCompare(b.id))
+        .map((c) => build(c.id, c.atSeq, here));
+      return { id: nodeId, ...(atSeq === undefined ? {} : { atSeq }), children };
+    };
+    return { root: build(ancestry[0]!, undefined, new Set()), ancestry, missing, unreadable: unreadable.sort() };
   }
 
   async list(): Promise<SessionRef[]> {

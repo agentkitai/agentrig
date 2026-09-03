@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { forkSession, forkSessionAt, renderSessionTree, replaySession, searchSessions, sessionTree } from "../src/sessions.ts";
+import { forkSession, forkSessionAt, renderSessionTree, replaySession, searchSessions } from "../src/sessions.ts";
 
 let root: string;
 
@@ -100,7 +100,7 @@ describe("session tree (R3c)", () => {
     const sibling = await forkSession(store, "rootsess", 2);
     await start(store, "unrelated", "elsewhere");
 
-    const tree = await sessionTree(store, grandchild);
+    const tree = await store.tree(grandchild);
     expect(tree.ancestry).toEqual(["rootsess", child, grandchild]);
     expect(tree.missing).toEqual([]);
     expect(tree.root).toEqual({
@@ -118,14 +118,47 @@ describe("session tree (R3c)", () => {
       `│  └─ ${grandchild} (forked at seq 1)  ← you are here`,
       `└─ ${sibling} (forked at seq 2)`,
     ]);
-    expect(lines.join("\n")).not.toContain("unrelated");
+    // the plain session is a root of its own, not a stray leaf of this tree
+    expect((await store.tree("unrelated")).ancestry).toEqual(["unrelated"]);
+  });
+
+  it("one unreadable log in the directory is skipped and named, not fatal for every /tree", async () => {
+    const store = new SessionStore({ root, newId: () => "kid" });
+    await start(store, "good", "fine");
+    const kid = await forkSession(store, "good", 0);
+    await writeFile(join(root, "bad.jsonl"), "this is not json\n", "utf8");
+    await writeFile(join(root, "empty.jsonl"), "", "utf8");
+
+    const tree = await store.tree("good");
+    expect(tree.unreadable).toEqual(["bad"]);
+    expect(tree.root.children.map((c) => c.id)).toEqual([kid]);
+    expect(renderSessionTree(tree, "good").at(-1)).toBe("(skipped 1 unreadable log(s): bad)");
+
+    // the named session itself must still parse: its corruption is the caller's error
+    await expect(store.tree("bad")).rejects.toThrow();
+  });
+
+  it("terminates on a marker that names itself, and on two markers naming each other", async () => {
+    const store = new SessionStore({ root });
+    await store.append("loop", { type: "session.fork", parent: "loop", atSeq: 0 });
+    const self = await store.tree("loop");
+    expect(self.ancestry).toEqual(["loop"]);
+    expect(self.root).toEqual({ id: "loop", children: [] });
+    expect(renderSessionTree(self, "loop")).toEqual(["loop  ← you are here"]);
+
+    await store.append("a", { type: "session.fork", parent: "b", atSeq: 0 });
+    await store.append("b", { type: "session.fork", parent: "a", atSeq: 0 });
+    const cycle = await store.tree("a");
+    expect(cycle.ancestry).toEqual(["b", "a"]);
+    expect(cycle.root).toEqual({ id: "b", children: [{ id: "a", atSeq: 0, children: [] }] });
+    expect(renderSessionTree(cycle, "a").filter((l) => l.includes("you are here"))).toHaveLength(1);
   });
 
   it("a plain session is its own root, with its forks as children", async () => {
     const store = new SessionStore({ root, newId: () => "kid" });
     await start(store, "solo", "alone");
     const kid = await forkSession(store, "solo", 0);
-    const tree = await sessionTree(store, "solo");
+    const tree = await store.tree("solo");
     expect(tree.ancestry).toEqual(["solo"]);
     expect(renderSessionTree(tree, "solo")).toEqual(["solo  ← you are here", `└─ ${kid} (forked at seq 0)`]);
   });
@@ -133,7 +166,7 @@ describe("session tree (R3c)", () => {
   it("tolerates a parent whose log is gone rather than throwing at the prompt", async () => {
     const store = new SessionStore({ root });
     await store.append("orphan", { type: "session.fork", parent: "vanished", atSeq: 3 });
-    const tree = await sessionTree(store, "orphan");
+    const tree = await store.tree("orphan");
     expect(tree.ancestry).toEqual(["vanished", "orphan"]);
     expect(tree.missing).toEqual(["vanished"]);
     expect(renderSessionTree(tree, "orphan")).toEqual([
