@@ -114,14 +114,17 @@ Staleness, bounded: if you push more commits after a review ran, the review is s
 and never a fresh full dual review per commit. A fix-only commit that addresses review findings
 is verified by its fail-first regression tests, not by another review round. Cap the cycle at
 **one delta re-review** after the findings round — ONE reviewer over the delta, never a fresh dual
-round. **The cap bounds review rounds, not fixes**: whatever that delta reviewer finds is recorded
-in the PR body (finding, severity, your assessment) and is never re-reviewed by a second agent —
-§9's "fix everything" applies to the findings round only. A LOW with a concrete fix may still be
-fixed after the delta round when the fix carries a fail-first test and a killed mutant: commit it
-separately, label it in the PR body as **post-delta, self-verified, not re-reviewed**, and let the
-human see that label at merge. A MEDIUM or HIGH the delta reviewer finds is recorded, never fixed
-post-delta: it needs eyes a self-check cannot give. Under `topic` nobody reads a label, so there
-the delta round is record-only and any finding halts. Per-commit full-review loops have burned
+round. **The cap bounds review rounds, not fixes**: whatever that delta reviewer finds is never
+re-reviewed by a second agent — §9's "fix everything" applies to the findings round only. A LOW
+with a concrete fix may still be fixed after the delta round when the fix carries a fail-first
+test and a killed mutant: commit it separately, label it in the PR body as **post-delta,
+self-verified, not re-reviewed**, and let the human see that label at merge. Anything the delta
+reviewer finds that you do not fix — a MEDIUM or HIGH (which needs eyes a self-check cannot
+give), or a LOW you judge inherent — becomes **one GitHub issue per finding** via
+`gh issue create` (title `[review residual] <one line>`, label `review-residual`, body: severity,
+file:line, scenario, proposed fix, PR number, head SHA, reviewer session id), listed by number
+under `## Residuals` in the PR body. A finding that lives only in a PR body is a finding nobody
+will act on. Under `topic` the loop in that skill applies instead. Per-commit full-review loops have burned
 hours of budget on nits without converging: the #82 run spent two hours on a skill file because
 "fix everything" and "one delta round" were read as compatible; PR #90 is the shape this rule
 describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
@@ -131,8 +134,9 @@ describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
 - Fix majors AND minors, each with a fail-first regression test — reuse the reviewer's exact
   mutant as the fail-first check where one was given.
 - A finding you believe is wrong is rebutted in the PR body with the reason, never silently
-  skipped. Re-run the full green trio, push, and update the PR body so it describes the final
-  state (a body that describes the pre-review code is stale documentation).
+  skipped. A finding you accept but do not fix in this PR is an issue (§8's `review-residual`
+  format), never a paragraph. Re-run the full green trio, push, and update the PR body so it
+  describes the final state (a body that describes the pre-review code is stale documentation).
 
 ## 10. Stop at the PR
 

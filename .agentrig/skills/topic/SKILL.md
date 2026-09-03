@@ -117,11 +117,16 @@ converging, or when something needs a human. Per row, at most THREE repair round
   a closed finding, or that ends with as many or more open findings than it started with, is not
   converging: halt with the full trace, because a fourth round would be the #82 treadmill. New
   findings in code the fix touched are normal and go to the next round.
-- **After the third round**, whatever the delta reviewer still finds is recorded in the PR body
-  with severity and the fixer's assessment: LOW or MEDIUM residual lands with that record; any
-  HIGH residual halts.
-- The train never rebuts, downgrades, waives, or silently skips a review finding; recording a
-  residual after three rounds is not skipping it, it is the bound doing its job.
+- **After the third round**, whatever the delta reviewer still finds becomes **one GitHub issue
+  per finding**, never a note in the PR body: the last fixer files each with `gh issue create`
+  (title `[review residual] <one line>`, label `review-residual`, body: severity, file:line, the
+  concrete scenario, the reviewer's proposed fix, the PR number, the head SHA, the reviewer's
+  session id), then lists the issue numbers under `## Residuals` in the PR body. A LOW or MEDIUM
+  residual lands once its issue exists; a HIGH residual halts. The lander refuses a PR whose
+  `## Residuals` names a finding without an issue number.
+- The train never rebuts, downgrades, waives, or silently skips a review finding; filing a
+  residual as an issue after three rounds is not skipping it, it is the bound doing its job with
+  a place the finding can be picked up from.
 
 ## 4. Conditional land and continue
 

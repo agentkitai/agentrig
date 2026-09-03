@@ -12,6 +12,13 @@ must carry that invocation verbatim and identify the band and row; preserve the 
 PR description and squash-merge commit body. A review verdict, green CI, or a PR body saying "ready"
 is not authorization.
 
+## 0. Residuals are issues, not prose
+
+Before anything else: if the PR body has a `## Residuals` section, every entry must name an
+open GitHub issue number, and each issue must exist. A residual described in prose without an
+issue is not recorded — refuse to land and say which entry needs its issue. Findings in
+`## Deviations` (arbiter records) and rebuttals are not residuals.
+
 ## 1. Preconditions — all of them, re-checked now
 
 - The human named this PR and said merge, or authorized its fixed roadmap band by invoking `topic`.

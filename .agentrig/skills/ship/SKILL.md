@@ -43,7 +43,8 @@ Do not implement, review, or fix anything in this session yourself.
   round's findings), then stop again with the verdict. Severity never decides fixability: any
   finding with a concrete proposed fix is fixer work. A contract or authorization finding goes to
   an `arbiter` subagent first, exactly as `topic` §3 does, and the fixer carries the verdict.
-  Residual findings after the third round are recorded in the PR body for the human.
+  Residual findings after the third round are filed as GitHub issues, one per finding, in
+  `topic` §3's `review-residual` format, and listed by number under `## Residuals` in the PR body.
 - No answer is an answer: never treat silence, a timeout, or your own confidence as approval.
   A ship run that ends waiting at the verdict is a success.
 
