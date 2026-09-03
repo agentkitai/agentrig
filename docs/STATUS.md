@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3a is complete; R3b is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3b is complete; R3c is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -139,8 +139,8 @@ Changes:
 | Row | Deliverable | Status |
 |---|---|---|
 | R3a | `session.fork` event, append-only child creation, and recursive event/message materialization | done |
-| R3b | Session fork/search CLI and bounded replay | next |
-| R3c | TUI `/fork` and `/tree` | pending |
+| R3b | Session fork/search CLI and bounded replay | done |
+| R3c | TUI `/fork` and `/tree` | next |
 | R3d | Live `/children` tree | pending |
 
 - R3a adds `SessionStore.fork(parent, atSeq)`: the child log contains only its seq-0
@@ -160,6 +160,12 @@ Changes:
   child is written, compares a real parallel-tool plus compaction run to its stored message state,
   preserves colliding files byte-for-byte, covers both patch modes, and uses a counter tool fixture
   to prove materialization does not repeat effects. No roadmap deviation was needed.
+- R3b adds `sessions fork <id> [--at <seq>]`, defaulting to the final event in the parent's own
+  physical log; `sessions replay <id> [--until <seq>]`, which renders the side-effect-free
+  materialized tree; and `sessions search <query>`, which runs the memory package's existing BM25
+  scorer over those same rendered materialized transcripts. Sequence options reject non-negative
+  integer violations at argument parsing, and no scorer move or dependency-boundary change was
+  needed.
 
 ## R2 notes
 
