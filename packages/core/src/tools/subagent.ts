@@ -173,9 +173,6 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // subagent tool `childConfig()` supplied (it carries the CURRENT depth) and, if another
       // level is allowed, add one that knows it is a level deeper.
       const childTools = config.tools.filter((t) => t.name !== SUBAGENT_TOOL);
-      if (depth + 1 < maxDepth) {
-        childTools.push(subagentTool({ ...opts, depth: depth + 1, ancestorPools: chain }));
-      }
 
       const budget: Budget = { ...(opts.childBudget ?? {}), maxTurns };
       const pricing = opts.pricing ?? config.pricing;
@@ -184,9 +181,21 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // waiting — and the parent would record a child "still running" that ends a moment later.
       // Floored at 1ms (#96): a parent at 1ms would otherwise hand its child 0 and record
       // "still running 0ms after abort" without waiting a tick.
+      const childGrace = Math.max(1, Math.floor(abortGraceOf(config) / 2));
+      if (depth + 1 < maxDepth) {
+        // The grandchild's grace must derive from THIS child's, not from the root config the
+        // caller's `childConfig()` returns: read from the root, a grandchild got the same grace
+        // as its parent, and its end-hook cut landed after the parent had stopped waiting.
+        childTools.push(subagentTool({
+          ...opts,
+          depth: depth + 1,
+          ancestorPools: chain,
+          childConfig: () => ({ ...opts.childConfig(), abortGraceMs: childGrace }),
+        }));
+      }
       const child = opts.createAgent({
         ...config,
-        abortGraceMs: Math.max(1, Math.floor(abortGraceOf(config) / 2)),
+        abortGraceMs: childGrace,
         tools: childTools,
         // NOT `{...config.budget}`: a child inherits no allowance it was not explicitly given
         budget,
@@ -224,11 +233,25 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // running and billing. `subagent.end` is emitted HERE rather than after the loop: by the
       // time the loop unwinds the parent is ending, and events from a finished session are
       // dropped — which is how a spawn came to be logged with no matching end.
+      let cut: ReturnType<typeof setTimeout> | undefined;
       const onAbort = (): void => {
         session.control.abort();
         end("aborted");
+        // The child's session_end hooks (#88) are cut with a second abort before the parent
+        // stops waiting at its own grace (#86): a child still ingesting after that would be
+        // exactly the orphan the parent's note reports. The parent's deadline is two child
+        // graces from its own finally. The child may first spend one whole grace waiting for a
+        // tool that ignores the abort; its hooks then get half a grace; the last quarter covers
+        // the child's own session.end write and the parent's stream drain. Armed at the child's
+        // grace, a child mid-tool at abort ran no end hooks at all.
+        cut = setTimeout(() => session.control.abort(), childGrace + Math.floor(childGrace / 2));
+        void session.done.then(() => clearTimeout(cut), () => clearTimeout(cut));
       };
+      // the parent's SECOND abort — stop waiting for end hooks — reaches the child's end hooks too
+      const onEndAbort = (): void => session.control.abort();
       ctx.signal.addEventListener("abort", onAbort, { once: true });
+      ctx.endSignal?.addEventListener("abort", onEndAbort, { once: true });
+      if (ctx.endSignal?.aborted === true) onEndAbort();
       // A listener added to an already-aborted signal never fires. The parent can abort between
       // its top-of-loop check and this call (a pre_tool hook, a permission prompt), and a child
       // spawned into that window would otherwise run its full budget with nobody able to stop it.
@@ -312,6 +335,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         // leave a pool permanently `live` (never evictable) and permanently charged
         settle();
         ctx.signal.removeEventListener("abort", onAbort);
+        ctx.endSignal?.removeEventListener("abort", onEndAbort);
       }
     },
   } as AnyTool;

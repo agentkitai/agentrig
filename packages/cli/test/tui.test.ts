@@ -13,6 +13,7 @@ import {
   subagentTool,
   type AnyTool,
   type HarnessEvent,
+  type Hook,
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
@@ -146,18 +147,21 @@ function makeController(turns: Array<ModelEvent[] | Error>, extra: Partial<Const
 function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
+  hooks: Hook[] = [],
+  tools: AnyTool[] = [],
 ) {
   const controller: TuiController = new TuiController({
     cwd: root,
     agent: createAgent({
       provider,
-      tools: [askingTool()],
+      tools: [askingTool(), ...tools],
       permissions: new RulePolicy(defaultRules),
       systemPrompt: "test",
       store: new SessionStore({ root }),
       budget: { maxTurns: 5 },
       maxTokensPerTurn: 100,
       onAsk: (req) => controller.ask(req),
+      ...(hooks.length === 0 ? {} : { hooks }),
     }),
     ...extra,
   });
@@ -547,6 +551,45 @@ describe("TuiController", () => {
     await running;
     expect(c.snapshot().pending).toBeNull();
     expect(c.snapshot().status).toBe("idle");
+  });
+
+  it("a second /abort reaches the session's end hooks, and says what each abort does (#88)", async () => {
+    // aborted mid-tool: the end hooks then RUN for the aborted session, and only the second
+    // abort cuts them — which is what the controller's two messages promise
+    let hookOutcome = "not run";
+    let toolStarted: () => void = () => {};
+    const started = new Promise<void>((r) => { toolStarted = r; });
+    const slow: AnyTool = {
+      name: "slow",
+      description: "waits for the abort",
+      inputSchema: z.object({}),
+      permission: "read",
+      paths: () => [],
+      execute: async (_i, ctx) => {
+        toolStarted();
+        await new Promise<void>((r) => ctx.signal.addEventListener("abort", () => r(), { once: true }));
+        ctx.signal.throwIfAborted();
+        return { output: "", display: "" };
+      },
+    };
+    const provider = new FakeProvider([[{ type: "tool_use", id: "t1", name: "slow", input: {} }, usage(1, 1), stop("tool_use")]]);
+    const c = makeControllerWith(provider, {}, [{
+      point: "session_end",
+      handler: (ctx) =>
+        new Promise((resolve) => {
+          hookOutcome = "running";
+          ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; resolve({ action: "continue" }); }, { once: true });
+        }),
+    }], [slow]);
+    const running = c.submit("hello");
+    await started;
+    c.abort();
+    expect(last(c)).toContain("aborting… (abort again to skip session_end hooks)");
+    await vi.waitFor(() => expect(hookOutcome).toBe("running"));
+    c.abort();
+    expect(last(c)).toContain("skipping session_end hooks");
+    await running;
+    expect(hookOutcome).toBe("cut");
   });
 
   it("/abort with nothing running says so instead of throwing", async () => {

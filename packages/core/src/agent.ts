@@ -375,6 +375,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
+  /**
+   * `session_end` hooks run under this signal, not the session's (#88). The session's signal is
+   * aborted by definition on an aborted session, and `runHooks` skips a point whose signal is
+   * already aborted — so no `session_end` hook ever ran for an abort, and the ingest and dream
+   * trigger that hang off that point never saw a session that was cut off, which is exactly the
+   * kind a memory wants. The abort reason still reaches hooks in `summary.reason`. A SECOND abort,
+   * once the session is ending, aborts this one too: the hooks are bounded by their budget, but
+   * a person pressing ctrl-C twice means "stop waiting", not "run ingest for fifteen minutes".
+   */
+  const endController = new AbortController();
+  let ending = false;
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook" }> = [];
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   let replanReason: string | null = null;
@@ -448,10 +459,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   ): Promise<{ denied?: string; patches: unknown[]; injects: string[] }> => {
     const hooks = config.hooks ?? [];
     if (!hooks.some((h) => h.point === point)) return { patches: [], injects: [] };
+    const signal = point === "session_end" ? endController.signal : abortController.signal;
     return runHooks(
       {
         hooks,
-        signal: abortController.signal,
+        signal,
         // one wall-clock budget for the whole point, so generous per-hook overrides cannot add up
         totalTimeoutMs: point === "session_end" ? (config.sessionEndBudgetMs ?? 15 * 60_000) : 60_000,
         ...(config.hookTimeoutMs === undefined ? {} : { timeoutMs: config.hookTimeoutMs }),
@@ -460,7 +472,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         },
       },
       point,
-      { ...ctx, signal: abortController.signal },
+      { ...ctx, signal },
     );
   };
 
@@ -1054,6 +1066,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      ending = true;
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
       // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.
@@ -1207,6 +1220,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // what tool.call recorded — not anything the tool or model could claim later
         emit: emitFromTool(tool.name),
         signal: abortController.signal,
+        endSignal: endController.signal,
       };
       const t0 = now();
       let sandboxDenialRecorded = false;
@@ -1421,6 +1435,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       pause: () => gate.pause(),
       resume: () => gate.resume(),
       abort: () => {
+        // an abort while the session is already ending is the second one: stop the end hooks too
+        if (ending || abortController.signal.aborted) endController.abort();
         abortController.abort();
         gate.resume();
       },

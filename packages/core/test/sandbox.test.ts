@@ -415,6 +415,30 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     }
   });
 
+  it("a path deeper than sixty-four components is judged by its string: a real deep tree cannot make the walk slow", async () => {
+    // a child may build a two-thousand-level tree inside the workspace; resolving leaves under it
+    // cost one syscall per existing component, quadratic over the budget — minutes per stderr
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-deeptree-")));
+    try {
+      const deepDir = join(root, ...Array.from({ length: 700 }, () => "d"));
+      await mkdir(deepDir, { recursive: true });
+      const ww = { mode: "workspace-write" as const, cwd: root };
+      const leaves = Array.from({ length: 16 }, (_, i) => `'${deepDir}/${i}'`).join(" ");
+      const line = `touch: cannot touch ${leaves}: Read-only file system`;
+      const t0 = Date.now();
+      for (let i = 0; i < 50; i += 1) expect(writeDenialPlausible(line, ww)).toBe(false);
+      expect(Date.now() - t0).toBeLessThan(1_500);
+      // the string judgement past the cap: an outside string stays outside
+      expect(writeDenialPlausible(`touch: cannot touch '/etc/${"d/".repeat(70)}x': Read-only file system`, ww)).toBe(true);
+      // a path through a regular file, and a component longer than any name: absent, not a crash
+      await writeFile(join(root, "file.txt"), "x");
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/file.txt/x': Read-only file system`, ww)).toBe(false);
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/${"n".repeat(300)}/x': Read-only file system`, ww)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("the classifier reads the head and the tail of a huge stderr, never the middle", () => {
     const head = "touch: cannot touch '/etc/head': Read-only file system\n";
     const tail = "\ntouch: cannot touch '/etc/tail': Read-only file system";
@@ -424,6 +448,17 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     expect(seen.startsWith(head)).toBe(true);
     expect(seen.endsWith(tail)).toBe(true);
     expect(classifiable("small")).toBe("small");
+    // the cut lands on a line boundary, so a denial line straddling it is never split into a
+    // fragment that names only its inside path
+    const filler = "x".repeat(1_000) + "\n";
+    const straddle = "Error: EROFS: read-only file system, copyfile '/work/proj/a' -> '/etc/x'\n";
+    // the line begins 30 characters before the head cut and ends after it
+    const headCase = "x".repeat(64 * 1024 - 31) + "\n" + straddle + filler.repeat(200);
+    expect(classifiable(headCase)).toContain(straddle.trim());
+    // and one whose middle is exactly where the tail cut would land
+    const pre = filler.repeat(70);
+    const tailCase = pre + straddle + "y".repeat(64 * 1024 - 30);
+    expect(classifiable(tailCase)).toContain(straddle.trim());
   });
 
   it("a symlink inside the workspace that points outside is outside to the boundary", async () => {
@@ -512,7 +547,7 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       .rejects.toBeInstanceOf(SandboxDeniedError);
   });
 
-  it("corroboration is spent on at most fifty matching lines; a matching line past that is kept as a denial", async () => {
+  it("corroboration touches the filesystem for at most fifty distinct matching lines; past that it judges by string", async () => {
     const inside = "touch: cannot touch 'CWD/a': Read-only file system";
     const outside = "touch: cannot touch '/etc/x': Read-only file system";
     // a genuine denial after chatty inside lines is still classified, however late
@@ -521,9 +556,15 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     // forty inside-only lines: every one corroborated and dropped — an ordinary failure
     const forty = Array.from({ length: 40 }, () => inside).join("\n");
     expect((await dockerRun(forty, "workspace-write")).output.exitCode).toBe(1);
-    // sixty: the budget runs out and the fifty-first is kept uncorroborated — narrowing only
-    const sixty = Array.from({ length: 60 }, () => inside).join("\n");
-    await expect(dockerRun(sixty, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
+    // sixty DISTINCT forged inside lines: past the budget they are judged by string alone and
+    // still dropped — repetition does not buy a prompt
+    const sixty = Array.from({ length: 60 }, (_, i) => `touch: cannot touch 'CWD/a${i}': Read-only file system`).join("\n");
+    expect((await dockerRun(sixty, "workspace-write")).output.exitCode).toBe(1);
+    // the same line sixty times is one line
+    const same = Array.from({ length: 60 }, () => inside).join("\n");
+    expect((await dockerRun(same, "workspace-write")).output.exitCode).toBe(1);
+    // and a genuine outside denial after sixty distinct inside ones is still classified
+    await expect(dockerRun(`${sixty}\n${outside}`, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
   });
 
   it("docker: the same line about a path outside the workspace, or under read-only, is still a denial", async () => {

@@ -180,6 +180,60 @@ Changes:
   Mutants killed: linear probing (timing); one hop only; no operand pass; no corroboration
   budget; no byte bound; quoted bare words gated again. Not observable: `realpath`-first on an
   existing link (the hop-by-hop path reaches the same target).
+- Fourth delta round: the probe count was bounded but each probe and the final `realpath` cost
+  one syscall per EXISTING component, so a child that built a two-thousand-level tree inside
+  the workspace made each classification a three-minute block. The walk now judges a path deeper
+  than sixty-four components by its string (drop-only), uses the native `realpath`, and a test
+  builds a real seven-hundred-level tree and bounds fifty lines of sixteen leaves. Past the
+  fifty-line corroboration budget a matching line is judged by string alone rather than kept,
+  so printing a forged inside line fifty-one times no longer buys a prompt; identical lines are
+  folded first; a late genuine outside denial is still kept. The head/tail cut of a huge stderr
+  lands on line boundaries so no denial line is split into an inside-only fragment. ENOTDIR
+  and ENAMETOOLONG probes are pinned as absent, not thrown. Mutants killed: no depth cap
+  (timing); past-budget lines kept; no catch around the probe; cut not line-aligned.
+## Open-issue sweep (2026-09-03)
+
+- **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the
+  session's own signal, which an abort has fired by definition, and `runHooks` skips a point whose
+  signal is already aborted; so the ingest and dream trigger that hang off `session_end` never saw
+  a cut-off session. `session_end` now runs under its own controller; the abort reason still
+  reaches hooks as `summary.reason`. A second abort once the session is ending aborts that
+  controller too, so ctrl-C twice means "stop waiting" rather than "run ingest for fifteen
+  minutes". Tests: an aborted session's `session_end` hook runs with reason `aborted` and a live
+  signal; a second abort stops a hook that would otherwise wait out its budget; a session abort
+  still stops a hanging `pre_tool` hook. Mutants killed: the session's signal for the point;
+  ignoring the second abort; every point under the end signal.
+- Children (review finding): the parent's signal fires once, and that once is the child's first
+  abort, so a child's `session_end` hooks could outlive the parent's grace with nothing able to
+  stop them. The subagent tool now cuts them with a second abort at 1.5× the child's grace —
+  the child may first spend its whole grace waiting for a tool that ignores the abort, and its
+  hooks still get half a grace after that, ending before the parent's own grace (2×) expires;
+  armed at the child's grace, a child mid-tool at abort ran no end hooks at all — and forwards
+  the parent's own second abort through a new optional `ToolContext.endSignal` (a field added,
+  never repurposed) so ctrl-C twice reaches the child's hooks too. The CLI's children carry no
+  hooks today, so this binds SDK embedders; CLI children still leave no ingest behind
+  (unchanged, noted). A grandchild's grace now derives from its parent's (the nested tool's
+  `childConfig` carries the child's halved grace), where it used to read the root config and
+  get the same grace as its parent, so its cut landed after the child had stopped waiting. The
+  tests set the parent's real grace and assert it never reports the child as still running, and
+  that the stubborn-tool case really spent the child's grace (its own log carries the orphan
+  note). Mutants killed: no grace cut; second abort not forwarded; cut at the child's grace; cut
+  at the parent's deadline; grandchild reading the root grace.
+- Both entry points say what each abort does: "aborting… (abort again to skip session_end
+  hooks)" then "skipping session_end hooks" — the first promises nothing about the hooks, because
+  a session that had already finished its turn and was in its hooks is cut by the first abort
+  and the controller cannot tell that case from a mid-turn abort. The TUI keeps answering SIGINT
+  until shutdown has finished (it used to remove the handler first, so a ctrl-C during the hooks
+  went to Node's default handler and killed the process mid-hook with no `session.end`) and says
+  so on stderr, since the frame is gone by then; headless `run` prints the same two lines. Both
+  read `abortNotice(nth, key)`, tested; the SIGINT wiring itself is code-read only.
+- Semantics, stated: an abort that lands while the session is already ending (a normally
+  finished session in its end hooks) counts as the second abort and stops them — that is what a
+  person pressing ctrl-C during a long ingest means.
+- **#100 — the malformed-injection test could not tell "ignored" from "injected an empty
+  message".** It now pins the exact provider conversation (the task alone), the exact appended
+  messages (the reply alone), and the snapshot and materialized lists. Mutant killed: reporting
+  the error and then injecting `""`.
 - **#104 — a forged spawn record naming a deeper session was undecidable.** `session.start`
   gains an optional `parent` (schema-added, never repurposed); the subagent tool passes
   `parent: ctx.sessionId` into the child's `run`, so a child's own log names its parent.

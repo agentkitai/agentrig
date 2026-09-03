@@ -30,6 +30,7 @@ const DENIAL_EXCERPT_CHARS = 200;
 /** Bytes of a child's stderr the classifier reads: its head and its tail, never the middle. */
 const CLASSIFY_HEAD_CHARS = 64 * 1024;
 const CLASSIFY_TAIL_CHARS = 64 * 1024;
+const CLASSIFY_SLACK_CHARS = 8 * 1024;
 
 /**
  * The part of an unbounded stderr the classifier looks at. A denial is printed where the write
@@ -38,7 +39,13 @@ const CLASSIFY_TAIL_CHARS = 64 * 1024;
  */
 export function classifiable(stderr: string): string {
   if (stderr.length <= CLASSIFY_HEAD_CHARS + CLASSIFY_TAIL_CHARS) return stderr;
-  return `${stderr.slice(0, CLASSIFY_HEAD_CHARS)}\n[…]\n${stderr.slice(-CLASSIFY_TAIL_CHARS)}`;
+  // cut on line boundaries (within a few KB of the budget) so no denial line is split into a
+  // fragment that names only its inside path
+  const headEnd = stderr.indexOf("\n", CLASSIFY_HEAD_CHARS);
+  const head = stderr.slice(0, headEnd === -1 || headEnd > CLASSIFY_HEAD_CHARS + CLASSIFY_SLACK_CHARS ? CLASSIFY_HEAD_CHARS : headEnd);
+  const tailStart = stderr.lastIndexOf("\n", stderr.length - CLASSIFY_TAIL_CHARS);
+  const tail = stderr.slice(tailStart === -1 || tailStart < stderr.length - CLASSIFY_TAIL_CHARS - CLASSIFY_SLACK_CHARS ? -CLASSIFY_TAIL_CHARS : tailStart + 1);
+  return `${head}\n[…]\n${tail}`;
 }
 
 const activeSandbox = new AsyncLocalStorage<ActiveSandbox>();
@@ -88,13 +95,15 @@ export function throwIfSandboxDenied(stderr: string): void {
 function firstDenialLine(
   stderr: string,
   patterns: readonly RegExp[],
-  unless?: RegExp | ((line: string) => boolean),
+  unless?: RegExp | ((line: string, spent: boolean) => boolean),
 ): string | undefined {
   // The pattern test is cheap and runs on every line; the corroboration (`unless`, which may
-  // touch the filesystem) is spent on at most MAX_CORROBORATED_LINES matching lines. A matching
-  // line past that budget is kept as a denial uncorroborated — the pre-corroboration behaviour,
-  // and the direction that never widens what is dropped.
+  // touch the filesystem) is spent on at most MAX_CORROBORATED_LINES distinct matching lines.
+  // Past that budget `unless` is told so and judges by string alone (no filesystem): a forged
+  // inside line is still dropped at any position, a late genuine outside or relative denial is
+  // still kept, and only symlink-through-inside detection is lost past the budget.
   let corroborated = 0;
+  const seen = new Set<string>();
   for (const line of stderr.split(/\r?\n/u)) {
     if (!patterns.some((p) => p.test(line))) continue;
     if (unless === undefined) return line;
@@ -102,9 +111,12 @@ function firstDenialLine(
       if (unless.test(line)) continue;
       return line;
     }
-    if (corroborated >= MAX_CORROBORATED_LINES) return line;
-    corroborated += 1;
-    if (unless(line)) continue;
+    // a repeated line is one line: a forger cannot spend the budget by printing it fifty times
+    if (seen.has(line)) continue;
+    seen.add(line);
+    const spent = corroborated >= MAX_CORROBORATED_LINES;
+    if (!spent) corroborated += 1;
+    if (unless(line, spent)) continue;
     return line;
   }
   return undefined;
@@ -112,6 +124,13 @@ function firstDenialLine(
 
 /** Longest path any filesystem accepts; a longer token cannot name a file and is not resolved. */
 const MAX_PATH_CHARS = 4_096;
+/**
+ * Deepest path the walk resolves through the filesystem. Every probe and the final realpath
+ * cost one syscall per EXISTING component, so a child that builds a two-thousand-level tree
+ * inside the workspace (allowed) and names leaves under it made each classification a
+ * three-minute block; past this depth the path is judged as a string, which only ever drops.
+ */
+const MAX_PATH_COMPONENTS = 64;
 /** Paths considered per line, and matching lines corroborated per stderr: the input is a child's. */
 const MAX_PATHS_PER_LINE = 16;
 const MAX_CORROBORATED_LINES = 50;
@@ -189,7 +208,10 @@ export function deniedPath(line: string): string | undefined {
 function canonical(path: string, hops = 0): string {
   if (path.length > MAX_PATH_CHARS || hops > MAX_LINK_HOPS) return path;
   const parts = path.split(sep).filter((p) => p !== "");
+  if (parts.length > MAX_PATH_COMPONENTS) return path;
   const prefix = (n: number): string => sep + parts.slice(0, n).join(sep);
+  // `throwIfNoEntry: false` silences ENOENT only; ENOTDIR (a path through a regular file) and
+  // ENAMETOOLONG still throw, and a component that cannot exist is simply absent
   const stat = (n: number): ReturnType<typeof lstatSync> | undefined => {
     try {
       return lstatSync(prefix(n), { throwIfNoEntry: false });
@@ -210,14 +232,14 @@ function canonical(path: string, hops = 0): string {
   const link = stat(lo)?.isSymbolicLink() === true;
   try {
     // an existing chain (link to link to directory) resolves outright
-    const real = realpathSync(existing);
+    const real = realpathSync.native(existing);
     return rest.length === 0 ? real : join(real, ...rest);
   } catch {
     if (!link) return path;
   }
   try {
     // the deepest existing component is a DANGLING link: follow it to where the write would land
-    const dir = realpathSync(dirname(existing));
+    const dir = realpathSync.native(dirname(existing));
     const target = canonical(resolve(dir, readlinkSync(existing)), hops + 1);
     return rest.length === 0 ? target : join(target, ...rest);
   } catch {
@@ -252,17 +274,18 @@ function insideWorkspace(path: string, cwd: string, canonicalise: boolean): bool
 export function writeDenialPlausible(
   line: string,
   policy: SandboxPolicy,
-  opts: { sharedFilesystem?: boolean } = {},
+  opts: { sharedFilesystem?: boolean; stringOnly?: boolean } = {},
 ): boolean {
   if (policy.mode !== "workspace-write") return true;
   const named = deniedPaths(line);
   if (named.length === 0) return true;
-  const cwd = canonical(resolve(policy.cwd));
+  const fs = opts.stringOnly !== true;
+  const cwd = fs ? canonical(resolve(policy.cwd)) : resolve(policy.cwd);
   return named.some((path) => {
     if (!isAbsolute(path)) return true;
     const literalInside = insideWorkspace(path, cwd, false);
-    if (!literalInside && opts.sharedFilesystem !== true) return true;
-    return !insideWorkspace(path, cwd, true);
+    if (!literalInside && (opts.sharedFilesystem !== true || !fs)) return true;
+    return fs ? !insideWorkspace(path, cwd, true) : !literalInside;
   });
 }
 
@@ -346,7 +369,9 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
     return firstDenialLine(
       stderr,
       patterns,
-      (line) => /read-only file system/iu.test(line) && !writeDenialPlausible(line, policy, { sharedFilesystem: false }),
+      (line, spent) =>
+        /read-only file system/iu.test(line) &&
+        !writeDenialPlausible(line, policy, { sharedFilesystem: false, stringOnly: spent }),
     );
   }
 }
@@ -398,9 +423,9 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
     return firstDenialLine(
       stderr,
       [/sandbox(?:-exec)?:?.*deny/iu],
-      (line) =>
+      (line, spent) =>
         (policy.network === true && /network/iu.test(line)) ||
-        (/file-write/iu.test(line) && !writeDenialPlausible(line, policy, { sharedFilesystem: true })),
+        (/file-write/iu.test(line) && !writeDenialPlausible(line, policy, { sharedFilesystem: true, stringOnly: spent })),
     );
   }
 }
