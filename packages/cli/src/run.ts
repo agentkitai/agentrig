@@ -100,13 +100,6 @@ export function toRules(values: string[] | undefined, decision: "allow" | "deny"
 }
 
 /**
- * Whether this run skips the permission prompt entirely.
- *
- * Two spellings for one thing: `--dangerously-skip-permissions` is the name that says what it
- * does, `--yolo` is the name people actually type. Read through this helper rather than either
- * flag, so a caller cannot honour one and miss the other.
- */
-/**
  * What each abort does, for the person who pressed it (#88): the first stops the work, and the
  * session_end hooks (memory ingest, the dream trigger) still run for a session aborted mid-turn;
  * the second stops those too. The first promises nothing about the hooks, because a session that
@@ -119,6 +112,13 @@ export function abortNotice(nth: number, key: string): string | null {
   return null;
 }
 
+/**
+ * Whether this run skips the permission prompt entirely.
+ *
+ * Two spellings for one thing: `--dangerously-skip-permissions` is the name that says what it
+ * does, `--yolo` is the name people actually type. Read through this helper rather than either
+ * flag, so a caller cannot honour one and miss the other.
+ */
 export function skipsPermissions(opts: { dangerouslySkipPermissions?: boolean; yolo?: boolean }): boolean {
   return opts.dangerouslySkipPermissions === true || opts.yolo === true;
 }

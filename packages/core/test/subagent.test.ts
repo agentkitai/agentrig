@@ -725,6 +725,7 @@ describe("a subagent cannot run away", () => {
     // the child spends its whole grace waiting for the tool, THEN runs its hooks; a cut armed at
     // the child's grace landed first and the aborted child was never ingested — the #88 outcome
     let hookOutcome = "not run";
+    let abort: () => void = () => {};
     const stubborn: AnyTool = {
       name: "echo",
       description: "ignores abort for a while",
@@ -732,6 +733,8 @@ describe("a subagent cannot run away", () => {
       permission: "read",
       paths: () => [],
       execute: async (i: { text: string }) => {
+        // the abort lands while this tool runs, by construction rather than by a timer
+        abort();
         await new Promise((r) => setTimeout(r, 350));
         return { output: i.text, display: `echo: ${i.text}` };
       },
@@ -760,7 +763,7 @@ describe("a subagent cannot run away", () => {
         }],
       },
     }).run("do it", { cwd: root });
-    setTimeout(() => session.control.abort(), 80);
+    abort = () => session.control.abort();
     const events = await collect(session);
     expect((await session.done).reason).toBe("aborted");
     // the child's grace is 200; its orphan wait spent it all (its own log says so); the hooks
