@@ -335,6 +335,7 @@ describe("skillTool", () => {
     expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
     expect(land.body).toContain("include the human's exact authorization quote");
     expect(land.body).toContain("Residuals are issues, not prose");
+    expect(land.body).toContain("An unmarked row is a row the next train rebuilds");
 
     const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");

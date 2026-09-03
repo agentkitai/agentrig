@@ -12,7 +12,9 @@ import {
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
+import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
+import { forkSessionAt, renderSessionTree } from "../sessions.js";
 import { currentGitBranch } from "../git-branch.js";
 import {
   parseSoft,
@@ -94,6 +96,15 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   controller.attach(built.agent);
   controller.setSkills(built.skills);
+  {
+    // The same root the agent's own store writes to; a separate instance because the store is
+    // per-agent and forks/trees are read-mostly operations over the directory.
+    const sessions = new SessionStore({ root: opts.root });
+    controller.setSessions({
+      fork: (parent, atSeq) => forkSessionAt(sessions, parent, atSeq),
+      tree: async (id) => renderSessionTree(await sessions.tree(id), id),
+    });
+  }
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
   if (warning !== null) controller.print(warning, "error");

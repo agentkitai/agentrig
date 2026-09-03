@@ -108,6 +108,13 @@ export interface TuiControllerOptions {
   onMemory?: (query: string) => Promise<string[]>;
   /** `/dream [--auto]` — returns lines to print. */
   onDream?: (auto: boolean) => Promise<string[]>;
+  /**
+   * `/fork [seq]` and `/tree` (R3c). Injected like the others so the controller never touches the
+   * session store: the TUI reads and writes logs only through the agent, and a fork is the one
+   * exception — it writes a new log, never the current one.
+   */
+  onFork?: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+  onTree?: (id: string) => Promise<string[]>;
   /** Whether a supervisor is attached; `/supervisor` says so rather than promising an empty list. */
   supervised?: boolean;
   /**
@@ -173,6 +180,8 @@ export class TuiController {
     this.agent = opts.agent;
     this.memory = opts.onMemory;
     this.dream = opts.onDream;
+    this.fork = opts.onFork;
+    this.tree = opts.onTree;
     if (opts.model !== undefined) this.state = { ...this.state, model: opts.model };
     this.refreshBranch();
   }
@@ -201,6 +210,14 @@ export class TuiController {
     this.dream = fn;
   }
 
+  setSessions(fns: {
+    fork: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+    tree: (id: string) => Promise<string[]>;
+  }): void {
+    this.fork = fns.fork;
+    this.tree = fns.tree;
+  }
+
   /** The loaded catalogue, for `/skills` and `/<skill-name>`. Set after buildAgent discovers it. */
   setSkills(skills: Skill[]): void {
     this.skills = skills;
@@ -208,6 +225,8 @@ export class TuiController {
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
   private dream: ((auto: boolean) => Promise<string[]>) | undefined;
+  private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
+  private tree: ((id: string) => Promise<string[]>) | undefined;
   private skills: Skill[] = [];
 
   subscribe(fn: (s: TuiState) => void): () => void {
@@ -521,6 +540,18 @@ export class TuiController {
         await this.continueConversation(composed);
         return true;
       }
+      case "fork":
+        await this.forkConversation(cmd.at);
+        return true;
+      case "tree": {
+        const id = this.state.sessionId;
+        if (id === null) {
+          this.print("no session yet — run a task first, then /tree shows where it sits", "system");
+          return true;
+        }
+        await this.delegate("tree", () => this.tree?.(id));
+        return true;
+      }
       case "unknown":
         this.print(`unknown command ${cmd.name === "" ? "/" : `/${cmd.name}`}\n${helpText()}`, "error");
         return true;
@@ -537,6 +568,52 @@ export class TuiController {
       default:
         return true;
     }
+  }
+
+  /**
+   * `/fork [seq]`: branch the conversation into a new session and continue there (R3c). The
+   * current session is never written — the child's log holds only a `session.fork` marker, and
+   * the next prompt resumes the child, which materializes the inherited prefix. Refused while a
+   * turn runs: the log is still being appended and "the latest event" is a moving target.
+   */
+  private async forkConversation(at: string): Promise<void> {
+    if (this.state.status === "running") {
+      this.print("a turn is already running — /abort first, then /fork", "error");
+      return;
+    }
+    const parent = this.state.sessionId;
+    if (parent === null) {
+      this.print("no session to fork — run a task first", "error");
+      return;
+    }
+    if (this.fork === undefined) {
+      this.print("/fork is not available in this session", "error");
+      return;
+    }
+    let atSeq: number | undefined;
+    if (at !== "") {
+      atSeq = /^\d+$/.test(at) ? Number(at) : Number.NaN;
+      if (!Number.isSafeInteger(atSeq)) {
+        this.print(`usage: /fork [seq] — seq is a non-negative event number in this session's log, not "${at}"`, "error");
+        return;
+      }
+    }
+    let forked: { id: string; atSeq: number };
+    try {
+      forked = await this.fork(parent, atSeq);
+    } catch (err) {
+      this.print(`/fork failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+      return;
+    }
+    // The child inherits the parent's conversation up to the fork point, so its plan and signals
+    // are still the ones on screen; only the identity changes. Resumable even when the parent was
+    // not: a fork resumes from its materialized tree, not from a snapshot.
+    this.resumable = true;
+    this.set({ sessionId: forked.id });
+    this.print(
+      `forked ${parent} at seq ${forked.atSeq} → ${forked.id}; this conversation continues in ${forked.id}, ${parent} is untouched`,
+      "system",
+    );
   }
 
   /** Runs an injected side command, reporting rather than throwing into the render loop. */

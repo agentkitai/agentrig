@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -15,6 +16,7 @@ import {
 } from "@agentkitai/agentrig-core";
 import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
 import { TuiController } from "../src/tui/controller.ts";
+import { forkSessionAt, renderSessionTree } from "../src/sessions.ts";
 
 describe("parseCommand", () => {
   it("treats anything not starting with / as a task", () => {
@@ -78,6 +80,12 @@ describe("parseCommand", () => {
       expect(parsed, `/${name} is reserved but parsed as a skill invocation`).not.toBeNull();
       expect(parsed!.kind).not.toBe("skill");
     }
+  });
+
+  it("parses /fork [seq] and /tree", () => {
+    expect(parseCommand("/fork")).toEqual({ kind: "fork", at: "" });
+    expect(parseCommand("/fork 12")).toEqual({ kind: "fork", at: "12" });
+    expect(parseCommand("/tree")).toEqual({ kind: "tree" });
   });
 
   it("helpText lists every command", () => {
@@ -840,6 +848,153 @@ describe("TuiController", () => {
     // one line carrying the whole reply, not two carrying "hello " and "world"
     const replies = c.snapshot().lines.filter((l) => l.tone === "assistant");
     expect(replies.map((l) => l.text)).toEqual(["hello world"]);
+  });
+});
+
+describe("/fork and /tree (R3c)", () => {
+  const hashFile = async (path: string): Promise<string> =>
+    createHash("sha256").update(await readFile(path)).digest("hex");
+
+  /** A controller whose fork/tree are wired to the same store its agent writes, as start.tsx does. */
+  function makeForking(provider: FakeProvider, ids: string[]) {
+    const store = new SessionStore({ root, newId: () => ids.shift() ?? "unexpected" });
+    const controller: TuiController = new TuiController({
+      cwd: root,
+      agent: createAgent({
+        provider,
+        tools: [askingTool()],
+        permissions: new RulePolicy(defaultRules),
+        systemPrompt: "test",
+        store,
+        budget: { maxTurns: 5 },
+        maxTokensPerTurn: 100,
+        onAsk: (req) => controller.ask(req),
+      }),
+      onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq),
+      onTree: async (id) => renderSessionTree(await store.tree(id), id),
+    });
+    return { controller, store };
+  }
+
+  it("branches the conversation into a new session and leaves the current one untouched", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "Hello!" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "2, 3, 5" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeForking(provider, ["parent", "child"]);
+    await c.submit("hello");
+    expect(c.snapshot().sessionId).toBe("parent");
+    const parentHash = await hashFile(store.pathFor("parent"));
+
+    await c.submit("/fork");
+    expect(c.snapshot().sessionId).toBe("child");
+    expect(last(c)).toContain("forked parent at seq");
+    expect(last(c)).toContain("→ child");
+    expect(last(c)).toContain("parent is untouched");
+
+    // the next prompt continues in the child, with the parent's conversation in scope
+    await c.submit("and the primes?");
+    expect(c.snapshot().sessionId).toBe("child");
+    const sent = JSON.stringify(provider.requests.at(-1)!.messages);
+    expect(sent).toContain("hello");
+    expect(sent).toContain("Hello!");
+    expect(sent).toContain("and the primes?");
+    expect(text(c)).toContain("2, 3, 5");
+
+    // the parent's log did not gain a byte; the child's log begins with its fork marker
+    expect(await hashFile(store.pathFor("parent"))).toBe(parentHash);
+    const childEvents = await store.readAll("child");
+    expect(childEvents[0]).toMatchObject({ type: "session.fork", parent: "parent" });
+    expect(childEvents.some((e) => e.type === "session.resume")).toBe(true);
+    // the plan and signals on screen belong to the inherited conversation, so they are kept
+    expect(c.snapshot().turns).toBe(2);
+  });
+
+  it("a fork of a session that never finished a turn is still continued, not replaced", async () => {
+    // the parent dies before its first turn.end: the controller marks it non-resumable and would
+    // start a fresh session on the next prompt — but a fork is continued, whatever its parent was
+    const provider = new FakeProvider([
+      new Error("HTTP 400 Unsupported parameter: max_output_tokens"),
+      [{ type: "text_delta", text: "recovered" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeForking(provider, ["parent", "child"]);
+    await c.submit("this one breaks");
+    expect(c.snapshot().sessionId).toBe("parent");
+
+    await c.submit("/fork");
+    expect(c.snapshot().sessionId).toBe("child");
+    await c.submit("try again");
+    expect(c.snapshot().sessionId).toBe("child");
+    expect((await store.readAll("child")).some((e) => e.type === "session.resume")).toBe(true);
+    const sent = JSON.stringify(provider.requests.at(-1)!.messages);
+    expect(sent).toContain("this one breaks");
+    expect(sent).toContain("try again");
+    expect(text(c)).toContain("recovered");
+  });
+
+  it("/fork <seq> branches at that event of the current session's own log", async () => {
+    const provider = new FakeProvider([[{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")]]);
+    const { controller: c, store } = makeForking(provider, ["parent", "child"]);
+    await c.submit("first");
+    await c.submit("/fork 0");
+    expect((await store.readAll("child"))[0]).toMatchObject({ type: "session.fork", parent: "parent", atSeq: 0 });
+    expect(last(c)).toContain("forked parent at seq 0");
+  });
+
+  it("refuses a bad sequence, a fork with no session, and a fork mid-turn — each naming the fix", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")],
+      [{ type: "tool_use", id: "t1", name: "needs_permission", input: {} }, usage(1, 1), stop("tool_use")],
+      [usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeForking(provider, ["parent", "never"]);
+    await c.submit("/fork");
+    expect(last(c)).toContain("no session to fork");
+
+    await c.submit("first");
+    await c.submit("/fork abc");
+    expect(last(c)).toContain("usage: /fork [seq]");
+    await c.submit("/fork 99");
+    expect(last(c)).toContain("/fork failed:");
+    expect(c.snapshot().sessionId).toBe("parent");
+    expect((await store.list()).map((r) => r.id)).toEqual(["parent"]);
+
+    const running = c.submit("run it");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    await c.submit("/fork");
+    expect(last(c)).toContain("a turn is already running");
+    c.answerPermission("allow");
+    await running;
+    expect(c.snapshot().sessionId).toBe("parent");
+  });
+
+  it("/tree shows ancestry and forks with the current session marked", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "two" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeForking(provider, ["parent", "child", "grandchild"]);
+    await c.submit("/tree");
+    expect(last(c)).toContain("no session yet");
+
+    await c.submit("first");
+    await c.submit("/fork");
+    await c.submit("second");
+    await c.submit("/fork");
+    await c.submit("/tree");
+    const shown = c.snapshot().lines.slice(-3).map((l) => l.text);
+    expect(shown[0]).toBe("parent");
+    expect(shown[1]).toMatch(/^└─ child \(forked at seq \d+\)$/);
+    expect(shown[2]).toMatch(/^   └─ grandchild \(forked at seq \d+\)  ← you are here$/);
+  });
+
+  it("/fork and /tree say so when they are not wired up", async () => {
+    const c = makeController([[{ type: "text_delta", text: "one" }, usage(1, 1), stop("end_turn")]]);
+    await c.submit("first");
+    await c.submit("/fork");
+    expect(last(c)).toContain("/fork is not available in this session");
+    await c.submit("/tree");
+    expect(last(c)).toContain("/tree is not available in this session");
   });
 });
 

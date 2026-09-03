@@ -589,7 +589,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
     try {
       if (resume !== undefined) {
-        const snap = await store.readSnapshot(id);
+        // A fork child has no snapshot until its first turn ends; its conversation is the
+        // materialized tree (R3c). Anything else without a snapshot is still unresumable.
+        const snap = (await store.readSnapshot(id)) ?? (await store.materializeSnapshot(id));
         if (snap === null) throw new Error(`cannot resume session ${id}: no snapshot found`);
         cwd = opts.cwd ?? snap.cwd;
         turns = snap.turns;
@@ -609,6 +611,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             );
         await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns });
         messages = snap.messages;
+        // A written snapshot is already resumable; a materialized one can end at a fork point in
+        // the middle of a tool call, and the same synthesis makes it acceptable to the APIs.
+        messages = resumableMessages();
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
       } else {
         await emit({ type: "session.start", task, cwd, provider: provider.id, model: provider.model });
