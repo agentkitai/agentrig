@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { resolve } from "node:path";
+import { isAbsolute, resolve, sep } from "node:path";
 import {
   SandboxDeniedError,
   type SandboxCommand,
@@ -69,15 +69,49 @@ export function throwIfSandboxDenied(stderr: string): void {
 /**
  * First line of `stderr` matching any of `patterns` and not `unless`, for a bounded,
  * provenance-labelled reason. `unless` lets a provider drop a denial its policy could not have
- * produced (a network denial under a network grant).
+ * produced (a network denial under a network grant; a write denial inside a writable workspace).
  */
-function firstDenialLine(stderr: string, patterns: readonly RegExp[], unless?: RegExp): string | undefined {
+function firstDenialLine(
+  stderr: string,
+  patterns: readonly RegExp[],
+  unless?: RegExp | ((line: string) => boolean),
+): string | undefined {
   for (const line of stderr.split(/\r?\n/u)) {
     if (!patterns.some((p) => p.test(line))) continue;
-    if (unless !== undefined && unless.test(line)) continue;
+    if (unless !== undefined && (unless instanceof RegExp ? unless.test(line) : unless(line))) continue;
     return line;
   }
   return undefined;
+}
+
+/**
+ * The filesystem path a denial line names, if it names one: a quoted path first (`touch: cannot
+ * touch '/etc/x': Read-only file system`), else the first absolute-path token (`sandbox-exec:
+ * deny file-write-create /etc/x`, `EROFS: read-only file system, open /etc/x`). Undefined when
+ * the line carries no recognisable path, in which case the caller falls back to the pattern alone.
+ */
+export function deniedPath(line: string): string | undefined {
+  const quoted = /['"‘’`]([^'"‘’`\s]*\/[^'"‘’`]*?)['"‘’`]/u.exec(line);
+  if (quoted?.[1] !== undefined) return quoted[1];
+  const absolute = /(?:^|[\s(=,:])(\/[^\s'"`,;)]+)/u.exec(line);
+  return absolute?.[1];
+}
+
+/**
+ * Whether a write denial naming `path` is one the ACTIVE policy could have produced (#95). Under
+ * `workspace-write` the workspace is writable, so a "read-only" line about a path inside it did
+ * not come from the boundary: it is the command's own words (forged, or a host mount that is
+ * read-only for reasons of its own), and classifying it would earn a forger an escalation prompt.
+ * Under `read-only` every path is denied. A line naming no path keeps today's classification:
+ * corroboration narrows, it never widens.
+ */
+export function writeDenialPlausible(line: string, policy: SandboxPolicy): boolean {
+  if (policy.mode !== "workspace-write") return true;
+  const named = deniedPath(line);
+  if (named === undefined) return true;
+  const cwd = resolve(policy.cwd);
+  const target = isAbsolute(named) ? resolve(named) : resolve(cwd, named);
+  return !(target === cwd || target.startsWith(cwd + sep));
 }
 
 /** Explicit identity provider. Omitting AgentConfig.sandbox remains the default and is equivalent. */
@@ -156,7 +190,12 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
     // sandbox or not, and would turn ordinary failures (and forged ones) into denials.
     const patterns = [/read-only file system/iu];
     if (policy.network !== true) patterns.push(/network is unreachable/iu);
-    return firstDenialLine(stderr, patterns);
+    // a "read-only" line naming a path inside a writable workspace is not the container's doing
+    return firstDenialLine(
+      stderr,
+      patterns,
+      (line) => /read-only file system/iu.test(line) && !writeDenialPlausible(line, policy),
+    );
   }
 }
 
@@ -203,10 +242,13 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
   protected denied(stderr: string, policy: SandboxPolicy): string | undefined {
     // a network denial cannot come from a profile that allows network: under a grant such a
     // line is the command's own words, not the sandbox's
+    // likewise a file-write denial inside the workspace the profile allows writes to
     return firstDenialLine(
       stderr,
       [/sandbox(?:-exec)?:?.*deny/iu],
-      policy.network === true ? /network/iu : undefined,
+      (line) =>
+        (policy.network === true && /network/iu.test(line)) ||
+        (/file-write/iu.test(line) && !writeDenialPlausible(line, policy)),
     );
   }
 }

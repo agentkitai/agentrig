@@ -134,6 +134,20 @@ Changes:
   PR body carries the verdict block so it is visible at a glance; if that is too much autonomy,
   make `DEVIATION REQUESTED` a halt instead of an arbitration.
 
+- **#95 — a forged or host-caused "read-only file system" line classified as a denial.** No
+  provider can authenticate a child's stderr, so classification is now corroborated against the
+  policy: `deniedPath(line)` reads the path a denial names (quoted, else the first absolute
+  token), and `writeDenialPlausible(line, policy)` rejects a write denial naming a path inside a
+  `workspace-write` workspace, which is writable and so could not have produced it (docker's
+  "read-only file system", seatbelt's `file-write*` denials). Paths are normalised (`..`, relative
+  to cwd) and the boundary is the directory, never its prefix. A line naming no recognisable path
+  keeps today's classification: corroboration narrows, never widens. A forged line naming a path
+  outside the workspace still classifies, and that is the boundary's own verdict on that path: the
+  sandbox would deny that write, and the escalation prompt (which yolo never auto-answers: it goes
+  to `onAsk`, denied headless) shows the provenance label. Mutants killed: docker ignoring the
+  corroboration; a prefix sibling counting as inside; no path normalisation; seatbelt ignoring
+  the corroboration.
+
 ## R3 notes
 
 | Row | Deliverable | Status |
