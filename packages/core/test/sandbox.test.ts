@@ -370,7 +370,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     expect(writeDenialPlausible("touch: cannot touch '/etc/a': Read-only file system", ww)).toBe(true);
     // .. cannot smuggle an outside path in as inside, nor the reverse
     expect(writeDenialPlausible("touch: cannot touch '/work/proj/../proj2/a': Read-only file system", ww)).toBe(true);
-    expect(writeDenialPlausible("touch: cannot touch '/etc/../work/proj/a': Read-only file system", ww)).toBe(false);
+    // `/usr` rather than `/etc`: on macOS `/etc` is a link to `/private/etc`, so `/etc/../work`
+    // really is `/private/work` — the walk agrees with the kernel, and the test must too
+    expect(writeDenialPlausible("touch: cannot touch '/usr/../work/proj/a': Read-only file system", ww)).toBe(false);
     // an inside source named before the outside target is still the boundary speaking
     expect(writeDenialPlausible("Error: EROFS: read-only file system, copyfile '/work/proj/a' -> '/etc/x'", ww)).toBe(true);
     expect(writeDenialPlausible("Error: EROFS: read-only file system, rename '/work/proj/tmp' -> '/etc/x'", ww)).toBe(true);
