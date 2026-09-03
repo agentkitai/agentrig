@@ -449,7 +449,9 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-")));
     const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-out-")));
     try {
-      const deepDir = join(root, ...Array.from({ length: 60 }, () => "d"));
+      // forty levels: with macOS's seven-component tmpdir the leaf stays under the sixty-four cap
+      const deepDir = join(root, ...Array.from({ length: 40 }, () => "d"));
+      expect(`${deepDir}/link0/x0`.split("/").filter(Boolean).length).toBeLessThan(64);
       await mkdir(deepDir, { recursive: true });
       // twenty hops: macOS resolves at most 32 symlinks (Linux 40), and past that limit a write
       // fails with ELOOP rather than EROFS, so a longer chain is judged by string — and dropped
@@ -468,6 +470,21 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       await symlink(join(root, "b"), join(root, "a"));
       await symlink(join(root, "a"), join(root, "b"));
       expect(writeDenialPlausible(`touch: cannot touch '${root}/a/x': Read-only file system`, ww)).toBe(false);
+      // an EXISTING chain whose every target is a long `w/../` walk costs its distinct paths, not
+      // the platform realpath's re-walk of the whole chain per call: one classification stays fast
+      const wobble = "w/../".repeat(800);
+      for (let i = 0; i < 20; i += 1) {
+        const target = i === 19 ? outside : `${root}/${wobble}e${i + 1}`;
+        await symlink(target, join(root, `e${i}`));
+      }
+      const existingChain = Array.from({ length: 16 }, (_, i) => `'${root}/e0/y${i}'`).join(" ");
+      const t1 = Date.now();
+      const budget = probeBudget();
+      for (let i = 0; i < 50; i += 1) {
+        expect(writeDenialPlausible(`touch: cannot touch ${existingChain}: Read-only file system`, ww, { budget })).toBe(true);
+      }
+      expect(Date.now() - t1).toBeLessThan(1_500);
+      expect(budget.remaining).toBeGreaterThan(0);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });
@@ -484,14 +501,14 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       // with budget: the link is followed and the line kept
       expect(writeDenialPlausible(viaLink, ww, { budget: probeBudget() })).toBe(true);
       // budget spent: the string says inside, and inside is dropped — the documented narrowing
-      const spent = { remaining: 0 };
+      const spent = probeBudget(0);
       expect(writeDenialPlausible(viaLink, ww, { budget: spent })).toBe(false);
       // a budget too small to finish the walk is spent by it and then judges by string
-      const tiny = { remaining: 3 };
+      const tiny = probeBudget(3);
       expect(writeDenialPlausible(viaLink, ww, { budget: tiny })).toBe(false);
       expect(tiny.remaining).toBe(0);
       // an outside string is kept either way
-      expect(writeDenialPlausible("touch: cannot touch '/etc/x': Read-only file system", ww, { budget: { remaining: 0 } })).toBe(true);
+      expect(writeDenialPlausible("touch: cannot touch '/etc/x': Read-only file system", ww, { budget: probeBudget(0) })).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });
@@ -509,8 +526,8 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       expect(writeDenialPlausible(`touch: cannot touch '${root}/link/${deep}': Read-only file system`, ww)).toBe(false);
       expect(writeDenialPlausible(`touch: cannot touch '${root}/real/${deep}': Read-only file system`, ww)).toBe(false);
       // and past the budget likewise
-      expect(writeDenialPlausible(`touch: cannot touch '${root}/real/a': Read-only file system`, ww, { budget: { remaining: 0 } })).toBe(false);
-      expect(writeDenialPlausible(`touch: cannot touch '${root}/link/a': Read-only file system`, ww, { budget: { remaining: 0 } })).toBe(false);
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/real/a': Read-only file system`, ww, { budget: probeBudget(0) })).toBe(false);
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/link/a': Read-only file system`, ww, { budget: probeBudget(0) })).toBe(false);
       // a sibling of the real directory is outside in both forms
       expect(writeDenialPlausible(`touch: cannot touch '${root}/other/a': Read-only file system`, ww)).toBe(true);
     } finally {

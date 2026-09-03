@@ -203,6 +203,18 @@ Changes:
   forms of the workspace (literal and real), so a symlinked `policy.cwd` cannot make it keep a
   line. The deep-tree fixture is three hundred levels (macOS PATH_MAX is 1024). Mutants killed:
   a `realpath` per hop (timing); the workspace in one form only; probes not budgeted.
+- Sixth delta round: the budget counted calls, not cost — one platform `realpath` over an
+  EXISTING forty-hop chain whose targets were long `w/../` walks made the kernel do thirty
+  thousand readlinks for one budget unit. The platform `realpath` is gone from the child-path
+  walk: every component is one memoised `lstat` (plus one `readlink` for a link), charged to
+  the budget; a link restarts the walk on its target with the rest re-joined, up to the hop
+  budget; the memo makes a chain cost its distinct paths rather than its hops times its depth,
+  and the sixteen leaves of one line share their prefixes. A path the walk cannot finish
+  (budget, hops, caps, a component the filesystem rejects) is judged by string. The chain
+  fixture is forty levels and twenty hops, under the sixty-four-component cap with macOS's
+  seven-component tmpdir and under its thirty-two-link resolution limit — past either, a write
+  fails with ELOOP or is judged by string, and the test says so. Mutants killed: no memo; probes
+  not charged; the platform `realpath` per link (timing).
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the

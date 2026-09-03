@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   SandboxDeniedError,
@@ -145,15 +145,48 @@ const MAX_LINK_HOPS = 40;
  * A global budget bounds the product: once spent, the rest of the stderr is judged by string
  * alone, which only ever drops.
  */
-const MAX_PROBES_PER_CLASSIFICATION = 2_000;
+const MAX_PROBES_PER_CLASSIFICATION = 4_000;
 
-/** The probe budget threaded through one classification. */
+/** What one probe learned about one path: missing, a directory or file, or a link and its target. */
+type Probed = { kind: "missing" } | { kind: "entry" } | { kind: "link"; target: string };
+
+/**
+ * The probe budget threaded through one classification, with a memo of every path probed: the
+ * sixteen leaves of one line share their prefixes, and a chain that keeps landing on the same
+ * directories costs its distinct paths, not its hops times its depth.
+ */
 export interface ProbeBudget {
   remaining: number;
+  memo: Map<string, Probed>;
 }
 
-export function probeBudget(): ProbeBudget {
-  return { remaining: MAX_PROBES_PER_CLASSIFICATION };
+export function probeBudget(remaining = MAX_PROBES_PER_CLASSIFICATION): ProbeBudget {
+  return { remaining, memo: new Map() };
+}
+
+/** One filesystem probe, memoised and charged; `undefined` once the budget is spent. */
+function probe(path: string, budget: ProbeBudget): Probed | undefined {
+  const known = budget.memo.get(path);
+  if (known !== undefined) return known;
+  if (budget.remaining <= 0) return undefined;
+  budget.remaining -= 1;
+  let result: Probed;
+  try {
+    // `throwIfNoEntry: false` silences ENOENT only; ENOTDIR (a path through a regular file) and
+    // ENAMETOOLONG still throw, and a component that cannot exist is simply absent
+    const st = lstatSync(path, { throwIfNoEntry: false });
+    if (st === undefined) result = { kind: "missing" };
+    else if (!st.isSymbolicLink()) result = { kind: "entry" };
+    else {
+      if (budget.remaining <= 0) return undefined;
+      budget.remaining -= 1;
+      result = { kind: "link", target: readlinkSync(path) };
+    }
+  } catch {
+    result = { kind: "missing" };
+  }
+  budget.memo.set(path, result);
+  return result;
 }
 
 /**
@@ -216,81 +249,39 @@ export function deniedPath(line: string): string | undefined {
 }
 
 /**
- * Where an absolute `path` really points on the host: the deepest existing prefix is resolved
- * through its symlinks and the rest re-joined. A symlink inside the workspace that points
- * outside names an inside path in the denial line but an outside one to the boundary. Existence
- * is monotone along the components, so the deepest existing prefix is found by binary search
- * with a non-throwing stat: eleven probes for two thousand components, not two thousand thrown
- * errors — a child that prints deep paths cannot make this expensive. A dangling link is
- * followed through its target, itself canonicalised, up to a hop budget.
+ * Where an absolute `path` really points on the host, resolved one component at a time with the
+ * classification's own probes — never the platform `realpath`, whose cost over a child-built
+ * symlink chain is unbounded and invisible to the budget. Each component is one memoised lstat
+ * (plus one readlink for a link); a link restarts the walk on its target with the remaining
+ * components re-joined, up to a hop budget, and a dangling link resolves to where the write
+ * would land. A path longer or deeper than the caps, a walk that exhausts the budget or the
+ * hops, or a component the filesystem rejects is returned as it stands: a string judgement.
  */
 function canonical(path: string, budget: ProbeBudget): string {
-  if (path.length > MAX_PATH_CHARS) return path;
-  const parts = path.split(sep).filter((p) => p !== "");
-  if (parts.length > MAX_PATH_COMPONENTS) return path;
-  const prefix = (n: number): string => sep + parts.slice(0, n).join(sep);
-  // `throwIfNoEntry: false` silences ENOENT only; ENOTDIR (a path through a regular file) and
-  // ENAMETOOLONG still throw, and a component that cannot exist is simply absent
-  const stat = (n: number): ReturnType<typeof lstatSync> | undefined => {
-    if (budget.remaining <= 0) return undefined;
-    budget.remaining -= 1;
-    try {
-      return lstatSync(prefix(n), { throwIfNoEntry: false });
-    } catch {
-      return undefined;
+  let current = path;
+  for (let hop = 0; hop <= MAX_LINK_HOPS; hop += 1) {
+    if (current.length > MAX_PATH_CHARS) return current;
+    const parts = current.split(sep).filter((p) => p !== "");
+    if (parts.length > MAX_PATH_COMPONENTS) return current;
+    let resolved: string = sep;
+    let restarted = false;
+    for (let i = 0; i < parts.length; i += 1) {
+      const candidate = join(resolved, parts[i]!);
+      const rest = parts.slice(i + 1);
+      const seen = probe(candidate, budget);
+      if (seen === undefined) return join(candidate, ...rest);
+      if (seen.kind === "missing") return join(candidate, ...rest);
+      if (seen.kind === "link") {
+        // restart on the target (relative to the link's directory) with the rest re-joined
+        current = resolve(dirname(candidate), seen.target, ...rest);
+        restarted = true;
+        break;
+      }
+      resolved = candidate;
     }
-  };
-  // invariant: prefix(lo) exists (the root always does), prefix(hi + 1) does not
-  let lo = 0;
-  let hi = parts.length;
-  while (lo < hi) {
-    if (budget.remaining <= 0) return path;
-    const mid = Math.ceil((lo + hi) / 2);
-    if (stat(mid) !== undefined) lo = mid;
-    else hi = mid - 1;
+    if (!restarted) return resolved;
   }
-  const existing = prefix(lo);
-  const rest = parts.slice(lo);
-  const link = stat(lo)?.isSymbolicLink() === true;
-  if (budget.remaining <= 0) return path;
-  budget.remaining -= 1;
-  try {
-    // an existing chain (link to link to directory) resolves outright; the kernel walks it once
-    const real = realpathSync.native(existing);
-    return rest.length === 0 ? real : join(real, ...rest);
-  } catch (err) {
-    // ELOOP, ENOTDIR, ENAMETOOLONG: a write there fails with that errno, not EROFS — judge the
-    // string; only a dangling link (ENOENT somewhere along the chain) is worth following
-    if (!link || (err as NodeJS.ErrnoException).code !== "ENOENT") return path;
-  }
-  // A DANGLING chain: follow it link by link with readlink alone (one call per hop, never a
-  // realpath per hop — the kernel would re-walk the whole remaining chain each time), then
-  // resolve the final target once through the same bounded walk.
-  let cursor = existing;
-  for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
-    if (budget.remaining <= 0) return path;
-    budget.remaining -= 1;
-    let target: string;
-    try {
-      target = resolve(dirname(cursor), readlinkSync(cursor));
-    } catch {
-      return path;
-    }
-    if (target.length > MAX_PATH_CHARS) return path;
-    budget.remaining -= 1;
-    let targetIsLink: boolean;
-    try {
-      targetIsLink = lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink() === true;
-    } catch {
-      return path;
-    }
-    if (!targetIsLink) {
-      const resolved = canonical(target, budget);
-      return rest.length === 0 ? resolved : join(resolved, ...rest);
-    }
-    cursor = target;
-  }
-  return path;
+  return current;
 }
 
 /** Whether `target` is `cwd` or beneath it, for any of the cwd's forms (literal and canonical). */
@@ -331,7 +322,7 @@ export function writeDenialPlausible(
   // The cwd is the policy's own string, not the child's, so its resolution has a small budget
   // of its own rather than the classification's.
   const literalCwd = resolve(policy.cwd);
-  const cwds = [literalCwd, canonical(literalCwd, { remaining: 64 })];
+  const cwds = [literalCwd, canonical(literalCwd, probeBudget(256))];
   return named.some((path) => {
     if (!isAbsolute(path)) return true;
     const literal = resolve(path);
