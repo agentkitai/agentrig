@@ -12,9 +12,9 @@ import {
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
-import { SessionStore } from "@agentkitai/agentrig-core";
+import { SessionStore, liveChildren, summarizeSession } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
-import { forkSessionAt, renderSessionTree } from "../sessions.js";
+import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
 import { currentGitBranch } from "../git-branch.js";
 import {
   parseSoft,
@@ -103,6 +103,15 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     controller.setSessions({
       fork: (parent, atSeq) => forkSessionAt(sessions, parent, atSeq),
       tree: async (id) => renderSessionTree(await sessions.tree(id), id),
+      // read-only: each child's own log is the source of truth, and nothing is copied into ours
+      children: async (children, now, parent) =>
+        renderChildren(await liveChildren(sessions, children, { parent }), now),
+      spawned: async (id) =>
+        summarizeSession(id, (await sessions.readPrefix(id)).events).children.map((c) => ({
+          id: c.id,
+          task: c.task,
+          ...(c.reason === undefined ? {} : { reason: c.reason }),
+        })),
     });
   }
   // in the frame rather than on stderr: stderr would be overwritten by the first render

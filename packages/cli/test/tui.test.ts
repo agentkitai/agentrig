@@ -9,14 +9,17 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  liveChildren,
+  subagentTool,
   type AnyTool,
+  type HarnessEvent,
   type ModelEvent,
   type ModelProvider,
   type ModelRequest,
 } from "@agentkitai/agentrig-core";
 import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
-import { TuiController } from "../src/tui/controller.ts";
-import { forkSessionAt, renderSessionTree } from "../src/sessions.ts";
+import { TuiController, applyChildEvent, type TuiChild } from "../src/tui/controller.ts";
+import { forkSessionAt, renderChildren, renderSessionTree } from "../src/sessions.ts";
 
 describe("parseCommand", () => {
   it("treats anything not starting with / as a task", () => {
@@ -86,6 +89,7 @@ describe("parseCommand", () => {
     expect(parseCommand("/fork")).toEqual({ kind: "fork", at: "" });
     expect(parseCommand("/fork 12")).toEqual({ kind: "fork", at: "12" });
     expect(parseCommand("/tree")).toEqual({ kind: "tree" });
+    expect(parseCommand("/children")).toEqual({ kind: "children" });
   });
 
   it("helpText lists every command", () => {
@@ -995,6 +999,207 @@ describe("/fork and /tree (R3c)", () => {
     expect(last(c)).toContain("/fork is not available in this session");
     await c.submit("/tree");
     expect(last(c)).toContain("/tree is not available in this session");
+  });
+});
+
+describe("/children (R3d)", () => {
+  const spawnTurn = (task: string): ModelEvent[] => [
+    { type: "tool_use", id: "s1", name: "subagent", input: { task, label: "worker" } },
+    usage(1, 1),
+    stop("tool_use"),
+  ];
+
+  /** A parent with a real subagent tool whose children log to the same store root. */
+  function makeParent(
+    provider: FakeProvider,
+    ids: string[],
+    extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
+    childTools: AnyTool[] = [],
+  ) {
+    const store = new SessionStore({ root, newId: () => ids.shift() ?? "unexpected" });
+    const childConfig = () => ({
+      provider,
+      tools: childTools,
+      permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
+      systemPrompt: "child",
+      store,
+      maxTokensPerTurn: 100,
+    });
+    const controller: TuiController = new TuiController({
+      cwd: root,
+      agent: createAgent({
+        provider,
+        tools: [subagentTool({ childConfig, createAgent, maxTurns: 3 })],
+        permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
+        systemPrompt: "test",
+        store,
+        budget: { maxTurns: 5 },
+        maxTokensPerTurn: 100,
+        onAsk: (req) => controller.ask(req),
+      }),
+      onChildren: async (children, now, parent) => renderChildren(await liveChildren(store, children, { parent }), now),
+      ...extra,
+    });
+    return { controller, store };
+  }
+
+  it("tracks spawn and end from the parent's stream and reads the child's own log for the rest", async () => {
+    const provider = new FakeProvider([
+      spawnTurn("count the files"),
+      [{ type: "text_delta", text: "child answer" }, usage(1, 1), stop("end_turn")], // the child's turn
+      [{ type: "text_delta", text: "parent done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeParent(provider, ["parent", "kid"]);
+    await c.submit("/children");
+    expect(last(c)).toContain("no session yet");
+
+    await c.submit("delegate it");
+    expect(c.snapshot().children).toEqual([{ id: "kid", task: "worker", spawnedAt: expect.any(Number), reason: "done" }]);
+    const parentBytes = (await store.list()).find((r) => r.id === "parent")!.bytes;
+
+    await c.submit("/children");
+    expect(last(c)).toMatch(/^kid · worker · done after 1 turn\(s\) · \d+s$/);
+    // read-only: the parent's log gained nothing from /children
+    expect((await store.list()).find((r) => r.id === "parent")!.bytes).toBe(parentBytes);
+    // and the child's log is where the turn count came from
+    expect((await store.readAll("kid")).some((e) => e.type === "turn.start")).toBe(true);
+  });
+
+  it("/children works mid-turn — that is the point — and shows the tool the child is blocked in", async () => {
+    let release: () => void = () => {};
+    const gate: AnyTool = {
+      name: "gate",
+      description: "blocks until released",
+      inputSchema: z.object({}),
+      permission: "read",
+      execute: async () => {
+        await new Promise<void>((r) => { release = r; });
+        return { output: "ok", display: "ok" };
+      },
+    };
+    const provider = new FakeProvider([
+      spawnTurn("wait on the gate"),
+      [{ type: "tool_use", id: "g1", name: "gate", input: {} }, usage(1, 1), stop("tool_use")], // child turn 1
+      [{ type: "text_delta", text: "child done" }, usage(1, 1), stop("end_turn")], // child turn 2
+      [{ type: "text_delta", text: "parent done" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeParent(provider, ["parent", "kid"], undefined, [gate]);
+    const running = c.submit("delegate");
+    await vi.waitFor(async () => {
+      expect(c.snapshot().status).toBe("running");
+      expect(c.snapshot().children.map((k) => k.id)).toEqual(["kid"]);
+    });
+    await vi.waitFor(async () => {
+      await c.submit("/children");
+      expect(last(c)).toMatch(/^kid · worker · turn 1 · gate \d+s · \d+s$/);
+    });
+    expect(c.snapshot().children[0]!.reason).toBeUndefined();
+    release();
+    await running;
+    await c.submit("/children");
+    expect(last(c)).toMatch(/^kid · worker · done after 2 turn\(s\) · \d+s$/);
+  });
+
+  it("/resume of another session drops this one's children and seeds them from that session's log", async () => {
+    const provider = new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "resumed" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const seeded: TuiChild[] = [{ id: "old-kid", task: "from the log", reason: "done" }];
+    const asked: string[] = [];
+    const { controller: c, store } = makeParent(provider, ["p1", "kid"], {
+      onSpawned: async (id) => { asked.push(id); return seeded; },
+    });
+    await c.submit("delegate");
+    expect(c.snapshot().children.map((k) => k.id)).toEqual(["kid"]);
+    // a second, plain session to resume into
+    await store.append("other", { type: "session.start", task: "t", cwd: root, provider: "fake", model: "m" });
+    await store.writeSnapshot({ sessionId: "other", task: "t", cwd: root, turns: 1, usage: { input: 1, output: 1 }, messages: [{ role: "user", content: [{ type: "text", text: "t" }] }], ts: 1 });
+    await c.submit("/resume other");
+    expect(asked).toEqual(["other"]);
+    expect(c.snapshot().sessionId).toBe("other");
+    expect(c.snapshot().children).toEqual(seeded);
+    // continuing the same session keeps the list without asking again
+    await c.submit("more");
+    expect(asked).toEqual(["other"]);
+  });
+
+  it("/resume of another session with no reader wired starts from an empty list, never a stale one", async () => {
+    const provider = new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "resumed" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c, store } = makeParent(provider, ["p1", "kid"]);
+    await c.submit("delegate");
+    await store.append("other", { type: "session.start", task: "t", cwd: root, provider: "fake", model: "m" });
+    await store.writeSnapshot({ sessionId: "other", task: "t", cwd: root, turns: 1, usage: { input: 1, output: 1 }, messages: [{ role: "user", content: [{ type: "text", text: "t" }] }], ts: 1 });
+    await c.submit("/resume other");
+    expect(c.snapshot().children).toEqual([]);
+  });
+
+  it("applyChildEvent records every end reason the log can carry, and 'ended' when it carries none", () => {
+    const spawn = { type: "subagent.spawn", id: "k", task: "t", seq: 0, sessionId: "p", ts: 5 } as HarnessEvent;
+    const one = applyChildEvent([], spawn);
+    expect(one).toEqual([{ id: "k", task: "t", spawnedAt: 5 }]);
+    for (const reason of ["done", "aborted", "error", "budget"] as const) {
+      const end = { type: "subagent.end", id: "k", reason, seq: 1, sessionId: "p", ts: 6 } as HarnessEvent;
+      expect(applyChildEvent(one, end)[0]!.reason).toBe(reason);
+    }
+    const bare = { type: "subagent.end", id: "k", seq: 1, sessionId: "p", ts: 6 } as HarnessEvent;
+    expect(applyChildEvent(one, bare)[0]!.reason).toBe("ended");
+    // an end for an unknown id changes nothing
+    const other = { type: "subagent.end", id: "zz", reason: "done", seq: 1, sessionId: "p", ts: 6 } as HarnessEvent;
+    expect(applyChildEvent(one, other)).toEqual(one);
+  });
+
+  it("a session with no subagents says so; /new forgets them", async () => {
+    const provider = new FakeProvider([
+      [{ type: "text_delta", text: "plain" }, usage(1, 1), stop("end_turn")],
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeParent(provider, ["p1", "p2", "kid"]);
+    await c.submit("no delegation");
+    await c.submit("/children");
+    expect(last(c)).toContain("spawned no subagents");
+    await c.submit("/new");
+    await c.submit("delegate");
+    expect(c.snapshot().children.map((k) => k.id)).toEqual(["kid"]);
+    await c.submit("/new");
+    expect(c.snapshot().children).toEqual([]);
+  });
+
+  it("renders live state through the injected reader, and says so when none is wired", async () => {
+    const seen: Array<{ ids: string[]; now: number }> = [];
+    const provider = new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]);
+    const { controller: c } = makeParent(provider, ["p", "kid"], {
+      onChildren: async (children, now) => {
+        seen.push({ ids: children.map((k) => k.id), now });
+        return ["kid · x · turn 2 · bash 3s · 40s"];
+      },
+    });
+    await c.submit("delegate");
+    await c.submit("/children");
+    expect(seen).toEqual([{ ids: ["kid"], now: expect.any(Number) }]);
+    expect(last(c)).toBe("kid · x · turn 2 · bash 3s · 40s");
+
+    const bare = makeParent(new FakeProvider([
+      spawnTurn("x"),
+      [{ type: "text_delta", text: "child" }, usage(1, 1), stop("end_turn")],
+      [{ type: "text_delta", text: "parent" }, usage(1, 1), stop("end_turn")],
+    ]), ["p2", "kid2"], { onChildren: undefined });
+    await bare.controller.submit("delegate");
+    await bare.controller.submit("/children");
+    expect(last(bare.controller)).toContain("/children is not available in this session");
   });
 });
 

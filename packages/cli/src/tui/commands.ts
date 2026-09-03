@@ -23,6 +23,7 @@ export type TuiCommand =
   /** `/fork [seq]` — `at` is the raw argument; the controller validates it and names the fix. */
   | { kind: "fork"; at: string }
   | { kind: "tree" }
+  | { kind: "children" }
   /**
    * `/<word>` that is no built-in: an attempted skill invocation (issue #62). Resolution against
    * the loaded catalogue happens in the controller — this module stays pure — and a name that
@@ -51,6 +52,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "fork", args: "[seq]", summary: "branch this conversation into a new session; this one is left untouched" },
   { name: "tree", summary: "show this session's ancestry and forks" },
+  { name: "children", summary: "live status of this session's subagents, read from their own logs" },
   { name: "new", summary: "forget this conversation and start a new session" },
   { name: "abort", summary: "stop the running turn" },
   { name: "quit", summary: "exit (bare `exit`/`quit`, and ctrl-c, also work)" },
@@ -117,6 +119,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "fork", at: args };
     case "tree":
       return { kind: "tree" };
+    case "children":
+      return { kind: "children" };
     default:
       // Built-ins always win: only a name NO case above claimed can reach the catalogue, so a
       // skill named "plan" can never override /plan (it is marked shadowed in /skills instead).
@@ -145,6 +149,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "skills",
   "fork",
   "tree",
+  "children",
 ]);
 
 /**

@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3c is complete; R3d is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3d is complete; R3 is complete (R3a–R3d); R4a is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -141,7 +141,7 @@ Changes:
 | R3a | `session.fork` event, append-only child creation, and recursive event/message materialization | done |
 | R3b | Session fork/search CLI and bounded replay | done |
 | R3c | TUI `/fork` and `/tree` | done |
-| R3d | Live `/children` tree | next |
+| R3d | Live `/children` tree | done |
 
 - R3a adds `SessionStore.fork(parent, atSeq)`: the child log contains only its seq-0
   `session.fork` record, while the parent log and existing snapshot behavior remain untouched.
@@ -198,6 +198,41 @@ Changes:
   task instead of the latest, not marking the fork resumable.
 - Skills: the land skill now checks the completed row carries `*(done)*` (the LOW #101's delta
   review found, made a precondition rather than a memory).
+- R3d adds `/children`. The controller records which children exist from the parent's own
+  stream (`subagent.spawn` gives the id and label, `subagent.end` the reason); everything else —
+  the turn it is on, the tool it is in, the plan item in progress, when it started and ended, the
+  children it spawned itself — is read from each child's own log by `liveChildren` in core, which
+  folds the log with `summarizeSession` and follows the child's own spawn records to
+  grandchildren, visited once. Nothing is written and nothing is copied into the parent's log
+  (the test compares the parent's byte count across `/children`). One line per child: `id ·
+  label · turn N · <tool> <since> · plan: <item> · <elapsed>`; a finished child shows the
+  parent's `subagent.end` reason and its duration; a child with no log yet is "starting"; a log
+  torn mid-line (the child is still writing it) is reported on that line rather than failing the
+  command. Nested children render as an indented tree through the same `renderTreeLines` that
+  `/tree` uses.
+- Decision beyond the row: `/children` reads the logs when invoked rather than repainting on a
+  timer. Every invocation is a fresh read of the source of truth, so what it prints is the state
+  at that moment; a self-refreshing block would need the live frame to hold N growing lines,
+  which the viewport design (`viewport.ts`) budgets against, and the scrollback is `Static`. A
+  timer-driven view is a follow-up if dogfooding asks for it.
+- Review fixes, each pinned: a `tool.result` closes the open call (a child thinking after `bash`
+  is not "in bash"); `/children` has no running-turn guard, and a test invokes it while the child
+  is blocked inside a tool; a torn last line — a child mid-write — keeps every line before it and
+  is flagged "log still being written" (`SessionStore.readPrefix`), while a corrupt terminated
+  line or a seq gap is still an error; `/resume <other>` drops the previous session's children and
+  seeds the list from that session's own log (`onSpawned`), or starts empty when nothing is
+  wired; a child log whose spawn record names the parent or a sibling cannot pull that session
+  under itself — the walk is breadth-first and every id found at one depth is claimed across
+  all branches before the next depth is read, so a record cannot steal a session of the same or
+  a shallower depth from another branch either; a record naming a session that truly belongs
+  strictly deeper in another branch is undecidable from child logs alone (residual issue, see
+  the PR) — and an id that is not a session id renders as "invalid id"; every `subagent.end` reason the log can carry is
+  recorded, "ended" when it carries none (`applyChildEvent`, exported and tested directly).
+- Mutants killed: a session that ended still "in" its last tool; a `tool.result` leaving the
+  call open; dropping the visited guard on looping spawn records; a torn tail throwing; no
+  up-front claims for parent and siblings; throwing on an unreadable child log; not recording
+  `subagent.end`; a hard-coded end reason; a resume keeping the previous session's children; a
+  running-turn guard on `/children`; preferring the child's own end reason over the parent's.
 
 ## R2 notes
 

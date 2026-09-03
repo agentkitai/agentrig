@@ -223,6 +223,42 @@ export class SessionStore {
     }
   }
 
+  /**
+   * Every complete line of a log, tolerating a torn tail (R3d). A log being appended by another
+   * process can end in a partial line — a large `tool.result` mid-write is the likely case, and
+   * exactly the moment a human looks at `/children`. Lines that parsed are returned and `torn`
+   * says the last one did not; a corrupt line that IS newline-terminated, or a seq gap, still
+   * throws, because that is corruption rather than concurrency.
+   */
+  async readPrefix(sessionId: string): Promise<{ events: HarnessEvent[]; torn: boolean }> {
+    this.knownIds.add(assertSessionId(sessionId));
+    const text = await readFile(this.pathFor(sessionId), "utf8");
+    const lines = text.split("\n");
+    const terminated = text.endsWith("\n");
+    const events: HarnessEvent[] = [];
+    let torn = false;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      if (line.trim() === "") continue;
+      const last = i === lines.length - 1;
+      let event: HarnessEvent;
+      try {
+        event = parseEvent(line);
+      } catch (err) {
+        if (last && !terminated) {
+          torn = true;
+          break;
+        }
+        throw err;
+      }
+      if (event.seq !== events.length) {
+        throw new Error(`session ${sessionId}: expected seq ${events.length}, got ${event.seq}`);
+      }
+      events.push(event);
+    }
+    return { events, torn };
+  }
+
   async readAll(sessionId: string): Promise<HarnessEvent[]> {
     const out: HarnessEvent[] = [];
     for await (const e of this.read(sessionId)) out.push(e);
