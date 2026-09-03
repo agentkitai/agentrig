@@ -279,10 +279,10 @@ question 1.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R2a | `SandboxProvider` seam in core: `prepare(cmd, policy) → cmd'` wrapping tool execution; modes `read-only` / `workspace-write` / `none`; `sandbox.denied` event when the OS blocks an action; the permission layer unchanged and orthogonal | core |
-| R2b | Providers: `none` (today's behaviour, default), `docker` (portable: bind-mount cwd rw, rootfs ro, `--network none` unless `net` allowed), `seatbelt` (macOS `sandbox-exec` profile: cwd-write, deny-net-by-default) | core |
-| R2c | Escalation path: a tool call that fails **inside** the sandbox emits a `permission.request` with `origin: "sandbox-escalation"`; approval retries the same call unsandboxed once. TUI renders it distinctly ("blocked by sandbox — run outside it?") | core + cli |
-| R2d | Wiring: `--sandbox <mode>` + config key; `--yolo` composes (skip approvals *inside* a sandbox is the recommended unattended posture and the warning says so); Linux runner lands `docker` in CI; **F3**: Windows CI job added with sandbox=none, proving the seam's no-op path | cli, .github |
+| R2a *(done)* | `SandboxProvider` seam in core: `prepare(cmd, policy) → cmd'` wrapping tool execution; modes `read-only` / `workspace-write` / `none`; `sandbox.denied` event when the OS blocks an action; the permission layer unchanged and orthogonal | core |
+| R2b *(done)* | Providers: `none` (today's behaviour, default), `docker` (portable: bind-mount cwd rw, rootfs ro, `--network none` unless `net` allowed), `seatbelt` (macOS `sandbox-exec` profile: cwd-write, deny-net-by-default) | core |
+| R2c *(done)* | Escalation path: a tool call that fails **inside** the sandbox emits a `permission.request` with `origin: "sandbox-escalation"`; approval retries the same call unsandboxed once. TUI renders it distinctly ("blocked by sandbox — run outside it?") | core + cli |
+| R2d *(done)* | Wiring: `--sandbox <mode>` + config key; `--yolo` composes (skip approvals *inside* a sandbox is the recommended unattended posture and the warning says so); Linux runner lands `docker` in CI; **F3**: Windows CI job added with sandbox=none, proving the seam's no-op path | cli, .github |
 
 Acceptance: a test drives a fake provider to write outside cwd under `workspace-write` and
 observes `sandbox.denied` + escalation request + (on approval) retry; docker provider gets an

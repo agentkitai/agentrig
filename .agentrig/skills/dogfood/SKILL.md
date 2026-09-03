@@ -70,7 +70,11 @@ pnpm build && pnpm test && pnpm typecheck
 ## 5. Documentation
 
 - `docs/STATUS.md`: a section for this change — what shipped, decisions beyond the spec, rejected
-  ideas, caveats a future reader would trip on. Update `docs/ROADMAP.md` if a row's contract moved.
+  ideas, caveats a future reader would trip on — and the "Current roadmap row" line at the top,
+  which names the row this PR completes and the next one. Update `docs/ROADMAP.md` if a row's
+  contract moved, and mark the row you are completing `*(done)*` in its table cell (`| R2b
+  *(done)* |`): `grep -E '^\| R[0-9]' docs/ROADMAP.md | grep -v '(done)'` is the live backlog, and
+  a row left unmarked is a row the next train may rebuild.
 
 ## 6. Commit and push
 
