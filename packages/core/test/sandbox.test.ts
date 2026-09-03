@@ -13,6 +13,7 @@ import {
   bashTool,
   classifiable,
   deniedPath,
+  probeBudget,
   deniedPaths,
   sandboxSpawnInvocation,
   writeDenialPlausible,
@@ -436,6 +437,80 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       await writeFile(join(root, "file.txt"), "x");
       expect(writeDenialPlausible(`touch: cannot touch '${root}/file.txt/x': Read-only file system`, ww)).toBe(false);
       expect(writeDenialPlausible(`touch: cannot touch '${root}/${"n".repeat(300)}/x': Read-only file system`, ww)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a dangling chain with deep targets is followed link by link, inside the syscall budget", async () => {
+    // forty links, each pointing at the next one sixty directories down, the last dangling to the
+    // outside: resolving the chain with a realpath per hop made the kernel re-walk the remainder
+    // every time — 820 traversals per path, a hundred seconds per classification
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-")));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-chain-out-")));
+    try {
+      const deepDir = join(root, ...Array.from({ length: 60 }, () => "d"));
+      await mkdir(deepDir, { recursive: true });
+      for (let i = 0; i < 40; i += 1) {
+        const target = i === 39 ? join(outside, "newfile") : join(deepDir, `link${i + 1}`);
+        await symlink(target, join(deepDir, `link${i}`));
+      }
+      const ww = { mode: "workspace-write" as const, cwd: root };
+      const names = Array.from({ length: 16 }, (_, i) => `'${deepDir}/link0/x${i}'`).join(" ");
+      const line = `touch: cannot touch ${names}: Read-only file system`;
+      const t0 = Date.now();
+      // the chain leads outside: a genuine denial, kept
+      for (let i = 0; i < 50; i += 1) expect(writeDenialPlausible(line, ww, { budget: probeBudget() })).toBe(true);
+      expect(Date.now() - t0).toBeLessThan(1_500);
+      // a two-link loop is not a write that fails with EROFS: judged by string, dropped
+      await symlink(join(root, "b"), join(root, "a"));
+      await symlink(join(root, "a"), join(root, "b"));
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/a/x': Read-only file system`, ww)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("the syscall budget is global to one classification: once spent, the rest is judged by string", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-budget-")));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "agentrig-budget-out-")));
+    try {
+      await symlink(outside, join(root, "etclink"));
+      const ww = { mode: "workspace-write" as const, cwd: root };
+      const viaLink = `touch: cannot touch '${root}/etclink/x': Read-only file system`;
+      // with budget: the link is followed and the line kept
+      expect(writeDenialPlausible(viaLink, ww, { budget: probeBudget() })).toBe(true);
+      // budget spent: the string says inside, and inside is dropped — the documented narrowing
+      const spent = { remaining: 0 };
+      expect(writeDenialPlausible(viaLink, ww, { budget: spent })).toBe(false);
+      // a budget too small to finish the walk is spent by it and then judges by string
+      const tiny = { remaining: 3 };
+      expect(writeDenialPlausible(viaLink, ww, { budget: tiny })).toBe(false);
+      expect(tiny.remaining).toBe(0);
+      // an outside string is kept either way
+      expect(writeDenialPlausible("touch: cannot touch '/etc/x': Read-only file system", ww, { budget: { remaining: 0 } })).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("a symlinked policy.cwd names the workspace in both forms, so a string judgement cannot keep an inside line", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-cwdlink-")));
+    try {
+      await mkdir(join(root, "real"));
+      await symlink(join(root, "real"), join(root, "link"));
+      const ww = { mode: "workspace-write" as const, cwd: join(root, "link") };
+      const deep = `${"d/".repeat(70)}x`;
+      // past the depth cap, the path is judged by string — against the literal AND the real cwd
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/link/${deep}': Read-only file system`, ww)).toBe(false);
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/real/${deep}': Read-only file system`, ww)).toBe(false);
+      // and past the budget likewise
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/real/a': Read-only file system`, ww, { budget: { remaining: 0 } })).toBe(false);
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/link/a': Read-only file system`, ww, { budget: { remaining: 0 } })).toBe(false);
+      // a sibling of the real directory is outside in both forms
+      expect(writeDenialPlausible(`touch: cannot touch '${root}/other/a': Read-only file system`, ww)).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

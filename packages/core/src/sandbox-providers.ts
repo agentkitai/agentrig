@@ -95,8 +95,9 @@ export function throwIfSandboxDenied(stderr: string): void {
 function firstDenialLine(
   stderr: string,
   patterns: readonly RegExp[],
-  unless?: RegExp | ((line: string, spent: boolean) => boolean),
+  unless?: RegExp | ((line: string, spent: boolean, budget: ProbeBudget) => boolean),
 ): string | undefined {
+  const budget = probeBudget();
   // The pattern test is cheap and runs on every line; the corroboration (`unless`, which may
   // touch the filesystem) is spent on at most MAX_CORROBORATED_LINES distinct matching lines.
   // Past that budget `unless` is told so and judges by string alone (no filesystem): a forged
@@ -114,9 +115,9 @@ function firstDenialLine(
     // a repeated line is one line: a forger cannot spend the budget by printing it fifty times
     if (seen.has(line)) continue;
     seen.add(line);
-    const spent = corroborated >= MAX_CORROBORATED_LINES;
+    const spent = corroborated >= MAX_CORROBORATED_LINES || budget.remaining <= 0;
     if (!spent) corroborated += 1;
-    if (unless(line, spent)) continue;
+    if (unless(line, spent, budget)) continue;
     return line;
   }
   return undefined;
@@ -128,7 +129,8 @@ const MAX_PATH_CHARS = 4_096;
  * Deepest path the walk resolves through the filesystem. Every probe and the final realpath
  * cost one syscall per EXISTING component, so a child that builds a two-thousand-level tree
  * inside the workspace (allowed) and names leaves under it made each classification a
- * three-minute block; past this depth the path is judged as a string, which only ever drops.
+ * three-minute block; past this depth the path is judged as a string, against both forms of
+ * the workspace, so a symlinked `policy.cwd` cannot make the string judgement keep a line.
  */
 const MAX_PATH_COMPONENTS = 64;
 /** Paths considered per line, and matching lines corroborated per stderr: the input is a child's. */
@@ -136,6 +138,23 @@ const MAX_PATHS_PER_LINE = 16;
 const MAX_CORROBORATED_LINES = 50;
 /** Symlink hops followed when the deepest existing component is a dangling link. */
 const MAX_LINK_HOPS = 40;
+/**
+ * Filesystem calls one classification may spend, across every line and path it corroborates.
+ * The per-axis caps (path length, depth, hops, paths per line, lines) each bound one dimension,
+ * and a child kept finding the product of two — a dangling chain whose every target is deep.
+ * A global budget bounds the product: once spent, the rest of the stderr is judged by string
+ * alone, which only ever drops.
+ */
+const MAX_PROBES_PER_CLASSIFICATION = 2_000;
+
+/** The probe budget threaded through one classification. */
+export interface ProbeBudget {
+  remaining: number;
+}
+
+export function probeBudget(): ProbeBudget {
+  return { remaining: MAX_PROBES_PER_CLASSIFICATION };
+}
 
 /**
  * The operand a coreutils/shell message names right before the errno text (`sh: line 5: hosts:
@@ -205,14 +224,16 @@ export function deniedPath(line: string): string | undefined {
  * errors — a child that prints deep paths cannot make this expensive. A dangling link is
  * followed through its target, itself canonicalised, up to a hop budget.
  */
-function canonical(path: string, hops = 0): string {
-  if (path.length > MAX_PATH_CHARS || hops > MAX_LINK_HOPS) return path;
+function canonical(path: string, budget: ProbeBudget): string {
+  if (path.length > MAX_PATH_CHARS) return path;
   const parts = path.split(sep).filter((p) => p !== "");
   if (parts.length > MAX_PATH_COMPONENTS) return path;
   const prefix = (n: number): string => sep + parts.slice(0, n).join(sep);
   // `throwIfNoEntry: false` silences ENOENT only; ENOTDIR (a path through a regular file) and
   // ENAMETOOLONG still throw, and a component that cannot exist is simply absent
   const stat = (n: number): ReturnType<typeof lstatSync> | undefined => {
+    if (budget.remaining <= 0) return undefined;
+    budget.remaining -= 1;
     try {
       return lstatSync(prefix(n), { throwIfNoEntry: false });
     } catch {
@@ -223,6 +244,7 @@ function canonical(path: string, hops = 0): string {
   let lo = 0;
   let hi = parts.length;
   while (lo < hi) {
+    if (budget.remaining <= 0) return path;
     const mid = Math.ceil((lo + hi) / 2);
     if (stat(mid) !== undefined) lo = mid;
     else hi = mid - 1;
@@ -230,27 +252,50 @@ function canonical(path: string, hops = 0): string {
   const existing = prefix(lo);
   const rest = parts.slice(lo);
   const link = stat(lo)?.isSymbolicLink() === true;
+  if (budget.remaining <= 0) return path;
+  budget.remaining -= 1;
   try {
-    // an existing chain (link to link to directory) resolves outright
+    // an existing chain (link to link to directory) resolves outright; the kernel walks it once
     const real = realpathSync.native(existing);
     return rest.length === 0 ? real : join(real, ...rest);
-  } catch {
-    if (!link) return path;
+  } catch (err) {
+    // ELOOP, ENOTDIR, ENAMETOOLONG: a write there fails with that errno, not EROFS — judge the
+    // string; only a dangling link (ENOENT somewhere along the chain) is worth following
+    if (!link || (err as NodeJS.ErrnoException).code !== "ENOENT") return path;
   }
-  try {
-    // the deepest existing component is a DANGLING link: follow it to where the write would land
-    const dir = realpathSync.native(dirname(existing));
-    const target = canonical(resolve(dir, readlinkSync(existing)), hops + 1);
-    return rest.length === 0 ? target : join(target, ...rest);
-  } catch {
-    return path;
+  // A DANGLING chain: follow it link by link with readlink alone (one call per hop, never a
+  // realpath per hop — the kernel would re-walk the whole remaining chain each time), then
+  // resolve the final target once through the same bounded walk.
+  let cursor = existing;
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
+    if (budget.remaining <= 0) return path;
+    budget.remaining -= 1;
+    let target: string;
+    try {
+      target = resolve(dirname(cursor), readlinkSync(cursor));
+    } catch {
+      return path;
+    }
+    if (target.length > MAX_PATH_CHARS) return path;
+    budget.remaining -= 1;
+    let targetIsLink: boolean;
+    try {
+      targetIsLink = lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink() === true;
+    } catch {
+      return path;
+    }
+    if (!targetIsLink) {
+      const resolved = canonical(target, budget);
+      return rest.length === 0 ? resolved : join(resolved, ...rest);
+    }
+    cursor = target;
   }
+  return path;
 }
 
-function insideWorkspace(path: string, cwd: string, canonicalise: boolean): boolean {
-  const literal = resolve(path);
-  const target = canonicalise ? canonical(literal) : literal;
-  return target === cwd || target.startsWith(cwd + sep);
+/** Whether `target` is `cwd` or beneath it, for any of the cwd's forms (literal and canonical). */
+function under(target: string, cwds: readonly string[]): boolean {
+  return cwds.some((cwd) => target === cwd || target.startsWith(cwd + sep));
 }
 
 /**
@@ -274,18 +319,27 @@ function insideWorkspace(path: string, cwd: string, canonicalise: boolean): bool
 export function writeDenialPlausible(
   line: string,
   policy: SandboxPolicy,
-  opts: { sharedFilesystem?: boolean; stringOnly?: boolean } = {},
+  opts: { sharedFilesystem?: boolean; stringOnly?: boolean; budget?: ProbeBudget } = {},
 ): boolean {
   if (policy.mode !== "workspace-write") return true;
   const named = deniedPaths(line);
   if (named.length === 0) return true;
-  const fs = opts.stringOnly !== true;
-  const cwd = fs ? canonical(resolve(policy.cwd)) : resolve(policy.cwd);
+  const budget = opts.budget ?? probeBudget();
+  const fs = opts.stringOnly !== true && budget.remaining > 0;
+  // Both forms of the workspace: a symlinked `policy.cwd` names the same directory either way,
+  // and a string judgement (past a cap or the budget) must not keep a line for naming the other.
+  // The cwd is the policy's own string, not the child's, so its resolution has a small budget
+  // of its own rather than the classification's.
+  const literalCwd = resolve(policy.cwd);
+  const cwds = [literalCwd, canonical(literalCwd, { remaining: 64 })];
   return named.some((path) => {
     if (!isAbsolute(path)) return true;
-    const literalInside = insideWorkspace(path, cwd, false);
-    if (!literalInside && (opts.sharedFilesystem !== true || !fs)) return true;
-    return fs ? !insideWorkspace(path, cwd, true) : !literalInside;
+    const literal = resolve(path);
+    const literalInside = under(literal, cwds);
+    if (!fs) return !literalInside;
+    // docker shares only the workspace bind, so an outside string is judged as written
+    if (!literalInside && opts.sharedFilesystem !== true) return true;
+    return !under(canonical(literal, budget), cwds);
   });
 }
 
@@ -369,9 +423,9 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
     return firstDenialLine(
       stderr,
       patterns,
-      (line, spent) =>
+      (line, spent, budget) =>
         /read-only file system/iu.test(line) &&
-        !writeDenialPlausible(line, policy, { sharedFilesystem: false, stringOnly: spent }),
+        !writeDenialPlausible(line, policy, { sharedFilesystem: false, stringOnly: spent, budget }),
     );
   }
 }
@@ -423,9 +477,10 @@ export class SeatbeltSandboxProvider extends ProcessSandboxProvider {
     return firstDenialLine(
       stderr,
       [/sandbox(?:-exec)?:?.*deny/iu],
-      (line, spent) =>
+      (line, spent, budget) =>
         (policy.network === true && /network/iu.test(line)) ||
-        (/file-write/iu.test(line) && !writeDenialPlausible(line, policy, { sharedFilesystem: true, stringOnly: spent })),
+        (/file-write/iu.test(line) &&
+          !writeDenialPlausible(line, policy, { sharedFilesystem: true, stringOnly: spent, budget })),
     );
   }
 }

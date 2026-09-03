@@ -191,6 +191,18 @@ Changes:
   lands on line boundaries so no denial line is split into an inside-only fragment. ENOTDIR
   and ENAMETOOLONG probes are pinned as absent, not thrown. Mutants killed: no depth cap
   (timing); past-budget lines kept; no catch around the probe; cut not line-aligned.
+- Fifth delta round: the per-axis caps each bound one dimension and a child could still buy
+  their product — a forty-hop dangling chain whose every target is sixty directories deep cost a
+  `realpath` per hop, each re-walking the remaining chain, a hundred seconds per classification.
+  The structural fix: one syscall budget per classification (`probeBudget`, two thousand
+  filesystem calls across every line and path), threaded from `firstDenialLine` through
+  `writeDenialPlausible` into the walk; once spent, the rest of the stderr is judged by string.
+  A dangling chain is now followed with one `readlink` per hop and resolved once at its end, and
+  a `realpath` failure other than ENOENT (ELOOP, ENOTDIR) is judged by string because a write
+  there fails with that errno, not EROFS. The string judgement tests membership against both
+  forms of the workspace (literal and real), so a symlinked `policy.cwd` cannot make it keep a
+  line. The deep-tree fixture is three hundred levels (macOS PATH_MAX is 1024). Mutants killed:
+  a `realpath` per hop (timing); the workspace in one form only; probes not budgeted.
 ## Open-issue sweep (2026-09-03)
 
 - **#88 — `session_end` hooks never ran for an aborted session.** The point ran under the
