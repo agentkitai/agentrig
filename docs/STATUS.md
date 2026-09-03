@@ -59,6 +59,10 @@ Residuals are GitHub issues, never PR-body prose: after the third round the last
 `review-residual` issue per open finding and lists the numbers under `## Residuals`; the lander
 refuses a PR whose residuals lack issue numbers. dogfood and ship say the same for anything a
 review found that the PR does not fix.
+First `/topic R3` run halted R3a after repair round 2 because the round "started with one finding
+and ended with one" — but the one it ended with was new, in code the fix touched, and the given
+one was closed. The convergence rule counted; it now asks only whether the given findings closed
+and none reopened. A new finding is the next round's work until the cap.
 
 ## Abort grace: a parent waits for the children its abort orphaned (#86)
 

@@ -113,10 +113,13 @@ converging, or when something needs a human. Per row, at most THREE repair round
   head SHAs; it reviews only that delta under the review skill's standards and never sees either
   author's report. Record its id. A clean, fully verified delta verdict lands (§4). Findings on the
   delta open the next round.
-- **Convergence**: a round must close every finding from the previous round. A round that reopens
-  a closed finding, or that ends with as many or more open findings than it started with, is not
-  converging: halt with the full trace, because a fourth round would be the #82 treadmill. New
-  findings in code the fix touched are normal and go to the next round.
+- **Convergence** is measured on the findings a round was given, never by counting: a round
+  converges when every finding it started with is closed and no previously closed finding is
+  reopened. A NEW finding the delta reviewer raises in code the fix touched is progress, not
+  regression — it goes to the next round, however many there are, until the round cap. The only
+  non-converging round is one that leaves a given finding open or reopens a closed one: that halts
+  with the full trace, because repeating it would be the #82 treadmill. The R3a train halted on
+  "started with one, ended with one" when the one it ended with was new; that reading is wrong.
 - **After the third round**, whatever the delta reviewer still finds becomes **one GitHub issue
   per finding**, never a note in the PR body: the last fixer files each with `gh issue create`
   (title `[review residual] <one line>`, label `review-residual`, body: severity, file:line, the

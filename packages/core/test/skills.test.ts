@@ -311,7 +311,8 @@ describe("skillTool", () => {
     expect(body).toContain("The train does not stop on a finding");
     expect(body).toContain("at most THREE repair rounds");
     expect(body).toContain("a HIGH with a one-line fix and a test is repair work");
-    expect(body).toContain("A round that reopens a closed finding");
+    expect(body).toContain("no previously closed finding is reopened");
+    expect(body).toContain("is progress, not regression");
     expect(body).toContain("one GitHub issue per finding");
     expect(body).toContain("A LOW or MEDIUM residual lands once its issue exists; a HIGH residual halts");
     expect(body).toContain("The lander refuses a PR whose `## Residuals` names a finding without an issue number");
