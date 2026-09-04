@@ -14,7 +14,7 @@ Do not implement, review, or fix anything in this session yourself.
 
 - Spawn a subagent with a self-contained task: the issue/roadmap row to implement, plus
   "Follow the dogfood skill. You are a ship child: stop at the PR and skip the external reviews —
-  an independent reviewer follows." Include everything it needs in the task text — a subagent
+  an independent review follows." Include everything it needs in the task text — a subagent
   gets none of this conversation.
 - If its report ends with `DEVIATION REQUESTED`, do not judge the proposal yourself: spawn an
   `arbiter` subagent with the proposal, the contract verbatim, and the human's invocation line;
@@ -37,7 +37,8 @@ Do not implement, review, or fix anything in this session yourself.
 ## 3. Stop — the merge decision is not yours
 
 - Present the verdict verbatim-in-substance: every finding with its severity, or the pass with
-  its evidence, plus PR number and CI state. Then END YOUR TURN and wait.
+  its evidence, plus PR number, CI state, and the URLs of the two external review comments (four
+  after a delta). Then END YOUR TURN and wait.
 - The human's next message decides: a merge instruction means run the `land` skill's steps (in
   this session or a third subagent); a fix request means spawn a fix subagent scoped to exactly
   those findings on the same branch, then a delta re-review of what changed — the same external
@@ -55,5 +56,6 @@ Do not implement, review, or fix anything in this session yourself.
 
 - Keep your own turns few — the work happens in the children. If a child fails, relay its actual
   failure; never paper over a red trio or a review finding to make the cycle look complete.
-- Every child has its own session log; name the session ids in your final report so the full
-  audit trail is one `sessions show` away.
+- Every child has its own session log; name the session ids and the URLs of the two external
+  review comments (four after a delta) in your final report so the full audit trail is one
+  `sessions show` away.

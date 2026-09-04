@@ -81,60 +81,75 @@ For each recorded row, in order:
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
    - **Prepare.** `gh pr view NN --json headRefName,headRefOid` gives `BRANCH` and `HEAD`. Then
-     `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `git worktree add "$WT" "$HEAD"`; assert
+     `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `git worktree add "$WT" "$HEAD"`,
+     `git -C "$WT" branch -f review-base-NN origin/main` (create it inside the worktree so
+     `git -C "$WT"` sees it); assert
      `[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ] || stop the pass (the worktree is not at the
-     PR head)`, and record `MAIN=$(git rev-parse origin/main)`. Then in `$WT`: `git merge --no-edit
-     origin/main` (a conflict is a finding for §3 — record which files and stop the pass),
-     `git branch -f review-base origin/main`, `pnpm install`. `OUT=$(mktemp -d)` holds every
-     output file; never write review artifacts inside `$WT`.
-   - **Claude job** — `bash` with `background: true`, cwd `$WT`:
+     PR head)` (remove the worktree and `review-base-NN` before stopping), and record
+     `MAIN=$(git rev-parse origin/main)`. Then `git -C "$WT" merge --no-edit origin/main` (a
+     conflict is a finding for §3 — record which files and stop the pass; remove the worktree and
+     `review-base-NN` before stopping). A pass that stopped before both reviews completed is not a
+     pass: the pass after a conflict-stopped one is a full pass on the new head, never a delta.
+     Then `(cd "$WT" && pnpm install)`. `OUT=$(mktemp -d)` holds every output file; never write
+     review artifacts inside `$WT`. End the command with `echo "$WT" "$OUT"`. `bash` has no cwd
+     field and no shell state survives between calls: record both absolute paths in your reply
+     text like a job id, and substitute them literally into every later command, prefixing each
+     job command with `cd <WT> && `.
+   - **Claude job** — `bash` with `background: true`:
      ```
-     env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
+     cd <WT> && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
          -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_PID \
        claude -p --model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash' \
          --output-format json --no-session-persistence \
          "Review PR #NN at head SHA HEAD. Read .agentrig/skills/review/SKILL.md and follow it. You are already in an isolated worktree at that head, merged with origin/main, with dependencies installed: skip its section 2 and verify that state yourself. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
-         < /dev/null > "$OUT/claude.json"
+         < /dev/null > "<OUT>/claude.json"
      ```
      The `env -u` list matters when this session was itself launched from inside Claude Code
      (the nesting variables make the child report "not logged in"); `< /dev/null` keeps it from
-     waiting on stdin.
-   - **Codex job** — `bash` with `background: true`, cwd `$WT`:
+     waiting on stdin. `<WT>` and `<OUT>` are the literal absolute paths Prepare echoed, not shell
+     variables — this is a fresh `bash` call and `$WT`/`$OUT` do not exist in it.
+   - **Codex job** — `bash` with `background: true`:
      ```
-     codex review --base review-base > "$OUT/codex.md" 2> "$OUT/codex.err"
+     cd <WT> && codex review --base review-base-NN > "<OUT>/codex.md" 2> "<OUT>/codex.err"
      ```
      Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
      standard is Claude's brief and step 5's sorting, where a Codex finding without a proposed fix
      is still repair work.
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
-     loop). Record both job ids from the `bash` results immediately and restate them in your own
-     reply text on every turn you poll — tool results older than five turns may be elided from
-     context, and a lost id is a dead job you cannot kill or read. A job still running 45 minutes
-     after it started is dead: `bash_job` `action: kill` it. A dead job (killed, non-zero exit, or
-     empty output) is retried ONCE on the same head; both reviewers dead on the same head halts
-     the train.
+     loop). Record both job ids from the `bash` results immediately, along with each job's start
+     time beside its id, and restate them in your own reply text on every turn you poll — tool
+     results older than five turns may be elided from context, and a lost id is a dead job you
+     cannot kill or read. A job still running 60 minutes after it started is dead: `bash_job`
+     `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/claude.md` /
+     `<OUT>/codex.md` after extraction — `bash_job` showing no output is normal because the jobs
+     write to files) is retried ONCE on the same head; both reviewers dead on the same head halts
+     the train. A pass with one surviving review is not a pass — halt with the surviving review
+     posted; the train never lands on one reviewer.
    - **Assert the model and extract the Claude review:**
      ```
-     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "$OUT/claude.json" > "$OUT/claude.md"
+     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "<OUT>/claude.json" > "<OUT>/claude.md"
      ```
      A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
      are dead), never a review to use.
-   - **Provenance.** Post each review verbatim as a PR comment, headed
-     `## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full`
-     and `## External review — Codex — head HEAD — merged with origin/main MAIN — full`, with
-     `gh pr comment NN --body-file "$OUT/…"`, and record both comment URLs — they stand in for
-     reviewer session ids. Then `git worktree remove --force "$WT"`.
-   - **Combine.** Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line and
-     the same scenario), and sort the union under step 5. Before combining, re-read the PR head
-     (`gh pr view NN --json headRefOid`): if it no longer equals `HEAD`, the author pushed during
-     the pass — the pass is stale, rerun it on the current head. Claude's review must also name
+   - **Provenance.** Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
+     it no longer equals `HEAD`, the author pushed during the pass — the pass is stale, rerun it
+     on the current head. Compose each comment body with its heading first —
+     `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
+     (the same for Codex, with its own heading and `<OUT>/codex.md`) — then post each with
+     `gh pr comment NN --body-file "<OUT>/claude-comment.md"` (and the Codex equivalent), and
+     record both comment URLs — they stand in for reviewer session ids. A body over 60,000
+     characters is split into numbered comments `(1/2)`, `(2/2)`. Then
+     `git worktree remove --force <WT>` and `git branch -D review-base-NN`.
+   - **Combine.** Strip the `<WT>/` prefix from every Codex file:line so findings are
+     repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
+     and the same scenario), and sort the union under step 5. Claude's review must also name
      `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
      asserted to be at `HEAD` before the merge.
 5. Record every child session id from its tool result and restate it in your own reply text in that
    same turn; tool results older than five turns may be elided from context. Bind the verdict to
    `HEAD` (Claude's self-reported SHA and the re-read PR head must both equal it); a head that
    changes other than through §3's loop is stale — rerun the pass on the new head rather than
-   halting. Sort its findings, never by severity:
+   halting. Sort the combined findings, never by severity:
    every finding that carries a concrete proposed fix is repair work for §3; a finding it labels contract or
    authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it could not
    verify is a finding whose fix is reproducible evidence in the PR body or deletion of the claim;
@@ -166,22 +181,27 @@ converging, or when something needs a human. Per row, at most THREE repair round
   from its pushed branch carrying the same findings; a second death halts. A merge conflict is the
   fixer's to resolve (merge `main` in, never rebase); red CI on the new head is a finding for the
   next round, not a halt.
-- **Re-review the delta**: run the external review pass again (§2 step 4) over the delta only.
-  Refresh the worktree to the new head: `git worktree add` at NEW; assert
-  `[ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at NEW)`,
-  and record `MAIN=$(git rev-parse origin/main)`. Then merge `origin/main`,
-  `git branch -f review-base OLD`, `pnpm install`. Brief the Claude job with the PR number and
-  the old/new head SHAs: "review only the changes OLD..NEW under the review skill's standards;
-  never assume the previous review's findings — verify the code as it is now". Codex takes no
-  wording either way — it runs `codex review --base review-base` unchanged, with `review-base`
-  now sitting at OLD, so its own diff is exactly OLD..NEW. Neither reviewer ever sees
+- **Re-review the delta**: run the external review pass again (§2 step 4) over the delta only, in
+  a fresh worktree and output directory: `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`,
+  `OUT=$(mktemp -d)`, `git worktree add "$WT" NEW`, `git -C "$WT" branch -f review-base-NN OLD`;
+  assert `[ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at
+  NEW)` (remove the worktree and `review-base-NN` before stopping), and
+  `(cd "$WT" && pnpm install)`. End the command with `echo "$WT" "$OUT"` and substitute both
+  paths literally into every later command as in §2 step 4, prefixing each job command with
+  `cd <WT> && `. Brief the Claude job with the PR number and the old/new head SHAs: "review only
+  the changes OLD..NEW under the review skill's standards; never assume the previous review's
+  findings — verify the code as it is now". Codex takes no wording either way — it runs
+  `codex review --base review-base-NN` unchanged, with `review-base-NN` now sitting at OLD.
+  Codex's diff is exactly OLD..NEW when the fixer did not merge `origin/main`; if NEW contains
+  such a merge, Codex also sees main's changes — findings on files the fixer's own commits did
+  not touch are noted in the PR comment, not opened as findings. Neither reviewer ever sees
   either author's report. Post both as PR comments headed
-  `## External review — Claude Code (claude-opus-5) — head NEW — merged with origin/main MAIN —
-  delta OLD..NEW` and `## External review — Codex — head NEW — merged with origin/main MAIN —
-  delta OLD..NEW`. Staleness here is the same re-read check as the full review: re-read the PR
-  head before combining, and if it no longer equals NEW, or Claude's self-reported SHA does not
-  equal NEW, the pass is stale — rerun it on the current head. A clean, fully verified delta
-  verdict from both reviewers lands (§4). Findings on the delta open the next round.
+  `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
+  `## External review — Codex — head NEW — delta OLD..NEW`. Staleness here is the same re-read
+  check as the full review: re-read the PR head before posting, and if it no longer equals NEW,
+  or Claude's self-reported SHA does not equal NEW, the pass is stale — rerun it on the current
+  head. A clean, fully verified delta verdict from both reviewers lands (§4). Findings on the
+  delta open the next round.
 - **Convergence** is measured on the findings a round was given, never by counting: a round
   converges when every finding it started with is closed and no previously closed finding is
   reopened. A NEW finding the delta review raises in code the fix touched is progress, not

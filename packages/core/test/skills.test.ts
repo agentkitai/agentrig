@@ -318,7 +318,7 @@ describe("skillTool", () => {
     expect(body).toContain("The lander refuses a PR whose `## Residuals` names a finding without an issue number");
     expect(body).toContain("Everything else is a child's job");
     expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
-    expect(body).toContain("Sort its findings, never by severity");
+    expect(body).toContain("Sort the combined findings, never by severity");
     expect(body).toContain("Arbitrate first, once per row");
     expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
@@ -333,7 +333,7 @@ describe("skillTool", () => {
     expect(body).toContain("two reviewers that share nothing with the builder, in parallel, in one worktree you prepare");
     expect(body).toContain("--model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash'");
     expect(body).toContain("--output-format json --no-session-persistence");
-    expect(body).toContain('not claude-opus-5');
+    expect(body).toContain("not claude-opus-5");
     expect(body).toContain("codex review --base review-base");
     expect(body).toContain("both reviewers dead on the same head halts the train");
     expect(body).toContain("gh pr comment");
@@ -341,6 +341,14 @@ describe("skillTool", () => {
     expect(body).toContain("runs on the main entry, never the child default");
     expect(body).toContain("run the external review pass again");
     expect(body).toContain("never write review artifacts inside");
+    // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
+    expect(body).toContain("env -u CLAUDECODE");
+    expect(body).toContain("< /dev/null");
+    expect(body).toContain('[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ]');
+    expect(body).toContain("gh pr view NN --json headRefOid");
+    expect(body).toContain("head HEAD — merged with origin/main MAIN — full");
+    expect(body).toContain("one surviving review is not a pass");
+    expect(body).toContain("is a full pass on the new head, never a delta");
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");

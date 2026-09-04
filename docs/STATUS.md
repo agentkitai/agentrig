@@ -408,7 +408,7 @@ Changes:
   `loadRunConfig` (typed `--provider`/`--model`/`--base-url` or `AGENTRIG_MODEL`), so it shows
   what `run` would resolve, not only the env-var case.
 - R3.5b moves the train's review out of subagents entirely: `topic` §2 step 4 runs `claude -p`
-  (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review --base review-base` in
+  (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review --base review-base-NN` in
   parallel in one conductor-made worktree, on the full review and on every delta; reviews are
   posted as PR comments and replace reviewer session ids in reports. The arbiter is spawned on
   the main entry. Preflight child counts drop from three to two per row.
@@ -417,9 +417,18 @@ Changes:
   Claude's. `codex review` on the installed CLI (0.153.2) rejects `--base <BRANCH>` combined with
   a `[PROMPT]` positional argument (`error: the argument '--base <BRANCH>' cannot be used with
   '[PROMPT]'`, confirmed with `--help` and by swapping argument order). The Codex job therefore
-  runs `codex review --base review-base` with no custom prompt; Codex's own review mode carries
+  runs `codex review --base review-base-NN` with no custom prompt; Codex's own review mode carries
   its own instructions, and the adversarial standard is enforced by Claude's brief plus step 5's
   finding-sorting rule, where a Codex finding without a proposed fix is still repair work.
+- Codex names no SHA in its own output; its provenance rests on the PR-comment heading (which
+  records `HEAD`) plus the pre-merge assertion that the worktree was at `HEAD` before
+  `origin/main` was merged in.
+- Observed dry-run cost against PR #109 (one file changed): the Claude leg cost $3.76 and took
+  13 minutes; the Codex leg took roughly 25 minutes — long enough that the final-review fix wave
+  raised the dead-job timeout in `topic` §2 step 4 from 45 to 60 minutes.
+- The dry run ran under Claude Code itself, so `bash_job` polling of the two backgrounded review
+  jobs from inside AgentRig's own `bash`/`bash_job` tools is the one part of the pass the dry run
+  did not exercise; the first real train verifies it.
 
 ## R2 notes
 
