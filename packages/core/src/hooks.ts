@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { CheckpointHookEvent } from "./checkpointer.js";
+import type { PermissionClass } from "./events.js";
 import type { Message } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import type { SessionSummary } from "./agent.js";
@@ -49,6 +51,10 @@ export interface HookContext {
   response?: Message;
   /** `pre_tool` / `post_tool`: which tool, and its (parsed) input. */
   tool?: { name: string; input: unknown };
+  /** Final permission class; present when the Checkpointer is run after approval. */
+  permission?: PermissionClass;
+  /** Core-only event seam supplied to the built-in Checkpointer, never to ordinary hooks. */
+  emitCheckpoint?(event: CheckpointHookEvent): Promise<void>;
   /**
    * `post_tool`: what the tool returned. `display` is the string the model will see and the one
    * a `modify` patch replaces; `output` is the tool's own value, which is very often NOT a

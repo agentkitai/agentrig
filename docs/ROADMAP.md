@@ -346,7 +346,7 @@ the tree; this gives it a clean floor.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R4a | `Checkpointer` hook (built on the existing 7-point hook surface, new code in core): before the first write-class tool of each turn, record a git stash-like snapshot via a temporary ref (`refs/agentrig/<session>/<turn>`, never touching the index or worktree); `checkpoint.created` event | core |
+| R4a *(done)* | `Checkpointer` hook (built on the existing 7-point hook surface, new code in core): before the first write-class tool of each turn, record a git stash-like snapshot via a temporary ref (`refs/agentrig/<session>/<turn>`, never touching the index or worktree); `checkpoint.created` event | core |
 | R4b | `sessions undo <id> [--to-turn n]` restores the tree to a checkpoint; TUI `/undo`; refuses (with a clear message) when the worktree has non-session changes newer than the checkpoint | cli |
 | R4c | Supervisor option: `abort` may restore the last checkpoint (`abortRestores: true`, default false — destructive-ish actions stay opt-in) | supervisor |
 

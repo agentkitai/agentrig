@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3d is complete; R3 is complete (R3a–R3d); R4a is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R4a is complete; R4b is next.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -63,6 +63,16 @@ First `/topic R3` run halted R3a after repair round 2 because the round "started
 and ended with one" — but the one it ended with was new, in code the fix touched, and the given
 one was closed. The convergence rule counted; it now asks only whether the given findings closed
 and none reopened. A new finding is the next round's work until the cap.
+
+## R4a checkpoint creation
+
+`Checkpointer` is an opt-in core `pre_tool` hook. After permission approval and immediately before
+`tool.call`, the loop gives it the final permission class; on the first write-class call in a turn
+it reads the complete repository worktree into a throw-away index, writes a commit object, and
+updates only `refs/agentrig/<session>/<turn>`. HEAD, the repository index, and worktree are not
+modified. Concurrent writes in one turn share one in-flight snapshot. `checkpoint.created` records
+the ref, commit, and tree. A non-git cwd continues normally and emits one `checkpoint.warning` for
+the session; read calls and denied writes do not checkpoint. R4b will consume these refs for undo.
 
 ## Abort grace: a parent waits for the children its abort orphaned (#86)
 
