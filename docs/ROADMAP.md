@@ -298,6 +298,25 @@ escalate-retry is a prompt-fatigue machine).
 Renunciation, recorded now: **no Landlock in R2.** Landlock needs a native addon or a helper
 binary; `docker` covers Linux correctness first. Landlock is R2-follow-up if dogfooding demands.
 
+Future investigation, recorded but not scheduled: **kernel-observed denials** (#95). Both
+providers still learn that the boundary refused a write by reading the child's stderr, which
+the child controls; #107 corroborates such a line against the policy, so a line naming only
+paths inside a writable workspace is dropped, but a forged line naming an outside path still
+classifies, because for that path the boundary really would refuse. The fix is a signal the
+provider observes rather than one the child prints. Two candidates, to be prototyped before
+either becomes a row: (1) **macOS, cheap** — seatbelt writes every violation to the unified
+log as `Sandbox: proc(pid) deny(1) file-write-* /path`, which the child cannot write to;
+the provider would run `log stream` filtered by the child's pid for the duration of the
+command and count only those records. (2) **Linux, the real design** — an eBPF program on
+the `sys_enter`/`sys_exit` tracepoints for the file-mutating syscalls, filtered to the
+container's cgroup, reporting `{pid, syscall, path, errno}` for EROFS/EACCES/EPERM; needs
+CAP_BPF + CAP_PERFMON or root on the host, a privileged sidecar in the VM under Docker
+Desktop, and a CO-RE build step or a `bpftrace` shell-out, since Node has no mature libbpf
+binding. The payoff is larger than #95: the same probe is a ground-truth feed of file writes,
+network connects and execs for the supervisor's detectors. Whichever lands, stderr becomes at
+most a hint and the corroboration walk from #107 can go. Not a renunciation — a cost the
+sandbox story has not yet earned.
+
 ### R3 — Session trees: fork, search, replay
 
 *Evidence: pi's most praised feature ("treat sessions like git history, not linear transcripts");
