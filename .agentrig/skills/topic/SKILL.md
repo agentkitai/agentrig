@@ -32,8 +32,11 @@ wait on (§2 step 4), never a child and never your own reading of the diff. Keep
   or substitute a row at expansion time; a row you believe is wrong goes through the deviation path
   in §3, and a child that rewrites its row without an arbiter record has produced a HIGH finding. If the band or
   invocation sentence is ambiguous, stop and ask the human before any child or branch is created.
-- Check that no row already has a half-pushed branch or open PR from an interrupted run. Resume its
-  named session instead of spawning over it; if no resumable session is known, halt for the human.
+- If a row already has an open PR from an interrupted run, adopt it instead of halting: verify CI is
+  green on its current head, treat it as the builder's output, and continue at §2 step 4. If its
+  description lacks the verbatim authorization quote, the first fixer adds it. Never spawn a second
+  builder over an adopted PR. A half-pushed branch with no PR gets ONE continuation builder from
+  whatever it pushed, exactly as §2 step 3 says. A train halts for a human only on §5's list.
 - Preflight child capacity before creating a branch. The minimum is two children per remaining
   row (builder, lander) — reviews are external CLI jobs, not children (§2 step 4); repair-round
   fixers, arbitration and continuations draw on the same pool as needed — a row that exhausts the
@@ -77,7 +80,11 @@ For each recorded row, in order:
    the human with both the proposal and the rejection. One arbitration per row; a second
    `DEVIATION REQUESTED` on the same row halts.
 4. Run the **external review pass** on the PR's current head: two reviewers that share nothing
-   with the builder, in parallel, in one worktree you prepare. Never pass the builder's report,
+   with the builder, in parallel, in one worktree you prepare. First check whether it already ran:
+   if the PR carries two comments whose heading starts with `## External review —` and whose body
+   names the CURRENT head SHA, one from Claude Code and one from Codex, do not run the pass again —
+   read those two comments as its result and continue at **Combine**. Comments naming an older head
+   are stale and are ignored. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
    - **Prepare.** One `bash` call, so every value it uses is assigned inside it before use:
