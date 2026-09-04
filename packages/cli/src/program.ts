@@ -242,7 +242,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     }
   }
 
-  async function configured(opts: RunOptions, cmd: Command, interactive: boolean): Promise<RunOptions | undefined> {
+  async function configured<T extends { profile?: string }>(opts: T, cmd: Command, interactive: boolean): Promise<T | undefined> {
     // The root-level --profile is scanned out of argv wherever it appears, so the subcommand's
     // own opts may not carry it even when the user typed it after the subcommand; optsWithGlobals
     // recovers the value (the subcommand's own, were it ever set, wins).
@@ -253,7 +253,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         ...dependencies.config,
         interactive,
         confirmTrust: dependencies.config?.confirmTrust ?? confirmTrust,
-      })) as unknown as RunOptions;
+      })) as unknown as T;
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
@@ -310,9 +310,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   );
   withProviderOptions(
     memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
-  ).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) =>
-    memoryIngest(sessionId, { ...opts, modelExplicit: modelExplicit(cmd) }),
-  );
+  ).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) => {
+    // R3.5a: ingest is the memory role; without config it stays exactly the flags it was given
+    const resolved = await configured(opts, cmd, false);
+    if (resolved !== undefined) await memoryIngest(sessionId, { ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
+  });
 
   // PLAN §5: agentrig dream [--review|--auto] [--scope project|global] [--since <n>]
   withProviderOptions(
@@ -327,7 +329,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--global <dir>", "global memory directory; enables promotion proposals")
     .option("--since <n>", "cap on raw sessions scanned")
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
-    .action(async (opts: DreamOptions, cmd: Command) => dreamCommand({ ...opts, modelExplicit: modelExplicit(cmd) }));
+    .action(async (opts: DreamOptions, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved !== undefined) await dreamCommand({ ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
+    });
 
   program
     .command("doctor")

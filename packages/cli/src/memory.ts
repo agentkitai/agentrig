@@ -15,7 +15,7 @@ import {
   withBackendRecall,
   type MemoryBackend,
 } from "@agentkitai/agentrig-memory";
-import { buildProvider, type ProviderOptions } from "./provider.js";
+import { buildProviders, type ProviderOptions } from "./provider.js";
 
 /**
  * `agentrig memory …` — thin wrappers over the memory package. Anything with logic in it
@@ -141,7 +141,10 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
   let provider;
   try {
-    provider = buildProvider(opts);
+    // R3.5a: the memory role's entry, unless the user typed provider flags — then, as for the
+    // main role, the typed flags win (`main` is the flat default entry under providerOverride)
+    const set = buildProviders(opts);
+    provider = opts.providerOverride === true ? set.main : set.memory;
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;

@@ -26,6 +26,8 @@ export interface ProviderOptions {
   providerOverride?: boolean;
   /** True when the user actually typed --max-tokens-per-turn; the flag has a default otherwise. */
   maxTokensPerTurnExplicit?: boolean;
+  /** Named config profile; consumed by loadRunConfig. */
+  profile?: string;
 }
 
 export interface ProviderHooks {

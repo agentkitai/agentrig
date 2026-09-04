@@ -495,4 +495,17 @@ describe("providers and roles (R3.5a)", () => {
     expect((await load(["--model", "typed"])).providerOverride).toBe(true);
     expect((await load([], { AGENTRIG_MODEL: "from-env" })).providerOverride).toBe(true);
   });
+
+  it("the dream and memory ingest commands see providers and roles from config", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(home, valid);
+    for (const path of [["dream"], ["memory", "ingest"]]) {
+      let cmd = buildProgram();
+      for (const name of path) cmd = cmd.commands.find((c) => c.name() === name)!;
+      cmd.parseOptions([]);
+      const resolved = await loadRunConfig(cmd, { ...cmd.opts() }, { cwd, home, env: {}, interactive: false });
+      expect(resolved.roles?.memory).toBe("cloud");
+      expect(Object.keys(resolved.providers ?? {})).toEqual(["cloud", "local"]);
+    }
+  });
 });
