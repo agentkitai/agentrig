@@ -458,6 +458,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     point: HookPoint,
     ctx: Omit<Parameters<typeof runHooks>[2], "signal">,
     selectedHooks?: Hook[],
+    failClosed = false,
   ): Promise<{ denied?: string; patches: unknown[]; injects: string[] }> => {
     // Checkpointer is still a pre_tool hook, but it must observe the final permission class and run
     // only after approval. Ordinary pre_tool hooks can modify input, so it gets a dedicated final
@@ -472,6 +473,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // one wall-clock budget for the whole point, so generous per-hook overrides cannot add up
         totalTimeoutMs: point === "session_end" ? (config.sessionEndBudgetMs ?? 15 * 60_000) : 60_000,
         ...(config.hookTimeoutMs === undefined ? {} : { timeoutMs: config.hookTimeoutMs }),
+        ...(failClosed ? { failClosed: true } : {}),
         onError: (message) => {
           if (!ended) void emit({ type: "error", message, fatal: false });
         },
@@ -1090,6 +1092,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         turn: turns,
         summary: { id, reason, turns, usage: totals },
       }).catch(() => ({ patches: [], injects: [] }));
+      for (const checkpointer of (config.hooks ?? []).filter(isCheckpointerHook)) {
+        checkpointer.endSession(id);
+      }
 
       for (const s of pendingSteers.splice(0)) {
         await emit({
@@ -1219,7 +1224,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
       const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
       if (checkpointers.length > 0) {
-        await hook("pre_tool", {
+        const checkpoint = await hook("pre_tool", {
           sessionId: id,
           cwd,
           turn: turns,
@@ -1230,7 +1235,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             // immutable append just as tool and supervisor record seams do.
             await emit(EventPayload.parse(event));
           },
-        }, checkpointers);
+        }, checkpointers, true);
+        if (checkpoint.denied !== undefined) {
+          await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+          return resultBlock(`checkpoint failed; write blocked: ${checkpoint.denied}`, true);
+        }
       }
 
       await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });

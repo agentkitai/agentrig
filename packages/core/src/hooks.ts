@@ -142,6 +142,8 @@ export interface HookRunnerOptions {
   signal?: AbortSignal;
   /** Total wall clock for the whole chain, regardless of per-hook overrides. */
   totalTimeoutMs?: number;
+  /** Built-in safety hooks may block the guarded operation instead of being skipped on failure. */
+  failClosed?: boolean;
 }
 
 /**
@@ -164,7 +166,9 @@ export async function runHooks(
   for (const hook of opts.hooks) {
     if (hook.point !== point) continue;
     if (opts.signal?.aborted === true) {
-      opts.onError(`hooks at ${point} stopped: the session was aborted`);
+      const reason = `hooks at ${point} stopped: the session was aborted`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       break;
     }
     const name = hook.id ?? point;
@@ -178,7 +182,9 @@ export async function runHooks(
       opts.totalTimeoutMs === undefined ? own : Math.max(0, opts.totalTimeoutMs - (Date.now() - startedAt));
     const budget = Math.min(own, remaining);
     if (budget <= 0) {
-      opts.onError(`hooks at ${point} stopped: the ${opts.totalTimeoutMs}ms budget for this point is spent`);
+      const reason = `hooks at ${point} stopped: the ${opts.totalTimeoutMs}ms budget for this point is spent`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       break;
     }
 
@@ -199,19 +205,30 @@ export async function runHooks(
         opts.signal,
       );
     } catch (err) {
-      // a third-party handler throwing or hanging must not take the session with it
-      opts.onError(`hook ${name} failed (continuing): ${err instanceof Error ? err.message : String(err)}`);
+      // Ordinary third-party handlers remain fail-open. Built-in safety hooks can require successful
+      // completion before the operation they guard is allowed to proceed.
+      const detail = err instanceof Error ? err.message : String(err);
+      if (opts.failClosed === true) {
+        const reason = `hook ${name} failed (blocking): ${detail}`;
+        opts.onError(reason);
+        return { denied: reason, patches, injects };
+      }
+      opts.onError(`hook ${name} failed (continuing): ${detail}`);
       continue;
     } finally {
       opts.signal?.removeEventListener("abort", onAbort);
     }
 
     if (result === null || typeof result !== "object" || !("action" in result)) {
-      opts.onError(`hook ${name} returned no action; ignoring`);
+      const reason = `hook ${name} returned no action; ${opts.failClosed === true ? "blocking" : "ignoring"}`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       continue;
     }
     if (!ALLOWED[point].has(result.action)) {
-      opts.onError(`hook ${name} returned "${result.action}", which ${point} does not support; ignoring`);
+      const reason = `hook ${name} returned "${result.action}", which ${point} does not support; ${opts.failClosed === true ? "blocking" : "ignoring"}`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       continue;
     }
 

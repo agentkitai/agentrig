@@ -41,7 +41,10 @@ async function snapshot(ctx: HookContext): Promise<void> {
   let repo: string;
   try {
     repo = (await git(ctx.cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"], undefined, ctx.signal)).stdout.trim();
-  } catch {
+  } catch (error) {
+    // A timeout abort is a checkpoint failure, not evidence that the directory is outside Git.
+    // Propagate it so the dedicated fail-closed pass blocks the pending write.
+    if (ctx.signal.aborted) throw error;
     await ctx.emitCheckpoint({
       type: "checkpoint.warning",
       message: `checkpointing disabled: ${ctx.cwd} is not inside a git repository`,
@@ -93,6 +96,12 @@ export class Checkpointer implements Hook {
   readonly [CHECKPOINTER] = true;
   private readonly attempts = new Map<string, { turn: number; work: Promise<void> }>();
   private readonly warned = new Set<string>();
+
+  /** Release state retained only to coordinate calls within one active session. */
+  endSession(sessionId: string): void {
+    this.attempts.delete(sessionId);
+    this.warned.delete(sessionId);
+  }
 
   async handler(ctx: HookContext): Promise<HookResult> {
     if (ctx.permission !== "write") return { action: "continue" };

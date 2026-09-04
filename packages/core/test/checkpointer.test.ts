@@ -61,7 +61,11 @@ async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promis
   return events;
 }
 
-function agent(turns: ModelEvent[][], tools: AnyTool[]) {
+function agent(
+  turns: ModelEvent[][],
+  tools: AnyTool[],
+  opts: { checkpointer?: Checkpointer; hookTimeoutMs?: number } = {},
+) {
   return createAgent({
     provider: new FakeProvider(turns),
     tools,
@@ -69,7 +73,8 @@ function agent(turns: ModelEvent[][], tools: AnyTool[]) {
       { class: "read", decision: "allow" },
       { class: "write", decision: "allow" },
     ]),
-    hooks: [new Checkpointer()],
+    hooks: [opts.checkpointer ?? new Checkpointer()],
+    ...(opts.hookTimeoutMs === undefined ? {} : { hookTimeoutMs: opts.hookTimeoutMs }),
     systemPrompt: "test",
     store: new SessionStore({ root }),
     budget: { maxTurns: 10 },
@@ -141,6 +146,42 @@ describe("Checkpointer", () => {
     expect(await git("log", "--format=%H")).toBe(logBefore);
     expect(await readFile(join(root, ".git", "index"))).toEqual(indexBefore);
     expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("third write\n");
+  });
+
+  it("blocks a write when the checkpoint times out", async () => {
+    await initRepo();
+    const session = agent([
+      [call("w1", "write", { path: "tracked.txt", content: "must not be written\n" }), usage, stop("tool_use")],
+      [usage, stop("end_turn")],
+    ], [writeTool()], { hookTimeoutMs: 1 }).run("write", { cwd: root, id: "checkpoint_timeout" });
+
+    const events = await collect(session);
+    expect((await session.done).reason).toBe("done");
+    expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
+    expect(events.some((event) => event.type === "tool.call" && event.name === "write")).toBe(false);
+    expect(events.some((event) => event.type === "tool.denied" && event.name === "write")).toBe(true);
+    expect(events.some((event) =>
+      event.type === "error"
+      && event.message.includes("core:checkpointer")
+      && event.message.includes("blocking")
+    )).toBe(true);
+  });
+
+  it("releases its per-session state when a session ends", async () => {
+    const checkpointer = new Checkpointer();
+    const session = agent([
+      [call("w1", "write", { path: "one.txt", content: "one" }), usage, stop("tool_use")],
+      [usage, stop("end_turn")],
+    ], [writeTool()], { checkpointer }).run("write", { cwd: root, id: "cleanup" });
+
+    await collect(session);
+    await session.done;
+    const state = checkpointer as unknown as {
+      attempts: Map<string, unknown>;
+      warned: Set<string>;
+    };
+    expect(state.attempts.size).toBe(0);
+    expect(state.warned.size).toBe(0);
   });
 
   it("does nothing for read-class tools", async () => {
