@@ -1114,3 +1114,47 @@ describe("the subagent tool's own shape", () => {
     expect(tool.inputSchema.safeParse({ task: "do it" }).success).toBe(true);
   });
 });
+
+describe("provider choice on the spawn tool", () => {
+  const noop = { createAgent: () => { throw new Error("not spawned in this test"); }, childConfig: () => ({}) as never };
+
+  it("has no provider field at all when the caller supplies no choices", () => {
+    const tool = subagentTool(noop);
+    const shape = (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape;
+    expect(Object.keys(shape).sort()).toEqual(["label", "task"]);
+  });
+
+  it("offers exactly the configured names, optional, and rejects an unknown one", () => {
+    const tool = subagentTool({ ...noop, providerChoices: { names: ["cloud", "local"], default: "local", main: "cloud" } });
+    const schema = tool.inputSchema as z.ZodObject<z.ZodRawShape>;
+    expect(schema.safeParse({ task: "t" }).success).toBe(true);
+    expect(schema.safeParse({ task: "t", provider: "cloud" }).success).toBe(true);
+    expect(schema.safeParse({ task: "t", provider: "nope" }).success).toBe(false);
+    expect(schema.shape.provider!.description).toContain("default: local");
+    expect(schema.shape.provider!.description).toContain("main session runs on cloud");
+  });
+
+  it("hands the chosen name to childConfig and passes undefined when none was named", async () => {
+    const seen: Array<string | undefined> = [];
+    const store = new SessionStore({ root: await mkdtemp(join(tmpdir(), "agentrig-spawn-choice-")) });
+    const tool = subagentTool({
+      providerChoices: { names: ["cloud", "local"], default: "local", main: "cloud" },
+      childConfig: (choice) => {
+        seen.push(choice?.provider);
+        return {
+          provider: new ScriptedProvider([[say("done"), usage(1, 1), stop("end_turn")]]),
+          tools: [],
+          permissions: new RulePolicy([]),
+          systemPrompt: "child",
+          store,
+          maxTokensPerTurn: 100,
+        };
+      },
+      createAgent,
+    });
+    const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
+    await tool.execute({ task: "a", provider: "cloud" }, ctx);
+    await tool.execute({ task: "b" }, ctx);
+    expect(seen).toEqual(["cloud", undefined]);
+  });
+});
