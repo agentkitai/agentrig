@@ -238,6 +238,7 @@ export interface SupervisorWiring {
  */
 export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   const o = w.opts;
+  const reviewProvider = w.reviewProvider ?? w.provider;
   return {
     budget: {
       soft: w.soft,
@@ -263,8 +264,8 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
     ...(o.supervisorReview === true
       ? {
-          reviewer: new TrajectoryReviewer({ provider: w.reviewProvider ?? w.provider }),
-          grader: new RubricGrader({ provider: w.reviewProvider ?? w.provider }),
+          reviewer: new TrajectoryReviewer({ provider: reviewProvider }),
+          grader: new RubricGrader({ provider: reviewProvider }),
           attempts: async () => {
             if (o.memory === undefined) return [];
             return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;

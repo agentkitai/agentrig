@@ -1136,7 +1136,7 @@ describe("provider choice on the spawn tool", () => {
 
   it("hands the chosen name to childConfig and passes undefined when none was named", async () => {
     const seen: Array<string | undefined> = [];
-    const store = new SessionStore({ root: await mkdtemp(join(tmpdir(), "agentrig-spawn-choice-")) });
+    const store = new SessionStore({ root });
     const tool = subagentTool({
       providerChoices: { names: ["cloud", "local"], default: "local", main: "cloud" },
       childConfig: (choice) => {
@@ -1161,7 +1161,7 @@ describe("provider choice on the spawn tool", () => {
   it("threads the choice through the depth re-wrap, so a grandchild's spawn still offers it (I4a)", async () => {
     const seen: Array<string | undefined> = [];
     const created: AnyTool[][] = [];
-    const store = new SessionStore({ root: await mkdtemp(join(tmpdir(), "agentrig-spawn-choice-")) });
+    const store = new SessionStore({ root });
     const childConfig = (choice?: { provider?: string }) => {
       seen.push(choice?.provider);
       return {

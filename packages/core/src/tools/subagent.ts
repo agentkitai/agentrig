@@ -38,12 +38,6 @@ export interface SubagentChoice {
   provider?: string;
 }
 
-interface Input {
-  task: string;
-  label?: string;
-  provider?: string;
-}
-
 const baseShape = {
   task: z
     .string()
@@ -52,6 +46,14 @@ const baseShape = {
   /** Named so a trajectory reads sensibly; the model picks something short. */
   label: z.string().max(60).optional().describe("a few words naming what this subagent is for"),
 };
+
+/**
+ * The type-level schema `Input` is inferred from, kept separate from the runtime schema
+ * `inputSchema()` returns: a field added to `baseShape` without a matching change here shows up
+ * as a type error in `execute` rather than silently falling out of sync.
+ */
+const InputTypeSchema = z.object({ ...baseShape, provider: z.string().optional() });
+type Input = z.infer<typeof InputTypeSchema>;
 
 /**
  * The schema is byte-identical to the pre-R3.5 one unless choices are supplied. Returns

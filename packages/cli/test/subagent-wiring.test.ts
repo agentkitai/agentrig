@@ -15,6 +15,7 @@ import {
 } from "@agentkitai/agentrig-core";
 import { subagentOptions, type AgentExtras } from "../src/agent-builder.ts";
 import { buildProgram } from "../src/program.ts";
+import type { ProviderSet } from "../src/provider.ts";
 
 /**
  * The CLI's subagent wiring had no tests at all, and everything that makes a subagent safe or
@@ -37,8 +38,6 @@ const provider: ModelProvider = {
     throw new Error("not called");
   },
 };
-
-import type { ProviderSet } from "../src/provider.ts";
 
 const second: ModelProvider = { ...provider, id: "fake-2", model: "fake-2" };
 function fakeSet(over: Partial<ProviderSet> = {}): ProviderSet {
@@ -240,6 +239,7 @@ describe("which provider a child runs on (R3.5a)", () => {
   it("defaults to the subagents role, never the parent's main provider", () => {
     expect(wiring().childConfig().provider).toBe(second);
     expect(wiring().childConfig(undefined).provider).toBe(second);
+    expect(wiring().childConfig({}).provider).toBe(second);
   });
 
   it("honours an explicit entry name from the spawn call", () => {

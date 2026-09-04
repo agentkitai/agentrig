@@ -40,8 +40,14 @@ export type ProviderEntry = z.output<typeof ProviderEntrySchema>;
 
 export const ROLES = ["main", "supervisor", "memory", "subagents"] as const;
 export type Role = (typeof ROLES)[number];
+const roleName = z.string().min(1).optional();
+// Bound to `Role` at compile time (`satisfies Record<Role, typeof roleName>`): a fifth role added
+// to ROLES without a matching key here is a type error, not a silent gap.
 const RolesSchema = z
-  .object({ main: z.string().min(1).optional(), supervisor: z.string().min(1).optional(), memory: z.string().min(1).optional(), subagents: z.string().min(1).optional() })
+  .object({ main: roleName, supervisor: roleName, memory: roleName, subagents: roleName } satisfies Record<
+    Role,
+    typeof roleName
+  >)
   .strict();
 export type Roles = z.output<typeof RolesSchema>;
 
@@ -121,6 +127,9 @@ export type ConfigFile = z.output<typeof ConfigFileSchema>;
 const CONFIG_KEYS = new Set(Object.keys(ConfigValuesSchema.shape));
 const CREDENTIAL_KEY = /^(?:api[-_]?key|token|access[-_]?token|refresh[-_]?token|auth[-_]?token|secret|client[-_]?secret|password|credential|credentials|private[-_]?key)$/i;
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 function credentialPath(value: unknown, path: string[] = []): string[] | null {
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i += 1) {
@@ -133,8 +142,11 @@ function credentialPath(value: unknown, path: string[] = []): string[] | null {
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const next = [...path, key];
     // Profile and provider-entry names are labels, not setting keys; a profile or entry named
-    // "secret" carries no secret. Their VALUES are still walked.
-    const parentIsLabelMap = path.length >= 1 && (path[path.length - 1] === "profiles" || path[path.length - 1] === "providers");
+    // "secret" carries no secret. Their VALUES are still walked. But the exemption is for the
+    // NAME only: a key here whose value is a bare primitive (`{ "providers": { "apiKey": "sk-…" } }`)
+    // is not a label at all, and must still go through the normal credential test.
+    const parentIsLabelMap =
+      path.length >= 1 && (path[path.length - 1] === "profiles" || path[path.length - 1] === "providers") && isPlainObject(child);
     if (!parentIsLabelMap && CREDENTIAL_KEY.test(key)) return next;
     const found = credentialPath(child, next);
     if (found !== null) return found;

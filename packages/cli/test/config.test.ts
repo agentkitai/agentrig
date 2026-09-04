@@ -464,6 +464,10 @@ describe("providers and roles (R3.5a)", () => {
     expect(parseConfigText("c", JSON.stringify({ providers: { token: { provider: "openai", model: "m" } } })).providers?.token?.model).toBe("m");
   });
 
+  it("still refuses a credential stored directly as a providers entry's value, not just inside one", () => {
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { apiKey: "sk-x" } }))).toThrow(/credentials cannot be stored/);
+  });
+
   it("replaces providers and roles wholesale across layers, never merging", () => {
     const resolved = resolveConfig({
       defaults: {},
