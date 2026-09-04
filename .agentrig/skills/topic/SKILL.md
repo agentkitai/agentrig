@@ -129,9 +129,10 @@ For each recorded row, in order:
      goes into its comment heading. A Claude SHA that differs from `HEAD`, or a `REVIEWED` that
      differs from `HEAD`, is a stale pass — rerun it on the current head.
 5. Record every child session id from its tool result and restate it in your own reply text in that
-   same turn; tool results older than five turns may be elided from context. Bind the verdict to the
-   head SHA both reviews report; a head that changes other than through §3's loop is stale —
-   rerun the pass on the new head rather than halting. Sort its findings, never by severity:
+   same turn; tool results older than five turns may be elided from context. Bind the verdict to
+   `HEAD` (Claude's self-reported SHA and `REVIEWED` must both equal it); a head that changes
+   other than through §3's loop is stale — rerun the pass on the new head rather than halting.
+   Sort its findings, never by severity:
    every finding that carries a concrete proposed fix is repair work for §3; a finding it labels contract or
    authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it could not
    verify is a finding whose fix is reproducible evidence in the PR body or deletion of the claim;
