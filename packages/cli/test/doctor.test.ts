@@ -466,6 +466,35 @@ describe("named provider entries (R3.5a)", () => {
     const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" }, cli: { model: "typed" } });
     expect(find(result.lines, "providers:roles")).toContain("main→default, supervisor→cloud, memory→cloud, subagents→local");
   });
+
+  it("skips the flat default's credential when no role uses it, without failing a config that runs fine (I2)", async () => {
+    const f = fixture();
+    // both entries are keyless-local-style so the whole diagnosis can be green: neither role
+    // resolves to `default`, and the flat default (anthropic, no ANTHROPIC_API_KEY here) would
+    // otherwise fail a config `agentrig run` starts cleanly.
+    const keylessConfig = {
+      providers: {
+        cloud: { provider: "openai", baseUrl: "http://127.0.0.1:8080/v1", model: "cloud-model" },
+        local: { provider: "openai", baseUrl: "http://127.0.0.1:9090/v1", model: "local-model" },
+      },
+      roles: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+    };
+    f.files.set(USER_CONFIG, JSON.stringify(keylessConfig));
+    const result = await diagnose({ ...f.options, env: {} });
+    expect(find(result.lines, "credentials")).toContain("skip credentials");
+    expect(find(result.lines, "credentials")).toContain("not used by any role");
+    expect(find(result.lines, "providers:roles")).toContain("pass");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("diagnoses a roles block with no providers block at all (I3)", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ roles: { main: "cloud" } }));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:roles")).toContain("fail providers:roles");
+    expect(find(result.lines, "providers:roles")).toContain('role main names unknown provider entry "cloud"');
+    expect(result.exitCode).toBe(1);
+  });
 });
 
 describe("doctor read-only guarantee", () => {

@@ -1130,8 +1130,8 @@ describe("provider choice on the spawn tool", () => {
     expect(schema.safeParse({ task: "t" }).success).toBe(true);
     expect(schema.safeParse({ task: "t", provider: "cloud" }).success).toBe(true);
     expect(schema.safeParse({ task: "t", provider: "nope" }).success).toBe(false);
-    expect(schema.shape.provider!.description).toContain("default: local");
-    expect(schema.shape.provider!.description).toContain("main session runs on cloud");
+    expect(schema.shape.provider!.description).toContain('you get "local"');
+    expect(schema.shape.provider!.description).toContain('main session runs on "cloud"');
   });
 
   it("hands the chosen name to childConfig and passes undefined when none was named", async () => {
@@ -1155,6 +1155,54 @@ describe("provider choice on the spawn tool", () => {
     const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
     await tool.execute({ task: "a", provider: "cloud" }, ctx);
     await tool.execute({ task: "b" }, ctx);
+    expect(seen).toEqual(["cloud", undefined]);
+  });
+
+  it("threads the choice through the depth re-wrap, so a grandchild's spawn still offers it (I4a)", async () => {
+    const seen: Array<string | undefined> = [];
+    const created: AnyTool[][] = [];
+    const store = new SessionStore({ root: await mkdtemp(join(tmpdir(), "agentrig-spawn-choice-")) });
+    const childConfig = (choice?: { provider?: string }) => {
+      seen.push(choice?.provider);
+      return {
+        provider: new ScriptedProvider([[say("done"), usage(1, 1), stop("end_turn")]]),
+        tools: [],
+        permissions: new RulePolicy([]),
+        systemPrompt: "child",
+        store,
+        maxTokensPerTurn: 100,
+      };
+    };
+    const tool = subagentTool({
+      providerChoices: { names: ["cloud", "local"], default: "local", main: "cloud" },
+      maxDepth: 2,
+      childConfig,
+      // wraps the REAL createAgent so it records each child's tools before delegating
+      createAgent: (config) => {
+        created.push(config.tools);
+        return createAgent(config);
+      },
+    });
+    const ctx = { cwd: root, sessionId: "parent", emit: () => {}, signal: new AbortController().signal };
+
+    await tool.execute({ task: "t" }, ctx);
+
+    // the depth-1 child was handed its own subagent tool, re-wrapped at the next depth, and its
+    // schema still offers a provider choice — the re-wrap must not have dropped it
+    expect(created).toHaveLength(1);
+    const depth1Tool = created[0]!.find((t) => t.name === "subagent");
+    expect(depth1Tool).toBeDefined();
+    const schema = depth1Tool!.inputSchema as z.ZodObject<z.ZodRawShape>;
+    expect(schema.shape.provider).toBeDefined();
+    expect(schema.safeParse({ task: "g", provider: "cloud" }).success).toBe(true);
+    expect(schema.safeParse({ task: "g", provider: "nope" }).success).toBe(false);
+
+    // only the grandchild spawns from here — the depth-0 spawn above already pushed to `seen`
+    seen.length = 0;
+    await depth1Tool!.execute({ task: "g", provider: "cloud" }, ctx);
+    await depth1Tool!.execute({ task: "g2" }, ctx);
+    // the named choice threads through the re-wrap; an unnamed grandchild gets undefined, which
+    // the CLI maps to the subagents role
     expect(seen).toEqual(["cloud", undefined]);
   });
 });

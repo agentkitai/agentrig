@@ -251,6 +251,7 @@ describe("supervisorOptions", () => {
     expect(o.cacheWriteMultiplier).toBe(2);
     // the reviewer/grader classes keep their provider private; assert through the injected object identity
     expect((o.reviewer as unknown as { opts: { provider: unknown } }).opts.provider).toBe(judge);
+    expect((o.grader as unknown as { opts: { provider: unknown } }).opts.provider).toBe(judge);
   });
 });
 

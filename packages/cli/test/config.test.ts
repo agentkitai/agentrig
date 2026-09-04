@@ -494,6 +494,8 @@ describe("providers and roles (R3.5a)", () => {
     expect((await load([])).providerOverride).toBe(false);
     expect((await load(["--model", "typed"])).providerOverride).toBe(true);
     expect((await load([], { AGENTRIG_MODEL: "from-env" })).providerOverride).toBe(true);
+    expect((await load(["--provider", "anthropic"])).providerOverride).toBe(true);
+    expect((await load(["--base-url", "http://127.0.0.1:1/v1"])).providerOverride).toBe(true);
   });
 
   it("the dream and memory ingest commands see providers and roles from config", async () => {

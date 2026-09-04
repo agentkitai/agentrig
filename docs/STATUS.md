@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3.5a is complete (inserted band, see ROADMAP §R3.5); R3.5b is next, then R4a.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3.5a is complete (inserted band, see ROADMAP §R3.5); R3.5b is next, then R4a.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |

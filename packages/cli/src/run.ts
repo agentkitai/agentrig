@@ -17,7 +17,7 @@ import {
   type Session,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
-import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
+import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
   dreamOnSessionEnd,

@@ -70,7 +70,7 @@ export function resolveProviderEntries(opts: ProviderOptions): ResolvedEntries {
   } satisfies Record<Role, string>;
   for (const role of ROLES) {
     const name = roleNames[role];
-    if (!(name in entries)) {
+    if (!Object.hasOwn(entries, name)) {
       throw new Error(
         `role ${role} names unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`,
       );
@@ -79,7 +79,16 @@ export function resolveProviderEntries(opts: ProviderOptions): ResolvedEntries {
   return { entries, roleNames };
 }
 
-/** Constructs one entry. `requireExplicitModel` guards only the flat default, whose model has a built-in fallback. */
+/**
+ * Which role a standalone memory command (`memory ingest`, `dream`) should build. Typed provider
+ * flags pin the standalone memory commands to the flat default, exactly as they pin `main` for
+ * `agentrig run` — one rule, not a copy of it in each command.
+ */
+export function memoryRole(opts: ProviderOptions): Role {
+  return opts.providerOverride === true ? "main" : "memory";
+}
+
+/** Constructs one entry. `modelExplicit` guards only the flat default, whose model has a built-in fallback. */
 function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
   const onRetry =
     hooks.onNotice === undefined
@@ -140,21 +149,32 @@ export interface ProviderSet {
 export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {}): ProviderSet {
   const { entries, roleNames } = resolveProviderEntries(opts);
   const built = new Map<string, ModelProvider>();
-  const get = (name: string): ModelProvider => {
-    const entry = entries[name];
-    if (entry === undefined) {
-      throw new Error(`unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`);
-    }
+  // From cache, or built and cached — unwrapped, so `get` and `forRole` can each name the failure
+  // their own way without one wrapping the other's message.
+  const construct = (name: string): ModelProvider => {
     let provider = built.get(name);
     if (provider === undefined) {
-      provider = buildEntry(name, entry, opts, hooks);
+      provider = buildEntry(name, entries[name]!, opts, hooks);
       built.set(name, provider);
     }
     return provider;
   };
+  const get = (name: string): ModelProvider => {
+    if (!Object.hasOwn(entries, name)) {
+      throw new Error(`unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`);
+    }
+    try {
+      // names the entry, so a spawn-time failure (a spawn choice built lazily, here) says which
+      // entry broke rather than just "ANTHROPIC_API_KEY is not set"
+      return construct(name);
+    } catch (err) {
+      throw new Error(`provider entry ${JSON.stringify(name)}: ${(err as Error).message}`);
+    }
+  };
   const forRole = (role: Role): ModelProvider => {
     try {
-      return get(roleNames[role]);
+      // entries[roleNames[role]] is defined: resolveProviderEntries already validated every role
+      return construct(roleNames[role]);
     } catch (err) {
       throw new Error(`role ${role} (provider entry ${JSON.stringify(roleNames[role])}): ${(err as Error).message}`);
     }
@@ -191,5 +211,6 @@ export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}):
   // strip the named entries so a bad `roles` block cannot fail a command that only wants the default
   const { providers: _providers, roles: _roles, ...flat } = opts;
   const { entries } = resolveProviderEntries(flat);
+  // entries.default is defined here: resolveProviderEntries always fills it from the flat keys
   return buildEntry("default", entries.default!, opts, hooks);
 }

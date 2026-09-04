@@ -133,7 +133,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "anthropic",
       )
       .option("-m, --model <model>", "model id", process.env.AGENTRIG_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
-      .option("--base-url <url>", "OpenAI-compatible server URL (e.g. http://localhost:11434/v1)");
+      .option(
+        "--base-url <url>",
+        "server base URL override (OpenAI-compatible servers; also honoured by anthropic and openai-chatgpt entries)",
+      );
   }
 
   const INTERACTIVE_MAX_TURNS = "50";
@@ -339,7 +342,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .description("Diagnose configuration, credentials, project state, and local prerequisites (read-only)")
     .option("-p, --provider <provider>", "provider override to diagnose")
     .option("-m, --model <model>", "model override to diagnose")
-    .option("--base-url <url>", "OpenAI-compatible server URL override")
+    .option("--base-url <url>", "server base URL override to diagnose (OpenAI-compatible servers; also honoured by anthropic and openai-chatgpt entries)")
     .option("--profile <name>", "named config profile to diagnose")
     .option("--memory <dir>", "memory directory override")
     .option("--mcp-config <path>", "MCP config override")

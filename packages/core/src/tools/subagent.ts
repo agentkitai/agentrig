@@ -68,7 +68,10 @@ function inputSchema(choices: SubagentProviderChoices | undefined): z.ZodTypeAny
     provider: z
       .enum([first, ...rest])
       .optional()
-      .describe(`named provider entry for this child (default: ${choices.default}; the main session runs on ${choices.main})`),
+      .describe(
+        `named provider entry for this child. When you name none you get "${choices.default}"; ` +
+          `the main session runs on "${choices.main}"; "default" is the flat provider/model entry from config`,
+      ),
   });
 }
 

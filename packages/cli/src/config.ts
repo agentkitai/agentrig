@@ -23,6 +23,7 @@ const stringList = z.array(z.string().min(1));
 const ProviderKindSchema = z.enum(["anthropic", "openai", "openai-chatgpt"]);
 export type ProviderKind = z.output<typeof ProviderKindSchema>;
 const reasoningEffortSetting = z.enum(REASONING_EFFORTS);
+// deliberately a number, not a numeric string like the settings above: the adapter needs a number
 const contextWindowSetting = z.number().int().positive();
 
 /** One named provider entry. Credentials never appear here; they come from the environment per kind. */

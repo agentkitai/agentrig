@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildProviders, buildRoleProvider, resolveProviderEntries, type ProviderOptions } from "../src/provider.ts";
+import { buildProviders, buildRoleProvider, memoryRole, resolveProviderEntries, type ProviderOptions } from "../src/provider.ts";
 
 const base: ProviderOptions = {
   provider: "openai",
@@ -81,7 +81,7 @@ describe("buildProviders", () => {
     const opts: ProviderOptions = { ...base, providers: { ...base.providers, spare: { provider: "anthropic", model: "claude-x" } } };
     const set = buildProviders(opts);
     expect(set.names).toContain("spare");
-    expect(() => set.get("spare")).toThrow(/ANTHROPIC_API_KEY/);
+    expect(() => set.get("spare")).toThrow(/provider entry "spare": ANTHROPIC_API_KEY is not set/);
   });
 });
 
@@ -98,5 +98,17 @@ describe("buildRoleProvider", () => {
     const broken: ProviderOptions = { ...base, providers: { ...base.providers, judge: { provider: "anthropic", model: "claude-x" } }, roles: { memory: "judge" } };
     expect(() => buildRoleProvider(broken, "memory")).toThrow(/role memory \(provider entry "judge"\): ANTHROPIC_API_KEY is not set/);
     expect(() => buildRoleProvider({ ...base, roles: { supervisor: "ghost" } }, "memory")).toThrow(/role supervisor names unknown provider entry "ghost"/);
+  });
+});
+
+describe("memoryRole", () => {
+  it("is memory normally, and main when a typed provider flag overrode config (I4b)", () => {
+    expect(memoryRole(base)).toBe("memory");
+    expect(memoryRole({ ...base, providerOverride: true })).toBe("main");
+  });
+
+  it("selects the same entry buildRoleProvider would for each case", () => {
+    expect(buildRoleProvider(base, memoryRole(base)).model).toBe("cloud-model");
+    expect(buildRoleProvider({ ...base, providerOverride: true }, memoryRole({ ...base, providerOverride: true })).model).toBe("default-model");
   });
 });
