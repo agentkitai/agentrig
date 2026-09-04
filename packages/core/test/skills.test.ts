@@ -359,9 +359,6 @@ describe("skillTool", () => {
     const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
     expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
     expect(ship.body).toContain("Never review in this session");
-    const dogfoodText2 = await readFile(".agentrig/skills/dogfood/SKILL.md", "utf8");
-    const dogfood2 = parseSkill(dogfoodText2, ".agentrig/skills/dogfood/SKILL.md");
-    expect(dogfood2.body).toContain("the conductor runs the same two external reviews itself");
 
     const arbiter = found.find((candidate) => candidate.name === "arbiter");
     expect(arbiter).toBeDefined();
@@ -372,6 +369,7 @@ describe("skillTool", () => {
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
+    expect(dogfood.body).toContain("the conductor runs the same two external reviews itself");
     expect(dogfood.body).toContain("The cap bounds review rounds, not fixes");
     expect(dogfood.body).toContain("post-delta, self-verified, not re-reviewed");
     expect(dogfood.body).toContain("A finding that lives only in a PR body is a finding nobody");

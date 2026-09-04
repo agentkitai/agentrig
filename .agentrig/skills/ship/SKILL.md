@@ -1,12 +1,13 @@
 ---
 name: ship
-description: Orchestrate one change end to end via subagents - a builder runs the dogfood skill, an independent reviewer runs the review skill, then STOP and present the verdict; land only on the human's word.
+description: Orchestrate one change end to end - a builder subagent runs dogfood, the external review pair (Claude Code + Codex) reviews the PR, then STOP and present the verdict; land only on the human's word.
 ---
 
 # Ship flow — one command from task to merge decision
 
-You are the conductor, not a performer. The building and the reviewing happen in subagents; your
-job is sequencing, relaying results faithfully, and stopping at the one decision that is human.
+You are the conductor, not a performer. The building happens in a subagent and the reviewing in
+external CLI jobs you run; your job is sequencing, relaying results faithfully, and stopping at
+the one decision that is human.
 Do not implement, review, or fix anything in this session yourself.
 
 ## 1. Build
