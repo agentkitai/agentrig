@@ -353,6 +353,15 @@ describe("skillTool", () => {
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
     expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
     expect(review.body).toContain("A deviation without that record is a HIGH finding");
+    // R3.5b: ship delegates the review pass to topic; dogfood children still skip it; review knows a prepared worktree
+    expect(review.body).toContain("Skip this section when the brief says a conductor prepared the worktree");
+    const shipText = await readFile(".agentrig/skills/ship/SKILL.md", "utf8");
+    const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
+    expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
+    expect(ship.body).toContain("Never review in this session");
+    const dogfoodText2 = await readFile(".agentrig/skills/dogfood/SKILL.md", "utf8");
+    const dogfood2 = parseSkill(dogfoodText2, ".agentrig/skills/dogfood/SKILL.md");
+    expect(dogfood2.body).toContain("the conductor runs the same two external reviews itself");
 
     const arbiter = found.find((candidate) => candidate.name === "arbiter");
     expect(arbiter).toBeDefined();

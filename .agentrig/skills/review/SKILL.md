@@ -23,6 +23,10 @@ Run this in a session that shares no context with the run that wrote the PR.
 - Merge `origin/main` into the worktree. A conflict is a finding in itself (report which files);
   resolve it only to keep testing, never push the resolution.
 - `pnpm install` in the worktree before anything else.
+- Skip this section when the brief says a conductor prepared the worktree (the `topic`/`ship`
+  external review pass runs you via `claude -p` inside one): it is already at the PR head merged
+  with `origin/main` with dependencies installed. Do not trust that — confirm with `git log -1`,
+  `git status --porcelain` (clean) and `ls node_modules` before §3, and say so in your verdict.
 
 ## 3. Green trio, real exit codes
 

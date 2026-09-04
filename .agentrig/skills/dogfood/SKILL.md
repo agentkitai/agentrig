@@ -122,11 +122,12 @@ Brief each reviewer to: assume the author is wrong, verify every finding against
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
 
 **Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
-the PR (§7) and does NOT run external reviews: the conductor spawns an independent reviewer
-child (fresh worktree, mutants, no shared context) that IS the review, and running both was
-measured at four review passes per PR — ~90 minutes for a skill file, with no extra eyes on the
-code. Your task text says when you are a child. Standalone dogfood keeps both reviews because
-nothing else reviews it.
+the PR (§7) and does NOT run external reviews:
+the conductor runs the same two external reviews itself, in one worktree, against the PR head
+(`topic` §2 step 4). Children may run on a local model and the review must never share the
+builder's model; a child running the pair too would double every pass for no extra eyes. Your
+task text says when you are a child. Standalone dogfood keeps both reviews because nothing else
+reviews it.
 
 Staleness, bounded: if you push more commits after a review ran, the review is stale for the
 **delta only** — re-review the diff since the last reviewed commit, never the whole branch again,

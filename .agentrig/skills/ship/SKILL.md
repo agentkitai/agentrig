@@ -27,10 +27,11 @@ Do not implement, review, or fix anything in this session yourself.
 
 ## 2. Review, independently
 
-- Spawn a SECOND subagent: "Review PR #NN. Follow the review skill." Subagent isolation is the
-  point — the reviewer shares no context with the builder by construction, which is what makes
-  its verdict independent. Never review in this session and never pass the builder's report to
-  the reviewer; the PR and the code are the reviewer's only inputs.
+- Run the external review pass exactly as `topic` §2 step 4 prescribes: two external reviewers
+  (Claude Code pinned to `claude-opus-5`, and Codex) in parallel in one worktree you prepare, the
+  model asserted from `modelUsage`, both reviews posted as PR comments, findings tagged and merged.
+  Never review in this session and never pass the builder's report to either reviewer; the PR and
+  the code are their only inputs.
 
 ## 3. Stop — the merge decision is not yours
 
@@ -38,9 +39,10 @@ Do not implement, review, or fix anything in this session yourself.
   its evidence, plus PR number and CI state. Then END YOUR TURN and wait.
 - The human's next message decides: a merge instruction means run the `land` skill's steps (in
   this session or a third subagent); a fix request means spawn a fix subagent scoped to exactly
-  those findings on the same branch, then a delta re-review of what changed, and loop the two
-  under `topic` §3's bounded converging rules (at most three rounds, each must close the last
-  round's findings), then stop again with the verdict. Severity never decides fixability: any
+  those findings on the same branch, then a delta re-review of what changed — the same external
+  pass over OLD..NEW as `topic` §3 describes — and loop the two under `topic` §3's bounded
+  converging rules (at most three rounds, each must close the last round's findings), then stop
+  again with the verdict. Severity never decides fixability: any
   finding with a concrete proposed fix is fixer work. A contract or authorization finding goes to
   an `arbiter` subagent first, exactly as `topic` §3 does, and the fixer carries the verdict.
   Residual findings after the third round are filed as GitHub issues, one per finding, in
