@@ -168,6 +168,24 @@ export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {})
   return { main, supervisor, memory, subagents, roleNames, names, get };
 }
 
+/**
+ * One role's provider, and nothing else constructed. For commands that run a single role
+ * (`memory ingest`, `dream`): the agent path builds every role eagerly so a session never
+ * starts on a broken entry, but a dream has no session and must not fail on main's credential.
+ * Still validates every role name via resolveProviderEntries, so a bad `roles` block is
+ * reported the same way everywhere.
+ */
+export function buildRoleProvider(opts: ProviderOptions, role: Role, hooks: ProviderHooks = {}): ModelProvider {
+  const { entries, roleNames } = resolveProviderEntries(opts);
+  const name = roleNames[role];
+  try {
+    // entries[name] is defined here: resolveProviderEntries already threw above if it weren't
+    return buildEntry(name, entries[name]!, opts, hooks);
+  } catch (err) {
+    throw new Error(`role ${role} (provider entry ${JSON.stringify(name)}): ${(err as Error).message}`);
+  }
+}
+
 /** The flat default entry alone — what every command built before R3.5a. */
 export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}): ModelProvider {
   // strip the named entries so a bad `roles` block cannot fail a command that only wants the default

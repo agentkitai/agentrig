@@ -15,7 +15,7 @@ import {
   withBackendRecall,
   type MemoryBackend,
 } from "@agentkitai/agentrig-memory";
-import { buildProviders, type ProviderOptions } from "./provider.js";
+import { buildRoleProvider, type ProviderOptions } from "./provider.js";
 
 /**
  * `agentrig memory …` — thin wrappers over the memory package. Anything with logic in it
@@ -141,10 +141,9 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
   let provider;
   try {
-    // R3.5a: the memory role's entry, unless the user typed provider flags — then, as for the
-    // main role, the typed flags win (`main` is the flat default entry under providerOverride)
-    const set = buildProviders(opts);
-    provider = opts.providerOverride === true ? set.main : set.memory;
+    // typed provider flags pin main to the flat default entry; otherwise the memory role. Only that
+    // one entry is constructed — a dream must not fail on a credential some other role needs.
+    provider = buildRoleProvider(opts, opts.providerOverride === true ? "main" : "memory");
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;

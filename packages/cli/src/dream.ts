@@ -8,7 +8,7 @@ import {
   renderReport,
   runDream,
 } from "@agentkitai/agentrig-memory";
-import { buildProviders, type ProviderOptions } from "./provider.js";
+import { buildRoleProvider, type ProviderOptions } from "./provider.js";
 
 /**
  * `agentrig dream` — PLAN §3.7/§5. Thin: every decision lives in the memory package, this
@@ -62,10 +62,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
     if (opts.structuralOnly === true) {
       provider = undefined;
     } else {
-      // R3.5a: the memory role's entry, unless the user typed provider flags — then, as for the
-      // main role, the typed flags win (`main` is the flat default entry under providerOverride)
-      const set = buildProviders(opts);
-      provider = opts.providerOverride === true ? set.main : set.memory;
+      // typed provider flags pin main to the flat default entry; otherwise the memory role. Only
+      // that one entry is constructed — a dream must not fail on a credential some other role needs.
+      provider = buildRoleProvider(opts, opts.providerOverride === true ? "main" : "memory");
     }
   } catch (err) {
     console.error(`${(err as Error).message}\n(run with --structural-only for the free, model-free pass)`);

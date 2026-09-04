@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildProviders, resolveProviderEntries, type ProviderOptions } from "../src/provider.ts";
+import { buildProviders, buildRoleProvider, resolveProviderEntries, type ProviderOptions } from "../src/provider.ts";
 
 const base: ProviderOptions = {
   provider: "openai",
@@ -82,5 +82,21 @@ describe("buildProviders", () => {
     const set = buildProviders(opts);
     expect(set.names).toContain("spare");
     expect(() => set.get("spare")).toThrow(/ANTHROPIC_API_KEY/);
+  });
+});
+
+describe("buildRoleProvider", () => {
+  it("builds only the requested role, so an unrelated role's missing credential is not fatal", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const opts: ProviderOptions = { ...base, providers: { ...base.providers, judge: { provider: "anthropic", model: "claude-x" } }, roles: { main: "judge", memory: "local" } };
+    expect(() => buildProviders(opts)).toThrow(/role main/);
+    expect(buildRoleProvider(opts, "memory").model).toBe("local-model");
+  });
+
+  it("wraps a failure with the role and entry name, and still validates every role name", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const broken: ProviderOptions = { ...base, providers: { ...base.providers, judge: { provider: "anthropic", model: "claude-x" } }, roles: { memory: "judge" } };
+    expect(() => buildRoleProvider(broken, "memory")).toThrow(/role memory \(provider entry "judge"\): ANTHROPIC_API_KEY is not set/);
+    expect(() => buildRoleProvider({ ...base, roles: { supervisor: "ghost" } }, "memory")).toThrow(/role supervisor names unknown provider entry "ghost"/);
   });
 });
