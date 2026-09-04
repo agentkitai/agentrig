@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3d is complete; R3 is complete (R3a–R3d); R4a is next.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3.5a is complete (inserted band, see ROADMAP §R3.5); R3.5b is next, then R4a.** R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -386,6 +386,27 @@ Changes:
   up-front claims for parent and siblings; throwing on an unreadable child log; not recording
   `subagent.end`; a hard-coded end reason; a resume keeping the previous session's children; a
   running-turn guard on `/children`; preferring the child's own end reason over the parent's.
+
+## R3.5 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R3.5a | Named provider entries, per-role selection, `reasoningEffort`, doctor coverage | done |
+| R3.5b | Train review via `claude -p` + `codex review` | next |
+
+- R3.5a keeps one instance per entry: two roles on `cloud` share one object, exactly as every
+  role shared one before. Roles are constructed eagerly so a missing credential fails the run
+  before a session starts; `get(name)` builds spawn-only entries on first use.
+- Typed `--provider`/`--model`/`--base-url` (or `AGENTRIG_MODEL`) pin only `main` to the flat
+  default entry; `modelExplicit` was not reusable for this because it is also true when config
+  sets `model`.
+- `memory ingest` and `dream` construct only the role they use, via a new
+  `buildRoleProvider(opts, role)` in `packages/cli/src/provider.ts`, rather than the full eager
+  `buildProviders` set — otherwise a dream failed on a credential some unrelated role needed.
+  Typed provider flags still pin them to the flat default entry (`main` under `providerOverride`).
+- Doctor's `providers:roles` table derives `providerOverride` from the same four-way rule as
+  `loadRunConfig` (typed `--provider`/`--model`/`--base-url` or `AGENTRIG_MODEL`), so it shows
+  what `run` would resolve, not only the env-var case.
 
 ## R2 notes
 
