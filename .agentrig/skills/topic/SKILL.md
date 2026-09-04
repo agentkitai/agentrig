@@ -83,8 +83,9 @@ For each recorded row, in order:
    - **Prepare.** `gh pr view NN --json headRefName,headRefOid` gives `BRANCH` and `HEAD`. Then
      `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `git worktree add "$WT" "$HEAD"`, and in
      `$WT`: `git merge --no-edit origin/main` (a conflict is a finding for §3 — record which files
-     and stop the pass), `git branch -f review-base origin/main`, `pnpm install`. `OUT=$(mktemp -d)`
-     holds every output file; never write review artifacts inside `$WT`.
+     and stop the pass), `git branch -f review-base origin/main`, `pnpm install`. Record
+     `REVIEWED=$(git -C "$WT" rev-parse HEAD)` — this must equal `HEAD` before either job starts.
+     `OUT=$(mktemp -d)` holds every output file; never write review artifacts inside `$WT`.
    - **Claude job** — `bash` with `background: true`, cwd `$WT`:
      ```
      env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
@@ -119,12 +120,14 @@ For each recorded row, in order:
      are dead), never a review to use.
    - **Provenance.** Post each review verbatim as a PR comment, headed
      `## External review — Claude Code (claude-opus-5) — head HEAD — full` and
-     `## External review — Codex — head HEAD — full`, with `gh pr comment NN --body-file "$OUT/…"`,
+     `## External review — Codex — head REVIEWED — full`, with `gh pr comment NN --body-file "$OUT/…"`,
      and record both comment URLs — they stand in for reviewer session ids. Then
      `git worktree remove --force "$WT"`.
    - **Combine.** Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line and
-     the same scenario), and sort the union under step 5. Both reviews must name `HEAD` as the
-     SHA they reviewed; a mismatch is a stale pass — rerun it on the current head.
+     the same scenario), and sort the union under step 5. Claude's review must name `HEAD` as the
+     SHA it reviewed; Codex's review mode echoes no SHA, so `REVIEWED` is the SHA it reviewed and
+     goes into its comment heading. A Claude SHA that differs from `HEAD`, or a `REVIEWED` that
+     differs from `HEAD`, is a stale pass — rerun it on the current head.
 5. Record every child session id from its tool result and restate it in your own reply text in that
    same turn; tool results older than five turns may be elided from context. Bind the verdict to the
    head SHA both reviews report; a head that changes other than through §3's loop is stale —
@@ -169,8 +172,10 @@ converging, or when something needs a human. Per row, at most THREE repair round
   now sitting at OLD, so its own diff is exactly OLD..NEW. Neither reviewer ever sees
   either author's report. Post both as PR comments headed
   `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
-  `## External review — Codex — head NEW — delta OLD..NEW`. A clean, fully verified delta verdict
-  from both reviewers lands (§4). Findings on the delta open the next round.
+  `## External review — Codex — head REVIEWED — delta OLD..NEW` (Claude names NEW; Codex's
+  heading uses `REVIEWED`, recorded by the refreshed Prepare step, same as the full review). A
+  clean, fully verified delta verdict from both reviewers lands (§4). Findings on the delta open
+  the next round.
 - **Convergence** is measured on the findings a round was given, never by counting: a round
   converges when every finding it started with is closed and no previously closed finding is
   reopened. A NEW finding the delta review raises in code the fix touched is progress, not
