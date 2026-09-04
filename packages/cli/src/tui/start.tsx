@@ -69,6 +69,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
                 memoryIndex: "",
                 provider: built!.provider,
+                reviewProvider: built!.providers.supervisor,
                 soft: supervisorSoft,
                 turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),
