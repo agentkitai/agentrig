@@ -55,7 +55,7 @@ For each recorded row, in order:
 2. Spawn a builder subagent with a self-contained task containing the exact roadmap-row contract
    (the verbatim row text from §1, quoted, never summarized), `AUTHORIZATION`, and: “Follow the dogfood skill. Start from current `origin/main`. Put the quoted
    authorization verbatim in the PR description. Report the PR, current head SHA and CI. You are a
-   topic child: stop at the PR and skip the external reviews — an independent reviewer follows.”
+   topic child: stop at the PR and skip the external reviews — an independent review follows.”
    The dogfood child stops at its PR and never merges. Record the session id
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
    children cannot reliably report their own ids.
@@ -102,20 +102,24 @@ For each recorded row, in order:
      codex review --base review-base "Review this PR's diff against review-base. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix; state the head SHA you reviewed." > "$OUT/codex.md" 2> "$OUT/codex.err"
      ```
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
-     loop). A job still running 45 minutes after it started is dead: `bash_job` `action: kill` it.
-     A dead job (killed, non-zero exit, or empty output) is retried ONCE on the same head; both
-     reviewers dead on the same head halts the train.
+     loop). Record both job ids from the `bash` results immediately and restate them in your own
+     reply text on every turn you poll — tool results older than five turns may be elided from
+     context, and a lost id is a dead job you cannot kill or read. A job still running 45 minutes
+     after it started is dead: `bash_job` `action: kill` it. A dead job (killed, non-zero exit, or
+     empty output) is retried ONCE on the same head; both reviewers dead on the same head halts
+     the train.
    - **Assert the model and extract the Claude review:**
      ```
      node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "$OUT/claude.json" > "$OUT/claude.md"
      ```
-     A non-zero exit here is a dead job, never a review to use.
+     A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
+     are dead), never a review to use.
    - **Provenance.** Post each review verbatim as a PR comment, headed
      `## External review — Claude Code (claude-opus-5) — head HEAD — full` and
      `## External review — Codex — head HEAD — full`, with `gh pr comment NN --body-file "$OUT/…"`,
      and record both comment URLs — they stand in for reviewer session ids. Then
      `git worktree remove --force "$WT"`.
-   - **Merge.** Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line and
+   - **Combine.** Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line and
      the same scenario), and sort the union under step 5. Both reviews must name `HEAD` as the
      SHA they reviewed; a mismatch is a stale pass — rerun it on the current head.
 5. Record every child session id from its tool result and restate it in your own reply text in that
@@ -144,7 +148,7 @@ converging, or when something needs a human. Per row, at most THREE repair round
   one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED` path.
 - **Fix**: spawn one fix subagent on the same PR branch, scoped verbatim to every open finding and
   no unrelated code changes. Its brief carries the same sentence the builder's does — “You are a
-  topic child: stop at the push and skip the external reviews — an independent delta reviewer
+  topic child: stop at the push and skip the external reviews — an independent delta review
   follows” — because the dogfood skill's §8 otherwise tells it to arrange its own reviews and wait
   on them. Tell it not to rebut or skip a finding, to add fail-first proof where
   behavior changes (reuse the reviewer's exact mutant as the fail-first check when one was given),
@@ -158,16 +162,18 @@ converging, or when something needs a human. Per row, at most THREE repair round
   `git branch -f review-base OLD`, `pnpm install`) and brief both reviewers with the PR number and
   the old/new head SHAs: "review only the changes OLD..NEW under the review skill's standards;
   never assume the previous review's findings — verify the code as it is now". They never see
-  either author's report. Post both as PR comments headed `… — delta OLD..NEW`. A clean, fully
-  verified delta verdict from both reviewers lands (§4). Findings on the delta open the next round.
+  either author's report. Post both as PR comments headed
+  `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
+  `## External review — Codex — head NEW — delta OLD..NEW`. A clean, fully verified delta verdict
+  from both reviewers lands (§4). Findings on the delta open the next round.
 - **Convergence** is measured on the findings a round was given, never by counting: a round
   converges when every finding it started with is closed and no previously closed finding is
-  reopened. A NEW finding the delta reviewer raises in code the fix touched is progress, not
+  reopened. A NEW finding the delta review raises in code the fix touched is progress, not
   regression — it goes to the next round, however many there are, until the round cap. The only
   non-converging round is one that leaves a given finding open or reopens a closed one: that halts
   with the full trace, because repeating it would be the #82 treadmill. The R3a train halted on
   "started with one, ended with one" when the one it ended with was new; that reading is wrong.
-- **After the third round**, whatever the delta reviewer still finds becomes **one GitHub issue
+- **After the third round**, whatever the delta review still finds becomes **one GitHub issue
   per finding**, never a note in the PR body: the last fixer files each with `gh issue create`
   (title `[review residual] <one line>`, label `review-residual`, body: severity, file:line, the
   concrete scenario, the reviewer's proposed fix, the PR number, the head SHA, the reviewer
