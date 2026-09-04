@@ -189,6 +189,24 @@ describe("Checkpointer", () => {
     expect(emitted.some((event) => event.type === "checkpoint.created")).toBe(true);
   });
 
+  it("rejects broken repository metadata instead of degrading it as a non-Git directory", async () => {
+    await writeFile(join(root, ".git"), `gitdir: ${join(root, "missing-worktree-metadata")}\n`);
+    const checkpointer = new Checkpointer();
+    const emitted: Array<{ type: string }> = [];
+
+    await expect(checkpointer.handler({
+      point: "pre_tool",
+      sessionId: "broken_metadata",
+      cwd: root,
+      turn: 1,
+      tool: { name: "write", input: {} },
+      permission: "write",
+      signal: new AbortController().signal,
+      emitCheckpoint: async (event) => { emitted.push(event); },
+    })).rejects.toBeDefined();
+    expect(emitted).toEqual([]);
+  });
+
   it("retries a non-Git warning when its first event append fails", async () => {
     const checkpointer = new Checkpointer();
     const events: Array<{ type: string }> = [];

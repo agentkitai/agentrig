@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
 
 /** Events the built-in checkpointer may append through its deliberately narrow hook seam. */
@@ -32,6 +32,8 @@ function gitEnvironment(): NodeJS.ProcessEnv {
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
     "GIT_NAMESPACE",
   ]) delete env[name];
+  // Classification of the only fail-open case below relies on Git's stable English diagnostic.
+  env.LC_ALL = "C";
   return env;
 }
 
@@ -58,6 +60,21 @@ function isOutsideGit(error: unknown): boolean {
   return code === 128 && typeof stderr === "string" && /not a git repository/i.test(stderr);
 }
 
+async function hasGitMetadata(cwd: string): Promise<boolean> {
+  let current = await realpath(cwd);
+  while (true) {
+    try {
+      await lstat(join(current, ".git"));
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
 async function snapshot(ctx: HookContext): Promise<void> {
   if (ctx.emitCheckpoint === undefined) {
     throw new Error("Checkpointer must be run by an AgentRig agent");
@@ -65,11 +82,15 @@ async function snapshot(ctx: HookContext): Promise<void> {
 
   let repo: string;
   try {
-    repo = (await git(ctx.cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"], undefined, ctx.signal)).stdout.trim();
+    repo = (await git(ctx.cwd, ["rev-parse", "--show-toplevel"], undefined, ctx.signal)).stdout.trim();
   } catch (error) {
     // A timeout abort is a checkpoint failure, not evidence that the directory is outside Git.
     // Propagate it so the dedicated fail-closed pass blocks the pending write.
     if (ctx.signal.aborted || !isOutsideGit(error)) throw error;
+    // Git uses the same "not a repository" diagnostic for a genuinely unversioned directory and
+    // for broken linked-worktree metadata. Only the former may degrade; corrupt/inaccessible
+    // metadata must block the write because there is a repository here that we failed to snapshot.
+    if (await hasGitMetadata(ctx.cwd) || ctx.signal.aborted) throw error;
     await ctx.emitCheckpoint({
       type: "checkpoint.warning",
       message: `checkpointing disabled: ${ctx.cwd} is not inside a git repository`,
