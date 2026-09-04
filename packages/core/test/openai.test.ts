@@ -67,6 +67,13 @@ describe("toOpenAIRequest", () => {
     ) as { messages: Array<Record<string, unknown>> };
     expect(body.messages[1]).toMatchObject({ role: "assistant", content: null });
   });
+
+  it("sends reasoning_effort only when configured", () => {
+    const plain = toOpenAIRequest(baseReq, "gpt-test") as Record<string, unknown>;
+    expect(plain).not.toHaveProperty("reasoning_effort");
+    const high = toOpenAIRequest(baseReq, "gpt-test", "max_completion_tokens", "high") as Record<string, unknown>;
+    expect(high.reasoning_effort).toBe("high");
+  });
 });
 
 const sse = (chunks: unknown[]): string => chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n";

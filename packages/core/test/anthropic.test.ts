@@ -55,6 +55,13 @@ describe("toAnthropicRequest", () => {
       { type: "text", text: "\n\nmutable map" },
     ]);
   });
+
+  it("sends output_config.effort only when configured, mapping minimal to low", () => {
+    const plain = toAnthropicRequest(baseReq, "claude-test") as Record<string, unknown>;
+    expect(plain).not.toHaveProperty("output_config");
+    expect((toAnthropicRequest(baseReq, "claude-test", "xhigh") as Record<string, unknown>).output_config).toEqual({ effort: "xhigh" });
+    expect((toAnthropicRequest(baseReq, "claude-test", "minimal") as Record<string, unknown>).output_config).toEqual({ effort: "low" });
+  });
 });
 
 const sse = (events: Array<[string, unknown]>): string =>
