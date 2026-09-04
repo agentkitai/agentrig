@@ -59,6 +59,19 @@ These flags are available on both `run` and the interactive TUI (and on `session
 - **Supervisor:** `--supervise` attaches heuristic detectors and the escalating policy ladder, which tops out at escalation by default. `--supervisor-abort` opts into its final abort rung; `--supervisor-no-abort` remains a compatibility no-op. `--supervisor-soft <fraction>` sets the proportional soft budget threshold; `--supervisor-turns-remaining <n>` also warns when the fixed turn wrap-up window is reached (15 by default). `--supervisor-review` enables the token-using trajectory reviewer and rubric grader rungs.
 - **Skills:** repeat `--skills <dir>` to discover Markdown skills from multiple roots. Earlier directories shadow later ones; only the compact catalogue is injected, and the agent loads a selected skill on demand.
 - **Subagents:** `--subagents` adds the context-isolated `subagent` tool. `--subagent-max-turns <n>` limits each child and `--subagent-max-children <n>` limits the total children a session may run.
+- **Providers per role (config only):** a `providers` map names entries, and `roles` picks one per role. A child may be spawned on any named entry; the spawn tool lists them. Example:
+
+  ```json
+  {
+    "providers": {
+      "cloud": { "provider": "openai-chatgpt", "model": "gpt-5.6-sol", "reasoningEffort": "max" },
+      "local": { "provider": "openai", "baseUrl": "http://127.0.0.1:8080/v1", "model": "qwen3.8-27b", "contextWindow": 98304 }
+    },
+    "roles": { "main": "cloud", "supervisor": "cloud", "memory": "cloud", "subagents": "local" }
+  }
+  ```
+
+  Typed `--provider`/`--model`/`--base-url` flags pin the main role to those values; other roles keep their entries. `agentrig doctor` checks every entry.
 - **MCP:** `--mcp-config <path>` starts the stdio MCP servers in the JSON config and adds their namespaced tools to the session. MCP tools use the `exec` permission class.
 - **Shell:** `--shell <path>` chooses the shell used by the `bash` tool instead of the platform default (`/bin/sh` on POSIX; Git Bash, then PowerShell, then `cmd.exe` on Windows).
 

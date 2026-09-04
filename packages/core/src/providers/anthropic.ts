@@ -1,5 +1,5 @@
 import type { ContentBlock, Message } from "../messages.js";
-import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
+import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 
@@ -14,6 +14,8 @@ export interface AnthropicProviderOptions {
   model: string;
   baseUrl?: string;
   contextWindow?: number;
+  /** Pinned effort, sent as `output_config.effort`; `minimal` maps to `low`. Omitted when unset. */
+  reasoningEffort?: ReasoningEffort;
   fetchFn?: typeof fetch;
   /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
   retry?: RetryPolicy;
@@ -25,7 +27,7 @@ const API_VERSION = "2023-06-01";
 
 type JsonObject = Record<string, unknown>;
 
-export function toAnthropicRequest(req: ModelRequest, model: string): JsonObject {
+export function toAnthropicRequest(req: ModelRequest, model: string, reasoningEffort?: ReasoningEffort): JsonObject {
   const body: JsonObject = {
     model,
     max_tokens: req.maxTokens,
@@ -42,6 +44,9 @@ export function toAnthropicRequest(req: ModelRequest, model: string): JsonObject
     stream: true,
   };
   if (req.temperature !== undefined) body.temperature = req.temperature;
+  if (reasoningEffort !== undefined) {
+    body.output_config = { effort: reasoningEffort === "minimal" ? "low" : reasoningEffort };
+  }
   return body;
 }
 
@@ -185,6 +190,7 @@ export class AnthropicProvider implements ModelProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
+  private readonly reasoningEffort: ReasoningEffort | undefined;
   private readonly retry: RetryPolicy | undefined;
   private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
 
@@ -193,6 +199,7 @@ export class AnthropicProvider implements ModelProvider {
     this.model = opts.model;
     this.baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
     this.fetchFn = opts.fetchFn ?? fetch;
+    this.reasoningEffort = opts.reasoningEffort;
     this.retry = opts.retry;
     this.onRetry = opts.onRetry;
     this.capabilities = {
@@ -220,7 +227,7 @@ export class AnthropicProvider implements ModelProvider {
             "x-api-key": this.apiKey,
             "anthropic-version": API_VERSION,
           },
-          body: JSON.stringify(toAnthropicRequest(req, this.model)),
+          body: JSON.stringify(toAnthropicRequest(req, this.model, this.reasoningEffort)),
         },
         signal,
         this.retry ?? {},

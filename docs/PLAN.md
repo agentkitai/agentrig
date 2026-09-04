@@ -76,6 +76,12 @@ interface ModelProvider {
 
 Ship `anthropic` and `openai-compatible` (covers OpenAI, most local servers) in M2. Others are community/adapter work.
 
+Named entries (R3.5a): config may define `providers` (name → provider/model/baseUrl/contextWindow/
+reasoningEffort) and `roles` (`main`, `supervisor`, `memory`, `subagents` → entry name). One
+process then runs each role on its own entry; the flat `provider`/`model`/`baseUrl` keys remain
+the implicit `default` entry. `reasoningEffort` is an adapter constructor option, never a per-request
+field.
+
 ### 2.3 Tools
 
 ```ts
@@ -576,7 +582,7 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 - `agentrig dream [--review|--auto] [--scope project|global] [--since <n>]`
 - `agentrig sessions ls|show <id>|resume <id>`
 - `agentrig memory ls|show|search <q>|ingest <path>|lint` (`lint` = a dry-run dream report, no output store)
-- Config: `agentrig.config.ts` (provider, model, tools, permission rules, budget, supervisor thresholds) + `.agentrig/` state dir
+- Config: `.agentrig/config.json` (provider, model, tools, permission rules, budget, supervisor thresholds; `providers` named entries + `roles` per-role selection) + `.agentrig/` state dir
 
 Keep it thin: every command is a few lines over the SDK. If a feature needs CLI-only logic, it belongs in a package instead.
 

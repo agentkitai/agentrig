@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ContentBlock, Message } from "../messages.js";
-import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
+import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { OpenAIChatGPTAuth, type OpenAIChatGPTAuthOptions } from "./openai-chatgpt-auth.js";
 import { errorDetail, fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
@@ -28,6 +28,8 @@ export interface OpenAIChatGPTProviderOptions {
   authOptions?: OpenAIChatGPTAuthOptions;
   baseUrl?: string;
   contextWindow?: number;
+  /** Pinned reasoning effort, sent as `reasoning: { effort }`. Omitted when unset. */
+  reasoningEffort?: ReasoningEffort;
   fetchFn?: typeof fetch;
   /**
    * Client identifier sent as the `originator` header. Defaults to AgentRig's own name — the
@@ -128,6 +130,7 @@ export function toResponsesRequest(
   req: ModelRequest,
   model: string,
   rawGroups?: Map<string, RawItemGroup>,
+  reasoningEffort?: ReasoningEffort,
 ): JsonObject {
   const body: JsonObject = {
     model,
@@ -153,6 +156,7 @@ export function toResponsesRequest(
     body.tool_choice = "auto";
   }
   if (req.temperature !== undefined) body.temperature = req.temperature;
+  if (reasoningEffort !== undefined) body.reasoning = { effort: reasoningEffort };
   return body;
 }
 
@@ -291,6 +295,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   private readonly fetchFn: typeof fetch;
   private readonly originator: string;
   private readonly clientVersion: string;
+  private readonly reasoningEffort: ReasoningEffort | undefined;
   private readonly retry: RetryPolicy;
   private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
   private readonly sessionId = randomUUID();
@@ -304,6 +309,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
     this.fetchFn = opts.fetchFn ?? fetch;
     this.originator = opts.originator ?? DEFAULT_ORIGINATOR;
     this.clientVersion = opts.clientVersion ?? "0.0.0";
+    this.reasoningEffort = opts.reasoningEffort;
     this.retry = opts.retry ?? {};
     this.onRetry = opts.onRetry;
     const cacheReadDiscount = openAiCacheReadDiscount(this.model);
@@ -335,7 +341,7 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       init: {
         method: "POST",
         headers,
-        body: JSON.stringify(toResponsesRequest(req, this.model, this.rawGroups)),
+        body: JSON.stringify(toResponsesRequest(req, this.model, this.rawGroups, this.reasoningEffort)),
       },
     };
   }

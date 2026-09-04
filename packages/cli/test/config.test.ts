@@ -6,6 +6,8 @@ import { Command } from "commander";
 import { buildAgent, type AgentBuildOptions } from "../src/agent-builder.ts";
 import {
   explicitCliValues,
+  loadRunConfig,
+  parseConfigText,
   readConfigFile,
   resolveConfig,
   type ConfigFile,
@@ -424,5 +426,92 @@ describe("both agent entry points use config", () => {
       "node", "agentrig", "run", "test", "--no-supervise",
     ]);
     expect(received?.supervise).toBe(false);
+  });
+});
+
+describe("providers and roles (R3.5a)", () => {
+  const valid = {
+    providers: {
+      cloud: { provider: "openai-chatgpt", model: "gpt-5.6-sol", reasoningEffort: "max" },
+      local: { provider: "openai", baseUrl: "http://127.0.0.1:8080/v1", model: "qwen3.8-27b", contextWindow: 98304 },
+    },
+    roles: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+  };
+
+  it("parses named entries with effort and context window, at top level and inside a profile", () => {
+    const top = parseConfigText("c", JSON.stringify(valid));
+    expect(top.providers?.local?.contextWindow).toBe(98304);
+    expect(top.providers?.cloud?.reasoningEffort).toBe("max");
+    expect(top.roles).toEqual(valid.roles);
+    const inProfile = parseConfigText("c", JSON.stringify({ profiles: { personal: valid } }));
+    expect(inProfile.profiles?.personal?.roles?.subagents).toBe("local");
+  });
+
+  it("rejects a bad entry name, the reserved name default, and an unknown effort", () => {
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { Cloud: { provider: "openai", model: "m" } } }))).toThrow(/providers\.Cloud/);
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { default: { provider: "openai", model: "m" } } }))).toThrow(/reserved/);
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { a: { provider: "openai", model: "m", reasoningEffort: "ultra" } } }))).toThrow(/providers\.a\.reasoningEffort/);
+  });
+
+  it("requires a model per entry and rejects unknown entry keys and unknown roles", () => {
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { a: { provider: "openai" } } }))).toThrow(/providers\.a\.model/);
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { a: { provider: "openai", model: "m", temperature: 1 } } }))).toThrow(/providers\.a\.temperature/);
+    expect(() => parseConfigText("c", JSON.stringify({ roles: { planner: "a" } }))).toThrow(/roles\.planner/);
+  });
+
+  it("still refuses a credential inside an entry, but allows an entry NAMED like one", () => {
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { a: { provider: "openai", model: "m", apiKey: "sk-x" } } }))).toThrow(/credentials cannot be stored/);
+    expect(parseConfigText("c", JSON.stringify({ providers: { token: { provider: "openai", model: "m" } } })).providers?.token?.model).toBe("m");
+  });
+
+  it("still refuses a credential stored directly as a providers entry's value, not just inside one", () => {
+    expect(() => parseConfigText("c", JSON.stringify({ providers: { apiKey: "sk-x" } }))).toThrow(/credentials cannot be stored/);
+  });
+
+  it("replaces providers and roles wholesale across layers, never merging", () => {
+    const resolved = resolveConfig({
+      defaults: {},
+      user: file({ providers: { cloud: { provider: "openai", model: "u" }, extra: { provider: "openai", model: "e" } } }),
+      project: file({ providers: { cloud: { provider: "openai", model: "p" } } }),
+    });
+    expect(Object.keys(resolved.providers ?? {})).toEqual(["cloud"]);
+    expect(resolved.providers?.cloud?.model).toBe("p");
+  });
+
+  it("parses the flat contextWindow and reasoningEffort keys for the default entry", () => {
+    const parsed = parseConfigText("c", JSON.stringify({ contextWindow: 98304, reasoningEffort: "high" }));
+    expect(parsed.contextWindow).toBe(98304);
+    expect(parsed.reasoningEffort).toBe("high");
+    expect(() => parseConfigText("c", JSON.stringify({ contextWindow: 0 }))).toThrow(/contextWindow/);
+  });
+
+  it("reports providerOverride only for typed provider flags or AGENTRIG_MODEL, not for config values", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(home, { model: "from-config", ...valid });
+    // a fresh program per call: commander keeps parsed option values on the command object,
+    // so a reused `run` would carry the earlier --model over into the next case
+    const load = async (argv: string[], env: NodeJS.ProcessEnv = {}) => {
+      const run = buildProgram().commands.find((c) => c.name() === "run")!;
+      run.parseOptions(argv);
+      return loadRunConfig(run, { ...run.opts(), root: ".agentrig" }, { cwd, home, env, interactive: false });
+    };
+    expect((await load([])).providerOverride).toBe(false);
+    expect((await load(["--model", "typed"])).providerOverride).toBe(true);
+    expect((await load([], { AGENTRIG_MODEL: "from-env" })).providerOverride).toBe(true);
+    expect((await load(["--provider", "anthropic"])).providerOverride).toBe(true);
+    expect((await load(["--base-url", "http://127.0.0.1:1/v1"])).providerOverride).toBe(true);
+  });
+
+  it("the dream and memory ingest commands see providers and roles from config", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(home, valid);
+    for (const path of [["dream"], ["memory", "ingest"]]) {
+      let cmd = buildProgram();
+      for (const name of path) cmd = cmd.commands.find((c) => c.name() === name)!;
+      cmd.parseOptions([]);
+      const resolved = await loadRunConfig(cmd, { ...cmd.opts() }, { cwd, home, env: {}, interactive: false });
+      expect(resolved.roles?.memory).toBe("cloud");
+      expect(Object.keys(resolved.providers ?? {})).toEqual(["cloud", "local"]);
+    }
   });
 });

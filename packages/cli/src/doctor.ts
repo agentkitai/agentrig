@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
 import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
-import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
+import { DEFAULT_ANTHROPIC_MODEL, resolveProviderEntries } from "./provider.js";
 import { parseTrustText, resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
 
 const execFileAsync = promisify(execFile);
@@ -218,20 +218,20 @@ async function readTrust(
 }
 
 async function credentialCheck(
-  effective: ConfigValues & Record<string, unknown>,
+  provider: string,
+  baseUrl: string | undefined,
   env: NodeJS.ProcessEnv,
   home: string,
   now: number,
   probes: DoctorProbes,
 ): Promise<CheckLine> {
-  const provider = effective.provider ?? "anthropic";
   if (provider === "anthropic") {
     return env.ANTHROPIC_API_KEY
       ? line("pass", "credentials", "provider anthropic; ANTHROPIC_API_KEY is present (environment)")
       : line("fail", "credentials", "provider anthropic; ANTHROPIC_API_KEY is absent — set ANTHROPIC_API_KEY");
   }
   if (provider === "openai") {
-    if (effective.baseUrl !== undefined && !env.OPENAI_API_KEY) {
+    if (baseUrl !== undefined && !env.OPENAI_API_KEY) {
       return line("skip", "credentials", "provider openai with a custom base URL; OPENAI_API_KEY is not required by AgentRig")
     }
     return env.OPENAI_API_KEY
@@ -263,6 +263,66 @@ async function credentialCheck(
     return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; access token has 0m remaining and the runtime will refresh before use`);
   }
   return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; expires in ${duration(expiresAt - now)}`);
+}
+
+type RoleNames = ReturnType<typeof resolveProviderEntries>["roleNames"];
+/** Either resolveProviderEntries's role table, or the error it threw — computed once and reused. */
+interface RoleResolution { roleNames?: RoleNames; error?: Error }
+
+function roleTable(roleNames: RoleNames): string {
+  return `main→${roleNames.main}, supervisor→${roleNames.supervisor}, memory→${roleNames.memory}, subagents→${roleNames.subagents}`;
+}
+
+/**
+ * R3.5a: which entry each role resolves to, computed once so both the flat-default credential
+ * decision and the `providers:roles` line agree — recomputing it twice risked exactly the kind of
+ * drift this doctor exists to catch.
+ */
+function resolveRoleNames(
+  effective: ConfigValues & Record<string, unknown>,
+  defaultProvider: string,
+  defaultModel: string,
+  env: NodeJS.ProcessEnv,
+  cli: DoctorCliValues,
+): RoleResolution {
+  try {
+    const { roleNames } = resolveProviderEntries({
+      provider: defaultProvider,
+      model: defaultModel,
+      ...(effective.baseUrl === undefined ? {} : { baseUrl: effective.baseUrl }),
+      providers: effective.providers ?? {},
+      ...(effective.roles === undefined ? {} : { roles: effective.roles }),
+      // mirrors loadRunConfig's rule (config.ts) so this table matches what `run` would resolve
+      providerOverride:
+        cli.provider !== undefined || cli.model !== undefined || cli.baseUrl !== undefined || env.AGENTRIG_MODEL !== undefined,
+    });
+    return { roleNames };
+  } catch (err) {
+    return { error: err as Error };
+  }
+}
+
+/** R3.5a: one line per named entry (credential by its own kind), then the role table. */
+async function providerEntryChecks(
+  effective: ConfigValues & Record<string, unknown>,
+  resolution: RoleResolution,
+  env: NodeJS.ProcessEnv,
+  home: string,
+  now: number,
+  probes: DoctorProbes,
+): Promise<CheckLine[]> {
+  const out: CheckLine[] = [];
+  for (const [name, entry] of Object.entries(effective.providers ?? {})) {
+    const check = await credentialCheck(entry.provider, entry.baseUrl, env, home, now, probes);
+    // no key required is the healthy state for a named local entry
+    out.push({ status: check.status === "skip" ? "pass" : check.status, label: `providers:${name}`, detail: `model ${display(entry.model)}; ${check.detail}` });
+  }
+  if (resolution.roleNames !== undefined) {
+    out.push(line("pass", "providers:roles", roleTable(resolution.roleNames)));
+  } else {
+    out.push(line("fail", "providers:roles", `${resolution.error!.message} — fix roles or add the entry under providers`));
+  }
+  return out;
 }
 
 export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResult> {
@@ -352,7 +412,28 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       checks.push(line("skip", "credentials", "effective provider/model pair is invalid; fix config:effective first"));
     } else {
       checks.push(line("pass", "config:effective", `provider ${display(provider)} from ${display(providerSource)}; model ${display(model)} from ${display(modelSource)}`));
-      checks.push(await credentialCheck(effective, env, home, now, probes));
+      // I3: `roles` alone (no `providers`) is diagnosable too — a role can still name an unknown
+      // entry with nothing under `providers` at all.
+      const needsRoleCheck = effective.providers !== undefined || effective.roles !== undefined;
+      const resolution = needsRoleCheck ? resolveRoleNames(effective, provider, model, env, cli) : undefined;
+      // I2: the flat default is only a live credential when some role actually resolves to it —
+      // otherwise doctor failed a config that `agentrig run` starts cleanly.
+      const flatUnused =
+        effective.providers !== undefined &&
+        resolution?.roleNames !== undefined &&
+        !Object.values(resolution.roleNames).includes("default");
+      if (flatUnused) {
+        checks.push(line(
+          "skip",
+          "credentials",
+          `flat provider/model entry is not used by any role (${roleTable(resolution!.roleNames!)}); credentials checked per named entry below`,
+        ));
+      } else {
+        checks.push(await credentialCheck(provider, effective.baseUrl, env, home, now, probes));
+      }
+      if (needsRoleCheck) {
+        checks.push(...(await providerEntryChecks(effective, resolution!, env, home, now, probes)));
+      }
     }
   }
 
