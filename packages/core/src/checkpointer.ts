@@ -33,6 +33,12 @@ function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: Abor
   });
 }
 
+function isOutsideGit(error: unknown): boolean {
+  if (error === null || typeof error !== "object" || !("stderr" in error)) return false;
+  const stderr = (error as { stderr?: unknown }).stderr;
+  return typeof stderr === "string" && /not a git repository/i.test(stderr);
+}
+
 async function snapshot(ctx: HookContext): Promise<void> {
   if (ctx.emitCheckpoint === undefined) {
     throw new Error("Checkpointer must be run by an AgentRig agent");
@@ -44,7 +50,7 @@ async function snapshot(ctx: HookContext): Promise<void> {
   } catch (error) {
     // A timeout abort is a checkpoint failure, not evidence that the directory is outside Git.
     // Propagate it so the dedicated fail-closed pass blocks the pending write.
-    if (ctx.signal.aborted) throw error;
+    if (ctx.signal.aborted || !isOutsideGit(error)) throw error;
     await ctx.emitCheckpoint({
       type: "checkpoint.warning",
       message: `checkpointing disabled: ${ctx.cwd} is not inside a git repository`,

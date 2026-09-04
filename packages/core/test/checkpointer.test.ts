@@ -167,6 +167,28 @@ describe("Checkpointer", () => {
     )).toBe(true);
   });
 
+  it("does not cache an aborted snapshot attempt as success for a later write in the turn", async () => {
+    await initRepo();
+    const checkpointer = new Checkpointer();
+    const aborted = new AbortController();
+    aborted.abort();
+    const emitted: Array<{ type: string }> = [];
+    const context = {
+      point: "pre_tool" as const,
+      sessionId: "retry_after_abort",
+      cwd: root,
+      turn: 1,
+      tool: { name: "write", input: {} },
+      permission: "write" as const,
+      emitCheckpoint: async (event: { type: string }) => { emitted.push(event); },
+    };
+
+    await expect(checkpointer.handler({ ...context, signal: aborted.signal })).rejects.toBeDefined();
+    await expect(checkpointer.handler({ ...context, signal: new AbortController().signal })).resolves.toEqual({ action: "continue" });
+    expect(emitted.some((event) => event.type === "checkpoint.warning")).toBe(false);
+    expect(emitted.some((event) => event.type === "checkpoint.created")).toBe(true);
+  });
+
   it("releases its per-session state when a session ends", async () => {
     const checkpointer = new Checkpointer();
     const session = agent([
