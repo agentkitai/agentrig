@@ -825,6 +825,16 @@ running (drift from R4 is the builder's to note).
 - The subagent tool inherits the parent's provider, so a train cannot yet pin a different model
   per child; a plan file is the mechanism that works without that. A per-child model pin is a
   separate, small core change if the experiment pays off.
+- Topic children and the dogfood skill's external reviews (2026-09-04, from the R4a fixer's log):
+  the builder brief in `topic` §2 says "skip the external reviews", the fixer brief in §3 did not,
+  and dogfood §8 unconditionally starts two. The R4a fixer pushed its fix in seven minutes, then
+  ran three rounds of `claude -p` and `codex exec` reviews of its own, waited on them for about
+  thirty minutes with three-minute silent polls, and widened its diff on what they found — all
+  before the train's own delta reviewer had seen anything. Fixed in the skills: dogfood §8 is
+  skipped under `ship`/`topic`, and the `topic` fixer and continuation briefs carry the same
+  sentence the builder's does. A running conductor keeps its loaded skill text, so this applies
+  from the next `/topic` invocation; children load `dogfood` fresh, so the §8 skip applies to the
+  next child spawned from a checkout that has it.
 - Rejected: putting the plan in the roadmap row. The row must stay short enough to quote
   verbatim in every child brief, and a plan that becomes contract would need the arbiter for
   every implementation detail.

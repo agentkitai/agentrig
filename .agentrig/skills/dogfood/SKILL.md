@@ -99,6 +99,13 @@ killed), and known caveats. If the implementation diverged from the issue, say w
 
 ## 8. Two external reviews, in parallel, as background jobs
 
+**Under `ship` or `topic`, skip this section entirely** — as a builder, a continuation builder,
+or a fixer. The conductor spawns an independent reviewer child after you stop; that review is the
+one that counts. Running your own here doubles the spend and, worse, turns your fix into a private
+review loop the conductor cannot see: the R4a fixer spent thirty of its fifty-four minutes waiting
+on three rounds of self-arranged reviews and widened its diff on their findings, with the train's
+own reviewer still to come. A topic child's job ends at the push and the report.
+
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
 
