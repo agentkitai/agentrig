@@ -1,5 +1,5 @@
 import type { ContentBlock, Message } from "../messages.js";
-import type { ModelEvent, ModelProvider, ModelRequest, StopReason } from "../provider.js";
+import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 import { openAiCacheReadDiscount } from "./cache-pricing.js";
@@ -23,6 +23,8 @@ export interface OpenAIProviderOptions {
    * `max_tokens` for other base URLs (what most local servers still expect).
    */
   maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  /** Pinned reasoning effort, sent as `reasoning_effort`. Omitted when unset. */
+  reasoningEffort?: ReasoningEffort;
   /** Backoff for transient HTTP failures (rate limits, 5xx); see RetryPolicy defaults. */
   retry?: RetryPolicy;
   /** Called when a transient in-stream failure triggers a clean re-request, so a UI can say so. */
@@ -44,6 +46,7 @@ export function toOpenAIRequest(
   req: ModelRequest,
   model: string,
   maxTokensParam: "max_tokens" | "max_completion_tokens" = "max_completion_tokens",
+  reasoningEffort?: ReasoningEffort,
 ): JsonObject {
   const messages: JsonObject[] = [{ role: "system", content: req.system }];
   for (const m of req.messages) messages.push(...toOpenAIMessages(m));
@@ -61,6 +64,7 @@ export function toOpenAIRequest(
     }));
   }
   if (req.temperature !== undefined) body.temperature = req.temperature;
+  if (reasoningEffort !== undefined) body.reasoning_effort = reasoningEffort;
   return body;
 }
 
@@ -218,6 +222,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly maxTokensParam: "max_tokens" | "max_completion_tokens";
+  private readonly reasoningEffort: ReasoningEffort | undefined;
   private readonly retry: RetryPolicy | undefined;
   private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
 
@@ -228,6 +233,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.fetchFn = opts.fetchFn ?? fetch;
     this.maxTokensParam =
       opts.maxTokensParam ?? (this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens");
+    this.reasoningEffort = opts.reasoningEffort;
     this.retry = opts.retry;
     this.onRetry = opts.onRetry;
     const officialOpenAi = new URL(this.baseUrl).hostname === "api.openai.com";
@@ -254,7 +260,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         {
           method: "POST",
           headers,
-          body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam)),
+          body: JSON.stringify(toOpenAIRequest(req, this.model, this.maxTokensParam, this.reasoningEffort)),
         },
         signal,
         this.retry ?? {},

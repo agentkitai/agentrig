@@ -44,6 +44,13 @@ describe("toResponsesRequest", () => {
       { type: "function_call_output", call_id: "call_1", output: "a.txt" },
     ]);
   });
+
+  it("sends reasoning.effort only when configured", () => {
+    const plain = toResponsesRequest(baseReq, "gpt-5.6-sol") as Record<string, unknown>;
+    expect(plain).not.toHaveProperty("reasoning");
+    const max = toResponsesRequest(baseReq, "gpt-5.6-sol", undefined, "max") as Record<string, unknown>;
+    expect(max.reasoning).toEqual({ effort: "max" });
+  });
 });
 
 const sse = (events: unknown[]): string => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("") + "data: [DONE]\n\n";

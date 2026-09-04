@@ -426,6 +426,77 @@ describe("agentrig doctor", () => {
   });
 });
 
+describe("named provider entries (R3.5a)", () => {
+  const config = {
+    providers: {
+      cloud: { provider: "openai-chatgpt", model: "gpt-5.6-sol" },
+      local: { provider: "openai", baseUrl: "http://127.0.0.1:8080/v1", model: "qwen3.8-27b" },
+    },
+    roles: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+  };
+
+  it("checks each entry's credential by its own kind and prints the role table", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify(config));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:local")).toContain("pass providers:local");
+    expect(find(result.lines, "providers:local")).toContain("OPENAI_API_KEY is not required");
+    expect(find(result.lines, "providers:cloud")).toContain("fail providers:cloud");
+    expect(find(result.lines, "providers:cloud")).toContain("agentrig login openai-chatgpt");
+    expect(find(result.lines, "providers:roles")).toContain("main→cloud, supervisor→cloud, memory→cloud, subagents→local");
+  });
+
+  it("fails the role table when a role names a missing entry", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ ...config, roles: { memory: "wiki" } }));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:roles")).toContain("fail providers:roles");
+    expect(find(result.lines, "providers:roles")).toContain('role memory names unknown provider entry "wiki"');
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("prints no provider entry lines when config has no providers block", async () => {
+    const result = await diagnose(fixture().options);
+    expect(result.lines.some((l) => l.includes("providers:"))).toBe(false);
+  });
+
+  it("pins main to the default entry when a provider flag is typed, exactly as run does", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify(config));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" }, cli: { model: "typed" } });
+    expect(find(result.lines, "providers:roles")).toContain("main→default, supervisor→cloud, memory→cloud, subagents→local");
+  });
+
+  it("skips the flat default's credential when no role uses it, without failing a config that runs fine (I2)", async () => {
+    const f = fixture();
+    // both entries are keyless-local-style so the whole diagnosis can be green: neither role
+    // resolves to `default`, and the flat default (anthropic, no ANTHROPIC_API_KEY here) would
+    // otherwise fail a config `agentrig run` starts cleanly.
+    const keylessConfig = {
+      providers: {
+        cloud: { provider: "openai", baseUrl: "http://127.0.0.1:8080/v1", model: "cloud-model" },
+        local: { provider: "openai", baseUrl: "http://127.0.0.1:9090/v1", model: "local-model" },
+      },
+      roles: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+    };
+    f.files.set(USER_CONFIG, JSON.stringify(keylessConfig));
+    const result = await diagnose({ ...f.options, env: {} });
+    expect(find(result.lines, "credentials")).toContain("skip credentials");
+    expect(find(result.lines, "credentials")).toContain("not used by any role");
+    expect(find(result.lines, "providers:roles")).toContain("pass");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("diagnoses a roles block with no providers block at all (I3)", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ roles: { main: "cloud" } }));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:roles")).toContain("fail providers:roles");
+    expect(find(result.lines, "providers:roles")).toContain('role main names unknown provider entry "cloud"');
+    expect(result.exitCode).toBe(1);
+  });
+});
+
 describe("doctor read-only guarantee", () => {
   const cleanup: string[] = [];
 

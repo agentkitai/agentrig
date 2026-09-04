@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R4a is complete; R4b is next.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R4a is complete; R4b is next.** R3.5 is complete (R3.5a, R3.5b — inserted band, see ROADMAP §R3.5); R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -396,6 +396,49 @@ Changes:
   up-front claims for parent and siblings; throwing on an unreadable child log; not recording
   `subagent.end`; a hard-coded end reason; a resume keeping the previous session's children; a
   running-turn guard on `/children`; preferring the child's own end reason over the parent's.
+
+## R3.5 notes
+
+| Row | Deliverable | Status |
+|---|---|---|
+| R3.5a | Named provider entries, per-role selection, `reasoningEffort`, doctor coverage | done |
+| R3.5b | Train review via `claude -p` + `codex review` | done |
+
+- R3.5a keeps one instance per entry: two roles on `cloud` share one object, exactly as every
+  role shared one before. Roles are constructed eagerly so a missing credential fails the run
+  before a session starts; `get(name)` builds spawn-only entries on first use.
+- Typed `--provider`/`--model`/`--base-url` (or `AGENTRIG_MODEL`) pin only `main` to the flat
+  default entry; `modelExplicit` was not reusable for this because it is also true when config
+  sets `model`.
+- `memory ingest` and `dream` construct only the role they use, via a new
+  `buildRoleProvider(opts, role)` in `packages/cli/src/provider.ts`, rather than the full eager
+  `buildProviders` set — otherwise a dream failed on a credential some unrelated role needed.
+  Typed provider flags still pin them to the flat default entry (`main` under `providerOverride`).
+- Doctor's `providers:roles` table derives `providerOverride` from the same four-way rule as
+  `loadRunConfig` (typed `--provider`/`--model`/`--base-url` or `AGENTRIG_MODEL`), so it shows
+  what `run` would resolve, not only the env-var case.
+- R3.5b moves the train's review out of subagents entirely: `topic` §2 step 4 runs `claude -p`
+  (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review --base review-base-NN` in
+  parallel in one conductor-made worktree, on the full review and on every delta; reviews are
+  posted as PR comments and replace reviewer session ids in reports. The arbiter is spawned on
+  the main entry. Preflight child counts drop from three to two per row.
+- Deliberate deviation from spec §6, found by the R3.5b dry run against PR #109: §6 called for
+  `codex review --base <branch>` with "a prompt carrying the same adversarial standard" as
+  Claude's. `codex review` on the installed CLI (0.153.2) rejects `--base <BRANCH>` combined with
+  a `[PROMPT]` positional argument (`error: the argument '--base <BRANCH>' cannot be used with
+  '[PROMPT]'`, confirmed with `--help` and by swapping argument order). The Codex job therefore
+  runs `codex review --base review-base-NN` with no custom prompt; Codex's own review mode carries
+  its own instructions, and the adversarial standard is enforced by Claude's brief plus step 5's
+  finding-sorting rule, where a Codex finding without a proposed fix is still repair work.
+- Codex names no SHA in its own output; its provenance rests on the PR-comment heading (which
+  records `HEAD`) plus the pre-merge assertion that the worktree was at `HEAD` before
+  `origin/main` was merged in.
+- Observed dry-run cost against PR #109 (one file changed): the Claude leg cost $3.76 and took
+  13 minutes; the Codex leg took roughly 25 minutes — long enough that the final-review fix wave
+  raised the dead-job timeout in `topic` §2 step 4 from 45 to 60 minutes.
+- The dry run ran under Claude Code itself, so `bash_job` polling of the two backgrounded review
+  jobs from inside AgentRig's own `bash`/`bash_job` tools is the one part of the pass the dry run
+  did not exercise; the first real train verifies it.
 
 ## R2 notes
 
@@ -817,6 +860,37 @@ through AgentRig itself:
 
 The remaining role AgentRig cannot self-host is the escape hatch: when a bad merge breaks the
 harness itself, the fix needs a tool that is not the broken tool.
+
+## Implementation plans for a band: `docs/plans/<band>.md` (2026-09-04)
+
+The trains so far ran builder, reviewer and lander on one model, and the builder's mistakes were
+design choices made mid-implementation (which snapshot mechanism, which hook point, what the
+test list is) rather than typing. A plan written by a stronger model before the train fixes
+those choices so a cheaper builder does mostly mechanical work, and the review gates stay
+unchanged. `docs/plans/R5.md` is the first: mechanism, file-level changes, tests with named
+mutants and known pitfalls per row, written against main `aad81ee` with the R4 train still
+running (drift from R4 is the builder's to note).
+
+- The plan is guidance under the row, never a second contract: the roadmap row text still wins
+  and the deviation gate still applies to the row. A departure from the plan is recorded in the
+  PR body under `## Plan departures` with its reason (dogfood §2); the reviewer compares the diff
+  against the plan and an unlisted departure is a LOW finding (review §4).
+- The subagent tool inherits the parent's provider, so a train cannot yet pin a different model
+  per child; a plan file is the mechanism that works without that. A per-child model pin is a
+  separate, small core change if the experiment pays off.
+- Topic children and the dogfood skill's external reviews (2026-09-04, from the R4a fixer's log):
+  the builder brief in `topic` §2 says "skip the external reviews", the fixer brief in §3 did not,
+  and dogfood §8 unconditionally starts two. The R4a fixer pushed its fix in seven minutes, then
+  ran three rounds of `claude -p` and `codex exec` reviews of its own, waited on them for about
+  thirty minutes with three-minute silent polls, and widened its diff on what they found — all
+  before the train's own delta reviewer had seen anything. Fixed in the skills: dogfood §8 is
+  skipped under `ship`/`topic`, and the `topic` fixer and continuation briefs carry the same
+  sentence the builder's does. A running conductor keeps its loaded skill text, so this applies
+  from the next `/topic` invocation; children load `dogfood` fresh, so the §8 skip applies to the
+  next child spawned from a checkout that has it.
+- Rejected: putting the plan in the roadmap row. The row must stay short enough to quote
+  verbatim in every child brief, and a plan that becomes contract would need the arbiter for
+  every implementation detail.
 
 ## Dogfood skill: bounded review staleness (2026-09-01)
 

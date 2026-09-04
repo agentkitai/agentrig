@@ -69,6 +69,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
                 memoryIndex: "",
                 provider: built!.provider,
+                reviewProvider: built!.providers.supervisor,
                 soft: supervisorSoft,
                 turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),
@@ -138,7 +139,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       const result = await runDream({
         wiki,
         raw: new FileRawStore({ root: dir }),
-        provider: built!.provider,
+        // the memory role, like the `--dream-on-end` hook and the standalone `dream` command
+        provider: built!.providers.memory,
         cwd: process.cwd(),
       });
       const findings = findingCount(result.report, result.structural);

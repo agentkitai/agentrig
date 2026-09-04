@@ -40,7 +40,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
-import { buildProvider, type ProviderOptions } from "./provider.js";
+import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 
@@ -225,6 +225,8 @@ export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
 export interface BuiltAgent {
   agent: Agent;
   provider: ModelProvider;
+  /** Every role's provider (R3.5a); `provider` is `providers.main`. */
+  providers: ProviderSet;
   /** The tools the agent was given. Exposed so the wiring can be asserted rather than assumed. */
   tools: AnyTool[];
   /** The discovered skill catalogue, so the TUI can serve /skills and /<skill-name> (issue #62). */
@@ -294,7 +296,7 @@ export interface SubagentWiring {
   extras: AgentExtras;
   budget: Budget;
   pricing?: Pricing;
-  provider: ModelProvider;
+  providers: ProviderSet;
   permissionPolicy: PermissionPolicy;
   sandbox?: SandboxConfig;
   skills: Skill[];
@@ -332,10 +334,14 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
     maxChildren,
     ...(w.budget.maxTokens === undefined ? {} : { maxChildTokens: w.budget.maxTokens }),
     ...(w.budget.maxUsd === undefined ? {} : { maxChildUsd: w.budget.maxUsd }),
-    // a child gets the parent's provider, tools and permissions, but NOT the ability to spawn
-    // its own — `subagentTool` builds the child's subagent tool itself, at depth + 1
-    childConfig: () => ({
-      provider: w.provider,
+    // a child gets the SUBAGENTS role's provider by default, or the entry the parent named at
+    // spawn time; it never silently inherits the parent's own entry (R3.5a). Tools and permissions
+    // are the parent's, but NOT the ability to spawn — `subagentTool` builds that at depth + 1.
+    ...(w.opts.providers !== undefined && Object.keys(w.opts.providers).length > 0
+      ? { providerChoices: { names: w.providers.names, default: w.providers.roleNames.subagents, main: w.providers.roleNames.main } }
+      : {}),
+    childConfig: (choice) => ({
+      provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
       // skills too: a subagent doing a task the project has instructions for should be able to
       // load them, and the catalogue costs one line each
       tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
@@ -371,7 +377,8 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
-  const provider = buildProvider(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
+  const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
+  const provider = providers.main;
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];
@@ -436,7 +443,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,
-        provider,
+        provider: providers.memory,
         ...(backend === null ? {} : { backend }),
         onError: (err) => extras.onHookError?.(`memory ingest failed (session still succeeded): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`memory: ${summary}`),
@@ -447,7 +454,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     hooks.push(
       dreamOnSessionEnd({
         dir: opts.memory,
-        provider,
+        provider: providers.memory,
         everySessions: positiveNumber("--dream-every-sessions", opts.dreamEverySessions ?? "10"),
         everyHours: positiveNumber("--dream-every-hours", opts.dreamEveryHours ?? "24"),
         ...(opts.dreamStructuralOnly === true ? { structuralOnly: true } : {}),
@@ -484,7 +491,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           extras,
           budget,
           ...(pricing === undefined ? {} : { pricing }),
-          provider,
+          providers,
           permissionPolicy,
           sandbox,
           skills,
@@ -519,6 +526,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, tools, skills, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, provider, providers, tools, skills, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

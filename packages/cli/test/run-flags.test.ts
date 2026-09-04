@@ -242,6 +242,17 @@ describe("supervisorOptions", () => {
       maxMinutes: 30,
     });
   });
+
+  it("builds the reviewer and grader on reviewProvider while accounting stays on provider (R3.5a)", () => {
+    const accounting = { id: "main", model: "m", capabilities: { cacheReadDiscount: 0.25, cacheWriteMultiplier: 2 } } as never;
+    const judge = { id: "judge", model: "j", capabilities: {} } as never;
+    const o = wiring({ opts: { supervisorReview: true }, provider: accounting, reviewProvider: judge });
+    expect(o.cacheReadDiscount).toBe(0.25);
+    expect(o.cacheWriteMultiplier).toBe(2);
+    // the reviewer/grader classes keep their provider private; assert through the injected object identity
+    expect((o.reviewer as unknown as { opts: { provider: unknown } }).opts.provider).toBe(judge);
+    expect((o.grader as unknown as { opts: { provider: unknown } }).opts.provider).toBe(judge);
+  });
 });
 
 describe("parseSoft", () => {

@@ -17,7 +17,7 @@ import {
   type Session,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
-import { buildProvider, DEFAULT_ANTHROPIC_MODEL, type ProviderOptions } from "./provider.js";
+import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
   dreamOnSessionEnd,
@@ -220,6 +220,8 @@ export interface SupervisorWiring {
   pricing?: Pricing;
   memoryIndex: string;
   provider: ModelProvider;
+  /** The entry the trajectory reviewer and rubric grader run on (R3.5a). Defaults to `provider`. */
+  reviewProvider?: ModelProvider;
   soft: number;
   turnsRemaining: number;
   onEscalate?: SuperviseOptions["onEscalate"];
@@ -236,6 +238,7 @@ export interface SupervisorWiring {
  */
 export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   const o = w.opts;
+  const reviewProvider = w.reviewProvider ?? w.provider;
   return {
     budget: {
       soft: w.soft,
@@ -261,8 +264,8 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     ...(w.memoryIndex === "" ? {} : { memoryIndex: w.memoryIndex }),
     ...(o.supervisorReview === true
       ? {
-          reviewer: new TrajectoryReviewer({ provider: w.provider }),
-          grader: new RubricGrader({ provider: w.provider }),
+          reviewer: new TrajectoryReviewer({ provider: reviewProvider }),
+          grader: new RubricGrader({ provider: reviewProvider }),
           attempts: async () => {
             if (o.memory === undefined) return [];
             return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;
@@ -346,7 +349,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = 1;
     return;
   }
-  const { agent, provider, memoryIndex } = built;
+  const { agent, provider, providers, memoryIndex } = built;
 
   const budget = parseBudget(opts);
 
@@ -369,6 +372,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }),
             memoryIndex,
             provider,
+            reviewProvider: providers.supervisor,
             soft: supervisorSoft,
             turnsRemaining: supervisorTurnsRemaining,
             ...(interactive

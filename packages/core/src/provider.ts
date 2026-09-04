@@ -8,6 +8,10 @@ export interface ToolSpec {
   inputSchema: Record<string, unknown>;
 }
 
+/** Effort levels an entry may pin; each adapter maps them onto its own wire field. */
+export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
 export interface ModelRequest {
   system: string;
   messages: Message[];

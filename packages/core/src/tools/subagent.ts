@@ -23,14 +23,59 @@ import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
  *   remembering to thread a counter is not a guard.
  */
 
-const Input = z.object({
+/** Which named provider entries a child may run on, and which of them are the defaults. */
+export interface SubagentProviderChoices {
+  /** Entry names offered to the model, in the order shown. Empty means no choice is offered. */
+  names: string[];
+  /** The entry a child gets when none is named. */
+  default: string;
+  /** The entry the main session runs on, so a skill can say "the main entry" without hardcoding a name. */
+  main: string;
+}
+
+/** What the model chose at spawn time. */
+export interface SubagentChoice {
+  provider?: string;
+}
+
+const baseShape = {
   task: z
     .string()
     .min(1)
     .describe("a complete, self-contained instruction — the subagent sees none of this conversation"),
   /** Named so a trajectory reads sensibly; the model picks something short. */
   label: z.string().max(60).optional().describe("a few words naming what this subagent is for"),
-});
+};
+
+/**
+ * The type-level schema `Input` is inferred from, kept separate from the runtime schema
+ * `inputSchema()` returns: a field added to `baseShape` without a matching change here shows up
+ * as a type error in `execute` rather than silently falling out of sync.
+ */
+const InputTypeSchema = z.object({ ...baseShape, provider: z.string().optional() });
+type Input = z.infer<typeof InputTypeSchema>;
+
+/**
+ * The schema is byte-identical to the pre-R3.5 one unless choices are supplied. Returns
+ * `z.ZodTypeAny` rather than `z.ZodType<Input>`: zod infers an optional field's output type as
+ * `T | undefined`, which `exactOptionalPropertyTypes` rejects against `label?: string`. `AnyTool`
+ * itself only asks for `z.ZodType<any>`, so widening here (rather than casting at the call site)
+ * is the narrowest fix.
+ */
+function inputSchema(choices: SubagentProviderChoices | undefined): z.ZodTypeAny {
+  if (choices === undefined || choices.names.length === 0) return z.object(baseShape);
+  const [first, ...rest] = choices.names as [string, ...string[]];
+  return z.object({
+    ...baseShape,
+    provider: z
+      .enum([first, ...rest])
+      .optional()
+      .describe(
+        `named provider entry for this child. When you name none you get "${choices.default}"; ` +
+          `the main session runs on "${choices.main}"; "default" is the flat provider/model entry from config`,
+      ),
+  });
+}
 
 export interface SubagentOptions {
   /**
@@ -39,8 +84,10 @@ export interface SubagentOptions {
    * the parent's memory tools. Its `budget` is ignored (see `childBudget`) and any subagent
    * tool in its `tools` is replaced by one this tool builds at the next depth.
    */
-  childConfig: () => AgentConfig;
+  childConfig: (choice?: SubagentChoice) => AgentConfig;
   createAgent: (config: AgentConfig) => Agent;
+  /** Supplied by the CLI when config defines named provider entries; absent otherwise. */
+  providerChoices?: SubagentProviderChoices;
   /** Turns before a child is cut off. Deliberately smaller than a parent's. */
   maxTurns?: number;
   /**
@@ -136,11 +183,11 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       "conversation (a broad search, reading many files for one answer) and to delegate a whole " +
       "job to an isolated worker (implement something, review something). The subagent sees none " +
       "of this conversation, so the task must stand alone.",
-    inputSchema: Input,
+    inputSchema: inputSchema(opts.providerChoices),
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
     permission: "exec",
-    execute: async (input: z.infer<typeof Input>, ctx: ToolContext): Promise<ToolResult<unknown>> => {
+    execute: async (input: Input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       if (depth >= maxDepth) {
         return refuse(`subagents may not nest more than ${maxDepth} deep; do this task yourself`);
       }
@@ -168,7 +215,8 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         }
       }
 
-      const config = opts.childConfig();
+      const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
+      const config = opts.childConfig(choice);
       // The child's own spawning ability is decided here, never by the caller: strip whatever
       // subagent tool `childConfig()` supplied (it carries the CURRENT depth) and, if another
       // level is allowed, add one that knows it is a level deeper.
@@ -190,7 +238,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
           ...opts,
           depth: depth + 1,
           ancestorPools: chain,
-          childConfig: () => ({ ...opts.childConfig(), abortGraceMs: childGrace }),
+          childConfig: (grandchildChoice) => ({ ...opts.childConfig(grandchildChoice), abortGraceMs: childGrace }),
         }));
       }
       const child = opts.createAgent({

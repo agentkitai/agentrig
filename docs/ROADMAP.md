@@ -338,6 +338,17 @@ the RECORDED tool results from the parent's log and re-executes nothing — Lang
 resume behaviour (downstream calls run again) is the failure mode, and the test is a fixture tool
 with a call counter that must not increment during fork materialization.
 
+### R3.5 — Provider routing (inserted band, authorized 2026-09-04)
+
+*Evidence: the first local-model dogfood. One `ModelProvider` per process meant a local builder
+also became the reviewer, the supervisor's judge and the memory writer. Spec:
+`docs/superpowers/specs/2026-09-04-provider-routing-design.md`.*
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R3.5a *(done)* | Config `providers` (named entries with model, baseUrl, contextWindow, reasoningEffort) + `roles` (main/supervisor/memory/subagents); `buildProviders` → `ProviderSet` consumed by the agent builder, run/TUI supervisor wiring (judges on the supervisor entry, accounting on main), `memory ingest`/`dream` (memory entry, single-role construction); the `subagent` tool gains an optional `provider` enum when entries exist; adapters accept `reasoningEffort`; `doctor` lists every entry and the role table | core + cli |
+| R3.5b *(done)* | Train review via the external pair: `topic`/`ship` run `claude -p` (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review` in parallel in one conductor-made worktree, on full and delta reviews; findings merged and posted as PR comments; arbiter spawned on the main entry | skills |
+
 ### R4 — Checkpoints and undo
 
 *Evidence: Codex's ghost commits; pi does it as an extension. Resolves PLAN §8 open question 2

@@ -15,7 +15,7 @@ import {
   withBackendRecall,
   type MemoryBackend,
 } from "@agentkitai/agentrig-memory";
-import { buildProvider, type ProviderOptions } from "./provider.js";
+import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
 
 /**
  * `agentrig memory …` — thin wrappers over the memory package. Anything with logic in it
@@ -141,7 +141,9 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
   let provider;
   try {
-    provider = buildProvider(opts);
+    // typed provider flags pin main to the flat default entry; otherwise the memory role. Only that
+    // one entry is constructed — an ingest must not fail on a credential some other role needs.
+    provider = buildRoleProvider(opts, memoryRole(opts));
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;

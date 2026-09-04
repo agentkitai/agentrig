@@ -3,20 +3,31 @@ import {
   OpenAICompatibleProvider,
   OpenAIChatGPTProvider,
   type ModelProvider,
+  type ReasoningEffort,
   type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
+import { ROLES, type ProviderEntry, type Role, type Roles } from "./config.js";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 
-/** The provider flags shared by every command that talks to a model. */
+/** The provider flags shared by every command that talks to a model, plus the R3.5a config keys. */
 export interface ProviderOptions {
   provider: string;
   model: string;
   baseUrl?: string;
+  contextWindow?: number;
+  reasoningEffort?: ReasoningEffort;
+  /** Named entries from config; the flat keys above are the implicit `default` entry. */
+  providers?: Record<string, ProviderEntry>;
+  roles?: Roles;
   /** True when the model came from --model or AGENTRIG_MODEL rather than the built-in default. */
   modelExplicit?: boolean;
+  /** True when --provider/--model/--base-url or AGENTRIG_MODEL overrode config: main is then `default`. */
+  providerOverride?: boolean;
   /** True when the user actually typed --max-tokens-per-turn; the flag has a default otherwise. */
   maxTokensPerTurnExplicit?: boolean;
+  /** Named config profile; consumed by loadRunConfig. */
+  profile?: string;
 }
 
 export interface ProviderHooks {
@@ -31,35 +42,84 @@ export function describeRetry(info: StreamRetryInfo): string {
   return `provider error (${info.reason}) — attempt ${info.attempt} of ${info.maxAttempts} failed, retrying in ${Math.round(info.delayMs / 1000)}s`;
 }
 
-export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}): ModelProvider {
+export interface ResolvedEntries {
+  entries: Record<string, ProviderEntry>;
+  roleNames: Record<Role, string>;
+}
+
+/**
+ * Pure: which entry each role resolves to. `default` is always present and is the flat keys;
+ * `roles[r] ?? roles.main ?? "default"`; typed provider flags pin main to `default` so today's
+ * `agentrig run --model x` keeps meaning "run the main loop on x".
+ */
+export function resolveProviderEntries(opts: ProviderOptions): ResolvedEntries {
+  const defaultEntry: ProviderEntry = {
+    provider: opts.provider as ProviderEntry["provider"],
+    model: opts.model,
+    ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
+    ...(opts.contextWindow === undefined ? {} : { contextWindow: opts.contextWindow }),
+    ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
+  };
+  const entries: Record<string, ProviderEntry> = { ...(opts.providers ?? {}), default: defaultEntry };
+  const configured = (role: Role): string => opts.roles?.[role] ?? opts.roles?.main ?? "default";
+  const roleNames = {
+    main: opts.providerOverride === true ? "default" : configured("main"),
+    supervisor: configured("supervisor"),
+    memory: configured("memory"),
+    subagents: configured("subagents"),
+  } satisfies Record<Role, string>;
+  for (const role of ROLES) {
+    const name = roleNames[role];
+    if (!Object.hasOwn(entries, name)) {
+      throw new Error(
+        `role ${role} names unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`,
+      );
+    }
+  }
+  return { entries, roleNames };
+}
+
+/**
+ * Which role a standalone memory command (`memory ingest`, `dream`) should build. Typed provider
+ * flags pin the standalone memory commands to the flat default, exactly as they pin `main` for
+ * `agentrig run` — one rule, not a copy of it in each command.
+ */
+export function memoryRole(opts: ProviderOptions): Role {
+  return opts.providerOverride === true ? "main" : "memory";
+}
+
+/** Constructs one entry. `modelExplicit` guards only the flat default, whose model has a built-in fallback. */
+function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
   const onRetry =
     hooks.onNotice === undefined
       ? {}
       : { onRetry: (info: StreamRetryInfo) => hooks.onNotice?.(describeRetry(info)) };
-  if (opts.provider === "anthropic") {
+  const tuning = {
+    ...(entry.contextWindow === undefined ? {} : { contextWindow: entry.contextWindow }),
+    ...(entry.reasoningEffort === undefined ? {} : { reasoningEffort: entry.reasoningEffort }),
+  };
+  const modelExplicit = name !== "default" || opts.modelExplicit === true;
+  if (entry.provider === "anthropic") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-    return new AnthropicProvider({ apiKey, model: opts.model, ...onRetry });
+    return new AnthropicProvider({ apiKey, model: entry.model, ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }), ...tuning, ...onRetry });
   }
-  if (opts.provider === "openai") {
-    if (opts.modelExplicit !== true) {
-      throw new Error("--model is required with --provider openai");
-    }
+  if (entry.provider === "openai") {
+    if (!modelExplicit) throw new Error("--model is required with --provider openai");
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey && opts.baseUrl === undefined) {
+    if (!apiKey && entry.baseUrl === undefined) {
       throw new Error("OPENAI_API_KEY is not set (or pass --base-url for a local server)");
     }
     return new OpenAICompatibleProvider({
-      model: opts.model,
+      model: entry.model,
       ...(apiKey ? { apiKey } : {}),
-      ...(opts.baseUrl === undefined ? {} : { baseUrl: opts.baseUrl }),
+      ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
+      ...tuning,
       ...onRetry,
     });
   }
-  if (opts.provider === "openai-chatgpt") {
-    if (opts.modelExplicit !== true) {
-      throw new Error("--model is required with --provider openai-chatgpt (e.g. gpt-5.6-sol)");
-    }
+  if (entry.provider === "openai-chatgpt") {
+    if (!modelExplicit) throw new Error("--model is required with --provider openai-chatgpt (e.g. gpt-5.6-sol)");
     // experimental subscription auth; tokens come from `agentrig login openai-chatgpt`
     console.error("Warning: --provider openai-chatgpt is experimental and uses an undocumented ChatGPT backend.");
     // the backend rejects `max_output_tokens` outright, so the flag cannot be honoured here.
@@ -67,8 +127,90 @@ export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}):
     if (opts.maxTokensPerTurnExplicit === true) {
       console.error("Warning: --max-tokens-per-turn is ignored by openai-chatgpt (the backend rejects the parameter).");
     }
-    return new OpenAIChatGPTProvider({ model: opts.model, ...onRetry });
+    return new OpenAIChatGPTProvider({ model: entry.model, ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }), ...tuning, ...onRetry });
   }
-  throw new Error(`unknown provider "${opts.provider}" (anthropic | openai | openai-chatgpt)`);
+  throw new Error(`unknown provider "${String(entry.provider)}" (anthropic | openai | openai-chatgpt)`);
 }
 
+/** Every role's provider, built once per entry. Roles are constructed eagerly; `get` builds lazily. */
+export interface ProviderSet {
+  main: ModelProvider;
+  supervisor: ModelProvider;
+  memory: ModelProvider;
+  subagents: ModelProvider;
+  /** Which entry each role resolved to, by name. */
+  roleNames: Record<Role, string>;
+  /** Every entry name, named ones in config order and `default` last — the spawn tool's menu. */
+  names: string[];
+  /** An entry by name, constructed on first use; throws for a name that is not an entry. */
+  get(name: string): ModelProvider;
+}
+
+export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {}): ProviderSet {
+  const { entries, roleNames } = resolveProviderEntries(opts);
+  const built = new Map<string, ModelProvider>();
+  // From cache, or built and cached — unwrapped, so `get` and `forRole` can each name the failure
+  // their own way without one wrapping the other's message.
+  const construct = (name: string): ModelProvider => {
+    let provider = built.get(name);
+    if (provider === undefined) {
+      provider = buildEntry(name, entries[name]!, opts, hooks);
+      built.set(name, provider);
+    }
+    return provider;
+  };
+  const get = (name: string): ModelProvider => {
+    if (!Object.hasOwn(entries, name)) {
+      throw new Error(`unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`);
+    }
+    try {
+      // names the entry, so a spawn-time failure (a spawn choice built lazily, here) says which
+      // entry broke rather than just "ANTHROPIC_API_KEY is not set"
+      return construct(name);
+    } catch (err) {
+      throw new Error(`provider entry ${JSON.stringify(name)}: ${(err as Error).message}`);
+    }
+  };
+  const forRole = (role: Role): ModelProvider => {
+    try {
+      // entries[roleNames[role]] is defined: resolveProviderEntries already validated every role
+      return construct(roleNames[role]);
+    } catch (err) {
+      throw new Error(`role ${role} (provider entry ${JSON.stringify(roleNames[role])}): ${(err as Error).message}`);
+    }
+  };
+  // eager, in a fixed order, so a broken entry fails the run before any session starts
+  const main = forRole("main");
+  const supervisor = forRole("supervisor");
+  const memory = forRole("memory");
+  const subagents = forRole("subagents");
+  const names = [...Object.keys(entries).filter((n) => n !== "default"), "default"];
+  return { main, supervisor, memory, subagents, roleNames, names, get };
+}
+
+/**
+ * One role's provider, and nothing else constructed. For commands that run a single role
+ * (`memory ingest`, `dream`): the agent path builds every role eagerly so a session never
+ * starts on a broken entry, but a dream has no session and must not fail on main's credential.
+ * Still validates every role name via resolveProviderEntries, so a bad `roles` block is
+ * reported the same way everywhere.
+ */
+export function buildRoleProvider(opts: ProviderOptions, role: Role, hooks: ProviderHooks = {}): ModelProvider {
+  const { entries, roleNames } = resolveProviderEntries(opts);
+  const name = roleNames[role];
+  try {
+    // entries[name] is defined here: resolveProviderEntries already threw above if it weren't
+    return buildEntry(name, entries[name]!, opts, hooks);
+  } catch (err) {
+    throw new Error(`role ${role} (provider entry ${JSON.stringify(name)}): ${(err as Error).message}`);
+  }
+}
+
+/** The flat default entry alone — what every command built before R3.5a. */
+export function buildProvider(opts: ProviderOptions, hooks: ProviderHooks = {}): ModelProvider {
+  // strip the named entries so a bad `roles` block cannot fail a command that only wants the default
+  const { providers: _providers, roles: _roles, ...flat } = opts;
+  const { entries } = resolveProviderEntries(flat);
+  // entries.default is defined here: resolveProviderEntries always fills it from the flat keys
+  return buildEntry("default", entries.default!, opts, hooks);
+}

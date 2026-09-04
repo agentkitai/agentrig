@@ -28,6 +28,14 @@ Repository rules that bind (each has bitten before):
   decision (names, descriptions, file content) is untrusted input: sanitize and bound it.
 - Error messages and tool descriptions are model-facing API: a refusal must name the exact fix.
 
+**Implementation plan — follow it when one exists.** If `docs/plans/<band>.md` exists for the
+band your row belongs to (R5a → `docs/plans/R5.md`), read its section for your row before
+writing code and build to it: it fixes mechanism, file-level changes, the test list and the
+named mutants. The row text stays the contract and the plan is guidance under it; where they
+disagree, the row wins. A departure from the plan is not a deviation, but it is recorded: list
+each one with its reason under `## Plan departures` in the PR body, and the reviewer checks the
+list against the plan. No plan file means no such section.
+
 **Deviation gate — you do not change your own contract.** If the row, issue, or task you were
 given turns out to be wrong, infeasible, or worse than an alternative (a different backend, a
 dropped acceptance criterion, a wider scope), you may propose a change but never decide it:
@@ -91,6 +99,13 @@ killed), and known caveats. If the implementation diverged from the issue, say w
 
 ## 8. Two external reviews, in parallel, as background jobs
 
+**Under `ship` or `topic`, skip this section entirely** — as a builder, a continuation builder,
+or a fixer. The conductor runs the external review pass (`topic` §2 step 4) after you stop; that
+review is the one that counts. Running your own here doubles the spend and, worse, turns your fix
+into a private review loop the conductor cannot see: the R4a fixer spent thirty of its fifty-four
+minutes waiting on three rounds of self-arranged reviews and widened its diff on their findings,
+with the train's own external review pass still to come. A topic child's job ends at the push and the report.
+
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
 
@@ -107,11 +122,12 @@ Brief each reviewer to: assume the author is wrong, verify every finding against
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
 
 **Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
-the PR (§7) and does NOT run external reviews: the conductor spawns an independent reviewer
-child (fresh worktree, mutants, no shared context) that IS the review, and running both was
-measured at four review passes per PR — ~90 minutes for a skill file, with no extra eyes on the
-code. Your task text says when you are a child. Standalone dogfood keeps both reviews because
-nothing else reviews it.
+the PR (§7) and does NOT run external reviews:
+the conductor runs the same two external reviews itself, in one worktree, against the PR head
+(`topic` §2 step 4). Children may run on a local model and the review must never share the
+builder's model; a child running the pair too would double every pass for no extra eyes. Your
+task text says when you are a child. Standalone dogfood keeps both reviews because nothing else
+reviews it.
 
 Staleness, bounded: if you push more commits after a review ran, the review is stale for the
 **delta only** — re-review the diff since the last reviewed commit, never the whole branch again,

@@ -18,6 +18,11 @@ Run this in a session that shares no context with the run that wrote the PR.
 
 ## 2. Isolated worktree, merged with main
 
+- Skip this section when the brief says a conductor prepared the worktree (the `topic`/`ship`
+  external review pass runs you via `claude -p` inside one): it is already at the head the brief
+  names (merged with `origin/main` on a full pass, unmerged on a delta pass), with dependencies
+  installed. Do not trust that — confirm with `git log -1`, `git status --porcelain` (clean) and
+  `ls node_modules` before §3, and say so in your verdict.
 - `git fetch origin main <branch>`, then `git worktree add <tmpdir> origin/<branch>` — never
   review in a working tree that has your own or anyone else's edits.
 - Merge `origin/main` into the worktree. A conflict is a finding in itself (report which files);
@@ -52,6 +57,10 @@ Run this in a session that shares no context with the run that wrote the PR.
   line. A deviation without that record is a HIGH finding ("unapproved deviation") regardless of
   its technical merit — say so, then judge the merit separately so the human has both. A PR body
   that calls the original row a "draft" or "superseded" is the usual tell.
+- If `docs/plans/<band>.md` exists for the row, compare the diff against the plan's section for
+  that row: a departure the PR body does not list under `## Plan departures` is a LOW finding
+  ("undocumented plan departure"), and a listed departure whose reason does not hold is a finding at
+  the severity of what it costs.
 
 ## 5. Test quality and mutation probes
 
