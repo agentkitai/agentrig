@@ -58,8 +58,8 @@ For each recorded row, in order:
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
    children cannot reliably report their own ids.
 3. If the builder dies at its budget, spawn ONE continuation builder from whatever it pushed (its
-   branch, its PR if any, and its last report are the task text; nothing pushed means a fresh
-   builder loses nothing); a second death halts with both session ids for
+   branch, its PR if any, and its last report are the task text, plus the same topic-child
+   sentence from step 2; nothing pushed means a fresh builder loses nothing); a second death halts with both session ids for
    `agentrig sessions resume <id>`. Never spawn a third builder over the same branch.
    A different case is a builder that stops deliberately with `DEVIATION REQUESTED` at the end
    of its report: it has pushed its work and is asking to change its contract. Do not judge the
@@ -102,7 +102,10 @@ converging, or when something needs a human. Per row, at most THREE repair round
   as written" with the rejection; on "needs the human", halt. This shares the
   one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED` path.
 - **Fix**: spawn one fix subagent on the same PR branch, scoped verbatim to every open finding and
-  no unrelated code changes. Tell it not to rebut or skip a finding, to add fail-first proof where
+  no unrelated code changes. Its brief carries the same sentence the builder's does — “You are a
+  topic child: stop at the push and skip the external reviews — an independent delta reviewer
+  follows” — because the dogfood skill's §8 otherwise tells it to arrange its own reviews and wait
+  on them. Tell it not to rebut or skip a finding, to add fail-first proof where
   behavior changes (reuse the reviewer's exact mutant as the fail-first check when one was given),
   run the green trio, push, update the PR description with every finding and its resolution, and
   report the old/new head SHAs. Record its id. If it dies at budget, spawn ONE continuation fixer
