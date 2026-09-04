@@ -324,11 +324,23 @@ describe("skillTool", () => {
     expect(body).toContain("Never stack PRs");
     expect(body).toContain("watch `main` CI on the exact merge commit");
     expect(body).toContain("spawn ONE continuation builder from whatever it pushed");
-    expect(body).toContain("The minimum is three children per remaining");
+    expect(body).toContain("The minimum is two children per remaining");
     expect(body).toContain("Each child's token cap is `--max-tokens ÷ --subagent-max-children`");
     expect(body).toContain("Report the exact head SHA you reviewed");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
+    // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
+    expect(body).toContain("two reviewers that share nothing with the builder, in parallel, in one worktree you prepare");
+    expect(body).toContain("--model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash'");
+    expect(body).toContain("--output-format json --no-session-persistence");
+    expect(body).toContain('not claude-opus-5');
+    expect(body).toContain("codex review --base review-base");
+    expect(body).toContain("both reviewers dead on the same head halts the train");
+    expect(body).toContain("gh pr comment");
+    expect(body).toContain("## External review —");
+    expect(body).toContain("runs on the main entry, never the child default");
+    expect(body).toContain("run the external review pass again");
+    expect(body).toContain("never write review artifacts inside");
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
