@@ -99,8 +99,11 @@ For each recorded row, in order:
      waiting on stdin.
    - **Codex job** — `bash` with `background: true`, cwd `$WT`:
      ```
-     codex review --base review-base "Review this PR's diff against review-base. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix; state the head SHA you reviewed." > "$OUT/codex.md" 2> "$OUT/codex.err"
+     codex review --base review-base > "$OUT/codex.md" 2> "$OUT/codex.err"
      ```
+     Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
+     standard is Claude's brief and step 5's sorting, where a Codex finding without a proposed fix
+     is still repair work.
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
      loop). Record both job ids from the `bash` results immediately and restate them in your own
      reply text on every turn you poll — tool results older than five turns may be elided from
@@ -159,9 +162,11 @@ converging, or when something needs a human. Per row, at most THREE repair round
   next round, not a halt.
 - **Re-review the delta**: run the external review pass again (§2 step 4) over the delta only.
   Refresh the worktree to the new head (`git worktree add` at NEW, merge `origin/main`,
-  `git branch -f review-base OLD`, `pnpm install`) and brief both reviewers with the PR number and
+  `git branch -f review-base OLD`, `pnpm install`). Brief the Claude job with the PR number and
   the old/new head SHAs: "review only the changes OLD..NEW under the review skill's standards;
-  never assume the previous review's findings — verify the code as it is now". They never see
+  never assume the previous review's findings — verify the code as it is now". Codex takes no
+  wording either way — it runs `codex review --base review-base` unchanged, with `review-base`
+  now sitting at OLD, so its own diff is exactly OLD..NEW. Neither reviewer ever sees
   either author's report. Post both as PR comments headed
   `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
   `## External review — Codex — head NEW — delta OLD..NEW`. A clean, fully verified delta verdict

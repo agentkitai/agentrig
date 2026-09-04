@@ -1,6 +1,6 @@
 # Status
 
-Current roadmap row: **R3.5a is complete (inserted band, see ROADMAP §R3.5); R3.5b is next, then R4a.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **R3.5 is complete (R3.5a, R3.5b — inserted band, see ROADMAP §R3.5); R4a is next.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 | M | Deliverable | Status |
@@ -392,7 +392,7 @@ Changes:
 | Row | Deliverable | Status |
 |---|---|---|
 | R3.5a | Named provider entries, per-role selection, `reasoningEffort`, doctor coverage | done |
-| R3.5b | Train review via `claude -p` + `codex review` | next |
+| R3.5b | Train review via `claude -p` + `codex review` | done |
 
 - R3.5a keeps one instance per entry: two roles on `cloud` share one object, exactly as every
   role shared one before. Roles are constructed eagerly so a missing credential fails the run
@@ -407,6 +407,19 @@ Changes:
 - Doctor's `providers:roles` table derives `providerOverride` from the same four-way rule as
   `loadRunConfig` (typed `--provider`/`--model`/`--base-url` or `AGENTRIG_MODEL`), so it shows
   what `run` would resolve, not only the env-var case.
+- R3.5b moves the train's review out of subagents entirely: `topic` §2 step 4 runs `claude -p`
+  (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review --base review-base` in
+  parallel in one conductor-made worktree, on the full review and on every delta; reviews are
+  posted as PR comments and replace reviewer session ids in reports. The arbiter is spawned on
+  the main entry. Preflight child counts drop from three to two per row.
+- Deliberate deviation from spec §6, found by the R3.5b dry run against PR #109: §6 called for
+  `codex review --base <branch>` with "a prompt carrying the same adversarial standard" as
+  Claude's. `codex review` on the installed CLI (0.153.2) rejects `--base <BRANCH>` combined with
+  a `[PROMPT]` positional argument (`error: the argument '--base <BRANCH>' cannot be used with
+  '[PROMPT]'`, confirmed with `--help` and by swapping argument order). The Codex job therefore
+  runs `codex review --base review-base` with no custom prompt; Codex's own review mode carries
+  its own instructions, and the adversarial standard is enforced by Claude's brief plus step 5's
+  finding-sorting rule, where a Codex finding without a proposed fix is still repair work.
 
 ## R2 notes
 
