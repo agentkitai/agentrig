@@ -80,7 +80,9 @@ For each recorded row, in order:
    with the builder, in parallel, in one worktree you prepare. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
-   - **Prepare.** `gh pr view NN --json headRefName,headRefOid` gives `BRANCH` and `HEAD`. Then
+   - **Prepare.** One `bash` call, so every value it uses is assigned inside it before use:
+     `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName)`;
+     `HEAD=$(gh pr view NN --json headRefOid --jq .headRefOid)`; then
      `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `git worktree add "$WT" "$HEAD"`,
      `git -C "$WT" branch -f review-base-NN origin/main` (create it inside the worktree so
      `git -C "$WT"` sees it); assert
@@ -90,11 +92,12 @@ For each recorded row, in order:
      conflict is a finding for §3 — record which files and stop the pass; remove the worktree and
      `review-base-NN` before stopping). A pass that stopped before both reviews completed is not a
      pass: the pass after a conflict-stopped one is a full pass on the new head, never a delta.
-     Then `(cd "$WT" && pnpm install)`. `OUT=$(mktemp -d)` holds every output file; never write
-     review artifacts inside `$WT`. End the command with `echo "$WT" "$OUT"`. `bash` has no cwd
-     field and no shell state survives between calls: record both absolute paths in your reply
-     text like a job id, and substitute them literally into every later command, prefixing each
-     job command with `cd <WT> && `.
+     Then `(cd "$WT" && pnpm install)` (pass a `timeoutMs` of at least 600000 to this `bash` call —
+     dogfood §8's warning about foreground commands a timeout can kill applies). `OUT=$(mktemp -d)`
+     holds every output file; never write review artifacts inside `$WT`. End the command with
+     `echo "$WT" "$OUT"`. `bash` has no cwd field and no shell state survives between calls: record
+     both absolute paths in your reply text like a job id, and substitute them literally into every
+     later command, prefixing each job command with `cd <WT> && `.
    - **Claude job** — `bash` with `background: true`:
      ```
      cd <WT> && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
@@ -120,11 +123,12 @@ For each recorded row, in order:
      time beside its id, and restate them in your own reply text on every turn you poll — tool
      results older than five turns may be elided from context, and a lost id is a dead job you
      cannot kill or read. A job still running 60 minutes after it started is dead: `bash_job`
-     `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/claude.md` /
-     `<OUT>/codex.md` after extraction — `bash_job` showing no output is normal because the jobs
-     write to files) is retried ONCE on the same head; both reviewers dead on the same head halts
-     the train. A pass with one surviving review is not a pass — halt with the surviving review
-     posted; the train never lands on one reviewer.
+     `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/codex.md`, or an
+     empty `<OUT>/claude.md` after the extraction step below — `bash_job` showing no output is
+     normal because the jobs write to files) is retried ONCE on the same head; both reviewers dead
+     on the same head halts the train (remove the worktree and `review-base-NN` first). A pass with
+     one surviving review is not a pass — halt with the surviving review posted (remove the
+     worktree and `review-base-NN` first); the train never lands on one reviewer.
    - **Assert the model and extract the Claude review:**
      ```
      node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "<OUT>/claude.json" > "<OUT>/claude.md"
@@ -132,8 +136,9 @@ For each recorded row, in order:
      A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
      are dead), never a review to use.
    - **Provenance.** Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
-     it no longer equals `HEAD`, the author pushed during the pass — the pass is stale, rerun it
-     on the current head. Compose each comment body with its heading first —
+     it no longer equals `HEAD`, the author pushed during the pass — the pass is stale: remove the
+     worktree and `review-base-NN`, then rerun it on the current head. Compose each comment body
+     with its heading first —
      `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
      (the same for Codex, with its own heading and `<OUT>/codex.md`) — then post each with
      `gh pr comment NN --body-file "<OUT>/claude-comment.md"` (and the Codex equivalent), and
@@ -144,7 +149,7 @@ For each recorded row, in order:
      repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
      and the same scenario), and sort the union under step 5. Claude's review must also name
      `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
-     asserted to be at `HEAD` before the merge.
+     asserted to be at `HEAD` (before the merge on a full pass).
 5. Record every child session id from its tool result and restate it in your own reply text in that
    same turn; tool results older than five turns may be elided from context. Bind the verdict to
    `HEAD` (Claude's self-reported SHA and the re-read PR head must both equal it); a head that
@@ -182,26 +187,35 @@ converging, or when something needs a human. Per row, at most THREE repair round
   fixer's to resolve (merge `main` in, never rebase); red CI on the new head is a finding for the
   next round, not a halt.
 - **Re-review the delta**: run the external review pass again (§2 step 4) over the delta only, in
-  a fresh worktree and output directory: `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`,
-  `OUT=$(mktemp -d)`, `git worktree add "$WT" NEW`, `git -C "$WT" branch -f review-base-NN OLD`;
-  assert `[ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at
-  NEW)` (remove the worktree and `review-base-NN` before stopping), and
-  `(cd "$WT" && pnpm install)`. End the command with `echo "$WT" "$OUT"` and substitute both
-  paths literally into every later command as in §2 step 4, prefixing each job command with
-  `cd <WT> && `. Brief the Claude job with the PR number and the old/new head SHAs: "review only
-  the changes OLD..NEW under the review skill's standards; never assume the previous review's
-  findings — verify the code as it is now". Codex takes no wording either way — it runs
-  `codex review --base review-base-NN` unchanged, with `review-base-NN` now sitting at OLD.
-  Codex's diff is exactly OLD..NEW when the fixer did not merge `origin/main`; if NEW contains
-  such a merge, Codex also sees main's changes — findings on files the fixer's own commits did
-  not touch are noted in the PR comment, not opened as findings. Neither reviewer ever sees
-  either author's report. Post both as PR comments headed
+  a fresh worktree and output directory. One `bash` call re-derives everything it needs, since
+  nothing from §2 step 4's shell — `$BRANCH` included — survives into this call:
+  `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName); NEW=<NEW>; OLD=<OLD>;
+  git fetch origin main "$BRANCH"; WT=$(mktemp -d); OUT=$(mktemp -d);
+  git worktree add "$WT" "$NEW"; git -C "$WT" branch -f review-base-NN "$OLD";
+  [ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at NEW;
+  remove the worktree and `review-base-NN` before stopping);
+  (cd "$WT" && pnpm install)` (pass a `timeoutMs` of at least 600000 to this `bash` call — dogfood
+  §8's warning about foreground commands a timeout can kill applies). End the command with
+  `echo "$WT" "$OUT"` and substitute both paths literally into every later command as in §2 step 4,
+  prefixing each job command with `cd <WT> && `. `<NEW>` and `<OLD>` above are the literal old/new
+  head SHAs the fixer reported in its handoff; the conductor writes them in by hand the same way it
+  writes in `NN`, because neither survives from one `bash` call to the next either. Brief the
+  Claude job with the PR number and the old/new head SHAs: "review only the changes OLD..NEW under
+  the review skill's standards; never assume the previous review's findings — verify the code as
+  it is now. You are already in an isolated worktree at NEW (not merged with origin/main), with
+  dependencies installed: skip the review skill's section 2 and verify that state yourself." The
+  delta pass does not merge `origin/main` (the full pass already did; CI tests the merged state).
+  Codex takes no wording either way — it runs `codex review --base review-base-NN` unchanged, with
+  `review-base-NN` now sitting at OLD. Codex's diff is exactly OLD..NEW when the fixer did not
+  merge `origin/main`; if NEW contains such a merge, Codex also sees main's changes — findings on
+  files the fixer's own commits did not touch are noted in the PR comment, not opened as findings.
+  Neither reviewer ever sees either author's report. Post both as PR comments headed
   `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
   `## External review — Codex — head NEW — delta OLD..NEW`. Staleness here is the same re-read
   check as the full review: re-read the PR head before posting, and if it no longer equals NEW,
-  or Claude's self-reported SHA does not equal NEW, the pass is stale — rerun it on the current
-  head. A clean, fully verified delta verdict from both reviewers lands (§4). Findings on the
-  delta open the next round.
+  or Claude's self-reported SHA does not equal NEW, the pass is stale: remove the worktree and
+  `review-base-NN`, then rerun it on the current head. A clean, fully verified delta verdict from
+  both reviewers lands (§4). Findings on the delta open the next round.
 - **Convergence** is measured on the findings a round was given, never by counting: a round
   converges when every finding it started with is closed and no previously closed finding is
   reopened. A NEW finding the delta review raises in code the fix touched is progress, not

@@ -334,3 +334,34 @@ git commit -m "docs: R3.5b done — train review via the external pair; status t
 ```
 
 Open the PR from `r3.5b-external-review` to `main` titled `docs(skills): train review via claude -p + codex review in parallel (R3.5b)`, body: spec §6 path, the four skill diffs in one paragraph each, the dry-run evidence, and the note that R3.5b's own review under the new procedure is the first dogfood of it.
+
+---
+
+## Post-implementation deviations
+
+The shipped skill text departs from this plan's tasks in ways found during implementation and
+review. The tasks above are left as written for history; this is what actually landed:
+
+- **No cwd, no shell state between `bash` calls.** The plan's job templates assume a `$WT` cwd
+  and live shell variables (`$WT`, `$OUT`, `$BRANCH`) surviving from Prepare into the Claude/Codex
+  job calls. The `bash` tool has no cwd field and starts each call in a fresh shell, so nothing
+  survives between calls: every job command is prefixed `cd <WT> && `, and `<WT>`/`<OUT>` are
+  literal absolute paths the conductor substitutes by hand, not `$WT`/`$OUT` references.
+- **A dead job is killed, non-zero exit, or an empty result file** — not the plan's bare "empty
+  output," which is ambiguous once the jobs write to files (`bash_job` legitimately shows no
+  stdout while a job runs). Concretely: an empty `<OUT>/codex.md`, or an empty `<OUT>/claude.md`
+  after the extraction step.
+- **60-minute cap**, not the plan's 45 minutes, before a still-running job counts as dead.
+- **Codex runs without a custom prompt.** `codex review --base review-base-NN` takes no `<brief>`
+  argument in `--base` mode (its review mode has its own); the adversarial standard is carried by
+  Claude's brief and the conductor's sorting in step 5.
+- **`review-base-NN`, not `review-base`.** The base branch is named per PR number so concurrent
+  rows never collide on one review-base branch.
+- **The delta pass never merges `origin/main`.** Only the full pass merges main into the worktree;
+  CI already tests the merged state, and the delta reviews the fixer's diff (`OLD..NEW`) on top of
+  the PR's already-merged history. The delta's Claude brief says so explicitly and skips the
+  review skill's §2 accordingly.
+- **Staleness is a PR-head re-read, not a session diff.** Before posting, the conductor re-reads
+  the PR head with `gh pr view NN --json headRefOid`; a mismatch (or a self-reported SHA mismatch
+  from Claude) means the pass is stale, and the worktree and `review-base-NN` are removed before
+  rerunning on the current head — the same rule for a stale full pass and a stale delta pass.

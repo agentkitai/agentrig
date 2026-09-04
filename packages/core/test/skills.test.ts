@@ -341,6 +341,8 @@ describe("skillTool", () => {
     expect(body).toContain("runs on the main entry, never the child default");
     expect(body).toContain("run the external review pass again");
     expect(body).toContain("never write review artifacts inside");
+    // R3.5b residual fix: the delta pass reuses the full pass's worktree but never its main merge
+    expect(body).toContain("The delta pass does not merge");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
     expect(body).toContain("env -u CLAUDECODE");
     expect(body).toContain("< /dev/null");

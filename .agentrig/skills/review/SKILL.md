@@ -19,9 +19,10 @@ Run this in a session that shares no context with the run that wrote the PR.
 ## 2. Isolated worktree, merged with main
 
 - Skip this section when the brief says a conductor prepared the worktree (the `topic`/`ship`
-  external review pass runs you via `claude -p` inside one): it is already at the PR head merged
-  with `origin/main` with dependencies installed. Do not trust that — confirm with `git log -1`,
-  `git status --porcelain` (clean) and `ls node_modules` before §3, and say so in your verdict.
+  external review pass runs you via `claude -p` inside one): it is already at the head the brief
+  names (merged with `origin/main` on a full pass, unmerged on a delta pass), with dependencies
+  installed. Do not trust that — confirm with `git log -1`, `git status --porcelain` (clean) and
+  `ls node_modules` before §3, and say so in your verdict.
 - `git fetch origin main <branch>`, then `git worktree add <tmpdir> origin/<branch>` — never
   review in a working tree that has your own or anyone else's edits.
 - Merge `origin/main` into the worktree. A conflict is a finding in itself (report which files);
