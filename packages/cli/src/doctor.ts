@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
 import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
-import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
+import { DEFAULT_ANTHROPIC_MODEL, resolveProviderEntries } from "./provider.js";
 import { parseTrustText, resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
 
 const execFileAsync = promisify(execFile);
@@ -218,20 +218,20 @@ async function readTrust(
 }
 
 async function credentialCheck(
-  effective: ConfigValues & Record<string, unknown>,
+  provider: string,
+  baseUrl: string | undefined,
   env: NodeJS.ProcessEnv,
   home: string,
   now: number,
   probes: DoctorProbes,
 ): Promise<CheckLine> {
-  const provider = effective.provider ?? "anthropic";
   if (provider === "anthropic") {
     return env.ANTHROPIC_API_KEY
       ? line("pass", "credentials", "provider anthropic; ANTHROPIC_API_KEY is present (environment)")
       : line("fail", "credentials", "provider anthropic; ANTHROPIC_API_KEY is absent — set ANTHROPIC_API_KEY");
   }
   if (provider === "openai") {
-    if (effective.baseUrl !== undefined && !env.OPENAI_API_KEY) {
+    if (baseUrl !== undefined && !env.OPENAI_API_KEY) {
       return line("skip", "credentials", "provider openai with a custom base URL; OPENAI_API_KEY is not required by AgentRig")
     }
     return env.OPENAI_API_KEY
@@ -263,6 +263,37 @@ async function credentialCheck(
     return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; access token has 0m remaining and the runtime will refresh before use`);
   }
   return line("pass", "credentials", `provider openai-chatgpt; token bundle readable from ${source}; expires in ${duration(expiresAt - now)}`);
+}
+
+/** R3.5a: one line per named entry (credential by its own kind), then the role table. */
+async function providerEntryChecks(
+  effective: ConfigValues & Record<string, unknown>,
+  defaultProvider: string,
+  defaultModel: string,
+  env: NodeJS.ProcessEnv,
+  home: string,
+  now: number,
+  probes: DoctorProbes,
+): Promise<CheckLine[]> {
+  const out: CheckLine[] = [];
+  for (const [name, entry] of Object.entries(effective.providers ?? {})) {
+    const check = await credentialCheck(entry.provider, entry.baseUrl, env, home, now, probes);
+    out.push({ status: check.status === "skip" ? "pass" : check.status, label: `providers:${name}`, detail: `model ${display(entry.model)}; ${check.detail}` });
+  }
+  try {
+    const { roleNames } = resolveProviderEntries({
+      provider: defaultProvider,
+      model: defaultModel,
+      ...(effective.baseUrl === undefined ? {} : { baseUrl: effective.baseUrl }),
+      providers: effective.providers ?? {},
+      ...(effective.roles === undefined ? {} : { roles: effective.roles }),
+      providerOverride: env.AGENTRIG_MODEL !== undefined,
+    });
+    out.push(line("pass", "providers:roles", `main→${roleNames.main}, supervisor→${roleNames.supervisor}, memory→${roleNames.memory}, subagents→${roleNames.subagents}`));
+  } catch (err) {
+    out.push(line("fail", "providers:roles", `${(err as Error).message} — fix roles or add the entry under providers`));
+  }
+  return out;
 }
 
 export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResult> {
@@ -352,7 +383,10 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       checks.push(line("skip", "credentials", "effective provider/model pair is invalid; fix config:effective first"));
     } else {
       checks.push(line("pass", "config:effective", `provider ${display(provider)} from ${display(providerSource)}; model ${display(model)} from ${display(modelSource)}`));
-      checks.push(await credentialCheck(effective, env, home, now, probes));
+      checks.push(await credentialCheck(provider, effective.baseUrl, env, home, now, probes));
+      if (effective.providers !== undefined) {
+        checks.push(...(await providerEntryChecks(effective, provider, model, env, home, now, probes)));
+      }
     }
   }
 

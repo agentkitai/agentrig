@@ -426,6 +426,41 @@ describe("agentrig doctor", () => {
   });
 });
 
+describe("named provider entries (R3.5a)", () => {
+  const config = {
+    providers: {
+      cloud: { provider: "openai-chatgpt", model: "gpt-5.6-sol" },
+      local: { provider: "openai", baseUrl: "http://127.0.0.1:8080/v1", model: "qwen3.8-27b" },
+    },
+    roles: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+  };
+
+  it("checks each entry's credential by its own kind and prints the role table", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify(config));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:local")).toContain("pass providers:local");
+    expect(find(result.lines, "providers:local")).toContain("OPENAI_API_KEY is not required");
+    expect(find(result.lines, "providers:cloud")).toContain("fail providers:cloud");
+    expect(find(result.lines, "providers:cloud")).toContain("agentrig login openai-chatgpt");
+    expect(find(result.lines, "providers:roles")).toContain("main→cloud, supervisor→cloud, memory→cloud, subagents→local");
+  });
+
+  it("fails the role table when a role names a missing entry", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ ...config, roles: { memory: "wiki" } }));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" } });
+    expect(find(result.lines, "providers:roles")).toContain("fail providers:roles");
+    expect(find(result.lines, "providers:roles")).toContain('role memory names unknown provider entry "wiki"');
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("prints no provider entry lines when config has no providers block", async () => {
+    const result = await diagnose(fixture().options);
+    expect(result.lines.some((l) => l.includes("providers:"))).toBe(false);
+  });
+});
+
 describe("doctor read-only guarantee", () => {
   const cleanup: string[] = [];
 
