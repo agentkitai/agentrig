@@ -829,6 +829,37 @@ through AgentRig itself:
 The remaining role AgentRig cannot self-host is the escape hatch: when a bad merge breaks the
 harness itself, the fix needs a tool that is not the broken tool.
 
+## Implementation plans for a band: `docs/plans/<band>.md` (2026-09-04)
+
+The trains so far ran builder, reviewer and lander on one model, and the builder's mistakes were
+design choices made mid-implementation (which snapshot mechanism, which hook point, what the
+test list is) rather than typing. A plan written by a stronger model before the train fixes
+those choices so a cheaper builder does mostly mechanical work, and the review gates stay
+unchanged. `docs/plans/R5.md` is the first: mechanism, file-level changes, tests with named
+mutants and known pitfalls per row, written against main `aad81ee` with the R4 train still
+running (drift from R4 is the builder's to note).
+
+- The plan is guidance under the row, never a second contract: the roadmap row text still wins
+  and the deviation gate still applies to the row. A departure from the plan is recorded in the
+  PR body under `## Plan departures` with its reason (dogfood §2); the reviewer compares the diff
+  against the plan and an unlisted departure is a LOW finding (review §4).
+- The subagent tool inherits the parent's provider, so a train cannot yet pin a different model
+  per child; a plan file is the mechanism that works without that. A per-child model pin is a
+  separate, small core change if the experiment pays off.
+- Topic children and the dogfood skill's external reviews (2026-09-04, from the R4a fixer's log):
+  the builder brief in `topic` §2 says "skip the external reviews", the fixer brief in §3 did not,
+  and dogfood §8 unconditionally starts two. The R4a fixer pushed its fix in seven minutes, then
+  ran three rounds of `claude -p` and `codex exec` reviews of its own, waited on them for about
+  thirty minutes with three-minute silent polls, and widened its diff on what they found — all
+  before the train's own delta reviewer had seen anything. Fixed in the skills: dogfood §8 is
+  skipped under `ship`/`topic`, and the `topic` fixer and continuation briefs carry the same
+  sentence the builder's does. A running conductor keeps its loaded skill text, so this applies
+  from the next `/topic` invocation; children load `dogfood` fresh, so the §8 skip applies to the
+  next child spawned from a checkout that has it.
+- Rejected: putting the plan in the roadmap row. The row must stay short enough to quote
+  verbatim in every child brief, and a plan that becomes contract would need the arbiter for
+  every implementation detail.
+
 ## Dogfood skill: bounded review staleness (2026-09-01)
 
 The first R1.5f dogfood run read §8's staleness rule as "full dual review after every fix

@@ -52,6 +52,10 @@ Run this in a session that shares no context with the run that wrote the PR.
   line. A deviation without that record is a HIGH finding ("unapproved deviation") regardless of
   its technical merit — say so, then judge the merit separately so the human has both. A PR body
   that calls the original row a "draft" or "superseded" is the usual tell.
+- If `docs/plans/<band>.md` exists for the row, compare the diff against the plan's section for
+  that row: a departure the PR body does not list under `## Plan departures` is a LOW finding
+  ("undocumented plan departure"), and a listed departure whose reason does not hold is a finding at
+  the severity of what it costs.
 
 ## 5. Test quality and mutation probes
 
