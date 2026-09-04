@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
+import { REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
+
+// Re-exported so downstream CLI code imports the reasoning-effort type from one place.
+export type { ReasoningEffort } from "@agentkitai/agentrig-core";
 
 const positiveSetting = z
   .union([z.string().min(1), z.number().finite()])
@@ -16,6 +20,41 @@ const softSetting = z
   .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1, "must be greater than 0 and at most 1");
 const stringList = z.array(z.string().min(1));
 
+const ProviderKindSchema = z.enum(["anthropic", "openai", "openai-chatgpt"]);
+export type ProviderKind = z.output<typeof ProviderKindSchema>;
+const reasoningEffortSetting = z.enum(REASONING_EFFORTS);
+const contextWindowSetting = z.number().int().positive();
+
+/** One named provider entry. Credentials never appear here; they come from the environment per kind. */
+export const ProviderEntrySchema = z
+  .object({
+    provider: ProviderKindSchema,
+    model: z.string().min(1),
+    baseUrl: z.string().url().optional(),
+    contextWindow: contextWindowSetting.optional(),
+    reasoningEffort: reasoningEffortSetting.optional(),
+  })
+  .strict();
+export type ProviderEntry = z.output<typeof ProviderEntrySchema>;
+
+export const ROLES = ["main", "supervisor", "memory", "subagents"] as const;
+export type Role = (typeof ROLES)[number];
+const RolesSchema = z
+  .object({ main: z.string().min(1).optional(), supervisor: z.string().min(1).optional(), memory: z.string().min(1).optional(), subagents: z.string().min(1).optional() })
+  .strict();
+export type Roles = z.output<typeof RolesSchema>;
+
+const ENTRY_NAME = /^[a-z][a-z0-9-]*$/;
+const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx) => {
+  for (const name of Object.keys(entries)) {
+    if (name === "default") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'the entry name "default" is reserved for the flat provider/model keys' });
+    } else if (!ENTRY_NAME.test(name)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: "entry names must match ^[a-z][a-z0-9-]*$" });
+    }
+  }
+});
+
 /**
  * Values that are useful across runs. Output types intentionally match Commander's option types,
  * so config resolution is the only extra layer and the existing validation/build path stays shared.
@@ -23,9 +62,13 @@ const stringList = z.array(z.string().min(1));
  */
 const ConfigValuesSchema = z
   .object({
-    provider: z.enum(["anthropic", "openai", "openai-chatgpt"]).optional(),
+    provider: ProviderKindSchema.optional(),
     model: z.string().min(1).optional(),
     baseUrl: z.string().url().optional(),
+    contextWindow: contextWindowSetting.optional(),
+    reasoningEffort: reasoningEffortSetting.optional(),
+    providers: providersSetting.optional(),
+    roles: RolesSchema.optional(),
     memory: z.string().min(1).optional(),
     root: z.string().min(1).optional(),
     system: z.string().min(1).optional(),
@@ -88,8 +131,10 @@ function credentialPath(value: unknown, path: string[] = []): string[] | null {
   if (value === null || typeof value !== "object") return null;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const next = [...path, key];
-    // Profile names are labels, not setting keys; a profile named "secret" carries no secret.
-    if (!(path.length === 1 && path[0] === "profiles") && CREDENTIAL_KEY.test(key)) return next;
+    // Profile and provider-entry names are labels, not setting keys; a profile or entry named
+    // "secret" carries no secret. Their VALUES are still walked.
+    const parentIsLabelMap = path.length >= 1 && (path[path.length - 1] === "profiles" || path[path.length - 1] === "providers");
+    if (!parentIsLabelMap && CREDENTIAL_KEY.test(key)) return next;
     const found = credentialPath(child, next);
     if (found !== null) return found;
   }
@@ -278,5 +323,9 @@ export async function loadRunConfig(
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),
+    // R3.5a: typed provider flags (or AGENTRIG_MODEL) pin the MAIN role to the flat default entry;
+    // a `model` that came from config does not, or `roles.main` could never win over a profile's model
+    providerOverride:
+      cli.provider !== undefined || cli.model !== undefined || cli.baseUrl !== undefined || environment.AGENTRIG_MODEL !== undefined,
   };
 }
