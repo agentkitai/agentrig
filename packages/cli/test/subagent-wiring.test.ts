@@ -38,6 +38,27 @@ const provider: ModelProvider = {
   },
 };
 
+import type { ProviderSet } from "../src/provider.ts";
+
+const second: ModelProvider = { ...provider, id: "fake-2", model: "fake-2" };
+function fakeSet(over: Partial<ProviderSet> = {}): ProviderSet {
+  const byName: Record<string, ModelProvider> = { cloud: provider, local: second, default: provider };
+  return {
+    main: provider,
+    supervisor: provider,
+    memory: provider,
+    subagents: second,
+    roleNames: { main: "cloud", supervisor: "cloud", memory: "cloud", subagents: "local" },
+    names: ["cloud", "local", "default"],
+    get: (name) => {
+      const p = byName[name];
+      if (p === undefined) throw new Error(`unknown provider entry "${name}"`);
+      return p;
+    },
+    ...over,
+  };
+}
+
 function wiring(
   over: Partial<Parameters<typeof subagentOptions>[0]> = {},
   extras: AgentExtras = {},
@@ -46,7 +67,7 @@ function wiring(
     opts: { root, maxTurns: "10", maxTokensPerTurn: "1024", provider: "anthropic", model: "m" } as AgentBuildOptions,
     extras,
     budget: { maxTurns: 10 },
-    provider,
+    providers: fakeSet(),
     permissionPolicy: new RulePolicy(defaultRules),
     skills: [],
     maxTokensPerTurn: 1024,
@@ -212,5 +233,27 @@ describe("the flags exist on the commands that build an agent", () => {
     const run = program.commands.find((c) => c.name() === "run")!;
     run.parseOptions(["--skills", "/a", "--skills", "/b"]);
     expect(run.opts()["skills"]).toEqual(["/a", "/b"]);
+  });
+});
+
+describe("which provider a child runs on (R3.5a)", () => {
+  it("defaults to the subagents role, never the parent's main provider", () => {
+    expect(wiring().childConfig().provider).toBe(second);
+    expect(wiring().childConfig(undefined).provider).toBe(second);
+  });
+
+  it("honours an explicit entry name from the spawn call", () => {
+    expect(wiring().childConfig({ provider: "cloud" }).provider).toBe(provider);
+  });
+
+  it("offers the entry menu only when config defines named entries", () => {
+    const withEntries = wiring({
+      opts: {
+        root, maxTurns: "10", maxTokensPerTurn: "1024", provider: "anthropic", model: "m",
+        providers: { cloud: { provider: "openai", model: "c" }, local: { provider: "openai", model: "l", baseUrl: "http://x/v1" } },
+      } as AgentBuildOptions,
+    });
+    expect(withEntries.providerChoices).toEqual({ names: ["cloud", "local", "default"], default: "local", main: "cloud" });
+    expect(wiring().providerChoices).toBeUndefined();
   });
 });
