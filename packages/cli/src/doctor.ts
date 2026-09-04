@@ -274,6 +274,7 @@ async function providerEntryChecks(
   home: string,
   now: number,
   probes: DoctorProbes,
+  cli: DoctorCliValues,
 ): Promise<CheckLine[]> {
   const out: CheckLine[] = [];
   for (const [name, entry] of Object.entries(effective.providers ?? {})) {
@@ -287,7 +288,9 @@ async function providerEntryChecks(
       ...(effective.baseUrl === undefined ? {} : { baseUrl: effective.baseUrl }),
       providers: effective.providers ?? {},
       ...(effective.roles === undefined ? {} : { roles: effective.roles }),
-      providerOverride: env.AGENTRIG_MODEL !== undefined,
+      // mirrors loadRunConfig's rule (config.ts) so this table matches what `run` would resolve
+      providerOverride:
+        cli.provider !== undefined || cli.model !== undefined || cli.baseUrl !== undefined || env.AGENTRIG_MODEL !== undefined,
     });
     out.push(line("pass", "providers:roles", `main→${roleNames.main}, supervisor→${roleNames.supervisor}, memory→${roleNames.memory}, subagents→${roleNames.subagents}`));
   } catch (err) {
@@ -385,7 +388,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       checks.push(line("pass", "config:effective", `provider ${display(provider)} from ${display(providerSource)}; model ${display(model)} from ${display(modelSource)}`));
       checks.push(await credentialCheck(provider, effective.baseUrl, env, home, now, probes));
       if (effective.providers !== undefined) {
-        checks.push(...(await providerEntryChecks(effective, provider, model, env, home, now, probes)));
+        checks.push(...(await providerEntryChecks(effective, provider, model, env, home, now, probes, cli)));
       }
     }
   }

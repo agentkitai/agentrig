@@ -459,6 +459,13 @@ describe("named provider entries (R3.5a)", () => {
     const result = await diagnose(fixture().options);
     expect(result.lines.some((l) => l.includes("providers:"))).toBe(false);
   });
+
+  it("pins main to the default entry when a provider flag is typed, exactly as run does", async () => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify(config));
+    const result = await diagnose({ ...f.options, env: { ANTHROPIC_API_KEY: "x" }, cli: { model: "typed" } });
+    expect(find(result.lines, "providers:roles")).toContain("main→default, supervisor→cloud, memory→cloud, subagents→local");
+  });
 });
 
 describe("doctor read-only guarantee", () => {
