@@ -346,8 +346,8 @@ also became the reviewer, the supervisor's judge and the memory writer. Spec:
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R3.5a | Config `providers` (named entries with model, baseUrl, contextWindow, reasoningEffort) + `roles` (main/supervisor/memory/subagents); `buildProviders` → `ProviderSet` consumed by the agent builder, run/TUI supervisor wiring (judges on the supervisor entry, accounting on main), `memory ingest`/`dream` (memory entry, single-role construction); the `subagent` tool gains an optional `provider` enum when entries exist; adapters accept `reasoningEffort`; `doctor` lists every entry and the role table | core + cli |
-| R3.5b | Train review via the external pair: `topic`/`ship` run `claude -p` (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review` in parallel in one conductor-made worktree, on full and delta reviews; findings merged and posted as PR comments; arbiter spawned on the main entry | skills |
+| R3.5a *(done)* | Config `providers` (named entries with model, baseUrl, contextWindow, reasoningEffort) + `roles` (main/supervisor/memory/subagents); `buildProviders` → `ProviderSet` consumed by the agent builder, run/TUI supervisor wiring (judges on the supervisor entry, accounting on main), `memory ingest`/`dream` (memory entry, single-role construction); the `subagent` tool gains an optional `provider` enum when entries exist; adapters accept `reasoningEffort`; `doctor` lists every entry and the role table | core + cli |
+| R3.5b *(done)* | Train review via the external pair: `topic`/`ship` run `claude -p` (pinned `claude-opus-5`, asserted from `modelUsage`) and `codex review` in parallel in one conductor-made worktree, on full and delta reviews; findings merged and posted as PR comments; arbiter spawned on the main entry | skills |
 
 ### R4 — Checkpoints and undo
 

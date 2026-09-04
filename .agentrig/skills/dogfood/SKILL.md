@@ -100,11 +100,11 @@ killed), and known caveats. If the implementation diverged from the issue, say w
 ## 8. Two external reviews, in parallel, as background jobs
 
 **Under `ship` or `topic`, skip this section entirely** — as a builder, a continuation builder,
-or a fixer. The conductor spawns an independent reviewer child after you stop; that review is the
-one that counts. Running your own here doubles the spend and, worse, turns your fix into a private
-review loop the conductor cannot see: the R4a fixer spent thirty of its fifty-four minutes waiting
-on three rounds of self-arranged reviews and widened its diff on their findings, with the train's
-own reviewer still to come. A topic child's job ends at the push and the report.
+or a fixer. The conductor runs the external review pass (`topic` §2 step 4) after you stop; that
+review is the one that counts. Running your own here doubles the spend and, worse, turns your fix
+into a private review loop the conductor cannot see: the R4a fixer spent thirty of its fifty-four
+minutes waiting on three rounds of self-arranged reviews and widened its diff on their findings,
+with the train's own external review pass still to come. A topic child's job ends at the push and the report.
 
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
@@ -122,11 +122,12 @@ Brief each reviewer to: assume the author is wrong, verify every finding against
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
 
 **Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
-the PR (§7) and does NOT run external reviews: the conductor spawns an independent reviewer
-child (fresh worktree, mutants, no shared context) that IS the review, and running both was
-measured at four review passes per PR — ~90 minutes for a skill file, with no extra eyes on the
-code. Your task text says when you are a child. Standalone dogfood keeps both reviews because
-nothing else reviews it.
+the PR (§7) and does NOT run external reviews:
+the conductor runs the same two external reviews itself, in one worktree, against the PR head
+(`topic` §2 step 4). Children may run on a local model and the review must never share the
+builder's model; a child running the pair too would double every pass for no extra eyes. Your
+task text says when you are a child. Standalone dogfood keeps both reviews because nothing else
+reviews it.
 
 Staleness, bounded: if you push more commits after a review ran, the review is stale for the
 **delta only** — re-review the diff since the last reviewed commit, never the whole branch again,
