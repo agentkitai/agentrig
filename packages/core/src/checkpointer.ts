@@ -16,12 +16,31 @@ interface GitResult {
   stderr: string;
 }
 
+function gitEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  // Repository-selection variables from the parent process must not redirect a checkpoint away
+  // from the run cwd or make a healthy repository look absent. The private index is supplied only
+  // to the plumbing calls that intentionally use it below.
+  for (const name of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_NAMESPACE",
+  ]) delete env[name];
+  return env;
+}
+
 function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<GitResult> {
   return new Promise((resolve, reject) => {
     execFile("git", args, {
       cwd,
       encoding: "utf8",
-      env: env ?? process.env,
+      env: env ?? gitEnvironment(),
       ...(signal === undefined ? {} : { signal }),
     }, (error, stdout, stderr) => {
       if (error !== null) {
@@ -35,8 +54,8 @@ function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: Abor
 
 function isOutsideGit(error: unknown): boolean {
   if (error === null || typeof error !== "object" || !("stderr" in error)) return false;
-  const stderr = (error as { stderr?: unknown }).stderr;
-  return typeof stderr === "string" && /not a git repository/i.test(stderr);
+  const { code, stderr } = error as { code?: unknown; stderr?: unknown };
+  return code === 128 && typeof stderr === "string" && /not a git repository/i.test(stderr);
 }
 
 async function snapshot(ctx: HookContext): Promise<void> {
@@ -60,7 +79,8 @@ async function snapshot(ctx: HookContext): Promise<void> {
 
   const dir = await mkdtemp(join(tmpdir(), "agentrig-index-"));
   const index = join(dir, "index");
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_INDEX_FILE: index };
+  const env = gitEnvironment();
+  env.GIT_INDEX_FILE = index;
   try {
     let parent: string | undefined;
     try {
@@ -129,11 +149,11 @@ export class Checkpointer implements Hook {
     const originalEmit = ctx.emitCheckpoint;
     if (originalEmit === undefined) return snapshot(ctx);
     const emitOnce = async (event: CheckpointHookEvent): Promise<void> => {
-      if (event.type === "checkpoint.warning") {
-        if (this.warned.has(ctx.sessionId)) return;
-        this.warned.add(ctx.sessionId);
-      }
+      if (event.type === "checkpoint.warning" && this.warned.has(ctx.sessionId)) return;
       await originalEmit(event);
+      // Suppress only warnings that reached the immutable log. If append failed, the checkpoint
+      // attempt must reject and a later write must retry rather than treating a lost warning as success.
+      if (event.type === "checkpoint.warning") this.warned.add(ctx.sessionId);
     };
     await snapshot({ ...ctx, emitCheckpoint: emitOnce });
   }

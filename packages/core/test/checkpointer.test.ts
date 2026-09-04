@@ -189,6 +189,51 @@ describe("Checkpointer", () => {
     expect(emitted.some((event) => event.type === "checkpoint.created")).toBe(true);
   });
 
+  it("retries a non-Git warning when its first event append fails", async () => {
+    const checkpointer = new Checkpointer();
+    const events: Array<{ type: string }> = [];
+    let fail = true;
+    const context = {
+      point: "pre_tool" as const,
+      sessionId: "warning_retry",
+      cwd: root,
+      turn: 1,
+      tool: { name: "write", input: {} },
+      permission: "write" as const,
+      signal: new AbortController().signal,
+      emitCheckpoint: async (event: { type: string }) => {
+        if (fail) {
+          fail = false;
+          throw new Error("append failed");
+        }
+        events.push(event);
+      },
+    };
+
+    await expect(checkpointer.handler(context)).rejects.toThrow("append failed");
+    await expect(checkpointer.handler(context)).resolves.toEqual({ action: "continue" });
+    expect(events).toEqual([{ type: "checkpoint.warning", message: expect.any(String) }]);
+  });
+
+  it("ignores parent Git repository-selection variables", async () => {
+    await initRepo();
+    const previous = process.env.GIT_DIR;
+    process.env.GIT_DIR = join(root, "missing-git-dir");
+    try {
+      const session = agent([
+        [call("w1", "write", { path: "tracked.txt", content: "written\n" }), usage, stop("tool_use")],
+        [usage, stop("end_turn")],
+      ], [writeTool()]).run("write", { cwd: root, id: "clean_git_env" });
+      const events = await collect(session);
+      await session.done;
+      expect(events.some((event) => event.type === "checkpoint.created")).toBe(true);
+      expect(events.some((event) => event.type === "checkpoint.warning")).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = previous;
+    }
+  });
+
   it("releases its per-session state when a session ends", async () => {
     const checkpointer = new Checkpointer();
     const session = agent([
