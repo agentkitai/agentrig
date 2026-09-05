@@ -253,6 +253,16 @@ Also investigate the intermittent macOS staged-write-abort timeout seen in CI ru
 later local and macOS runs pass, but the abort/child-cleanup cause remains unestablished. Preserve
 the interrupted-target assertion; do not treat a rerun as proof of a lifecycle fix.
 
+H5 is delivered in dependency order, one PR/updated-main branch per sub-item. H5 is not complete
+until all four land; adding store primitives alone does not protect every maintenance caller.
+
+| Row | Deliverable | Acceptance |
+|---|---|---|
+| H5a | Versioned page reads and compare-and-swap memory tools; serialize page/index/log mutations across store instances/processes; retain real unfilled reservation metadata and durable alias retrieval. | Competing writers using one version cannot both replace it; stale responses include current content/version. Concurrent index/log additions survive. Lock waits are bounded and never steal a live lock. Real reservations stay planned through dream. |
+| H5b | Integrate ingest with conflict-safe updates; reject stale shorter captures; propagate cancellation/time bounds through provider/backend work and commits; introduce explicit auxiliary usage/unknown-usage reporting. | Controlled competing ingests retain facts; cancellation prevents subsequent commits and reaches cooperative providers; work is bounded and usage is not silently free. |
+| H5c | Dream snapshot/apply concurrency protection, cancellation and bounded maintenance accounting; investigate the staged-write-abort timeout. | A stale dream cannot overwrite intervening edits; failed/cancelled work cleans up owned artifacts and does not apply; target preservation and child-cleanup tests remain meaningful. |
+| H5d | Reviewer/grader cancellation and bounded usage integrated with the same auxiliary accounting contract and CLI/session reporting. | Abort reaches cooperative reviewer/grader work, orphaned work cannot steer completed sessions, and reports distinguish main/auxiliary reported and unknown usage. |
+
 ### E — Measure outcomes before expanding capabilities
 
 This is the minimum useful subset of R9 and R14, not a requirement to build a full exporter,

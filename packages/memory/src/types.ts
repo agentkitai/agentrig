@@ -23,6 +23,8 @@ export interface WikiPage {
   frontmatter: PageFrontmatter;
   body: string;
   updatedAt: number;
+  /** Hash of persisted bytes, supplied by version-aware stores. Not a model assertion. */
+  version?: string;
 }
 
 export interface IndexEntry {

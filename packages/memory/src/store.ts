@@ -1,8 +1,9 @@
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PAGE_DIR, pagePath, parsePage, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
+import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
 
 /**
@@ -28,7 +29,12 @@ export interface FileMemoryStoreOptions {
   root: string;
   scope?: Scope;
   now?: () => number;
+  lockTimeoutMs?: number;
 }
+
+export type PageWrite = Omit<WikiPage, "updatedAt" | "version">;
+export type MemoryWriteResult = { ok: true; version: string } | { ok: false; current: WikiPage | null };
+const versionOf = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 function serializeEntry(e: IndexEntry): string {
   const claimed = e.claimedBy === undefined || e.claimedBy.length === 0 ? "" : ` (claimed: ${e.claimedBy.join(", ")})`;
@@ -63,13 +69,13 @@ export class FileMemoryStore implements MemoryStore {
   readonly root: string;
   readonly scope: Scope;
   private readonly now: () => number;
-  /** In-process serialization of index read-modify-write. */
-  private indexChain: Promise<unknown> = Promise.resolve();
+  private readonly lockTimeoutMs: number;
 
   constructor(opts: FileMemoryStoreOptions) {
     this.root = opts.root;
     this.scope = opts.scope ?? "project";
     this.now = opts.now ?? (() => Date.now());
+    this.lockTimeoutMs = opts.lockTimeoutMs ?? 5000;
   }
 
   /**
@@ -78,37 +84,8 @@ export class FileMemoryStore implements MemoryStore {
    * retrieval forever. Mutations run one at a time in this process and hold an O_EXCL lock
    * file across processes.
    */
-  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
-    const run = async (): Promise<T> => {
-      await mkdir(this.root, { recursive: true });
-      const lockPath = join(resolve(this.root), "index.md.lock");
-      const deadline = this.now() + 5000;
-      for (;;) {
-        try {
-          const handle = await open(lockPath, "wx");
-          await handle.close();
-          break;
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-          // a crashed holder must not wedge the wiki forever
-          const age = await stat(lockPath).then((st) => Date.now() - st.mtimeMs, () => 0);
-          if (age > 10_000) {
-            await rm(lockPath, { force: true }).catch(() => {});
-            continue;
-          }
-          if (this.now() > deadline) throw new Error(`timed out waiting for ${lockPath}`);
-          await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
-        }
-      }
-      try {
-        return await fn();
-      } finally {
-        await rm(lockPath, { force: true }).catch(() => {});
-      }
-    };
-    const next = this.indexChain.then(run, run);
-    this.indexChain = next.catch(() => {});
-    return next;
+  private async withMutationLock<T>(fn: () => Promise<T>, opts: MemoryLockOptions = {}): Promise<T> {
+    return withMemoryLock(this.root, fn, { timeoutMs: this.lockTimeoutMs, ...opts });
   }
 
   /**
@@ -133,6 +110,10 @@ export class FileMemoryStore implements MemoryStore {
 
   /** Create the wiki skeleton if absent. Idempotent; never overwrites existing content. */
   async init(): Promise<void> {
+    return this.withMutationLock(() => this.initUnlocked());
+  }
+
+  private async initUnlocked(): Promise<void> {
     await mkdir(this.root, { recursive: true });
     for (const dir of Object.values(PAGE_DIR)) await mkdir(this.abs(dir), { recursive: true });
     await this.ensure(INDEX_FILE, `${INDEX_HEADER}\n`);
@@ -171,40 +152,67 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   async writeIndex(entries: IndexEntry[]): Promise<void> {
+    return this.withMutationLock(() => this.writeIndexUnlocked(entries));
+  }
+
+  private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal): Promise<void> {
     const sorted = [...entries].sort((a, b) =>
       a.type === b.type ? a.slug.localeCompare(b.slug) : a.type.localeCompare(b.type),
     );
-    await this.atomicWrite(INDEX_FILE, `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`);
+    await this.atomicWrite(INDEX_FILE, `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`, signal);
   }
 
-  /** Insert or replace one index row, preserving everything else. Serialized; see withIndexLock. */
+  /** Insert or replace one index row, preserving everything else. */
   async upsertIndex(entry: IndexEntry): Promise<void> {
-    await this.withIndexLock(async () => {
-      const entries = await this.index();
-      const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
-      if (i === -1) entries.push(entry);
-      else entries[i] = entry;
-      await this.writeIndex(entries);
-    });
+    await this.withMutationLock(() => this.upsertIndexUnlocked(entry));
+  }
+
+  private async upsertIndexUnlocked(entry: IndexEntry, signal?: AbortSignal): Promise<void> {
+    const entries = await this.index();
+    const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
+    if (i === -1) entries.push(entry);
+    else entries[i] = entry;
+    await this.writeIndexUnlocked(entries, signal);
   }
 
   async read(path: string): Promise<WikiPage | null> {
     const full = this.abs(path);
-    let text: string;
+    let bytes: Buffer;
     let mtime: number;
     try {
-      text = await readFile(full, "utf8");
+      bytes = await readFile(full);
       mtime = (await stat(full)).mtimeMs;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    const { frontmatter, body } = parsePage(text, path);
-    return { path, frontmatter, body, updatedAt: mtime };
+    const { frontmatter, body } = parsePage(bytes.toString("utf8"), path);
+    return { path, frontmatter, body, updatedAt: mtime, version: versionOf(bytes) };
   }
 
-  async write(path: string, page: Omit<WikiPage, "updatedAt">): Promise<void> {
-    await this.atomicWrite(path, serializePage(page.frontmatter, page.body));
+  /** Trusted unconditional replacement. Use compareAndSwap/update for read-modify-write. */
+  async write(path: string, page: PageWrite, opts: MemoryLockOptions = {}): Promise<void> {
+    await this.withMutationLock(() => this.atomicWrite(path, serializePage(page.frontmatter, page.body), opts.signal), opts);
+  }
+
+  async compareAndSwap(path: string, page: PageWrite, ifVersion: string | null, opts: MemoryLockOptions & { index?: IndexEntry } = {}): Promise<MemoryWriteResult> {
+    return this.withMutationLock(async () => {
+      const current = await this.read(path);
+      if ((current?.version ?? null) !== ifVersion) return { ok: false, current };
+      const text = serializePage(page.frontmatter, page.body);
+      await this.atomicWrite(path, text, opts.signal);
+      if (opts.index !== undefined) await this.upsertIndexUnlocked(opts.index, opts.signal);
+      return { ok: true, version: versionOf(text) };
+    }, opts);
+  }
+
+  /** Synchronous transform under the short mutation lock; never call providers here. */
+  async update(path: string, transform: (current: WikiPage | null) => PageWrite, opts: MemoryLockOptions = {}): Promise<WikiPage> {
+    return this.withMutationLock(async () => {
+      const next = transform(await this.read(path));
+      await this.atomicWrite(path, serializePage(next.frontmatter, next.body), opts.signal);
+      return (await this.read(path))!;
+    }, opts);
   }
 
   /**
@@ -213,6 +221,10 @@ export class FileMemoryStore implements MemoryStore {
    * The LLM call that fills the page happens outside this — the lock is only the placeholder.
    */
   async reserve(slug: string, claimant: string, type: PageType = "entity"): Promise<"created" | "exists"> {
+    return this.withMutationLock(() => this.reserveUnlocked(slug, claimant, type));
+  }
+
+  private async reserveUnlocked(slug: string, claimant: string, type: PageType): Promise<"created" | "exists"> {
     const rel = pagePath(type, slug);
     const full = this.abs(rel);
     await mkdir(dirname(full), { recursive: true });
@@ -229,7 +241,6 @@ export class FileMemoryStore implements MemoryStore {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-        await this.withIndexLock(async () => {
           const entries = await this.index();
           const i = entries.findIndex((e) => e.slug === slug && e.type === type);
           if (i === -1) {
@@ -239,13 +250,12 @@ export class FileMemoryStore implements MemoryStore {
           } else {
             entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
           }
-          await this.writeIndex(entries);
-        });
+          await this.writeIndexUnlocked(entries);
         return "exists";
       }
       throw err;
     }
-    await this.upsertIndex({
+    await this.upsertIndexUnlocked({
       slug,
       path: rel,
       type,
@@ -260,9 +270,14 @@ export class FileMemoryStore implements MemoryStore {
     // read-modify-atomicWrite rather than appendFile: appendFile follows a symlink, which let a
     // dream's log line write through a symlinked log.md into the wiki it was supposed to be
     // copying. Every other writer here already goes through atomicWrite.
-    const line = entry.endsWith("\n") ? entry : `${entry}\n`;
-    const existing = await readFile(this.abs(LOG_FILE), "utf8").catch(() => "");
-    await this.atomicWrite(LOG_FILE, existing + line);
+    await this.withMutationLock(async () => {
+      const line = entry.endsWith("\n") ? entry : `${entry}\n`;
+      const existing = await readFile(this.abs(LOG_FILE), "utf8").catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") return "";
+        throw err;
+      });
+      await this.atomicWrite(LOG_FILE, existing + line);
+    });
   }
 
   /** Every page on disk, for search and lint. */
@@ -292,12 +307,14 @@ export class FileMemoryStore implements MemoryStore {
     return bm25Search(await this.pages(), query, k);
   }
 
-  private async atomicWrite(rel: string, contents: string): Promise<void> {
+  private async atomicWrite(rel: string, contents: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const full = this.abs(rel);
     await mkdir(dirname(full), { recursive: true });
     const tmp = `${full}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       await writeFile(tmp, contents, "utf8");
+      signal?.throwIfAborted();
       await rename(tmp, full);
     } catch (err) {
       await rm(tmp, { force: true }).catch(() => {});

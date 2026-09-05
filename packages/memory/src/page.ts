@@ -143,6 +143,9 @@ export function factLines(body: string): FactLine[] {
     const m = /^\s*-\s*\[(stated|observed|inferred)\]\s*(.*)$/.exec(line);
     if (m === null) continue;
     const text = m[2]!.trim();
+    // The generated reservation line is bookkeeping, not an ingested fact. Keep historical
+    // placeholders visible to humans without activating their planned index row in dream.
+    if (m[1] === "inferred" && /^Reserved by .+; content pending ingest\.$/.test(text)) continue;
     const refs = [...text.matchAll(/\(([^)]*(?:session|doc|dream|lore):[^)]*)\)/g)].flatMap((r) =>
       r[1]!.split(",").map((s) => s.trim()).filter((s) => s !== ""),
     );

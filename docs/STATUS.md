@@ -1,9 +1,21 @@
 # Status
 
-Current roadmap row: **H5 — memory lifecycle, concurrency, cancellation and accounting.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5a — versioned memory writes and reservation integrity.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
+
+### H5a in progress
+
+H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
+H5a–H5d (ROADMAP); each gets its own branch/PR and all validation gates. H5a adds guarded writes
+and store serialization; maintenance integration/cancellation remains H5b–H5d, not implicitly done.
+
+Initial H5a implementation passes build/typecheck and 1,472 tests (73 files). New tests cover
+version conflicts, two-process races, create races, index/log conservation, raw edits with unchanged
+mtime, frozen-clock lock timeout, abort/cleanup, aliases, actual tools and real reservations through
+dream. Locks do not expire or steal; manual crashed-owner recovery requires stopping writers.
+Independent review and PR CI are pending. See [plans/H5.md](plans/H5.md).
 
 ### H4 complete (2026-09-05; PR #121)
 

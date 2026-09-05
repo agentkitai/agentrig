@@ -332,7 +332,7 @@ confidence: high | medium | low
 ### 3.4 Store interface and tools
 
 ```ts
-interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number }
+interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number; version?: string }
 
 interface MemoryStore {
   root: string;
@@ -356,7 +356,18 @@ Tools exposed to the agent:
 
 - `memory_search(query)` — index ∪ BM25, progressive disclosure
 - `memory_read(path)`
-- `memory_write(path, page)` — wiki only; `raw/` is not writable by the agent
+- `memory_write(type, slug, body, if_version?)` — wiki only; `raw/` is not writable by the agent.
+  Replacement requires the content version from `memory_read`; absent/null is create-only.
+  A stale response returns the current page/version for intentional merge and retry. The same
+  rule applies to `memory_file_analysis`. Version-aware reads hash persisted bytes, not mtime.
+
+H5a's `FileMemoryStore.compareAndSwap()` serializes version checking and replacement across
+cooperating processes; optional index updates share that lock. `update()` runs a synchronous
+transform under the mutation lock. The original SDK `write()` remains a trusted unconditional
+replacement, not a safe read-modify-write API. Index additions, reservations and log appends are
+serialized too. Locks have bounded waits and no age-based stealing; crashed-owner recovery requires
+stopping writers before removing the named lock. Human/external file edits and multi-file crash
+atomicity are outside this cooperative lock contract. H5b/H5c migrate ingest/dream callers.
 - `memory_file_analysis(slug, body)` — file an answer back into `analyses/`
 - `attempt_log(attempt)` — record a direction while it's fresh (lands in `raw/attempts/`)
 - `memory_ingest(path)` — ingest a doc the user pointed at

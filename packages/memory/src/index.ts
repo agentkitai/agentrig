@@ -9,6 +9,7 @@
 export * from "./types.js";
 export * from "./page.js";
 export * from "./store.js";
+export * from "./lock.js";
 export * from "./search.js";
 export * from "./raw.js";
 export * from "./pins.js";
