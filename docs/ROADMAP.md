@@ -859,3 +859,5 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   guidance; simplify the legacy `extra`/opaque-frontmatter serialization API. Current bounded
   rebuilds, explicit lock failures, and retained merge sources remain the contract. Consolidating
   supervisor timer ownership belongs to the already-active H5d lifecycle work, not a new row.
+- Optionally deduplicate repeated partial-ledger warnings across reviews. Each current warning
+  remains explicit; reducing repetition must not hide newly unreadable history.

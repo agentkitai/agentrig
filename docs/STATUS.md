@@ -27,8 +27,13 @@ Regressions cover raw preservation, repeated append/rebuild, aggregate limits an
 diagnostics. Maintainer/review compatibility fixes also preserve legacy indented known metadata,
 exclude continued reservation placeholders and protect existing temps on exclusive-create failure.
 Build/typecheck and full explicit Node22 suite now pass: 1,786 plus two skips (1,788 total, 84 files).
-Focused independent repair review is running; optional findings are at the END of ROADMAP.
-Fresh exact-head PR CI and post-merge main CI remain gates.
+Focused independent repair review approved all five repairs; no further blockers. That pass ran
+no tests (alternate test command spellings were denied); maintainer Node22 results above are the
+test evidence. Two Claude CLI review rounds total; the first's skill spawned extra finders despite
+the prompt, and the focused second disabled delegation/skills. Two further negative mutations
+reproduced both blockers, were restored, and all 40 targeted tests passed in the clean isolated
+checkout. Optional findings are at the END of ROADMAP. Final documentation-only head still needs
+exact-head PR CI, then merge and exact post-merge main CI before H5d.
 
 ### H5 workspace recovery complete (PR #129)
 
