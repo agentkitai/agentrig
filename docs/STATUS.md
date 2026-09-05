@@ -1,9 +1,46 @@
 # Status
 
-Current roadmap row: **H5 — memory lifecycle, concurrency, cancellation and accounting.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5a — final PR gates; H5b follows only after merge and green main CI.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
+
+### H5a implemented (PR #122; final gates pending)
+
+H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
+H5a–H5d (ROADMAP); each gets its own branch/PR and all validation gates. H5a adds guarded writes
+and store serialization; maintenance integration/cancellation remains H5b–H5d, not implicitly done.
+
+Page reads and write receipts carry 128-bit content-hash tokens; agent replacement tools require
+the checked token, or create-only absence. Conflicts expose the current content/version for an
+intentional merge. Metadata defaults come from the checked state. Content tokens are not monotonic
+generations. Cross-process locks serialize page/index/log mutations and reservations; they have
+bounded waits, never steal by age, and report stopped-writer recovery paths. Init remains available
+for read-only inspection behind a stale lock. Committed writes remain explicit successes with
+warnings if index, pin recheck or release bookkeeping fails. Real reservation placeholders remain
+planned through dream. See [plans/H5.md](plans/H5.md) for the cooperative-writer boundary.
+
+Build/typecheck and 1,503 tests pass with two Windows-only skips on Linux (1,505 total, 73 files).
+Coverage includes actual two-process CAS plus 50 conserved appends, stale/raw-edit conflicts,
+metadata races, aliases, malformed/absent tools, CLI recovery inspection, failed marker/identity/
+release/index/pin writes, timeout/abort, Windows delete-pending retries, and deterministic missing-log
+initialization races. Isolated mutations removing CAS checks, shared locks or pin-warning handling
+fail their corresponding regressions; all mutations were restored.
+
+Independent reviews closed the correctness findings; the repair review at 58d3d0b reproduced the
+full suite and found no introduced correctness gap. The separate staged-abort fixture review is
+clean; ten readiness/FIFO repetitions retain both AbortError and unchanged-target assertions.
+CI 33954441586 passed Linux/macOS/Windows, including both Windows-only lock tests. Final diagnostic
+wording/readability edits require narrow review and latest-head CI before merge. Main CI must then
+pass before the next updated-main branch. H5b owns ingest/provenance/pins migration and the newly
+recorded empty/partially initialized log recovery; H5c owns dream swaps/recovery. None is implicitly
+protected just because H5a primitives exist.
+
+Final narrow review at 229a365 closed all remaining notes. CI 33954975532 passed Linux/Windows;
+macOS passed every test assertion but detected an unhandled rejection in the injected-fstat test.
+Its expected path is now resolved before starting the rejecting operation, so the rejection
+assertion attaches synchronously. No production behavior or unhandled-error gate was weakened;
+repaired-head CI/review remain required.
 
 ### H4 complete (2026-09-05; PR #121)
 

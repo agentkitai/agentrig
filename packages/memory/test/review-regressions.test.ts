@@ -225,7 +225,8 @@ describe("pins are re-checked wherever a page is regenerated (C12)", () => {
     await addPin(store.root, pin);
 
     const r = await write.execute(
-      { type: "concept", slug: "retry-policy", body: "- [stated] Retries do NOT apply per request; they are batched" },
+      { type: "concept", slug: "retry-policy", body: "- [stated] Retries do NOT apply per request; they are batched",
+        if_version: (await store.read("concepts/retry-policy.md"))!.version },
       ctx,
     );
     expect(r.isError).toBe(true);

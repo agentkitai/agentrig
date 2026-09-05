@@ -1,10 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { FileMemoryStore, LoreBackend } from "@agentkitai/agentrig-memory";
-import { memoryPromote } from "../src/memory.ts";
+import { memoryLs, memoryPromote, memoryShow } from "../src/memory.ts";
 import { buildProgram } from "../src/program.ts";
 
 let root: string;
@@ -36,6 +36,16 @@ afterEach(async () => {
 function backend() { vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1"); vi.stubEnv("LORE_API_KEY", "test-key"); }
 
 describe("memory promotion publication gate", () => {
+  it("keeps CLI inspection available while a stale write lock needs recovery", async () => {
+    await wiki.upsertIndex({ slug: "retries", path, type: "concept", status: "active", summary: "retry evidence" });
+    await writeFile(`${wiki.root}.write.lock`, "stale owner");
+    await memoryLs({ dir: root });
+    await memoryShow(path, { dir: root });
+    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+    expect(output).toContain(path); expect(output).toContain(claim);
+    expect(process.exitCode).toBe(0);
+  });
+
   it("previews located evidence without requiring a backend or publishing", async () => {
     await memoryPromote(path, { dir: root });
     expect(LoreBackend.prototype.promote).not.toHaveBeenCalled();

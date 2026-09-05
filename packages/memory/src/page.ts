@@ -137,12 +137,18 @@ export interface FactLine {
   refs: string[];
 }
 
+export const reservationPlaceholder = (claimant: string): string => `- [inferred] Reserved by ${claimant}; content pending ingest.`;
+export const isReservationPlaceholder = (line: string): boolean => /^\s*-\s*\[inferred\]\s*Reserved by .+; content pending ingest\.\s*$/.test(line);
+
 export function factLines(body: string): FactLine[] {
   const out: FactLine[] = [];
   for (const line of body.split("\n")) {
     const m = /^\s*-\s*\[(stated|observed|inferred)\]\s*(.*)$/.exec(line);
     if (m === null) continue;
     const text = m[2]!.trim();
+    // The generated reservation line is bookkeeping, not an ingested fact. Keep historical
+    // placeholders visible to humans without activating their planned index row in dream.
+    if (isReservationPlaceholder(line)) continue;
     const refs = [...text.matchAll(/\(([^)]*(?:session|doc|dream|lore):[^)]*)\)/g)].flatMap((r) =>
       r[1]!.split(",").map((s) => s.trim()).filter((s) => s !== ""),
     );
