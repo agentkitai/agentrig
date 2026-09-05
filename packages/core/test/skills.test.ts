@@ -343,6 +343,9 @@ describe("skillTool", () => {
     expect(body).toContain("never write review artifacts inside");
     // R3.5b residual fix: the delta pass reuses the full pass's worktree but never its main merge
     expect(body).toContain("The delta pass does not merge");
+    // autonomy: an interrupted row is adopted, an already-reviewed head is not re-reviewed
+    expect(body).toContain("adopt it instead of halting");
+    expect(body).toContain("do not run the pass again");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
     expect(body).toContain("env -u CLAUDECODE");
     expect(body).toContain("< /dev/null");
@@ -369,6 +372,7 @@ describe("skillTool", () => {
     const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
     expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
     expect(ship.body).toContain("Never review in this session");
+    expect(ship.body).toContain("A fixable verdict does not wait for the human");
 
     const arbiter = found.find((candidate) => candidate.name === "arbiter");
     expect(arbiter).toBeDefined();

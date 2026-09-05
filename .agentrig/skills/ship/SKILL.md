@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Orchestrate one change end to end - a builder subagent runs dogfood, the external review pair (Claude Code + Codex) reviews the PR, then STOP and present the verdict; land only on the human's word.
+description: Orchestrate one change end to end - a builder subagent runs dogfood, the external review pair reviews the PR, fix rounds run unasked, then STOP with the verdict; land only on the human's word.
 ---
 
 # Ship flow — one command from task to merge decision
@@ -39,12 +39,15 @@ Do not implement, review, or fix anything in this session yourself.
 - Present the verdict verbatim-in-substance: every finding with its severity, or the pass with
   its evidence, plus PR number, CI state, and the URLs of the two external review comments (four
   after a delta). Then END YOUR TURN and wait.
-- The human's next message decides: a merge instruction means run the `land` skill's steps (in
-  this session or a third subagent); a fix request means spawn a fix subagent scoped to exactly
-  those findings on the same branch, then a delta re-review of what changed — the same external
-  pass over OLD..NEW as `topic` §3 describes — and loop the two under `topic` §3's bounded
-  converging rules (at most three rounds, each must close the last round's findings), then stop
-  again with the verdict. Severity never decides fixability: any
+- A fixable verdict does not wait for the human: when the pass returns findings that carry concrete
+  fixes, or stopped on a merge conflict, spawn the fix subagent scoped to exactly those findings on
+  the same branch, then the delta re-review of what changed — the same external pass over OLD..NEW
+  as `topic` §3 describes — and loop the two under `topic` §3's bounded converging rules (at most
+  three rounds, each must close the last round's findings) without asking. Present the verdict and
+  stop only when the review is clean, the rounds are spent, or a `topic` §5 halt applies.
+- The human's next message decides the merge, and only the merge: a merge instruction means run
+  the `land` skill's steps (in this session or a third subagent); anything else is not a merge.
+  Severity never decides fixability: any
   finding with a concrete proposed fix is fixer work. A contract or authorization finding goes to
   an `arbiter` subagent first, exactly as `topic` §3 does, and the fixer carries the verdict.
   Residual findings after the third round are filed as GitHub issues, one per finding, in
