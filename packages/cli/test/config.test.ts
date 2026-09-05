@@ -31,6 +31,7 @@ it("validates and resolves ingest limits for both explicit and session-end CLI e
   }
   expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { maxCalls: 0 } }))).toThrow();
   expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { unknown: 1 } }))).toThrow();
+  expect(() => parseConfigText("fixture", JSON.stringify({ ingestSpanChars: 4294967296 }))).toThrow("must be from 2 to 2147483647");
 });
 
 it.each(["1", "abc", "1.5", "4294967296"])("rejects invalid ingest span size %s while parsing CLI flags", value => {

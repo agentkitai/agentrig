@@ -35,6 +35,13 @@ two platform-specific skips (1,620 total, 77 files). CI 33960504444 passed all p
 the final narrow delta still needs review and fresh CI. Ledger-wide limits intentionally fail
 visibly; session-scoped attempt lookup is recorded under H5c rather than silently omitting history.
 
+Third, narrow review reran typecheck/full tests and verified those fixes. Its final two small
+refinements are applied and regression-tested: scheduled backend diagnostics use the visible
+onHookError channel (including TUI), and config span sizes share the CLI upper bound. Broader
+recall diagnostic routing is queued in H5d. CI 33961117588 passed all platforms at d309c30; the
+refinement commit still requires fresh CI before merge. Three review passes, not a new broad
+review cycle for the final two targeted changes.
+
 ### H5b1 complete (PR #123)
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.

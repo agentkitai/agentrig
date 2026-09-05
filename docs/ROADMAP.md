@@ -286,6 +286,9 @@ dream scans are not implicitly bounded by H5b2's ingest-only migration.
 Add session-scoped attempt lookup/indexing under H5c: the current ledger-wide bounded scan can
 reach its cap because of unrelated historical sessions. Keep immutable attempt files, avoid
 silently cherry-picking partial history, and make any index rebuild bounded and inspectable.
+H5d should also route remaining auxiliary diagnostics (including tolerant recall failures) through
+the CLI/TUI diagnostic channels rather than raw stderr, which a TUI redraw can overwrite. H5b2
+fixes that routing for scheduled ingest; it does not claim a complete diagnostic-channel audit.
 
 ### E — Measure outcomes before expanding capabilities
 

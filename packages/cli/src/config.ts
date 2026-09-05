@@ -103,7 +103,7 @@ const ConfigValuesSchema = z
     maxTokensPerTurn: positiveSetting.optional(),
     ingestOnEnd: z.boolean().optional(),
     ingestLimits: IngestLimitsSchema.optional(),
-    ingestSpanChars: integerSetting.refine(value => Number(value) >= 2, "must be at least 2").optional(),
+    ingestSpanChars: integerSetting.refine(value => Number(value) >= 2 && Number(value) <= 2_147_483_647, "must be from 2 to 2147483647").optional(),
     dreamOnEnd: z.boolean().optional(),
     dreamEverySessions: positiveSetting.optional(),
     dreamEveryHours: positiveSetting.optional(),

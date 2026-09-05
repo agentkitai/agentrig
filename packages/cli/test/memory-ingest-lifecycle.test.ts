@@ -59,9 +59,11 @@ it.each(["../evil", "s1.jsonl", "sources/s1"])("reports an invalid session id %s
 });
 
 it("wires agent-builder limits, span size and backend diagnostics into the scheduled hook", async () => {
+  const onHookError = vi.fn();
   await buildAgent({ root: join(root, "raw/sessions"), memory: root, maxTurns: "1", maxTokensPerTurn: "20",
-    ingestOnEnd: true, ingestLimits: { maxSpans: 100, maxCalls: 102 }, ingestSpanChars: "8000", skillDiscovery: false, sandbox: "none" });
+    ingestOnEnd: true, ingestLimits: { maxSpans: 100, maxCalls: 102 }, ingestSpanChars: "8000", skillDiscovery: false, sandbox: "none" }, { onHookError });
   expect(ingestOnSessionEnd).toHaveBeenCalledWith(expect.objectContaining({ limits: { maxSpans: 100, maxCalls: 102 }, maxSpanChars: 8000, onBackendError: expect.any(Function) }));
   vi.mocked(ingestOnSessionEnd).mock.calls[0]![0].onBackendError!("onIngest", new Error("backend offline"));
-  expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("lore onIngest failed (continuing): backend offline");
+  expect(onHookError).toHaveBeenCalledWith("memory ingest: lore onIngest failed (continuing): backend offline");
+  expect(console.error).not.toHaveBeenCalled(); // TUI must not lose this message to a stderr redraw.
 });
