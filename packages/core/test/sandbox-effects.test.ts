@@ -177,7 +177,18 @@ describe("H1 real tool effects", () => {
     await expect(readFile(path)).rejects.toThrow();
   });
 
-  it("writes exact bytes through the live provider; Docker mount scope and Seatbelt deny outside symlink effects", async (ctx) => {
+  it("denies a dangling relative link through an outside directory without creating a different inside file", async () => {
+    const outsideDir = join(root, "outside-dir");
+    await mkdir(outsideDir);
+    await symlink("../new.txt", join(outsideDir, "dangling"));
+    await symlink(outsideDir, join(cwd, "alias-dir"), "dir");
+    const result = await run(writeFileTool(), { path: join(cwd, "alias-dir", "dangling"), content: "changed" }, "workspace-write");
+    expect(result.events.some(e => e.type === "sandbox.denied")).toBe(true);
+    await expect(readFile(join(cwd, "new.txt"))).rejects.toThrow();
+    await expect(readFile(join(root, "new.txt"))).rejects.toThrow();
+  });
+
+  it("writes exact bytes through the live provider and preserves only contained symlink targets", async (ctx) => {
     const image = process.env.AGENTRIG_DOCKER_TEST_IMAGE ?? "alpine:3.20";
     let backend: SandboxProvider;
     if (process.platform === "linux") {
@@ -207,6 +218,12 @@ describe("H1 real tool effects", () => {
     await run(writeFileTool(), { path: dangling, content: "new target" }, "workspace-write", backend);
     expect((await lstat(dangling)).isSymbolicLink()).toBe(true);
     expect(await readFile(future, "utf8")).toBe("new target");
+    // Absolute paths can contain '..' after an alias: read and write must resolve them alike.
+    await mkdir(join(cwd, "deep", "child"), { recursive: true });
+    await symlink(join(cwd, "deep", "child"), join(cwd, "dir-alias"), "dir");
+    await run(writeFileTool(), { path: `${cwd}/dir-alias/../through-parent.txt`, content: "parent target" }, "workspace-write", backend);
+    expect(await readFile(join(cwd, "deep", "through-parent.txt"), "utf8")).toBe("parent target");
+    await expect(readFile(join(cwd, "through-parent.txt"))).rejects.toThrow();
     const outside = join(root, "outside.txt");
     await writeFile(outside, "original");
     const hardlink = join(cwd, "hardlink.txt");

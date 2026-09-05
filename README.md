@@ -85,6 +85,8 @@ tools (including memory writes and network-backed memory searches) require expli
 `--sandbox none` explicitly when accepting those host effects. SDK code, provider calls and
 session bookkeeping remain trusted host operations; extensions are not isolated by this boundary.
 Local memory reads/searches and subagents that inherit or narrow the sandbox remain available.
+The CLI disables Lore recall in enforcing modes and uses local search; SDK callers supplying a
+network backend themselves encounter the outside-sandbox approval gate.
 
 ```sh
 pnpm build

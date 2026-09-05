@@ -13,7 +13,12 @@ async function writeTarget(path: string, depth = 0): Promise<string> {
     if (err.code !== "ENOENT") throw err;
     return undefined;
   });
-  if (info?.isSymbolicLink()) return writeTarget(resolve(dirname(path), await readlink(path)), depth + 1);
+  if (info?.isSymbolicLink()) {
+    const target = await readlink(path);
+    // Relative link targets are relative to the physical parent. Preserve embedded '..'
+    // until realpath resolves it, rather than collapsing it across unresolved symlinks.
+    return writeTarget(isAbsolute(target) ? target : `${await realpath(dirname(path))}${sep}${target}`, depth + 1);
+  }
   const parent = dirname(path);
   if (parent === path) throw new Error(`cannot resolve file-write target: ${path}`);
   return join(await writeTarget(parent, depth + 1), basename(path));
@@ -30,7 +35,7 @@ export async function writeToolFile(path: string, content: string, signal: Abort
     await writeFile(path, content, { encoding: "utf8", signal });
     return;
   }
-  const absolute = await writeTarget(resolve(path));
+  const absolute = await writeTarget(path);
   const canonicalCwd = await realpath(policy.cwd);
   const rel = relative(canonicalCwd, absolute);
   if (policy.mode === "read-only" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {

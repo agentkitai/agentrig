@@ -15,10 +15,13 @@ describe("CLI sandbox wiring", () => {
     if (process.platform === "win32") return; // enforcing modes are explicitly unsupported here
     const root = await mkdtemp(join(tmpdir(), "agentrig-local-recall-"));
     vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1");
+    vi.stubEnv("LORE_API_KEY", "test-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     try {
+      const notices: string[] = [];
       const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "workspace-write", repoMap: false,
-        maxTurns: "2", maxTokensPerTurn: "1024" });
+        maxTurns: "2", maxTokensPerTurn: "1024" }, { onNotice: notice => notices.push(notice) });
+      expect(notices.some(notice => notice.includes("Lore recall is disabled"))).toBe(true);
       const search = built.tools.find(t => t.name === "memory_search");
       expect(search?.sandbox).toBe("compatible");
       const result = await search!.execute({ query: "anything" }, { cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
