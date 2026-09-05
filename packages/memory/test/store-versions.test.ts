@@ -1,10 +1,16 @@
 import { fork } from "node:child_process";
+import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileMemoryStore, FileRawStore, memoryTools, runDream, withMemoryLock,
   type MemoryWriteResult, type PageWrite } from "@agentkitai/agentrig-memory";
+
+vi.mock("node:fs/promises", async importOriginal => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, open: vi.fn(actual.open) };
+});
 
 let root: string;
 let store: FileMemoryStore;
@@ -12,7 +18,7 @@ const path = "concepts/shared.md";
 const page = (body = "original"): PageWrite => ({ path, body,
   frontmatter: { type: "concept", slug: "shared", aliases: [], sources: [], updated: "2026-09-05", confidence: "medium" } });
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "agentrig-versions-")); store = new FileMemoryStore({ root: join(root, "wiki") }); await store.init(); });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); await rm(root, { recursive: true, force: true }); });
 const ctx = () => ({ cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
 const tool = (name: string) => memoryTools({ store }).find(tool => tool.name === name)!;
 
@@ -133,6 +139,25 @@ describe("versioned memory mutations", () => {
   it("releases a failed operation's lock", async () => {
     await expect(store.update(path, () => { throw new Error("transform failed"); })).rejects.toThrow("transform failed");
     expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
+  });
+
+  it("releases its lock when writing the ownership marker fails", async () => {
+    const realOpen = (await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")).open;
+    vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
+      const handle = await realOpen(...args);
+      vi.spyOn(handle, "writeFile").mockRejectedValueOnce(new Error("marker write failed"));
+      return handle;
+    });
+    await expect(store.write(path, page())).rejects.toThrow("marker write failed");
+    expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
+  });
+
+  it("does not remove a replacement lock owned by another process", async () => {
+    await withMemoryLock(store.root, async () => {
+      await rm(`${store.root}.write.lock`);
+      await writeFile(`${store.root}.write.lock`, "new owner");
+    });
+    expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("new owner");
   });
 
   it("prevents a commit when cancellation arrives during the guarded transform", async () => {

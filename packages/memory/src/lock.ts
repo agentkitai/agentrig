@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, realpath, rm } from "node:fs/promises";
+import { lstat, mkdir, open, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -32,13 +32,21 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
         opts.signal === undefined ? {} : { signal: opts.signal });
     }
   }
+  let identity: { dev: bigint; ino: bigint } | undefined;
   try {
+    identity = await handle.stat({ bigint: true });
     await handle.writeFile(owner, "utf8");
     opts.signal?.throwIfAborted();
     return await work();
   } finally {
-    await handle.close();
-    // Do not remove another owner's lock after out-of-band operator replacement.
-    if (await readFile(lockPath, "utf8").catch(() => "") === owner) await rm(lockPath);
+    try {
+      // Keep the handle open during the identity check so its inode cannot be reused.
+      // A failed/partial marker write must not leak our lock, nor erase a replacement owner.
+      const current = await lstat(lockPath, { bigint: true }).catch((err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") return undefined;
+        throw err;
+      });
+      if (identity !== undefined && current?.dev === identity.dev && current.ino === identity.ino) await rm(lockPath);
+    } finally { await handle.close(); }
   }
 }

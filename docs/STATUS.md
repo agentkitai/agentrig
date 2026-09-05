@@ -17,6 +17,11 @@ mtime, frozen-clock lock timeout, abort/cleanup, aliases, actual tools and real 
 dream. Locks do not expire or steal; manual crashed-owner recovery requires stopping writers.
 Independent review and PR CI are pending. See [plans/H5.md](plans/H5.md).
 
+Initial PR CI passed on all three platforms. A local audit then found a failed ownership-marker
+write could leak a lock; cleanup now checks the held file's identity and preserves replacement
+owners. Both fault cases have regressions. Build/typecheck and all 1,474 tests (73 files) pass
+with the cleanup repair; review and repaired-head CI are pending.
+
 ### H4 complete (2026-09-05; PR #121)
 
 Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
