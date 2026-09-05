@@ -31,7 +31,11 @@ export async function resetDreamStamp(wikiRoot: string, opts: MemoryLockOptions 
     if (!info.isFile() || info.isSymbolicLink()) throw new Error("dream stamp is not a regular file; preserve and inspect " + path);
     const backup = root + ".last-dream-before-reset-" + randomUUID();
     opts.signal?.throwIfAborted();
-    await link(path, backup);
+    try { await link(path, backup); }
+    catch (error) {
+      throw new Error("cannot archive dream stamp; backup requires filesystem hard-link support and permission; original was not removed: "
+        + String(error), { cause: error });
+    }
     // Once the backup exists, do not falsely report an uncommitted cancellation.
     try { await unlink(path); }
     catch (error) {

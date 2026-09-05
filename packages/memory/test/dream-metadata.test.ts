@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { FileMemoryStore, FileRawStore, lastDreamAt, resetDreamStamp, runDream, withMemoryLock } from "@agentkitai/agentrig-memory";
+import { applyDream, copyWiki, FileMemoryStore, FileRawStore, lastDreamAt, markDreamed, resetDreamStamp, runDream, withMemoryLock } from "@agentkitai/agentrig-memory";
 
 vi.mock("node:fs/promises", async original => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -39,6 +39,18 @@ it.skipIf(process.platform === "win32")("resets a no-read-permission regular sta
   expect(result.status).toBe("reset"); if (result.status !== "reset") throw new Error("missing backup");
   expect((await fs.stat(result.backup)).mode & 0o777).toBe(0);
   await fs.chmod(result.backup, 0o600); expect(await fs.readFile(result.backup, "utf8")).toBe("private-corrupt");
+});
+
+it("applying a retained review copy does not resurrect a stamp explicitly reset on the live wiki", async () => {
+  await markDreamed(wiki.root, 1000);
+  const workspace = await copyWiki(wiki.root, join(root, "review"));
+  await markDreamed(workspace.outputRoot, 2000);
+  const reset = await resetDreamStamp(wiki.root); expect(reset.status).toBe("reset");
+  await applyDream(wiki.root, workspace.outputRoot, "after-reset");
+  expect(await lastDreamAt(wiki.root)).toBeUndefined();
+  expect(await lastDreamAt(workspace.outputRoot)).toBe(2000); // Original review artifact is intact.
+  if (reset.status === "reset") expect(await fs.readFile(reset.backup, "utf8")).toBe("1000\n");
+  await workspace.dispose();
 });
 
 it("refuses a stamp symlink and directory, preserving unrelated targets", async () => {
@@ -88,7 +100,7 @@ it("checks the root identity again after acquiring its lock", async () => {
 it("leaves the original untouched when backup creation fails", async () => {
   await fs.writeFile(stamp, "old");
   vi.mocked(fs.link).mockRejectedValueOnce(Object.assign(new Error("backup exists"), { code: "EEXIST" }));
-  await expect(resetDreamStamp(wiki.root)).rejects.toThrow("backup exists");
+  await expect(resetDreamStamp(wiki.root)).rejects.toThrow("requires filesystem hard-link support and permission");
   expect(await fs.readFile(stamp, "utf8")).toBe("old"); expect(fs.unlink).not.toHaveBeenCalled();
 });
 

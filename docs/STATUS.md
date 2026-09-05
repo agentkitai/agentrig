@@ -20,6 +20,17 @@ and unlink failure names both retained links. Operators stop scheduled/running d
 Build/typecheck and explicit Node22 full suite pass: 1,750 passes plus two skips (1,752 total,
 82 files). Review and exact-head PR/main CI remain required.
 
+PR #128 head 988a72d passed CI 33968775029 on all platforms. One Claude pass approved with
+no blocking findings (Node24 full suite independently reproduced). Its hard-link portability
+note is addressed with a safe-failure hint and documentation; scheduling-reset discoverability
+is documented next to the command, and log dates explicitly mean consolidation start. This is
+not a claim of richer in-error help for every scheduler/ENOENT path. Final-head CI remains a gate.
+
+A final maintainer check found retained-review apply could resurrect an explicitly reset stamp.
+Apply now mirrors absent live metadata as well as present metadata, before its first rename;
+the copy and archived stamp remain intact. A real reset→apply regression covers this sequence.
+This semantic repair receives a focused follow-up review; it is not covered by the first approval.
+
 ### H5c2b complete (PR #127)
 
 Completion gate: final head ef7e072, merge 74ffbf8, PR CI 33968092090 and main CI 33968348026

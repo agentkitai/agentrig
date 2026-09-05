@@ -239,6 +239,7 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
         throw error;
       });
       if (currentStamp !== undefined) await writeFile(join(staged, ".last-dream"), currentStamp);
+      else await rm(join(staged, ".last-dream"), { force: true }); // Preserve an explicit live reset, not the review copy's old stamp.
       opts.signal?.throwIfAborted();
       await rename(src, backup);
       // Once the original moved, finish or restore even if abort arrives during the rename.

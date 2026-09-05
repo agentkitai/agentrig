@@ -226,7 +226,7 @@ async function dreamInto(
   // ---- phase 3: consolidate (the only phase that costs tokens)
   phase("consolidate");
   const modelEnabled = opts.structuralOnly !== true && unreadableAttempts.length === 0 && pages.length > 0 && opts.provider !== undefined;
-  const logDate = new Date(now()).toISOString();
+  const logDate = new Date(now()).toISOString(); // Consolidation-start timestamp, frozen for the preflight/append pair.
   const logEntry = (contradictions: number) =>
     `${logDate} | dream | ${sessions.length} session(s) since last | ` +
     `${contradictions} contradiction(s), ${structural.orphans.length} orphan(s), ` +

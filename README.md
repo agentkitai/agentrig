@@ -55,6 +55,10 @@ Dream log capacity is checked before paid consolidation. If the log needs more r
 raise `dreamScanLimits.maxFileBytes` (or `--dream-scan-limits '{"maxFileBytes":16777216}'`);
 other scan caps may also need adjustment. History is never automatically truncated. The stamp
 reset above repairs scheduling metadata, not log capacity, abandoned workspaces or writer locks.
+If a scheduler reports an unreadable or oversized `.last-dream`, inspect that file and use the
+confirmed reset above only after stopping running/scheduled dreams. Backups require filesystem
+hard-link support and permission; failure leaves the original stamp in place. Dream log dates
+mark consolidation start, not the later append/completion time.
 
 ## Optional run flag groups
 
