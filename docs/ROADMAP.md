@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: E2; H1–H5 and E1 complete in PRs #118–#132.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: E3; H1–H5 and E1–E2 complete in PRs #118–#133.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -8,8 +8,8 @@ evidence. This revision changes planned work, not the implementation status of c
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Complete | H1–H5 and E1: hardening and frozen independent tasks | PRs #118–#132 merged with exact-head and post-merge three-platform CI |
-| Now | E2–E3: outcome metrics and controlled real-model comparisons | Published baseline and ablations, including failures and inconclusive results |
+| Complete | H1–H5 and E1–E2: hardening, frozen independent tasks and reporting | PRs #118–#133 merged with exact-head and post-merge three-platform CI |
+| Now | E3: controlled real-model comparisons | Published baseline and ablations, including failures and inconclusive results |
 | Then | R4a–R4c: checkpoints and undo; H6: focused core extraction | Shell and file-tool changes recover correctly; extraction preserves behavior |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
@@ -869,3 +869,18 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - E2 reporting follow-ups: move unusually verbose E1 diagnostics into bounded hashed side files
   instead of invalidating an oversized report bundle; consider longitudinal resumed/forked-history
   aggregation only when needed. Fresh-attempt reports and explicit input limits suffice for E3.
+- E3 runner polish: reduce repeated Docker startup overhead for shell change observations,
+  consider a larger/per-run preparation cache for larger fixtures, and supply a disposable Git
+  author identity if committing becomes part of a future task. These are not E3 prerequisites;
+  current tasks need no commits and the pinned AgentRig preparation passed with the present limits.
+- Future evaluation hygiene: create a training-only Git baseline rather than replacing a held-out
+  TASK.md after export. E3's training trace exposed the old X4 task description through a diff
+  (not a held-out solution/result/check); retain and disclose that limitation in this exploratory
+  comparison. See [E3 collection notes](E3-COLLECTION-NOTES.md). Do not retroactively tune v1 checks.
+- Future EVALSET prompt clarity: distinguish A4's terminal session event from a final auxiliary
+  snapshot, and disclose evidence-file/path formatting restrictions. Preserve the current v1
+  scores and raw answers; an ambiguous structured-field failure is not by itself a reasoning failure.
+- E3 publication polish: distinguish created-but-incomplete attempts from untouched slots in
+  summaries, improve missing-argument diagnostics, and add explicit symlink/size-limit/protocol
+  rejection tests. A hard-killed collection lacking its final results.json deliberately cannot
+  be packaged as a closed run; any future recovery must preserve partial evidence and provenance.

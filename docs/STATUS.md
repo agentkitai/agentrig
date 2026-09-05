@@ -1,11 +1,35 @@
 # Status
 
-Current roadmap row: **E2 — compact outcome reporting.** H1–H5 and E1 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **E3 — controlled live comparison.** H1–H5 and E1–E2 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### E2 in progress
+### E3 in progress
+
+Subscription-only Luna is authorized and connectivity passed. Protocol and stop rules are in
+[plans/E3.md](plans/E3.md). E2 PR #133 is merged at d6d82f5; exact-head CI 33977198824 and
+post-merge CI 33977351290 passed all three platforms. E3 will preserve A4/X4 human review gates.
+
+The isolated runner, fixed schedule, unknown-usage guards and E2 bundle collection are implemented.
+Claude review cdd0632f-5313-422a-a483-923d4776ccbe requested three repairs, then approved the focused
+second pass with 51 relevant tests passing (actual Docker controls ran). A Docker timeout test
+reproduced SIGTERM client hanging; SIGKILL plus exact UUID cleanup fixed it. All four SDK conditions
+have scripted wiring tests. Maintainer build/typecheck and explicit Node22 full suite pass 1,868
+plus two skips (1,870 total, 89 files). The initial review could not run build; maintainer did.
+Real pinned A1 preparation/build and seeded-failure checker passed their expected controls.
+Frozen runner 5d990d6 passed all-platform CI 33979321280. Training and SDK ingest consumed
+104,010 reported tokens; the unchanged 96-attempt collection is running. Publication-only head
+1054684 passed all-platform CI 33982491430 and maintainer build/typecheck plus 1,870 Node22
+tests and two skips (1,872 total, 89 files). Claude's bounded publication-helper review
+1413271b-8d6d-45b3-be0b-750f61f28dc2 approved without blockers (read-only, no test execution).
+That is three scoped passes total: two runner passes and one publication pass, not new milestones.
+The [first X4 human packet](reviews/E3-X4-R1.md) is awaiting the user's assessment. Read the
+[collection limitations](E3-COLLECTION-NOTES.md), including training task-description overlap
+and A4's ambiguous output contract. Live results, human judgments, final-head CI and post-merge
+main CI remain pending; no benefit is claimed and R4 has not started.
+
+### E2 complete (PR #133)
 
 Fresh branch from updated main aeb5ac6 after E1 PR #132 final-head CI 33975625109 and
 post-merge main CI 33975763463 passed all three platforms. Produce a compact report from
