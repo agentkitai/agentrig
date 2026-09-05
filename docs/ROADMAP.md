@@ -880,3 +880,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - Future EVALSET prompt clarity: distinguish A4's terminal session event from a final auxiliary
   snapshot, and disclose evidence-file/path formatting restrictions. Preserve the current v1
   scores and raw answers; an ambiguous structured-field failure is not by itself a reasoning failure.
+- E3 publication polish: distinguish created-but-incomplete attempts from untouched slots in
+  summaries, improve missing-argument diagnostics, and add explicit symlink/size-limit/protocol
+  rejection tests. A hard-killed collection lacking its final results.json deliberately cannot
+  be packaged as a closed run; any future recovery must preserve partial evidence and provenance.

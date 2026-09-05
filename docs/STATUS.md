@@ -18,7 +18,16 @@ reproduced SIGTERM client hanging; SIGKILL plus exact UUID cleanup fixed it. All
 have scripted wiring tests. Maintainer build/typecheck and explicit Node22 full suite pass 1,868
 plus two skips (1,870 total, 89 files). The initial review could not run build; maintainer did.
 Real pinned A1 preparation/build and seeded-failure checker passed their expected controls.
-Live results, human judgments and exact-head PR/main CI are still pending; no benefit is claimed.
+Frozen runner 5d990d6 passed all-platform CI 33979321280. Training and SDK ingest consumed
+104,010 reported tokens; the unchanged 96-attempt collection is running. Publication-only head
+1054684 passed all-platform CI 33982491430 and maintainer build/typecheck plus 1,870 Node22
+tests and two skips (1,872 total, 89 files). Claude's bounded publication-helper review
+1413271b-8d6d-45b3-be0b-750f61f28dc2 approved without blockers (read-only, no test execution).
+That is three scoped passes total: two runner passes and one publication pass, not new milestones.
+The [first X4 human packet](reviews/E3-X4-R1.md) is awaiting the user's assessment. Read the
+[collection limitations](E3-COLLECTION-NOTES.md), including training task-description overlap
+and A4's ambiguous output contract. Live results, human judgments, final-head CI and post-merge
+main CI remain pending; no benefit is claimed and R4 has not started.
 
 ### E2 complete (PR #133)
 
