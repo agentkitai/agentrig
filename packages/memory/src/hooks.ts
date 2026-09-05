@@ -108,6 +108,8 @@ export interface DreamTriggerOptions {
    * unattended, so this is the safer setting for it — see the CLI's `--dream-structural-only`.
    */
   structuralOnly?: boolean;
+  /** Wait for snapshot/apply mutation locks; not a full dream deadline. */
+  lockTimeoutMs?: number;
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
   now?: () => number;
@@ -139,7 +141,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
 
         if (sessionsSince < everySessions && hoursSince < everyHours) return { action: "continue" };
 
-        const store = new FileMemoryStore({ root: wikiRoot });
+        const store = new FileMemoryStore({ root: wikiRoot, lockTimeoutMs: opts.lockTimeoutMs ?? 5000 });
         await store.init();
         const result = await runDream({
           wiki: store,
@@ -147,20 +149,23 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           ...(opts.provider === undefined ? {} : { provider: opts.provider }),
           ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
           now,
+          lockTimeoutMs: opts.lockTimeoutMs ?? 5000,
           ...(opts.onError === undefined ? {} : { onError: opts.onError }),
         });
 
         const findings = findingCount(result.report, result.structural);
         if (opts.auto === true) {
+          let backup: string;
           try {
             const { applyDream } = await import("./dream/copy.js");
             const stamp = `${now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const backup = await applyDream(wikiRoot, result.outputRoot, stamp);
-            opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
-          } finally {
-            // the copy is disposed even when applying threw, or a failed apply leaks it
-            await result.workspace.dispose().catch(() => {});
+            backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
+          } catch (error) {
+            throw new Error(String(error) + "; dream artifact retained at " + result.outputRoot
+              + "; manifest: " + result.workspace.manifestPath, { cause: error });
           }
+          await result.workspace.dispose().catch(() => {});
+          opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
         } else if (findings === 0) {
           // nothing to look at, so nothing to keep: a clean dream that left a full wiki copy in
           // /tmp on every trigger is how an unattended maintenance task fills a disk
@@ -168,7 +173,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           opts.onDone?.("dream ran clean; nothing to review");
         } else {
           opts.onDone?.(
-            `dream found ${findings} thing(s) to review: agentrig dream --review, or inspect ${result.outputRoot}`,
+            `dream found ${findings} thing(s) to review: inspect ${result.outputRoot} (manifest: ${result.workspace.manifestPath}); agentrig dream --review runs a fresh review`,
           );
         }
       } catch (err) {

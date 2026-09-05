@@ -369,10 +369,10 @@ describe("the consolidation prompt is bounded on both axes", () => {
 });
 
 describe("applyDream failure paths", () => {
-  it("restores the original when the second rename fails, and says where it is", async () => {
+  it("rejects a missing proposed artifact without touching the original", async () => {
     const ws = await copyWiki(wikiRoot);
-    // make the destination un-creatable by planting a file where the directory must go, after
-    // the backup rename has already moved the original away
+    // A missing output fails before the backup rename. Actual rename faults are tested in
+    // dream-lifecycle.test.ts rather than inferred from this preflight rejection.
     const original = await fingerprint(wikiRoot);
     const err = await applyDream(wikiRoot, join(ws.outputRoot, "does-not-exist"), "s1").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
@@ -381,8 +381,7 @@ describe("applyDream failure paths", () => {
     await ws.dispose();
   });
 
-  it("names the backup directory when it cannot put the original back", async () => {
-    // drive the aggregate-error branch directly: staged is missing AND src is occupied
+  it("returns a usable backup path after a successful apply", async () => {
     const ws = await copyWiki(wikiRoot);
     const message = await applyDream(wikiRoot, ws.outputRoot, "ok").then(
       async (backup) => {

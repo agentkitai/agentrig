@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5b1; H1–H4 and H5a complete (PRs #118–#122).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5c1; H1–H4, H5a and H5b complete (PRs #118–#124).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -273,6 +273,15 @@ lifetimes, cancellation through commits and explicit auxiliary/unknown usage. H5
 concurrent append/provenance/pin conservation, stale-capture, interrupted-ingest retry and log-recovery
 tests. H5b2 must pass the remaining cancellation/bounds/accounting acceptance above. Each starts
 from updated main only after its predecessor's review, PR CI, merge and main CI succeed.
+
+H5c is likewise sequential and not complete until all sub-items land:
+
+| Row | Deliverable | Acceptance |
+|---|---|---|
+| H5c1 | Guarded snapshots and stale-safe apply; own fresh copy/staging paths, persist source snapshot identity, coordinate apply with store writers, preserve backups and test real rollback branches. | Intervening content/root changes reject apply; active writes serialize; aliases, existing destinations and colliding backups cannot clobber user data. |
+| H5c2 | Bound/cancel the full dream lifecycle with H5b2 accounting; safe workspace lifecycle and explicit ownership-checked crash recovery. | Cooperative abort reaches providers, no later apply occurs, failures clean only owned artifacts, and crash recovery never steals active/replacement owners. |
+| H5c3 | Lossless legacy multiline/frontmatter regeneration and session-scoped attempt lookup with bounded index rebuilds. | Old facts/references and unknown keys survive; unrelated immutable ledger history does not consume a session's entire scan budget. |
+| H5c4 | Complete the staged-write-abort/child-cleanup investigation pulled forward from H1. | Deterministic target-preservation and child-lifetime regressions; clearly distinguish proven fixes from an unreproduced historical timeout. |
 
 H5b1 inspection also found older multiline facts are not fully understood by the line-based fact
 parser, and unknown frontmatter keys parsed as `extra` do not survive current store regeneration.

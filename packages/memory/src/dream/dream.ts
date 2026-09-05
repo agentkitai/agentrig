@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
 import { FileMemoryStore, OVERVIEW_FILE } from "../store.js";
@@ -17,6 +18,7 @@ import { selectForPromotion, sessionEvidence, type PromotionRejection } from "./
 import { loadPromotionEvidence } from "./evidence.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
+import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
 
@@ -31,6 +33,8 @@ export interface DreamOptions extends Omit<DreamInput, "provider"> {
   outputRoot?: string;
   /** Cap on raw sessions scanned, per PLAN §3.7. */
   maxSessions?: number;
+  /** Lock-acquisition wait only, not a bound on scan duration. Default 5 seconds. */
+  lockTimeoutMs?: number;
   /** Root that fact-line file references are resolved against, for the stale-ref check. */
   cwd?: string;
   minSessionsToPromote?: number;
@@ -66,8 +70,20 @@ export async function lastDreamAt(wikiRoot: string): Promise<number | undefined>
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-export async function markDreamed(wikiRoot: string, at: number): Promise<void> {
-  await writeFile(join(wikiRoot, LAST_DREAM_FILE), `${at}\n`, "utf8");
+export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLockOptions = {}): Promise<void> {
+  if (!Number.isFinite(at) || at < 0) throw new Error("invalid dream timestamp");
+  await withMemoryLock(wikiRoot, async () => {
+    const previous = await lastDreamAt(wikiRoot);
+    if (previous !== undefined && previous >= at) return;
+    const path = join(wikiRoot, LAST_DREAM_FILE);
+    const temp = path + "." + randomUUID() + ".tmp";
+    try {
+      opts.signal?.throwIfAborted();
+      await writeFile(temp, `${at}\n`, { flag: "wx", mode: 0o600 });
+      opts.signal?.throwIfAborted();
+      await rename(temp, path);
+    } finally { await rm(temp, { force: true }).catch(() => {}); }
+  }, opts);
 }
 
 /**
@@ -81,7 +97,7 @@ export async function markDreamed(wikiRoot: string, at: number): Promise<void> {
 export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   const now = opts.now ?? (() => Date.now());
   const phase = (p: string): void => opts.onPhase?.(p);
-  const workspace = await copyWiki(opts.wiki.root, opts.outputRoot);
+  const workspace = await copyWiki(opts.wiki.root, opts.outputRoot, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
   try {
     return await dreamInto(workspace, opts, now, phase);
   } catch (err) {
@@ -100,7 +116,7 @@ async function dreamInto(
 ): Promise<FullDreamResult> {
   // concretely a FileMemoryStore, not the MemoryStore interface: the dream needs `pages()` and
   // `writeIndex()`, which are implementation surface rather than part of the read/write contract
-  const out = new FileMemoryStore({ root: workspace.outputRoot, scope: opts.wiki.scope });
+  const out = new FileMemoryStore({ root: workspace.outputRoot, scope: opts.wiki.scope, lockTimeoutMs: opts.lockTimeoutMs ?? 5000 });
 
   // ---- phase 1: orient
   phase("orient");
@@ -203,13 +219,17 @@ async function dreamInto(
       `${report.contradictions.length} contradiction(s), ${report.orphans.length} orphan(s), ` +
       `${report.missingPages.length} missing page(s)`,
   );
-  await markDreamed(workspace.outputRoot, now());
+  await markDreamed(workspace.outputRoot, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 });
   // ALSO stamp the live wiki. The stamp answers "when was a dream last run", not "last
   // applied" — writing it only into the copy meant review mode never advanced it, so a
   // scheduled trigger stayed permanently due and re-dreamt on every single session end,
   // spending consolidate-phase tokens and leaking a wiki copy each time. This is the one
   // write a dream makes to its input, and it is metadata about the dream, not wiki content.
-  await markDreamed(opts.wiki.root, now()).catch(() => {});
+  await markDreamed(opts.wiki.root, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 }).catch(error => {
+    const warning = new Error("dream scheduling stamp was not updated; the next session may trigger another dream: " + String(error), { cause: error });
+    if (opts.onError !== undefined) opts.onError(warning);
+    else process.emitWarning(warning.message);
+  });
 
   return {
     outputRoot: workspace.outputRoot,
