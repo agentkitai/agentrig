@@ -245,6 +245,11 @@ H1–H5 precede the live comparison. H6 follows measurement and checkpoints, bef
 expansion. Each row needs an implementation plan sized into reviewable changes if necessary;
 security or evidence work is not constrained to fit an arbitrary single-session budget.
 
+H5 implementation note discovered during H4 portability validation: `reserve()` emits a tagged
+placeholder that dream currently counts as a fact, prematurely activating its index row and
+dropping its claimant metadata. Correct this alongside reservation/concurrent-writer lifecycle
+tests; a real unfilled reservation must remain planned after dream, not just an empty test page.
+
 ### E — Measure outcomes before expanding capabilities
 
 This is the minimum useful subset of R9 and R14, not a requirement to build a full exporter,

@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FileMemoryStore } from "@agentkitai/agentrig-memory";
+import { FileMemoryStore, rebuildIndex } from "@agentkitai/agentrig-memory";
 
 let root: string;
 let store: FileMemoryStore;
@@ -92,8 +92,26 @@ describe("FileMemoryStore", () => {
       frontmatter: { type: "entity", slug: "a", aliases: [], sources: [], updated: "2026-08-29", confidence: "low" },
       body: "- [stated] thing",
     });
+    // A valid page under a non-markdown name detects removal of the extension filter.
+    await store.write("entities/notes.txt", (await store.read("entities/a.md"))!);
     const paths = (await store.pages()).map((p) => p.path).sort();
     expect(paths).toContain("entities/a.md");
     expect(paths).toContain("overview.md");
+    expect(paths).not.toContain("entities/notes.txt");
+  });
+
+  it("normalizes legacy Windows index paths without losing reservation state", async () => {
+    await store.reserve("a", "session:a");
+    const entries = await store.index();
+    await store.writeIndex(entries.map(entry => ({ ...entry, path: "entities\\a.md" })));
+    const migrated = await store.index();
+    expect(migrated[0]).toMatchObject({ path: "entities/a.md", status: "planned", claimedBy: ["session:a"] });
+    // Use an empty planned page to isolate path matching from placeholder-content classification.
+    const placeholder = (await store.read("entities/a.md"))!;
+    await store.write(placeholder.path, { ...placeholder, body: "" });
+    const rebuilt = rebuildIndex(await store.pages(), migrated);
+    expect(rebuilt.find(entry => entry.slug === "a")).toMatchObject({
+      path: "entities/a.md", status: "planned", claimedBy: ["session:a"],
+    });
   });
 });
