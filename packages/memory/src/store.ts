@@ -18,6 +18,21 @@ import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types
 export const INDEX_FILE = "index.md";
 export const LOG_FILE = "log.md";
 const LOG_HEADER = "# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\n";
+/** Recover known initialization fragments; keep every non-header line, including custom notes. */
+function recoverLogHeader(text: string): string {
+  if (text.startsWith(LOG_HEADER)) return text;
+  if (LOG_HEADER.startsWith(text)) return LOG_HEADER;
+  let rest = text;
+  if (rest.startsWith("# Log\n")) {
+    rest = rest.slice("# Log\n".length).replace(/^\n/, "");
+    const end = rest.indexOf("\n");
+    const first = end === -1 ? rest : rest.slice(0, end);
+    if (first !== "" && "Append-only chronology of ingests, dreams, and corrections.".startsWith(first)) {
+      rest = end === -1 ? "" : rest.slice(end + 1);
+    }
+  }
+  return LOG_HEADER + rest;
+}
 export const OVERVIEW_FILE = "overview.md";
 const INDEX_HEADER = `# Index
 
@@ -285,7 +300,8 @@ export class FileMemoryStore implements MemoryStore {
         if (err.code === "ENOENT") return LOG_HEADER;
         throw err;
       });
-      await this.atomicWrite(LOG_FILE, existing + line);
+      const repaired = recoverLogHeader(existing);
+      await this.atomicWrite(LOG_FILE, repaired + (repaired.endsWith("\n") ? "" : "\n") + line);
     });
   }
 

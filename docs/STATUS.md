@@ -1,11 +1,26 @@
 # Status
 
-Current roadmap row: **H5a — final PR gates; H5b follows only after merge and green main CI.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5b1 — conflict-safe ingest persistence.** H1–H4 and H5a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5a implemented (PR #122; final gates pending)
+### H5b1 in progress
+
+H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
+H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate
+updated-main branch/PR with review and CI gates. Current work migrates ingest/provenance/pins,
+corrects stale shorter captures and repairs incomplete log initialization. Provider/backend lifetime
+and accounting remain H5b2; no claim that abort already cancels those calls.
+
+Initial H5b1 implementation passes build/typecheck and 1,529 tests with two Windows-only skips
+on Linux (1,531 total, 74 files). Twenty-six new persistence tests cover real two-process writers,
+shorter/different/canonicalized captures, pending retries, provider-time edits, provenance aliases
+and deduplication, invalid IDs, stale/deleted pin snapshots, malformed data, analysis pin conflicts,
+and empty/partial/custom log recovery. Independent review and PR CI are pending. See H5.md for
+the cooperative-writer boundary, partial-commit retry semantics and H5b2/H5c exclusions.
+
+### H5a complete (2026-09-05; PR #122)
 
 H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
 H5a–H5d (ROADMAP); each gets its own branch/PR and all validation gates. H5a adds guarded writes
@@ -40,7 +55,8 @@ Final narrow review at 229a365 closed all remaining notes. CI 33954975532 passed
 macOS passed every test assertion but detected an unhandled rejection in the injected-fstat test.
 Its expected path is now resolved before starting the rejecting operation, so the rejection
 assertion attaches synchronously. No production behavior or unhandled-error gate was weakened;
-repaired-head CI/review remain required.
+repaired-head CI/review were required. Final fixture review at a7b2cd5 reports no findings, PR CI
+33955143444 passed every platform, and post-merge main CI 33955259134 is green.
 
 ### H4 complete (2026-09-05; PR #121)
 

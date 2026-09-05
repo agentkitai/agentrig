@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5; H1–H4 complete (PRs #118–#121).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5b1; H1–H4 and H5a complete (PRs #118–#122).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -266,6 +266,13 @@ until all four land; adding store primitives alone does not protect every mainte
 | H5b | Integrate ingest with conflict-safe updates; reject stale shorter captures; propagate cancellation/time bounds through provider/backend work and commits; introduce explicit auxiliary usage/unknown-usage reporting. Cover empty/partially initialized log recovery found during H5a review, preserving existing entries. | Controlled competing ingests retain facts; cancellation prevents subsequent commits and reaches cooperative providers; work is bounded and usage is not silently free. Empty/partially initialized logs recover their header without losing existing entries. |
 | H5c | Dream snapshot/apply concurrency protection, cancellation and bounded maintenance accounting; investigate the staged-write-abort timeout. Existing apply bypasses H5a locks entirely; coordinate swaps and safely recover owned workspace lock sidecars without deleting active/replacement owners. | A stale dream cannot overwrite intervening edits; failed/cancelled work cleans up owned artifacts and does not apply; target preservation and child-cleanup tests remain meaningful. |
 | H5d | Reviewer/grader cancellation and bounded usage integrated with the same auxiliary accounting contract and CLI/session reporting. | Abort reaches cooperative reviewer/grader work, orphaned work cannot steer completed sessions, and reports distinguish main/auxiliary reported and unknown usage. |
+
+H5b is sized into two sequential PRs: **H5b1** migrates ingest/provenance/pins to conflict-safe
+persistence, handles shorter stale captures and log recovery; **H5b2** adds bounded provider/backend
+lifetimes, cancellation through commits and explicit auxiliary/unknown usage. H5b1 must pass
+concurrent append/provenance/pin conservation, stale-capture, interrupted-ingest retry and log-recovery
+tests. H5b2 must pass the remaining cancellation/bounds/accounting acceptance above. Each starts
+from updated main only after its predecessor's review, PR CI, merge and main CI succeed.
 
 ### E — Measure outcomes before expanding capabilities
 

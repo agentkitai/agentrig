@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { tokenize } from "./search.js";
+import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
+import { FileMemoryStore } from "./store.js";
 import type { MemoryStore, Pin } from "./types.js";
 
 /**
@@ -38,12 +40,19 @@ export async function readPins(wikiRoot: string): Promise<Pin[]> {
   return parsed.data;
 }
 
-export async function writePins(wikiRoot: string, pins: Pin[]): Promise<void> {
+/** Trusted unconditional replacement; use addPin/recheckStoredPins for read-modify-write. */
+export async function writePins(wikiRoot: string, pins: Pin[], opts: MemoryLockOptions = {}): Promise<void> {
+  await withMemoryLock(wikiRoot, () => writePinsUnlocked(wikiRoot, pins, opts.signal), opts);
+}
+
+async function writePinsUnlocked(wikiRoot: string, pins: Pin[], signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const full = join(wikiRoot, PINS_FILE);
   await mkdir(dirname(full), { recursive: true });
   const tmp = `${full}.${randomBytes(6).toString("hex")}.tmp`;
   try {
     await writeFile(tmp, `${JSON.stringify(z.array(PinSchema).parse(pins), null, 2)}\n`, "utf8");
+    signal?.throwIfAborted();
     await rename(tmp, full);
   } catch (err) {
     await rm(tmp, { force: true }).catch(() => {});
@@ -51,12 +60,14 @@ export async function writePins(wikiRoot: string, pins: Pin[]): Promise<void> {
   }
 }
 
-export async function addPin(wikiRoot: string, pin: Pin): Promise<void> {
-  const pins = await readPins(wikiRoot);
-  const i = pins.findIndex((p) => p.page === pin.page && p.claim === pin.claim);
-  if (i === -1) pins.push(PinSchema.parse(pin));
-  else pins[i] = PinSchema.parse(pin);
-  await writePins(wikiRoot, pins);
+export async function addPin(wikiRoot: string, pin: Pin, opts: MemoryLockOptions = {}): Promise<void> {
+  await withMemoryLock(wikiRoot, async () => {
+    const pins = await readPins(wikiRoot);
+    const i = pins.findIndex((p) => p.page === pin.page && p.claim === pin.claim);
+    if (i === -1) pins.push(PinSchema.parse(pin));
+    else pins[i] = PinSchema.parse(pin);
+    await writePinsUnlocked(wikiRoot, pins, opts.signal);
+  }, opts);
 }
 
 export type PinStatus = "kept" | "conflict" | "orphaned";
@@ -65,6 +76,8 @@ export interface PinCheck {
   pin: Pin;
   status: PinStatus;
   reason: string;
+  /** Exact checked page content (null for absence); unversioned checks cannot be persisted safely. */
+  pageVersion?: string | null;
 }
 
 const NEGATIONS = new Set([
@@ -148,21 +161,23 @@ export function claimSatisfied(claim: string, pageBody: string): boolean {
 export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinCheck[]> {
   const out: PinCheck[] = [];
   for (const pin of pins) {
-    const page = await store.read(pin.page).catch(() => null);
+    const page = await store.read(pin.page);
+    const snapshot = page === null ? { pageVersion: null } : page.version === undefined ? {} : { pageVersion: page.version };
     if (page === null) {
-      out.push({ pin, status: "orphaned", reason: `page ${pin.page} no longer exists` });
+      out.push({ ...snapshot, pin, status: "orphaned", reason: `page ${pin.page} no longer exists` });
       continue;
     }
     const anchorPresent = pin.anchor === "" || page.body.includes(pin.anchor);
     if (claimSatisfied(pin.claim, page.body)) {
       out.push(
         anchorPresent
-          ? { pin, status: "kept", reason: "claim still present" }
-          : { pin, status: "orphaned", reason: `anchor ${JSON.stringify(pin.anchor)} is gone` },
+          ? { ...snapshot, pin, status: "kept", reason: "claim still present" }
+          : { ...snapshot, pin, status: "orphaned", reason: `anchor ${JSON.stringify(pin.anchor)} is gone` },
       );
       continue;
     }
     out.push({
+      ...snapshot,
       pin,
       status: "conflict",
       reason: anchorPresent
@@ -177,16 +192,43 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
  * Apply the re-check back to the stored pins so their status reflects the current wiki.
  * Merges by (page, claim) against the file rather than replacing it wholesale — a subset of
  * checks must never delete the pins it didn't cover.
+ * Stale/unversioned checks and pins deleted or changed since inspection are skipped; callers
+ * needing a fresh persisted status should use recheckStoredPins instead of retrying old checks.
  */
-export async function applyPinChecks(wikiRoot: string, checks: PinCheck[]): Promise<void> {
+export async function applyPinChecks(wikiRoot: string, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<void> {
+  await withMemoryLock(wikiRoot, async () => {
+    const current = await readPins(wikiRoot);
+    const store = new FileMemoryStore({ root: wikiRoot });
+    const fresh: PinCheck[] = [];
+    for (const check of checks) {
+      if (check.pageVersion === undefined) continue;
+      if (((await store.read(check.pin.page))?.version ?? null) === check.pageVersion) fresh.push(check);
+    }
+    if (fresh.length > 0) await writePinsUnlocked(wikiRoot, mergeChecks(current, fresh), opts.signal);
+  }, opts);
+}
+
+function mergeChecks(current: Pin[], checks: PinCheck[]): Pin[] {
   const statusOf: Record<PinStatus, Pin["status"]> = { kept: "active", conflict: "conflict", orphaned: "orphaned" };
-  const current = await readPins(wikiRoot);
   const merged = [...current];
   for (const c of checks) {
     const updated = { ...c.pin, status: statusOf[c.status] };
     const i = merged.findIndex((p) => p.page === c.pin.page && p.claim === c.pin.claim);
-    if (i === -1) merged.push(updated);
-    else merged[i] = updated;
+    // A stale check must not resurrect a deleted pin or overwrite a newer human correction.
+    if (i !== -1 && JSON.stringify(PinSchema.parse(merged[i])) === JSON.stringify(PinSchema.parse(c.pin))) merged[i] = updated;
   }
-  await writePins(wikiRoot, merged);
+  return merged;
+}
+
+/** Read current pins/pages and persist statuses under the same lock as page and pin writers. */
+export async function recheckStoredPins(store: MemoryStore, paths?: ReadonlySet<string>, opts: MemoryLockOptions = {}): Promise<PinCheck[]> {
+  // An empty snapshot needs no mutation. Pins added after it belong to a later operation.
+  if ((await readPins(store.root)).length === 0) return [];
+  return withMemoryLock(store.root, async () => {
+    const pins = await readPins(store.root);
+    const relevant = paths === undefined ? pins : pins.filter(pin => paths.has(pin.page));
+    const checks = await recheckPins(store, relevant);
+    if (checks.length > 0) await writePinsUnlocked(store.root, mergeChecks(pins, checks), opts.signal);
+    return checks;
+  }, opts);
 }

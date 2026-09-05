@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { createReadStream } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { PAGE_DIR, isReservationPlaceholder, pagePath, serializePage } from "./page.js";
-import { applyPinChecks, readPins, recheckPins } from "./pins.js";
+import { recheckStoredPins } from "./pins.js";
+import { withMemoryLock } from "./lock.js";
 import { tolerant, type MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
 import type { Attempt, PageType } from "./types.js";
@@ -340,6 +342,28 @@ export interface IngestOptions {
   checkBackendConflicts?: boolean;
   /** Reported when a tolerated backend call fails; defaults to silence. */
   onBackendError?: (op: string, err: Error) => void;
+  /** Same-session ingest serialization; distinct sessions still distill concurrently. */
+  lockTimeoutMs?: number;
+}
+
+const CaptureHashes = z.array(z.string().regex(/^[a-f0-9]{64}$/));
+function captureHashes(body: string): string[] | undefined {
+  if (!body.includes("<!-- ingest:version=2 -->") || body.includes("<!-- ingest:pending -->")) return undefined;
+  const marker = /^<!-- ingest:events-v1=(.*) -->$/m.exec(body);
+  if (marker === null) return undefined; // one-time migration of older projection-only captures
+  return CaptureHashes.parse(JSON.parse(marker[1]!));
+}
+
+function withoutCapture(body: string): string {
+  return body.replace(/<!-- capture:prefix=[^>]*-->/g, "").replace(/<!-- ingest:coverage=.*?-->/g, "")
+    .replace(/<!-- ingest:version=\d+ -->/g, "").replace(/<!-- ingest:events-v1=.*?-->/g, "")
+    .replace(/<!-- ingest:pending -->/g, "").trim();
+}
+
+/** Backend annotations extend a fact's source list rather than create a different fact. */
+function containsFact(body: string, line: string): boolean {
+  return body.split("\n").some(existing => existing === line ||
+    (existing.startsWith(`${line.slice(0, -1)}, `) && existing.endsWith(")")));
 }
 
 async function readEvents(logPath: string): Promise<unknown[]> {
@@ -367,6 +391,19 @@ async function readEvents(logPath: string): Promise<unknown[]> {
  * dropped — only a provably superseded snapshot is.
  */
 export async function ingestSession(opts: IngestOptions): Promise<IngestResult> {
+  // Match core's filename contract without introducing a runtime dependency on core.
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)) throw new Error("invalid ingest session id: expected 1-128 characters of [A-Za-z0-9_-]");
+  // Long-lived per-session guard, distinct from the short page/pin mutation lock. Never hold
+  // the wiki mutation lock across a provider/backend call. H5b2 bounds those call lifetimes.
+  const root = await realpath(opts.store.root);
+  // Conservatively serialize case aliases even on case-sensitive hosts; on macOS/Windows
+  // those aliases can name the same source file.
+  const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex");
+  return withMemoryLock(`${root}.ingest-${sessionKey}`, () => ingestSessionLocked(opts),
+    opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs });
+}
+
+async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
   const { store, provider, sessionId, logPath } = opts;
   const now = opts.now ?? (() => Date.now());
   const today = new Date(now()).toISOString().slice(0, 10);
@@ -376,17 +413,17 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const sourcePath = pagePath("source", `session-${sessionId}`);
 
   // prefix comparison against the previous capture of this same session
-  const existing = await store.read(sourcePath).catch(() => null);
-  const previousPrefix = /<!-- capture:prefix=([a-f0-9]+):len=(\d+) -->/.exec(existing?.body ?? "");
+  const existing = await store.read(sourcePath);
+  const hashes = events.map(event => createHash("sha256").update(JSON.stringify(event)).digest("hex"));
+  const previous = captureHashes(existing?.body ?? "");
   let supersededPrevious = false;
-  // Old projector captures may have discarded evidence before hashing. Reprocess once under
-  // this coverage contract even when the surviving text happens to be identical.
-  if (previousPrefix !== null && existing?.body.includes("<!-- ingest:version=2 -->")) {
-    const prevLen = Number(previousPrefix[2]);
-    const prevHash = previousPrefix[1]!;
-    const thisPrefixHash = createHash("sha256").update(transcript.slice(0, prevLen)).digest("hex").slice(0, 16);
-    if (thisPrefixHash === prevHash) {
-      if (transcript.length <= prevLen) {
+  // Compare original event prefixes, not a projection whose streamed fallback can be replaced
+  // by a canonical assistant message when the raw log grows. Retain hashes of every event so a
+  // strictly shorter prefix is verifiable without guessing from a longer capture's full hash.
+  if (previous !== undefined) {
+    const common = Math.min(previous.length, hashes.length);
+    if (previous.slice(0, common).every((hash, i) => hash === hashes[i])) {
+      if (hashes.length <= previous.length) {
         return {
           sessionId,
           coverage: [],
@@ -498,38 +535,27 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const pagesWritten: string[] = [];
   const ref = `session:${sessionId}`;
 
-  // The source page: what happened, plus the capture marker used for prefix comparison.
-  // Only a provably superseded capture may replace the previous body; otherwise merge, because
-  // a re-ingest of a *different* transcript must not delete narrative that is still unique.
-  const newLines = [
+  // Merge against the locked current source page, never against the pre-provider snapshot.
+  // Even a growing capture can omit earlier facts in its new distillation: retain that narrative.
+  // Completion is marked only after every local page/index/pin/log mutation succeeds, so an
+  // interrupted ingest is retried instead of being mistaken for a completed duplicate.
+  const newLines = [...new Set([
     ...summaries.map((s) => `- [observed] ${s} (${ref})`),
     ...sourceFacts.map((f) => `- [${f.tag}] ${f.text} (${ref})`),
-  ];
-  const priorSourceBody =
-    existing === null || supersededPrevious
-      ? ""
-      : existing.body.replace(/<!-- capture:prefix=[^>]*-->/g, "").replace(/<!-- ingest:coverage=.*?-->/g, "")
-        .replace(/<!-- ingest:version=\d+ -->/g, "").trim();
-  const keptLines = priorSourceBody === "" ? [] : priorSourceBody.split("\n").filter((l) => l.trim() !== "");
-  const merged = [...keptLines, ...newLines.filter((l) => !keptLines.includes(l))];
-  const sourceBody = [
-    ...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
-    "",
-    `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
-    "<!-- ingest:version=2 -->",
-    `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`,
-  ].join("\n");
-  await store.write(sourcePath, {
-    path: sourcePath,
-    frontmatter: {
-      type: "source",
-      slug: `session-${sessionId}`,
-      aliases: [],
-      sources: [ref],
-      updated: today,
-      confidence: "high",
-    },
-    body: sourceBody,
+  ])];
+  await store.update(sourcePath, current => {
+    const kept = withoutCapture(current?.body ?? "").split("\n").filter(line => line.trim() !== "");
+    const merged = [...kept, ...newLines.filter(line => !containsFact(kept.join("\n"), line))];
+    return {
+      path: sourcePath,
+      frontmatter: {
+        type: "source", slug: `session-${sessionId}`, aliases: current?.frontmatter.aliases ?? [],
+        sources: [...new Set([...(current?.frontmatter.sources ?? []), ref])], updated: today,
+        confidence: current?.frontmatter.confidence ?? "high",
+      },
+      body: [...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
+        "", "<!-- ingest:pending -->"].join("\n"),
+    };
   });
   pagesWritten.push(sourcePath);
   await store.upsertIndex({
@@ -543,24 +569,19 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   // entity/concept pages: append new fact lines, never rewriting what is already there
   for (const t of targets.values()) {
     const path = pagePath(t.type, t.slug);
-    const page = await store.read(path).catch(() => null);
-    const priorBody = page === null ? "" : page.body.split("\n").filter(line => !isReservationPlaceholder(line)).join("\n").trim();
-    const newLines = t.facts
-      .map((f) => `- [${f.tag}] ${f.text} (${ref})`)
-      .filter((line) => !priorBody.includes(line));
-    const body = [priorBody, ...newLines].filter((s) => s !== "").join("\n");
-    const sources = [...new Set([...(page?.frontmatter.sources ?? []), ref])];
-    await store.write(path, {
-      path,
-      frontmatter: {
-        type: t.type,
-        slug: t.slug,
-        aliases: page?.frontmatter.aliases ?? [],
-        sources,
-        updated: today,
-        confidence: page?.frontmatter.confidence ?? "medium",
-      },
-      body,
+    await store.update(path, page => {
+      const priorBody = page === null ? "" : page.body.split("\n").filter(line => !isReservationPlaceholder(line)).join("\n").trim();
+      const newLines = [...new Set(t.facts.map(f => `- [${f.tag}] ${f.text} (${ref})`))]
+        .filter(line => !containsFact(priorBody, line));
+      return {
+        path,
+        frontmatter: {
+          type: t.type, slug: t.slug, aliases: page?.frontmatter.aliases ?? [],
+          sources: [...new Set([...(page?.frontmatter.sources ?? []), ref])], updated: today,
+          confidence: page?.frontmatter.confidence ?? "medium",
+        },
+        body: [priorBody, ...newLines].filter(s => s !== "").join("\n"),
+      };
     });
     pagesWritten.push(path);
     await store.upsertIndex({
@@ -575,10 +596,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
   // happened — not only when a human remembers to run `memory lint`
   const touched = new Set(pagesWritten);
-  const allPins = await readPins(store.root).catch(() => []);
-  const relevant = allPins.filter((pin) => touched.has(pin.page));
-  const checks = relevant.length === 0 ? [] : await recheckPins(store, relevant);
-  if (checks.length > 0) await applyPinChecks(store.root, checks);
+  const checks = await recheckStoredPins(store, touched);
   const pinConflicts = checks
     .filter((c) => c.status !== "kept")
     .map((c) => ({ page: c.pin.page, claim: c.pin.claim, reason: c.reason }));
@@ -588,6 +606,14 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
       `${supersededPrevious ? " (superseded an earlier capture)" : ""}` +
       `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
   );
+
+  await store.update(sourcePath, current => {
+    if (current === null) throw new Error(`ingest source disappeared before completion: ${sourcePath}`);
+    return { ...current, body: [withoutCapture(current.body), "",
+      `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
+      "<!-- ingest:version=2 -->", `<!-- ingest:events-v1=${JSON.stringify(hashes)} -->`,
+      `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`].join("\n") };
+  });
 
   // PLAN §3.8: the backend runs LAST — after every page, the pin re-check, and the log entry —
   // so no backend outcome, including an unwrapped throw, can leave the wiki half-written.
@@ -641,19 +667,18 @@ async function annotateProvenance(
   for (const t of targets.values()) {
     const path = pagePath(t.type, t.slug);
     try {
-      const page = await store.read(path);
-      if (page === null) continue;
-      let body = page.body;
-      let changed = false;
-      for (const fact of t.facts) {
-        const memoryId = idByText.get(fact.text);
-        if (memoryId === undefined) continue;
-        const line = `- [${fact.tag}] ${fact.text} (${ref})`;
-        if (!body.includes(line)) continue;
-        body = body.replace(line, `${line.slice(0, -1)}, ${backendId}:${memoryId})`);
-        changed = true;
-      }
-      if (changed) await store.write(path, { path, frontmatter: page.frontmatter, body });
+      await store.update(path, page => {
+        if (page === null) throw new Error(`provenance target disappeared: ${path}`);
+        const body = page.body.split("\n").map(line => {
+          for (const fact of t.facts) {
+            const memoryId = idByText.get(fact.text);
+            if (memoryId !== undefined && line === `- [${fact.tag}] ${fact.text} (${ref})`)
+              return `${line.slice(0, -1)}, ${backendId}:${memoryId})`;
+          }
+          return line;
+        }).join("\n");
+        return { path, frontmatter: page.frontmatter, body };
+      });
     } catch {
       // provenance is an annotation, never a reason to fail an ingest that already succeeded
     }
