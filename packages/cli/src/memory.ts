@@ -6,6 +6,7 @@ import {
   LoreBackend,
   SCHEMA_MD,
   findingCount,
+  formatAuxiliaryUsage,
   ingestSession,
   loreConfigFromEnv,
   loadPromotionEvidence,
@@ -164,6 +165,7 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
     attempts,
     project: projectName(),
     onBackendError: backendError,
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     ...(backend === null ? {} : { backend, checkBackendConflicts: true }),
   });
   for (const omission of result.omissions) {

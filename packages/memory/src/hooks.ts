@@ -1,9 +1,10 @@
 import { stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
 import { FileMemoryStore } from "./store.js";
 import { FileRawStore } from "./raw.js";
 import { ingestSession } from "./ingest.js";
+import { formatAuxiliaryUsage } from "./maintenance.js";
 import { lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
@@ -26,6 +27,7 @@ export interface SessionEndIngestOptions {
   backend?: MemoryBackend;
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
+  onUsage?: (report: AuxiliaryReport) => void;
 }
 
 /** Distils the session that just ended into the wiki. */
@@ -36,6 +38,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
     // ingest is a multi-call distillation over a whole transcript; the default 30s is too tight
     timeoutMs: 10 * 60_000,
     handler: async (ctx: HookContext): Promise<HookResult> => {
+      let auxiliary: AuxiliaryReport | undefined;
       try {
         // defence in depth: core validates session ids, but this hook builds a path from one and
         // must not depend on a caller upstream having done the right thing
@@ -61,12 +64,18 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           sessionId: ctx.sessionId,
           logPath,
           signal: ctx.signal,
+          onUsage: report => {
+            auxiliary = report;
+            opts.onUsage?.(report);
+          },
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
         opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
           (result.omissions.length === 0 ? "" : `; ${result.omissions.length} uninspected evidence omission(s), see source-page coverage`));
       } catch (err) {
         opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        if (auxiliary !== undefined) opts.onDone?.(formatAuxiliaryUsage(auxiliary));
       }
       return { action: "continue" };
     },

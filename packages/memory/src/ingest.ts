@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
-import { createReadStream } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
-import { createInterface } from "node:readline";
 import { z } from "zod";
-import type { ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
 import { PAGE_DIR, isReservationPlaceholder, pagePath, serializePage } from "./page.js";
 import { recheckStoredPins } from "./pins.js";
 import { withMemoryLock } from "./lock.js";
-import { tolerant, type MemoryBackend } from "./backend.js";
+import type { MemoryLockOptions } from "./lock.js";
+import { MaintenanceRun, MaintenanceLimitError, positiveLimit, type MaintenanceLimits } from "./maintenance.js";
+import { readBoundedFile } from "./bounded-file.js";
+import type { MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
 import type { Attempt, PageType } from "./types.js";
 
@@ -55,6 +56,8 @@ export interface EvidenceOmission {
 }
 
 export interface IngestResult {
+  /** Also delivered on failure through onUsage; absent on legacy results. */
+  auxiliary?: AuxiliaryReport;
   sessionId: string;
   /** Every span, and whether it was distilled or explicitly closed — the coverage guarantee. */
   coverage: Array<{ spanId: string; from: number; to: number; charFrom: number; charTo: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
@@ -223,12 +226,13 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
  * Split a transcript into bounded spans. Bounded by characters rather than events so one
  * enormous tool result can't produce a span that blows the context window.
  */
-export function planCoverage(transcript: string, maxChars = 6000): Span[] {
+export function planCoverage(transcript: string, maxChars = 6000, maxSpans = Infinity): Span[] {
   if (!Number.isSafeInteger(maxChars) || maxChars < 2) throw new Error("maxSpanChars must be an integer of at least 2");
   const spans: Span[] = [];
   let charFrom = 0;
   let line = 0;
   while (charFrom < transcript.length) {
+    if (spans.length >= maxSpans) throw new MaintenanceLimitError("ingest span/call limit exceeded");
     let charTo = Math.min(charFrom + maxChars, transcript.length);
     if (charTo < transcript.length) {
       const newline = transcript.lastIndexOf("\n", charTo - 1);
@@ -332,7 +336,7 @@ export interface IngestOptions {
   maxTokens?: number;
   now?: () => number;
   /**
-   * Optional sink (PLAN §3.8). Wrapped in `tolerant()` internally — the guarantee that a
+   * Optional sink (PLAN §3.8). Failures are tolerated internally — the guarantee that a
    * backend cannot break an ingest must not depend on the caller remembering to wrap it.
    */
   backend?: MemoryBackend;
@@ -345,9 +349,25 @@ export interface IngestOptions {
   onBackendError?: (op: string, err: Error) => void;
   /** Same-session ingest serialization; distinct sessions still distill concurrently. */
   lockTimeoutMs?: number;
-  /** H5b1 cancels lock acquisition only. Provider/backend and commit cancellation land in H5b2. */
+  /** Abort propagates to providers/backends and is checked before subsequent local commits. */
   signal?: AbortSignal;
+  limits?: Partial<IngestLimits>;
+  /** Delivered once on success/failure; reporter exceptions cannot mask the outcome. */
+  onUsage?: (report: AuxiliaryReport) => void;
 }
+
+export interface IngestLimits extends MaintenanceLimits {
+  maxRawBytes: number;
+  maxEvents: number;
+  maxSpans: number;
+  maxFacts: number;
+  maxPages: number;
+  maxFileBytes: number;
+}
+export const DEFAULT_INGEST_LIMITS = Object.freeze({
+  maxRawBytes: 8 * 1024 * 1024, maxEvents: 20_000, maxSpans: 64,
+  maxFacts: 1024, maxPages: 256, maxFileBytes: 8 * 1024 * 1024,
+});
 
 const CaptureHashes = z.array(z.string().regex(/^[a-f0-9]{64}$/));
 function captureHashes(body: string): string[] | undefined {
@@ -376,13 +396,14 @@ function containsFact(body: string, line: string): boolean {
   return new RegExp(`(^|\\n)${escapePattern(line.slice(0, -1))}(?:\\)|, [^\\n]*\\))(?=\\n|$)`).test(body);
 }
 
-async function readEvents(logPath: string): Promise<unknown[]> {
+async function readEvents(logPath: string, limits: IngestLimits, signal: AbortSignal): Promise<unknown[]> {
   const out: unknown[] = [];
-  const rl = createInterface({ input: createReadStream(logPath, "utf8"), crlfDelay: Infinity });
+  const text = (await readBoundedFile(logPath, limits.maxRawBytes, signal)).toString("utf8");
   let lineNumber = 0;
-  for await (const line of rl) {
+  for (const line of text.split(/\r?\n/)) {
     lineNumber++;
     if (line.trim() === "") continue;
+    if (out.length >= limits.maxEvents) throw new MaintenanceLimitError("ingest event limit exceeded");
     try {
       out.push(JSON.parse(line));
     } catch {
@@ -401,11 +422,30 @@ async function readEvents(logPath: string): Promise<unknown[]> {
  * dropped — only a provably superseded snapshot is.
  */
 export async function ingestSession(opts: IngestOptions): Promise<IngestResult> {
+  const run = new MaintenanceRun("ingest", opts.limits, opts.signal);
+  run.localCommitState = "not-started";
+  const limits: IngestLimits = { ...run.limits, ...DEFAULT_INGEST_LIMITS, ...opts.limits };
+  let failure: unknown; let result: IngestResult | undefined;
+  try {
+    for (const [key, value] of Object.entries(limits)) positiveLimit(key, value);
+    positiveLimit("maxSpanChars", opts.maxSpanChars ?? 6000);
+    positiveLimit("maxTokens", opts.maxTokens ?? 2048);
+    result = await ingestSessionGuarded({ ...opts, signal: run.signal }, run, limits);
+    return result;
+  } catch (error) { failure = error; throw error; }
+  finally {
+    const report = run.finish(failure);
+    if (result !== undefined) result.auxiliary = report;
+    try { opts.onUsage?.(structuredClone(report)); } catch { /* diagnostic only */ }
+  }
+}
+
+async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits): Promise<IngestResult> {
   // Match core's filename contract without introducing a runtime dependency on core.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)) throw new Error("invalid ingest session id: expected 1-128 characters of [A-Za-z0-9_-]");
   opts.signal?.throwIfAborted();
   // Long-lived per-session guard, distinct from the short page/pin mutation lock. Never hold
-  // the wiki mutation lock across a provider/backend call. H5b2 bounds those call lifetimes.
+  // the wiki mutation lock across a provider/backend call. The run bounds those call lifetimes.
   await mkdir(opts.store.root, { recursive: true });
   const root = await realpath(opts.store.root);
   // Conservatively serialize case aliases even on case-sensitive hosts; on macOS/Windows
@@ -413,7 +453,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex").slice(0, 32);
   let entered = false;
   try {
-    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts); }, {
+    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts, run, limits); }, {
       ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }),
       ...(opts.signal === undefined ? {} : { signal: opts.signal }),
     });
@@ -423,17 +463,20 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   }
 }
 
-async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
+async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits): Promise<IngestResult> {
   const { store, provider, sessionId, logPath } = opts;
   const now = opts.now ?? (() => Date.now());
   const today = new Date(now()).toISOString().slice(0, 10);
 
-  const events = await readEvents(logPath);
+  const mutation = { signal: run.signal, maxFileBytes: limits.maxFileBytes,
+    ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }) };
+  run.check();
+  const events = await readEvents(logPath, limits, run.signal);
   const { text: transcript, omissions, records } = transcriptEvidence(events);
   const sourcePath = pagePath("source", `session-${sessionId}`);
 
   // prefix comparison against the previous capture of this same session
-  const existing = await store.read(sourcePath);
+  const existing = await store.read(sourcePath, mutation);
   const hashes = events.map(event => createHash("sha256").update(JSON.stringify(event)).digest("hex"));
   const previous = captureHashes(existing?.body ?? "");
   let supersededPrevious = false;
@@ -444,6 +487,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     const common = Math.min(previous.length, hashes.length);
     if (previous.slice(0, common).every((hash, i) => hash === hashes[i])) {
       if (hashes.length <= previous.length) {
+        run.check();
         return {
           sessionId,
           coverage: [],
@@ -461,15 +505,23 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     }
   }
 
-  const existingIndexSummary = (await store.index()).find((e) => e.slug === `session-${sessionId}`)?.summary;
-  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000);
+  const existingIndexSummary = (await store.index(mutation)).find((e) => e.slug === `session-${sessionId}`)?.summary;
+  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000, Math.min(limits.maxSpans, limits.maxCalls));
+  if (spans.length > limits.maxSpans || spans.length > limits.maxCalls) throw new MaintenanceLimitError("ingest span/call limit exceeded");
   const coverage: IngestResult["coverage"] = [];
   const facts: DistilledFact[] = [];
   const summaries: string[] = [];
 
   const emptyButNotClosed: string[] = [];
+  if ((opts.attempts?.length ?? 0) > 128) throw new MaintenanceLimitError("ingest attempt count limit exceeded");
+  let attemptChars = 0;
+  for (const attempt of opts.attempts ?? []) {
+    attemptChars += attempt.hypothesis.length + attempt.actions.length + (attempt.lesson?.length ?? 0) + attempt.outcome.length + 10;
+    if (attemptChars > limits.maxInputChars) throw new MaintenanceLimitError("ingest attempts input limit exceeded");
+  }
   let recordIndex = 0;
   for (const span of spans) {
+    run.check();
     const range = { spanId: span.id, from: span.from, to: span.to, charFrom: span.charFrom, charTo: span.charTo };
     while (recordIndex < records.length && records[recordIndex]!.to <= span.charFrom) recordIndex++;
     const origins: string[] = [];
@@ -483,7 +535,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
         : `\n\nAttempts recorded this session:\n${opts.attempts
             .map((a) => `- ${a.outcome}: ${a.hypothesis} — ${a.actions}${a.lesson ? ` (lesson: ${a.lesson})` : ""}`)
             .join("\n")}`;
-    const raw = await completeJson(
+    const raw = await run.completeJson(
       provider,
       SYSTEM,
       `Session ${sessionId}, span ${span.id} of ${spans.length}, transcript characters [${span.charFrom}, ${span.charTo}), lines ${span.from}-${span.to}. A span may continue a long event from an adjacent span. Evidence origins: ${origins.join("; ")}.\n\n${span.text}${attemptNote}`,
@@ -522,6 +574,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     }
     coverage.push({ ...range, outcome: "distilled" });
     facts.push(...parsed.facts);
+    if (facts.length > limits.maxFacts) throw new MaintenanceLimitError("ingest fact limit exceeded");
   }
 
   if (emptyButNotClosed.length > 0) {
@@ -547,8 +600,12 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     targets.set(key, target);
   }
   const pagesReserved: string[] = [];
+  if (targets.size + 1 > limits.maxPages) throw new MaintenanceLimitError("ingest page limit exceeded");
+  run.check();
+  run.localCommitState = "may-be-partial";
   for (const t of targets.values()) {
-    const outcome = await store.reserve(t.slug, `session:${sessionId}`, t.type);
+    run.check();
+    const outcome = await store.reserve(t.slug, `session:${sessionId}`, t.type, mutation);
     if (outcome === "created") pagesReserved.push(pagePath(t.type, t.slug));
   }
 
@@ -578,7 +635,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
       body: [...(merged.length === 0 ? [NO_FINDINGS] : merged),
         "", "<!-- ingest:pending -->"].join("\n"),
     };
-  });
+  }, mutation);
   pagesWritten.push(sourcePath);
   await store.upsertIndex({
     slug: `session-${sessionId}`,
@@ -586,7 +643,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     type: "source",
     status: "active",
     summary: summaries[0] ?? existingIndexSummary ?? "session with no durable findings",
-  });
+  }, mutation);
 
   // entity/concept pages: append new fact lines, never rewriting what is already there
   for (const t of targets.values()) {
@@ -604,7 +661,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
         },
         body: [priorBody, ...newLines].filter(s => s !== "").join("\n"),
       };
-    });
+    }, mutation);
     pagesWritten.push(path);
     await store.upsertIndex({
       slug: t.slug,
@@ -612,13 +669,13 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
       type: t.type,
       status: "active",
       summary: t.facts[0]?.text.slice(0, 120) ?? "",
-    });
+    }, mutation);
   }
 
   // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
   // happened — not only when a human remembers to run `memory lint`
   const touched = new Set(pagesWritten);
-  const checks = await recheckStoredPins(store, touched);
+  const checks = await recheckStoredPins(store, touched, mutation);
   const pinConflicts = checks
     .filter((c) => c.status !== "kept")
     .map((c) => ({ page: c.pin.page, claim: c.pin.claim, reason: c.reason }));
@@ -627,6 +684,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     `## [${today}] ingest | ${ref} | ${facts.length} facts, ${pagesWritten.length} pages` +
       `${supersededPrevious ? " (extended an earlier capture)" : ""}` +
       `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
+    mutation,
   );
 
   await store.update(sourcePath, current => {
@@ -636,16 +694,38 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
       `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
       "<!-- ingest:version=2 -->", `<!-- ingest:events-v1=${JSON.stringify(hashes)} -->`,
       `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`].join("\n") };
-  });
+  }, mutation);
+  run.localCommitState = "completed";
 
   // PLAN §3.8: the backend runs LAST — after every page, the pin re-check, and the log entry —
   // so no backend outcome, including an unwrapped throw, can leave the wiki half-written.
   const backendConflicts: IngestResult["backendConflicts"] = [];
   if (opts.backend !== undefined && facts.length > 0) {
-    const backend = tolerant(opts.backend, opts.onBackendError ?? (() => {}));
+    const sink = opts.backend;
+    const bounded: MemoryBackend = { id: sink.id,
+      onIngest: (items, source) => run.call("backend.onIngest", sink.id, signal => sink.onIngest(items, source, { signal })),
+      recall: (query, k) => run.call("backend.recall", sink.id, signal => sink.recall(query, k, { signal })),
+      promote: page => run.call("backend.promote", sink.id, signal => sink.promote(page, { signal })),
+    };
+    if (sink.conflicts !== undefined) bounded.conflicts = items => run.call("backend.conflicts", sink.id, signal => sink.conflicts!(items, { signal }));
+    // The runner owns timeout/cancellation/accounting; tolerate remote failure, not run abort
+    // or exhausted harness limits. No second timer races the accounting runner.
+    const bestEffort = async <T>(operation: string, work: () => Promise<T>, fallback: T): Promise<T> => {
+      try { return await work(); }
+      catch (error) {
+        run.check();
+        if (error instanceof MaintenanceLimitError) throw error;
+        try { opts.onBackendError?.(operation, error instanceof Error ? error : new Error(String(error))); } catch { /* diagnostic only */ }
+        return fallback;
+      }
+    };
+    const backend = bounded;
     const project = opts.project ?? (basename(resolve(process.cwd())) || "default");
     if (opts.checkBackendConflicts === true && backend.conflicts !== undefined) {
-      for (const c of await backend.conflicts(facts)) {
+      const conflicts = await bestEffort("conflicts", () => backend.conflicts!(facts), []);
+      run.check();
+      if (conflicts.length > limits.maxFacts) throw new MaintenanceLimitError("backend conflict limit exceeded");
+      for (const c of conflicts) {
         backendConflicts.push(
           c.detail === undefined
             ? { fact: c.fact, existing: c.existing }
@@ -653,13 +733,16 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
         );
       }
     }
-    const acks = await backend.onIngest(facts, { ref, project });
+    const acks = await bestEffort("onIngest", () => backend.onIngest(facts, { ref, project }), []);
+    run.check();
+    if (acks.length > limits.maxFacts) throw new MaintenanceLimitError("backend acknowledgement limit exceeded");
     // provenance the wiki's way: annotate the fact lines we just wrote with their memory ids
     if (acks.length > 0) {
-      await annotateProvenance(store, targets, acks, opts.backend.id, ref);
+      await annotateProvenance(store, targets, acks, opts.backend.id, ref, mutation);
     }
   }
 
+  run.check();
   return {
     sessionId,
     coverage,
@@ -685,9 +768,11 @@ async function annotateProvenance(
   acks: Array<{ factText: string; memoryId: string }>,
   backendId: string,
   ref: string,
+  mutation: MemoryLockOptions,
 ): Promise<void> {
   const idByText = new Map(acks.map((a) => [a.factText, a.memoryId]));
   for (const t of targets.values()) {
+    mutation.signal?.throwIfAborted();
     const path = pagePath(t.type, t.slug);
     try {
       await store.update(path, page => {
@@ -701,7 +786,7 @@ async function annotateProvenance(
             (_match, prefix: string) => `${prefix}${line.slice(0, -1)}, ${backendId}:${memoryId})`);
         }
         return { path, frontmatter: page.frontmatter, body };
-      });
+      }, mutation);
     } catch {
       // provenance is an annotation, never a reason to fail an ingest that already succeeded
     }

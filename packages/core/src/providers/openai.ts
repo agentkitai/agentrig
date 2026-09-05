@@ -207,7 +207,7 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
     }
     yield { type: "tool_use", id: tc.id || `call_${Math.random().toString(36).slice(2, 10)}`, name: tc.name, input };
   }
-  yield { type: "usage", usage: usage ?? { input: 0, output: 0 } };
+  yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
   const mapped = mapFinishReason(finishReason ?? "stop");
   yield mapped.raw === undefined
     ? { type: "stop", reason: mapped.reason }

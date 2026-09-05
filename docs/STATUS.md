@@ -1,11 +1,25 @@
 # Status
 
-Current roadmap row: **H5b1 — conflict-safe ingest persistence.** H1–H4 and H5a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5b2 — bounded ingest cancellation and auxiliary accounting.** H1–H4, H5a and H5b1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5b1 in progress
+### H5b2 in progress
+
+H5b1 merged in PR #123 at 5fc2cb8; post-merge CI 33958820304 passed all platforms.
+H5b2 starts from that updated main. It bounds ingest input/model/backend work, propagates abort
+through commit boundaries, and reports auxiliary usage separately, including unreported usage.
+Dream lifecycle and reviewer/grader adoption remain H5c/H5d, not implicitly complete here.
+
+Implementation now includes linked call/run deadlines, late-result isolation, bounded file/model/
+coverage work, signal-aware ingest mutations and optional backend requests, plus a shared types-only
+auxiliary accounting contract. Synthesized adapter zeros are explicitly unreported. CLI and scheduled
+ingest expose reported/unknown usage and local-write completion state; durable session aggregation
+remains H5d. See [plans/H5b2.md](plans/H5b2.md) for exact limits and OS/remote cancellation boundaries.
+New lifecycle/adapter tests pass; full validation, independent review and CI remain merge gates.
+
+### H5b1 complete (PR #123)
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
 H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate

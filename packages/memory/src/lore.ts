@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { serializePage } from "./page.js";
-import type { BackendAck, BackendHit, Conflict, MemoryBackend, SourceRef } from "./backend.js";
+import type { BackendAck, BackendCallOptions, BackendHit, Conflict, MemoryBackend, SourceRef } from "./backend.js";
 import type { DistilledFact } from "./ingest.js";
 import type { WikiPage } from "./types.js";
 
@@ -105,10 +105,12 @@ export class LoreBackend implements MemoryBackend {
     if (this.apiUrl === "") throw new Error("lore: LORE_API_URL is not set");
   }
 
-  private async request(path: string, body: JsonObject): Promise<JsonObject> {
+  private async request(path: string, body: JsonObject, opts: BackendCallOptions = {}): Promise<JsonObject> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const signal = opts.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, opts.signal]);
     try {
+      signal.throwIfAborted();
       const res = await this.fetchFn(`${this.apiUrl}${path}`, {
         method: "POST",
         headers: {
@@ -116,20 +118,33 @@ export class LoreBackend implements MemoryBackend {
           authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal,
       });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(`lore: HTTP ${res.status} ${detail.slice(0, 300)}`);
+      const reader = res.body?.getReader();
+      const chunks: Uint8Array[] = []; let bytes = 0;
+      try {
+        if (reader !== undefined) for (;;) {
+          signal.throwIfAborted();
+          const item = await reader.read();
+          signal.throwIfAborted();
+          if (item.done) break;
+          bytes += item.value.byteLength;
+          if (bytes > 2 * 1024 * 1024) throw new Error("lore: response exceeds 2 MiB");
+          chunks.push(item.value);
+        }
+      } finally {
+        try { void reader?.cancel().catch(() => {}); } catch { /* best-effort stream cleanup */ }
       }
-      return (await res.json().catch(() => ({}))) as JsonObject;
+      const text = Buffer.concat(chunks, bytes).toString("utf8");
+      if (!res.ok) throw new Error(`lore: HTTP ${res.status} ${text.slice(0, 300)}`);
+      try { return JSON.parse(text) as JsonObject; } catch { return {}; }
     } finally {
       clearTimeout(timer);
     }
   }
 
   /** Push distilled facts as Lore memories, tagged so they can be traced back to the wiki. */
-  async onIngest(facts: DistilledFact[], source: SourceRef): Promise<BackendAck[]> {
+  async onIngest(facts: DistilledFact[], source: SourceRef, opts: BackendCallOptions = {}): Promise<BackendAck[]> {
     if (facts.length === 0) return [];
     const data = await this.request("/v1/memories", {
       project: this.project,
@@ -143,7 +158,7 @@ export class LoreBackend implements MemoryBackend {
           tag: f.tag,
         },
       })),
-    });
+    }, opts);
     // ids come back so the wiki can record `lore:<memory-id>` on the fact lines it just wrote
     const acks: BackendAck[] = [];
     for (const raw of rowsOf(data, "memories", "results", "created")) {
@@ -157,8 +172,8 @@ export class LoreBackend implements MemoryBackend {
   }
 
   /** Extra recall, unioned with index ∪ BM25 by the caller — never a replacement. */
-  async recall(query: string, k: number): Promise<BackendHit[]> {
-    const data = await this.request("/v1/retrieve", { project: this.project, query, limit: k });
+  async recall(query: string, k: number, opts: BackendCallOptions = {}): Promise<BackendHit[]> {
+    const data = await this.request("/v1/retrieve", { project: this.project, query, limit: k }, opts);
     const hits: BackendHit[] = [];
     for (const raw of rowsOf(data, "memories", "results")) {
       const row = RecallRow.safeParse(raw);
@@ -180,7 +195,7 @@ export class LoreBackend implements MemoryBackend {
   }
 
   /** Promotion to global scope: private → shared, the wiki page carried across as one memory. */
-  async promote(page: WikiPage): Promise<void> {
+  async promote(page: WikiPage, opts: BackendCallOptions = {}): Promise<void> {
     const pageRef = `${page.frontmatter.type}/${page.frontmatter.slug}`;
     await this.request("/v1/memories/promote", {
       project: this.project,
@@ -191,16 +206,16 @@ export class LoreBackend implements MemoryBackend {
         // same namespace onIngest uses, so a promoted page and its facts are traceable together
         metadata: { agentrig: `${this.project}/${pageRef}` },
       },
-    });
+    }, opts);
   }
 
   /** Contradiction check consulted by the dream (M5); the wiki lint still runs regardless. */
-  async conflicts(facts: DistilledFact[]): Promise<Conflict[]> {
+  async conflicts(facts: DistilledFact[], opts: BackendCallOptions = {}): Promise<Conflict[]> {
     if (facts.length === 0) return [];
     const data = await this.request("/v1/conflicts", {
       project: this.project,
       facts: facts.map((f) => ({ content: f.text, tags: [`page:${f.pageType}/${f.slug}`] })),
-    });
+    }, opts);
     const out: Conflict[] = [];
     for (const raw of rowsOf(data, "conflicts")) {
       const row = ConflictRow.safeParse(raw);

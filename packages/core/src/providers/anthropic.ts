@@ -97,6 +97,8 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
   let cacheRead: number | undefined;
   let cacheWrite: number | undefined;
   let outputTokens = 0;
+  let inputReported = false;
+  let outputReported = false;
   let stopReason: unknown;
 
   const handle = function* (data: JsonObject): Generator<ModelEvent> {
@@ -104,6 +106,7 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
       case "message_start": {
         const usage = (data.message as JsonObject | undefined)?.usage as JsonObject | undefined;
         inputTokens = Number(usage?.input_tokens ?? 0);
+        inputReported = typeof usage?.input_tokens === "number";
         if (typeof usage?.cache_read_input_tokens === "number") cacheRead = usage.cache_read_input_tokens;
         if (typeof usage?.cache_creation_input_tokens === "number") cacheWrite = usage.cache_creation_input_tokens;
         break;
@@ -144,7 +147,7 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
         const delta = data.delta as JsonObject | undefined;
         if (delta?.stop_reason !== undefined) stopReason = delta.stop_reason;
         const usage = data.usage as JsonObject | undefined;
-        if (typeof usage?.output_tokens === "number") outputTokens = usage.output_tokens;
+        if (typeof usage?.output_tokens === "number") { outputTokens = usage.output_tokens; outputReported = true; }
         break;
       }
       case "error": {
@@ -176,7 +179,7 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
   const usage: Usage = { input: inputTokens, output: outputTokens };
   if (cacheRead !== undefined) usage.cacheRead = cacheRead;
   if (cacheWrite !== undefined) usage.cacheWrite = cacheWrite;
-  yield { type: "usage", usage };
+  yield { type: "usage", usage, ...(!inputReported || !outputReported ? { reported: false } : {}) };
   const mapped = mapStopReason(stopReason);
   yield mapped.raw === undefined
     ? { type: "stop", reason: mapped.reason }

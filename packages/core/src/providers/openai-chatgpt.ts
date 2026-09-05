@@ -281,7 +281,7 @@ export async function* parseResponsesSse(
   buffer += "\n";
   yield* drain();
 
-  yield { type: "usage", usage: usage ?? { input: 0, output: 0 } };
+  yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
   const finalStop: StopReason = stop ?? (sawToolUse ? "tool_use" : sawRefusal ? "refusal" : "end_turn");
   yield stopRaw === undefined ? { type: "stop", reason: finalStop } : { type: "stop", reason: finalStop, raw: stopRaw };
 }
