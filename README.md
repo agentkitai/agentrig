@@ -48,6 +48,7 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 - `agentrig memory init|ls|show|search|promote|lint|ingest` — create, inspect, search, maintain, or populate the Markdown wiki.
 - `agentrig dream` — run structural and model-backed wiki consolidation on a copy; review is the default and `--auto` applies it while retaining the previous wiki.
 - `agentrig memory reset-dream-stamp --dir <memory-dir>` — preview a scheduling reset. Stop running/scheduled dreams, then add `--confirm` to archive the regular `.last-dream` file in a named sibling backup and reset cadence. It never initializes missing wikis or removes locks; symlinks and special files require manual inspection.
+- `agentrig memory discard-dream <outputRoot>` — preview one registered review artifact. After stopping its users, repeat with the displayed `--owner <uuid> --confirm` to discard that copy and sidecar. Only explicitly released or exited same-host producers are eligible. Source wikis, install backups and writer locks are never removed.
 
 The CLI also exposes provider, permission, budget, output, and command-specific controls through its generated command help.
 
@@ -59,6 +60,14 @@ If a scheduler reports an unreadable or oversized `.last-dream`, inspect that fi
 confirmed reset above only after stopping running/scheduled dreams. Backups require filesystem
 hard-link support and permission; failure leaves the original stamp in place. Dream log dates
 mark consolidation start, not the later append/completion time.
+
+Workspace recovery is single-host, same-PID-namespace coordination on a local filesystem, not a
+distributed lease or authentication protocol. New manifests record producer ownership; normal
+`runDream` completion/retained failure hands it off. SDK `copyWiki` users call `workspace.release()`
+when done producing, or dispose through their runtime handle. Legacy, malformed, unregistered,
+foreign-host or ambiguous artifacts require manual inspection. Existing locks are never reclaimed,
+even if a producer crashed: stop **all** writers before manually recovering the exact named lock.
+Interrupted-install recovery is still separate work; this command only discards the output copy.
 
 ## Optional run flag groups
 

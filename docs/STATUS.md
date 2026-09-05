@@ -1,11 +1,22 @@
 # Status
 
-Current roadmap row: **H5c2c1 — dream metadata recovery and log preflight.** H1–H4, H5a, H5b, H5c1, H5c2a and H5c2b are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5c2c2 — owned dream workspace recovery.** H1–H4, H5a, H5b, H5c1, H5c2a, H5c2b and H5c2c1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5c2c1 in progress
+### H5c2c2 in progress
+
+Fresh branch from updated main c820c84 after PR #128 exact-head CI 33969076711 and main CI
+33969215100 passed all platforms. See `docs/plans/H5c2c2.md`. Recovery is explicit and limited to
+registered, ownership-checked workspaces; it never guesses ownership from a temp prefix or age.
+
+### H5c2c1 complete (PR #128)
+
+Completion gate: final head 19f1a71, merge c820c84, PR CI 33969076711 and main CI 33969215100
+all green. Two Claude passes approved (broad, then focused reset→apply repair). Final build,
+typecheck and explicit Node22 full suite: 1,751 passes plus two skips (1,753 total, 82 files).
+Four negative mutations were detected and restored. Notes below describe intermediate gates.
 
 Fresh branch from updated main 74ffbf8 after PR #127 exact-head CI 33968092090 and post-merge
 main CI 33968348026 passed all platforms. H5c2c is split into metadata/log preflight (c1),

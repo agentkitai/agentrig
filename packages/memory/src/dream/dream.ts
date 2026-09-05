@@ -126,7 +126,7 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
   };
   const bounded = { ...opts, signal: run.signal, onError: warning };
   let workspace: DreamWorkspace | undefined; let result: FullDreamResult | undefined;
-  let failure: unknown; let retain = false;
+  let failure: unknown; let retain = false; let handoff = false;
   run.localCommitState = "not-started";
   try {
     new ScanBudget(bounded); positiveLimit("maxSessions", opts.maxSessions ?? 100); run.check();
@@ -149,11 +149,13 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
       }
     }
     run.localCommitState = "completed";
+    handoff = true;
     return result;
   } catch (err) {
     failure = err ?? new Error(String(err));
     if (workspace !== undefined) {
       if (retain) {
+        handoff = true;
         const retained = new Error(String(err) + "; dream artifact retained at " + workspace.outputRoot
           + "; manifest: " + workspace.manifestPath, { cause: err });
         retained.name = err instanceof Error ? err.name : "Error";
@@ -164,6 +166,11 @@ export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
     }
     throw err;
   } finally {
+    // Post-production bookkeeping, like disposal: bounded lock wait, no false abort after a
+    // completed live swap. Failure leaves persisted recovery conservative and names the path.
+    if (handoff && workspace !== undefined) await workspace.release().catch(error => warning(new Error(
+      "dream ownership handoff failed; artifact remains conservatively owned; inspect " + workspace!.outputRoot
+        + "; manifest: " + workspace!.manifestPath + "; " + String(error))));
     const report = run.finish(failure ?? (result?.consolidationError === undefined ? undefined : new Error(result.consolidationError)));
     if (result !== undefined) result.auxiliary = report;
     maintenanceDiagnostic(() => opts.onUsage?.(structuredClone(report)));

@@ -19,7 +19,7 @@ export function interactiveDream(opts: { dir: string; provider: ModelProvider; c
         outputRoot: result.outputRoot, applied: false }),
       ...(result.autoApply?.status === "refused" ? [`auto-apply refused: ${result.autoApply.reason}`] : []),
       `review artifact: ${result.outputRoot}; manifest: ${result.workspace.manifestPath}`,
-      "keep both together; discard through workspace.dispose() only after review",
+      "keep both together; after review, preview agentrig memory discard-dream <outputRoot>, then confirm its owner UUID (SDK: workspace.dispose())",
       ...(result.report.scan?.complete === false ? ["resolve the reported unreadable attempts before retrying; do not delete immutable history"]
         : ["agentrig dream --auto runs and applies a fresh dream, not this saved artifact"])];
     }

@@ -16,6 +16,8 @@ import {
   renderReport,
   runDream,
   resetDreamStamp,
+  inspectDreamWorkspace,
+  discardDreamWorkspace,
   tolerant,
   unionRetrieve,
   withBackendRecall,
@@ -46,6 +48,23 @@ export async function memoryResetDreamStamp(opts: MemoryOptions & { confirm?: bo
     const result = await resetDreamStamp(wiki, { signal });
     console.log(result.status === "absent" ? "No dream scheduling stamp; nothing changed."
       : `Dream scheduling stamp reset; the next scheduled dream is due. Previous stamp preserved at ${result.backup}`);
+  });
+}
+
+export async function memoryDiscardDream(outputRoot: string, opts: { owner?: string; confirm?: boolean }): Promise<void> {
+  if (opts.confirm !== true) {
+    const preview = await inspectDreamWorkspace(outputRoot);
+    console.log(`dream output: ${preview.outputRoot}\nmanifest: ${preview.manifestPath}\nowner: ${preview.owner}`
+      + `\nproducer: ${preview.activity}${preview.producer === undefined ? "" : ` (${preview.producer.pid} on ${preview.producer.host})`}`
+      + `\nsource (never discarded): ${preview.sourceRoot}`);
+    console.log("Stop using this artifact. To discard this owner, rerun with --owner <the UUID above> --confirm. Nothing changed. Existing locks are never reclaimed.");
+    return;
+  }
+  if (opts.owner === undefined) throw new Error("discard requires --owner from a fresh preview and --confirm; nothing changed");
+  await withMaintenanceSignal(async signal => {
+    const result = await discardDreamWorkspace(outputRoot, opts.owner!, { signal });
+    console.log(result.status === "absent" ? "Dream output and manifest already absent; nothing changed."
+      : `Discarded dream output and manifest at ${outputRoot}; not recoverable by this command. Source wiki and install backups were not removed.`);
   });
 }
 
