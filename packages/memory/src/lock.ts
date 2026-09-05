@@ -3,7 +3,12 @@ import { lstat, mkdir, open, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-export interface MemoryLockOptions { signal?: AbortSignal; timeoutMs?: number }
+export interface MemoryLockOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  /** Release failures are warnings, never a replacement for the work's committed outcome. */
+  onReleaseError?: (error: Error) => void;
+}
 
 /** Shared by cooperating writers, including separate store instances/processes. No age-based
  * stealing: crash recovery requires stopping writers and removing the named lock manually. */
@@ -26,8 +31,11 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
     opts.signal?.throwIfAborted();
     try { handle = await open(lockPath, "wx", 0o600); break; }
     catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath}; if its owner crashed, stop all writers before removing that lock`);
+      const code = (err as NodeJS.ErrnoException).code;
+      // Windows can briefly report access/busy errors while the last deleted handle closes.
+      const retryable = code === "EEXIST" || (process.platform === "win32" && ["EPERM", "EACCES", "EBUSY"].includes(code ?? ""));
+      if (!retryable) throw new Error(`cannot acquire memory lock ${lockPath}: ${(err as Error).message}; check parent-directory permissions`, { cause: err });
+      if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath} (${code}); check parent-directory permissions; if its owner crashed, stop all writers before removing that lock`);
       await delay(Math.min(20, Math.max(1, deadline - performance.now())), undefined,
         opts.signal === undefined ? {} : { signal: opts.signal });
     }
@@ -39,6 +47,7 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
     opts.signal?.throwIfAborted();
     return await work();
   } finally {
+    const releaseErrors: unknown[] = [];
     try {
       // Keep the handle open during the identity check so its inode cannot be reused.
       // A failed/partial marker write must not leak our lock, nor erase a replacement owner.
@@ -46,7 +55,15 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
         if (err.code === "ENOENT") return undefined;
         throw err;
       });
-      if (identity !== undefined && current?.dev === identity.dev && current.ino === identity.ino) await rm(lockPath);
-    } finally { await handle.close(); }
+      if (identity !== undefined && current?.dev === identity.dev && current.ino === identity.ino) await rm(lockPath, { force: true });
+    } catch (error) { releaseErrors.push(error); }
+    try { await handle.close(); } catch (error) { releaseErrors.push(error); }
+    for (const error of releaseErrors) {
+      const warning = new Error(`memory lock release failed at ${lockPath}: ${String(error)}; operation outcome is unchanged; stop writers before lock recovery`);
+      try {
+        if (opts.onReleaseError !== undefined) opts.onReleaseError(warning);
+        else process.emitWarning(warning.message, { code: "AGENTRIG_MEMORY_LOCK_RELEASE" });
+      } catch { process.emitWarning(warning.message, { code: "AGENTRIG_MEMORY_LOCK_RELEASE" }); }
+    }
   }
 }

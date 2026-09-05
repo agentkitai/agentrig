@@ -22,6 +22,14 @@ write could leak a lock; cleanup now checks the held file's identity and preserv
 owners. Both fault cases have regressions. Build/typecheck and all 1,474 tests (73 files) pass
 with the cleanup repair; review and repaired-head CI are pending.
 
+Independent review prompted unlocked idempotent initialization for inspection, explicit committed
+outcomes despite index/release failures, checked-state metadata defaults, shorter 128-bit tokens
+and receipt-based refinement, Windows delete-pending retries, and shared placeholder parsing.
+Tests now cover fault injection, CLI inspection behind a stale lock, 50 cross-process appends,
+partial reservations, absent/malformed tool targets and metadata races. Build/typecheck pass;
+1,489 tests pass with one Windows-only test skipped on Linux (1,490 total, 73 files). Repair delta
+review and latest-head CI remain pending. Dream swaps/owned sidecar recovery remain H5c.
+
 ### H4 complete (2026-09-05; PR #121)
 
 Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written

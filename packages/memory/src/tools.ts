@@ -36,7 +36,7 @@ const ReadInput = z.object({
 });
 
 const WriteInput = z.object({
-  if_version: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional().describe("Version returned by memory_read; absent/null creates only. On conflict merge current content and retry with its version."),
+  if_version: z.string().regex(/^[a-f0-9]{32}$/).nullable().optional().describe("Version returned by memory_read or the last write receipt; absent/null creates only. On conflict merge current content and retry with its version."),
   type: z.enum(["entity", "concept", "source", "analysis"]),
   slug: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
   body: z.string().min(1).describe("Fact lines: - [stated|observed|inferred] ... (source:ref)"),
@@ -46,7 +46,7 @@ const WriteInput = z.object({
 });
 
 const AnalysisInput = z.object({
-  if_version: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional().describe("Version from memory_read; absent/null creates only. Merge the returned current page on conflict."),
+  if_version: z.string().regex(/^[a-f0-9]{32}$/).nullable().optional().describe("Version from memory_read or the last write receipt; absent/null creates only. Merge the returned current page on conflict."),
   slug: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
   body: z.string().min(1).describe("The filed answer, as fact lines"),
 });
@@ -79,10 +79,11 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
   const { store } = opts;
   const now = opts.now ?? (() => Date.now());
   const today = () => new Date(now()).toISOString().slice(0, 10);
-  const conflict = (path: string, current: WikiPage | null) => ({
-    output: { conflict: true, path, current, version: current?.version ?? null },
+  const warningsText = (warnings: string[]) => warnings.map(warning => `\nWARNING: ${warning}`).join("");
+  const conflict = (path: string, current: WikiPage | null, warnings: string[]) => ({
+    output: { conflict: true, path, current, version: current?.version ?? null, warnings },
     display: `STALE WRITE: ${path}. Merge the current content, then retry with if_version=${JSON.stringify(current?.version ?? null)}.\n` +
-      (current === null ? "The page is currently absent." : serializePage(current.frontmatter, current.body)),
+      (current === null ? "The page is currently absent." : serializePage(current.frontmatter, current.body)) + warningsText(warnings),
     isError: true,
   });
 
@@ -145,8 +146,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
     permission: "write",
     execute: async (input: z.infer<typeof WriteInput>, ctx: ToolContext) => {
       const path = pagePath(input.type, input.slug);
-      const existing = await store.read(path);
-      const result = await store.compareAndSwap(path, {
+      const result = await store.compareAndSwap(path, existing => ({
         path,
         frontmatter: {
           type: input.type,
@@ -157,27 +157,29 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
           confidence: input.confidence ?? existing?.frontmatter.confidence ?? "medium",
         },
         body: input.body,
-      }, input.if_version ?? null, { signal: ctx.signal, index: {
+      }), input.if_version ?? null, { signal: ctx.signal, index: {
         slug: input.slug,
         path,
         type: input.type,
         status: "active",
         summary: input.body.split("\n")[0]?.replace(/^- \[\w+\]\s*/, "").slice(0, 120) ?? "",
       } });
-      if (!result.ok) return conflict(path, result.current);
+      if (!result.ok) return conflict(path, result.current, result.warnings);
       // a full-body replace is a regeneration: re-check any pin on this page so a human
       // correction can't be reverted silently (PLAN §3.6)
-      const conflicts = await pinConflictsFor(store, path);
+      let conflicts: Array<{ claim: string; reason: string }> = [];
+      try { conflicts = await pinConflictsFor(store, path); }
+      catch (error) { result.warnings.push(`page committed at ${path}; pin recheck failed: ${String(error)}`); }
       if (conflicts.length > 0) {
         return {
-          output: { path, version: result.version, pinConflicts: conflicts },
+          output: { path, committed: true, version: result.version, pinConflicts: conflicts, warnings: result.warnings },
           display:
             `wrote ${path}\nWARNING: ${conflicts.length} pinned human correction(s) no longer hold:\n` +
-            conflicts.map((c) => `  - ${c.claim} (${c.reason})`).join("\n"),
+            conflicts.map((c) => `  - ${c.claim} (${c.reason})`).join("\n") + warningsText(result.warnings),
           isError: true,
         };
       }
-      return { output: { path, version: result.version }, display: `wrote ${path}\nversion: ${result.version}` };
+      return { output: { path, committed: true, version: result.version, warnings: result.warnings }, display: `wrote ${path}\nversion: ${result.version}` + warningsText(result.warnings) };
     },
   };
 
@@ -186,31 +188,32 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
     description:
       "File an answer worth keeping (a comparison, an investigation, a root cause) into " +
       "analyses/, so explorations compound the way sources do. To replace an existing answer, read it " +
-      "and provide if_version. A stale response includes current content to merge; omitted/null is create-only.",
+      "and provide if_version, or reuse the last write receipt's version when refining that same content. " +
+      "A stale response includes current content to merge; omitted/null is create-only.",
     inputSchema: AnalysisInput,
     permission: "write",
     execute: async (input: z.infer<typeof AnalysisInput>, ctx: ToolContext) => {
       const path = pagePath("analysis", input.slug);
-      const result = await store.compareAndSwap(path, {
+      const result = await store.compareAndSwap(path, existing => ({
         path,
         frontmatter: {
           type: "analysis",
           slug: input.slug,
-          aliases: [],
-          sources: opts.sessionId === undefined ? [] : [`session:${opts.sessionId}`],
+          aliases: existing?.frontmatter.aliases ?? [],
+          sources: [...new Set([...(existing?.frontmatter.sources ?? []), ...(opts.sessionId === undefined ? [] : [`session:${opts.sessionId}`])])],
           updated: today(),
           confidence: "medium",
         },
         body: input.body,
-      }, input.if_version ?? null, { signal: ctx.signal, index: {
+      }), input.if_version ?? null, { signal: ctx.signal, index: {
         slug: input.slug,
         path,
         type: "analysis",
         status: "active",
         summary: input.body.split("\n")[0]?.replace(/^- \[\w+\]\s*/, "").slice(0, 120) ?? "",
       } });
-      if (!result.ok) return conflict(path, result.current);
-      return { output: { path, version: result.version }, display: `filed ${path}\nversion: ${result.version}` };
+      if (!result.ok) return conflict(path, result.current, result.warnings);
+      return { output: { path, committed: true, version: result.version, warnings: result.warnings }, display: `filed ${path}\nversion: ${result.version}` + warningsText(result.warnings) };
     },
   };
 

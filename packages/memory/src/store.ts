@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { PAGE_DIR, pagePath, parsePage, serializePage } from "./page.js";
+import { PAGE_DIR, pagePath, parsePage, reservationPlaceholder, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
@@ -33,8 +33,8 @@ export interface FileMemoryStoreOptions {
 }
 
 export type PageWrite = Omit<WikiPage, "updatedAt" | "version">;
-export type MemoryWriteResult = { ok: true; version: string } | { ok: false; current: WikiPage | null };
-const versionOf = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
+export type MemoryWriteResult = ({ ok: true; version: string } | { ok: false; current: WikiPage | null }) & { warnings: string[] };
+const versionOf = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex").slice(0, 32);
 
 function serializeEntry(e: IndexEntry): string {
   const claimed = e.claimedBy === undefined || e.claimedBy.length === 0 ? "" : ` (claimed: ${e.claimedBy.join(", ")})`;
@@ -110,10 +110,8 @@ export class FileMemoryStore implements MemoryStore {
 
   /** Create the wiki skeleton if absent. Idempotent; never overwrites existing content. */
   async init(): Promise<void> {
-    return this.withMutationLock(() => this.initUnlocked());
-  }
-
-  private async initUnlocked(): Promise<void> {
+    // mkdir/ensure(O_EXCL) never replace existing content. In particular, a stale write lock
+    // must not prevent read-only CLI commands from opening and inspecting an existing wiki.
     await mkdir(this.root, { recursive: true });
     for (const dir of Object.values(PAGE_DIR)) await mkdir(this.abs(dir), { recursive: true });
     await this.ensure(INDEX_FILE, `${INDEX_HEADER}\n`);
@@ -195,15 +193,26 @@ export class FileMemoryStore implements MemoryStore {
     await this.withMutationLock(() => this.atomicWrite(path, serializePage(page.frontmatter, page.body), opts.signal), opts);
   }
 
-  async compareAndSwap(path: string, page: PageWrite, ifVersion: string | null, opts: MemoryLockOptions & { index?: IndexEntry } = {}): Promise<MemoryWriteResult> {
+  async compareAndSwap(path: string, page: PageWrite | ((current: WikiPage | null) => PageWrite), ifVersion: string | null, opts: MemoryLockOptions & { index?: IndexEntry } = {}): Promise<MemoryWriteResult> {
+    const warnings: string[] = [];
     return this.withMutationLock(async () => {
       const current = await this.read(path);
-      if ((current?.version ?? null) !== ifVersion) return { ok: false, current };
-      const text = serializePage(page.frontmatter, page.body);
+      if ((current?.version ?? null) !== ifVersion) return { ok: false, current, warnings };
+      const next = typeof page === "function" ? page(current) : page;
+      const text = serializePage(next.frontmatter, next.body);
       await this.atomicWrite(path, text, opts.signal);
-      if (opts.index !== undefined) await this.upsertIndexUnlocked(opts.index, opts.signal);
-      return { ok: true, version: versionOf(text) };
-    }, opts);
+      // Once the page commits, finish its index bookkeeping even if cancellation arrives.
+      // A filesystem failure is explicit partial success, not a claim that the page was unwritten.
+      if (opts.index !== undefined) {
+        try { await this.upsertIndexUnlocked(opts.index); }
+        catch (error) { warnings.push(`page committed at ${path}; index update failed: ${String(error)}`); }
+      }
+      return { ok: true, version: versionOf(text), warnings };
+    }, { ...opts, onReleaseError: error => {
+      warnings.push(error.message);
+      if (opts.onReleaseError !== undefined) opts.onReleaseError(error);
+      else process.emitWarning(error.message, { code: "AGENTRIG_MEMORY_LOCK_RELEASE" });
+    } });
   }
 
   /** Synchronous transform under the short mutation lock; never call providers here. */
@@ -230,7 +239,7 @@ export class FileMemoryStore implements MemoryStore {
     await mkdir(dirname(full), { recursive: true });
     const placeholder = serializePage(
       { type, slug, aliases: [], sources: [], updated: this.today(), confidence: "low" },
-      `- [inferred] Reserved by ${claimant}; content pending ingest.`,
+      reservationPlaceholder(claimant),
     );
     try {
       const handle = await open(full, "wx");
@@ -241,16 +250,15 @@ export class FileMemoryStore implements MemoryStore {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-          const entries = await this.index();
-          const i = entries.findIndex((e) => e.slug === slug && e.type === type);
-          if (i === -1) {
-            // page on disk with no catalog row (a crash between create and upsert, or a lost
-            // row): re-adopt it rather than leaving it invisible to index-first retrieval
-            entries.push({ slug, path: rel, type, status: "planned", summary: `(reserved by ${claimant})`, claimedBy: [claimant] });
-          } else {
-            entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
-          }
-          await this.writeIndexUnlocked(entries);
+        const entries = await this.index();
+        const i = entries.findIndex((e) => e.slug === slug && e.type === type);
+        if (i === -1) {
+          // Re-adopt pages whose catalog row was lost in an earlier interrupted operation.
+          entries.push({ slug, path: rel, type, status: "planned", summary: `(reserved by ${claimant})`, claimedBy: [claimant] });
+        } else {
+          entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
+        }
+        await this.writeIndexUnlocked(entries);
         return "exists";
       }
       throw err;

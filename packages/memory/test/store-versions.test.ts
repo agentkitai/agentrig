@@ -4,12 +4,12 @@ import { mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileMemoryStore, FileRawStore, memoryTools, runDream, withMemoryLock,
+import { FileMemoryStore, FileRawStore, factLines, memoryTools, rebuildIndex, runDream, withMemoryLock,
   type MemoryWriteResult, type PageWrite } from "@agentkitai/agentrig-memory";
 
 vi.mock("node:fs/promises", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...actual, open: vi.fn(actual.open) };
+  return { ...actual, open: vi.fn(actual.open), rename: vi.fn(actual.rename), rm: vi.fn(actual.rm) };
 });
 
 let root: string;
@@ -18,7 +18,14 @@ const path = "concepts/shared.md";
 const page = (body = "original"): PageWrite => ({ path, body,
   frontmatter: { type: "concept", slug: "shared", aliases: [], sources: [], updated: "2026-09-05", confidence: "medium" } });
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "agentrig-versions-")); store = new FileMemoryStore({ root: join(root, "wiki") }); await store.init(); });
-afterEach(async () => { vi.restoreAllMocks(); await rm(root, { recursive: true, force: true }); });
+afterEach(async () => {
+  vi.restoreAllMocks();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.mocked(fs.open).mockReset().mockImplementation(actual.open);
+  vi.mocked(fs.rename).mockReset().mockImplementation(actual.rename);
+  vi.mocked(fs.rm).mockReset().mockImplementation(actual.rm);
+  await rm(root, { recursive: true, force: true });
+});
 const ctx = () => ({ cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
 const tool = (name: string) => memoryTools({ store }).find(tool => tool.name === name)!;
 
@@ -26,7 +33,7 @@ describe("versioned memory mutations", () => {
   it("creates only when absent, then requires the exact read version", async () => {
     expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
     const current = (await store.read(path))!;
-    expect(current.version).toMatch(/^[a-f0-9]{64}$/);
+    expect(current.version).toMatch(/^[a-f0-9]{32}$/);
     expect(await store.compareAndSwap(path, page("lost"), null)).toMatchObject({ ok: false, current });
     expect(await store.compareAndSwap(path, page("new"), current.version!)).toMatchObject({ ok: true });
     const stale = await store.compareAndSwap(path, page("lost"), current.version!);
@@ -109,6 +116,9 @@ describe("versioned memory mutations", () => {
       expect((await store.index()).map(e => e.slug).sort()).toEqual(["first", "second"]);
       expect(await readFile(join(store.root, "log.md"), "utf8")).toMatch(/first|second/);
       for (const name of ["first", "second"]) expect(await readFile(join(store.root, "log.md"), "utf8")).toContain(name);
+      const appended = (await store.read("concepts/appends.md"))!.body.split("\n");
+      for (const name of ["first", "second"]) for (let i = 0; i < 25; i++)
+        expect(appended.filter(line => line === `${name}-${i}`)).toHaveLength(1);
     } finally {
       for (const w of workers) if (w.child.exitCode === null) w.child.kill();
       await Promise.all(workers.map(w => w.exited));
@@ -123,6 +133,31 @@ describe("versioned memory mutations", () => {
     await expect(blocked.write(path, page())).rejects.toThrow(/stop all writers/);
     expect(await readFile(lock, "utf8")).toBe("other owner");
     expect(await store.read(path)).toBeNull();
+  });
+
+  it("allows initialization and reads while a stale write lock needs operator inspection", async () => {
+    await store.write(path, page());
+    await writeFile(`${store.root}.write.lock`, "stale owner");
+    const reader = new FileMemoryStore({ root: store.root, lockTimeoutMs: 0 });
+    await reader.init();
+    expect((await reader.read(path))!.body).toBe("original\n");
+    expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("stale owner");
+  });
+
+  it.each([-1, NaN, Infinity])("rejects invalid lock timeout %s without mutating", async timeoutMs => {
+    await expect(store.write(path, page(), { timeoutMs })).rejects.toThrow("invalid memory lock timeout");
+    expect(await store.read(path)).toBeNull();
+  });
+
+  it("names the lock path when parent permissions prevent acquisition", async () => {
+    vi.mocked(fs.open).mockRejectedValueOnce(Object.assign(new Error("read-only filesystem"), { code: "EROFS" }));
+    await expect(store.write(path, page())).rejects.toThrow(`${store.root}.write.lock`);
+    expect(await store.read(path)).toBeNull();
+  });
+
+  it.skipIf(process.platform !== "win32")("retries transient delete-pending access errors on Windows", async () => {
+    vi.mocked(fs.open).mockRejectedValueOnce(Object.assign(new Error("delete pending"), { code: "EPERM" }));
+    expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
   });
 
   it("aborts while waiting and leaves another owner's lock intact", async () => {
@@ -160,6 +195,70 @@ describe("versioned memory mutations", () => {
     expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("new owner");
   });
 
+  it("reports release failure as a committed-write warning through the tool", async () => {
+    vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fs.rm).mockImplementation(async (target, options) => {
+      if (String(target).endsWith(".write.lock")) throw new Error("lock unlink failed");
+      return actual.rm(target, options);
+    });
+    const result = await tool("memory_write").execute({ type: "concept", slug: "shared", body: "committed" }, ctx());
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toMatchObject({ committed: true, warnings: [expect.stringContaining("lock release failed")] });
+    expect(result.display).toContain("WARNING:");
+    expect((await store.read(path))!.body).toBe("committed\n");
+  });
+
+  it("still surfaces release warnings when CAS throws before returning its result", async () => {
+    const emit = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    vi.mocked(fs.rm).mockRejectedValueOnce(new Error("unlink failed"));
+    await expect(store.compareAndSwap(path, () => { throw new Error("primary failure"); }, null)).rejects.toThrow("primary failure");
+    expect(emit).toHaveBeenCalledWith(expect.stringContaining("lock release failed"), { code: "AGENTRIG_MEMORY_LOCK_RELEASE" });
+  });
+
+  it("does not replace a successful result or primary error when handle close fails", async () => {
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const failClose = () => vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
+      const handle = await actual.open(...args);
+      const close = handle.close.bind(handle);
+      vi.spyOn(handle, "close").mockImplementationOnce(async () => { await close(); throw new Error("close failed"); });
+      return handle;
+    });
+    const warnings: Error[] = [];
+    failClose();
+    expect(await withMemoryLock(store.root, async () => 42, { onReleaseError: e => warnings.push(e) })).toBe(42);
+    failClose();
+    await expect(withMemoryLock(store.root, async () => { throw new Error("primary failure"); }, { onReleaseError: e => warnings.push(e) }))
+      .rejects.toThrow("primary failure");
+    expect(warnings).toHaveLength(2);
+  });
+
+  it("finishes the committed page's index after cancellation", async () => {
+    const signal = new AbortController();
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      await actual.rename(from, to);
+      if (String(to) === join(store.root, path)) signal.abort();
+    });
+    const result = await store.compareAndSwap(path, page("committed"), null, { signal: signal.signal,
+      index: { slug: "shared", path, type: "concept", status: "active", summary: "committed" } });
+    expect(signal.signal.aborted).toBe(true);
+    expect(result).toMatchObject({ ok: true, warnings: [] });
+    expect((await store.index())[0]!.path).toBe(path);
+  });
+
+  it("reports a committed page and failed index explicitly", async () => {
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to) === join(store.root, "index.md")) throw new Error("index rename failed");
+      await actual.rename(from, to);
+    });
+    const result = await tool("memory_write").execute({ type: "concept", slug: "shared", body: "committed" }, ctx());
+    expect(result.output).toMatchObject({ committed: true, warnings: [expect.stringContaining("index update failed")] });
+    expect(result.display).toContain("page committed");
+    expect((await store.read(path))!.body).toBe("committed\n");
+  });
+
   it("prevents a commit when cancellation arrives during the guarded transform", async () => {
     await store.write(path, page());
     const signal = new AbortController();
@@ -175,6 +274,8 @@ describe("versioned memory mutations", () => {
     expect(await readFile(join(store.root, path), "utf8")).toBe("not a wiki page");
     const read = await tool("memory_read").execute({ path }, ctx());
     expect(read.isError).toBe(true); expect(read.display).toContain("cannot read");
+    await expect(tool("memory_write").execute({ type: "concept", slug: "shared", body: "lost" }, ctx())).rejects.toThrow();
+    expect(await readFile(join(store.root, path), "utf8")).toBe("not a wiki page");
   });
 
   it.skipIf(process.platform === "win32")("canonical root aliases share a lock", async () => {
@@ -195,12 +296,57 @@ describe("versioned memory mutations", () => {
     } finally { await result.workspace.dispose(); }
   });
 
+  it("activates partially filled reservations without discarding similarly worded facts", async () => {
+    await store.reserve("filled", "session:a");
+    const reserved = (await store.read("entities/filled.md"))!;
+    const real = "- [inferred] Reserved by the coordinator for safety (session:a)";
+    await store.write(reserved.path, { ...reserved, body: `${reserved.body}\n${real}` });
+    expect(factLines((await store.read(reserved.path))!.body).map(f => f.text))
+      .toEqual(["Reserved by the coordinator for safety (session:a)"]);
+    const row = rebuildIndex(await store.pages(), await store.index()).find(e => e.slug === "filled")!;
+    expect(row.status).toBe("active"); expect(row.claimedBy).toBeUndefined();
+  });
+
+  it("derives metadata from the version-checked state rather than a pre-lock read", async () => {
+    const enriched = { ...page(), frontmatter: { ...page().frontmatter, aliases: ["durable alias"], sources: ["session:new"] } };
+    await store.write(path, enriched);
+    const current = (await store.read(path))!;
+    const cas = store.compareAndSwap.bind(store);
+    const actualRead = store.read.bind(store);
+    let insideCas = false;
+    // Model a stale pre-lock metadata read, while the caller holds the newer valid token.
+    vi.spyOn(store, "read").mockImplementation(async target => insideCas ? actualRead(target) :
+      { ...current, frontmatter: { ...current.frontmatter, aliases: [], sources: [] } });
+    vi.spyOn(store, "compareAndSwap").mockImplementation(async (...args) => {
+      expect(typeof args[1]).toBe("function");
+      insideCas = true;
+      try { return await cas(...args); } finally { insideCas = false; }
+    });
+    await tool("memory_write").execute({ type: "concept", slug: "shared", body: "new body", if_version: current.version }, ctx());
+    expect((await actualRead(path))!.frontmatter).toMatchObject({ aliases: ["durable alias"], sources: ["session:new"] });
+  });
+
+  it("returns absence and a create-only token after a page was deleted", async () => {
+    const result = await tool("memory_write").execute({ type: "concept", slug: "shared", body: "new", if_version: "a".repeat(32) }, ctx());
+    expect(result.output).toMatchObject({ conflict: true, current: null, version: null });
+    expect(result.display).toContain("currently absent");
+    expect(await store.read(path)).toBeNull();
+  });
+
+  it("refines an analysis directly with the previous write receipt", async () => {
+    const writer = tool("memory_file_analysis");
+    const first = await writer.execute({ slug: "answer", body: "draft" }, ctx());
+    const second = await writer.execute({ slug: "answer", body: "refined", if_version: (first.output as { version: string }).version }, ctx());
+    expect(second.isError).toBeUndefined();
+    expect((await store.read("analyses/answer.md"))!.body).toBe("refined\n");
+  });
+
   it("returns read versions and current conflict content through the actual tools", async () => {
     const write = tool("memory_write");
     const input = { type: "concept", slug: "shared", body: "original", aliases: ["the auth thing"] };
     await write.execute(input, ctx());
     const read = await tool("memory_read").execute({ path }, ctx());
-    expect(read.display).toMatch(/version: [a-f0-9]{64}/);
+    expect(read.display).toMatch(/version: [a-f0-9]{32}/);
     const version = (read.output as { version: string }).version;
     await write.execute({ ...input, body: "new fact", if_version: version }, ctx());
     const stale = await write.execute({ ...input, body: "lost", if_version: version }, ctx());

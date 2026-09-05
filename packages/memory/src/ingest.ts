@@ -4,7 +4,7 @@ import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
-import { PAGE_DIR, pagePath, serializePage } from "./page.js";
+import { PAGE_DIR, isReservationPlaceholder, pagePath, serializePage } from "./page.js";
 import { applyPinChecks, readPins, recheckPins } from "./pins.js";
 import { tolerant, type MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
@@ -544,7 +544,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   for (const t of targets.values()) {
     const path = pagePath(t.type, t.slug);
     const page = await store.read(path).catch(() => null);
-    const priorBody = page === null ? "" : page.body.replace(/^- \[inferred\] Reserved by .*$/gm, "").trim();
+    const priorBody = page === null ? "" : page.body.split("\n").filter(line => !isReservationPlaceholder(line)).join("\n").trim();
     const newLines = t.facts
       .map((f) => `- [${f.tag}] ${f.text} (${ref})`)
       .filter((line) => !priorBody.includes(line));

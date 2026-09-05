@@ -6,6 +6,9 @@ process.send({ ready: true });
 process.once("message", async () => {
   try {
     const result = await store.compareAndSwap(page.path, { ...page, body: process.argv[3] }, page.version);
+    for (let i = 0; i < 25; i++) {
+      await store.update("concepts/appends.md", current => ({ ...page, path: "concepts/appends.md", body: `${current?.body ?? ""}${process.argv[3]}-${i}\n` }));
+    }
     await store.upsertIndex({ slug: process.argv[3], path: `concepts/${process.argv[3]}.md`, type: "concept", status: "active", summary: process.argv[3] });
     await store.appendLog(process.argv[3]);
     process.send({ result }, () => process.disconnect());
