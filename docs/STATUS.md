@@ -18,7 +18,11 @@ before provider calls or wiki writes and can be retried when complete.
 
 See [plans/H3.md](plans/H3.md). Tests pin canonical/legacy deduplication, assistant-only conclusions,
 late tool evidence reaching distillation, exact bounded ranges, Unicode/blank lines, omissions,
-corrupt logs and capture migration. Full-suite validation and independent review are pending.
+corrupt logs and capture migration. Initial code head bf915c4 passes build/typecheck, all 1,390
+tests and Linux/macOS/Windows CI. Independent review requested a missing-log test, explicit
+denial records and duplicate-preview labeling; local diagnostics additionally caught omitted
+canonical-only tool requests and nested images. Repairs and regression tests cover all five.
+Full repaired-suite validation and delta review are pending.
 
 ### H2 complete (2026-09-05; PR #119)
 

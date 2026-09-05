@@ -119,6 +119,33 @@ describe("transcript and coverage planning", () => {
     expect(t).toContain("model-facing patch");
   });
 
+  it("keeps denial records distinct from requested tools and labels duplicated overflow previews", () => {
+    const t = eventsToTranscript([
+      { type: "tool.call", id: "t", name: "bash", input: {} },
+      { type: "tool.denied", id: "t", name: "bash" },
+      { type: "sandbox.denied", id: "s", name: "write_file", mode: "read-only", reason: "write refused" },
+      { type: "tool.result", id: "r", ok: true, display: "prefix", output: "prefix and full evidence", truncated: true },
+      { type: "tool.result.patched", id: "r", by: "core:output-overflow", display: "prefix plus output handle" },
+    ]);
+    expect(t).toContain("[tool.denied] id=t name=bash");
+    expect(t).toContain("[sandbox.denied] id=s name=write_file mode=read-only write refused");
+    expect(t).toContain("[tool.result.patched:preview-copy]");
+    expect(t).toContain("prefix and full evidence");
+  });
+
+  it("retains canonical-only tool requests and results but not redundant result text", () => {
+    const t = eventsToTranscript([
+      { type: "message.append", message: { role: "assistant", content: [{ type: "tool_use", id: "pending", name: "bash", input: { command: "unexecuted-request" } }] } },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "pending", content: "canonical-only-result" }] } },
+      { type: "tool.result", id: "done", ok: true, display: "already-rendered-result" },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "done", content: "already-rendered-result" }] } },
+    ]);
+    expect(t).toContain("[assistant.tool-request]");
+    expect(t).toContain("unexecuted-request");
+    expect(t).toContain("canonical-only-result");
+    expect(t.split("already-rendered-result")).toHaveLength(2);
+  });
+
   it("handles an empty transcript", () => {
     expect(planCoverage("")).toEqual([]);
   });
@@ -199,6 +226,25 @@ describe("ingestSession", () => {
     await expect(ingestSession({ store, provider, sessionId: "s1", logPath, now: at })).rejects.toThrow(/invalid session/);
     expect(provider.calls).toBe(0);
     expect(await store.read("sources/session-s1.md")).toBeNull();
+  });
+
+  it("rejects a missing log before any provider call or wiki write", async () => {
+    const provider = scriptedProvider([distillation]);
+    await expect(ingestSession({ store, provider, sessionId: "missing", logPath: join(root, "missing.jsonl"), now: at })).rejects.toThrow(/ENOENT/);
+    expect(provider.calls).toBe(0);
+    expect(await store.read("sources/session-missing.md")).toBeNull();
+  });
+
+  it("reports nested non-text tool evidence even when a textual result was already rendered", async () => {
+    await writeFile(logPath, [
+      { type: "tool.result", id: "image", ok: true, display: "image display" },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "image", content: [
+        { type: "text", text: "image display" }, { type: "image", mediaType: "image/png", data: "not-inspected" },
+      ] }] } },
+    ].map(e => JSON.stringify(e)).join("\n"));
+    const result = await ingestSession({ store, provider: scriptedProvider(['{"nothingDurable":true}']), sessionId: "s1", logPath, now: at });
+    expect(result.omissions).toEqual([{ eventIndex: 1, field: "message.content[0].content[1]", reason: expect.stringContaining("image content") }]);
+    expect((await store.read("sources/session-s1.md"))!.body).not.toContain("not-inspected");
   });
 
   it("writes a source page, reserves and fills target pages, and updates index and log", async () => {

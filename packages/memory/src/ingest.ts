@@ -82,6 +82,8 @@ Rules:
 - Assistant messages are model claims, not independently verified tool evidence. Streamed fallback
   text may be an interrupted/uncommitted response. Tool-result patches describe what the model saw,
   not a replacement for original tool evidence. Omission markers are unavailable evidence.
+- Tool calls and assistant tool requests are intent, not proof of execution; inspect results and
+  denial records. Preview copies and model-facing tool-result copies are not independent evidence.
 - entity = a module, service, tool, command, external system. concept = a convention, decision,
   recurring pattern, gotcha.
 - If this span contains nothing worth remembering next week, set nothingDurable true and return
@@ -97,6 +99,7 @@ interface TranscriptRecord { from: number; to: number; kind: string }
 function transcriptEvidence(events: unknown[]): { text: string; omissions: EvidenceOmission[]; records: TranscriptRecord[] } {
   const lines: string[] = [];
   const omissions: EvidenceOmission[] = [];
+  const renderedResults = new Set<string>();
   let streamed = "";
   let responseEnded = false;
   const flushStream = () => {
@@ -113,6 +116,7 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
     const e = raw as Record<string, unknown>;
     const type = String(e.type ?? "");
     if (["model.request", "turn.start", "turn.end", "tool.call", "session.start", "session.resume", "session.end"].includes(type)) flushStream();
+    if (["model.request", "turn.start", "session.start", "session.resume"].includes(type)) renderedResults.clear();
     switch (type) {
       case "session.start":
       case "session.resume":
@@ -127,17 +131,37 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
         break;
       case "message.append": {
         const message = e.message as { role?: unknown; content?: unknown } | null;
-        if (message === null || typeof message !== "object" || !Array.isArray(message.content)) {
+        if (message === null || typeof message !== "object" || !Array.isArray(message.content)
+          || (message.role !== "assistant" && message.role !== "user")) {
           throw new Error(`invalid message.append at event ${eventIndex}`);
         }
-        if (message.role === "assistant") { streamed = ""; responseEnded = false; }
-        for (const [blockIndex, block] of message.content.entries()) {
-          if (block?.type === "text" && typeof block.text === "string") {
-            lines.push(`[${message.role === "assistant" ? "assistant" : "user.message"}] ${block.text}`);
-          } else if (block?.type === "image") {
-            omit(eventIndex, `message.content[${blockIndex}]`, "image content is not inspected by textual ingest");
+        if (message.role === "assistant") { streamed = ""; responseEnded = false; renderedResults.clear(); }
+        const renderBlock = (rawBlock: unknown, field: string, label: string, includeText = true): void => {
+          if (typeof rawBlock !== "object" || rawBlock === null) {
+            omit(eventIndex, field, "unsupported message content is not inspected");
+            return;
           }
-          // Tool-use/result blocks repeat the dedicated tool events, which retain full output.
+          const block = rawBlock as Record<string, unknown>;
+          if (block.type === "text" && typeof block.text === "string") {
+            if (includeText) lines.push(`[${label}] ${block.text}`);
+          } else if (block.type === "tool_use") {
+            lines.push(`[assistant.tool-request] id=${String(block.id)} name=${String(block.name)} ${JSON.stringify(block.input)}`);
+          } else if (block.type === "tool_result") {
+            // The ordinary event path already rendered the raw result and any patches. Retain
+            // canonical-only results (e.g. interrupted/exported logs), but always inspect nested
+            // content for non-text omissions even when the textual display was already rendered.
+            const includeResult = !renderedResults.has(String(block.toolUseId));
+            if (typeof block.content === "string") {
+              if (includeResult) lines.push(`[model.tool-result] id=${String(block.toolUseId)} (model-facing view) ${block.content}`);
+            } else if (Array.isArray(block.content)) {
+              for (const [i, child] of block.content.entries()) renderBlock(child, `${field}.content[${i}]`, "model.tool-result", includeResult);
+            } else omit(eventIndex, `${field}.content`, "unsupported tool-result content is not inspected");
+          } else if (block.type === "image") {
+            omit(eventIndex, field, "image content is not inspected by textual ingest");
+          } else omit(eventIndex, field, "unsupported message content is not inspected");
+        };
+        for (const [blockIndex, block] of message.content.entries()) {
+          renderBlock(block, `message.content[${blockIndex}]`, message.role === "assistant" ? "assistant" : "user.message");
         }
         break;
       }
@@ -145,6 +169,7 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
         lines.push(`[tool.call] ${String(e.name)} ${JSON.stringify(e.input)}`);
         break;
       case "tool.result": {
+        if (typeof e.id === "string") renderedResults.add(e.id);
         const output = typeof e.output === "string" ? e.output : String(e.display ?? "");
         lines.push(`[tool.result] ok=${String(e.ok)} ${output}`);
         if (e.truncated === true && typeof e.output !== "string") {
@@ -153,7 +178,13 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
         break;
       }
       case "tool.result.patched":
-        lines.push(`[tool.result.patched] id=${String(e.id)} by=${String(e.by)} mode=${String(e.mode ?? "modify")} ${String(e.display ?? "")}`);
+        lines.push(`[tool.result.patched${e.by === "core:output-overflow" ? ":preview-copy" : ""}] id=${String(e.id)} by=${String(e.by)} mode=${String(e.mode ?? "modify")} ${String(e.display ?? "")}`);
+        break;
+      case "tool.denied":
+        lines.push(`[tool.denied] id=${String(e.id)} name=${String(e.name)}`);
+        break;
+      case "sandbox.denied":
+        lines.push(`[sandbox.denied] id=${String(e.id)} name=${String(e.name)} mode=${String(e.mode)} ${String(e.reason)}`);
         break;
       case "file.changed":
         lines.push(`[file.changed] ${String(e.op)} ${String(e.path)}`);
