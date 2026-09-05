@@ -1,9 +1,30 @@
 # Status
 
-Current roadmap row: **H2 — exclude generated checkout trees from repository maps.** H1 is complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H3 — preserve assistant conclusions and complete ingest evidence.** H1 and H2 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
+
+### H2 complete (2026-09-05; PR #119)
+
+Repository maps prune `.claude/worktrees` and `.worktrees` descendant containers before scanning,
+so generated files consume neither the prompt budget nor the freshness snapshot. `.claude`
+instructions/commands, ordinary `worktrees` directories and submodule contents remain visible.
+Mapping a checkout as the requested root still works. Bounded regular in-tree gitfiles pointing
+into `.git/worktrees` identify linked checkouts in other containers; `.git/modules` submodules
+remain visible. Gitfiles themselves are omitted. Other layouts can use `excludePaths`; existing
+exclusions are canonicalized so aliases such as macOS `/var` match the canonical map root.
+No Git commands or reads into external Git metadata are used.
+
+The initial full suite passed all 1,372 tests in the actual workspace with existing review
+worktrees present. macOS CI exposed the exclusion alias bug; independent review also requested
+arbitrary-container linked-worktree detection and omitted gitfiles. Repairs add alias-path and
+gitfile regressions alongside budget/freshness isolation, instruction visibility, submodule
+preservation and checkout-root behavior. The repaired head ac951a5 passes build/typecheck and
+all 1,375 tests (70 files); Linux/macOS/Windows CI is green. Independent delta review closes all
+three findings with no remaining findings. Mutation checks prove the fixtures detect removal of
+both filtering and canonical exclusions. Bare-repository/custom Git metadata layouts still use
+explicit exclusions when not inside a recognized generated container.
 
 ### H1 complete (2026-09-05; PR #118)
 
@@ -23,7 +44,7 @@ Four independent Claude review rounds closed all findings; the final delta revie
 Review prompted atomic writes, SDK policy propagation, retained local recall/subagents, physical
 symlink handling, stronger negative tests and documentation corrections. Mutation checks confirm
 the outside-cwd tests detect bypassed policy and the Lore fixture detects removal of the CLI fix.
-The existing nested-worktree map failure remains H2; no user worktrees were removed to obtain
+At H1 verification, the nested-worktree map failure remained H2; no user worktrees were removed to obtain
 this result. See [plans/H1.md](plans/H1.md) for implementation and trusted-host limitations.
 Each subsequent row starts only after the preceding PR and post-merge main CI are green.
 
@@ -48,7 +69,7 @@ trusted code with ambient env/filesystem access despite a restricted API object.
 
 Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
 worktree in the repository map), one skipped. The original roadmap revision changed documentation
-only and preserved existing R identifiers. H1's implementation and validation are recorded above;
+only and preserved existing R identifiers. H1/H2 implementation and validation are recorded above;
 the remaining H/E rows are still planned. Older notes below
 record decisions at the time; they do not override these priorities or current limitations.
 
