@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { activeSandboxPolicy, sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
 import { SandboxDeniedError } from "../sandbox.js";
@@ -20,10 +20,17 @@ export async function writeToolFile(path: string, content: string, signal: Abort
   if (policy.mode === "read-only" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new SandboxDeniedError(`sandbox ${policy.mode} refuses file write: ${absolute}`);
   }
-  const script = parents
-    ? 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"'
-    : 'cat > "$1"';
-  const invocation = sandboxSpawnInvocation("/bin/sh", ["-c", script, "agentrig-write", absolute], policy.cwd);
+  // A sibling temp + rename never truncates the old target if input or execution is interrupted.
+  // Replacing the directory entry also avoids mutating a pre-existing hardlink's outside inode.
+  const existing = await stat(absolute).catch(() => undefined);
+  if (existing?.isDirectory()) throw new Error(`cannot write a directory: ${absolute}`);
+  const mode = (existing === undefined ? 0o666 & ~process.umask() : existing.mode & 0o777).toString(8);
+  const script = (parents ? 'mkdir -p -- "$(dirname -- "$1")" || exit; ' : "") +
+    't=$(mktemp "$(dirname -- "$1")/.agentrig-write-XXXXXX") || exit; ' +
+    'trap \'rm -f -- "$t"\' EXIT HUP INT TERM; ' +
+    'cat > "$t" && chmod "$2" "$t" && mv -f -- "$t" "$1"';
+  const invocation = sandboxSpawnInvocation("/bin/sh", ["-c", script, "agentrig-write", absolute, mode], policy.cwd);
+  if (!invocation.sandboxed) throw new SandboxDeniedError("the configured provider has no sandboxed file-write launcher");
   const child = spawn(invocation.command, invocation.args, {
     cwd: policy.cwd, stdio: ["pipe", "ignore", "pipe"], detached: true,
   });

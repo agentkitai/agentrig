@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createAgent, DockerSandboxProvider, SeatbeltSandboxProvider, NoneSandboxProvider,
   SessionStore, writeFileTool, editFileTool, type AnyTool, type ModelProvider,
-  type SandboxMode, type SandboxProvider, type Decision,
+  type SandboxMode, type SandboxProvider, type Decision, subagentTool, type AgentConfig,
 } from "@agentkitai/agentrig-core";
 import { FileMemoryStore, memoryTools } from "@agentkitai/agentrig-memory";
 
@@ -85,7 +85,8 @@ describe("H1 real tool effects", () => {
     const store = new FileMemoryStore({ root: join(root, "wiki") });
     const tool = memoryTools({ store }).find(t => t.name === "memory_write")!;
     const input = { type: "concept", slug: "test", body: "- [stated] fixture (session:test)" };
-    await run(tool, input, "workspace-write");
+    const denied = await run(tool, input, "workspace-write");
+    expect(denied.events.some(e => e.type === "sandbox.denied")).toBe(true);
     expect(await store.read("concepts/test.md")).toBeNull();
     expect((await run(tool, input, "workspace-write", undefined, "allow")).asks).toBe(1);
     expect(await store.read("concepts/test.md")).not.toBeNull();
@@ -97,6 +98,78 @@ describe("H1 real tool effects", () => {
     } as never)).toThrow("cannot contain host-process hooks");
   });
 
+  it("allows local memory retrieval without outside approval, but gates backend network access", async () => {
+    const store = new FileMemoryStore({ root: join(root, "wiki") });
+    await store.write("concepts/test.md", { path: "concepts/test.md", frontmatter: {
+      type: "concept", slug: "test", aliases: [], sources: [], updated: "2026-09-05", confidence: "medium",
+    }, body: "a durable test fact" });
+    for (const name of ["memory_read", "memory_search"]) {
+      const tool = memoryTools({ store }).find(t => t.name === name)!;
+      const result = await run(tool, name === "memory_read" ? { path: "concepts/test.md" } : { query: "durable" }, "workspace-write");
+      expect(result.asks).toBe(0);
+      expect(result.events.some(e => e.type === "sandbox.denied")).toBe(false);
+      expect(result.events.some(e => e.type === "tool.result" && e.ok && e.display.includes("durable"))).toBe(true);
+    }
+    let recall = false;
+    const tool = memoryTools({ store, backend: { id: "fixture", async recall() { recall = true; return []; }, async onIngest() {}, async promote() {} } })
+      .find(t => t.name === "memory_search")!;
+    expect((await run(tool, { query: "durable" }, "workspace-write")).events.some(e => e.type === "sandbox.denied")).toBe(true);
+    expect(recall).toBe(false);
+  });
+
+  it("keeps file enforcement active for an SDK provider without a process launcher", async () => {
+    const identity: SandboxProvider = { prepare: command => command };
+    for (const path of [join(root, "outside"), join(cwd, "inside")]) {
+      const result = await run(writeFileTool(), { path, content: "changed" }, "workspace-write", identity);
+      expect(result.events.some(e => e.type === "sandbox.denied")).toBe(true);
+      await expect(readFile(path)).rejects.toThrow();
+    }
+  });
+
+  it("leaves the previous target intact when a staged file write is aborted", async () => {
+    // Controlled slow process transport, not an OS-isolation test. The production broker's
+    // exact program runs, with its stdin consumer delayed until the abort can be observed.
+    class SlowTransport extends SeatbeltSandboxProvider {
+      protected override wrap(command: string, args: readonly string[]) {
+        return { command, args: args.map((arg, i) => i === 1 ? arg.replace('cat > "$t"', 'sleep 10; cat > "$t"') : arg) };
+      }
+    }
+    const path = join(cwd, "target.txt");
+    await writeFile(path, "original");
+    const signal = new AbortController();
+    const work = new SlowTransport().prepare(() => writeFileTool().execute({ path, content: "replacement" }, {
+      cwd, sessionId: "fixture", signal: signal.signal, emit() {},
+    }), { mode: "workspace-write", cwd })();
+    const rejected = expect(work).rejects.toMatchObject({ name: "AbortError" });
+    try {
+      const deadline = Date.now() + 3000;
+      while (!(await readdir(cwd)).some(name => name.startsWith(".agentrig-write-"))) {
+        if (Date.now() > deadline) throw new Error("staged write never started");
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+    } finally { signal.abort(); }
+    await rejected;
+    expect(await readFile(path, "utf8")).toBe("original");
+  });
+
+  it("allows a sandbox-inheriting subagent and refuses a child configured without that boundary", async () => {
+    const config: AgentConfig = {
+      provider: { id: "child", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 8192 },
+        async *stream() { yield { type: "text_delta", text: "child finished" }; yield { type: "stop", reason: "end_turn" }; } },
+      store: new SessionStore({ root: join(root, "children") }), tools: [],
+      permissions: { async decide() { return "allow"; } }, systemPrompt: "fixture", repoMap: false,
+      sandbox: { provider: new DockerSandboxProvider(), mode: "workspace-write" },
+    };
+    const tool = subagentTool({ createAgent, childConfig: () => config });
+    const result = await run(tool, { task: "say done" }, "workspace-write");
+    expect(result.events.some(e => e.type === "subagent.spawn")).toBe(true);
+    expect(result.events.some(e => e.type === "sandbox.denied")).toBe(false);
+    config.sandbox = { provider: new NoneSandboxProvider(), mode: "none" };
+    const refused = await run(tool, { task: "say done" }, "workspace-write");
+    expect(refused.events.some(e => e.type === "sandbox.denied")).toBe(true);
+    expect(refused.events.some(e => e.type === "subagent.spawn")).toBe(false);
+  });
+
   it("cannot silently configure none as an enforcing provider", async () => {
     const path = join(root, "outside.txt");
     const { events } = await run(writeFileTool(), { path, content: "changed" }, "workspace-write", new NoneSandboxProvider());
@@ -104,7 +177,7 @@ describe("H1 real tool effects", () => {
     await expect(readFile(path)).rejects.toThrow();
   });
 
-  it("writes exact bytes through the live OS provider and cannot follow a symlink outside", async (ctx) => {
+  it("writes exact bytes through the live provider; Docker mount scope and Seatbelt deny outside symlink effects", async (ctx) => {
     const image = process.env.AGENTRIG_DOCKER_TEST_IMAGE ?? "alpine:3.20";
     let backend: SandboxProvider;
     if (process.platform === "linux") {
@@ -125,9 +198,14 @@ describe("H1 real tool effects", () => {
     expect(await readFile(path, "utf8")).toBe(content.replace("literal", "edited"));
     const outside = join(root, "outside.txt");
     await writeFile(outside, "original");
-    const link = join(cwd, "escape");
-    await symlink(root, link, "dir");
-    const blocked = await run(writeFileTool(), { path: join(link, "outside.txt"), content: "changed" }, "workspace-write", backend);
+    const hardlink = join(cwd, "hardlink.txt");
+    await link(outside, hardlink);
+    await run(writeFileTool(), { path: hardlink, content: "replaced" }, "workspace-write", backend);
+    expect(await readFile(hardlink, "utf8")).toBe("replaced");
+    expect(await readFile(outside, "utf8")).toBe("original");
+    const escapeLink = join(cwd, "escape");
+    await symlink(root, escapeLink, "dir");
+    const blocked = await run(writeFileTool(), { path: join(escapeLink, "outside.txt"), content: "changed" }, "workspace-write", backend);
     expect(blocked.events.some(e => e.type === "tool.result" && !e.ok)).toBe(true);
     expect(await readFile(outside, "utf8")).toBe("original");
   }, 60_000);

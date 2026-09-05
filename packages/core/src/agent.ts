@@ -7,7 +7,8 @@ import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
-import { SandboxDeniedError, type SandboxConfig } from "./sandbox.js";
+import { SandboxDeniedError, withSandboxPolicy, type SandboxConfig } from "./sandbox.js";
+import { outsideSandbox } from "./sandbox-providers.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
@@ -1243,7 +1244,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             });
         let r;
         try {
-          r = await raceAbort(prepared(), `tool ${tool.name}`);
+          r = await raceAbort(withSandboxPolicy(
+            config.sandbox === undefined || config.sandbox.mode === "none" ? undefined : {
+              mode: config.sandbox.mode, cwd,
+              ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
+            }, prepared,
+          ), `tool ${tool.name}`);
         } catch (err) {
           if (config.sandbox === undefined || !(err instanceof SandboxDeniedError)) throw err;
 
@@ -1276,7 +1282,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           // Deliberately call the original deferred command, never `prepared`, and never catch this
           // as another escalation. A provider-shaped error from this one retry is an ordinary tool
           // failure because no sandbox was active for it.
-          r = await raceAbort(command(), `tool ${tool.name} outside sandbox`);
+          r = await raceAbort(outsideSandbox(command), `tool ${tool.name} outside sandbox`);
         }
         const ok = r.isError !== true;
         const overflow = overflowResult(r);

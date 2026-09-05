@@ -173,7 +173,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--yolo", "alias for --dangerously-skip-permissions")
       .option(
         "--sandbox <mode>",
-        "execution boundary: read-only, workspace-write, or none",
+        "execution boundary: read-only, workspace-write, or none; enforcing modes refuse host hooks and MCP startup",
         "none",
       )
       .option("--max-turns <n>", "turn budget", maxTurnsDefault)

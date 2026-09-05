@@ -2,6 +2,7 @@ import { z } from "zod";
 import { abortGraceOf, usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
 import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
+import { currentSandboxPolicy, SandboxDeniedError } from "../sandbox.js";
 
 /**
  * A subagent tool. `subagent.spawn` / `subagent.end` have been in the event schema since M0 and
@@ -174,6 +175,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
 
   return {
     name: SUBAGENT_TOOL,
+    sandbox: "compatible",
     description:
       "Run a self-contained task in a separate child session and get back only its final answer. " +
       "This is THE way to run a child from here: it inherits this session's provider, permissions, " +
@@ -217,6 +219,14 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
 
       const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
       const config = opts.childConfig(choice);
+      const parentPolicy = currentSandboxPolicy();
+      if (parentPolicy !== undefined && (
+        config.sandbox === undefined || config.sandbox.mode === "none" ||
+        (parentPolicy.mode === "read-only" && config.sandbox.mode !== "read-only") ||
+        (parentPolicy.network !== true && config.sandbox.network === true)
+      )) {
+        throw new SandboxDeniedError("subagent configuration widens the parent's sandbox; inherit or narrow its mode and network policy");
+      }
       // The child's own spawning ability is decided here, never by the caller: strip whatever
       // subagent tool `childConfig()` supplied (it carries the CURRENT depth) and, if another
       // level is allowed, add one that knows it is a level deeper.

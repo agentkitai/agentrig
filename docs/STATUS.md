@@ -8,15 +8,18 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 ### H1 implementation (2026-09-05; review and CI pending)
 
 Built-in file mutations now cross the actual process sandbox using a fixed program and stdin
-data. Read-only and outside-workspace writes fail even under allow-all permissions. Docker
+data, staging then renaming to preserve the target on interrupted input. Read-only and outside-workspace writes fail even under allow-all permissions. Docker
 uses the caller's UID/GID so its artifacts do not become root-owned. Unsupported tools, including
-memory and subagents, require explicit one-call outside approval; headless denies. Host hooks
+memory mutations and network-backed recall, require explicit one-call outside approval; headless denies.
+Local memory read/search and sandbox-inheriting subagents remain available. Host hooks
 (including end-of-session memory maintenance) and CLI MCP startup are refused in enforcing modes.
 Trusted SDK code, provider calls, reads and session bookkeeping are not isolated; compatibility
 is declared by trusted registration code, never by a model, MCP annotation or permission class.
 
-Validation so far: build/typecheck and all 1,363 tests passed in a clean checkout, including live
-Docker file effects. The existing nested-worktree map failure remains H2; no user worktrees were
+Initial validation: build/typecheck and all 1,363 tests passed in a clean checkout, including live
+Docker file effects. Claude's six initial findings prompted atomic target replacement, local
+retrieval/subagent compatibility, runtime policy for SDK providers, stronger negative tests and
+documentation corrections. Final validation and delta review are pending. The existing nested-worktree map failure remains H2; no user worktrees were
 removed to obtain this result. The concrete implementation and limitations are in
 [plans/H1.md](plans/H1.md). Independent review and CI must complete before H2 begins.
 
@@ -32,7 +35,7 @@ promotion eligibility based on nonexistent session citations. The repository map
 nested review worktree, exhausting its budget. These gaps must be corrected before expanding
 the system's authority or turning memory into durable instructions.
 
-Current limitations: sandboxing wraps participating process launches, not all host-process
+Review-baseline limitations (the H1 implementation above supersedes the execution details): sandboxing wrapped participating process launches, not all host-process
 effects; `--yolo` + sandbox is not yet a sufficient containment recommendation. Promotion counts
 page-supplied citations, not independently verified claim support. Neither supervisor nor memory
 benefit is established by scripted-provider tests alone. In-process extensions, if added, remain

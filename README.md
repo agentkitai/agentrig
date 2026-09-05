@@ -79,11 +79,12 @@ These flags are available on both `run` and the interactive TUI (and on `session
 
 Sandbox modes constrain supported tool effects, not arbitrary JavaScript in the harness process.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
-tools (including memory tools and subagents) require explicit outside-sandbox approval, even with
+tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
 `--yolo`; headless runs deny that escalation. Host hooks, including `--ingest-on-end` and
 `--dream-on-end`, and CLI MCP startup are refused with an enforcing sandbox selected. Use
 `--sandbox none` explicitly when accepting those host effects. SDK code, provider calls and
 session bookkeeping remain trusted host operations; extensions are not isolated by this boundary.
+Local memory reads/searches and subagents that inherit or narrow the sandbox remain available.
 
 ```sh
 pnpm build

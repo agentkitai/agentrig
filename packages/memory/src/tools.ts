@@ -80,6 +80,8 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
 
   const search: AnyTool = {
     name: "memory_search",
+    // Local retrieval is read-only. A backend may use the network outside the process sandbox.
+    ...(opts.backend === undefined ? { sandbox: "compatible" as const } : {}),
     description:
       "Search project memory. Returns the union of index-selected pages and BM25 matches over " +
       "page bodies, with the path and a snippet for each. Read a page with memory_read.",
@@ -109,6 +111,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
 
   const read: AnyTool = {
     name: "memory_read",
+    sandbox: "compatible",
     description: "Read one wiki page in full.",
     inputSchema: ReadInput,
     permission: "read",

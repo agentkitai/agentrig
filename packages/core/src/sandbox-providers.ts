@@ -3,6 +3,8 @@ import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   SandboxDeniedError,
+  currentSandboxPolicy,
+  withSandboxPolicy,
   type SandboxCommand,
   type SandboxPolicy,
   type SandboxProvider,
@@ -48,12 +50,17 @@ export function classifiable(stderr: string): string {
   return `${head}\n[…]\n${tail}`;
 }
 
-const activeSandbox = new AsyncLocalStorage<ActiveSandbox>();
+const activeSandbox = new AsyncLocalStorage<ActiveSandbox | undefined>();
 
 /** Internal filesystem broker reads the runtime policy, never a tool-supplied cwd. */
 export function activeSandboxPolicy(): SandboxPolicy | undefined {
-  const policy = activeSandbox.getStore()?.policy;
+  const policy = currentSandboxPolicy() ?? activeSandbox.getStore()?.policy;
   return policy === undefined ? undefined : { ...policy };
+}
+
+/** A one-call escalation clears inherited contexts as well as bypassing prepare(). */
+export function outsideSandbox<T>(command: () => T): T {
+  return withSandboxPolicy(undefined, () => activeSandbox.run(undefined, command));
 }
 
 /**
@@ -66,7 +73,10 @@ export function sandboxSpawnInvocation(
   _cwd: string,
 ): SandboxSpawnInvocation {
   const active = activeSandbox.getStore();
-  if (active === undefined) return { command, args: [...args], sandboxed: false };
+  if (active === undefined) {
+    if (currentSandboxPolicy() !== undefined) throw new SandboxDeniedError("the configured provider has no sandboxed process launcher");
+    return { command, args: [...args], sandboxed: false };
+  }
   // The prepared session policy is authoritative. A tool cannot widen the bind/write boundary by
   // handing its process launcher a different cwd.
   return {
