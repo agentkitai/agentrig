@@ -44,7 +44,7 @@ export function indexTokens(text: string): string[] {
 }
 
 /** Internal machinery (the ingest capture marker) must not be searchable or quotable. */
-function searchableBody(body: string): string {
+export function searchableBody(body: string): string {
   return body.replace(/<!--[\s\S]*?-->/g, " ");
 }
 

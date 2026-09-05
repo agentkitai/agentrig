@@ -307,7 +307,7 @@ describe("versioned memory mutations", () => {
   });
 
   it("reports a committed page when persisting the pin recheck fails", async () => {
-    await writePins(store.root, [{ page: path, kind: "addition", claim: "committed", anchor: "",
+    await writePins(store.root, [{ page: path, kind: "addition", claim: "missing correction", anchor: "",
       provenance: "human", created: "2026-09-05", status: "active" }]);
     const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     vi.mocked(fs.rename).mockImplementation(async (from, to) => {

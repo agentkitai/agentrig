@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { createReadStream } from "node:fs";
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
@@ -21,17 +21,18 @@ import type { Attempt, PageType } from "./types.js";
  * out. An unaccounted span is a hard error, not a shrug.
  */
 
+const singleLine = (text: string) => text.replace(/[ \t]*[\r\n]+[ \t\r\n]*/g, " ").trim();
 export const DistilledFact = z.object({
   pageType: z.enum(["entity", "concept", "source", "analysis"]),
   slug: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]*$/, "slug must be kebab-case"),
   tag: z.enum(["stated", "observed", "inferred"]),
-  text: z.string().min(1),
+  text: z.string().transform(singleLine).pipe(z.string().min(1)),
 });
 export type DistilledFact = z.infer<typeof DistilledFact>;
 
 export const SpanDistillation = z.object({
   nothingDurable: z.boolean().default(false),
-  summary: z.string().default(""),
+  summary: z.string().default("").transform(singleLine),
   facts: z.array(DistilledFact).default([]),
 });
 export type SpanDistillation = z.infer<typeof SpanDistillation>;
@@ -66,7 +67,7 @@ export interface IngestResult {
   pinConflicts: Array<{ page: string; claim: string; reason: string }>;
   /** Contradictions an optional backend reported against these facts (PLAN §3.8). */
   backendConflicts: Array<{ fact: string; existing: string; detail?: string }>;
-  /** True when this session was already ingested and the new log is a prefix-superset. */
+  /** Historical name: the raw capture extends a completed prefix; prior narrative is retained. */
   supersededPrevious: boolean;
   skipped: boolean;
 }
@@ -344,21 +345,30 @@ export interface IngestOptions {
   onBackendError?: (op: string, err: Error) => void;
   /** Same-session ingest serialization; distinct sessions still distill concurrently. */
   lockTimeoutMs?: number;
+  /** H5b1 cancels lock acquisition only. Provider/backend and commit cancellation land in H5b2. */
+  signal?: AbortSignal;
 }
 
 const CaptureHashes = z.array(z.string().regex(/^[a-f0-9]{64}$/));
 function captureHashes(body: string): string[] | undefined {
-  if (!body.includes("<!-- ingest:version=2 -->") || body.includes("<!-- ingest:pending -->")) return undefined;
-  const marker = /^<!-- ingest:events-v1=(.*) -->$/m.exec(body);
+  // Only the final generated trailer is authoritative. Marker-shaped model text earlier in
+  // the narrative must neither wedge parsing nor force perpetual re-distillation.
+  const marker = /(?:^|\n)<!-- ingest:version=2 -->\n<!-- ingest:events-v1=(.*) -->\n<!-- ingest:coverage=.* -->\s*$/.exec(body);
   if (marker === null) return undefined; // one-time migration of older projection-only captures
   return CaptureHashes.parse(JSON.parse(marker[1]!));
 }
 
 function withoutCapture(body: string): string {
-  return body.replace(/<!-- capture:prefix=[^>]*-->/g, "").replace(/<!-- ingest:coverage=.*?-->/g, "")
-    .replace(/<!-- ingest:version=\d+ -->/g, "").replace(/<!-- ingest:events-v1=.*?-->/g, "")
-    .replace(/<!-- ingest:pending -->/g, "").trim();
+  const lines = body.trimEnd().split("\n");
+  while (lines.length > 0) {
+    const last = lines.at(-1)!;
+    if (last.trim() === "" || /^<!-- (?:capture:prefix=.*|ingest:(?:coverage=.*|version=\d+|events-v1=.*|pending)) -->$/.test(last)) lines.pop();
+    else break;
+  }
+  return lines.join("\n").trim();
 }
+const NO_FINDINGS = "<!-- Session produced no durable findings. -->";
+const OLD_NO_FINDINGS = "- [observed] Session produced no durable findings.";
 
 /** Backend annotations extend a fact's source list rather than create a different fact. */
 const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -393,14 +403,24 @@ async function readEvents(logPath: string): Promise<unknown[]> {
 export async function ingestSession(opts: IngestOptions): Promise<IngestResult> {
   // Match core's filename contract without introducing a runtime dependency on core.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)) throw new Error("invalid ingest session id: expected 1-128 characters of [A-Za-z0-9_-]");
+  opts.signal?.throwIfAborted();
   // Long-lived per-session guard, distinct from the short page/pin mutation lock. Never hold
   // the wiki mutation lock across a provider/backend call. H5b2 bounds those call lifetimes.
+  await mkdir(opts.store.root, { recursive: true });
   const root = await realpath(opts.store.root);
   // Conservatively serialize case aliases even on case-sensitive hosts; on macOS/Windows
   // those aliases can name the same source file.
-  const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex");
-  return withMemoryLock(`${root}.ingest-${sessionKey}`, () => ingestSessionLocked(opts),
-    opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs });
+  const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex").slice(0, 32);
+  let entered = false;
+  try {
+    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts); }, {
+      ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }),
+      ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+    });
+  } catch (error) {
+    if (entered || opts.signal?.aborted || !(error instanceof Error) || !error.message.startsWith("timed out waiting for memory lock")) throw error;
+    throw new Error(`ingest ${opts.sessionId}: another ingest of this session may be running; ${String(error)}`, { cause: error });
+  }
 }
 
 async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
@@ -544,8 +564,10 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
     ...sourceFacts.map((f) => `- [${f.tag}] ${f.text} (${ref})`),
   ])];
   await store.update(sourcePath, current => {
-    const kept = withoutCapture(current?.body ?? "").split("\n").filter(line => line.trim() !== "");
-    const merged = [...kept, ...newLines.filter(line => !containsFact(kept.join("\n"), line))];
+    const keptBody = withoutCapture(current?.body ?? "").split("\n")
+      .filter(line => line !== NO_FINDINGS && line !== OLD_NO_FINDINGS).join("\n");
+    const kept = keptBody === "" ? [] : keptBody.split("\n");
+    const merged = [...kept, ...newLines.filter(line => !containsFact(keptBody, line))];
     return {
       path: sourcePath,
       frontmatter: {
@@ -553,7 +575,7 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
         sources: [...new Set([...(current?.frontmatter.sources ?? []), ref])], updated: today,
         confidence: current?.frontmatter.confidence ?? "high",
       },
-      body: [...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
+      body: [...(merged.length === 0 ? [NO_FINDINGS] : merged),
         "", "<!-- ingest:pending -->"].join("\n"),
     };
   });
@@ -603,13 +625,14 @@ async function ingestSessionLocked(opts: IngestOptions): Promise<IngestResult> {
 
   await store.appendLog(
     `## [${today}] ingest | ${ref} | ${facts.length} facts, ${pagesWritten.length} pages` +
-      `${supersededPrevious ? " (superseded an earlier capture)" : ""}` +
+      `${supersededPrevious ? " (extended an earlier capture)" : ""}` +
       `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
   );
 
   await store.update(sourcePath, current => {
     if (current === null) throw new Error(`ingest source disappeared before completion: ${sourcePath}`);
     return { ...current, body: [withoutCapture(current.body), "",
+      // Compatibility-only projection marker. Current stale detection uses raw event hashes.
       `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
       "<!-- ingest:version=2 -->", `<!-- ingest:events-v1=${JSON.stringify(hashes)} -->`,
       `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`].join("\n") };

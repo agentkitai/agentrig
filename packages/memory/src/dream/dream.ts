@@ -163,7 +163,8 @@ async function dreamInto(
   await out.writeIndex(rebuildIndex(finalPages, index));
   const pins = await readPins(workspace.outputRoot);
   const pinChecks = await recheckPins(out, pins);
-  await applyPinChecks(workspace.outputRoot, pinChecks);
+  const persistedPins = await applyPinChecks(workspace.outputRoot, pinChecks);
+  if (persistedPins.skipped > 0) opts.onError?.(new Error(`dream inspected pins but skipped ${persistedPins.skipped} stale/unversioned status update(s)`));
 
   // ---- promotion proposals: validate final pages against immutable runtime observations.
   const evidenceIndex = await loadPromotionEvidence(opts.raw,

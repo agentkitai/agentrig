@@ -13,19 +13,27 @@ updated-main branch/PR with review and CI gates. Current work migrates ingest/pr
 corrects stale shorter captures and repairs incomplete log initialization. Provider/backend lifetime
 and accounting remain H5b2; no claim that abort already cancels those calls.
 
-Initial H5b1 implementation passes build/typecheck and 1,529 tests with two Windows-only skips
-on Linux (1,531 total, 74 files). Twenty-six new persistence tests cover real two-process writers,
-shorter/different/canonicalized captures, pending retries, provider-time edits, provenance aliases
-and deduplication, invalid IDs, stale/deleted pin snapshots, malformed data, analysis pin conflicts,
-and empty/partial/custom log recovery. Independent review and PR CI are pending. See H5.md for
-the cooperative-writer boundary, partial-commit retry semantics and H5b2/H5c exclusions.
+PR #123 migrates source/entity/provenance writes to checked-state transforms and serializes pin
+updates. Pending captures remain retryable; raw-event prefix hashes identify shorter stale logs
+without confusing canonical-message projection changes. Both replacement tools recheck pins.
+Distinct sessions still distill concurrently, while same-session/case aliases share a separate
+lock. See [plans/H5.md](plans/H5.md) for partial-commit, recovery and H5b2/H5c boundaries.
 
-Initial PR CI 33956025872 passed Linux/macOS/Windows. Isolated mutations prove shorter-prefix
-detection and locked provenance are covered. A removed update lock initially escaped the process
-conservation test through favorable scheduling; the fixture now also asserts each process owns the
-mutation lock during transform reads. Multiline facts and regex/replacement punctuation are covered
-through annotation and re-ingest. Build/typecheck and 1,530 tests pass plus two platform skips
-(1,532 total, 74 files). Independent review and strengthened-head validation are pending.
+CI 33956220720 passed Linux/macOS/Windows at 2dbce51. Two independent reviews prompted final-trailer
+capture parsing, single-line normalization of newly distilled facts, preserved interior narrative
+blank lines, no-findings bookkeeping, lazy initialization, bounded/cancelable lock acquisition,
+applied/skipped pin counts, comment-free pin matching and no-op status writes. Tests also prove
+dream pin persistence and malformed-input failure without modifying its source wiki.
+
+Current local validation: build/typecheck and 1,550 tests pass plus two Windows-only skips
+(1,552 total, 74 files), including 47 persistence cases. Real processes test same-session skipping
+and distinct-session fact/source/index/pin conservation; fixture assertions pin own-PID session-lock
+ownership during providers and mutation-lock ownership during source/concept transform reads.
+Isolated mutations of shorter-prefix detection, provenance locking, page-update locking and pin
+page-version guards fail relevant regressions; restored tests pass. The process test was strengthened
+after an outcome-only version escaped a lock-removal mutation through favorable scheduling.
+Repair review and repaired-head CI remain pending. Legacy multiline facts and unknown-frontmatter
+preservation discovered during inspection are recorded under H5c, not claimed complete here.
 
 ### H5a complete (2026-09-05; PR #122)
 

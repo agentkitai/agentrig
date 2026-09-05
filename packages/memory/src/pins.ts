@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { tokenize } from "./search.js";
+import { searchableBody, tokenize } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
 import { FileMemoryStore } from "./store.js";
 import type { MemoryStore, Pin } from "./types.js";
@@ -128,6 +128,7 @@ function polarity(text: string): Map<string, boolean> {
  * worse than a false "conflict" — so a polarity mismatch fails closed.
  */
 export function claimSatisfied(claim: string, pageBody: string): boolean {
+  pageBody = searchableBody(pageBody);
   const terms = new Set(tokenize(claim));
   if (terms.size === 0) return true;
   const bodyTerms = new Set(tokenize(pageBody));
@@ -167,7 +168,7 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
       out.push({ ...snapshot, pin, status: "orphaned", reason: `page ${pin.page} no longer exists` });
       continue;
     }
-    const anchorPresent = pin.anchor === "" || page.body.includes(pin.anchor);
+    const anchorPresent = pin.anchor === "" || searchableBody(page.body).includes(pin.anchor);
     if (claimSatisfied(pin.claim, page.body)) {
       out.push(
         anchorPresent
@@ -195,8 +196,8 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
  * Stale/unversioned checks and pins deleted or changed since inspection are skipped; callers
  * needing a fresh persisted status should use recheckStoredPins instead of retrying old checks.
  */
-export async function applyPinChecks(wikiRoot: string, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<void> {
-  await withMemoryLock(wikiRoot, async () => {
+export async function applyPinChecks(wikiRoot: string, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<{ applied: number; skipped: number }> {
+  return withMemoryLock(wikiRoot, async () => {
     const current = await readPins(wikiRoot);
     const store = new FileMemoryStore({ root: wikiRoot });
     const fresh: PinCheck[] = [];
@@ -204,20 +205,25 @@ export async function applyPinChecks(wikiRoot: string, checks: PinCheck[], opts:
       if (check.pageVersion === undefined) continue;
       if (((await store.read(check.pin.page))?.version ?? null) === check.pageVersion) fresh.push(check);
     }
-    if (fresh.length > 0) await writePinsUnlocked(wikiRoot, mergeChecks(current, fresh), opts.signal);
+    const merged = mergeChecks(current, fresh);
+    if (JSON.stringify(merged.pins) !== JSON.stringify(current)) await writePinsUnlocked(wikiRoot, merged.pins, opts.signal);
+    return { applied: merged.applied, skipped: checks.length - merged.applied };
   }, opts);
 }
 
-function mergeChecks(current: Pin[], checks: PinCheck[]): Pin[] {
+function mergeChecks(current: Pin[], checks: PinCheck[]): { pins: Pin[]; applied: number } {
   const statusOf: Record<PinStatus, Pin["status"]> = { kept: "active", conflict: "conflict", orphaned: "orphaned" };
   const merged = [...current];
+  let applied = 0;
   for (const c of checks) {
     const updated = { ...c.pin, status: statusOf[c.status] };
     const i = merged.findIndex((p) => p.page === c.pin.page && p.claim === c.pin.claim);
     // A stale check must not resurrect a deleted pin or overwrite a newer human correction.
-    if (i !== -1 && JSON.stringify(PinSchema.parse(merged[i])) === JSON.stringify(PinSchema.parse(c.pin))) merged[i] = updated;
+    if (i !== -1 && JSON.stringify(PinSchema.parse(merged[i])) === JSON.stringify(PinSchema.parse(c.pin))) {
+      merged[i] = updated; applied++;
+    }
   }
-  return merged;
+  return { pins: merged, applied };
 }
 
 /** Read current pins/pages and persist statuses under the same lock as page and pin writers. */
@@ -228,7 +234,8 @@ export async function recheckStoredPins(store: MemoryStore, paths?: ReadonlySet<
     const pins = await readPins(store.root);
     const relevant = paths === undefined ? pins : pins.filter(pin => paths.has(pin.page));
     const checks = await recheckPins(store, relevant);
-    if (checks.length > 0) await writePinsUnlocked(store.root, mergeChecks(pins, checks), opts.signal);
+    const merged = mergeChecks(pins, checks);
+    if (JSON.stringify(merged.pins) !== JSON.stringify(pins)) await writePinsUnlocked(store.root, merged.pins, opts.signal);
     return checks;
   }, opts);
 }

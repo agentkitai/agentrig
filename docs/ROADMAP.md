@@ -274,6 +274,12 @@ concurrent append/provenance/pin conservation, stale-capture, interrupted-ingest
 tests. H5b2 must pass the remaining cancellation/bounds/accounting acceptance above. Each starts
 from updated main only after its predecessor's review, PR CI, merge and main CI succeed.
 
+H5b1 inspection also found older multiline facts are not fully understood by the line-based fact
+parser, and unknown frontmatter keys parsed as `extra` do not survive current store regeneration.
+H5c must diagnose/migrate legacy multiline facts without losing their text or references and preserve
+unknown frontmatter across regeneration, with round-trip tests. New ingest normalizes line breaks;
+this is not a claim that all old pages have been migrated.
+
 ### E — Measure outcomes before expanding capabilities
 
 This is the minimum useful subset of R9 and R14, not a requirement to build a full exporter,

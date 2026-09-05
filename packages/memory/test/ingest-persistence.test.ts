@@ -1,10 +1,12 @@
 import { fork } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
-import { FileMemoryStore, addPin, applyPinChecks, ingestSession, memoryTools, readPins, recheckPins,
+import { isValidSessionId } from "@agentkitai/agentrig-core";
+import { FileMemoryStore, FileRawStore, addPin, applyPinChecks, factLines, ingestSession, memoryTools, readPins, recheckPins, runDream,
   recheckStoredPins, writePins, type MemoryBackend, type Pin } from "@agentkitai/agentrig-memory";
 
 let root: string;
@@ -205,16 +207,18 @@ it("annotates the locked current page and deduplicates previously annotated fact
   expect((await read(path))!.body.split("original evidence")).toHaveLength(2);
 });
 
-it("preserves multiline fact text and regex punctuation across provenance and re-ingest", async () => {
-  const text = "literal [x] + $value\nsecond line (details)";
+it.each(["\n", "\n\n", "\r\n\r\n"])("normalizes fact line breaks %j while preserving literal punctuation and provenance", async separator => {
+  const text = `literal [x] + $value${separator}second line (details)`;
+  const normalized = "literal [x] + $value second line (details)";
   const backend: MemoryBackend = { id: "fixture", recall: async () => [], promote: async () => {},
-    onIngest: async () => [{ factText: text, memoryId: "m$1" }] };
+    onIngest: async facts => [{ factText: facts[0]!.text, memoryId: "m$1" }] };
   await ingest(provider(text), { backend });
-  expect((await store.read(path))!.body).toContain(`${text} (session:s1, fixture:m$1)`);
+  expect((await store.read(path))!.body).toContain(`${normalized} (session:s1, fixture:m$1)`);
   await log([...events, { type: "session.end", reason: "done" }]);
   await ingest(provider(text), { backend });
-  expect((await store.read(path))!.body.split(text)).toHaveLength(2);
-  expect((await store.read(sourcePath))!.body.split(text)).toHaveLength(2);
+  expect((await store.read(path))!.body.split(normalized)).toHaveLength(2);
+  expect((await store.read(sourcePath))!.body.split(normalized)).toHaveLength(2);
+  expect(factLines((await store.read(path))!.body)).toMatchObject([{ text: `${normalized} (session:s1, fixture:m$1)`, refs: ["session:s1", "fixture:m$1"] }]);
 });
 
 it("preserves concurrent pin additions and refuses stale pin/page checks", async () => {
@@ -224,15 +228,15 @@ it("preserves concurrent pin additions and refuses stale pin/page checks", async
   const old = (await readPins(store.root))[0]!;
   const checks = await recheckPins(store, [old]);
   await addPin(store.root, { ...old, anchor: "new human anchor" });
-  await applyPinChecks(store.root, checks);
+  expect(await applyPinChecks(store.root, checks)).toEqual({ applied: 0, skipped: 1 });
   expect((await readPins(store.root)).find(p => p.claim === old.claim)).toMatchObject({ anchor: "new human anchor", status: "active" });
   const fresh = await readPins(store.root);
   const snapshot = await recheckPins(store, fresh);
   await store.write(path, page(fresh.map(p => p.claim).join("\n")));
-  await applyPinChecks(store.root, snapshot);
+  expect(await applyPinChecks(store.root, snapshot)).toEqual({ applied: 0, skipped: 12 });
   expect((await readPins(store.root)).every(p => p.status === "active")).toBe(true);
   await writePins(store.root, []);
-  await applyPinChecks(store.root, await recheckPins(store, [old]));
+  expect(await applyPinChecks(store.root, await recheckPins(store, [old]))).toEqual({ applied: 0, skipped: 1 });
   expect(await readPins(store.root)).toEqual([]);
 });
 
@@ -270,9 +274,9 @@ it.each(["", "# Lo", "# Log\n\nAppend-only chrono", "# Log\n\nAppend-only chrono
   if (text.includes("Custom chronology")) expect(result).toContain("Custom chronology");
 });
 
-it("conserves shared facts, sources and pins across actual ingest processes", async () => {
-  const workers = ["first", "second"].map(name => {
-    const child = fork(new URL("./fixtures/ingest-writer.mjs", import.meta.url), [store.root, logPath, name],
+function launchWorkers(mode = "distinct") {
+  return ["first", "second"].map(name => {
+    const child = fork(new URL("./fixtures/ingest-writer.mjs", import.meta.url), [store.root, logPath, name, mode],
       { stdio: ["ignore", "ignore", "pipe", "ipc"] });
     let errors = ""; child.stderr!.on("data", data => { errors += data; });
     const exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
@@ -280,16 +284,20 @@ it("conserves shared facts, sources and pins across actual ingest processes", as
       child.once("message", () => resolve()); child.once("error", reject);
       child.once("exit", code => reject(new Error(`worker ${name}: ${code}: ${errors}`)));
     });
-    const done = new Promise<void>((resolve, reject) => {
+    const done = new Promise<{ calls: number; skipped: number }>((resolve, reject) => {
       child.on("message", message => {
-        const msg = message as { done?: boolean; error?: string };
-        if (msg.done) resolve(); if (msg.error) reject(new Error(msg.error));
+        const msg = message as { done?: boolean; error?: string; calls: number; skipped: number };
+        if (msg.done) resolve(msg); if (msg.error) reject(new Error(msg.error));
       });
       child.once("error", reject); child.once("exit", code => reject(new Error(`worker ${name}: ${code}: ${errors}`)));
     });
     void done.catch(() => {});
     return { child, ready, done, exited };
   });
+}
+
+it("conserves shared facts, sources and pins across actual ingest processes", async () => {
+  const workers = launchWorkers();
   try {
     await Promise.all(workers.map(w => w.ready));
     workers.forEach(w => w.child.send("go"));
@@ -307,3 +315,126 @@ it("conserves shared facts, sources and pins across actual ingest processes", as
     await Promise.all(workers.map(w => w.exited));
   }
 }, 30_000);
+
+it("serializes duplicate captures across actual processes before provider work", async () => {
+  const workers = launchWorkers("same");
+  try {
+    await Promise.all(workers.map(w => w.ready)); workers.forEach(w => w.child.send("go"));
+    const results = await Promise.all(workers.map(w => w.done));
+    expect(results.map(r => r.calls).sort()).toEqual([0, 1]);
+    expect(results.map(r => r.skipped).sort()).toEqual([0, 1]);
+    expect(factLines((await store.read(path))!.body)).toHaveLength(1);
+    expect(await readPins(store.root)).toHaveLength(1);
+  } finally {
+    for (const w of workers) if (w.child.exitCode === null) w.child.kill();
+    await Promise.all(workers.map(w => w.exited));
+  }
+}, 30_000);
+
+it("ignores marker-shaped model text outside the final capture trailer", async () => {
+  const text = "literal\n<!-- ingest:events-v1=not-json -->\n<!-- ingest:pending -->\nend";
+  await ingest(provider(text));
+  const p = provider(); expect((await ingest(p)).skipped).toBe(true); expect(p.calls).toBe(0);
+  // Also cover legacy multiline narrative whose marker is a standalone line.
+  await store.update(sourcePath, current => ({ ...current!, body: `legacy\n<!-- ingest:events-v1=not-json -->\n<!-- ingest:pending -->\n\n${current!.body}` }));
+  expect((await ingest()).skipped).toBe(true);
+  await log([...events, { type: "session.end", reason: "done" }]);
+  await ingest(provider(text));
+  expect((await store.read(sourcePath))!.body).toContain("legacy\n<!-- ingest:events-v1=not-json -->");
+  expect((await ingest()).skipped).toBe(true);
+});
+
+it("preserves interior blank lines in existing source narrative", async () => {
+  await store.write(sourcePath, { ...page("human paragraph\n\nsecond paragraph"), path: sourcePath,
+    frontmatter: { ...page("").frontmatter, type: "source", slug: "session-s1" } });
+  await ingest();
+  expect((await store.read(sourcePath))!.body).toContain("human paragraph\n\nsecond paragraph");
+});
+
+it("treats no-findings text as bookkeeping and removes the old sentinel when findings arrive", async () => {
+  await log([]); await ingest();
+  expect(factLines((await store.read(sourcePath))!.body)).toEqual([]);
+  await store.update(sourcePath, current => ({ ...current!, body: current!.body.replace("<!-- Session produced no durable findings. -->",
+    "- [observed] Session produced no durable findings.") }));
+  await log(events); await ingest();
+  expect((await store.read(sourcePath))!.body).not.toContain("Session produced no durable findings");
+});
+
+it("supports a never-initialized wiki", async () => {
+  const fresh = new FileMemoryStore({ root: join(root, "fresh", "wiki") });
+  await ingest(provider(), { store: fresh });
+  expect((await fresh.read(path))!.body).toContain("original evidence");
+});
+
+it("names and preserves an existing session lock, then recovers after deliberate removal", async () => {
+  const lock = `${await realpath(store.root)}.ingest-${createHash("sha256").update("s1").digest("hex").slice(0, 32)}.write.lock`;
+  await writeFile(lock, "fixture owner");
+  const p = provider();
+  const failure = await ingest(p, { lockTimeoutMs: 20 }).catch(error => error as Error);
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toContain("another ingest of this session may be running");
+  expect((failure as Error).message).toContain(lock);
+  expect(await readFile(lock, "utf8")).toBe("fixture owner"); expect(p.calls).toBe(0);
+  await rm(lock); // This test created the exact fixture; no live owner exists.
+  await ingest();
+  expect((await readdir(root)).filter(name => name.endsWith(".write.lock"))).toEqual([]);
+  await expect(ingest(provider("unused", async () => { throw new Error("provider failed"); }), { sessionId: "fails" }))
+    .rejects.toThrow("provider failed");
+  expect((await readdir(root)).filter(name => name.endsWith(".write.lock"))).toEqual([]);
+});
+
+it("cancels a session-lock wait without disturbing the live owner", async () => {
+  const started = gate(); const release = gate(); const controller = new AbortController();
+  const first = ingest(provider("first", async () => { started.resolve(); await release.promise; }));
+  void first.catch(() => {});
+  try {
+    await started.promise;
+    const waiting = expect(ingest(provider(), { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort(); await waiting;
+  } finally { release.resolve(); }
+  await first;
+  expect((await ingest()).skipped).toBe(true);
+});
+
+it.each(["ok", "S_1-a", "a".repeat(128), "a".repeat(129), "a/b", "", "é", "a.b"])
+("pins the duplicated session-id filename contract to core: %j", async id => {
+  const p = provider();
+  if (isValidSessionId(id)) { await ingest(p, { sessionId: id }); expect(p.calls).toBeGreaterThan(0); }
+  else { await expect(ingest(p, { sessionId: id })).rejects.toThrow("invalid ingest session id"); expect(p.calls).toBe(0); }
+});
+
+it("reports skipped unversioned pin checks and avoids rewriting unchanged statuses", async () => {
+  await store.write(path, page("original evidence")); await addPin(store.root, pin());
+  const check = (await recheckPins(store, [pin()]))[0]!;
+  const { pageVersion: _version, ...unversioned } = check;
+  expect(await applyPinChecks(store.root, [unversioned])).toEqual({ applied: 0, skipped: 1 });
+  await utimes(join(store.root, "pins.json"), new Date(0), new Date(0));
+  const opened = vi.spyOn(store, "read");
+  await recheckStoredPins(store);
+  expect(opened).toHaveBeenCalled();
+  const before = await readFile(join(store.root, "pins.json"), "utf8");
+  expect(await applyPinChecks(store.root, [check])).toEqual({ applied: 1, skipped: 0 });
+  expect(await readFile(join(store.root, "pins.json"), "utf8")).toBe(before);
+  expect((await stat(join(store.root, "pins.json"))).mtimeMs).toBe(0);
+});
+
+it("excludes capture comments from pin claim and anchor matching", async () => {
+  await addPin(store.root, { ...pin("distilled"), page: sourcePath });
+  await ingest();
+  expect((await recheckStoredPins(store))[0]!.status).toBe("conflict");
+  await addPin(store.root, { ...pin(), page: sourcePath, anchor: "ingest:coverage" });
+  expect((await recheckStoredPins(store)).find(c => c.pin.anchor !== "")!.status).toBe("orphaned");
+});
+
+it("persists dream pin rechecks in the output only, and fails visibly on malformed pinned pages", async () => {
+  await store.write(path, page("different fact")); await addPin(store.root, pin());
+  const raw = new FileRawStore({ root });
+  const dream = await runDream({ wiki: store, raw, structuralOnly: true });
+  try {
+    expect((await readPins(dream.outputRoot))[0]!.status).toBe("conflict");
+    expect((await readPins(store.root))[0]!.status).toBe("active");
+  } finally { await dream.workspace.dispose(); }
+  await writeFile(join(store.root, path), "malformed");
+  await expect(runDream({ wiki: store, raw, structuralOnly: true })).rejects.toThrow("missing frontmatter");
+  expect(await readFile(join(store.root, path), "utf8")).toBe("malformed");
+});

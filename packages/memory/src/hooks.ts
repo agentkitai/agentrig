@@ -59,6 +59,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           provider: opts.provider,
           sessionId: ctx.sessionId,
           logPath,
+          signal: ctx.signal,
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
         opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
