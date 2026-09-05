@@ -20,8 +20,11 @@ import {
   withBackendRecall,
   type MemoryBackend,
   type IngestLimits,
+  type MaintenanceLimits,
+  type ScanLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
+import { withMaintenanceSignal } from "./maintenance.js";
 
 /**
  * `agentrig memory …` — thin wrappers over the memory package. Anything with logic in it
@@ -254,7 +257,12 @@ export async function memoryPromote(path: string, opts: MemoryOptions & { confir
 }
 
 /** `lint` = a dry-run dream report. M3 ships the pin re-check; M5 adds the rest. */
-export async function memoryLint(opts: MemoryOptions): Promise<void> {
+export interface MemoryLintOptions extends MemoryOptions { dreamLimits?: Partial<MaintenanceLimits>; dreamScanLimits?: Partial<ScanLimits>; signal?: AbortSignal }
+export async function memoryLint(opts: MemoryLintOptions): Promise<void> {
+  return withMaintenanceSignal(signal => lintWithSignal(opts, signal), opts.signal);
+}
+
+async function lintWithSignal(opts: MemoryLintOptions, signal: AbortSignal): Promise<void> {
   const { wiki } = layout(opts.dir);
   const store = await openStore(opts.dir);
 
@@ -263,6 +271,9 @@ export async function memoryLint(opts: MemoryOptions): Promise<void> {
   // no provider at all: structural-only needs no model, so `lint` must not need a credential
   const result = await runDream({
     wiki: store,
+    signal,
+    limits: opts.dreamLimits ?? {}, scanLimits: opts.dreamScanLimits ?? {},
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     raw: new FileRawStore({ root: opts.dir }),
     structuralOnly: true,
     cwd: process.cwd(),
@@ -275,7 +286,7 @@ export async function memoryLint(opts: MemoryOptions): Promise<void> {
     }));
   } finally {
     // a dry run leaves nothing behind, even if rendering threw
-    await result.workspace.dispose().catch(() => {});
+    await result.workspace.dispose().catch(error => console.error(`dream cleanup failed; inspect ${result.outputRoot} and ${result.workspace.manifestPath}: ${String(error)}`));
   }
   void wiki;
 

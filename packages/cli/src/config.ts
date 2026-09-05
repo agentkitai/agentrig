@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
 import { REASONING_EFFORTS } from "@agentkitai/agentrig-core";
-import { IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
+import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
@@ -109,6 +109,7 @@ const ConfigValuesSchema = z
     dreamEveryHours: positiveSetting.optional(),
     dreamStructuralOnly: z.boolean().optional(),
     dreamScanLimits: ScanLimitsSchema.partial().optional(),
+    dreamLimits: DreamLimitsSchema.optional(),
     mcpConfig: z.string().min(1).optional(),
     subagents: z.boolean().optional(),
     subagentMaxTurns: positiveSetting.optional(),

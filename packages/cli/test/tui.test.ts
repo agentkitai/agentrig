@@ -144,6 +144,33 @@ function makeController(turns: Array<ModelEvent[] | Error>, extra: Partial<Const
   return makeControllerWith(new FakeProvider(turns), extra);
 }
 
+it.each(["abort", "shutdown"])("%s cancels an interactive dream and joins its cleanup without an agent session", async action => {
+  const controller = makeController([]); let signal: AbortSignal | undefined; let release!: () => void;
+  const released = new Promise<void>(resolve => { release = resolve; });
+  controller.setDream(async (_auto, nextSignal) => {
+    signal = nextSignal;
+    await new Promise<void>(resolve => nextSignal.addEventListener("abort", () => resolve(), { once: true }));
+    await released; return ["dream cleanup complete"];
+  });
+  const running = controller.submit("/dream --auto");
+  expect(signal).toBeDefined();
+  await controller.submit("/dream"); // no overlapping maintenance callback
+  let shut = false;
+  const stopping = action === "shutdown" ? controller.shutdown().then(() => { shut = true; }) : undefined;
+  if (action === "abort") controller.abort();
+  expect(signal!.aborted).toBe(true); await Promise.resolve(); expect(shut).toBe(false);
+  release(); await running; await stopping;
+  if (action === "shutdown") expect(shut).toBe(true);
+});
+
+it("a synchronous dream callback failure does not leave the controller stuck in maintenance", async () => {
+  const controller = makeController([]);
+  controller.setDream(() => { throw new Error("callback failed"); });
+  await expect(controller.submit("/dream")).resolves.toBe(true);
+  const next = vi.fn(async () => ["next dream"]); controller.setDream(next);
+  await controller.submit("/dream"); expect(next).toHaveBeenCalledOnce();
+});
+
 function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},

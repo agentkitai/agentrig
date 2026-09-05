@@ -67,6 +67,7 @@ const RELATIVE_DATE =
 const FILE_REF = /`([^`\s]+\.[A-Za-z0-9]{1,6})`/g;
 
 export interface StructuralOptions {
+  signal?: AbortSignal;
   /** Root the file refs are relative to. Omit to skip the file-existence check entirely. */
   cwd?: string;
 }
@@ -76,6 +77,7 @@ export async function structuralLint(
   index: IndexEntry[],
   opts: StructuralOptions = {},
 ): Promise<StructuralFindings> {
+  opts.signal?.throwIfAborted();
   const byPath = new Map(pages.map((p) => [p.path, p]));
   const linkedTo = new Set<string>();
   const missing = new Map<string, string[]>();
@@ -84,6 +86,7 @@ export async function structuralLint(
   const unsourced: StructuralFindings["unsourced"] = [];
 
   for (const page of pages) {
+    opts.signal?.throwIfAborted();
     for (const link of wikilinks(page.body)) {
       const target = resolveLink(link, pages);
       if (target === undefined) {
@@ -103,6 +106,7 @@ export async function structuralLint(
 
     const prose = stripCode(page.body);
     for (const line of prose.split("\n")) {
+      opts.signal?.throwIfAborted();
       for (const m of stripInlineCode(line).matchAll(RELATIVE_DATE)) {
         relativeDates.push({ page: page.path, line: line.trim().slice(0, 160), phrase: m[0] });
       }
@@ -112,6 +116,7 @@ export async function structuralLint(
       const seen = new Set<string>();
       const base = resolve(opts.cwd);
       for (const m of stripCode(page.body).matchAll(FILE_REF)) {
+        opts.signal?.throwIfAborted();
         const ref = m[1]!;
         if (seen.has(ref)) continue;
         seen.add(ref);
@@ -125,12 +130,14 @@ export async function structuralLint(
           () => true,
           () => false,
         );
+        opts.signal?.throwIfAborted();
         if (!exists) staleFileRefs.push({ page: page.path, ref });
       }
     }
   }
 
   const indexPaths = new Set(index.map((e) => e.path));
+  opts.signal?.throwIfAborted();
   const orphans = pages
     .filter((p) => !linkedTo.has(p.path) && !indexPaths.has(p.path))
     .map((p) => p.path)

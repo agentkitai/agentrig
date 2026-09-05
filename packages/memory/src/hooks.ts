@@ -4,7 +4,7 @@ import type { AuxiliaryReport, Hook, HookContext, HookResult, ModelProvider } fr
 import { FileMemoryStore } from "./store.js";
 import { FileRawStore } from "./raw.js";
 import { ingestSession, type IngestLimits } from "./ingest.js";
-import { formatAuxiliaryUsage } from "./maintenance.js";
+import { formatAuxiliaryUsage, maintenanceDiagnostic, type MaintenanceLimits } from "./maintenance.js";
 import { lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
@@ -92,6 +92,8 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
 }
 
 export interface DreamTriggerOptions {
+  limits?: Partial<MaintenanceLimits>;
+  onUsage?: (report: AuxiliaryReport) => void;
   scanLimits?: Partial<ScanLimits>;
   dir: string;
   provider?: ModelProvider;
@@ -125,17 +127,23 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
   const everySessions = opts.everySessions ?? 10;
   const everyHours = opts.everyHours ?? 24;
   const now = opts.now ?? (() => Date.now());
+  const done = (summary: string): void => {
+    // Preserve synchronous error reporting; also observe async callback failures without waiting.
+    const pending = opts.onDone?.(summary);
+    void Promise.resolve(pending).catch(error => maintenanceDiagnostic(() => opts.onError?.(error instanceof Error ? error : new Error(String(error)))));
+  };
 
   return {
     point: "session_end",
     id: "memory:dream",
-    timeoutMs: 15 * 60_000,
-    handler: async (): Promise<HookResult> => {
+    timeoutMs: Math.min(2_147_483_647, Math.max(15 * 60_000, (opts.limits?.timeoutMs ?? 300_000) + 60_000)),
+    handler: async (ctx: HookContext): Promise<HookResult> => {
       try {
+        ctx.signal.throwIfAborted();
         const wikiRoot = join(opts.dir, "wiki");
-        const since = await lastDreamAt(wikiRoot);
+        const since = await lastDreamAt(wikiRoot, { signal: ctx.signal });
         const raw = new FileRawStore({ root: opts.dir });
-        const sessionsSince = (await raw.sessions(since, { scanLimits: opts.scanLimits ?? {} })).length;
+        const sessionsSince = (await raw.sessions(since, { scanLimits: opts.scanLimits ?? {}, signal: ctx.signal })).length;
         // A wiki that has never been dreamt is NOT immediately overdue — treating it that way
         // made the first session end trigger a full dream regardless of the configured cadence.
         // The session count is the honest signal for a fresh wiki.
@@ -147,6 +155,10 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         await store.init();
         const result = await runDream({
           wiki: store,
+          signal: ctx.signal,
+          autoApply: opts.auto === true,
+          limits: opts.limits ?? {},
+          ...(opts.onUsage === undefined ? {} : { onUsage: opts.onUsage }),
           raw,
           ...(opts.provider === undefined ? {} : { provider: opts.provider }),
           ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
@@ -157,40 +169,40 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         });
 
         const findings = findingCount(result.report, result.structural);
-        if (opts.auto === true && result.report.scan?.complete === false) {
+        const dispose = async (): Promise<boolean> => {
+          try { await result.workspace.dispose(); return true; }
+          catch (error) {
+            const warning = new Error(`dream ${result.autoApply?.status === "applied" ? "was applied; " : ""}cleanup failed; inspect ${result.outputRoot}; manifest: ${result.workspace.manifestPath}; ${String(error)}`);
+            maintenanceDiagnostic(() => opts.onError === undefined ? process.emitWarning(warning.message) : opts.onError(warning));
+            return false;
+          }
+        };
+        if (result.autoApply?.status === "refused") {
           // A persistent immutable-ledger fault must not retain a fresh wiki every cadence.
-          // No model work ran; explicit review commands can still produce an inspectable copy.
-          await result.workspace.dispose();
-          opts.onDone?.("dream raw scan incomplete; auto-apply disabled; temporary copy discarded; unreadable attempts: "
-            + result.report.scan.unreadableAttempts.slice(0, 20).join(", ")
-            + (result.report.scan.unreadableAttempts.length > 20 ? "; more entries omitted from this summary" : "")
+          // No usable consolidation ran; explicit review commands can retain an inspectable copy.
+          const disposed = await dispose();
+          const unreadable = result.report.scan?.unreadableAttempts ?? [];
+          done(`dream ${result.autoApply.reason}; auto-apply disabled; temporary copy ${disposed ? "discarded" : "retained at " + result.outputRoot}; unreadable attempts: `
+            + unreadable.slice(0, 20).join(", ")
+            + (unreadable.length > 20 ? "; more entries omitted from this summary" : "")
             + "; run an explicit dream review to retain an artifact");
           return { action: "continue" };
         }
-        if (opts.auto === true && result.report.scan?.complete !== false) {
-          let backup: string;
-          try {
-            const { applyDream } = await import("./dream/copy.js");
-            const stamp = `${now()}-${Math.random().toString(36).slice(2, 8)}`;
-            backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000, scanLimits: opts.scanLimits ?? {} });
-          } catch (error) {
-            throw new Error(String(error) + "; dream artifact retained at " + result.outputRoot
-              + "; manifest: " + result.workspace.manifestPath, { cause: error });
-          }
-          await result.workspace.dispose().catch(() => {});
-          opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
-        } else if (findings === 0) {
+        if (result.autoApply?.status === "applied") {
+          await dispose();
+          done(`dream applied (${findings} finding(s)); previous wiki kept at ${result.autoApply.backup}`);
+        } else if (findings === 0 && result.consolidationError === undefined) {
           // nothing to look at, so nothing to keep: a clean dream that left a full wiki copy in
           // /tmp on every trigger is how an unattended maintenance task fills a disk
-          await result.workspace.dispose().catch(() => {});
-          opts.onDone?.("dream ran clean; nothing to review");
+          const disposed = await dispose();
+          done("dream ran clean; nothing to review" + (disposed ? "" : `; cleanup pending at ${result.outputRoot}`));
         } else {
-          opts.onDone?.(
+          done(
             `${result.report.scan?.complete === false ? "dream raw scan incomplete; auto-apply disabled; " : ""}dream found ${findings} thing(s) to review: inspect ${result.outputRoot} (manifest: ${result.workspace.manifestPath}); agentrig dream --review runs a fresh review`,
           );
         }
       } catch (err) {
-        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+        maintenanceDiagnostic(() => opts.onError?.(err instanceof Error ? err : new Error(String(err))));
       }
       return { action: "continue" };
     },

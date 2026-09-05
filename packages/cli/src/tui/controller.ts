@@ -127,7 +127,7 @@ export interface TuiControllerOptions {
   /** `/memory <q>` — returns lines to print. Injected so the controller stays free of stores. */
   onMemory?: (query: string) => Promise<string[]>;
   /** `/dream [--auto]` — returns lines to print. */
-  onDream?: (auto: boolean) => Promise<string[]>;
+  onDream?: (auto: boolean, signal: AbortSignal) => Promise<string[]>;
   /**
    * `/fork [seq]` and `/tree` (R3c). Injected like the others so the controller never touches the
    * session store: the TUI reads and writes logs only through the agent, and a fork is the one
@@ -241,7 +241,7 @@ export class TuiController {
     this.memory = fn;
   }
 
-  setDream(fn: (auto: boolean) => Promise<string[]>): void {
+  setDream(fn: (auto: boolean, signal: AbortSignal) => Promise<string[]>): void {
     this.dream = fn;
   }
 
@@ -263,7 +263,9 @@ export class TuiController {
   }
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
-  private dream: ((auto: boolean) => Promise<string[]>) | undefined;
+  private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
+  private dreamAbort: AbortController | undefined;
+  private dreaming: Promise<void> | undefined;
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
   private tree: ((id: string) => Promise<string[]>) | undefined;
   private children: ((children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>) | undefined;
@@ -424,6 +426,10 @@ export class TuiController {
   }
 
   abort(): void {
+    if (this.dreamAbort !== undefined) {
+      this.dreamAbort.abort(); this.print("cancelling dream…", "error");
+      if (this.session === null) return;
+    }
     if (this.session === null) {
       this.print("nothing running", "system");
       return;
@@ -448,12 +454,13 @@ export class TuiController {
    * running with the terminal gone keeps executing tools and billing, unwatched.
    */
   async shutdown(): Promise<void> {
-    if (this.session !== null) this.abort();
+    if (this.session !== null || this.dreamAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
     this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
+    await this.dreaming?.catch(() => {});
   }
 
   /** Handles one submitted line. Returns false when the app should exit. */
@@ -510,9 +517,13 @@ export class TuiController {
       case "memory":
         await this.delegate("memory", () => this.memory?.(cmd.query));
         return true;
-      case "dream":
-        await this.delegate("dream", () => this.dream?.(cmd.auto));
+      case "dream": {
+        if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
+        const controller = new AbortController(); this.dreamAbort = controller;
+        this.dreaming = this.delegate("dream", () => this.dream?.(cmd.auto, controller.signal));
+        try { await this.dreaming; } finally { this.dreamAbort = undefined; this.dreaming = undefined; }
         return true;
+      }
       case "resume":
         if (cmd.id === "") this.print("usage: /resume <session-id>", "error");
         else {
@@ -684,12 +695,12 @@ export class TuiController {
 
   /** Runs an injected side command, reporting rather than throwing into the render loop. */
   private async delegate(name: string, fn: () => Promise<string[]> | undefined): Promise<void> {
-    const work = fn();
-    if (work === undefined) {
-      this.print(`/${name} is not available in this session`, "error");
-      return;
-    }
     try {
+      const work = fn();
+      if (work === undefined) {
+        this.print(`/${name} is not available in this session`, "error");
+        return;
+      }
       for (const l of await work) this.print(l, "system");
     } catch (err) {
       this.print(`/${name} failed: ${err instanceof Error ? err.message : String(err)}`, "error");

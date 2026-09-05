@@ -18,6 +18,10 @@ export function positiveLimit(name: string, value: number): number {
   return value;
 }
 export class MaintenanceLimitError extends Error { override name = "MaintenanceLimitError"; }
+/** Diagnostic callbacks are not work: neither a throw nor an async rejection changes commits. */
+export function maintenanceDiagnostic(callback: () => unknown): void {
+  try { void Promise.resolve(callback()).catch(() => {}); } catch { /* diagnostic only */ }
+}
 const timeout = (ms: number) => new DOMException(`maintenance timed out after ${ms}ms`, "TimeoutError");
 function outcome(error: unknown): AuxiliaryCall["outcome"] {
   if (error instanceof MaintenanceLimitError) return "limit";
@@ -96,6 +100,7 @@ export class MaintenanceRun {
         });
       });
       const result = await Promise.race([work, aborted]);
+      if (performance.now() - started >= this.limits.callTimeoutMs) controller.abort(timeout(this.limits.callTimeoutMs));
       controller.signal.throwIfAborted(); this.check();
       record.outcome = "completed";
       record.usageComplete = record.usage !== undefined && reported && !malformedUsage;
@@ -114,12 +119,18 @@ export class MaintenanceRun {
     }
   }
 
-  async completeJson(provider: ModelProvider, system: string, user: string, maxTokens: number): Promise<string> {
+  async completeJson(provider: ModelProvider, system: string, user: string, maxTokens: number, opts: { requireEndTurn?: boolean } = {}): Promise<string> {
     positiveLimit("maxTokens", maxTokens);
     if (system.length + user.length > this.limits.maxInputChars) throw new MaintenanceLimitError("maintenance model input limit exceeded");
     return this.call("completion", provider.id, async (signal, usage) => {
       const iterator = provider.stream({ system, messages: [{ role: "user", content: [{ type: "text", text: user }] }], tools: [], maxTokens }, signal)[Symbol.asyncIterator]();
-      let text = ""; let events = 0; let retried = false; let lastUsage: Usage | undefined;
+      let closed = false;
+      const close = (): void => {
+        if (closed) return; closed = true;
+        try { void Promise.resolve(iterator.return?.()).catch(() => {}); } catch { /* cleanup cannot mask outcome */ }
+      };
+      signal.addEventListener("abort", close, { once: true });
+      let text = ""; let events = 0; let retried = false; let lastUsage: Usage | undefined; let ended = false;
       try {
         for (;;) {
           signal.throwIfAborted();
@@ -133,13 +144,17 @@ export class MaintenanceRun {
             text += ev.text;
           } else if (ev.type === "usage") { lastUsage = ev.usage; usage(ev.usage, ev.reported !== false && !retried); }
           else if (ev.type === "retry") { retried = true; if (lastUsage !== undefined) usage(lastUsage, false); }
-          else if (ev.type === "stop" && ev.reason !== "end_turn") throw new Error(`auxiliary completion stopped: ${ev.reason}`);
+          else if (ev.type === "stop") {
+            if (ev.reason !== "end_turn") throw new Error(`auxiliary completion stopped: ${ev.reason}`);
+            ended = true;
+          }
           // Let timers/abort run even if an adapter yields endless immediately-resolved events.
           if (events % 64 === 0) await new Promise<void>(resolve => setImmediate(resolve));
         }
+        if (opts.requireEndTurn === true && !ended) throw new Error("auxiliary completion ended without end_turn");
         return text;
       } finally {
-        try { void Promise.resolve(iterator.return?.()).catch(() => {}); } catch { /* cleanup cannot mask outcome */ }
+        signal.removeEventListener("abort", close); close();
       }
     }, provider.model);
   }

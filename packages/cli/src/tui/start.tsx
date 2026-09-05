@@ -1,6 +1,7 @@
 import { render } from "ink";
 import {
   unionRetrieve,
+  formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
@@ -127,7 +128,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
   if (opts.memory !== undefined) {
     controller.setDream(interactiveDream({ dir: opts.memory, provider: built.providers.memory,
-      cwd: process.cwd(), scanLimits: opts.dreamScanLimits ?? {} }));
+      cwd: process.cwd(), scanLimits: opts.dreamScanLimits ?? {}, limits: opts.dreamLimits ?? {},
+      onUsage: report => controller.print(formatAuxiliaryUsage(report), "system"),
+      onError: error => controller.print(`dream warning: ${error.message}`, "error") }));
   }
 
   // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the

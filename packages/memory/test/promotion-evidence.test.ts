@@ -299,7 +299,10 @@ describe("runtime-backed claim promotion", () => {
     await wiki.write(target.path, target);
     const globalWiki = new FileMemoryStore({ root: join(root, "global"), scope: "global" }); await globalWiki.init();
     const provider: ModelProvider = { id: "scripted", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100_000 },
-      async *stream() { yield { type: "text_delta", text: JSON.stringify({ contradictions: [], superseded: [], removed: [], merged: [{ from: [page().path, target.path], to: target.path }] }) }; } };
+      async *stream() {
+        yield { type: "text_delta", text: JSON.stringify({ contradictions: [], superseded: [], removed: [], merged: [{ from: [page().path, target.path], to: target.path }] }) };
+        yield { type: "stop", reason: "end_turn" };
+      } };
     const result = await runDream({ wiki, raw, globalWiki, provider });
     try {
       expect(result.applied.mergedPages.some(m => m.from === page().path)).toBe(true);

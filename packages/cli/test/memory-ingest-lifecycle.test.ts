@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyDream, runDream, FileMemoryStore, FileRawStore, dreamOnSessionEnd, fingerprint, ingestOnSessionEnd, ingestSession, LoreBackend } from "@agentkitai/agentrig-memory";
 import { dreamCommand } from "../src/dream.js";
 import { interactiveDream } from "../src/tui/dream.js";
-import { memoryIngest } from "../src/memory.js";
+import { memoryIngest, memoryLint } from "../src/memory.js";
 import { buildProviders, buildRoleProvider } from "../src/provider.js";
 import { buildAgent } from "../src/agent-builder.js";
 
@@ -56,9 +56,11 @@ it("interactive /dream forwards scan caps to both generation and successful appl
   const scanLimits = { maxEntries: 20000 };
   const lines = await interactiveDream({ dir: root, provider: buildRoleProvider({}), cwd: root, scanLimits })(true);
   expect(lines[0]).toContain("dream applied");
-  expect(runDream).toHaveBeenCalledWith(expect.objectContaining({ scanLimits }));
-  expect(applyDream).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.any(String), { scanLimits });
+  expect(runDream).toHaveBeenCalledWith(expect.objectContaining({ scanLimits, autoApply: true }));
+  expect(applyDream).not.toHaveBeenCalled(); // one SDK lifetime, no second CLI apply after it closes
   const result = await vi.mocked(runDream).mock.results[0]!.value;
+  expect(result.autoApply.status).toBe("applied");
+  expect(await readFile(join(result.autoApply.backup, "index.md"), "utf8")).toContain("# Index");
   await expect(readFile(result.workspace.manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCode = priorExit; await rm(root, { recursive: true, force: true }); });
@@ -101,9 +103,38 @@ it("wires agent-builder limits, span size and backend diagnostics into the sched
 });
 
 it("forwards dream scan limits to the scheduled hook instead of leaving its cadence scan fixed", async () => {
+  const onHookDone = vi.fn();
   await buildAgent({ root: join(root, "raw/sessions"), memory: root, maxTurns: "1", maxTokensPerTurn: "20",
-    dreamOnEnd: true, dreamScanLimits: { maxEntries: 20000 }, skillDiscovery: false, sandbox: "none" });
-  expect(dreamOnSessionEnd).toHaveBeenCalledWith(expect.objectContaining({ scanLimits: { maxEntries: 20000 } }));
+    dreamOnEnd: true, dreamScanLimits: { maxEntries: 20000 }, dreamLimits: { callTimeoutMs: 321 }, skillDiscovery: false, sandbox: "none" }, { onHookDone });
+  expect(dreamOnSessionEnd).toHaveBeenCalledWith(expect.objectContaining({ scanLimits: { maxEntries: 20000 }, limits: { callTimeoutMs: 321 } }));
+  vi.mocked(dreamOnSessionEnd).mock.calls[0]![0].onUsage!({ operation: "dream", outcome: "completed", calls: [],
+    durationMs: 1, reportedUsage: { input: 0, output: 0 }, unknownUsageCalls: 0, costUsd: 0 });
+  expect(onHookDone).toHaveBeenCalledWith(expect.stringContaining("auxiliary dream"));
+});
+
+it("standalone SIGINT reaches the provider, reports failed-run usage, and removes its handler", async () => {
+  const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
+  await wiki.write("concepts/a.md", { path: "concepts/a.md", body: "original", frontmatter: { type: "concept", slug: "a",
+    sources: [], aliases: [], updated: "2026-09-05", confidence: "high" } });
+  const before = await fingerprint(wiki.root); let signal: AbortSignal | undefined;
+  vi.mocked(buildRoleProvider).mockReturnValue({ ...buildRoleProvider({}), stream(_request, nextSignal) {
+    signal = nextSignal; process.emit("SIGINT");
+    return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) };
+  } });
+  const listeners = process.listenerCount("SIGINT");
+  await expect(dreamCommand({ dir: root, scope: "project", auto: true })).rejects.toMatchObject({ name: "AbortError" });
+  expect(signal?.aborted).toBe(true); expect(process.listenerCount("SIGINT")).toBe(listeners);
+  expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/auxiliary dream:.*aborted/);
+  expect(await fingerprint(wiki.root)).toBe(before);
+});
+
+it("memory lint forwards configurable bounds and reports zero-call failure accounting", async () => {
+  const listeners = process.listenerCount("SIGINT");
+  await expect(memoryLint({ dir: root, dreamScanLimits: { maxEntries: 1 }, dreamLimits: { timeoutMs: 2000 } }))
+    .rejects.toMatchObject({ name: "MaintenanceLimitError" });
+  expect(runDream).toHaveBeenCalledWith(expect.objectContaining({ limits: { timeoutMs: 2000 }, scanLimits: { maxEntries: 1 }, signal: expect.any(AbortSignal) }));
+  expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/auxiliary dream: 0 call.*limit/);
+  expect(process.listenerCount("SIGINT")).toBe(listeners);
 });
 
 it("the dream CLI refuses auto-apply of incomplete scans and retains the exact review artifact", async () => {

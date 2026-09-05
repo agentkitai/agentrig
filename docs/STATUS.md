@@ -1,11 +1,28 @@
 # Status
 
-Current roadmap row: **H5c2a — bounded wiki/raw scans.** H1–H4, H5a, H5b and H5c1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5c2b — dream lifecycle and auxiliary accounting.** H1–H4, H5a, H5b, H5c1 and H5c2a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5c2a in progress
+### H5c2b in progress
+
+PR #126 merged at 3e97b65 after exact-head PR CI 33965907380; main CI 33966024863 passed
+all platforms. Fresh branch starts from updated main. See `docs/plans/H5c2b.md` for this row.
+
+Implemented one SDK deadline across snapshots, bounded provider consolidation, regeneration and
+opt-in automatic apply. Incomplete/failed model passes are review-only; late cancellation cannot
+undo a live swap already in progress. Auxiliary snapshots/unknown usage reach CLI, lint, TUI and
+scheduled hooks; shutdown joins cancelled maintenance. New tests cover stalled/late providers,
+timer starvation, writer lock lifetime, post-swap cancellation, callback failures and UI wiring.
+Local build/typecheck and explicit Node 22 suite passed: 1,728 passes plus two skips (1,730 total,
+80 files). Independent review and exact-head PR/main CI remain required before H5c2c.
+
+### H5c2a complete (PR #126)
+
+Completion gate: final head 9c06f1c, merge 3e97b65, PR CI 33965907380 and main CI 33966024863
+all green. Two Claude passes; final conditional-approval repairs maintainer-tested. The following
+notes are historical intermediate gates, not outstanding work.
 
 PR #125 merged at fb8201e after final PR CI 33963220803 passed; main CI 33963323981 passed
 all platforms. H5c2a starts from that updated main. H5c2 is split into bounded wiki/raw scans,

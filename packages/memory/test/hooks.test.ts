@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
 import { dreamOnSessionEnd, FileMemoryStore, fingerprint, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
 
 function scripted(bodies: unknown[]): ModelProvider {
@@ -330,6 +330,30 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     for (const id of ["a", "b"]) await writeLog(id);
     const hook = dreamOnSessionEnd({ dir, provider: exploding, everySessions: 1, everyHours: 1, structuralOnly: true });
     expect(await hook.handler(ctx("b"))).toEqual({ action: "continue" });
+  });
+
+  it("forwards hook cancellation into dream providers and delivers failure accounting", async () => {
+    await writeLog("a"); const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "original", frontmatter: { type: "concept", slug: "a",
+      aliases: [], sources: [], updated: "2026-09-05", confidence: "high" } });
+    const controller = new AbortController(); let signal: AbortSignal | undefined;
+    const provider: ModelProvider = { ...scripted([{}]), stream(_request, nextSignal) {
+      signal = nextSignal; controller.abort();
+      return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) };
+    } };
+    const errors: Error[] = []; const reports: AuxiliaryReport[] = []; const before = await fingerprint(store.root);
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, provider, auto: true, onError: error => errors.push(error), onUsage: report => reports.push(report) });
+    expect(await hook.handler({ ...ctx("a"), signal: controller.signal })).toEqual({ action: "continue" });
+    expect(signal?.aborted).toBe(true); expect(errors[0]!.name).toBe("AbortError");
+    expect(reports[0]).toMatchObject({ operation: "dream", outcome: "aborted", unknownUsageCalls: 1 });
+    expect(await fingerprint(store.root)).toBe(before);
+  });
+
+  it("does no cadence scan for an already cancelled hook, even if its error callback throws", async () => {
+    const controller = new AbortController(); controller.abort();
+    const hook = dreamOnSessionEnd({ dir: join(dir, "missing"), onError: () => { throw new Error("notification failed"); } });
+    expect(await hook.handler({ ...ctx("a"), signal: controller.signal })).toEqual({ action: "continue" });
+    await expect(lstat(join(dir, "missing"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("a failed dream never changes the session's outcome", async () => {
