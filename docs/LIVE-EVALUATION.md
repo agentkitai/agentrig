@@ -52,3 +52,21 @@ A4/X4 need genuine human prose review under EVALSET's frozen rubric. Their autom
 results must remain unchanged. Provide the human an answer packet, then attach separately
 attributed verdicts through E2's humanVerdict field. Pending or failed checks never become PASS
 because the maintainer or a model reviewer thinks an answer looks right.
+
+## Publication
+
+After collection has closed, `node eval/pack-live.mjs CLOSED_EVIDENCE_ROOT NEW_PUBLICATION_DIRECTORY`
+creates a hashed, compressed evidence bundle, an index, a summary with unrun/blocked slots and
+an untrusted-answer packet for human review. It never changes verdicts or copies task workspaces,
+dependencies, credentials, or mutable session snapshots. It preserves created partial attempts
+as well as completed ones. It refuses an existing publication directory.
+
+The gzip payload is JSON with `files[path] = {sha256, bytes, base64}`. Inspect a selected record
+without extracting or executing anything:
+
+```sh
+node --input-type=module -e 'import{readFileSync}from"node:fs";import{gunzipSync}from"node:zlib";const b=JSON.parse(gunzipSync(readFileSync(process.argv[1])));console.log(Buffer.from(b.files[process.argv[2]].base64,"base64").toString())' evidence.json.gz 001-A1-s0m0-r1/report.json
+```
+
+Read [collection notes](E3-COLLECTION-NOTES.md) with results. Limitations discovered during
+collection are disclosed there, not hidden by changing the preregistration or silently rerunning.

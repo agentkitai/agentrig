@@ -30,9 +30,33 @@ describe("E3 frozen live-comparison mechanics (no live calls)", () => {
   it("keeps pending and unrun slots visible and reports variability without a benefit claim", () => {
     probe(`import assert from 'node:assert/strict';import {summarize,spread} from './eval/summarize-live.mjs';
       assert.deepEqual(spread([9,1,3,5]),{n:4,min:1,median:4,max:9});assert.equal(spread([]),null);
-      const s=summarize({ledger:{blocked:'quota'},completed:[{supervisor:false,memory:false,outcome:'BLOCKED',reportedTokens:3,wallMs:9}]});
+      const s=summarize({planned:96,ledger:{blocked:'quota',tokens:3,startedAt:Date.now()},completed:[{key:'001-A1-s0m0-r1',task:'A1',repeat:1,position:0,supervisor:false,memory:false,outcome:'BLOCKED',reportedTokens:3,wallMs:9}]});
       assert.equal(s.planned,96);assert.equal(s.completed,1);assert.equal(s.groups[0].outcomes.BLOCKED,1);assert.equal(s.groups[0].notRun,23);
       assert.equal(s.groups[1].notRun,24);assert.match(s.conclusion,/No benefit claim/);`);
+  });
+  it("rejects duplicate/mismatched scheduled results instead of inflating outcome counts", () => {
+    probe(`import assert from 'node:assert/strict';import {summarize} from './eval/summarize-live.mjs';
+      const row={key:'001-A1-s0m0-r1',task:'A1',repeat:1,position:0,supervisor:false,memory:false,outcome:'PASS',reportedTokens:3,wallMs:9};
+      const base={planned:96,ledger:{blocked:null,tokens:3,startedAt:Date.now()}};
+      assert.throws(()=>summarize({...base,completed:[row,row]}),/duplicate/);
+      assert.throws(()=>summarize({...base,completed:[{...row,memory:true}]}),/mismatched/);`);
+  });
+  it("packs closed evidence verbatim with hashes, excludes workspaces, and cannot overwrite a publication", () => {
+    probe(`import assert from 'node:assert/strict';import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {randomUUID,createHash} from 'node:crypto';import {gunzipSync} from 'node:zlib';import {pack,fence} from './eval/pack-live.mjs';
+      const root=await mkdtemp(join(tmpdir(),'agentrig-e3-pack-')),dest=root+'-publication';
+      const save=(p,v)=>writeFile(join(root,p),JSON.stringify(v));
+      try{await save('protocol.json',{revision:'a'.repeat(40)});await save('results.json',{planned:96,ledger:{tokens:0,startedAt:Date.now(),blocked:'fixture'},completed:[]});
+        const key='013-A4-s1m1-r1';await mkdir(join(root,key,'artifacts'),{recursive:true});
+        await mkdir(join(root,key+'-workspace'));await writeFile(join(root,key+'-workspace','excluded'),'not evidence');
+        await save(key+'/checks.json',{task:'A4',runId:randomUUID(),outcome:'BLOCKED',behavior:'PASS',regression:'PASS',scope:'PASS',submittedTests:'NOT_REQUIRED',manual:'PENDING',evidence:[]});
+        const answer='untrusted answer';await writeFile(join(root,key,'artifacts/answer.md'),answer);
+        await pack(root,dest);const compressed=await readFile(join(dest,'evidence.json.gz'));const bundle=JSON.parse(gunzipSync(compressed));
+        assert(!Object.keys(bundle.files).some(p=>p.includes('workspace')));const entry=bundle.files[key+'/artifacts/answer.md'];
+        assert.equal(Buffer.from(entry.base64,'base64').toString(),answer);assert.equal(entry.sha256,createHash('sha256').update(answer).digest('hex'));
+        assert.match(await readFile(join(dest,'ANSWERS.md'),'utf8'),/Automatic outcome: BLOCKED/);
+        assert(fence(String.fromCharCode(96).repeat(3)).startsWith(String.fromCharCode(96).repeat(4)));
+        await assert.rejects(pack(root,dest),/EEXIST/);
+      }finally{await rm(root,{recursive:true,force:true});await rm(dest,{recursive:true,force:true})}`);
   });
   it("pins worker identity and exposes only its workspace with no network or inherited credentials", () => {
     probe(`import assert from 'node:assert/strict'; import {dockerArgs} from './eval/live-support.mjs';

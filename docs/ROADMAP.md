@@ -873,3 +873,10 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   consider a larger/per-run preparation cache for larger fixtures, and supply a disposable Git
   author identity if committing becomes part of a future task. These are not E3 prerequisites;
   current tasks need no commits and the pinned AgentRig preparation passed with the present limits.
+- Future evaluation hygiene: create a training-only Git baseline rather than replacing a held-out
+  TASK.md after export. E3's training trace exposed the old X4 task description through a diff
+  (not a held-out solution/result/check); retain and disclose that limitation in this exploratory
+  comparison. See [E3 collection notes](E3-COLLECTION-NOTES.md). Do not retroactively tune v1 checks.
+- Future EVALSET prompt clarity: distinguish A4's terminal session event from a final auxiliary
+  snapshot, and disclose evidence-file/path formatting restrictions. Preserve the current v1
+  scores and raw answers; an ambiguous structured-field failure is not by itself a reasoning failure.
