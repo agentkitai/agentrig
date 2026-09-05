@@ -5,7 +5,18 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-05
 
-### E3 in progress
+### E3 collection complete — human gate pending (PR #134)
+
+All 96 scheduled Luna attempts ran once: 66 PASS, 18 FAIL, 12 BLOCKED awaiting genuine X4
+prose judgments. Total 9,358,630 reported tokens including training/ingest, zero incomplete
+calls, no global guard stop. All regression/scope lanes passed. The full evidence archive and
+[results/limitations](E3-RESULTS.md) are published in this PR; 2,872 file hashes were verified,
+all 96 reports reproduced, and all 48 frozen memory copies matched. No feature benefit is
+established pending human judgments; the supervisor-on memory comparison also exceeds the
+preregistered token-overhead threshold. Features remain opt-in. Human packets:
+[R1](reviews/E3-X4-R1.md), [R2](reviews/E3-X4-R2.md), [R3](reviews/E3-X4-R3.md).
+Do not merge or start R4 before this gate, final analysis, final-head CI and post-merge main CI.
+The notes below record implementation/collection history, not new submilestones.
 
 Subscription-only Luna is authorized and connectivity passed. Protocol and stop rules are in
 [plans/E3.md](plans/E3.md). E2 PR #133 is merged at d6d82f5; exact-head CI 33977198824 and

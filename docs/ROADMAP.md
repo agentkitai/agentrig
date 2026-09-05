@@ -884,3 +884,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   summaries, improve missing-argument diagnostics, and add explicit symlink/size-limit/protocol
   rejection tests. A hard-killed collection lacking its final results.json deliberately cannot
   be packaged as a closed run; any future recovery must preserve partial evidence and provenance.
+- Normalize supervisor plan/observation path spelling: E3 recorded drift warnings for relative
+  changes already covered by absolute plan paths (for example runs 019 and 029). Add focused
+  controls before changing matching; preserve task-boundary checks. This is a quality follow-up,
+  not a reason to tune the frozen experiment or create another E3 submilestone.
