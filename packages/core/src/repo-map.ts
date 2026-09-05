@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type * as Ts from "typescript";
 
 type TypeScriptApi = Omit<typeof Ts, "default">;
@@ -32,6 +32,13 @@ interface Entry {
 }
 
 const SKIP_DIRECTORIES = new Set([".git", ".agentrig", "node_modules", "dist", "coverage", ".next", ".turbo"]);
+
+/** Generated checkout containers, not entire instruction/config directories. Applied to
+ * descendants only: mapping a checkout itself still maps its project normally. Other checkout
+ * locations can be omitted with excludePaths; a nested .git alone may belong to a submodule. */
+function generatedCheckouts(parent: string, name: string): boolean {
+  return name === ".worktrees" || (basename(parent) === ".claude" && name === "worktrees");
+}
 const TS_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 const MAX_TS_SOURCE_BYTES = 256 * 1024;
 const MAX_TOTAL_TS_SOURCE_BYTES = 2 * 1024 * 1024;
@@ -60,7 +67,7 @@ async function scan(root: string, excludePaths: string[] = []): Promise<Entry[]>
       const absolute = join(directory, child.name);
       if (excluded.has(resolve(absolute))) continue;
       if (child.isDirectory()) {
-        if (!SKIP_DIRECTORIES.has(child.name)) await walk(absolute);
+        if (!SKIP_DIRECTORIES.has(child.name) && !generatedCheckouts(directory, child.name)) await walk(absolute);
         continue;
       }
       // Never follow symlinks: a repository map cannot become an ambient read outside the cwd.

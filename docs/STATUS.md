@@ -5,6 +5,21 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-05
 
+### H2 implementation (2026-09-05; review and CI pending)
+
+Repository maps prune `.claude/worktrees` and `.worktrees` descendant containers before scanning,
+so generated files consume neither the prompt budget nor the freshness snapshot. `.claude`
+instructions/commands, ordinary `worktrees` directories and submodule contents remain visible.
+Mapping a checkout as the requested root still works. Nonstandard checkout locations remain
+available to the existing `excludePaths` option; no Git commands or reads into external Git
+metadata are used. This intentionally recognizes generated-container conventions, not every
+directory containing `.git` (which would incorrectly hide submodules).
+
+Seven repository-map tests pass in the actual workspace with the existing review worktrees
+present, including the previously failing whole-repository budget regression. New fixtures pin
+budget isolation, freshness isolation, instruction visibility, submodule preservation, explicit
+exclusions and checkout-root behavior. Full-suite validation and independent review are pending.
+
 ### H1 complete (2026-09-05; PR #118)
 
 Built-in file mutations now cross the actual process sandbox using a fixed program and stdin
