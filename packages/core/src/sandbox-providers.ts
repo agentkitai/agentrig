@@ -3,6 +3,8 @@ import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   SandboxDeniedError,
+  currentSandboxPolicy,
+  withSandboxPolicy,
   type SandboxCommand,
   type SandboxPolicy,
   type SandboxProvider,
@@ -48,7 +50,18 @@ export function classifiable(stderr: string): string {
   return `${head}\n[…]\n${tail}`;
 }
 
-const activeSandbox = new AsyncLocalStorage<ActiveSandbox>();
+const activeSandbox = new AsyncLocalStorage<ActiveSandbox | undefined>();
+
+/** Internal filesystem broker reads the runtime policy, never a tool-supplied cwd. */
+export function activeSandboxPolicy(): SandboxPolicy | undefined {
+  const policy = currentSandboxPolicy() ?? activeSandbox.getStore()?.policy;
+  return policy === undefined ? undefined : { ...policy };
+}
+
+/** A one-call escalation clears inherited contexts as well as bypassing prepare(). */
+export function outsideSandbox<T>(command: () => T): T {
+  return withSandboxPolicy(undefined, () => activeSandbox.run(undefined, command));
+}
 
 /**
  * Process-launching core tools call this immediately before spawn. A provider prepared around the
@@ -60,7 +73,10 @@ export function sandboxSpawnInvocation(
   _cwd: string,
 ): SandboxSpawnInvocation {
   const active = activeSandbox.getStore();
-  if (active === undefined) return { command, args: [...args], sandboxed: false };
+  if (active === undefined) {
+    if (currentSandboxPolicy() !== undefined) throw new SandboxDeniedError("the configured provider has no sandboxed process launcher");
+    return { command, args: [...args], sandboxed: false };
+  }
   // The prepared session policy is authoritative. A tool cannot widen the bind/write boundary by
   // handing its process launcher a different cwd.
   return {
@@ -369,7 +385,8 @@ export function writeDenialPlausible(
 export class NoneSandboxProvider implements SandboxProvider {
   readonly backend = "none";
 
-  prepare<T>(cmd: SandboxCommand<T>, _policy: SandboxPolicy): SandboxCommand<T> {
+  prepare<T>(cmd: SandboxCommand<T>, policy: SandboxPolicy): SandboxCommand<T> {
+    if (policy.mode !== "none") return async () => { throw new SandboxDeniedError("the none provider cannot enforce a sandbox mode"); };
     return cmd;
   }
 }
@@ -423,6 +440,11 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
       args: [
         "run",
         "--rm",
+        "--interactive",
+        // Bind-mounted artifacts belong to the caller, not container root. This also avoids
+        // granting process tools host-file privileges the harness itself does not have.
+        "--user",
+        `${process.getuid?.() ?? 65534}:${process.getgid?.() ?? 65534}`,
         "--read-only",
         ...(policy.network === true ? [] : ["--network", "none"]),
         "--mount",

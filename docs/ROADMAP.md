@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H1.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H2; H1 complete (PR #118).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -184,7 +184,7 @@ their cost and complexity.
 The tables below are the original research snapshot, **not current implementation status**.
 R1, R1.5, R2, R3 and R3.5 have since landed. Project context, configuration, trust, doctor,
 context manifests, eviction and session trees exist; recorded fork replay executes no tools.
-Sandbox enforcement remains incomplete for direct in-process effects (H1). See the priority
+H1 repaired supported tool effects and explicitly gates unsupported host effects. See the priority
 table above and STATUS for current work; competitor columns are historical research claims.
 
 | Capability | Codex | pi | dsh | Hermes | OpenClaw | nanobot | AgentRig today | Milestone |
@@ -336,7 +336,7 @@ question 1.*
 | R2a *(done)* | `SandboxProvider` seam in core: `prepare(cmd, policy) → cmd'` wrapping tool execution; modes `read-only` / `workspace-write` / `none`; `sandbox.denied` event when the OS blocks an action; the permission layer unchanged and orthogonal | core |
 | R2b *(done)* | Providers: `none` (today's behaviour, default), `docker` (portable: bind-mount cwd rw, rootfs ro, `--network none` unless `net` allowed), `seatbelt` (macOS `sandbox-exec` profile: cwd-write, deny-net-by-default) | core |
 | R2c *(done)* | Escalation path: a tool call that fails **inside** the sandbox emits a `permission.request` with `origin: "sandbox-escalation"`; approval retries the same call unsandboxed once. TUI renders it distinctly ("blocked by sandbox — run outside it?") | core + cli |
-| R2d *(done; enforcement gap tracked in H1)* | Wiring: `--sandbox <mode>` + config key; Linux runner lands `docker` in CI; **F3**: Windows CI job added with sandbox=none, proving the seam's no-op path. The original `--yolo` + sandbox recommendation is withdrawn pending H1: direct in-process file writes currently bypass that boundary | cli, .github |
+| R2d *(done; repaired by H1)* | Wiring: `--sandbox <mode>` + config key; Linux runner lands `docker` in CI; **F3**: Windows CI job added with sandbox=none. H1 routes file mutations through the process boundary and gates unsupported effects; the blanket `--yolo` recommendation is replaced by the explicit supported-effects and trusted-host limitations in `docs/plans/H1.md` | cli, .github |
 
 Acceptance: a test drives a fake provider to write outside cwd under `workspace-write` and
 observes `sandbox.denied` + escalation request + (on approval) retry; docker provider gets an

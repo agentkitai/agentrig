@@ -1,9 +1,31 @@
 # Status
 
-Current roadmap row: **H1 — complete sandbox enforcement across tool effects.** R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H2 — exclude generated checkout trees from repository maps.** H1 is complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
+
+### H1 complete (2026-09-05; PR #118)
+
+Built-in file mutations now cross the actual process sandbox using a fixed program and stdin
+data, staging then renaming to preserve the target on interrupted input. Read-only and outside-workspace writes fail even under allow-all permissions. Docker
+uses the caller's UID/GID so its artifacts do not become root-owned. Unsupported tools, including
+memory mutations and network-backed recall, require explicit one-call outside approval; headless denies.
+Local memory read/search and sandbox-inheriting subagents remain available. Host hooks
+(including end-of-session memory maintenance) and CLI MCP startup are refused in enforcing modes.
+Trusted SDK code, provider calls, reads and session bookkeeping are not isolated; compatibility
+is declared by trusted registration code, never by a model, MCP annotation or permission class.
+
+Validation: build/typecheck and all 1,369 tests pass in a clean checkout, including live Docker,
+interrupted-target preservation, hardlink replacement, physical symlink resolution, local memory
+retrieval and subagent boundary checks. Linux/macOS/Windows CI passed on code head ca81510.
+Four independent Claude review rounds closed all findings; the final delta review has no findings.
+Review prompted atomic writes, SDK policy propagation, retained local recall/subagents, physical
+symlink handling, stronger negative tests and documentation corrections. Mutation checks confirm
+the outside-cwd tests detect bypassed policy and the Lore fixture detects removal of the CLI fix.
+The existing nested-worktree map failure remains H2; no user worktrees were removed to obtain
+this result. See [plans/H1.md](plans/H1.md) for implementation and trusted-host limitations.
+Each subsequent row starts only after the preceding PR and post-merge main CI are green.
 
 The user requested a roadmap revision following the code review. The authoritative order is
 [ROADMAP §5](ROADMAP.md#5-sequencing-and-exit-criteria): **H1–H5 → E1–E3 → R4 → H6**, followed
@@ -17,15 +39,17 @@ promotion eligibility based on nonexistent session citations. The repository map
 nested review worktree, exhausting its budget. These gaps must be corrected before expanding
 the system's authority or turning memory into durable instructions.
 
-Current limitations: sandboxing wraps participating process launches, not all host-process
-effects; `--yolo` + sandbox is not yet a sufficient containment recommendation. Promotion counts
+Current limitations after H1: only supported effects cross the sandbox; trusted SDK code and
+bookkeeping remain host operations. Shell authority is path-based and pre-existing hardlinks may
+alias outside inodes; the file broker avoids that alias through atomic replacement. Promotion counts
 page-supplied citations, not independently verified claim support. Neither supervisor nor memory
 benefit is established by scripted-provider tests alone. In-process extensions, if added, remain
 trusted code with ambient env/filesystem access despite a restricted API object.
 
 Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
-worktree in the repository map), one skipped. H/E rows are **planned, not implemented**. This
-revision changes documentation only and preserves existing R identifiers. Older notes below
+worktree in the repository map), one skipped. The original roadmap revision changed documentation
+only and preserved existing R identifiers. H1's implementation and validation are recorded above;
+the remaining H/E rows are still planned. Older notes below
 record decisions at the time; they do not override these priorities or current limitations.
 
 | M | Deliverable | Status |

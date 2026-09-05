@@ -7,7 +7,8 @@ import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool, ToolContext } from "./tool.js";
-import { SandboxDeniedError, type SandboxConfig } from "./sandbox.js";
+import { SandboxDeniedError, withSandboxPolicy, type SandboxConfig } from "./sandbox.js";
+import { outsideSandbox } from "./sandbox-providers.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
 import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
 import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
@@ -353,6 +354,9 @@ function displayWithOutputHandle(
 }
 
 export function createAgent(config: AgentConfig): Agent {
+  if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
+    throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
+  }
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
@@ -1229,7 +1233,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const command = () => tool.execute(input, ctx);
         // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
         // and selecting `none` still traverses the provider seam so providers own mode semantics.
-        const prepared = config.sandbox === undefined
+        const prepared = config.sandbox !== undefined && config.sandbox.mode !== "none" && tool.sandbox !== "compatible"
+          ? async () => { throw new SandboxDeniedError(`tool ${tool.name} has no sandbox-compatible execution path; running it requires explicit outside-sandbox approval`); }
+          : config.sandbox === undefined
           ? command
           : config.sandbox.provider.prepare(command, {
               mode: config.sandbox.mode,
@@ -1238,7 +1244,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             });
         let r;
         try {
-          r = await raceAbort(prepared(), `tool ${tool.name}`);
+          r = await raceAbort(withSandboxPolicy(
+            config.sandbox === undefined || config.sandbox.mode === "none" ? undefined : {
+              mode: config.sandbox.mode, cwd,
+              ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
+            }, prepared,
+          ), `tool ${tool.name}`);
         } catch (err) {
           if (config.sandbox === undefined || !(err instanceof SandboxDeniedError)) throw err;
 
@@ -1271,7 +1282,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           // Deliberately call the original deferred command, never `prepared`, and never catch this
           // as another escalation. A provider-shaped error from this one retry is an ordinary tool
           // failure because no sandbox was active for it.
-          r = await raceAbort(command(), `tool ${tool.name} outside sandbox`);
+          r = await raceAbort(outsideSandbox(command), `tool ${tool.name} outside sandbox`);
         }
         const ok = r.isError !== true;
         const overflow = overflowResult(r);

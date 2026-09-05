@@ -40,6 +40,7 @@ type ReadOutputInput = z.infer<typeof ReadOutputInput>;
 export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, string> {
   return {
     name: READ_OUTPUT_TOOL,
+    sandbox: "compatible",
     description:
       "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. " +
       "Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, " +

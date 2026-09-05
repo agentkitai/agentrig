@@ -32,6 +32,7 @@ const MAX_LINE_CHARS = 250;
 export function grepTool(): Tool<GrepInput, GrepMatch[]> {
   return {
     name: "grep",
+    sandbox: "compatible",
     description:
       "Search file contents with a regular expression; returns path:line: text matches. " +
       "`path` may be a directory to walk or a single file to search. " +

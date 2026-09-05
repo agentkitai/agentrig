@@ -39,6 +39,12 @@ export interface Tool<I = unknown, O = unknown> {
   inputSchema: z.ZodType<I>;
   permission: PermissionClass | ((input: I) => PermissionClass);
   /**
+   * Trusted SDK registration only: the implementation has no unrestricted host effects and
+   * routes mutations/processes through the active sandbox. Never infer this from tool names,
+   * permission classes, model input or MCP annotations. Omitted tools require outside approval.
+   */
+  sandbox?: "compatible";
+  /**
    * The filesystem paths a call would touch (raw, as given — relative paths are resolved
    * against the session cwd by the policy). Lets policies confine a tool to the working
    * directory (`cwdOnly` rules). A tool without this cannot be path-confined (e.g. bash).

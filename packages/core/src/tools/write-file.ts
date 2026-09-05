@@ -1,9 +1,10 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import { dirname, relative } from "node:path";
+import { stat } from "node:fs/promises";
+import { relative } from "node:path";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
+import { writeToolFile } from "./sandbox-write.js";
 
 const WriteFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -14,6 +15,7 @@ type WriteFileInput = z.infer<typeof WriteFileInput>;
 export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: number }> {
   return {
     name: "write_file",
+    sandbox: "compatible",
     description: "Create or overwrite a file with the given content. Parent directories are created.",
     inputSchema: WriteFileInput,
     permission: "write",
@@ -21,8 +23,7 @@ export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: num
     async execute(input, ctx): Promise<ToolResult<{ path: string; bytes: number }>> {
       const path = resolveIn(ctx.cwd, input.path);
       const existed = await stat(path).then(() => true, () => false);
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, input.content, "utf8");
+      await writeToolFile(path, input.content, ctx.signal, true);
       const rel = relative(ctx.cwd, path) || path;
       ctx.emit({
         type: "file.changed",
