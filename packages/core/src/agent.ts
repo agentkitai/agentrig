@@ -889,6 +889,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
         const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
         let usage: Usage = { input: 0, output: 0 };
+        let usageReported = false;
+        let usageRetried = false;
+        let sawStop = false;
         let stop: StopReason = "end_turn";
         let stopRaw: string | undefined;
         try {
@@ -905,12 +908,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
                 break;
               case "usage":
                 usage = ev.usage;
+                usageReported = ev.reported !== false;
                 break;
               case "stop":
                 stop = ev.reason;
+                sawStop = true;
                 stopRaw = ev.raw;
                 break;
               case "retry":
+                usageRetried = true;
                 // informational: the provider re-requested a transient failure; logged so a slow
                 // turn is explicable from the session log alone
                 await emit({
@@ -932,7 +938,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           throw err;
         }
 
-        await emit({ type: "model.response", usage, stop });
+        await emit({ type: "model.response", usage, stop,
+          usageComplete: usageReported && sawStop && stop !== "error" && !usageRetried });
         {
           // post_model: observe what came back; `inject` queues a follow-up user message
           const h = await hook("post_model", {

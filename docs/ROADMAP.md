@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: E1; H1–H5 complete in PRs #118–#131.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: E2; H1–H5 and E1 complete in PRs #118–#132.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -8,8 +8,8 @@ evidence. This revision changes planned work, not the implementation status of c
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Now | H1–H5: execution boundary, context map, memory evidence, concurrency and cancellation | Real-path regression tests prove the corrected guarantees; limitations are documented |
-| Next | E1–E3: independent checks, outcome metrics, controlled real-model comparisons | Published baseline and ablations, including failures and inconclusive results |
+| Complete | H1–H5 and E1: hardening and frozen independent tasks | PRs #118–#132 merged with exact-head and post-merge three-platform CI |
+| Now | E2–E3: outcome metrics and controlled real-model comparisons | Published baseline and ablations, including failures and inconclusive results |
 | Then | R4a–R4c: checkpoints and undo; H6: focused core extraction | Shell and file-tool changes recover correctly; extraction preserves behavior |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
@@ -866,3 +866,6 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   Git-internal change inventory if adversarial submission checking becomes a goal. Current limits
   are explicit. Expand the lightweight AgentRig lane integration checks in CI if their runtime is
   justified; actual fresh-workspace A1/A2/A3 build/check trials are already maintainer evidence.
+- E2 reporting follow-ups: move unusually verbose E1 diagnostics into bounded hashed side files
+  instead of invalidating an oversized report bundle; consider longitudinal resumed/forked-history
+  aggregation only when needed. Fresh-attempt reports and explicit input limits suffice for E3.

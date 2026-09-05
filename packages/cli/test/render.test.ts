@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("labels legacy and incomplete main usage as unknown, not a known zero", () => {
+  const event = HarnessEvent.parse({ type: "model.response", seq: 1, ts: 1, sessionId: "s", usage: { input: 0, output: 0 }, stop: "end_turn" });
+  expect(renderEvent(event)).toContain("total-usage=unknown");
+  expect(renderEvent({ ...event, usageComplete: false })).toContain("total-usage=unknown");
+  expect(renderEvent({ ...event, usageComplete: true })).not.toContain("total-usage=unknown");
+});
+
 it("labels auxiliary reported and unknown usage without presenting it as main usage or free", () => {
   const event = HarnessEvent.parse({ type: "auxiliary.usage", id: "review-1", final: true, seq: 2, ts: 1, sessionId: "s",
     report: { operation: "reviewer", outcome: "aborted", durationMs: 2, calls: [

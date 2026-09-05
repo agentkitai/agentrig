@@ -559,7 +559,11 @@ cumulative `AuxiliaryReport` and `final` flag. Replace snapshots by ID, never su
 them into main-model totals. An unfinished snapshot keeps total consumption/cost unknown when
 the log closes; `session.end` remains its final event. CLI/TUI render final and unfinished usage
 separately. See `docs/plans/H5-auxiliary-lifecycle.md` for defaults, SDK options and the limits of
-cancelling uncooperative JavaScript/remote work. Evaluation-wide aggregation/pricing remains E2.
+cancelling uncooperative JavaScript/remote work. E2's bounded evidence-bundle report keeps main,
+child and auxiliary consumption explicit and prices only supplied role/provider/model rates;
+see `docs/EVALUATION-REPORTS.md`. Missing collector coverage remains unknown. Optional
+`model.response.usageComplete` distinguishes new reported-zero calls from synthesized/missing
+usage; legacy absence is conservative unknown, never a schema incompatibility.
 
 ```ts
 interface Reviewer {

@@ -4,6 +4,13 @@ import { HarnessEvent, SupervisorRecord, parseEvent, serializeEvent, parseAnthro
 async function* stream(events: unknown[]) { for (const event of events) yield `data: ${JSON.stringify(event)}\n\n`; }
 async function usage(events: AsyncIterable<ModelEvent>) { for await (const event of events) if (event.type === "usage") return event; throw new Error("missing usage event"); }
 
+it("round-trips optional main usage completeness while retaining legacy logs", () => {
+  const base = { type: "model.response", seq: 1, ts: 1, sessionId: "s", usage: { input: 0, output: 0 }, stop: "end_turn" };
+  expect(parseEvent(JSON.stringify(base))).not.toHaveProperty("usageComplete");
+  for (const usageComplete of [true, false]) expect(parseEvent(serializeEvent(HarnessEvent.parse({ ...base, usageComplete })))).toMatchObject({ usageComplete });
+  expect(HarnessEvent.safeParse({ ...base, usageComplete: "true" }).success).toBe(false);
+});
+
 it("validates and round-trips cumulative auxiliary snapshots separately from model responses", () => {
   const record = { type: "auxiliary.usage", id: "review-1", final: false, report: {
     operation: "reviewer", outcome: "completed", durationMs: 1,

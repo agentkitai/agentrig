@@ -1,0 +1,1 @@
+{"task":"A1","runId":"00000000-0000-4000-8000-000000000001","outcome":"FAIL","behavior":"FAIL","regression":"PASS","scope":"PASS","submittedTests":"PASS","manual":"NOT_REQUIRED","evidence":["Synthetic negative control: independent behavior failed although the agent said done."]}

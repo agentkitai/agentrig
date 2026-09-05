@@ -67,7 +67,7 @@ export function renderEvent(e: HarnessEvent): string {
       const cacheWrite = e.usage.cacheWrite === undefined || e.usage.cacheWrite === 0
         ? ""
         : ` cacheWrite=${formatTokens(e.usage.cacheWrite)}`;
-      return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}`;
+      return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}${e.usageComplete === true ? "" : " total-usage=unknown"}`;
     }
     case "message.append": return `${p} role=${e.message.role} blocks=${e.message.content.length}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
