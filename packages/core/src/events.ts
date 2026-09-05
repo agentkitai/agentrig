@@ -206,6 +206,9 @@ export const EventPayload = z.discriminatedUnion("type", [
     durationMs: z.number().int(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
+    /** The tool stopped collecting or did not supply its full text; even an output artifact
+     * contains only the recorded portion. Distinct from representational display truncation. */
+    outputIncomplete: z.boolean().optional(),
     /** Additive for compatibility with logs written before output artifacts existed. */
     truncated: z.boolean().optional(),
   }),

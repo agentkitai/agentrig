@@ -162,6 +162,9 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
     onBackendError: backendError,
     ...(backend === null ? {} : { backend, checkBackendConflicts: true }),
   });
+  for (const omission of result.omissions) {
+    console.error(`uninspected evidence: event ${omission.eventIndex}, ${omission.field}: ${omission.reason}`);
+  }
   if (result.skipped) {
     console.log(`session ${sessionId} already ingested and unchanged; nothing to do`);
     return;

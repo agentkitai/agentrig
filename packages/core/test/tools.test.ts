@@ -94,11 +94,28 @@ describe("bash", () => {
 });
 
 describe("read_file", () => {
+  it.each(["one\ntwo\n", "one\r\ntwo\r\n"])("does not offer a phantom page after a final newline: %j", async content => {
+    await writeFile(join(root, "terminated.txt"), content);
+    const r = await readFileTool().execute({ path: "terminated.txt", limit: 2 }, ctx);
+    expect(r.display).toBe("1\tone\n2\ttwo");
+    expect(r.truncated).toBeUndefined();
+  });
+
+  it("preserves a real trailing blank line and explains empty/out-of-range reads", async () => {
+    await writeFile(join(root, "blank.txt"), "one\n\n");
+    const first = await readFileTool().execute({ path: "blank.txt", limit: 1 }, ctx);
+    expect(first.display).toContain("continue with offset 2");
+    expect((await readFileTool().execute({ path: "blank.txt", offset: 2 }, ctx)).display).toBe("2\t");
+    expect((await readFileTool().execute({ path: "blank.txt", offset: 3 }, ctx)).display).toBe("offset 3 is beyond end of file (2 lines)");
+    await writeFile(join(root, "empty.txt"), "");
+    expect((await readFileTool().execute({ path: "empty.txt" }, ctx)).display).toBe("file is empty");
+  });
+
   it("returns numbered lines and honors offset/limit", async () => {
     await writeFile(join(root, "a.txt"), "one\ntwo\nthree\nfour");
     const r = await readFileTool().execute({ path: "a.txt", offset: 2, limit: 2 }, ctx);
-    expect(r.display).toBe("2\ttwo\n3\tthree");
-    expect(r.truncated).toBe(true);
+    expect(r.display).toBe("More lines available; continue with offset 4.\n2\ttwo\n3\tthree");
+    expect(r.truncated).toBeUndefined();
   });
 
   it("reports a missing file as an error", async () => {
@@ -336,6 +353,15 @@ describe("CRLF files (every checkout on Windows)", () => {
 });
 
 describe("glob", () => {
+  it("makes a collection cap visible without claiming an exhaustive result", async () => {
+    for (let i = 0; i < 1001; i++) await writeFile(join(root, `match-${i}.txt`), "");
+    const r = await globTool().execute({ pattern: "*.txt" }, ctx);
+    expect(r.output).toHaveLength(1000);
+    expect(r.truncated).toBe(true);
+    expect(r.fullDisplay).toBeUndefined();
+    expect(r.display).toContain("Search incomplete: stopped after 1000 matches");
+  });
+
   it("matches patterns and skips node_modules", async () => {
     await mkdir(join(root, "src"), { recursive: true });
     await mkdir(join(root, "node_modules/pkg"), { recursive: true });
@@ -412,11 +438,21 @@ describe("grep", () => {
     expect(r.output[0]).toMatchObject({ path: "d.ts", line: 1 });
   });
 
-  it("caps matches in a single-file search and says so via truncated", async () => {
+  it("caps matches in a single-file search and tells the model the search is incomplete", async () => {
     await writeFile(join(root, "many.txt"), "hit\n".repeat(300));
     const r = await grepTool().execute({ pattern: "hit", path: "many.txt" }, ctx);
     expect(r.output).toHaveLength(200);
     expect(r.truncated).toBe(true);
+    expect(r.display).toContain("Search incomplete: stopped after 200 matches");
+  });
+
+  it("reports abbreviated matching lines rather than silently discarding their tails", async () => {
+    await writeFile(join(root, "long.txt"), `match ${"x".repeat(300)}TAIL`);
+    const r = await grepTool().execute({ pattern: "TAIL", path: "long.txt" }, ctx);
+    expect(r.output).toHaveLength(1);
+    expect(r.truncated).toBe(true);
+    expect(r.fullDisplay).toBeUndefined();
+    expect(r.display).toContain("1 matching line(s) abbreviated to 250 characters; use read_file for full lines.");
   });
 
   it("says why a named file cannot be searched instead of silently skipping it", async () => {

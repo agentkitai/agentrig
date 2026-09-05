@@ -31,6 +31,8 @@ const at = () => Date.parse("2026-08-29T00:00:00Z");
 const events = [
   { type: "session.start", task: "make retries per-request", cwd: "/w" },
   { type: "model.delta", text: "noise that must not reach the transcript" },
+  { type: "model.response", usage: { input: 1, output: 1 }, stop: "tool_use" },
+  { type: "message.append", message: { role: "assistant", content: [{ type: "text", text: "Investigate per-request retry ownership" }] } },
   { type: "tool.call", name: "bash", input: { command: "pnpm test" } },
   { type: "tool.result", ok: false, display: "FAIL retry.test.ts expected per request" },
   { type: "file.changed", op: "edit", path: "src/retry.ts" },
@@ -50,9 +52,10 @@ afterEach(async () => {
 });
 
 describe("transcript and coverage planning", () => {
-  it("drops model.delta noise but keeps tool calls, results, and file changes", () => {
+  it("prefers authoritative assistant messages over deltas and keeps tool evidence", () => {
     const t = eventsToTranscript(events);
     expect(t).not.toContain("noise that must not reach");
+    expect(t).toContain("[assistant] Investigate per-request retry ownership");
     expect(t).toContain("[tool.call] bash");
     expect(t).toContain("[tool.result] ok=false");
     expect(t).toContain("[file.changed] edit src/retry.ts");
@@ -65,7 +68,90 @@ describe("transcript and coverage planning", () => {
     // contiguous, no gaps, no overlaps
     expect(spans[0]!.from).toBe(0);
     for (let i = 1; i < spans.length; i++) expect(spans[i]!.from).toBe(spans[i - 1]!.to + 1);
-    expect(spans.map((s) => s.text).join("\n").split("\n")).toHaveLength(50);
+    expect(spans.map((s) => s.text).join("")).toBe(transcript);
+    expect(spans.every((s) => s.text.length <= 500)).toBe(true);
+  });
+
+  it("keeps legacy and interrupted streamed conclusions without duplicating canonical ones", () => {
+    const t = eventsToTranscript([
+      { type: "model.request" }, { type: "model.delta", text: "legacy " }, { type: "model.delta", text: "conclusion" },
+      { type: "model.response" }, { type: "turn.end" },
+      { type: "model.request" }, { type: "model.delta", text: "canonical conclusion" }, { type: "model.response" },
+      { type: "message.append", message: { role: "assistant", content: [{ type: "text", text: "canonical conclusion" }] } },
+      { type: "model.request" }, { type: "model.delta", text: "partial reasoning" }, { type: "session.end", reason: "aborted" },
+    ]);
+    expect(t).toContain("[assistant:streamed-uncommitted] legacy conclusion");
+    expect(t.split("canonical conclusion")).toHaveLength(2);
+    expect(t).toContain("[assistant:streamed-uncommitted] partial reasoning");
+  });
+
+  it("bounds long single lines without losing characters, blank lines or surrogate pairs", () => {
+    const transcript = `\n\n[tool.result] ${"x".repeat(13)}${"🙂".repeat(40)}TAIL\n\nlast\n`;
+    const spans = planCoverage(transcript, 17);
+    expect(spans.map(s => s.text).join("")).toBe(transcript);
+    let end = 0;
+    for (const span of spans) {
+      expect(span.charFrom).toBe(end);
+      expect(span.text).toBe(transcript.slice(span.charFrom, span.charTo));
+      expect(span.text.length).toBeLessThanOrEqual(17);
+      expect(span.text).not.toMatch(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/);
+      end = span.charTo;
+    }
+    expect(end).toBe(transcript.length);
+    expect(spans.some(s => s.text.includes("TAIL"))).toBe(true);
+  });
+
+  it.each([0, 1, -1, 2.5, NaN, Infinity])("rejects invalid span size %s", maxChars => {
+    expect(() => planCoverage("text", maxChars)).toThrow(/maxSpanChars/);
+  });
+
+  it("keeps full inputs, output artifacts, steering, errors and patched displays", () => {
+    const tail = `${"x".repeat(700)}DECISIVE-TAIL`;
+    const t = eventsToTranscript([
+      { type: "tool.call", name: "bash", input: { command: tail } },
+      { type: "tool.result", ok: true, display: "short preview", output: tail, truncated: true },
+      { type: "tool.result.patched", id: "t", by: "hook", display: "model-facing patch", mode: "modify" },
+      { type: "steer", source: "user", message: tail }, { type: "error", message: tail, fatal: false },
+    ]);
+    expect(t.split("DECISIVE-TAIL")).toHaveLength(5);
+    expect(t).not.toContain("short preview");
+    expect(t).toContain("[tool.result.patched]");
+    expect(t).toContain("model-facing patch");
+  });
+
+  it("keeps denial records distinct from requested tools and labels duplicated overflow previews", () => {
+    const t = eventsToTranscript([
+      { type: "tool.call", id: "t", name: "bash", input: {} },
+      { type: "tool.denied", id: "t", name: "bash" },
+      { type: "sandbox.denied", id: "s", name: "write_file", mode: "read-only", reason: "write refused" },
+      { type: "tool.result", id: "r", ok: true, display: "prefix", output: "prefix and full evidence", truncated: true },
+      { type: "tool.result.patched", id: "r", by: "core:output-overflow", display: "prefix plus output handle" },
+    ]);
+    expect(t).toContain("[tool.denied] id=t name=bash");
+    expect(t).toContain("[sandbox.denied] id=s name=write_file mode=read-only write refused");
+    expect(t).toContain("[tool.result.patched:preview-copy]");
+    expect(t).toContain("prefix and full evidence");
+  });
+
+  it("retains canonical-only tool requests and results but not redundant result text", () => {
+    const t = eventsToTranscript([
+      { type: "message.append", message: { role: "assistant", content: [{ type: "tool_use", id: "pending", name: "bash", input: { command: "unexecuted-request" } }] } },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "pending", content: "canonical-only-result" }] } },
+      { type: "tool.result", id: "done", ok: true, display: "already-rendered-result" },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "done", content: "already-rendered-result" }] } },
+    ]);
+    expect(t).toContain("[assistant.tool-request]");
+    expect(t).toContain("unexecuted-request");
+    expect(t).toContain("canonical-only-result");
+    expect(t.split("already-rendered-result")).toHaveLength(2);
+  });
+
+  it.each(["rm failed", [{ type: "text", text: "rm failed" }]])("preserves canonical-only result identity and error status: %j", content => {
+    const t = eventsToTranscript([{ type: "message.append", message: { role: "user", content: [
+      { type: "tool_result", toolUseId: "failed-request", isError: true, content },
+    ] } }]);
+    expect(t).toContain("[model.tool-result] id=failed-request error=true (model-facing view)");
+    expect(t).toContain("rm failed");
   });
 
   it("handles an empty transcript", () => {
@@ -91,6 +177,93 @@ const distillation = JSON.stringify({
 });
 
 describe("ingestSession", () => {
+  it("sends assistant-only conclusions and late tool evidence through bounded distillation", async () => {
+    const log = [
+      { type: "model.request" }, { type: "model.delta", text: "Canonical-only conclusion" },
+      { type: "model.response" },
+      { type: "message.append", message: { role: "assistant", content: [{ type: "text", text: "Canonical-only conclusion" }] } },
+      { type: "tool.result", ok: false, display: "preview", output: `${"x".repeat(750)}LATE-DECISIVE-EVIDENCE`, truncated: true },
+    ];
+    await writeFile(logPath, log.map(e => JSON.stringify(e)).join("\n"));
+    const seen: string[] = [];
+    const provider: ModelProvider = {
+      ...scriptedProvider([]),
+      async *stream(req) {
+        seen.push(req.messages[0]!.content.map(b => b.type === "text" ? b.text : "").join(""));
+        yield { type: "text_delta", text: JSON.stringify({ nothingDurable: true }) };
+      },
+    };
+    const result = await ingestSession({ store, provider, sessionId: "s1", logPath, maxSpanChars: 200, now: at });
+    expect(seen.join("\n").split("Canonical-only conclusion")).toHaveLength(2);
+    expect(seen.join("\n")).toContain("LATE-DECISIVE-EVIDENCE");
+    expect(seen.find(text => text.includes("LATE-DECISIVE-EVIDENCE"))).toContain("Evidence origins: tool.result");
+    expect(result.omissions).toEqual([]);
+    const transcript = eventsToTranscript(log);
+    let end = 0;
+    for (const span of result.coverage) {
+      expect(span.charFrom).toBe(end);
+      expect(span.charTo - span.charFrom).toBeLessThanOrEqual(200);
+      end = span.charTo;
+    }
+    expect(end).toBe(transcript.length);
+    expect(result.coverage).toHaveLength(seen.length);
+    expect((await store.read("sources/session-s1.md"))!.body).toContain("ingest:coverage=");
+  });
+
+  it("reports unavailable historical output and non-text evidence instead of counting them as covered", async () => {
+    await writeFile(logPath, [
+      { type: "tool.result", ok: true, display: "only recorded prefix", truncated: true },
+      { type: "message.append", message: { role: "user", content: [{ type: "image", mediaType: "image/png", data: "uninspected-image" }] } },
+    ].map(e => JSON.stringify(e)).join("\n"));
+    const result = await ingestSession({ store, provider: scriptedProvider(['{"nothingDurable":true}']), sessionId: "s1", logPath, now: at });
+    expect(result.omissions).toEqual([
+      { eventIndex: 0, field: "tool.result.output", reason: expect.stringContaining("length unknown") },
+      { eventIndex: 1, field: "message.content[0]", reason: expect.stringContaining("image content") },
+    ]);
+    const source = (await store.read("sources/session-s1.md"))!.body;
+    expect(source).toContain('"omissions":');
+    expect(source).toContain("full output was not recorded");
+    const repeated = await ingestSession({ store, provider: scriptedProvider([]), sessionId: "s1", logPath, now: at });
+    expect(repeated.skipped).toBe(true);
+    expect(repeated.omissions).toEqual(result.omissions);
+  });
+
+  it.each(["{broken\n", "{broken", "null\n"])("rejects corrupt records before writing or distilling: %s", async suffix => {
+    await writeFile(logPath, `${JSON.stringify(events[0])}\n${suffix}`);
+    const provider = scriptedProvider([distillation]);
+    await expect(ingestSession({ store, provider, sessionId: "s1", logPath, now: at })).rejects.toThrow(/invalid session/);
+    expect(provider.calls).toBe(0);
+    expect(await store.read("sources/session-s1.md")).toBeNull();
+  });
+
+  it("rejects a missing log before any provider call or wiki write", async () => {
+    const provider = scriptedProvider([distillation]);
+    await expect(ingestSession({ store, provider, sessionId: "missing", logPath: join(root, "missing.jsonl"), now: at })).rejects.toThrow(/ENOENT/);
+    expect(provider.calls).toBe(0);
+    expect(await store.read("sources/session-missing.md")).toBeNull();
+  });
+
+  it("reports nested non-text tool evidence even when a textual result was already rendered", async () => {
+    await writeFile(logPath, [
+      { type: "tool.result", id: "image", ok: true, display: "image display" },
+      { type: "message.append", message: { role: "user", content: [{ type: "tool_result", toolUseId: "image", content: [
+        { type: "text", text: "image display" }, { type: "image", mediaType: "image/png", data: "not-inspected" },
+      ] }] } },
+    ].map(e => JSON.stringify(e)).join("\n"));
+    const result = await ingestSession({ store, provider: scriptedProvider(['{"nothingDurable":true}']), sessionId: "s1", logPath, now: at });
+    expect(result.omissions).toEqual([{ eventIndex: 1, field: "message.content[0].content[1]", reason: expect.stringContaining("image content") }]);
+    expect((await store.read("sources/session-s1.md"))!.body).not.toContain("not-inspected");
+  });
+
+  it.each([false, true])("reports collection truncation even with an artifact: %s", artifact => {
+    const t = eventsToTranscript([{ type: "tool.result", id: "limited", ok: true, display: "collected prefix", outputIncomplete: true,
+      ...(artifact ? { output: "full recorded portion", truncated: true } : {}),
+    }]);
+    expect(t).toContain("[evidence.omitted]");
+    expect(t).toContain("uncollected range is unavailable");
+    expect(t).toContain(artifact ? "full recorded portion" : "collected prefix");
+  });
+
   it("writes a source page, reserves and fills target pages, and updates index and log", async () => {
     const provider = scriptedProvider([distillation]);
     const result = await ingestSession({ store, provider, sessionId: "s1", logPath, now: at });
@@ -191,6 +364,17 @@ describe("ingestSession", () => {
     const body = (await store.read("concepts/retry-policy.md"))!.body;
     const occurrences = body.split("Retries apply per request").length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it("reprocesses a pre-H3 capture even when its surviving transcript is unchanged", async () => {
+    await ingestSession({ store, provider: scriptedProvider([distillation]), sessionId: "s1", logPath, now: at });
+    const source = (await store.read("sources/session-s1.md"))!;
+    await store.write(source.path, { ...source, body: source.body.replace("<!-- ingest:version=2 -->", "") });
+    const provider = scriptedProvider([distillation]);
+    const result = await ingestSession({ store, provider, sessionId: "s1", logPath, now: at });
+    expect(result.skipped).toBe(false);
+    expect(provider.calls).toBeGreaterThan(0);
+    expect((await store.read(source.path))!.body).toContain("<!-- ingest:version=2 -->");
   });
 
   it("passes the attempts ledger to the model", async () => {

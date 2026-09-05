@@ -58,6 +58,16 @@ async function writeLog(id: string): Promise<void> {
 }
 
 describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
+  it("surfaces uninspected evidence in the completion notice", async () => {
+    await writeFile(join(dir, "raw", "sessions", "s1.jsonl"), JSON.stringify({
+      type: "tool.result", ok: true, display: "recorded prefix only", truncated: true,
+    }) + "\n");
+    const done: string[] = [];
+    const hook = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]), onDone: text => done.push(text) });
+    expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+    expect(done[0]).toContain("1 uninspected evidence omission(s)");
+  });
+
   it("distils the session that just ended into the wiki", async () => {
     await writeLog("s1");
     const done: string[] = [];

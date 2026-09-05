@@ -1293,6 +1293,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           display: overflow.display,
           durationMs: now() - t0,
           ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
+          ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)
+            ? { outputIncomplete: true } : {}),
         });
         const modelDisplay = overflow.output === undefined
           ? overflow.display

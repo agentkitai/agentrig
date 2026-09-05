@@ -38,13 +38,25 @@ export interface Span {
   id: string;
   from: number;
   to: number;
+  /** Half-open UTF-16 offsets into the complete rendered transcript. */
+  charFrom: number;
+  charTo: number;
   text: string;
+}
+
+export interface EvidenceOmission {
+  /** Zero-based event index in the parsed log. */
+  eventIndex: number;
+  field: string;
+  reason: string;
 }
 
 export interface IngestResult {
   sessionId: string;
   /** Every span, and whether it was distilled or explicitly closed — the coverage guarantee. */
-  coverage: Array<{ spanId: string; from: number; to: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
+  coverage: Array<{ spanId: string; from: number; to: number; charFrom: number; charTo: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
+  /** Evidence not present in the textual transcript; never counted as inspected coverage. */
+  omissions: EvidenceOmission[];
   pagesWritten: string[];
   pagesReserved: string[];
   factCount: number;
@@ -67,38 +79,125 @@ Rules:
   count, a current version number, or a file's present contents.
 - "stated" = the user or a doc said it. "observed" = it happened in this session (a command
   failed, a test passed). "inferred" = you concluded it from evidence.
+- Assistant messages are model claims, not independently verified tool evidence. Streamed fallback
+  text may be an interrupted/uncommitted response. Tool-result patches describe what the model saw,
+  not a replacement for original tool evidence. Omission markers are unavailable evidence.
+- Tool calls and assistant tool requests are intent, not proof of execution; inspect results and
+  denial records. Preview copies and model-facing tool-result copies are not independent evidence.
 - entity = a module, service, tool, command, external system. concept = a convention, decision,
   recurring pattern, gotcha.
 - If this span contains nothing worth remembering next week, set nothingDurable true and return
   no facts. That is a normal and useful answer — do not invent facts to fill space.`;
 
-/** Render session events into a compact transcript the model can read. */
+/** Render textual evidence without prefix truncation; canonical assistant messages beat deltas. */
 export function eventsToTranscript(events: unknown[]): string {
+  return transcriptEvidence(events).text;
+}
+
+interface TranscriptRecord { from: number; to: number; kind: string }
+
+function transcriptEvidence(events: unknown[]): { text: string; omissions: EvidenceOmission[]; records: TranscriptRecord[] } {
   const lines: string[] = [];
-  for (const raw of events) {
+  const omissions: EvidenceOmission[] = [];
+  const renderedResults = new Set<string>();
+  let streamed = "";
+  let responseEnded = false;
+  const flushStream = () => {
+    if (streamed !== "") lines.push(`[assistant:streamed-uncommitted] ${streamed}`);
+    streamed = "";
+    responseEnded = false;
+  };
+  const omit = (eventIndex: number, field: string, reason: string) => {
+    omissions.push({ eventIndex, field, reason });
+    lines.push(`[evidence.omitted] event=${eventIndex} field=${field}: ${reason}`);
+  };
+  for (const [eventIndex, raw] of events.entries()) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`invalid session event ${eventIndex}`);
     const e = raw as Record<string, unknown>;
     const type = String(e.type ?? "");
+    if (["model.request", "turn.start", "turn.end", "tool.call", "session.start", "session.resume", "session.end"].includes(type)) flushStream();
+    if (["model.request", "turn.start", "session.start", "session.resume"].includes(type)) renderedResults.clear();
     switch (type) {
       case "session.start":
       case "session.resume":
         lines.push(`[${type}] task=${JSON.stringify(e.task)} cwd=${String(e.cwd)}`);
         break;
       case "model.delta":
-        break; // deltas are noise; model.response carries the outcome
-      case "tool.call":
-        lines.push(`[tool.call] ${String(e.name)} ${JSON.stringify(e.input).slice(0, 300)}`);
+        if (responseEnded) flushStream();
+        if (typeof e.text === "string") streamed += e.text;
         break;
-      case "tool.result":
-        lines.push(`[tool.result] ok=${String(e.ok)} ${String(e.display).slice(0, 500)}`);
+      case "model.response":
+        responseEnded = true;
+        break;
+      case "message.append": {
+        const message = e.message as { role?: unknown; content?: unknown } | null;
+        if (message === null || typeof message !== "object" || !Array.isArray(message.content)
+          || (message.role !== "assistant" && message.role !== "user")) {
+          throw new Error(`invalid message.append at event ${eventIndex}`);
+        }
+        if (message.role === "assistant") { streamed = ""; responseEnded = false; renderedResults.clear(); }
+        const renderBlock = (rawBlock: unknown, field: string, label: string, includeText = true): void => {
+          if (typeof rawBlock !== "object" || rawBlock === null) {
+            omit(eventIndex, field, "unsupported message content is not inspected");
+            return;
+          }
+          const block = rawBlock as Record<string, unknown>;
+          if (block.type === "text" && typeof block.text === "string") {
+            if (includeText) lines.push(`[${label}] ${block.text}`);
+          } else if (block.type === "tool_use") {
+            lines.push(`[assistant.tool-request] id=${String(block.id)} name=${String(block.name)} ${JSON.stringify(block.input)}`);
+          } else if (block.type === "tool_result") {
+            // The ordinary event path already rendered the raw result and any patches. Retain
+            // canonical-only results (e.g. interrupted/exported logs), but always inspect nested
+            // content for non-text omissions even when the textual display was already rendered.
+            const includeResult = !renderedResults.has(String(block.toolUseId));
+            const header = `[model.tool-result] id=${String(block.toolUseId)} error=${String(block.isError === true)} (model-facing view)`;
+            if (typeof block.content === "string") {
+              if (includeResult) lines.push(`${header} ${block.content}`);
+            } else if (Array.isArray(block.content)) {
+              if (includeResult) lines.push(header);
+              for (const [i, child] of block.content.entries()) renderBlock(child, `${field}.content[${i}]`, "model.tool-result", includeResult);
+            } else omit(eventIndex, `${field}.content`, "unsupported tool-result content is not inspected");
+          } else if (block.type === "image") {
+            omit(eventIndex, field, "image content is not inspected by textual ingest");
+          } else omit(eventIndex, field, "unsupported message content is not inspected");
+        };
+        for (const [blockIndex, block] of message.content.entries()) {
+          renderBlock(block, `message.content[${blockIndex}]`, message.role === "assistant" ? "assistant" : "user.message");
+        }
+        break;
+      }
+      case "tool.call":
+        lines.push(`[tool.call] ${String(e.name)} ${JSON.stringify(e.input)}`);
+        break;
+      case "tool.result": {
+        if (typeof e.id === "string") renderedResults.add(e.id);
+        const output = typeof e.output === "string" ? e.output : String(e.display ?? "");
+        lines.push(`[tool.result] ok=${String(e.ok)} ${output}`);
+        if (e.outputIncomplete === true) {
+          omit(eventIndex, "tool.result.output", "the tool did not record complete output; the uncollected range is unavailable (length unknown)");
+        } else if (e.truncated === true && typeof e.output !== "string") {
+          omit(eventIndex, "tool.result.output", "full output was not recorded; the undisplayed range is unavailable (length unknown)");
+        }
+        break;
+      }
+      case "tool.result.patched":
+        lines.push(`[tool.result.patched${e.by === "core:output-overflow" ? ":preview-copy" : ""}] id=${String(e.id)} by=${String(e.by)} mode=${String(e.mode ?? "modify")} ${String(e.display ?? "")}`);
+        break;
+      case "tool.denied":
+        lines.push(`[tool.denied] id=${String(e.id)} name=${String(e.name)}`);
+        break;
+      case "sandbox.denied":
+        lines.push(`[sandbox.denied] id=${String(e.id)} name=${String(e.name)} mode=${String(e.mode)} ${String(e.reason)}`);
         break;
       case "file.changed":
         lines.push(`[file.changed] ${String(e.op)} ${String(e.path)}`);
         break;
       case "error":
-        lines.push(`[error] fatal=${String(e.fatal)} ${String(e.message).slice(0, 300)}`);
+        lines.push(`[error] fatal=${String(e.fatal)} ${String(e.message)}`);
         break;
       case "steer":
-        lines.push(`[steer:${String(e.source)}] ${String(e.message).slice(0, 300)}`);
+        lines.push(`[steer:${String(e.source)}] ${String(e.message)}`);
         break;
       case "session.end":
         lines.push(`[session.end] reason=${String(e.reason)}`);
@@ -107,7 +206,14 @@ export function eventsToTranscript(events: unknown[]): string {
         break;
     }
   }
-  return lines.join("\n");
+  flushStream();
+  let offset = 0;
+  const records = lines.map((line, index) => {
+    const from = offset;
+    offset += line.length + (index < lines.length - 1 ? 1 : 0);
+    return { from, to: offset, kind: /^\[([^\]]+)\]/.exec(line)![1]! };
+  });
+  return { text: lines.join("\n"), omissions, records };
 }
 
 /**
@@ -115,33 +221,31 @@ export function eventsToTranscript(events: unknown[]): string {
  * enormous tool result can't produce a span that blows the context window.
  */
 export function planCoverage(transcript: string, maxChars = 6000): Span[] {
-  // keep original line numbers so a coverage error names something a human can open
-  const all = transcript.split("\n");
-  const lines: Array<{ text: string; lineNo: number }> = [];
-  for (let i = 0; i < all.length; i++) {
-    if (all[i] !== "") lines.push({ text: all[i]!, lineNo: i });
-  }
-  if (lines.length === 0) return [];
+  if (!Number.isSafeInteger(maxChars) || maxChars < 2) throw new Error("maxSpanChars must be an integer of at least 2");
   const spans: Span[] = [];
-  let buf: Array<{ text: string; lineNo: number }> = [];
-  let size = 0;
-  const flush = () => {
-    if (buf.length === 0) return;
+  let charFrom = 0;
+  let line = 0;
+  while (charFrom < transcript.length) {
+    let charTo = Math.min(charFrom + maxChars, transcript.length);
+    if (charTo < transcript.length) {
+      const newline = transcript.lastIndexOf("\n", charTo - 1);
+      if (newline >= charFrom) charTo = newline + 1;
+      // Keep a surrogate pair together when splitting a very long line.
+      else if (/[\uD800-\uDBFF]/.test(transcript[charTo - 1]!) && /[\uDC00-\uDFFF]/.test(transcript[charTo]!)) charTo--;
+    }
+    const text = transcript.slice(charFrom, charTo);
+    const newlines = text.split("\n").length - 1;
     spans.push({
       id: `span-${spans.length + 1}`,
-      from: buf[0]!.lineNo,
-      to: buf[buf.length - 1]!.lineNo,
-      text: buf.map((l) => l.text).join("\n"),
+      from: line,
+      to: line + newlines - (text.endsWith("\n") ? 1 : 0),
+      charFrom,
+      charTo,
+      text,
     });
-    buf = [];
-    size = 0;
-  };
-  for (const line of lines) {
-    if (size + line.text.length > maxChars && buf.length > 0) flush();
-    buf.push(line);
-    size += line.text.length + 1;
+    charFrom = charTo;
+    line += newlines;
   }
-  flush();
   return spans;
 }
 
@@ -241,12 +345,14 @@ export interface IngestOptions {
 async function readEvents(logPath: string): Promise<unknown[]> {
   const out: unknown[] = [];
   const rl = createInterface({ input: createReadStream(logPath, "utf8"), crlfDelay: Infinity });
+  let lineNumber = 0;
   for await (const line of rl) {
+    lineNumber++;
     if (line.trim() === "") continue;
     try {
       out.push(JSON.parse(line));
     } catch {
-      // a torn final line (session still being written) is not a reason to lose the rest
+      throw new Error(`invalid session JSON at line ${lineNumber}; retry ingest after the log is complete`);
     }
   }
   return out;
@@ -266,14 +372,16 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const today = new Date(now()).toISOString().slice(0, 10);
 
   const events = await readEvents(logPath);
-  const transcript = eventsToTranscript(events);
+  const { text: transcript, omissions, records } = transcriptEvidence(events);
   const sourcePath = pagePath("source", `session-${sessionId}`);
 
   // prefix comparison against the previous capture of this same session
   const existing = await store.read(sourcePath).catch(() => null);
   const previousPrefix = /<!-- capture:prefix=([a-f0-9]+):len=(\d+) -->/.exec(existing?.body ?? "");
   let supersededPrevious = false;
-  if (previousPrefix !== null) {
+  // Old projector captures may have discarded evidence before hashing. Reprocess once under
+  // this coverage contract even when the surviving text happens to be identical.
+  if (previousPrefix !== null && existing?.body.includes("<!-- ingest:version=2 -->")) {
     const prevLen = Number(previousPrefix[2]);
     const prevHash = previousPrefix[1]!;
     const thisPrefixHash = createHash("sha256").update(transcript.slice(0, prevLen)).digest("hex").slice(0, 16);
@@ -282,6 +390,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
         return {
           sessionId,
           coverage: [],
+          omissions,
           pagesWritten: [],
           pagesReserved: [],
           factCount: 0,
@@ -302,7 +411,15 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const summaries: string[] = [];
 
   const emptyButNotClosed: string[] = [];
+  let recordIndex = 0;
   for (const span of spans) {
+    const range = { spanId: span.id, from: span.from, to: span.to, charFrom: span.charFrom, charTo: span.charTo };
+    while (recordIndex < records.length && records[recordIndex]!.to <= span.charFrom) recordIndex++;
+    const origins: string[] = [];
+    for (let i = recordIndex; i < records.length && records[i]!.from < span.charTo; i++) {
+      const record = records[i]!;
+      origins.push(`${record.kind} [${Math.max(record.from, span.charFrom)}, ${Math.min(record.to, span.charTo)})`);
+    }
     const attemptNote =
       opts.attempts === undefined || opts.attempts.length === 0
         ? ""
@@ -312,7 +429,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     const raw = await completeJson(
       provider,
       SYSTEM,
-      `Session ${sessionId}, span ${span.id} of ${spans.length}:\n\n${span.text}${attemptNote}`,
+      `Session ${sessionId}, span ${span.id} of ${spans.length}, transcript characters [${span.charFrom}, ${span.charTo}), lines ${span.from}-${span.to}. A span may continue a long event from an adjacent span. Evidence origins: ${origins.join("; ")}.\n\n${span.text}${attemptNote}`,
       opts.maxTokens ?? 2048,
     );
     let parsed: SpanDistillation;
@@ -330,7 +447,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     if (parsed.summary !== "") summaries.push(parsed.summary);
     if (parsed.nothingDurable) {
       // the model explicitly closed this span — that is the coverage guarantee being met
-      coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "nothing-durable" });
+      coverage.push({ ...range, outcome: "nothing-durable" });
       continue;
     }
     if (parsed.facts.length === 0) {
@@ -338,15 +455,15 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
         // Nothing at all: no facts, no summary, and no explicit close. A truncated or degenerate
         // reply looks exactly like this, and calling it "covered" is the silent hole the
         // coverage plan exists to prevent — so fail at the end naming the span.
-        coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "empty" });
+        coverage.push({ ...range, outcome: "empty" });
         emptyButNotClosed.push(`${span.id} (lines ${span.from}-${span.to})`);
         continue;
       }
       // a summary but no page-level facts is a real answer: the span was read and weighed
-      coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
+      coverage.push({ ...range, outcome: "distilled" });
       continue;
     }
-    coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
+    coverage.push({ ...range, outcome: "distilled" });
     facts.push(...parsed.facts);
   }
 
@@ -391,13 +508,16 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const priorSourceBody =
     existing === null || supersededPrevious
       ? ""
-      : existing.body.replace(/<!-- capture:prefix=[^>]*-->/g, "").trim();
+      : existing.body.replace(/<!-- capture:prefix=[^>]*-->/g, "").replace(/<!-- ingest:coverage=.*?-->/g, "")
+        .replace(/<!-- ingest:version=\d+ -->/g, "").trim();
   const keptLines = priorSourceBody === "" ? [] : priorSourceBody.split("\n").filter((l) => l.trim() !== "");
   const merged = [...keptLines, ...newLines.filter((l) => !keptLines.includes(l))];
   const sourceBody = [
     ...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
     "",
     `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
+    "<!-- ingest:version=2 -->",
+    `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`,
   ].join("\n");
   await store.write(sourcePath, {
     path: sourcePath,
@@ -494,6 +614,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   return {
     sessionId,
     coverage,
+    omissions,
     pagesWritten,
     pagesReserved,
     factCount: facts.length,
