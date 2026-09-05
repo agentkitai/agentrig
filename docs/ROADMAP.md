@@ -252,6 +252,10 @@ tests; a real unfilled reservation must remain planned after dream, not just an 
 Also investigate the intermittent macOS staged-write-abort timeout seen in CI run 33952067241:
 later local and macOS runs pass, but the abort/child-cleanup cause remains unestablished. Preserve
 the interrupted-target assertion; do not treat a rerun as proof of a lifecycle fix.
+The timeout recurred in 33953862815 while gating H5a. Its CI-blocking fixture repair is pulled
+into H5a: an explicit readiness barrier and parked shell replace an uncontrolled sleeping child,
+with ten repetitions retaining both abort rejection and unchanged-target assertions. This does
+not establish a production cancellation defect; broader lifecycle investigation remains H5c.
 
 H5 is delivered in dependency order, one PR/updated-main branch per sub-item. H5 is not complete
 until all four land; adding store primitives alone does not protect every maintenance caller.

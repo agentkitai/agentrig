@@ -126,12 +126,14 @@ describe("H1 real tool effects", () => {
     }
   });
 
-  it("leaves the previous target intact when a staged file write is aborted", async () => {
+  it.each(Array.from({ length: 10 }, (_, i) => i + 1))("leaves the previous target intact when a staged file write is aborted (run %s)", async () => {
     // Controlled slow process transport, not an OS-isolation test. The production broker's
-    // exact program runs, with its stdin consumer delayed until the abort can be observed.
+    // exact program runs, with its stdin consumer parked until abort. A stage filename alone
+    // was not a readiness barrier: the old injected `sleep` child could still be forking.
+    // Signal readiness after mkfifo finishes, then block the shell itself opening the FIFO.
     class SlowTransport extends SeatbeltSandboxProvider {
       protected override wrap(command: string, args: readonly string[]) {
-        return { command, args: args.map((arg, i) => i === 1 ? arg.replace('cat > "$t"', 'sleep 10; cat > "$t"') : arg) };
+        return { command, args: args.map((arg, i) => i === 1 ? arg.replace('cat > "$t"', 'mkfifo "$t.block"; : > "$t.ready"; read -r parked < "$t.block"; cat > "$t"') : arg) };
       }
     }
     const path = join(cwd, "target.txt");
@@ -143,8 +145,8 @@ describe("H1 real tool effects", () => {
     const rejected = expect(work).rejects.toMatchObject({ name: "AbortError" });
     try {
       const deadline = Date.now() + 3000;
-      while (!(await readdir(cwd)).some(name => name.startsWith(".agentrig-write-"))) {
-        if (Date.now() > deadline) throw new Error("staged write never started");
+      while (!(await readdir(cwd)).some(name => name.startsWith(".agentrig-write-") && name.endsWith(".ready"))) {
+        if (Date.now() > deadline) throw new Error("staged writer never became ready");
         await new Promise(resolve => setTimeout(resolve, 5));
       }
     } finally { signal.abort(); }

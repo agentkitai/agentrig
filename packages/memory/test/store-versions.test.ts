@@ -151,7 +151,7 @@ describe("versioned memory mutations", () => {
 
   it("names the lock path when parent permissions prevent acquisition", async () => {
     vi.mocked(fs.open).mockRejectedValueOnce(Object.assign(new Error("read-only filesystem"), { code: "EROFS" }));
-    await expect(store.write(path, page())).rejects.toThrow(`${store.root}.write.lock`);
+    await expect(store.write(path, page())).rejects.toThrow(`${await fs.realpath(store.root)}.write.lock`);
     expect(await store.read(path)).toBeNull();
   });
 
