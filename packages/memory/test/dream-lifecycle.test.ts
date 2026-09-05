@@ -61,6 +61,18 @@ it("rejects a replacement source directory even with identical bytes", async () 
   await ws.dispose();
 });
 
+it.skipIf(process.platform === "win32")("preserves root permissions and rejects intervening permission changes", async () => {
+  await fs.chmod(store.root, 0o750);
+  const ws = await copy();
+  expect((await fs.stat(ws.outputRoot)).mode & 0o777).toBe(0o750);
+  await fs.chmod(store.root, 0o700);
+  await expect(applyDream(store.root, ws.outputRoot, "permissions")).rejects.toThrow("stale dream snapshot");
+  await fs.chmod(store.root, 0o750);
+  await applyDream(store.root, ws.outputRoot, "permissions");
+  expect((await fs.stat(store.root)).mode & 0o777).toBe(0o750);
+  await ws.dispose();
+});
+
 it("does not replace a symlinked live root and retains the original physical backup", async () => {
   const alias = join(root, "alias"); await symlink(store.root, alias, process.platform === "win32" ? "junction" : "dir");
   const ws = await copyWiki(alias, join(root, "output"));
@@ -222,10 +234,12 @@ it("serializes against an actual separate-process store writer and rejects the n
   await locked.promise;
   let settled = false;
   const applying = applyDream(store.root, ws.outputRoot, "race", { timeoutMs: 3000 }).then(
-    result => { settled = true; return result; }, error => { settled = true; throw error; });
-  const rejected = expect(applying).rejects.toThrow("stale dream snapshot");
+    result => { settled = true; return { result, error: undefined }; },
+    (error: Error) => { settled = true; return { result: undefined, error }; });
   await new Promise(resolve => setTimeout(resolve, 30)); expect(settled).toBe(false);
-  child.send("release"); await done.promise; await rejected;
+  child.send("release"); await done.promise;
+  const outcome = await applying;
+  expect(outcome.result).toBeUndefined(); expect(outcome.error?.message).toContain("stale dream snapshot");
   expect((await store.read(path))!.body).toContain("concurrent process fact");
   await ws.dispose();
 }, 20_000);

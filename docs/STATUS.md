@@ -21,6 +21,13 @@ apply rejects its now-stale snapshot. Linux local build/typecheck and the full s
 (1,643 passed plus two platform-specific skips, 78 files), including both additional abort cases.
 Independent review and exact-head CI remain pending. Windows CI now includes lifecycle/apply tests.
 
+PR #125's first CI run found a Node 22 incompatibility with copying onto a pre-created empty
+directory using errorOnExist. Copying children into absent paths fixes that without weakening
+ownership checks; root permissions are preserved and included in the stale snapshot check.
+The full suite now passes on Node 22 too: 1,644 passed plus two platform-specific skips (1,646
+total, 78 files). Isolated removal of the content fingerprint check and source apply lock each
+fails its regression; restored code passes. Review and repaired-head CI remain pending.
+
 ### H5b2 complete (PR #124)
 
 Completion gate: final PR CI 33961342727 passed at f2edf579, PR #124 merged at 3eee3ea,

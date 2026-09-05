@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -83,6 +83,15 @@ async function removeOwnedDirectory(path: string, expected: z.infer<typeof Ident
   await rm(path, { recursive: true });
 }
 
+/** The root is already exclusively owned. Copy children to absent paths: Node 22 rejects
+ * cp(source, existingRoot, { errorOnExist: true }) even when that root is empty. */
+async function copyContents(source: string, destination: string): Promise<void> {
+  for (const name of await readdir(source)) {
+    await cp(join(source, name), join(destination, name), { recursive: true, force: false, errorOnExist: true, dereference: true });
+  }
+  await chmod(destination, (await stat(source)).mode & 0o777);
+}
+
 function workspace(manifest: Manifest): DreamWorkspace {
   const out = manifest.outputRoot;
   return {
@@ -134,7 +143,7 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Memo
       else if (!sameIdentity(await identity(out), precreated)) throw new Error("dream output root was replaced before copy");
       if (await exists(manifestPath(out))) throw new Error("dream manifest already exists; preserving " + manifestPath(out));
       const before = await fingerprint(src);
-      await cp(src, out, { recursive: true, force: false, errorOnExist: true, dereference: true });
+      await copyContents(src, out);
       opts.signal?.throwIfAborted();
       if (await fingerprint(src) !== before) throw new Error("dream source changed while copying; retry from a fresh snapshot");
       const manifest: Manifest = {
@@ -168,6 +177,7 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Memo
  */
 export async function fingerprint(root: string): Promise<string> {
   const hash = createHash("sha256");
+  hash.update(JSON.stringify(["root", (await stat(root)).mode & 0o777]));
   const active = new Set<string>();
   const walk = async (dir: string, prefix: string): Promise<void> => {
     const canonical = await realpath(dir);
@@ -218,7 +228,7 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
     const stagedIdentity = await identity(staged);
     let preserveStage = false;
     try {
-      await cp(out, staged, { recursive: true, force: false, errorOnExist: true, dereference: true });
+      await copyContents(out, staged);
       // A concurrent completed review can advance scheduling metadata without changing content.
       const currentStamp = await readFile(join(src, ".last-dream")).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") return undefined;
