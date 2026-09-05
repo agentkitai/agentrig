@@ -852,3 +852,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - Automatic interrupted-install journal/recovery is deferred scope, not a small current repair.
   If activated, require exact source/stage/backup ownership and never overwrite an occupied live
   root or discard the only original. Protected backups and conservative manual recovery remain.
+- Workspace-recovery polish from PR #129's approving review: avoid telling users to inspect a
+  handoff temp that cleanup already removed; optionally align release/dispose lock waits with
+  caller configuration; validate generated manifests through their schema before writing (for
+  unusual host metadata such as an empty hostname). These do not block the current contract.

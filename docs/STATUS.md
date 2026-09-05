@@ -30,6 +30,12 @@ cleanup, cancellation and failed handoff are covered. Full build/typecheck and e
 suite pass: 1,770 passed plus two skips (1,772 total, 83 files). Independent review and exact-head
 PR/main CI are still required.
 
+PR #129 head 9323fb4 passed CI 33970298458 on Linux/macOS/Windows. One Claude pass approved
+without blockers; nonblocking polish is at the END of ROADMAP. Negative mutations caught live
+producer deletion, missing under-lock owner checks, and symbol-first repo-map starvation; all
+restored, with the isolated targeted suite green. The final documentation-only update requires
+fresh exact-head CI, then merge/main CI; it does not reopen implementation scope.
+
 ### H5c2c1 complete (PR #128)
 
 Completion gate: final head 19f1a71, merge c820c84, PR CI 33969076711 and main CI 33969215100
