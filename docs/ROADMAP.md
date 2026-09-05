@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H4; H1–H3 complete (PRs #118–#120).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5; H1–H4 complete (PRs #118–#121).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -249,6 +249,9 @@ H5 implementation note discovered during H4 portability validation: `reserve()` 
 placeholder that dream currently counts as a fact, prematurely activating its index row and
 dropping its claimant metadata. Correct this alongside reservation/concurrent-writer lifecycle
 tests; a real unfilled reservation must remain planned after dream, not just an empty test page.
+Also investigate the intermittent macOS staged-write-abort timeout seen in CI run 33952067241:
+later local and macOS runs pass, but the abort/child-cleanup cause remains unestablished. Preserve
+the interrupted-target assertion; do not treat a rerun as proof of a lifecycle fix.
 
 ### E — Measure outcomes before expanding capabilities
 
