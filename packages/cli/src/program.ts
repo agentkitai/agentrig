@@ -38,6 +38,7 @@ import {
   memoryLs,
   memoryPromote,
   memoryResetDreamStamp,
+  memoryDiscardDream,
   memorySearch,
   memoryShow,
   type MemoryIngestOptions,
@@ -319,6 +320,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   const memory = program.command("memory").description("Inspect and maintain the LLM Wiki memory");
   const memoryDir = (cmd: Command): Command =>
     cmd.option("-d, --dir <dir>", "memory directory", ".agentrig");
+
+  memory.command("discard-dream <outputRoot>").description("Preview one owned dream artifact; discard only a released or stopped producer's copy")
+    .option("--owner <uuid>", "exact owner UUID observed in preview")
+    .option("--confirm", "discard this output/sidecar; never reclaim writer locks or source/install backups")
+    .action(async (outputRoot: string, opts: { owner?: string; confirm?: boolean }) => memoryDiscardDream(outputRoot, opts));
 
   memoryDir(memory.command("init").description("Create the .agentrig raw/ + wiki/ layout and SCHEMA.md")).action(
     async (opts: { dir: string }) => memoryInit(opts),

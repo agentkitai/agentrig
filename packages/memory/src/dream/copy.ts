@@ -1,11 +1,13 @@
 import { chmod, lstat, mkdir, mkdtemp, open, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
+import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 import { readBoundedFile } from "../bounded-file.js";
 import { ScanBudget, walkTree, type ScanOptions } from "../scan.js";
+import { MaintenanceLimitError } from "../maintenance.js";
 
 export interface DreamFileOptions extends MemoryLockOptions, ScanOptions {}
 
@@ -13,12 +15,15 @@ export interface DreamWorkspace {
   outputRoot: string;
   /** Saved beside the copy; survives process exit and is required for apply. */
   manifestPath: string;
+  /** Finish producing this artifact, permitting explicit persisted recovery even while this
+   * process remains alive. Do not keep producing after handoff. Failure leaves it active. */
+  release(): Promise<void>;
   /** Refuses a replaced directory/manifest or an active/stale writer lock. Idempotent. */
   dispose(): Promise<void>;
 }
 
 const Identity = z.object({ dev: z.string(), ino: z.string(), birthtimeNs: z.string() }).strict();
-const Manifest = z.object({
+const LegacyManifest = z.object({
   version: z.literal(1),
   owner: z.string().uuid(),
   sourceRoot: z.string(),
@@ -27,7 +32,14 @@ const Manifest = z.object({
   outputRoot: z.string(),
   outputIdentity: Identity,
 }).strict();
+const OwnedManifest = LegacyManifest.extend({
+  version: z.literal(2),
+  producer: z.object({ pid: z.number().int().positive().max(2_147_483_647), host: z.string().min(1).max(1024) }).strict(),
+  released: z.boolean(),
+}).strict();
+const Manifest = z.discriminatedUnion("version", [LegacyManifest, OwnedManifest]);
 type Manifest = z.infer<typeof Manifest>;
+const MAX_MANIFEST_BYTES = 65536;
 const manifestPath = (root: string) => root + ".dream.json";
 const identity = async (path: string) => {
   const info = await lstat(path, { bigint: true });
@@ -72,7 +84,118 @@ async function readManifest(out: string, opts: MemoryLockOptions = {}): Promise<
   const path = manifestPath(out);
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink()) throw new Error("invalid dream workspace manifest: " + path);
-  return Manifest.parse(JSON.parse((await readBoundedFile(path, opts.maxFileBytes ?? 65536, opts.signal)).toString("utf8")));
+  return Manifest.parse(JSON.parse((await readBoundedFile(path, Math.min(opts.maxFileBytes ?? MAX_MANIFEST_BYTES, MAX_MANIFEST_BYTES), opts.signal)).toString("utf8")));
+}
+
+function manifestBytes(manifest: Manifest): string {
+  const bytes = JSON.stringify(manifest) + "\n";
+  if (Buffer.byteLength(bytes) > MAX_MANIFEST_BYTES) throw new MaintenanceLimitError("dream manifest exceeds metadata byte limit");
+  return bytes;
+}
+
+/** Caller holds the output lock and checked the previous owner/content. Atomic handoff leaves
+ * a complete old or new manifest, never a half-rewritten record. Only our temp is cleaned. */
+async function replaceManifest(manifest: Manifest): Promise<void> {
+  const path = manifestPath(manifest.outputRoot);
+  const temp = path + "." + randomUUID() + ".tmp";
+  const bytes = manifestBytes(manifest);
+  const handle = await open(temp, "wx", 0o600);
+  let owned: { dev: bigint; ino: bigint; birthtimeNs: bigint } | undefined;
+  try {
+    owned = await handle.stat({ bigint: true });
+    await handle.writeFile(bytes, "utf8");
+    await handle.close();
+    await rename(temp, path);
+  } catch (error) {
+    throw new Error("dream handoff failed; inspect " + temp + ": " + String(error), { cause: error });
+  } finally {
+    await handle.close().catch(() => {});
+    if (owned !== undefined) {
+      try {
+        const current = await lstat(temp, { bigint: true }).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined;
+          throw error;
+        });
+        if (current?.dev === owned.dev && current.ino === owned.ino && current.birthtimeNs === owned.birthtimeNs) await rm(temp);
+      } catch (error) { process.emitWarning("dream manifest temp cleanup failed; inspect " + temp + ": " + String(error)); }
+    }
+  }
+}
+
+export type DreamWorkspaceActivity = "released" | "stopped" | "active" | "unknown" | "legacy";
+export interface DreamWorkspaceInspection {
+  outputRoot: string;
+  manifestPath: string;
+  sourceRoot: string;
+  owner: string;
+  version: 1 | 2;
+  activity: DreamWorkspaceActivity;
+  producer?: { pid: number; host: string };
+}
+
+function activity(manifest: Manifest): DreamWorkspaceActivity {
+  if (manifest.version === 1) return "legacy";
+  // Single-host coordination only. Hostname is a conservative mismatch check, not identity
+  // authentication for shared mounts, containers or different PID namespaces.
+  if (manifest.producer.host !== hostname()) return "unknown";
+  if (manifest.released) return "released";
+  try { process.kill(manifest.producer.pid, 0); return "active"; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH" ? "stopped" : "unknown"; }
+}
+
+async function recoveryRoot(path: string): Promise<string> {
+  const absolute = resolve(path);
+  const info = await lstat(absolute).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
+    throw error;
+  });
+  if (info?.isSymbolicLink()) throw new Error("dream recovery refuses a symlinked/replaced output root: " + absolute);
+  return physical(absolute);
+}
+
+/** Read-only preview. Capture owner and supply it explicitly to discard; never identify a
+ * recovery candidate by age or temp prefix. Invalid/legacy ownership is not guessed through. */
+export async function inspectDreamWorkspace(outputRoot: string, opts: MemoryLockOptions = {}): Promise<DreamWorkspaceInspection> {
+  opts.signal?.throwIfAborted();
+  const out = await recoveryRoot(outputRoot);
+  const manifest = await readManifest(out, opts);
+  if (manifest.outputRoot !== out) throw new Error("dream manifest output path changed; preserving " + out);
+  if (await exists(out)) await verifyOutput(out, manifest);
+  opts.signal?.throwIfAborted();
+  return { outputRoot: out, manifestPath: manifestPath(out), sourceRoot: manifest.sourceRoot,
+    owner: manifest.owner, version: manifest.version, activity: activity(manifest),
+    ...(manifest.version === 2 ? { producer: manifest.producer } : {}) };
+}
+
+/** Explicit disposal of one registered output/sidecar. No source, backup or lock is reclaimed.
+ * Unknown, live, foreign-host and legacy producers are refused. Stop using released artifacts
+ * before discard. Existing writer locks (even apparently stale ones) always block this path. */
+export async function discardDreamWorkspace(outputRoot: string, owner: string, opts: MemoryLockOptions = {}): Promise<{ status: "discarded" | "absent" }> {
+  z.string().uuid().parse(owner); opts.signal?.throwIfAborted();
+  const out = await recoveryRoot(outputRoot);
+  if (!(await exists(out)) && !(await exists(manifestPath(out)))) return { status: "absent" };
+  const observed = await readManifest(out, opts);
+  const check = async (current: Manifest): Promise<void> => {
+    if (current.owner !== owner || !isDeepStrictEqual(current, observed)) throw new Error("dream manifest owner changed or contents changed; preserving " + manifestPath(out));
+    if (current.outputRoot !== out) throw new Error("dream manifest output path changed; preserving " + out);
+    if (await exists(out)) await verifyOutput(out, current);
+    const state = activity(current);
+    if (state !== "released" && state !== "stopped") throw new Error("dream recovery refused: producer is " + state + "; preserve " + out);
+  };
+  await check(observed);
+  return withMemoryLock(out, async () => {
+    await check(await readManifest(out, opts));
+    opts.signal?.throwIfAborted();
+    // Once deletion starts, finish owned cleanup rather than reporting an uncommitted abort.
+    // On partial I/O failure the sidecar stays, allowing explicit retry against the same owner.
+    try {
+      await removeOwnedDirectory(out, observed.outputIdentity);
+      await rm(manifestPath(out));
+    } catch (error) {
+      throw new Error("dream discard incomplete; inspect " + out + " and " + manifestPath(out) + ": " + String(error), { cause: error });
+    }
+    return { status: "discarded" };
+  }, opts);
 }
 
 async function verifyOutput(out: string, manifest: Manifest): Promise<void> {
@@ -113,13 +236,26 @@ function workspace(manifest: Manifest): DreamWorkspace {
   return {
     outputRoot: out,
     manifestPath: manifestPath(out),
+    release: async () => {
+      await verifyOutput(out, manifest);
+      await withMemoryLock(out, async () => {
+        const current = await readManifest(out);
+        if (!isDeepStrictEqual(current, manifest)) throw new Error("dream manifest owner changed or contents changed; preserving " + manifestPath(out));
+        await verifyOutput(out, manifest);
+        if (manifest.version !== 2) throw new Error("legacy workspace has no producer ownership to release");
+        if (manifest.released) return;
+        const released = { ...manifest, released: true };
+        await replaceManifest(released);
+        manifest = released;
+      });
+    },
     dispose: async () => {
       // Do not resolve a replacement symlink and lock/delete its unrelated target.
       if (!(await exists(out)) && !(await exists(manifestPath(out)))) return;
       if (await exists(out)) await verifyOutput(out, manifest);
       await withMemoryLock(out, async () => {
         const current = await readManifest(out);
-        if (current.owner !== manifest.owner) throw new Error("dream manifest owner changed; preserving " + manifestPath(out));
+        if (!isDeepStrictEqual(current, manifest)) throw new Error("dream manifest owner changed or contents changed; preserving " + manifestPath(out));
         if (await exists(out)) {
           await verifyOutput(out, manifest);
           await removeOwnedDirectory(out, manifest.outputIdentity);
@@ -164,13 +300,14 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Drea
       opts.signal?.throwIfAborted();
       if (await fingerprint(src, opts) !== before) throw new Error("dream source changed while copying; retry from a fresh snapshot");
       const manifest: Manifest = {
-        version: 1, owner: randomUUID(), sourceRoot: src, sourceIdentity,
+        version: 2, owner: randomUUID(), producer: { pid: process.pid, host: hostname() }, released: false,
+        sourceRoot: src, sourceIdentity,
         sourceFingerprint: before, outputRoot: out, outputIdentity: owned!,
       };
       const handle = await open(manifestPath(out), "wx", 0o600);
       try {
         ownedManifest = await handle.stat({ bigint: true });
-        await handle.writeFile(JSON.stringify(manifest) + "\n", "utf8");
+        await handle.writeFile(manifestBytes(manifest), "utf8");
       } finally { await handle.close(); }
       opts.signal?.throwIfAborted();
       return workspace(manifest);

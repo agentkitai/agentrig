@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5c2c1; H1–H4, H5a, H5b, H5c1, H5c2a and H5c2b complete (PRs #118–#127).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5 workspace recovery, then remaining persistence and auxiliary lifecycle checks; PRs #118–#128 complete.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -274,40 +274,34 @@ concurrent append/provenance/pin conservation, stale-capture, interrupted-ingest
 tests. H5b2 must pass the remaining cancellation/bounds/accounting acceptance above. Each starts
 from updated main only after its predecessor's review, PR CI, merge and main CI succeed.
 
-H5c is likewise sequential and not complete until all sub-items land:
+**Convergence rule (user-directed): no further nested milestones.** Historical PR labels remain
+in STATUS, but do not define an expanding hierarchy. Close the original H5 acceptance criteria
+and proceed to E1; nonblocking follow-ups belong at the END of this roadmap, outside the sequence.
 
-| Row | Deliverable | Acceptance |
-|---|---|---|
-| H5c1 | Guarded snapshots and stale-safe apply; own fresh copy/staging paths, persist source snapshot identity, coordinate apply with store writers, preserve backups and test real rollback branches. | Intervening content/root changes reject apply; active writes serialize; aliases, existing destinations and colliding backups cannot clobber user data. |
-| H5c2 | Bound/cancel the full dream lifecycle with H5b2 accounting; safe workspace lifecycle and explicit ownership-checked crash recovery. | Cooperative abort reaches providers, no later apply occurs, failures clean only owned artifacts, and crash recovery never steals active/replacement owners. |
-| H5c3 | Lossless legacy multiline/frontmatter regeneration and session-scoped attempt lookup with bounded index rebuilds. | Old facts/references and unknown keys survive; unrelated immutable ledger history does not consume a session's entire scan budget. |
-| H5c4 | Complete the staged-write-abort/child-cleanup investigation pulled forward from H1. | Deterministic target-preservation and child-lifetime regressions; clearly distinguish proven fixes from an unreproduced historical timeout. |
+Completed dream work: guarded snapshot/apply and preserved backups (#125), bounded scans (#126),
+full-lifecycle cancellation/accounting (#127), and explicit stamp repair/log preflight (#128).
 
-H5c2 is delivered as three sequential PRs with the same review/CI/updated-main gates:
-**H5c2a** bounds wiki snapshot/copy/fingerprint and raw enumeration reads, with cooperative scan
-abort and visible cap failures; **H5c2b** integrates full dream/provider deadlines, cancellation,
-auxiliary accounting and CLI/hook reporting; **H5c2c** provides explicit ownership-checked recovery
-of crash-left workspaces/sidecars. A bounded scanner alone does not complete H5c2.
-H5c2b includes configurable bounds for `memory lint`. H5c2c includes explicit repair of unreadable/
-oversized mutable scheduling metadata; scanner failures must not silently overwrite it.
-H5c2c also covers explicit disposal/recovery of retained pre-install/failed-install artifacts and
-preflight of known wiki-log capacity before paid consolidation. Preserve log history; configured
-scan caps can be raised deliberately, so truncating history is not the only capacity remedy.
+Remaining H5 deliverables, in order:
 
-H5c2c has three sequential, separately gated sub-rows:
-- **H5c2c1:** preflight log append capacity before model calls; explicit, confirmed reset of a
-  corrupt/unreadable/oversized mutable scheduling stamp into a preserved named backup. Never
-  silently reset metadata, truncate logs, rewrite raw history or remove writer locks.
-- **H5c2c2:** persisted producer ownership and explicit recovery/disposal of abandoned or handed-off
-  review workspaces/sidecars, refusing active, ambiguous legacy and replacement owners.
-- **H5c2c3:** journal and recover interrupted installs with exact source/backup/staging identities;
-  never overwrite an occupied live root or discard the only original. Preserve finish-or-restore
-  after the first rename. No unsupported power-loss or hostile-writer atomicity claims.
+- **Workspace recovery (current PR):** persisted producer ownership and explicit discard of one
+  registered abandoned or handed-off output/sidecar. Refuse active/ambiguous/replacement owners
+  and existing writer locks. Preserve source and install backups; unknown provenance stays manual.
+- **Persistence and target/child-abort closure:** preserve legacy multiline facts/references and
+  unknown frontmatter; provide session-scoped attempt lookup with bounded rebuilds. Confirm
+  deterministic target-preservation and child-cleanup evidence; distinguish a proven fix from
+  the historical unreproduced timeout. No separate PR is needed just to restate existing evidence.
+- **Auxiliary lifecycle (H5d):** finish reviewer/grader cancellation, bounded usage and CLI/session
+  accounting against the acceptance already stated above. Then begin E1.
+
+Each implementation PR retains independent review, proper tests, exact-head green PR CI and
+post-merge main CI, on a fresh updated-main branch. Correct stale tests within the relevant PR.
+Additional automatic install-crash repair/journaling is deferred, not an H5 gate. Existing
+finish-or-restore behavior, retained original backups and stop-writers manual recovery remain.
 
 H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
 attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
 apply, and leave immutable history untouched; enumeration/byte cap failures still stop the run.
-H5c3 also migrates the supervisor's remaining legacy unbounded `readAttempts()` caller in
+Remaining persistence work also migrates the supervisor's legacy unbounded `readAttempts()` caller in
 `packages/cli/src/run.ts` to scoped, bounded lookup.
 
 H5b1 inspection also found older multiline facts are not fully understood by the line-based fact
@@ -812,7 +806,6 @@ independently of their surrounding feature bands.
 | R10 parallelism | Measured sequential latency bottleneck; safe effect ordering and isolated writers |
 | R11 network tools | A task that needs structured network access and an enforceable network policy |
 | R9/R12/R13/R14 remainder, R6g | A measured evaluation, permission, provenance or usability gap; reuse E rather than duplicating its machinery |
-| CI action-runtime maintenance | Main CI 33963323981 warns that checkout/setup-node/pnpm action v4 runtimes target deprecated Node 20 and are forced onto Node 24. Audit supported action versions/runtime compatibility in a separate maintenance PR; retain all three platform checks. Non-blocking while current CI passes. |
 
 Exit criteria for active work: appropriate build/typecheck/regression checks pass; a named
 negative case fails without the fix; current guarantees and limitations are updated; and the
@@ -843,3 +836,23 @@ concise and place detailed implementation history in dated notes as it is mainta
   corpus" above for the tiering and CC0 caveats). Two unified analyses: the claude.ai session
   capture (memory filing, write calibration, guardrails) and the coding-agent captures (prompt
   composition, hook authority, manifest failure modes, verification lanes).
+
+## Follow-ups / nice to haves — not active prerequisites
+
+These do not block H5 or E1 and do not recursively create new milestones. Activate deliberately
+after the active sequence, unless new evidence demonstrates a safety or data-loss defect.
+
+- Improve repo-map breadth when the file list alone exceeds its byte cap (for example, directory
+  summaries). Current truncation is explicit; the production 8 KiB budget is unchanged.
+- Embed stamp-reset help in more scheduler/ENOENT diagnostics. The command and recovery limits
+  are documented; richer in-error guidance is optional usability work.
+- Audit action-runtime compatibility: CI warns that checkout/setup-node/pnpm v4 actions target
+  deprecated Node20 and are forced onto Node24. Retain three-platform validation; nonblocking
+  while CI passes (first recorded in main run 33963323981).
+- Automatic interrupted-install journal/recovery is deferred scope, not a small current repair.
+  If activated, require exact source/stage/backup ownership and never overwrite an occupied live
+  root or discard the only original. Protected backups and conservative manual recovery remain.
+- Workspace-recovery polish from PR #129's approving review: avoid telling users to inspect a
+  handoff temp that cleanup already removed; optionally align release/dispose lock waits with
+  caller configuration; validate generated manifests through their schema before writing (for
+  unusual host metadata such as an empty hostname). These do not block the current contract.

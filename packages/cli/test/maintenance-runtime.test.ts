@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
+import { copyWiki, FileMemoryStore, inspectDreamWorkspace } from "@agentkitai/agentrig-memory";
 
 it.each(["cooperative", "stuck"])("handles interruption of %s maintenance in a real child process", async mode => {
   const child = fork(fileURLToPath(new URL("./fixtures/maintenance-interrupt.mjs", import.meta.url)), [mode], {
@@ -61,5 +62,30 @@ it("the built CLI requires explicit stamp-reset confirmation and preserves a usa
     expect(await readdir(wiki)).toEqual([]);
     expect((await cli("--confirm")).stdout).toContain("nothing changed");
     expect((await readdir(root)).filter(name => name.includes("before-reset"))).toEqual([backup]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 15_000);
+
+it("the built CLI previews without writing and binds confirmed discard to the previewed owner", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-cli-discard-"));
+  try {
+    const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
+    const ws = await copyWiki(wiki.root, join(root, "review copy")); await ws.release();
+    const owner = (await inspectDreamWorkspace(ws.outputRoot)).owner;
+    const cli = (...args: string[]) => promisify(execFile)(process.execPath,
+      [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "memory", "discard-dream", ws.outputRoot, ...args], { timeout: 5000 });
+    const names = await readdir(root); const preview = await cli();
+    expect(preview.stdout).toContain("owner: " + owner); expect(preview.stdout).toContain("producer: released");
+    expect(preview.stdout).toContain("Nothing changed"); expect(await readdir(root)).toEqual(names);
+    const missing = await cli("--confirm").catch(error => error);
+    expect(missing.code).toBe(1); expect(missing.stderr).toContain("requires --owner");
+    const mismatch = await cli("--confirm", "--owner", "00000000-0000-4000-8000-000000000000").catch(error => error);
+    expect(mismatch.code).toBe(1); expect(mismatch.stderr).toContain("owner changed");
+    expect(await readdir(root)).toEqual(names);
+    const discarded = await cli("--confirm", "--owner", owner);
+    expect(discarded.stdout).toContain("Discarded dream output and manifest");
+    expect(discarded.stdout).toContain("not recoverable by this command");
+    expect(await readdir(root)).toEqual(["wiki"]);
+    expect((await cli("--confirm", "--owner", owner)).stdout).toContain("already absent");
+    await ws.dispose(); // Still idempotent on the original runtime handle.
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 15_000);

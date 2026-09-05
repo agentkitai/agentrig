@@ -33,7 +33,8 @@ const copy = () => copyWiki(store.root, join(root, "output"));
 it("persists source identity outside a fresh copy and rejects an intervening fact update", async () => {
   const ws = await copy();
   const manifest = JSON.parse(await readFile(ws.manifestPath, "utf8"));
-  expect(manifest).toMatchObject({ version: 1, sourceRoot: await realpath(store.root), sourceFingerprint: await fingerprint(store.root) });
+  expect(manifest).toMatchObject({ version: 2, producer: { pid: process.pid }, released: false,
+    sourceRoot: await realpath(store.root), sourceFingerprint: await fingerprint(store.root) });
   expect(ws.manifestPath.startsWith(ws.outputRoot + ".")).toBe(true);
   await store.update(path, current => ({ ...current!, body: current!.body + "human fact\n" }));
   await expect(applyDream(store.root, ws.outputRoot, "stale")).rejects.toThrow("stale dream snapshot");

@@ -178,13 +178,31 @@ describe("repository map", () => {
     expect(changed.map.content).toContain("export const after_: number");
   });
 
-  it("keeps this repository's whole tree visible within the dogfood budget", async () => {
+  it("keeps every file visible before symbol detail when the tree fits the default budget", async () => {
+    const root = await fixture();
+    const paths = ["packages/cli/src/index.ts", "packages/core/src/agent.ts", "packages/memory/src/index.ts", "packages/supervisor/src/index.ts"];
+    for (const path of paths) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), path.includes("agent.ts")
+        ? Array.from({ length: 400 }, (_, i) => `export const symbol_${i}: number = ${i};`).join("\n")
+        : "export const present: boolean = true;");
+    }
+    const map = await generateRepoMap(root);
+    expect(map.bytes).toBeLessThanOrEqual(DEFAULT_REPO_MAP_BYTES);
+    expect(map.files).toBe(paths.length);
+    expect(map.truncated).toBe(true); // Symbols exceed the cap, the controlled file list does not.
+    expect(map.content).toContain("Exports:");
+    expect(map.content).toContain("export const symbol_0");
+    const tree = map.content.split("\nExports:")[0]!;
+    for (const path of paths) expect(tree).toContain(`- ${path}`);
+  });
+
+  it("bounds this growing checkout and reports any truncation honestly", async () => {
     const map = await generateRepoMap(process.cwd());
     expect(map.bytes).toBeLessThanOrEqual(DEFAULT_REPO_MAP_BYTES);
     expect(map.files).toBeGreaterThan(100);
-    // A symbol-heavy early package must not starve later packages from the structural tree.
-    expect(map.content).toContain("packages/core/src/agent.ts");
-    expect(map.content).toContain("packages/memory/src/index.ts");
-    expect(map.content).toContain("packages/supervisor/src/index.ts");
+    expect(map.content).toContain("BEGIN REPOSITORY MAP");
+    expect(map.content).toContain("END REPOSITORY MAP");
+    expect(map.content.includes("repository map truncated")).toBe(map.truncated);
   });
 });

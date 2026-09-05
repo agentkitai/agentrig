@@ -128,7 +128,7 @@ async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise
       ? "\nresolve the reported unreadable attempts before retrying; do not delete immutable history"
       : "\nto run and apply a fresh dream: agentrig dream --auto");
     console.log(`review artifact: ${result.outputRoot}\nmanifest: ${result.workspace.manifestPath}`);
-    console.log("keep both together; discard both only after stopping users of this artifact (SDK: workspace.dispose())");
+    console.log("keep both together; after review, preview agentrig memory discard-dream <outputRoot>, then confirm its owner UUID (SDK: workspace.dispose())");
   }
 
   process.exitCode = !applied && (findingCount(result.report, result.structural) > 0 || result.consolidationError !== undefined) ? 1 : 0;
