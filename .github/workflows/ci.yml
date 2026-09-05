@@ -18,6 +18,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # E1 exports a frozen prior commit into a fresh workspace; never resets this checkout.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -38,6 +41,8 @@ jobs:
       AGENTRIG_CI_SANDBOX: none
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -65,4 +70,5 @@ jobs:
       - run: pnpm exec vitest run packages/memory/test/persistence.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/auxiliary-lifecycle.test.ts packages/core/test/auxiliary-usage.test.ts packages/cli/test/render.test.ts
       - run: pnpm exec vitest run packages/cli/test/maintenance-runtime.test.ts
+      - run: pnpm exec vitest run packages/cli/test/evalset.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'

@@ -1,11 +1,33 @@
 # Status
 
-Current roadmap row: **H5d — auxiliary lifecycle closure, then E1.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **E1 — frozen tasks and independent outcome checks.** H1–H5 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5d auxiliary lifecycle in progress
+### E1 in progress
+
+Fresh branch from updated main a14dd57 after PR #131 exact-head CI 33973659278 and
+post-merge main CI 33973789052 passed all three platforms. Eight frozen tasks will cover
+AgentRig and an external repository, with isolated preparation, independent behavioral checks,
+separate regression results and explicit failure/block/skip rules. This is benchmark mechanics,
+not live-model evidence. E2 reporting and E3 paid comparisons are not pulled into this PR.
+
+Implemented `docs/EVALSET.md`, eight exact task definitions, new-directory-only pinned-tree
+preparation and external-receipt checks with separate behavior/regression/submitted-test/scope
+lanes. Investigation explanations require an independent human verdict and remain BLOCKED until
+then. Twelve mechanics tests cover every task's positive/negative controls, exact upstream blobs,
+scope violations after commits, malformed receipts and preserving existing work. Actual fresh
+AgentRig A1/A2/A3 workspaces fail before repair and pass all lanes after repair; A1 demonstrates
+why passing old regression tests alone is insufficient. Build/typecheck and full explicit Node22
+suite pass 1,827 plus two skips (1,829 total, 86 files). Independent review and PR/main CI pending.
+
+### H5d auxiliary lifecycle complete (PR #131)
+
+Completion gate: final head a1a586f, merge a14dd57, PR CI 33973659278 and main CI 33973789052
+all green. One approving Claude review; four detected/restored negative mutations; final
+build/typecheck and 1,815 Node22 passes plus two skips. H5 is complete. The following notes
+record intermediate gates, not remaining prerequisites. Optional work stays at the END of ROADMAP.
 
 Fresh branch from updated main 661634a after PR #130 final-head CI 33972036578 and main CI
 33972161624 passed all platforms. See `docs/plans/H5-auxiliary-lifecycle.md`. This is the last

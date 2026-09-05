@@ -1,0 +1,2 @@
+# E1 verifies these vendored upstream blobs byte-for-byte on every platform.
+eval/fixtures/is-number/* text eol=lf
