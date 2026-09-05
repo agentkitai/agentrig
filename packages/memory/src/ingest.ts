@@ -361,9 +361,9 @@ function withoutCapture(body: string): string {
 }
 
 /** Backend annotations extend a fact's source list rather than create a different fact. */
+const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function containsFact(body: string, line: string): boolean {
-  return body.split("\n").some(existing => existing === line ||
-    (existing.startsWith(`${line.slice(0, -1)}, `) && existing.endsWith(")")));
+  return new RegExp(`(^|\\n)${escapePattern(line.slice(0, -1))}(?:\\)|, [^\\n]*\\))(?=\\n|$)`).test(body);
 }
 
 async function readEvents(logPath: string): Promise<unknown[]> {
@@ -669,14 +669,14 @@ async function annotateProvenance(
     try {
       await store.update(path, page => {
         if (page === null) throw new Error(`provenance target disappeared: ${path}`);
-        const body = page.body.split("\n").map(line => {
-          for (const fact of t.facts) {
-            const memoryId = idByText.get(fact.text);
-            if (memoryId !== undefined && line === `- [${fact.tag}] ${fact.text} (${ref})`)
-              return `${line.slice(0, -1)}, ${backendId}:${memoryId})`;
-          }
-          return line;
-        }).join("\n");
+        let body = page.body;
+        for (const fact of t.facts) {
+          const memoryId = idByText.get(fact.text);
+          if (memoryId === undefined) continue;
+          const line = `- [${fact.tag}] ${fact.text} (${ref})`;
+          body = body.replace(new RegExp(`(^|\\n)${escapePattern(line)}(?=\\n|$)`, "g"),
+            (_match, prefix: string) => `${prefix}${line.slice(0, -1)}, ${backendId}:${memoryId})`);
+        }
         return { path, frontmatter: page.frontmatter, body };
       });
     } catch {

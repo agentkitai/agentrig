@@ -205,6 +205,18 @@ it("annotates the locked current page and deduplicates previously annotated fact
   expect((await read(path))!.body.split("original evidence")).toHaveLength(2);
 });
 
+it("preserves multiline fact text and regex punctuation across provenance and re-ingest", async () => {
+  const text = "literal [x] + $value\nsecond line (details)";
+  const backend: MemoryBackend = { id: "fixture", recall: async () => [], promote: async () => {},
+    onIngest: async () => [{ factText: text, memoryId: "m$1" }] };
+  await ingest(provider(text), { backend });
+  expect((await store.read(path))!.body).toContain(`${text} (session:s1, fixture:m$1)`);
+  await log([...events, { type: "session.end", reason: "done" }]);
+  await ingest(provider(text), { backend });
+  expect((await store.read(path))!.body.split(text)).toHaveLength(2);
+  expect((await store.read(sourcePath))!.body.split(text)).toHaveLength(2);
+});
+
 it("preserves concurrent pin additions and refuses stale pin/page checks", async () => {
   await store.write(path, page("other content"));
   await Promise.all(Array.from({ length: 12 }, (_, i) => addPin(store.root, pin(`claim ${i}`))));

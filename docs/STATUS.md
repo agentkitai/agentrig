@@ -20,6 +20,13 @@ and deduplication, invalid IDs, stale/deleted pin snapshots, malformed data, ana
 and empty/partial/custom log recovery. Independent review and PR CI are pending. See H5.md for
 the cooperative-writer boundary, partial-commit retry semantics and H5b2/H5c exclusions.
 
+Initial PR CI 33956025872 passed Linux/macOS/Windows. Isolated mutations prove shorter-prefix
+detection and locked provenance are covered. A removed update lock initially escaped the process
+conservation test through favorable scheduling; the fixture now also asserts each process owns the
+mutation lock during transform reads. Multiline facts and regex/replacement punctuation are covered
+through annotation and re-ingest. Build/typecheck and 1,530 tests pass plus two platform skips
+(1,532 total, 74 files). Independent review and strengthened-head validation are pending.
+
 ### H5a complete (2026-09-05; PR #122)
 
 H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
