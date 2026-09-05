@@ -303,19 +303,35 @@ export class FileMemoryStore implements MemoryStore {
     return "created";
   }
 
+  /** Checks a byte allowance including its final newline. Not a durable reservation: callers
+   * must own an isolated copy or tolerate intervening appenders; appendLog checks again. */
+  async checkLogCapacity(entryBytes: number, opts: MemoryLockOptions & { maxFileBytes: number }): Promise<void> {
+    if (!Number.isSafeInteger(entryBytes) || entryBytes < 1) throw new Error("invalid log entry byte allowance");
+    await this.withMutationLock(async () => {
+      const prefix = await this.logPrefix(opts);
+      if (Buffer.byteLength(prefix) + entryBytes > opts.maxFileBytes) {
+        throw new MaintenanceLimitError("dream log capacity preflight failed; raise the configured scan maxFileBytes deliberately; log history was preserved");
+      }
+    }, opts);
+  }
+
+  private async logPrefix(opts: MemoryLockOptions): Promise<string> {
+    const existing = await (opts.maxFileBytes === undefined ? readFile(this.abs(LOG_FILE), "utf8")
+      : readBoundedFile(this.abs(LOG_FILE), opts.maxFileBytes, opts.signal).then(bytes => bytes.toString("utf8"))).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return LOG_HEADER;
+      throw err;
+    });
+    const repaired = recoverLogHeader(existing);
+    return repaired + (repaired.endsWith("\n") ? "" : "\n");
+  }
+
   async appendLog(entry: string, opts: MemoryLockOptions = {}): Promise<void> {
     // read-modify-atomicWrite rather than appendFile: appendFile follows a symlink, which let a
     // dream's log line write through a symlinked log.md into the wiki it was supposed to be
     // copying. Every other writer here already goes through atomicWrite.
     await this.withMutationLock(async () => {
       const line = entry.endsWith("\n") ? entry : `${entry}\n`;
-      const existing = await (opts.maxFileBytes === undefined ? readFile(this.abs(LOG_FILE), "utf8")
-        : readBoundedFile(this.abs(LOG_FILE), opts.maxFileBytes, opts.signal).then(bytes => bytes.toString("utf8"))).catch((err: NodeJS.ErrnoException) => {
-        if (err.code === "ENOENT") return LOG_HEADER;
-        throw err;
-      });
-      const repaired = recoverLogHeader(existing);
-      const contents = repaired + (repaired.endsWith("\n") ? "" : "\n") + line;
+      const contents = await this.logPrefix(opts) + line;
       if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance log output limit exceeded");
       await this.atomicWrite(LOG_FILE, contents, opts.signal);
     }, opts);

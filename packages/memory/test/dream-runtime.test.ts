@@ -26,6 +26,21 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true }); });
 const absent = (file: string) => expect(fs.lstat(file)).rejects.toMatchObject({ code: "ENOENT" });
 
+it("preflights a near-cap log before paying and preserves history when the cap is raised", async () => {
+  const log = join(wiki.root, "log.md"); const history = (await fs.readFile(log, "utf8")) + "é".repeat(980);
+  await fs.writeFile(log, history); const before = await fingerprint(wiki.root);
+  const paid = provider(); const stream = vi.spyOn(paid, "stream"); const reports: AuxiliaryReport[] = [];
+  await expect(runDream({ ...options(), provider: paid, scanLimits: { maxFileBytes: 2048 }, onUsage: report => reports.push(report) }))
+    .rejects.toThrow("log capacity preflight");
+  expect(stream).not.toHaveBeenCalled(); expect(reports[0]).toMatchObject({ outcome: "limit", calls: [], costUsd: 0 });
+  expect(await fingerprint(wiki.root)).toBe(before); await absent(join(wiki.root, ".last-dream"));
+  await absent(output); await absent(output + ".dream.json");
+  const result = await runDream({ ...options(), provider: paid, scanLimits: { maxFileBytes: 4096 } });
+  expect(stream).toHaveBeenCalledTimes(1);
+  expect(await fs.readFile(join(output, "log.md"), "utf8")).toContain(history + "\n");
+  expect(await fs.readFile(log, "utf8")).toBe(history); await result.workspace.dispose();
+});
+
 it("reports zero-call structural work and protects the result from a throwing/mutating usage callback", async () => {
   const result = await runDream({ ...options(), structuralOnly: true, onUsage: report => {
     report.reportedUsage.input = 999; throw new Error("notification failed");

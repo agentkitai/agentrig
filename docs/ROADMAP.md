@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5c2b; H1–H4, H5a, H5b, H5c1 and H5c2a complete (PRs #118–#126).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5c2c1; H1–H4, H5a, H5b, H5c1, H5c2a and H5c2b complete (PRs #118–#127).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -293,6 +293,16 @@ oversized mutable scheduling metadata; scanner failures must not silently overwr
 H5c2c also covers explicit disposal/recovery of retained pre-install/failed-install artifacts and
 preflight of known wiki-log capacity before paid consolidation. Preserve log history; configured
 scan caps can be raised deliberately, so truncating history is not the only capacity remedy.
+
+H5c2c has three sequential, separately gated sub-rows:
+- **H5c2c1:** preflight log append capacity before model calls; explicit, confirmed reset of a
+  corrupt/unreadable/oversized mutable scheduling stamp into a preserved named backup. Never
+  silently reset metadata, truncate logs, rewrite raw history or remove writer locks.
+- **H5c2c2:** persisted producer ownership and explicit recovery/disposal of abandoned or handed-off
+  review workspaces/sidecars, refusing active, ambiguous legacy and replacement owners.
+- **H5c2c3:** journal and recover interrupted installs with exact source/backup/staging identities;
+  never overwrite an occupied live root or discard the only original. Preserve finish-or-restore
+  after the first rename. No unsupported power-loss or hostile-writer atomicity claims.
 
 H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
 attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
