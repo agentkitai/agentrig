@@ -1,11 +1,11 @@
 # Status
 
-Current roadmap row: **H3 — preserve assistant conclusions and complete ingest evidence.** H1 and H2 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H4 — runtime-backed, claim-level promotion eligibility.** H1–H3 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H3 implementation (2026-09-05; review and CI pending)
+### H3 complete (2026-09-05; PR #120)
 
 Ingest preserves canonical assistant text with labeled legacy/interrupted-stream fallback,
 complete recorded tool output/input and full steering/errors. Patched displays remain separate
@@ -18,16 +18,18 @@ before provider calls or wiki writes and can be retried when complete.
 
 See [plans/H3.md](plans/H3.md). Tests pin canonical/legacy deduplication, assistant-only conclusions,
 late tool evidence reaching distillation, exact bounded ranges, Unicode/blank lines, omissions,
-corrupt logs and capture migration. Initial code head bf915c4 passes build/typecheck, all 1,390
-tests and Linux/macOS/Windows CI. Independent review requested a missing-log test, explicit
-denial records and duplicate-preview labeling; local diagnostics additionally caught omitted
-canonical-only tool requests and nested images. Repairs and regression tests cover all five.
-The repaired head e82eced passes build/typecheck, all 1,395 tests and all CI platforms. Delta
-review closed those findings and requested identity/error flags on canonical-only array results;
-both array and string paths now preserve them. A further real-agent regression showed collection
-limits were lost before reaching ingest: the additive `tool.result.outputIncomplete` field now
-survives durable logging, including when a partial recorded-output artifact exists. Ingest reports
-the uncollected range as unavailable rather than covered. Final validation and delta review are pending.
+corrupt logs and capture migration. Five independent Claude reviews closed all findings, ending
+with no findings at code head 876bd3d. Build/typecheck and all 1,408 tests (70 files) pass; Linux,
+macOS and Windows CI is green. Mutation checks detect removed assistant conclusions and restored
+display-only truncation. Reviews/local diagnostics added denial records, duplicate-preview labels,
+canonical-only request/result identity, nested omissions and missing-log coverage.
+
+The additive `tool.result.outputIncomplete` field preserves collection limits through durable
+logging, even with partial artifacts; ingest reports the unavailable range. Requested read_file
+pages remain complete for their range and advertise further lines without phantom trailing-newline
+pages. Glob/grep caps and abbreviated matching lines are explicit to both the model and ingest.
+Coverage means the recorded textual range was submitted and accounted for, not that the model
+verified its claims; runtime-backed promotion eligibility is the next row, H4.
 
 ### H2 complete (2026-09-05; PR #119)
 
@@ -93,7 +95,7 @@ trusted code with ambient env/filesystem access despite a restricted API object.
 
 Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
 worktree in the repository map), one skipped. The original roadmap revision changed documentation
-only and preserved existing R identifiers. H1/H2 implementation and validation are recorded above;
+only and preserved existing R identifiers. H1–H3 implementation and validation are recorded above;
 the remaining H/E rows are still planned. Older notes below
 record decisions at the time; they do not override these priorities or current limitations.
 

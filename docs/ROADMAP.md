@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H3; H1/H2 complete (PRs #118/#119).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H4; H1–H3 complete (PRs #118–#120).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
