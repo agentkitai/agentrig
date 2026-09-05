@@ -267,9 +267,13 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ? {
           reviewer: new TrajectoryReviewer({ provider: reviewProvider }),
           grader: new RubricGrader({ provider: reviewProvider }),
-          attempts: async () => {
+          attempts: async (sessionId: string, signal: AbortSignal) => {
             if (o.memory === undefined) return [];
-            return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;
+            const ledger = await new FileRawStore({ root: o.memory }).readAttempts(sessionId, {
+              signal, maxEntries: 128, maxFileBytes: 64 * 1024, maxTotalBytes: 2 * 1024 * 1024,
+            });
+            if (ledger.corrupt.length > 0) throw new Error(`attempt ledger is incomplete: ${ledger.corrupt.join(", ")}`);
+            return ledger.attempts;
           },
         }
       : {}),

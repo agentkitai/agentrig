@@ -6,7 +6,7 @@ import type { Consolidation } from "./phases.js";
 import type { StructuralFindings } from "./lint.js";
 import type { ScanOptions } from "../scan.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
-import { serializePage } from "../page.js";
+import { factBlocks, serializePage } from "../page.js";
 import { MaintenanceLimitError } from "../maintenance.js";
 import { DEFAULT_SCAN_LIMITS } from "../scan.js";
 
@@ -87,8 +87,9 @@ export async function applyConsolidation(
     if (page === undefined) continue;
     const kept: string[] = [];
     const remaining = [...targets];
-    for (const line of page.body.split("\n")) {
-      const hit = remaining.findIndex((t) => matchesRemoval(line, t));
+    for (const block of factBlocks(page.body)) {
+      const line = block.raw;
+      const hit = block.fact ? remaining.findIndex((t) => matchesRemoval(line, t)) : -1;
       if (hit === -1) {
         kept.push(line);
         continue;
@@ -110,16 +111,16 @@ export async function applyConsolidation(
     opts.signal?.throwIfAborted();
     const page = pages.get(s.page);
     if (page === undefined) continue;
-    const lines = page.body.split("\n");
+    const blocks = factBlocks(page.body);
     let touched = false;
-    for (let i = 0; i < lines.length; i += 1) {
-      if (!matchesRemoval(lines[i]!, s.old)) continue;
-      lines[i] = `${lines[i]!.replace(/\s*$/, "")} — superseded by "${s.new}" (${s.source})`;
+    for (const block of blocks) {
+      if (!block.fact || !matchesRemoval(block.raw, s.old)) continue;
+      block.raw = `${block.raw.replace(/\s*$/, "")} — superseded by "${s.new}" (${s.source})`;
       touched = true;
       break;
     }
     if (touched) {
-      page.body = lines.join("\n");
+      page.body = blocks.map(block => block.raw).join("\n");
       pages.set(s.page, page);
       dirty.add(s.page);
       changes.supersededMarked.push({ page: s.page, old: s.old });
@@ -157,10 +158,14 @@ export async function applyConsolidation(
     if (target === undefined) continue;
     const sources = m.from.filter((f) => f !== m.to && pages.has(f));
     if (sources.length === 0) continue;
+    let merged = false;
 
     for (const from of sources) {
       opts.signal?.throwIfAborted();
       const src = pages.get(from)!;
+      // Opaque metadata has no safe automatic cross-page merge semantics. Keep the source
+      // rather than discard human fields or invent a conflicting metadata precedence rule.
+      if (src.extraFrontmatter?.trim()) continue;
       if (Buffer.byteLength(target.body) + Buffer.byteLength(src.body) + Buffer.byteLength(from) + 32
         > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) throw new MaintenanceLimitError("dream merged page output limit exceeded");
       // append rather than interleave: the merge is a model's judgement, and a wrong ordering
@@ -174,19 +179,22 @@ export async function applyConsolidation(
       dirty.delete(from);
       await withMemoryLock(out.root, async () => { opts.signal?.throwIfAborted(); await rm(join(out.root, from), { force: true }); }, opts);
       changes.mergedPages.push({ from, into: m.to });
+      merged = true;
     }
-    pages.set(m.to, target);
-    dirty.add(m.to);
+    if (merged) {
+      pages.set(m.to, target);
+      dirty.add(m.to);
+    }
   }
 
   for (const path of dirty) {
     opts.signal?.throwIfAborted();
     const page = pages.get(path);
     if (page === undefined) continue;
-    if (Buffer.byteLength(serializePage(page.frontmatter, page.body)) > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) {
+    if (Buffer.byteLength(serializePage(page.frontmatter, page.body, {}, page.extraFrontmatter)) > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) {
       throw new MaintenanceLimitError("dream page output limit exceeded");
     }
-    await out.write(path, { path, frontmatter: page.frontmatter, body: page.body }, opts);
+    await out.write(path, page, opts);
   }
   return changes;
 }

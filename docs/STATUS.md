@@ -1,11 +1,30 @@
 # Status
 
-Current roadmap row: **H5 — workspace recovery, then remaining persistence and auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5 — remaining persistence, then auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5 workspace recovery in progress
+### H5 persistence in progress
+
+Fresh branch from updated main ba4569c after PR #129 final-head CI 33970456552 and post-merge
+main CI 33970638299 passed all platforms. See `docs/plans/H5-memory-persistence.md` for the
+remaining acceptance checklist. No additional recursive milestones; optional polish stays at
+the END of ROADMAP.
+
+Implemented opaque frontmatter retention, whole multiline fact parsing/removal, conservative
+metadata-bearing merge refusal, and scoped attempt lookup with separately bounded disposable
+index rebuilds. CLI supervisor supplies session/timeout/query limits and rejects incomplete
+ledger results. Existing staged-target and actual child cleanup evidence is documented without
+claiming an unproven production fix. Build/typecheck and explicit Node22 full suite pass:
+1,782 passed plus two skips (1,784 total, 84 files). First independent Claude review is running;
+negative mutations, exact-head PR CI and post-merge main CI remain gates.
+
+### H5 workspace recovery complete (PR #129)
+
+Completion gate: final head b618b2a, merge ba4569c, PR CI 33970456552 and main CI 33970638299
+all green. One approving Claude pass, three detected/restored negative mutations, build/typecheck
+and 1,770 passing Node22 tests plus two skips. Following notes record intermediate gates.
 
 Fresh branch from updated main c820c84 after PR #128 exact-head CI 33969076711 and main CI
 33969215100 passed all platforms. See `docs/plans/H5-workspace-recovery.md`. Recovery is explicit and limited to

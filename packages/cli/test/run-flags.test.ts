@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { abortNotice, parseSoft, parseTurnsRemaining, runCommand, supervisorOptions, type RunOptions } from "../src/run.ts";
 import { parseBudget } from "../src/agent-builder.ts";
+import { FileRawStore } from "@agentkitai/agentrig-memory";
 
 /**
  * The supervisor CLI surface had no tests at all. These drive `runCommand` directly with no
@@ -206,6 +207,16 @@ describe("supervisorOptions", () => {
     const reviewed = wiring({ opts: { supervisorReview: true } });
     expect(reviewed.reviewer).toBeDefined();
     expect(reviewed.grader).toBeDefined();
+  });
+
+  it("loads bounded attempts for the reviewed session and forwards cancellation", async () => {
+    const raw = new FileRawStore({ root });
+    for (const sessionId of ["current", "unrelated"]) await raw.addAttempt({
+      id: sessionId, sessionId, ts: 1, hypothesis: "test", actions: "test", outcome: "success", evidence: [],
+    });
+    const reviewed = wiring({ opts: { supervisorReview: true, memory: root } });
+    expect((await reviewed.attempts!("current", new AbortController().signal)).map(a => a.id)).toEqual(["current"]);
+    await expect(reviewed.attempts!("current", AbortSignal.abort())).rejects.toThrow();
   });
 
   it("carries provider cache pricing into the supervisor", () => {
