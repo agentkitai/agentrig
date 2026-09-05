@@ -221,8 +221,9 @@ describe("versioned memory mutations", () => {
     });
     const work = vi.fn(async () => 42);
     const warnings: Error[] = [];
+    const expectedLock = `${await fs.realpath(store.root)}.write.lock`;
     await expect(withMemoryLock(store.root, work, { onReleaseError: e => warnings.push(e) }))
-      .rejects.toThrow(`cannot establish memory lock identity at ${await fs.realpath(store.root)}.write.lock`);
+      .rejects.toThrow(`cannot establish memory lock identity at ${expectedLock}`);
     expect(work).not.toHaveBeenCalled(); expect(closed).toBe(true);
     if (persistent) {
       expect(warnings[0]!.message).toContain("stop writers before lock recovery");

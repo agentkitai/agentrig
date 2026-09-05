@@ -36,6 +36,12 @@ pass before the next updated-main branch. H5b owns ingest/provenance/pins migrat
 recorded empty/partially initialized log recovery; H5c owns dream swaps/recovery. None is implicitly
 protected just because H5a primitives exist.
 
+Final narrow review at 229a365 closed all remaining notes. CI 33954975532 passed Linux/Windows;
+macOS passed every test assertion but detected an unhandled rejection in the injected-fstat test.
+Its expected path is now resolved before starting the rejecting operation, so the rejection
+assertion attaches synchronously. No production behavior or unhandled-error gate was weakened;
+repaired-head CI/review remain required.
+
 ### H4 complete (2026-09-05; PR #121)
 
 Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
