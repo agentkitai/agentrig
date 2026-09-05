@@ -31,6 +31,8 @@ interface LoadedSession {
   family: string;
   own: Observation[];
   inherited: Observation[];
+  ownInputs: Array<{ seq: number; text: string }>;
+  inheritedInputs: Array<{ seq: number; text: string }>;
   eventCount: number;
   error?: string;
 }
@@ -40,6 +42,23 @@ export interface PromotionEvidenceIndex { readonly kind: "runtime-session-eviden
 const indexes = new WeakMap<PromotionEvidenceIndex, Map<string, LoadedSession>>();
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
+const NON_OBSERVATIONS = new Set(["write_file", "edit_file", "memory_write", "memory_file_analysis",
+  "attempt_log", "memory_ingest", "memory_read", "memory_search", "update_plan", "subagent", "skills"]);
+
+function inputText(input: unknown): string {
+  const pending = [input];
+  const parts: string[] = [];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") parts.push(String(value));
+    else if (Array.isArray(value)) { for (const item of value) pending.push(item); }
+    else if (typeof value === "object" && value !== null) {
+      for (const [key, item] of Object.entries(value)) { parts.push(key); pending.push(item); }
+    }
+  }
+  return normalized(parts.join("\n"));
+}
 
 export interface EvidenceLimits {
   maxSessions?: number;
@@ -65,7 +84,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
   const sessions = new Map<string, LoadedSession>();
   let bytesRead = 0;
   let filesRead = 0;
-  const failed = (id: string, error: string): LoadedSession => ({ family: id, own: [], inherited: [], eventCount: 0, error });
+  const failed = (id: string, error: string): LoadedSession => ({ family: id, own: [], inherited: [], ownInputs: [], inheritedInputs: [], eventCount: 0, error });
 
   async function readLog(ref: SessionLogRef): Promise<Array<Record<string, unknown>>> {
     if (++filesRead > maxSessions) throw new Error("session validation limit exceeded");
@@ -118,7 +137,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
       if (ref === undefined) throw new Error("session does not exist in the raw store");
       const events = await readLog(ref);
       const first = events[0]!;
-      result = { family: id, own: [], inherited: [], eventCount: events.length };
+      result = { family: id, own: [], inherited: [], ownInputs: [], inheritedInputs: [], eventCount: events.length };
       if (first.parent !== undefined) {
         if (typeof first.parent !== "string" || !ID.test(first.parent)) throw new Error("invalid session parent");
         const parent = await load(first.parent, new Set([...ancestry, id]));
@@ -127,21 +146,28 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
         if (first.type === "session.fork") {
           if (!Number.isSafeInteger(first.atSeq) || Number(first.atSeq) < 0 || Number(first.atSeq) >= parent.eventCount) throw new Error("invalid fork point");
           result.inherited = [...parent.inherited, ...parent.own.filter(o => o.seq <= Number(first.atSeq))];
-        }
+          result.inheritedInputs = [...parent.inheritedInputs, ...parent.ownInputs.filter(input => input.seq <= Number(first.atSeq))];
+        } else result.inheritedInputs = [...parent.inheritedInputs, ...parent.ownInputs];
       } else if (first.type === "session.fork") throw new Error("missing fork parent");
       const tools = new Map<string, string>();
       for (const event of events) {
-        if (event.type === "tool.call" && typeof event.id === "string" && typeof event.name === "string") tools.set(event.id, event.name);
+        if (event.type === "tool.call" && typeof event.id === "string" && typeof event.name === "string") {
+          tools.set(event.id, event.name);
+          result.ownInputs.push({ seq: Number(event.seq), text: inputText(event.input) });
+        }
         if (event.type !== "tool.result") continue;
         if (typeof event.id !== "string" || typeof event.ok !== "boolean" || typeof event.display !== "string"
           || (event.output !== undefined && typeof event.output !== "string")
           || (event.truncated !== undefined && typeof event.truncated !== "boolean")
           || (event.outputIncomplete !== undefined && typeof event.outputIncomplete !== "boolean")) throw new Error("malformed tool result");
         if (event.outputIncomplete === true || (event.truncated === true && typeof event.output !== "string")) continue;
+        if (typeof event.output !== "string" && /(?:^|\n)(?:…|\.{3}) \[truncated \d+ (?:UTF-16 code units|chars)\]\s*$/.test(event.display)) continue;
+        const tool = tools.get(event.id) ?? "";
+        if (NON_OBSERVATIONS.has(tool)) continue;
         const field = typeof event.output === "string" ? "output" : "display";
         const text = String(event[field]);
-        result.own.push({ sessionId: id, seq: Number(event.seq), field, text, tool: tools.get(event.id) ?? "",
-          eventHash: hash(JSON.stringify(event)), observationHash: hash(text.replace(/\s+/g, " ").trim()) });
+        result.own.push({ sessionId: id, seq: Number(event.seq), field, text, tool,
+          eventHash: hash(JSON.stringify(event)), observationHash: hash(normalized(text)) });
       }
     } catch (err) { result = failed(id, err instanceof Error ? err.message : String(err)); }
     sessions.set(id, result);
@@ -158,6 +184,9 @@ export function witnessesForClaim(index: PromotionEvidenceIndex | undefined, ses
   const session = index === undefined ? undefined : indexes.get(index)?.get(sessionId);
   if (session === undefined) return { witnesses: [], error: "no runtime-validated evidence for this session" };
   if (session.error !== undefined) return { witnesses: [], error: session.error };
+  if (claim !== "" && [...session.inheritedInputs, ...session.ownInputs].some(input => input.text.includes(normalized(claim)))) {
+    return { witnesses: [], error: "claim occurs in agent tool input; self-authored text is not corroboration" };
+  }
   const witnesses: PromotionWitness[] = [];
   for (const observation of [...session.inherited, ...session.own]) {
     let offset = 0;

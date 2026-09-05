@@ -22,10 +22,10 @@ function page(body = `- [observed] ${claim} (session:s1, session:s2)`): WikiPage
   return { path: "concepts/retries.md", updatedAt: 0, body,
     frontmatter: { type: "concept", slug: "retries", confidence: "high", aliases: [], sources: ["session:s1", "session:s2"], updated: "2026-09-05" } };
 }
-async function session(id: string, output: string, opts: { parent?: string; tool?: string; incomplete?: boolean; artifact?: boolean } = {}) {
+async function session(id: string, output: string, opts: { parent?: string; tool?: string; input?: unknown; incomplete?: boolean; artifact?: boolean } = {}) {
   await logs.append(id, { type: "session.start", task: `observation ${id}`, cwd: root, provider: "scripted", model: "fixture",
     ...(opts.parent === undefined ? {} : { parent: opts.parent }) });
-  await logs.append(id, { type: "tool.call", id: "call", name: opts.tool ?? "bash", input: { command: "observe" }, inputHash: "fixture" });
+  await logs.append(id, { type: "tool.call", id: "call", name: opts.tool ?? "bash", input: opts.input ?? { command: "observe" }, inputHash: "fixture" });
   await logs.append(id, { type: "tool.result", id: "call", ok: true, display: opts.artifact ? "preview" : output, durationMs: 0,
     ...(opts.artifact ? { output, truncated: true } : {}), ...(opts.incomplete ? { outputIncomplete: true } : {}) });
   await logs.append(id, { type: "session.end", reason: "done" });
@@ -109,6 +109,46 @@ describe("runtime-backed claim promotion", () => {
       await logs.append(id, { type: "message.append", message: { role: "assistant", content: [{ type: "text", text: claim }] } });
       await logs.append(id, { type: "tool.result.patched", id: "call", by: "hook", display: claim });
     }
+    expect(selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) }).promote).toEqual([]);
+  });
+
+  it("rejects two distinct echo results when the model dictated the claim", async () => {
+    for (const id of ["s1", "s2"]) await session(id, `context ${id}\n${claim}`, { input: { command: `printf 'context ${id}\\n${claim}\\n'` } });
+    const result = selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) });
+    expect(result.promote).toEqual([]);
+    expect(result.rejected[0]!.claims![0]!.reason).toContain("self-authored text");
+  });
+
+  it("rejects agent-written text read back later in the same session", async () => {
+    for (const id of ["s1", "s2"]) {
+      await session(id, `wrote file in ${id}`, { tool: "write_file", input: { path: "claim.txt", content: claim } });
+      await logs.append(id, { type: "tool.call", id: "read", name: "read_file", input: { path: "claim.txt" }, inputHash: "fixture" });
+      await logs.append(id, { type: "tool.result", id: "read", ok: true, display: `1\tcontext ${id}\n2\t${claim}`, durationMs: 0 });
+    }
+    expect(selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) }).promote).toEqual([]);
+  });
+
+  it("carries agent-authored input through inherited fork prefixes", async () => {
+    await session("parent", "write receipt", { tool: "write_file", input: { content: claim } });
+    const child = await logs.fork("parent", 2);
+    await logs.append(child, { type: "tool.call", id: "read", name: "read_file", input: { path: "claim.txt" }, inputHash: "fixture" });
+    await logs.append(child, { type: "tool.result", id: "read", ok: true, display: `1\tchild context\n2\t${claim}`, durationMs: 0 });
+    await session("s2", `independent context\n${claim}`);
+    const p = page(`- [observed] ${claim} (session:${child}, session:s2)`);
+    const result = selectForPromotion([p], { evidenceIndex: await loadPromotionEvidence(raw, [child, "s2"]) });
+    expect(result.promote).toEqual([]);
+    expect(result.rejected[0]!.claims![0]!.reason).toContain("self-authored text");
+  });
+
+  it.each(["write_file", "edit_file", "memory_write", "memory_file_analysis", "attempt_log", "subagent", "memory_read"])("does not count %s receipts/views as independent observations", async tool => {
+    await session("s1", `context one\n${claim}`, { tool });
+    await session("s2", `context two\n${claim}`, { tool });
+    expect(selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) }).promote).toEqual([]);
+  });
+
+  it.each(["UTF-16 code units", "chars"])("rejects unflagged legacy display truncation markers (%s)", async units => {
+    await session("s1", `context one\n${claim}\n… [truncated 200 ${units}]`);
+    await session("s2", `context two\n${claim}\n… [truncated 300 ${units}]`);
     expect(selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) }).promote).toEqual([]);
   });
 
