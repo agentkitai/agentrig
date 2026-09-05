@@ -854,3 +854,8 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   handoff temp that cleanup already removed; optionally align release/dispose lock waits with
   caller configuration; validate generated manifests through their schema before writing (for
   unusual host metadata such as an empty hostname). These do not block the current contract.
+- Persistence follow-ups from PR #130: explicitly report metadata-based skipped merges; optimize
+  cache maintenance after appends; expose more lock-wait configuration and clearer contention
+  guidance; simplify the legacy `extra`/opaque-frontmatter serialization API. Current bounded
+  rebuilds, explicit lock failures, and retained merge sources remain the contract. Consolidating
+  supervisor timer ownership belongs to the already-active H5d lifecycle work, not a new row.

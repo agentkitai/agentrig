@@ -81,16 +81,20 @@ export function parsePage(text: string, path = "<unknown>"): ParsedPage {
   const raw: Record<string, unknown> = {};
   const extra: Record<string, string> = {};
   const opaque: string[] = [];
+  let opaqueIndent: number | undefined;
   const known = new Set(["type", "slug", "aliases", "sources", "updated", "confidence"]);
   for (const line of head.split("\n")) {
-    // Only top-level keys belong to the tiny schema. Nested human metadata is opaque.
-    if (/^\s/.test(line) || line.trim() === "" || line.startsWith("#")) { opaque.push(line); continue; }
+    // Preserve legacy indented schema keys, but never interpret children of an unknown key.
+    const indent = /^\s*/.exec(line)![0].length;
+    if ((opaqueIndent !== undefined && indent > opaqueIndent) || line.trim() === "" || line.trimStart().startsWith("#")) { opaque.push(line); continue; }
     const colon = line.indexOf(":");
     if (colon === -1) { opaque.push(line); continue; }
     const key = line.slice(0, colon).trim();
     const value = line.slice(colon + 1);
-    if (known.has(key)) raw[key] = key === "aliases" || key === "sources" ? parseList(value) : parseScalar(value);
-    else { extra[key] = parseScalar(value); opaque.push(line); }
+    if (known.has(key)) {
+      opaqueIndent = undefined;
+      raw[key] = key === "aliases" || key === "sources" ? parseList(value) : parseScalar(value);
+    } else { opaqueIndent = indent; extra[key] = parseScalar(value); opaque.push(line); }
   }
   const parsed = FrontmatterSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`${path}: invalid frontmatter — ${parsed.error.issues[0]?.message ?? "unknown"}`);
@@ -183,7 +187,7 @@ export function factLines(body: string): FactLine[] {
     const text = m[2]!.trim();
     // The generated reservation line is bookkeeping, not an ingested fact. Keep historical
     // placeholders visible to humans without activating their planned index row in dream.
-    if (isReservationPlaceholder(line)) continue;
+    if (isReservationPlaceholder(line.split("\n")[0]!)) continue;
     const refs = [...text.matchAll(/\(([^)]*(?:session|doc|dream|lore):[^)]*)\)/g)].flatMap((r) =>
       r[1]!.split(",").map((s) => s.trim()).filter((s) => s !== ""),
     );

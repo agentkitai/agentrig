@@ -26,7 +26,10 @@ The trusted unconditional `write()` still replaces the page. Pass the read page 
 when using it. Dream keeps metadata-bearing merge sources because automatic cross-page metadata
 precedence is undefined. Continuation text and references remain intact; removals must match the
 whole tagged fact. Blank lines, headings and new list items delimit facts; this is not a general
-Markdown parser. Fenced examples do not count as evidence.
+Markdown parser. Adjacent prose without a blank separator is a lazy continuation; quoting just
+its first line is deliberately insufficient for deletion. Fenced examples and reservation
+bookkeeping do not count as evidence. Legacy indented known keys remain accepted unless nested
+under an opaque unknown key.
 
 Named-session attempt reads use `.agentrig/attempt-index.json`, outside immutable `raw/`.
 Append and index operations share `attempt-index.write.lock`. The index is a disposable local
@@ -35,11 +38,16 @@ stamps detect ordinary legacy additions. In-place external rewrites violate raw 
 stop writers and explicitly rebuild after any such repair, rather than trusting directory stamps.
 The first lookup or invalid cache triggers a separate bounded rebuild (10,000 directory entries,
 64 KiB per raw record, 64 MiB total); it never raises the requested session query budget. Cached
-index reads/writes have an 8 MiB cap. Limits fail visibly, not as empty history. For larger legacy
+index reads/writes have an 8 MiB cap. New attempts must fit 64 KiB before an immutable ID is
+claimed. Oversized legacy records are reported as unreadable during rebuild rather than disabling
+unrelated session lookups; failed bounded reads are charged conservatively to the aggregate cap.
+Entry/aggregate limits still stop the rebuild visibly, not as empty history. For larger legacy
 ledgers, call `raw.rebuildAttemptIndex({ signal, maxEntries, maxFileBytes, maxTotalBytes })` with
 deliberate operator-selected limits; the index's 8 MiB cap remains. No raw file is rewritten.
 Corrupt entries whose session cannot be established remain reported on every scoped lookup.
-The supervisor rejects incomplete results; ingest retains its existing corrupt-entry diagnostic.
+The supervisor warns that it is reviewing only readable attempts, then continues; ingest retains
+its existing corrupt-entry diagnostic. Neither silently claims a complete ledger. Dream's existing
+full-scan limit and incomplete-evidence refusal of automatic apply are unchanged.
 Unscoped SDK compatibility reads remain available; dream already supplies explicit full-scan caps.
 
 CLI supervisor lookup now receives the reviewed session ID and a timeout signal, with 128-entry,

@@ -149,12 +149,15 @@ export class FileRawStore implements RawStore {
    * in a directory the rest of the system treats as trustworthy.
    */
   async addAttempt(attempt: Attempt): Promise<void> {
-    AttemptSchema.parse(attempt);
+    const parsed = AttemptSchema.parse(attempt);
     z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/).parse(attempt.id);
-    return withMemoryLock(join(this.root, "attempt-index"), () => this.addAttemptUnlocked(attempt));
+    if (Buffer.byteLength(JSON.stringify(parsed, null, 2)) > REBUILD_LIMITS.maxFileBytes) {
+      throw new MaintenanceLimitError("new attempt exceeds 64 KiB; summarize its evidence before recording it");
+    }
+    return withMemoryLock(join(this.root, "attempt-index"), () => this.addAttemptUnlocked(parsed));
   }
 
-  private async addAttemptUnlocked(attempt: Attempt): Promise<void> {
+  private async addAttemptUnlocked(attempt: z.infer<typeof AttemptSchema>): Promise<void> {
     await rm(join(this.root, "attempt-index.json"), { force: true });
     await mkdir(this.dir("attempts"), { recursive: true });
     const parsed = AttemptSchema.parse(attempt);
@@ -203,7 +206,7 @@ export class FileRawStore implements RawStore {
 
   private async buildAttemptIndex(opts: AttemptReadLimits): Promise<AttemptIndex> {
     const token = await this.attemptToken();
-    const result = await this.scanAttempts(undefined, opts);
+    const result = await this.scanAttempts(undefined, opts, undefined, true);
     const index: AttemptIndex = { version: 1, token,
       entries: result.records, corrupt: result.corrupt.map(path => basename(path)) };
     opts.signal.throwIfAborted();
@@ -212,8 +215,9 @@ export class FileRawStore implements RawStore {
     if (Buffer.byteLength(text) > INDEX_BYTES) throw new MaintenanceLimitError("attempt index byte limit exceeded");
     const dest = join(this.root, "attempt-index.json");
     const tmp = `${dest}.${randomBytes(6).toString("hex")}.tmp`;
+    // A failed exclusive create must never authorize unlinking a pre-existing temp.
+    await writeFile(tmp, text, { flag: "wx" });
     try {
-      await writeFile(tmp, text, { flag: "wx" });
       opts.signal.throwIfAborted();
       await rename(tmp, dest);
     } finally { await rm(tmp, { force: true }); }
@@ -244,7 +248,7 @@ export class FileRawStore implements RawStore {
     }, { signal: limits.signal });
   }
 
-  private async scanAttempts(sessionId?: string, opts?: AttemptReadLimits, selectedNames?: string[]): Promise<{ attempts: Attempt[]; corrupt: string[]; records: AttemptIndex["entries"] }> {
+  private async scanAttempts(sessionId?: string, opts?: AttemptReadLimits, selectedNames?: string[], skipOversized = false): Promise<{ attempts: Attempt[]; corrupt: string[]; records: AttemptIndex["entries"] }> {
     if (opts !== undefined) new ScanBudget({ signal: opts.signal, scanLimits: {
       maxEntries: opts.maxEntries, maxFileBytes: opts.maxFileBytes, maxTotalBytes: opts.maxTotalBytes,
     } });
@@ -282,6 +286,14 @@ export class FileRawStore implements RawStore {
           if (bytes > opts.maxTotalBytes) throw new MaintenanceLimitError("attempt ledger total byte limit exceeded");
           return buffer.toString("utf8");
         })).catch(error => {
+          opts?.signal.throwIfAborted();
+          if (opts !== undefined && skipOversized && error instanceof MaintenanceLimitError
+            && opts.maxTotalBytes - bytes >= opts.maxFileBytes + 1) {
+            // Legacy oversized records must not poison every session. Charge even a failed
+            // read's worst-case allocation/read (cap + EOF probe) to the aggregate budget.
+            bytes += opts.maxFileBytes + 1;
+            return null;
+          }
           if (opts?.signal.aborted || error instanceof MaintenanceLimitError) throw error;
           return null;
         });

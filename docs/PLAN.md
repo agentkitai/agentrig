@@ -376,9 +376,23 @@ serialized too. Locks have bounded waits and no age-based stealing; crashed-owne
 stopping writers before removing the named lock. Human/external file edits and multi-file crash
 atomicity are outside this cooperative lock contract. H5b/H5c migrate ingest/dream callers.
 
+`WikiPage.extraFrontmatter` retains unknown human metadata as opaque lines. Guarded updates/CAS
+preserve it when omitted; an explicit empty string clears it. The trusted `write()` replacement
+requires callers to pass any metadata they want retained. Dream retains metadata-bearing merge
+sources rather than guessing cross-page metadata precedence. See
+`docs/plans/H5-memory-persistence.md` for multiline fact boundaries and persistence limits.
+
 An `Embedder` interface exists for optional vector search later; BM25 is the default and needs no API key.
 
 ### 3.5 Attempts ledger (the "every attempt incl. failures" requirement)
+
+Session-scoped reads use disposable `.agentrig/attempt-index.json` with a separate bounded rebuild
+and a shared writer lock; raw records remain immutable. New records are capped at 64 KiB before
+claiming their ID. Oversized/torn legacy entries remain visible as unreadable, not silently absent.
+Reviewer input can proceed with a partial-history warning; dream's automatic-apply completeness
+gate is unchanged. Explicit `FileRawStore.rebuildAttemptIndex()` supports operator-selected scan
+limits and must be called after out-of-contract in-place raw repair. See the H5 persistence plan
+for cache caps, cooperative-writer assumptions and exact rebuild/query budget separation.
 
 ```ts
 interface Attempt {

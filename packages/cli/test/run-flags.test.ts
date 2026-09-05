@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -217,6 +217,18 @@ describe("supervisorOptions", () => {
     const reviewed = wiring({ opts: { supervisorReview: true, memory: root } });
     expect((await reviewed.attempts!("current", new AbortController().signal)).map(a => a.id)).toEqual(["current"]);
     await expect(reviewed.attempts!("current", AbortSignal.abort())).rejects.toThrow();
+  });
+
+  it("reports a torn claim without disabling unrelated session review, even if diagnostics reject", async () => {
+    const raw = new FileRawStore({ root });
+    await raw.addAttempt({ id: "current", sessionId: "current", ts: 1, hypothesis: "test", actions: "test", outcome: "success", evidence: [] });
+    const torn = join(root, "raw/attempts/torn.json");
+    await writeFile(torn, "");
+    const onError = vi.fn(async () => { throw new Error("broken UI"); });
+    const reviewed = wiring({ opts: { supervisorReview: true, memory: root }, onError });
+    expect((await reviewed.attempts!("current", new AbortController().signal)).map(a => a.id)).toEqual(["current"]);
+    expect(onError).toHaveBeenCalledWith("attempts", expect.objectContaining({ message: expect.stringContaining(torn) }));
+    await new Promise<void>(resolve => setImmediate(resolve));
   });
 
   it("carries provider cache pricing into the supervisor", () => {

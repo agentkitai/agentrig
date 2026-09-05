@@ -14,11 +14,21 @@ the END of ROADMAP.
 
 Implemented opaque frontmatter retention, whole multiline fact parsing/removal, conservative
 metadata-bearing merge refusal, and scoped attempt lookup with separately bounded disposable
-index rebuilds. CLI supervisor supplies session/timeout/query limits and rejects incomplete
-ledger results. Existing staged-target and actual child cleanup evidence is documented without
+index rebuilds. CLI supervisor supplies session/timeout/query limits and warns on incomplete
+ledger results while reviewing readable attempts. Existing staged-target and actual child cleanup evidence is documented without
 claiming an unproven production fix. Build/typecheck and explicit Node22 full suite pass:
-1,782 passed plus two skips (1,784 total, 84 files). First independent Claude review is running;
-negative mutations, exact-head PR CI and post-merge main CI remain gates.
+1,782 passed plus two skips (1,784 total, 84 files) at initial head 8c58e75, whose CI 33971331288
+passed all platforms. Three isolated negative mutations were detected and restored.
+
+First Claude review identified two blockers: oversized legacy records poisoned all scoped reads,
+and torn claims disabled every reviewer. Repairs cap new records before claiming IDs, report
+oversized legacy entries under the rebuild budget, and warn/continue on partial reviewer history.
+Regressions cover raw preservation, repeated append/rebuild, aggregate limits and rejecting
+diagnostics. Maintainer/review compatibility fixes also preserve legacy indented known metadata,
+exclude continued reservation placeholders and protect existing temps on exclusive-create failure.
+Build/typecheck and full explicit Node22 suite now pass: 1,786 plus two skips (1,788 total, 84 files).
+Focused independent repair review is running; optional findings are at the END of ROADMAP.
+Fresh exact-head PR CI and post-merge main CI remain gates.
 
 ### H5 workspace recovery complete (PR #129)
 
