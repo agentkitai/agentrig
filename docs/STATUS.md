@@ -5,6 +5,21 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-05
 
+### H1 implementation (2026-09-05; review and CI pending)
+
+Built-in file mutations now cross the actual process sandbox using a fixed program and stdin
+data. Read-only and outside-workspace writes fail even under allow-all permissions. Docker
+uses the caller's UID/GID so its artifacts do not become root-owned. Unsupported tools, including
+memory and subagents, require explicit one-call outside approval; headless denies. Host hooks
+(including end-of-session memory maintenance) and CLI MCP startup are refused in enforcing modes.
+Trusted SDK code, provider calls, reads and session bookkeeping are not isolated; compatibility
+is declared by trusted registration code, never by a model, MCP annotation or permission class.
+
+Validation so far: build/typecheck and all 1,363 tests passed in a clean checkout, including live
+Docker file effects. The existing nested-worktree map failure remains H2; no user worktrees were
+removed to obtain this result. The concrete implementation and limitations are in
+[plans/H1.md](plans/H1.md). Independent review and CI must complete before H2 begins.
+
 The user requested a roadmap revision following the code review. The authoritative order is
 [ROADMAP §5](ROADMAP.md#5-sequencing-and-exit-criteria): **H1–H5 → E1–E3 → R4 → H6**, followed
 by memory write-quality hardening and conditional generated skills. R4a is no longer next.
