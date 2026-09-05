@@ -1,11 +1,56 @@
 # Status
 
-Current roadmap row: **H5a — final PR gates; H5b follows only after merge and green main CI.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5b1 — conflict-safe ingest persistence.** H1–H4 and H5a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5a implemented (PR #122; final gates pending)
+### H5b1 in progress
+
+H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
+H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate
+updated-main branch/PR with review and CI gates. Current work migrates ingest/provenance/pins,
+corrects stale shorter captures and repairs incomplete log initialization. Provider/backend lifetime
+and accounting remain H5b2; no claim that abort already cancels those calls.
+
+PR #123 migrates source/entity/provenance writes to checked-state transforms and serializes pin
+updates. Pending captures remain retryable; raw-event prefix hashes identify shorter stale logs
+without confusing canonical-message projection changes. Both replacement tools recheck pins.
+Distinct sessions still distill concurrently, while same-session/case aliases share a separate
+lock. See [plans/H5.md](plans/H5.md) for partial-commit, recovery and H5b2/H5c boundaries.
+
+CI 33956220720 passed Linux/macOS/Windows at 2dbce51. Two independent reviews prompted final-trailer
+capture parsing, single-line normalization of newly distilled facts, preserved interior narrative
+blank lines, no-findings bookkeeping, lazy initialization, bounded/cancelable lock acquisition,
+applied/skipped pin counts, comment-free pin matching and no-op status writes. Tests also prove
+dream pin persistence and malformed-input failure without modifying its source wiki.
+
+Current local validation: build/typecheck and 1,556 tests pass plus two Windows-only skips
+(1,558 total, 74 files), including 53 persistence cases. Real processes test same-session skipping
+and distinct-session fact/source/index/pin conservation; fixture assertions pin own-PID session-lock
+ownership during providers and mutation-lock ownership during source/concept transform reads.
+Isolated mutations of shorter-prefix detection, provenance locking, page-update locking and pin
+page-version guards fail relevant regressions; restored tests pass. The process test was strengthened
+after an outcome-only version escaped a lock-removal mutation through favorable scheduling.
+Repair review and repaired-head CI remain pending. Legacy multiline facts and unknown-frontmatter
+preservation discovered during inspection are recorded under H5c, not claimed complete here.
+
+Capture repair review at 4746913 found no blocking issue; its minor test/documentation notes are
+addressed. Pin review verified snapshot guards but found skipped dream statuses only reached an
+optional callback. Counts now travel in the returned/rendered report and count as findings even
+without that callback; a deterministic pin-edit fixture proves it. Dream passes its actual store
+to validation; per-input-check counts and upgrade-induced comment-only status corrections are
+documented. CI 33957190843 passed all platforms at 4746913; this final reporting delta still needs
+independent review and latest-head CI.
+
+Six independent Claude review passes are complete. The final pass verified guarded pin snapshot
+comparison and external staleness checks; its remaining canonical-path fixtures and advisory-channel
+documentation are corrected. Duplicate status-changing checks now count consistently against the
+original guarded snapshot. The CLI labels advisory dream diagnostics as warnings or failures, not
+necessarily a failed dream. All-platform CI 33957831735 passed at e75a8ef; final corrections await
+fresh CI. Provider lifetime and dream swaps remain explicitly in H5b2/H5c.
+
+### H5a complete (2026-09-05; PR #122)
 
 H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
 H5a–H5d (ROADMAP); each gets its own branch/PR and all validation gates. H5a adds guarded writes
@@ -40,7 +85,8 @@ Final narrow review at 229a365 closed all remaining notes. CI 33954975532 passed
 macOS passed every test assertion but detected an unhandled rejection in the injected-fstat test.
 Its expected path is now resolved before starting the rejecting operation, so the rejection
 assertion attaches synchronously. No production behavior or unhandled-error gate was weakened;
-repaired-head CI/review remain required.
+repaired-head CI/review were required. Final fixture review at a7b2cd5 reports no findings, PR CI
+33955143444 passed every platform, and post-merge main CI 33955259134 is green.
 
 ### H4 complete (2026-09-05; PR #121)
 

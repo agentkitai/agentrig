@@ -15,7 +15,8 @@ import type { MemoryBackend } from "./backend.js";
  *
  * Both are deliberately **advisory**. A session that finished its work has finished it; a failed
  * ingest or a failed dream must not change that, and must not make the harness feel slower than
- * it is. So both report through `onError` and return `continue` regardless.
+ * it is. So both report through `onError` and return `continue` regardless. Dream also forwards
+ * non-fatal maintenance warnings through this diagnostic channel.
  */
 
 export interface SessionEndIngestOptions {
@@ -59,6 +60,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           provider: opts.provider,
           sessionId: ctx.sessionId,
           logPath,
+          signal: ctx.signal,
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
         opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
@@ -128,6 +130,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           ...(opts.provider === undefined ? {} : { provider: opts.provider }),
           ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
           now,
+          ...(opts.onError === undefined ? {} : { onError: opts.onError }),
         });
 
         const findings = findingCount(result.report, result.structural);

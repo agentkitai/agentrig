@@ -96,6 +96,8 @@ export interface DreamReport {
     claims?: ClaimPromotionAssessment[]; requiresHumanReview?: true; semanticAssessment?: "not-assessed";
     advisoryConfidence?: PageFrontmatter["confidence"]; publicationBody?: string; publicationSources?: string[] }>;
   pinsAffected: Array<{ pin: string; status: "kept" | "conflict" | "orphaned" }>;
+  /** Counts per input check, not distinct pins; absent on legacy reports. */
+  pinPersistence?: { applied: number; skipped: number };
 }
 
 export interface DreamResult {

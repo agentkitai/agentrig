@@ -36,6 +36,8 @@ export function renderPromotionProposal(proposal: DreamReport["promoted"][number
 
 export function renderReport(report: DreamReport, opts: RenderOptions = {}): string {
   const out: string[] = ["# Dream report"];
+  if ((report.pinPersistence?.skipped ?? 0) > 0) out.push("",
+    `WARNING: ${report.pinPersistence!.skipped} pin status check(s) were not persisted because the page/pin changed, the pin was removed, or the check was unversioned. Reported pin statuses are observations, not all persisted updates.`);
   if (opts.outputRoot !== undefined) {
     out.push(
       "",
@@ -114,7 +116,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   return `${out.join("\n")}\n`;
 }
 
-/** Total findings, so a caller can decide an exit code without re-walking the report. */
+/** Total issues, not distinct pins: a conflict and skipped persistence are separate findings. */
 export function findingCount(report: DreamReport, structural?: StructuralFindings): number {
   const base =
     report.contradictions.length +
@@ -123,7 +125,8 @@ export function findingCount(report: DreamReport, structural?: StructuralFinding
     report.removed.length +
     report.orphans.length +
     report.missingPages.length +
-    report.pinsAffected.filter((p) => p.status !== "kept").length;
+    report.pinsAffected.filter((p) => p.status !== "kept").length +
+    (report.pinPersistence?.skipped ?? 0);
   if (structural === undefined) return base;
   return (
     base +

@@ -4,7 +4,7 @@ import type { AnyTool, ToolContext } from "@agentkitai/agentrig-core";
 import { pagePath, serializePage } from "./page.js";
 import { unionRetrieve, withBackendRecall } from "./search.js";
 import type { MemoryBackend } from "./backend.js";
-import { applyPinChecks, readPins, recheckPins } from "./pins.js";
+import { recheckStoredPins } from "./pins.js";
 import type { FileMemoryStore } from "./store.js";
 import type { FileRawStore } from "./raw.js";
 import type { Attempt, WikiPage } from "./types.js";
@@ -68,10 +68,7 @@ async function pinConflictsFor(
   store: FileMemoryStore,
   path: string,
 ): Promise<Array<{ claim: string; reason: string }>> {
-  const pins = (await readPins(store.root).catch(() => [])).filter((p) => p.page === path);
-  if (pins.length === 0) return [];
-  const checks = await recheckPins(store, pins);
-  await applyPinChecks(store.root, checks);
+  const checks = await recheckStoredPins(store, new Set([path]));
   return checks.filter((c) => c.status !== "kept").map((c) => ({ claim: c.pin.claim, reason: c.reason }));
 }
 
@@ -86,6 +83,20 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
       (current === null ? "The page is currently absent." : serializePage(current.frontmatter, current.body)) + warningsText(warnings),
     isError: true,
   });
+  const completedWrite = async (verb: "wrote" | "filed", path: string, result: { version: string; warnings: string[] }) => {
+    let conflicts: Array<{ claim: string; reason: string }> = [];
+    try { conflicts = await pinConflictsFor(store, path); }
+    catch (error) { result.warnings.push(`page committed at ${path}; pin recheck failed: ${String(error)}`); }
+    const receipt = `${verb} ${path}\nversion: ${result.version}`;
+    if (conflicts.length > 0) return {
+      output: { path, committed: true, version: result.version, pinConflicts: conflicts, warnings: result.warnings },
+      display: receipt + `\nWARNING: ${conflicts.length} pinned human correction(s) no longer hold:\n` +
+        conflicts.map(c => `  - ${c.claim} (${c.reason})`).join("\n") + warningsText(result.warnings),
+      isError: true,
+    };
+    return { output: { path, committed: true, version: result.version, warnings: result.warnings },
+      display: receipt + warningsText(result.warnings) };
+  };
 
   const search: AnyTool = {
     name: "memory_search",
@@ -165,21 +176,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
         summary: input.body.split("\n")[0]?.replace(/^- \[\w+\]\s*/, "").slice(0, 120) ?? "",
       } });
       if (!result.ok) return conflict(path, result.current, result.warnings);
-      // a full-body replace is a regeneration: re-check any pin on this page so a human
-      // correction can't be reverted silently (PLAN §3.6)
-      let conflicts: Array<{ claim: string; reason: string }> = [];
-      try { conflicts = await pinConflictsFor(store, path); }
-      catch (error) { result.warnings.push(`page committed at ${path}; pin recheck failed: ${String(error)}`); }
-      if (conflicts.length > 0) {
-        return {
-          output: { path, committed: true, version: result.version, pinConflicts: conflicts, warnings: result.warnings },
-          display:
-            `wrote ${path}\nWARNING: ${conflicts.length} pinned human correction(s) no longer hold:\n` +
-            conflicts.map((c) => `  - ${c.claim} (${c.reason})`).join("\n") + warningsText(result.warnings),
-          isError: true,
-        };
-      }
-      return { output: { path, committed: true, version: result.version, warnings: result.warnings }, display: `wrote ${path}\nversion: ${result.version}` + warningsText(result.warnings) };
+      return completedWrite("wrote", path, result);
     },
   };
 
@@ -213,7 +210,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
         summary: input.body.split("\n")[0]?.replace(/^- \[\w+\]\s*/, "").slice(0, 120) ?? "",
       } });
       if (!result.ok) return conflict(path, result.current, result.warnings);
-      return { output: { path, committed: true, version: result.version, warnings: result.warnings }, display: `filed ${path}\nversion: ${result.version}` + warningsText(result.warnings) };
+      return completedWrite("filed", path, result);
     },
   };
 

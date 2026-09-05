@@ -135,7 +135,7 @@ describe("versioned memory mutations", () => {
   }, 30_000);
 
   it("bounds lock waits even with a frozen content clock and never steals an old lock", async () => {
-    const lock = `${store.root}.write.lock`;
+    const lock = `${await fs.realpath(store.root)}.write.lock`;
     await writeFile(lock, "other owner");
     await utimes(lock, new Date(0), new Date(0));
     const blocked = new FileMemoryStore({ root: store.root, now: () => 0, lockTimeoutMs: 30 });
@@ -146,11 +146,12 @@ describe("versioned memory mutations", () => {
 
   it("allows initialization and reads while a stale write lock needs operator inspection", async () => {
     await store.write(path, page());
-    await writeFile(`${store.root}.write.lock`, "stale owner");
+    const lock = `${await fs.realpath(store.root)}.write.lock`;
+    await writeFile(lock, "stale owner");
     const reader = new FileMemoryStore({ root: store.root, lockTimeoutMs: 0 });
     await reader.init();
     expect((await reader.read(path))!.body).toBe("original\n");
-    expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("stale owner");
+    expect(await readFile(lock, "utf8")).toBe("stale owner");
   });
 
   it.each([-1, NaN, Infinity])("rejects invalid lock timeout %s without mutating", async timeoutMs => {
@@ -181,7 +182,7 @@ describe("versioned memory mutations", () => {
   });
 
   it("aborts while waiting and leaves another owner's lock intact", async () => {
-    const lock = `${store.root}.write.lock`;
+    const lock = `${await fs.realpath(store.root)}.write.lock`;
     await writeFile(lock, "owner");
     const signal = new AbortController();
     const work = store.compareAndSwap(path, page(), null, { signal: signal.signal });
@@ -227,7 +228,7 @@ describe("versioned memory mutations", () => {
     expect(work).not.toHaveBeenCalled(); expect(closed).toBe(true);
     if (persistent) {
       expect(warnings[0]!.message).toContain("stop writers before lock recovery");
-      expect(await fs.stat(`${store.root}.write.lock`)).toBeDefined();
+      expect(await fs.stat(expectedLock)).toBeDefined();
     } else {
       expect(warnings).toEqual([]);
       expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
@@ -235,11 +236,12 @@ describe("versioned memory mutations", () => {
   });
 
   it("does not remove a replacement lock owned by another process", async () => {
+    const lock = `${await fs.realpath(store.root)}.write.lock`;
     await withMemoryLock(store.root, async () => {
-      await rm(`${store.root}.write.lock`);
-      await writeFile(`${store.root}.write.lock`, "new owner");
+      await rm(lock);
+      await writeFile(lock, "new owner");
     });
-    expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("new owner");
+    expect(await readFile(lock, "utf8")).toBe("new owner");
   });
 
   it("reports release failure as a committed-write warning through the tool", async () => {
@@ -307,7 +309,7 @@ describe("versioned memory mutations", () => {
   });
 
   it("reports a committed page when persisting the pin recheck fails", async () => {
-    await writePins(store.root, [{ page: path, kind: "addition", claim: "committed", anchor: "",
+    await writePins(store.root, [{ page: path, kind: "addition", claim: "missing correction", anchor: "",
       provenance: "human", created: "2026-09-05", status: "active" }]);
     const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     vi.mocked(fs.rename).mockImplementation(async (from, to) => {

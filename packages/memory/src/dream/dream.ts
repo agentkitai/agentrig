@@ -38,7 +38,7 @@ export interface DreamOptions extends Omit<DreamInput, "provider"> {
   /** Skips the model-backed consolidation pass — the free, structural-only dream. */
   structuralOnly?: boolean;
   onPhase?: (phase: string) => void;
-  /** The consolidation pass failing is reported, not thrown — the rest of the dream still runs. */
+  /** Advisory warnings, including consolidation failure and skipped pin persistence; not fatal. */
   onError?: (err: Error) => void;
 }
 
@@ -163,7 +163,8 @@ async function dreamInto(
   await out.writeIndex(rebuildIndex(finalPages, index));
   const pins = await readPins(workspace.outputRoot);
   const pinChecks = await recheckPins(out, pins);
-  await applyPinChecks(workspace.outputRoot, pinChecks);
+  const persistedPins = await applyPinChecks(out, pinChecks);
+  if (persistedPins.skipped > 0) opts.onError?.(new Error(`dream inspected pins but skipped ${persistedPins.skipped} status check(s): page/pin changed, pin removed, or check unversioned`));
 
   // ---- promotion proposals: validate final pages against immutable runtime observations.
   const evidenceIndex = await loadPromotionEvidence(opts.raw,
@@ -194,6 +195,7 @@ async function dreamInto(
     }),
     promoted,
     pinsAffected: pinChecks.map((c) => ({ pin: `${c.pin.page}: ${c.pin.claim}`, status: c.status })),
+    pinPersistence: persistedPins,
   };
 
   await out.appendLog(
