@@ -19,6 +19,7 @@ export function isExcludedPath(p: string): boolean {
 export function globTool(): Tool<GlobInput, string[]> {
   return {
     name: "glob",
+    sandbox: "compatible",
     description:
       "Find files matching a glob pattern, sorted. node_modules and .git are skipped.",
     inputSchema: GlobInput,

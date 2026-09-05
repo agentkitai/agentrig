@@ -376,6 +376,9 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.mcpConfig !== undefined) {
+    throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
+  }
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
   const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
   const provider = providers.main;

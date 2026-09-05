@@ -27,6 +27,7 @@ const Input = z.object({
 export function updatePlanTool(): AnyTool {
   return {
     name: "update_plan",
+    sandbox: "compatible",
     description:
       "Record or revise your plan for this task. Send the complete list of steps every time. " +
       "Declare a `scope` per step naming the files or directories it may touch — work outside " +

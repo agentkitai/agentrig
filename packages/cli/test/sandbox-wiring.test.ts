@@ -11,6 +11,10 @@ import {
 import { buildAgent, buildSandbox } from "../src/agent-builder.ts";
 
 describe("CLI sandbox wiring", () => {
+  it("refuses MCP startup before reading a config or starting a host server", async () => {
+    await expect(buildAgent({ root: "/unused", sandbox: "workspace-write", mcpConfig: "/must-not-read" } as never))
+      .rejects.toThrow("MCP servers start in the host process");
+  });
   it("routes the assembled parent agent through the selected provider, including Windows none", async () => {
     const mode = process.env.AGENTRIG_CI_SANDBOX ?? "none";
     const root = await mkdtemp(join(tmpdir(), "agentrig-sandbox-wire-"));

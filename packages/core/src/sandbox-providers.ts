@@ -50,6 +50,12 @@ export function classifiable(stderr: string): string {
 
 const activeSandbox = new AsyncLocalStorage<ActiveSandbox>();
 
+/** Internal filesystem broker reads the runtime policy, never a tool-supplied cwd. */
+export function activeSandboxPolicy(): SandboxPolicy | undefined {
+  const policy = activeSandbox.getStore()?.policy;
+  return policy === undefined ? undefined : { ...policy };
+}
+
 /**
  * Process-launching core tools call this immediately before spawn. A provider prepared around the
  * tool supplies the OS/container wrapper; outside a prepared command this is an identity operation.
@@ -369,7 +375,8 @@ export function writeDenialPlausible(
 export class NoneSandboxProvider implements SandboxProvider {
   readonly backend = "none";
 
-  prepare<T>(cmd: SandboxCommand<T>, _policy: SandboxPolicy): SandboxCommand<T> {
+  prepare<T>(cmd: SandboxCommand<T>, policy: SandboxPolicy): SandboxCommand<T> {
+    if (policy.mode !== "none") return async () => { throw new SandboxDeniedError("the none provider cannot enforce a sandbox mode"); };
     return cmd;
   }
 }
@@ -423,6 +430,11 @@ export class DockerSandboxProvider extends ProcessSandboxProvider {
       args: [
         "run",
         "--rm",
+        "--interactive",
+        // Bind-mounted artifacts belong to the caller, not container root. This also avoids
+        // granting process tools host-file privileges the harness itself does not have.
+        "--user",
+        `${process.getuid?.() ?? 65534}:${process.getgid?.() ?? 65534}`,
         "--read-only",
         ...(policy.network === true ? [] : ["--network", "none"]),
         "--mount",

@@ -1,9 +1,10 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
+import { writeToolFile } from "./sandbox-write.js";
 
 const EditFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -19,6 +20,7 @@ type EditFileInput = z.infer<typeof EditFileInput>;
 export function editFileTool(): Tool<EditFileInput, { path: string; replacements: number }> {
   return {
     name: "edit_file",
+    sandbox: "compatible",
     description:
       "Search-and-replace in a file. oldText must match exactly once unless replaceAll is set.",
     inputSchema: EditFileInput,
@@ -67,7 +69,7 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
       const next = input.replaceAll
         ? text.split(oldText).join(newText)
         : text.replace(oldText, () => newText);
-      await writeFile(path, next, "utf8");
+      await writeToolFile(path, next, ctx.signal);
       ctx.emit({ type: "file.changed", path: rel, op: "edit", contentHash: contentHash(next) });
       const replacements = input.replaceAll ? count : 1;
       return {

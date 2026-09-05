@@ -59,6 +59,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
   });
   return {
     name: "bash",
+    sandbox: "compatible",
     // The tool is called `bash` for the same reason it always was — permission rules and every
     // trajectory ever recorded name it — but what actually runs the command is named here, along
     // with the syntax to write. A model told nothing writes bash at `cmd.exe` and is simply wrong.

@@ -353,6 +353,9 @@ function displayWithOutputHandle(
 }
 
 export function createAgent(config: AgentConfig): Agent {
+  if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
+    throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
+  }
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
@@ -1229,7 +1232,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const command = () => tool.execute(input, ctx);
         // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
         // and selecting `none` still traverses the provider seam so providers own mode semantics.
-        const prepared = config.sandbox === undefined
+        const prepared = config.sandbox !== undefined && config.sandbox.mode !== "none" && tool.sandbox !== "compatible"
+          ? async () => { throw new SandboxDeniedError(`tool ${tool.name} has no sandbox-compatible execution path; running it requires explicit outside-sandbox approval`); }
+          : config.sandbox === undefined
           ? command
           : config.sandbox.provider.prepare(command, {
               mode: config.sandbox.mode,

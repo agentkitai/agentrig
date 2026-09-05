@@ -185,6 +185,7 @@ export function skillTool(skills: Skill[]): AnyTool {
   const byName = new Map(skills.map((s) => [s.name.toLowerCase(), s]));
   return {
     name: "skill",
+    sandbox: "compatible",
     description: "Load the full instructions for one of the skills listed in the system prompt.",
     inputSchema: SkillInput,
     // reads a file the harness itself chose, from a fixed set — not a path the model supplies,

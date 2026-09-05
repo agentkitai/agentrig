@@ -276,6 +276,7 @@ export interface BashJobOutput {
 export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOutput> {
   return {
     name: "bash_job",
+    sandbox: "compatible",
     description:
       "Manage a background job started by `bash` with background: true. " +
       "`status` reports whether it is running, its exit code once done, and the output that arrived " +

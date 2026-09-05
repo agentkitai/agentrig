@@ -57,6 +57,7 @@ class FakeProvider implements ModelProvider {
 
 const echoTool = (): AnyTool => ({
   name: "echo",
+  sandbox: "compatible",
   description: "echo text back",
   inputSchema: z.object({ text: z.string() }),
   permission: "read",
@@ -358,6 +359,8 @@ describe("agent loop", () => {
     };
     const writeTool: AnyTool = {
       name: "write_fixture",
+      // This test supplies its own enforcing provider; H1 tests the concrete providers/tools.
+      sandbox: "compatible",
       description: "write a test fixture",
       inputSchema: z.object({ path: z.string(), text: z.string() }),
       permission: "write",

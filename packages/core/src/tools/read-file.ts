@@ -13,6 +13,7 @@ type ReadFileInput = z.infer<typeof ReadFileInput>;
 export function readFileTool(): Tool<ReadFileInput, string> {
   return {
     name: "read_file",
+    sandbox: "compatible",
     description:
       "Read a text file. Returns numbered lines; use offset/limit to page through large files.",
     inputSchema: ReadFileInput,
