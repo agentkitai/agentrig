@@ -346,6 +346,7 @@ describe("skillTool", () => {
     // autonomy: an interrupted row is adopted, an already-reviewed head is not re-reviewed
     expect(body).toContain("adopt it instead of halting");
     expect(body).toContain("do not run the pass again");
+    expect(body).toContain("Verbatim means the finding's own text");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
     expect(body).toContain("env -u CLAUDECODE");
     expect(body).toContain("< /dev/null");

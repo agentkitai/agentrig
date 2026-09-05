@@ -183,7 +183,9 @@ converging, or when something needs a human. Per row, at most THREE repair round
   as written" with the rejection; on "needs the human", halt. This shares the
   one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED` path.
 - **Fix**: spawn one fix subagent on the same PR branch, scoped verbatim to every open finding and
-  no unrelated code changes. Its brief carries the same sentence the builder's does — “You are a
+  no unrelated code changes. Verbatim means the finding's own text: paste each open finding from the
+  review comments into the task, or give the comment URLs with the finding numbers — never your own
+  restatement, which the R4a continuation fixer found did not match the comments. Its brief carries the same sentence the builder's does — “You are a
   topic child: stop at the push and skip the external reviews — an independent delta review
   follows” — because the dogfood skill's §8 otherwise tells it to arrange its own reviews and wait
   on them. Tell it not to rebut or skip a finding, to add fail-first proof where
