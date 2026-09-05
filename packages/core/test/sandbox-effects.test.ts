@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { link, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -196,6 +196,17 @@ describe("H1 real tool effects", () => {
     expect(await readFile(path, "utf8")).toBe(content);
     await run(editFileTool(), { path, oldText: "literal", newText: "edited" }, "workspace-write", backend);
     expect(await readFile(path, "utf8")).toBe(content.replace("literal", "edited"));
+    const alias = join(cwd, "alias.txt");
+    await symlink(path, alias);
+    await run(editFileTool(), { path: alias, oldText: "edited", newText: "via-link" }, "workspace-write", backend);
+    expect((await lstat(alias)).isSymbolicLink()).toBe(true);
+    expect(await readFile(path, "utf8")).toBe(content.replace("literal", "via-link"));
+    const future = join(cwd, "new-dir", "future.txt");
+    const dangling = join(cwd, "dangling.txt");
+    await symlink(future, dangling);
+    await run(writeFileTool(), { path: dangling, content: "new target" }, "workspace-write", backend);
+    expect((await lstat(dangling)).isSymbolicLink()).toBe(true);
+    expect(await readFile(future, "utf8")).toBe("new target");
     const outside = join(root, "outside.txt");
     await writeFile(outside, "original");
     const hardlink = join(cwd, "hardlink.txt");
@@ -206,6 +217,7 @@ describe("H1 real tool effects", () => {
     const escapeLink = join(cwd, "escape");
     await symlink(root, escapeLink, "dir");
     const blocked = await run(writeFileTool(), { path: join(escapeLink, "outside.txt"), content: "changed" }, "workspace-write", backend);
+    expect(blocked.events.some(e => e.type === "sandbox.denied")).toBe(true);
     expect(blocked.events.some(e => e.type === "tool.result" && !e.ok)).toBe(true);
     expect(await readFile(outside, "utf8")).toBe("original");
   }, 60_000);

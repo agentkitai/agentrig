@@ -1,8 +1,23 @@
 import { spawn } from "node:child_process";
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, readlink, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { activeSandboxPolicy, sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
 import { SandboxDeniedError } from "../sandbox.js";
+
+/** Resolve existing aliases, including a dangling final symlink and missing parent directories. */
+async function writeTarget(path: string, depth = 0): Promise<string> {
+  if (depth > 128) throw new Error("file-write target has too many unresolved path components or symlinks");
+  try { return await realpath(path); }
+  catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }
+  const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
+    if (err.code !== "ENOENT") throw err;
+    return undefined;
+  });
+  if (info?.isSymbolicLink()) return writeTarget(resolve(dirname(path), await readlink(path)), depth + 1);
+  const parent = dirname(path);
+  if (parent === path) throw new Error(`cannot resolve file-write target: ${path}`);
+  return join(await writeTarget(parent, depth + 1), basename(path));
+}
 
 /** File bytes travel on stdin, never as shell source or argv. The OS checks the final open,
  * including symlinks that change after any host-side check. Unsandboxed behavior is unchanged. */
@@ -15,8 +30,9 @@ export async function writeToolFile(path: string, content: string, signal: Abort
     await writeFile(path, content, { encoding: "utf8", signal });
     return;
   }
-  const absolute = resolve(path);
-  const rel = relative(policy.cwd, absolute);
+  const absolute = await writeTarget(resolve(path));
+  const canonicalCwd = await realpath(policy.cwd);
+  const rel = relative(canonicalCwd, absolute);
   if (policy.mode === "read-only" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new SandboxDeniedError(`sandbox ${policy.mode} refuses file write: ${absolute}`);
   }
@@ -29,7 +45,9 @@ export async function writeToolFile(path: string, content: string, signal: Abort
     't=$(mktemp "$(dirname -- "$1")/.agentrig-write-XXXXXX") || exit; ' +
     'trap \'rm -f -- "$t"\' EXIT HUP INT TERM; ' +
     'cat > "$t" && chmod "$2" "$t" && mv -f -- "$t" "$1"';
-  const invocation = sandboxSpawnInvocation("/bin/sh", ["-c", script, "agentrig-write", absolute, mode], policy.cwd);
+  // Map physical host paths back into the provider's bind/profile namespace when cwd is an alias.
+  const target = resolve(policy.cwd, rel);
+  const invocation = sandboxSpawnInvocation("/bin/sh", ["-c", script, "agentrig-write", target, mode], policy.cwd);
   if (!invocation.sandboxed) throw new SandboxDeniedError("the configured provider has no sandboxed file-write launcher");
   const child = spawn(invocation.command, invocation.args, {
     cwd: policy.cwd, stdio: ["pipe", "ignore", "pipe"], detached: true,

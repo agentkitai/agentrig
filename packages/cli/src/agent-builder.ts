@@ -389,7 +389,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (opts.memory !== undefined) {
     memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
     memoryIndex = await indexInjection(memoryStore).catch(() => "");
-    const backend = openBackend();
+    let backend = openBackend();
+    if (backend !== null && opts.sandbox !== undefined && opts.sandbox !== "none") {
+      backend = null;
+      extras.onNotice?.("sandbox: Lore recall is disabled; local memory read/search remain available");
+    }
     memoryToolset = memoryTools({
       store: memoryStore,
       raw: new FileRawStore({ root: opts.memory }),

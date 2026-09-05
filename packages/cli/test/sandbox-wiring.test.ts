@@ -11,6 +11,19 @@ import {
 import { buildAgent, buildSandbox } from "../src/agent-builder.ts";
 
 describe("CLI sandbox wiring", () => {
+  it("keeps local search available when sandboxing a configured Lore backend", async () => {
+    if (process.platform === "win32") return; // enforcing modes are explicitly unsupported here
+    const root = await mkdtemp(join(tmpdir(), "agentrig-local-recall-"));
+    vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    try {
+      const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "workspace-write", repoMap: false });
+      const search = built.tools.find(t => t.name === "memory_search");
+      expect(search?.sandbox).toBe("compatible");
+      const result = await search!.execute({ query: "anything" }, { cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
+      expect(result.display).toContain("no memory matches");
+    } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
+  });
   it("refuses MCP startup before reading a config or starting a host server", async () => {
     await expect(buildAgent({ root: "/unused", sandbox: "workspace-write", mcpConfig: "/must-not-read" } as never))
       .rejects.toThrow("MCP servers start in the host process");
