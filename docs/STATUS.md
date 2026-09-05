@@ -32,6 +32,16 @@ Review-repair validation: build/typecheck and the explicit Node 22 full suite pa
 passes plus two skips (1,698 total, 79 files); the scan suite now has 36 cases. All six substantive
 first-review findings are addressed. A follow-up review and exact-head CI remain pending.
 
+Second Claude pass confirmed all six original findings closed and recommended approval after
+fixing the interactive TUI auto-apply bypass. That callback now forwards scan caps and rejects
+incomplete auto-apply, with real filesystem tests. Scheduled auto mode disposes incomplete copies
+on repeated cadences (no persistent-fault accumulation); explicit review still retains artifacts.
+These final repairs are maintainer-tested, not a third independent pass. Metadata recovery and
+`memory lint` cap configuration are explicitly assigned to H5c2c/H5c2b respectively.
+
+Final repair validation: build/typecheck and explicit Node 22 full suite passed, 1,698 passes
+plus two skips (1,700 total, 79 files). Fresh PR CI and post-merge main CI remain the final gates.
+
 ### H5c1 complete (PR #125)
 
 Completion gate: final PR CI 33963220803 passed at b26f260, merge fb8201e, main CI 33963323981

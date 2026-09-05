@@ -157,6 +157,16 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         });
 
         const findings = findingCount(result.report, result.structural);
+        if (opts.auto === true && result.report.scan?.complete === false) {
+          // A persistent immutable-ledger fault must not retain a fresh wiki every cadence.
+          // No model work ran; explicit review commands can still produce an inspectable copy.
+          await result.workspace.dispose();
+          opts.onDone?.("dream raw scan incomplete; auto-apply disabled; temporary copy discarded; unreadable attempts: "
+            + result.report.scan.unreadableAttempts.slice(0, 20).join(", ")
+            + (result.report.scan.unreadableAttempts.length > 20 ? "; more entries omitted from this summary" : "")
+            + "; run an explicit dream review to retain an artifact");
+          return { action: "continue" };
+        }
         if (opts.auto === true && result.report.scan?.complete !== false) {
           let backup: string;
           try {

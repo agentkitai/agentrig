@@ -290,26 +290,29 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     await expect(lstat(outputRoot + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("never auto-applies an incomplete raw scan or labels it clean", async () => {
+  it("never auto-applies an incomplete raw scan or accumulates copies on repeated cadences", async () => {
     await writeLog("a"); await mkdir(join(dir, "raw/attempts"), { recursive: true });
     await writeFile(join(dir, "raw/attempts/torn.json"), "{bad");
     const before = await fingerprint(join(dir, "wiki"));
-    const append = FileMemoryStore.prototype.appendLog; let outputRoot = "";
+    const append = FileMemoryStore.prototype.appendLog; const outputs: string[] = [];
     vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
-      outputRoot = this.root; return append.apply(this, args);
+      outputs.push(this.root); return append.apply(this, args);
     });
     const warnings: Error[] = []; const done: string[] = [];
-    const hook = dreamOnSessionEnd({ dir, everySessions: 1, auto: true, structuralOnly: true,
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, auto: true, structuralOnly: true, now: () => 1,
       onError: error => warnings.push(error), onDone: text => done.push(text) });
+    await hook.handler(ctx("a"));
     await hook.handler(ctx("a"));
     expect(warnings[0]!.message).toContain("raw scan incomplete");
     expect(done[0]).toContain("auto-apply disabled"); expect(done[0]).not.toContain("ran clean");
     expect(await fingerprint(join(dir, "wiki"))).toBe(before);
-    expect(outputRoot).not.toBe("");
-    try {
-      expect(JSON.parse(await readFile(outputRoot + ".dream.json", "utf8")).outputRoot).toBe(outputRoot);
-      expect(await readFile(join(dir, "raw/attempts/torn.json"), "utf8")).toBe("{bad");
-    } finally { await rm(outputRoot, { recursive: true, force: true }); await rm(outputRoot + ".dream.json", { force: true }); }
+    expect(done).toHaveLength(2); expect(outputs).toHaveLength(2);
+    expect(done.every(text => text.includes("temporary copy discarded"))).toBe(true);
+    for (const output of outputs) {
+      await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(output + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await readFile(join(dir, "raw/attempts/torn.json"), "utf8")).toBe("{bad");
   });
 
   it("uses configurable scan limits before checking the scheduler cadence", async () => {

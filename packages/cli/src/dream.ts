@@ -126,7 +126,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   // has been copied into place and the temp copy is redundant
   if (applied) await result.workspace.dispose().catch(() => {});
   if (!applied) {
-    console.log(`\nto run and apply a fresh dream: agentrig dream --auto`);
+    console.log(result.report.scan?.complete === false
+      ? "\nresolve the reported unreadable attempts before retrying; do not delete immutable history"
+      : "\nto run and apply a fresh dream: agentrig dream --auto");
     console.log(`review artifact: ${result.outputRoot}\nmanifest: ${result.workspace.manifestPath}`);
     console.log("keep both together; discard both only after stopping users of this artifact (SDK: workspace.dispose())");
   }

@@ -36,6 +36,9 @@ search retains the old behavior for now. Dream uses the strict path, including c
 reread. Enumeration/byte cap failures stop the dream; known unreadable/corrupt attempt entries
 instead produce an explicitly incomplete, review-only artifact with the affected paths. Model
 consolidation and CLI/hook automatic apply are disabled, and the report cannot claim a clean scan.
+Explicit CLI/TUI review retains the named artifact and manifest. Scheduled auto mode instead
+disposes its incomplete structural-only copy and reports the unreadable paths; repeated cadences
+cannot accumulate copies for the same persistent fault. Scheduled review retains findings as before.
 The immutable files remain untouched; fixing permissions can resolve a transient read failure
 without deleting history. Manual SDK artifact application remains an explicit trusted operation.
 Custom SDK stores must honor scan options; returned lengths are checked too, but the
@@ -47,6 +50,12 @@ reads share one aggregate budget across inspection and guarded revalidation; pin
 serialized pins/index output are capped. Short reads reuse a geometrically grown buffer, preventing
 retained backing buffers from multiplying the byte cap. A fixed H5c1 hash vector covers files,
 empty directories, relative file/directory symlinks, modes and the excluded scheduling stamp.
+
+The interactive TUI `/dream` uses these caps and the same incomplete-scan gate; its callback has
+real filesystem regressions without mounting Ink. Oversized/unreadable `.last-dream` metadata still
+fails visibly rather than being silently overwritten. It is mutable scheduling state, unlike raw
+attempt history; explicit recovery belongs to H5c2c. `memory lint` still uses default scan caps;
+its configuration is included with H5c2b's remaining entry-point/lifetime integration.
 
 Scan signals are observed by tree/page/raw/evidence reads and at phase transitions. Full provider
 lifetime, regeneration commit cancellation, final accounting and lifetime CLI configuration remain H5c2b;

@@ -288,6 +288,8 @@ H5c2 is delivered as three sequential PRs with the same review/CI/updated-main g
 abort and visible cap failures; **H5c2b** integrates full dream/provider deadlines, cancellation,
 auxiliary accounting and CLI/hook reporting; **H5c2c** provides explicit ownership-checked recovery
 of crash-left workspaces/sidecars. A bounded scanner alone does not complete H5c2.
+H5c2b includes configurable bounds for `memory lint`. H5c2c includes explicit repair of unreadable/
+oversized mutable scheduling metadata; scanner failures must not silently overwrite it.
 
 H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
 attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
