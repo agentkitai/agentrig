@@ -29,8 +29,13 @@ export function readFileTool(): Tool<ReadFileInput, string> {
       }
       // `\r?\n`, not `\n`: on a CRLF file every line would otherwise reach the model with a
       // trailing carriage return, which it then copies into `edit_file`'s oldText
-      const lines = text.split(/\r?\n/);
+      const lines = text === "" ? [] : text.split(/\r?\n/);
+      // A final line terminator is not an extra content line. Preserve real blank lines (e.g.
+      // "a\n\n" has two lines), but do not advertise a phantom page after "a\nb\n".
+      if (text.endsWith("\n")) lines.pop();
       const start = (input.offset ?? 1) - 1;
+      if (start >= lines.length) return { output: text, display: lines.length === 0
+        ? "file is empty" : `offset ${start + 1} is beyond end of file (${lines.length} lines)` };
       const slice = lines.slice(start, input.limit === undefined ? undefined : start + input.limit);
       const width = String(start + slice.length).length;
       const numbered = slice.map((l, i) => `${String(start + i + 1).padStart(width)}\t${l}`).join("\n");

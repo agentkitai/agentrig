@@ -94,6 +94,23 @@ describe("bash", () => {
 });
 
 describe("read_file", () => {
+  it.each(["one\ntwo\n", "one\r\ntwo\r\n"])("does not offer a phantom page after a final newline: %j", async content => {
+    await writeFile(join(root, "terminated.txt"), content);
+    const r = await readFileTool().execute({ path: "terminated.txt", limit: 2 }, ctx);
+    expect(r.display).toBe("1\tone\n2\ttwo");
+    expect(r.truncated).toBeUndefined();
+  });
+
+  it("preserves a real trailing blank line and explains empty/out-of-range reads", async () => {
+    await writeFile(join(root, "blank.txt"), "one\n\n");
+    const first = await readFileTool().execute({ path: "blank.txt", limit: 1 }, ctx);
+    expect(first.display).toContain("continue with offset 2");
+    expect((await readFileTool().execute({ path: "blank.txt", offset: 2 }, ctx)).display).toBe("2\t");
+    expect((await readFileTool().execute({ path: "blank.txt", offset: 3 }, ctx)).display).toBe("offset 3 is beyond end of file (2 lines)");
+    await writeFile(join(root, "empty.txt"), "");
+    expect((await readFileTool().execute({ path: "empty.txt" }, ctx)).display).toBe("file is empty");
+  });
+
   it("returns numbered lines and honors offset/limit", async () => {
     await writeFile(join(root, "a.txt"), "one\ntwo\nthree\nfour");
     const r = await readFileTool().execute({ path: "a.txt", offset: 2, limit: 2 }, ctx);
