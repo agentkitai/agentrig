@@ -67,7 +67,7 @@ distributed lease or authentication protocol. New manifests record producer owne
 when done producing, or dispose through their runtime handle. Legacy, malformed, unregistered,
 foreign-host or ambiguous artifacts require manual inspection. Existing locks are never reclaimed,
 even if a producer crashed: stop **all** writers before manually recovering the exact named lock.
-Interrupted-install recovery is still separate work; this command only discards the output copy.
+Automatic interrupted-install recovery is deferred; this command only discards the output copy.
 
 ## Optional run flag groups
 

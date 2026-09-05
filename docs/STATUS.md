@@ -1,15 +1,34 @@
 # Status
 
-Current roadmap row: **H5c2c2 — owned dream workspace recovery.** H1–H4, H5a, H5b, H5c1, H5c2a, H5c2b and H5c2c1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5 — workspace recovery, then remaining persistence and auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5c2c2 in progress
+### H5 workspace recovery in progress
 
 Fresh branch from updated main c820c84 after PR #128 exact-head CI 33969076711 and main CI
-33969215100 passed all platforms. See `docs/plans/H5c2c2.md`. Recovery is explicit and limited to
+33969215100 passed all platforms. See `docs/plans/H5-workspace-recovery.md`. Recovery is explicit and limited to
 registered, ownership-checked workspaces; it never guesses ownership from a temp prefix or age.
+
+Scope reset requested by the user: no further recursive subdivisions. Finish the original H5
+acceptance criteria, then E1. Current PR covers registered workspace handoff/disposal; remaining
+required work is lossless persistence/scoped attempts, closure of the target/child-abort evidence,
+and reviewer/grader auxiliary lifecycle/reporting. Nonblocking follow-ups go at the END of the
+roadmap and are not prerequisites. Automated interrupted-install repair is deferred; protected
+backups and conservative stop-writers manual recovery remain the safety contract.
+
+The recovery draft passed its new process/ownership tests. Its full run exposed a stale repo-map
+test assumption that this growing checkout's entire file list fits 8 KiB forever. Correct that
+test here with controlled tree-before-symbols evidence and retain real-checkout byte/truncation
+checks; no product budget change and no separate milestone/PR for test maintenance.
+
+Implemented manifest-v2 producer/handoff state, UUID-bound preview/discard and CLI confirmation.
+Real child-process tests prove active refusal, explicit release, exited-owner recovery and refusal
+to steal even a crashed writer's lock. Replacement/malformed/legacy/unknown owners, partial
+cleanup, cancellation and failed handoff are covered. Full build/typecheck and explicit Node22
+suite pass: 1,770 passed plus two skips (1,772 total, 83 files). Independent review and exact-head
+PR/main CI are still required.
 
 ### H5c2c1 complete (PR #128)
 
