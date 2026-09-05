@@ -1,7 +1,32 @@
 # Status
 
-Current roadmap row: **R3.5 is complete (R3.5a, R3.5b — inserted band, see ROADMAP §R3.5); R4a is next.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Current roadmap row: **H1 — complete sandbox enforcement across tool effects.** R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
+
+## Current priorities — revised 2026-09-05
+
+The user requested a roadmap revision following the code review. The authoritative order is
+[ROADMAP §5](ROADMAP.md#5-sequencing-and-exit-criteria): **H1–H5 → E1–E3 → R4 → H6**, followed
+by memory write-quality hardening and conditional generated skills. R4a is no longer next.
+Broader capability work is backlog, activated by a concrete need and measurable acceptance.
+R6f's stale-write work is pulled into H5; the minimum R9/R14 measurement work is pulled into E.
+
+Why: the review reproduced direct file writes outside the workspace under both sandbox modes,
+loss of assistant conclusions and long tool evidence before ingest coverage planning, and
+promotion eligibility based on nonexistent session citations. The repository map also scans a
+nested review worktree, exhausting its budget. These gaps must be corrected before expanding
+the system's authority or turning memory into durable instructions.
+
+Current limitations: sandboxing wraps participating process launches, not all host-process
+effects; `--yolo` + sandbox is not yet a sufficient containment recommendation. Promotion counts
+page-supplied citations, not independently verified claim support. Neither supervisor nor memory
+benefit is established by scripted-provider tests alone. In-process extensions, if added, remain
+trusted code with ambient env/filesystem access despite a restricted API object.
+
+Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
+worktree in the repository map), one skipped. H/E rows are **planned, not implemented**. This
+revision changes documentation only and preserves existing R identifiers. Older notes below
+record decisions at the time; they do not override these priorities or current limitations.
 
 | M | Deliverable | Status |
 |---|---|---|
