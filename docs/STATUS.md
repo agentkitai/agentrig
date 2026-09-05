@@ -28,6 +28,13 @@ The full suite now passes on Node 22 too: 1,644 passed plus two platform-specifi
 total, 78 files). Isolated removal of the content fingerprint check and source apply lock each
 fails its regression; restored code passes. Review and repaired-head CI remain pending.
 
+First independent review's fixes retain stale scheduled-apply artifacts, expose lock acquisition
+waits, surface live stamp failures, and retain physical lock identity through dangling root aliases
+during a swap. Added inverse copy/writer, stamp-lock, alias-gap, bounded-manifest and scheduled
+stale-artifact regressions. CLI review text names both artifact and manifest. CI's pin-race fixture
+now uses canonical output paths on macOS/Windows. Build/typecheck and full Node 22 suite pass:
+1,654 passed plus two skips (1,656 total, 78 files). Repair review and fresh CI remain required.
+
 ### H5b2 complete (PR #124)
 
 Completion gate: final PR CI 33961342727 passed at f2edf579, PR #124 merged at 3eee3ea,

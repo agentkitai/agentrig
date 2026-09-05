@@ -347,6 +347,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--scope <scope>", "project | global", "project")
     .option("--global <dir>", "global memory directory; enables promotion proposals")
     .option("--since <n>", "cap on raw sessions scanned")
+    .option("--lock-timeout <ms>", "wait for memory mutation locks (default 5000 ms); not a scan deadline")
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);

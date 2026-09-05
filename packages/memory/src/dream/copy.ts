@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
+import { readBoundedFile } from "../bounded-file.js";
 
 export interface DreamWorkspace {
   outputRoot: string;
@@ -64,11 +65,11 @@ async function locked<T>(roots: string[], work: () => Promise<T>, opts: MemoryLo
   return enter(0);
 }
 
-async function readManifest(out: string): Promise<Manifest> {
+async function readManifest(out: string, opts: MemoryLockOptions = {}): Promise<Manifest> {
   const path = manifestPath(out);
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink()) throw new Error("invalid dream workspace manifest: " + path);
-  return Manifest.parse(JSON.parse(await readFile(path, "utf8")));
+  return Manifest.parse(JSON.parse((await readBoundedFile(path, opts.maxFileBytes ?? 65536, opts.signal)).toString("utf8")));
 }
 
 async function verifyOutput(out: string, manifest: Manifest): Promise<void> {
@@ -216,7 +217,7 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
   const out = await realpath(outputRoot);
   if (overlaps(src, out)) throw new Error("applyDream: roots overlap; the dream must write to a copy");
   return locked([src, out], async () => {
-    const manifest = await readManifest(out);
+    const manifest = await readManifest(out, opts);
     await verifyOutput(out, manifest);
     if (manifest.sourceRoot !== src || !sameIdentity(await identity(src), manifest.sourceIdentity)
       || await fingerprint(src) !== manifest.sourceFingerprint) {

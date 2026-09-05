@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
+import { dreamCommand } from "../src/dream.ts";
 import { supervisorOptions, type SupervisorFlags } from "../src/run.ts";
 
 /**
@@ -50,6 +51,14 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it.each(["bad", "-1", "1.5", "2147483648"])("rejects invalid dream lock wait %s before work", async lockTimeout => {
+    const prior = process.exitCode;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await dreamCommand({ dir: "not-used-invalid-option", scope: "project", structuralOnly: true, lockTimeout });
+      expect(process.exitCode).toBe(1); expect(error).toHaveBeenCalledWith(expect.stringContaining("--lock-timeout must be"));
+    } finally { process.exitCode = prior; error.mockRestore(); }
+  });
   it("a subcommand's own options are not swallowed by the root", async () => {
     const { run } = stub(buildProgram());
     // each of these was silently lost when the TUI's options lived on the root program
@@ -61,6 +70,7 @@ describe("argv parsing", () => {
     expect((await run(["run", "x", "--max-tokens-per-turn", "99"]))?.opts.maxTokensPerTurn).toBe("99");
     expect((await run(["run", "x", "--base-url", "http://h/v1"]))?.opts.baseUrl).toBe("http://h/v1");
     expect((await run(["dream", "--model", "m"]))?.opts.model).toBe("m");
+    expect((await run(["dream", "--lock-timeout", "15000"]))?.opts.lockTimeout).toBe("15000");
     expect((await run(["memory", "ingest", "s1", "--model", "m"]))?.opts.model).toBe("m");
     expect((await run(["sessions", "resume", "s1", "--max-turns", "7"]))?.opts.maxTurns).toBe("7");
   });

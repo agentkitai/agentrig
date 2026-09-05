@@ -23,9 +23,16 @@ export interface DreamOptions extends ProviderOptions {
   since?: string;
   structuralOnly?: boolean;
   modelExplicit?: boolean;
+  lockTimeout?: string;
 }
 
 export async function dreamCommand(opts: DreamOptions): Promise<void> {
+  const lockTimeoutMs = opts.lockTimeout === undefined ? 5000 : Number(opts.lockTimeout);
+  if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs < 0 || lockTimeoutMs > 2_147_483_647) {
+    console.error("--lock-timeout must be an integer from 0 to 2147483647 milliseconds");
+    process.exitCode = 1;
+    return;
+  }
   let sinceCap: number | undefined;
   if (opts.since !== undefined) {
     sinceCap = Number(opts.since);
@@ -40,7 +47,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   const scope = opts.scope === "global" ? "global" : "project";
   const wikiRoot = join(opts.dir, "wiki");
-  const wiki = new FileMemoryStore({ root: wikiRoot, scope });
+  const wiki = new FileMemoryStore({ root: wikiRoot, scope, lockTimeoutMs });
   await wiki.init();
 
   // Promotion proposals need somewhere to propose *to*. Without a global wiki the report's
@@ -74,6 +81,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   const result = await runDream({
     wiki,
+    lockTimeoutMs,
     raw: new FileRawStore({ root: opts.dir }),
     ...(globalWiki === undefined ? {} : { globalWiki }),
     ...(provider === undefined ? {} : { provider }),
@@ -81,13 +89,14 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
     ...(opts.structuralOnly === true ? { structuralOnly: true } : {}),
     ...(sinceCap === undefined ? {} : { maxSessions: sinceCap }),
     onPhase: (p) => console.error(`… ${p}`),
+    onError: error => console.error(`dream warning: ${error.message}`),
   });
 
   let applied = false;
   let backup: string | undefined;
   if (auto) {
     try {
-      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()));
+      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()), { timeoutMs: lockTimeoutMs });
       applied = true;
     } catch (err) {
       // applyDream's message names the directory the wiki is actually in when a restore failed;
@@ -113,7 +122,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   // has been copied into place and the temp copy is redundant
   if (applied) await result.workspace.dispose().catch(() => {});
   if (!applied) {
-    console.log(`\nto accept: agentrig dream --auto   |   to discard: rm -rf ${result.outputRoot}`);
+    console.log(`\nto run and apply a fresh dream: agentrig dream --auto`);
+    console.log(`review artifact: ${result.outputRoot}\nmanifest: ${result.workspace.manifestPath}`);
+    console.log("keep both together; discard both only after stopping users of this artifact (SDK: workspace.dispose())");
   }
 
   process.exitCode = findingCount(result.report, result.structural) > 0 && !applied ? 1 : 0;

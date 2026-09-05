@@ -471,7 +471,8 @@ it("corrects legacy comment-only pin satisfaction without changing the page", as
 it("returns and renders skipped dream pin persistence even without an error callback", async () => {
   await store.write(path, page("- [stated] original evidence (doc:fixture)")); await addPin(store.root, pin());
   await store.upsertIndex({ path, slug: "shared", type: "concept", status: "active", summary: "original evidence" });
-  const outputRoot = join(root, "dream-output");
+  // copyWiki returns canonical paths, including macOS /private and Windows drive aliases.
+  const outputRoot = join(await realpath(root), "dream-output");
   let phase = ""; let pruneReads = 0; let injected = false;
   const read = FileMemoryStore.prototype.read;
   vi.spyOn(FileMemoryStore.prototype, "read").mockImplementation(async function(target) {

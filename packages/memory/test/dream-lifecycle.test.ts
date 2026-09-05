@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, symlink, write
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { applyDream, copyWiki, FileMemoryStore, fingerprint, markDreamed, lastDreamAt, withMemoryLock } from "@agentkitai/agentrig-memory";
+import { applyDream, copyWiki, FileMemoryStore, FileRawStore, fingerprint, markDreamed, lastDreamAt, runDream, withMemoryLock } from "@agentkitai/agentrig-memory";
 
 vi.mock("node:fs/promises", async original => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -101,7 +101,7 @@ it("refuses an alias destination pointing at the source", async () => {
 
 it("rejects unregistered, tampered or replaced outputs without touching the live wiki", async () => {
   const output = join(root, "unregistered"); await mkdir(output);
-  await expect(applyDream(store.root, output, "unregistered")).rejects.toThrow();
+  await expect(applyDream(store.root, output, "unregistered")).rejects.toMatchObject({ code: "ENOENT" });
   const ws = await copy();
   const manifest = JSON.parse(await readFile(ws.manifestPath, "utf8"));
   await writeFile(ws.manifestPath, JSON.stringify({ ...manifest, sourceRoot: root }));
@@ -214,7 +214,7 @@ it("cleans its failed fresh copy but preserves unrelated manifest content", asyn
 
 it("rejects unreadable source entries rather than silently hashing a partial tree", async () => {
   await symlink(join(root, "missing"), join(store.root, "broken"));
-  await expect(copy()).rejects.toThrow();
+  await expect(copy()).rejects.toMatchObject({ code: "ENOENT" });
   expect(await fs.lstat(join(root, "output")).catch(() => null)).toBeNull();
 });
 
@@ -252,4 +252,68 @@ it("does not dispose a workspace while another owner holds its mutation lock", a
   await new Promise(resolve => setTimeout(resolve, 30)); expect(finished).toBe(false);
   release.resolve(); await owner; await disposing;
   expect(await fs.lstat(ws.outputRoot).catch(() => null)).toBeNull();
+});
+
+it("blocks a store writer while copying a guarded source snapshot", async () => {
+  const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.mocked(fs.cp).mockImplementationOnce(async (from, to, options) => {
+    expect(await readFile(store.root + ".write.lock", "utf8")).toMatch(new RegExp(`^${process.pid}:`));
+    entered.resolve(); await release.promise; await actual.cp(from, to, options);
+  });
+  const copying = copy();
+  await entered.promise;
+  let updated = false;
+  const writing = store.update(path, current => ({ ...current!, body: "later write" })).then(() => { updated = true; });
+  try { await new Promise(resolve => setTimeout(resolve, 30)); expect(updated).toBe(false); }
+  finally { release.resolve(); }
+  const ws = await copying; await writing;
+  expect(await readFile(join(ws.outputRoot, path), "utf8")).toContain("original fact");
+  await expect(applyDream(store.root, ws.outputRoot, "late")).rejects.toThrow("stale dream snapshot");
+  await ws.dispose();
+});
+
+it("stamp writes use the mutation lock and the configured wait", async () => {
+  await withMemoryLock(store.root, async () => {
+    await expect(markDreamed(store.root, 1000, { timeoutMs: 0 })).rejects.toThrow("timed out waiting for memory lock");
+    expect(await lastDreamAt(store.root)).toBeUndefined();
+    await expect(runDream({ wiki: store, raw: new FileRawStore({ root }), structuralOnly: true,
+      outputRoot: join(root, "blocked-output"), lockTimeoutMs: 0 })).rejects.toThrow("timed out waiting for memory lock");
+  });
+  expect(await fs.lstat(join(root, "blocked-output")).catch(() => null)).toBeNull();
+});
+
+it("alias writers retain the physical lock key while the live root is temporarily absent", async () => {
+  const alias = join(root, "alias"); await symlink(store.root, alias, process.platform === "win32" ? "junction" : "dir");
+  const moved = join(root, "temporarily-moved"); let settled = false;
+  let writing: Promise<unknown>;
+  await withMemoryLock(store.root, async () => {
+    await rename(store.root, moved);
+    writing = markDreamed(alias, 1234).then(() => { settled = true; }, error => { settled = true; return error; });
+    try { await new Promise(resolve => setTimeout(resolve, 30)); expect(settled).toBe(false); }
+    finally { await rename(moved, store.root); }
+  });
+  expect(await writing!).toBeUndefined(); expect(await lastDreamAt(store.root)).toBe(1234);
+  expect(await fs.lstat(alias + ".write.lock").catch(() => null)).toBeNull();
+});
+
+it("reports live scheduling-stamp failures instead of silently retriggering", async () => {
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    if (String(to) === join(store.root, ".last-dream")) throw new Error("injected live stamp failure");
+    await actual.rename(from, to);
+  });
+  const warnings: Error[] = [];
+  const result = await runDream({ wiki: store, raw: new FileRawStore({ root }), structuralOnly: true,
+    outputRoot: join(root, "output"), now: () => 1234, onError: error => warnings.push(error) });
+  expect(warnings.map(error => error.message)).toEqual([expect.stringContaining("scheduling stamp was not updated")]);
+  expect(warnings[0]!.message).toContain("injected live stamp failure");
+  expect(await lastDreamAt(store.root)).toBeUndefined(); expect(await lastDreamAt(result.outputRoot)).toBe(1234);
+  await result.workspace.dispose();
+});
+
+it("bounds manifest reads without replacing the live wiki", async () => {
+  const ws = await copy(); const before = await fingerprint(store.root);
+  await expect(applyDream(store.root, ws.outputRoot, "bounded", { maxFileBytes: 8 })).rejects.toThrow("exceeds 8 bytes");
+  expect(await fingerprint(store.root)).toBe(before); await ws.dispose();
 });

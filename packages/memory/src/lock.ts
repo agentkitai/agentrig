@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, realpath, rm } from "node:fs/promises";
+import { lstat, mkdir, open, readlink, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -12,6 +12,24 @@ export interface MemoryLockOptions {
   onReleaseError?: (error: Error) => void;
 }
 
+async function lockRoot(path: string, hops = 0): Promise<string> {
+  if (hops > 40) throw new Error("too many symlink levels resolving memory lock: " + path);
+  try { return await realpath(path); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return undefined;
+      throw err;
+    });
+    // During a dream swap a root symlink is briefly dangling. It must still lock the
+    // physical target, never a new alias.write.lock that bypasses the ongoing swap.
+    if (info?.isSymbolicLink()) return lockRoot(resolve(dirname(path), await readlink(path)), hops + 1);
+    const parent = dirname(path);
+    if (parent === path) throw error;
+    return join(await lockRoot(parent, hops + 1), basename(path));
+  }
+}
+
 /** Shared by cooperating writers, including separate store instances/processes. No age-based
  * stealing: crash recovery requires stopping writers and removing the named lock manually. */
 export async function withMemoryLock<T>(root: string, work: () => Promise<T>, opts: MemoryLockOptions = {}): Promise<T> {
@@ -20,10 +38,7 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
   opts.signal?.throwIfAborted();
   const absolute = resolve(root);
   await mkdir(dirname(absolute), { recursive: true });
-  const physical = await realpath(absolute).catch(async (err: NodeJS.ErrnoException) => {
-    if (err.code !== "ENOENT") throw err;
-    return join(await realpath(dirname(absolute)), basename(absolute));
-  });
+  const physical = await lockRoot(absolute);
   // Outside the wiki content tree so copies do not inherit locks. H5c will coordinate swaps.
   const lockPath = `${physical}.write.lock`;
   const deadline = performance.now() + timeoutMs;

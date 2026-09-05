@@ -239,6 +239,37 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     expect(done[0]).toContain("previous wiki kept at");
   });
 
+  it("retains and names a stale auto-apply artifact and its manifest", async () => {
+    await writeLog("a");
+    const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "- [stated] a durable fact (doc:fixture)",
+      frontmatter: { type: "concept", slug: "a", aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
+    let changed = false;
+    const provider: ModelProvider = { ...scripted([{}]), async *stream() {
+      await store.appendLog("a cooperating write during consolidation"); changed = true;
+      yield { type: "text_delta", text: "{}" };
+      yield { type: "stop", reason: "end_turn" };
+    } };
+    const errors: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, provider, everySessions: 1, auto: true,
+      onError: error => errors.push(error), onDone: text => done.push(text) });
+    expect(await hook.handler(ctx("a"))).toEqual({ action: "continue" });
+    expect(changed).toBe(true); expect(done).toEqual([]);
+    expect(errors).toHaveLength(1); expect(errors[0]!.message).toContain("stale dream snapshot");
+    const retained = /dream artifact retained at (.*); manifest: (.*)$/.exec(errors[0]!.message)!;
+    expect(retained).not.toBeNull();
+    const output = retained[1]!; const manifestPath = retained[2]!;
+    try {
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      expect(manifest.outputRoot).toBe(output);
+      expect(await readFile(join(output, "index.md"), "utf8")).toContain("# Index");
+      expect(await readFile(join(store.root, "log.md"), "utf8")).toContain("cooperating write");
+    } finally {
+      // These are the exact artifacts created by this test's hook, verified by its manifest.
+      await rm(output, { recursive: true, force: true }); await rm(manifestPath, { force: true });
+    }
+  });
+
   it("stays free without a provider — structural only, no model call", async () => {
     await markDreamed(join(dir, "wiki"), 1);
     for (const id of ["a", "b"]) await writeLog(id);
