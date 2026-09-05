@@ -43,8 +43,10 @@ const indexes = new WeakMap<PromotionEvidenceIndex, Map<string, LoadedSession>>(
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
-const NON_OBSERVATIONS = new Set(["write_file", "edit_file", "memory_write", "memory_file_analysis",
-  "attempt_log", "memory_ingest", "memory_read", "memory_search", "update_plan", "subagent", "skills"]);
+/** Built-in receipt/view names; custom/MCP semantics cannot be inferred from a logged name. */
+export const NON_OBSERVATION_TOOLS: readonly string[] = Object.freeze(["write_file", "edit_file", "memory_write", "memory_file_analysis",
+  "attempt_log", "memory_ingest", "memory_read", "memory_search", "update_plan", "subagent", "skill"]);
+const NON_OBSERVATIONS = new Set(NON_OBSERVATION_TOOLS);
 
 function inputText(input: unknown): string {
   const pending = [input];
@@ -93,6 +95,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
     const info = await lstat(ref.path);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error("session log is not a regular non-symlink file");
     if (info.size > cap) throw new Error("session evidence byte limit exceeded");
+    // NOFOLLOW/NONBLOCK are POSIX hardening; Windows relies on the lstat check above.
     const handle = await open(ref.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     let text: string;
     try {
@@ -184,7 +187,8 @@ export function witnessesForClaim(index: PromotionEvidenceIndex | undefined, ses
   const session = index === undefined ? undefined : indexes.get(index)?.get(sessionId);
   if (session === undefined) return { witnesses: [], error: "no runtime-validated evidence for this session" };
   if (session.error !== undefined) return { witnesses: [], error: session.error };
-  if (claim !== "" && [...session.inheritedInputs, ...session.ownInputs].some(input => input.text.includes(normalized(claim)))) {
+  const needle = normalized(claim);
+  if (claim !== "" && [...session.inheritedInputs, ...session.ownInputs].some(input => input.text.includes(needle))) {
     return { witnesses: [], error: "claim occurs in agent tool input; self-authored text is not corroboration" };
   }
   const witnesses: PromotionWitness[] = [];

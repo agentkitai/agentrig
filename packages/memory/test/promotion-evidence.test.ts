@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SessionStore, type ModelProvider } from "@agentkitai/agentrig-core";
-import { FileMemoryStore, FileRawStore, loadPromotionEvidence, renderReport, runDream, selectForPromotion,
+import { builtinTools, SessionStore, skillTool, SUBAGENT_TOOL, type ModelProvider } from "@agentkitai/agentrig-core";
+import { FileMemoryStore, FileRawStore, loadPromotionEvidence, memoryTools, NON_OBSERVATION_TOOLS, renderReport, runDream, selectForPromotion,
   type PromotionEvidenceIndex, type WikiPage } from "@agentkitai/agentrig-memory";
 
 let root: string;
@@ -37,6 +37,21 @@ async function independent() {
 }
 
 describe("runtime-backed claim promotion", () => {
+  it("ties the receipt exclusion list to registered built-in tool names", () => {
+    const store = new FileMemoryStore({ root: join(root, "wiki") });
+    const names = new Set([...builtinTools(), ...memoryTools({ store, raw }), skillTool([])].map(tool => tool.name));
+    names.add(SUBAGENT_TOOL);
+    for (const name of NON_OBSERVATION_TOOLS) expect(names.has(name), name).toBe(true);
+  });
+
+  it("rejects different skill bodies containing the same claim under the registered tool name", async () => {
+    const tool = skillTool([]).name;
+    await session("s1", `skill alpha instructions\n${claim}`, { tool, input: { name: "alpha" } });
+    await session("s2", `skill beta instructions\n${claim}`, { tool, input: { name: "beta" } });
+    const evidenceIndex = await loadPromotionEvidence(raw, ["s1", "s2"]);
+    expect(selectForPromotion([page()], { evidenceIndex }).promote).toEqual([]);
+  });
+
   it("fails closed without a runtime index, including fabricated serialized validation", async () => {
     expect(selectForPromotion([page()]).promote).toEqual([]);
     const real = await independent();
