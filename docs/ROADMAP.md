@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5d auxiliary lifecycle closure, then E1; PRs #118–#130 complete.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: E1; H1–H5 complete in PRs #118–#131.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -283,10 +283,9 @@ full-lifecycle cancellation/accounting (#127), explicit stamp repair/log preflig
 registered workspace recovery (#129), and lossless persistence/scoped attempts plus target/child
 abort evidence closure (#130).
 
-Remaining H5 deliverables, in order:
-
-- **Auxiliary lifecycle (H5d, current PR):** finish reviewer/grader cancellation, bounded usage and CLI/session
-  accounting against the acceptance already stated above. Then begin E1.
+H5 closure: **auxiliary lifecycle (H5d, #131)** completed reviewer/grader cancellation, bounded
+usage and CLI/session accounting. Exact-head PR and post-merge main CI are green on all three
+platforms. **H5 is complete; proceed to E1.**
 
 Each implementation PR retains independent review, proper tests, exact-head green PR CI and
 post-merge main CI, on a fresh updated-main branch. Correct stale tests within the relevant PR.
@@ -862,3 +861,8 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   running-state marker (the current `final: false` flag and UI already identify unfinished work),
   and optionally ignore explicitly undefined entries in partial-limit objects rather than reject
   them before work starts. Neither is an H5/E1 prerequisite.
+- E1 evaluator polish: remove its mechanics tests' prior-build requirement by compiling isolated
+  fixtures; add a distinct NOT_RUN lane state for scope-rejected submissions; strengthen ignored/
+  Git-internal change inventory if adversarial submission checking becomes a goal. Current limits
+  are explicit. Expand the lightweight AgentRig lane integration checks in CI if their runtime is
+  justified; actual fresh-workspace A1/A2/A3 build/check trials are already maintainer evidence.
