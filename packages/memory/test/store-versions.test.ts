@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileMemoryStore, FileRawStore, factLines, memoryTools, rebuildIndex, runDream, withMemoryLock,
-  type MemoryWriteResult, type PageWrite } from "@agentkitai/agentrig-memory";
+  writePins, type MemoryWriteResult, type PageWrite } from "@agentkitai/agentrig-memory";
 
 vi.mock("node:fs/promises", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -50,6 +50,15 @@ describe("versioned memory mutations", () => {
     const result = await store.compareAndSwap(path, page("lost"), before.version!);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.current!.body).toContain("manual edit");
+  });
+
+  it("uses content identity rather than a monotonic write generation", async () => {
+    await store.write(path, page());
+    const version = (await store.read(path))!.version!;
+    expect(await store.compareAndSwap(path, page(), version)).toMatchObject({ ok: true, version });
+    await store.write(path, page("temporary"));
+    await store.write(path, page());
+    expect((await store.read(path))!.version).toBe(version);
   });
 
   it("serializes competing versions across separate store instances", async () => {
@@ -123,7 +132,7 @@ describe("versioned memory mutations", () => {
       for (const w of workers) if (w.child.exitCode === null) w.child.kill();
       await Promise.all(workers.map(w => w.exited));
     }
-  });
+  }, 30_000);
 
   it("bounds lock waits even with a frozen content clock and never steals an old lock", async () => {
     const lock = `${store.root}.write.lock`;
@@ -160,6 +169,14 @@ describe("versioned memory mutations", () => {
     expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
   });
 
+  it.skipIf(process.platform !== "win32")("bounds persistent access failures separately from contention", async () => {
+    vi.mocked(fs.open).mockRejectedValue(Object.assign(new Error("access denied"), { code: "EACCES" }));
+    const started = performance.now();
+    await expect(store.write(path, page(), { timeoutMs: 30_000 })).rejects.toThrow("cannot acquire memory lock");
+    expect(performance.now() - started).toBeLessThan(5000);
+    expect(await store.read(path)).toBeNull();
+  });
+
   it("aborts while waiting and leaves another owner's lock intact", async () => {
     const lock = `${store.root}.write.lock`;
     await writeFile(lock, "owner");
@@ -185,6 +202,32 @@ describe("versioned memory mutations", () => {
     });
     await expect(store.write(path, page())).rejects.toThrow("marker write failed");
     expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
+  });
+
+  it.each([false, true])("handles failed lock identity capture (persistent=%s) without running work", async persistent => {
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let closed = false;
+    vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
+      const handle = await actual.open(...args);
+      const stat = vi.spyOn(handle, "stat");
+      if (persistent) stat.mockRejectedValue(new Error("fstat failed"));
+      else stat.mockRejectedValueOnce(new Error("fstat failed"));
+      const close = handle.close.bind(handle);
+      vi.spyOn(handle, "close").mockImplementationOnce(async () => { await close(); closed = true; });
+      return handle;
+    });
+    const work = vi.fn(async () => 42);
+    const warnings: Error[] = [];
+    await expect(withMemoryLock(store.root, work, { onReleaseError: e => warnings.push(e) }))
+      .rejects.toThrow(`cannot establish memory lock identity at ${await fs.realpath(store.root)}.write.lock`);
+    expect(work).not.toHaveBeenCalled(); expect(closed).toBe(true);
+    if (persistent) {
+      expect(warnings[0]!.message).toContain("stop writers before lock recovery");
+      expect(await fs.stat(`${store.root}.write.lock`)).toBeDefined();
+    } else {
+      expect(warnings).toEqual([]);
+      expect(await store.compareAndSwap(path, page(), null)).toMatchObject({ ok: true });
+    }
   });
 
   it("does not remove a replacement lock owned by another process", async () => {
@@ -257,6 +300,32 @@ describe("versioned memory mutations", () => {
     expect(result.output).toMatchObject({ committed: true, warnings: [expect.stringContaining("index update failed")] });
     expect(result.display).toContain("page committed");
     expect((await store.read(path))!.body).toBe("committed\n");
+  });
+
+  it("reports a committed page when persisting the pin recheck fails", async () => {
+    await writePins(store.root, [{ page: path, kind: "addition", claim: "committed", anchor: "",
+      provenance: "human", created: "2026-09-05", status: "active" }]);
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to) === join(store.root, "pins.json")) throw new Error("pin rename failed");
+      await actual.rename(from, to);
+    });
+    const result = await tool("memory_write").execute({ type: "concept", slug: "shared", body: "committed" }, ctx());
+    expect(result.output).toMatchObject({ committed: true, warnings: [expect.stringContaining("pin recheck failed")] });
+    expect(result.display).toContain("page committed");
+    expect((await store.read(path))!.body).toBe("committed\n");
+  });
+
+  it("retains the log header when initialization races the first append", async () => {
+    await rm(join(store.root, "log.md"));
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to) === join(store.root, "log.md")) await store.init();
+      await actual.rename(from, to);
+    });
+    await store.appendLog("first entry");
+    expect(await readFile(join(store.root, "log.md"), "utf8"))
+      .toBe("# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\nfirst entry\n");
   });
 
   it("prevents a commit when cancellation arrives during the guarded transform", async () => {

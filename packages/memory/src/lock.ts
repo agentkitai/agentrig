@@ -27,13 +27,17 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
   const deadline = performance.now() + timeoutMs;
   const owner = `${process.pid}:${randomUUID()}\n`;
   let handle;
+  let accessDeadline: number | undefined;
   for (;;) {
     opts.signal?.throwIfAborted();
     try { handle = await open(lockPath, "wx", 0o600); break; }
     catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // Windows can briefly report access/busy errors while the last deleted handle closes.
-      const retryable = code === "EEXIST" || (process.platform === "win32" && ["EPERM", "EACCES", "EBUSY"].includes(code ?? ""));
+      if (code === "EEXIST") accessDeadline = undefined;
+      const accessError = process.platform === "win32" && ["EPERM", "EACCES", "EBUSY"].includes(code ?? "");
+      if (accessError) accessDeadline ??= performance.now() + 250;
+      const retryable = code === "EEXIST" || (accessError && performance.now() < accessDeadline!);
       if (!retryable) throw new Error(`cannot acquire memory lock ${lockPath}: ${(err as Error).message}; check parent-directory permissions`, { cause: err });
       if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath} (${code}); check parent-directory permissions; if its owner crashed, stop all writers before removing that lock`);
       await delay(Math.min(20, Math.max(1, deadline - performance.now())), undefined,
@@ -42,7 +46,10 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
   }
   let identity: { dev: bigint; ino: bigint } | undefined;
   try {
-    identity = await handle.stat({ bigint: true });
+    try { identity = await handle.stat({ bigint: true }); }
+    catch (error) {
+      throw new Error(`cannot establish memory lock identity at ${lockPath}; no work ran; if release cannot verify ownership, stop all writers before removing that lock`, { cause: error });
+    }
     await handle.writeFile(owner, "utf8");
     opts.signal?.throwIfAborted();
     return await work();
@@ -50,7 +57,9 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
     const releaseErrors: unknown[] = [];
     try {
       // Keep the handle open during the identity check so its inode cannot be reused.
-      // A failed/partial marker write must not leak our lock, nor erase a replacement owner.
+      // Retry a failed initial fstat before cleanup; never blindly unlink an unidentified lock.
+      identity ??= await handle.stat({ bigint: true });
+      // This narrows replacement-owner deletion to the lstat→unlink window, not an atomic guarantee.
       const current = await lstat(lockPath, { bigint: true }).catch((err: NodeJS.ErrnoException) => {
         if (err.code === "ENOENT") return undefined;
         throw err;

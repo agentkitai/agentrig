@@ -17,6 +17,7 @@ import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types
 
 export const INDEX_FILE = "index.md";
 export const LOG_FILE = "log.md";
+const LOG_HEADER = "# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\n";
 export const OVERVIEW_FILE = "overview.md";
 const INDEX_HEADER = `# Index
 
@@ -115,7 +116,7 @@ export class FileMemoryStore implements MemoryStore {
     await mkdir(this.root, { recursive: true });
     for (const dir of Object.values(PAGE_DIR)) await mkdir(this.abs(dir), { recursive: true });
     await this.ensure(INDEX_FILE, `${INDEX_HEADER}\n`);
-    await this.ensure(LOG_FILE, "# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\n");
+    await this.ensure(LOG_FILE, LOG_HEADER);
     await this.ensure(
       OVERVIEW_FILE,
       serializePage(
@@ -281,7 +282,7 @@ export class FileMemoryStore implements MemoryStore {
     await this.withMutationLock(async () => {
       const line = entry.endsWith("\n") ? entry : `${entry}\n`;
       const existing = await readFile(this.abs(LOG_FILE), "utf8").catch((err: NodeJS.ErrnoException) => {
-        if (err.code === "ENOENT") return "";
+        if (err.code === "ENOENT") return LOG_HEADER;
         throw err;
       });
       await this.atomicWrite(LOG_FILE, existing + line);

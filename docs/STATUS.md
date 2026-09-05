@@ -30,6 +30,13 @@ partial reservations, absent/malformed tool targets and metadata races. Build/ty
 1,489 tests pass with one Windows-only test skipped on Linux (1,490 total, 73 files). Repair delta
 review and latest-head CI remain pending. Dream swaps/owned sidecar recovery remain H5c.
 
+CI-fixture review is clean and CI 33954063135 passed all platforms. A second lock review prompted
+a separate Windows access-error retry budget, safe recovery diagnostics for failed handle identity,
+explicit residual unlink-race documentation, a longer integration-test budget, pin-recheck failure
+coverage, and deterministic initialization/log-header race coverage. Content tokens are explicitly
+not monotonic generations. Build/typecheck pass; 1,503 tests pass with two Windows-only skips on
+Linux (1,505 total, 73 files). Final repair review and CI are pending.
+
 ### H4 complete (2026-09-05; PR #121)
 
 Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
