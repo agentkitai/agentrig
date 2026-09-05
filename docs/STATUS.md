@@ -31,6 +31,14 @@ same extraction test (not a third review). Final build/typecheck and explicit No
 controls: six code tasks pass; A4/X4 automatic lanes pass and honestly remain BLOCKED pending a
 human verdict. These are maintainer controls, not model results. Final-head/main CI still required.
 
+Repair head c163b6b passed Linux/macOS but CI 33975385360 caught a Windows-only test assumption:
+Node exposes the self-SIGTERM fixture as a numeric exit rather than a signal. The test now checks
+the actually reported metadata; a separate real timed-child test verifies portable ETIMEDOUT
+classification. The documented Windows provenance limitation does not invent causes for numeric
+exits. This is maintainer-tested CI repair within E1, not another review round or milestone.
+Final CI-repair validation: build/typecheck and 1,830 explicit Node22 passes plus two skips
+(1,832 total, 86 files), including 15 E1 mechanics tests.
+
 ### H5d auxiliary lifecycle complete (PR #131)
 
 Completion gate: final head a1a586f, merge a14dd57, PR CI 33973659278 and main CI 33973789052

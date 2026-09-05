@@ -136,9 +136,13 @@ changes, but sandbox escape/external actions invalidate the run and are recorded
 Git scope inspection is not tamper-proof: ignored files and changes inside `.git` are outside its
 inventory. Isolation and independent artifact review remain required. Scope rejection returns
 FAIL without executing submitted code; the remaining automatic lanes are left BLOCKED (not run).
-Worker launch errors, timeout, output overflow or termination by signal are BLOCKED with evidence;
+Worker launch errors, timeout, output overflow or a **reported** termination signal are BLOCKED with evidence;
 ordinary nonzero test/build exits and missing submitted artifacts are FAIL. A check timeout makes
 that run inconclusive until diagnosed; it is distinct from the model's declared task budget.
+Windows can expose self-termination as an ordinary numeric exit, without signal provenance; the
+checker cannot distinguish that from a program failure. Preserve worker/host diagnostics. If those
+independently establish an external termination, record an operator BLOCKED verdict alongside the
+unchanged automatic FAIL output rather than guessing from an exit code.
 
 E1's mechanics tests currently read built package leaves: run `pnpm build` before `pnpm test` for
 this suite. This is a narrow exception to source-only tests, not a live-provider requirement.

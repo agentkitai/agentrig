@@ -195,19 +195,34 @@ describe("E1 workspace and outcome mechanics", () => {
     expect(JSON.parse(result.stdout)).toMatchObject({ behavior: "PASS", regression: "PASS", scope: "PASS", manual: "PENDING", outcome: "BLOCKED" });
   });
 
-  it("records a signaled checker worker as BLOCKED, but ordinary exit 2 as FAIL", async () => {
+  it("records reported worker signals as BLOCKED, but ordinary numeric exits as FAIL", async () => {
     const path = await external();
     await writeFile(join(path, "index.js"), "process.kill(process.pid, 'SIGTERM');");
     const { receiptPath } = await receiptFor("X1", path);
     await writeFile(join(path, "eval-test-worker.js"), "require('node:assert').ok(true);");
     const check = () => spawnSync(process.execPath, [checker, receiptPath], { encoding: "utf8", timeout: 30_000 });
+    // Windows represents self-SIGTERM as a numeric exit, losing the signal provenance. Do not
+    // invent a signal from an ordinary nonzero status; assert the actual child-process metadata.
+    const probe = spawnSync(process.execPath, ["-e", "process.kill(process.pid, 'SIGTERM');"], { encoding: "utf8" });
+    expect(probe.error).toBeUndefined(); expect(probe.status).not.toBe(0);
+    const signaled = probe.signal !== null;
     let result = check();
-    expect(result.status).toBe(2);
-    expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "BLOCKED", behavior: "BLOCKED", regression: "BLOCKED" });
+    expect(result.status).toBe(signaled ? 2 : 1);
+    const outcome = signaled ? "BLOCKED" : "FAIL";
+    expect(JSON.parse(result.stdout)).toMatchObject({ outcome, behavior: outcome, regression: outcome });
     await writeFile(join(path, "index.js"), "process.exit(2);");
     result = check();
     expect(result.status).toBe(1);
     expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "FAIL", behavior: "FAIL", regression: "FAIL" });
+  });
+
+  it("classifies a real child timeout as infrastructure on every platform", async () => {
+    const { infrastructureFailure } = await import(pathToFileURL(checker).href);
+    let failure: unknown;
+    try { execFileSync(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { timeout: 100, stdio: "pipe" }); }
+    catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: "ETIMEDOUT" });
+    expect(infrastructureFailure(failure)).toBe(true);
   });
 
   it("exports a real pinned tree without copying dirty source or overwriting existing work", async () => {
