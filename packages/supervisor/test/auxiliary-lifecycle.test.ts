@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createAgent, RulePolicy, SessionStore, type AuxiliaryReport, type HarnessEvent, type ModelEvent, type ModelProvider, type Session } from "@agentkitai/agentrig-core";
+import { createAgent, RulePolicy, SessionStore, type AuxiliaryReport, type HarnessEvent, type Hook, type ModelEvent, type ModelProvider, type Session } from "@agentkitai/agentrig-core";
 import { attach, RubricGrader, TrajectoryReviewer, type AuxiliaryOptions, type Reviewer } from "@agentkitai/agentrig-supervisor";
 
 let root: string;
@@ -111,14 +111,14 @@ describe("bounded reviewer/grader SDK", () => {
   });
 });
 
-async function mainSession(): Promise<{ session: Session; finish: () => void; events: () => Promise<HarnessEvent[]> }> {
+async function mainSession(hooks: Hook[] = []): Promise<{ session: Session; finish: () => void; events: () => Promise<HarnessEvent[]> }> {
   const finish = Promise.withResolvers<void>();
   const store = new SessionStore({ root });
   const session = createAgent({ provider: provider(async function* () {
     await finish.promise;
     yield { type: "usage", usage: { input: 2, output: 3 } };
     yield { type: "stop", reason: "end_turn" };
-  }), tools: [], permissions: new RulePolicy([]), systemPrompt: "test", store, repoMap: false }).run("test", { cwd: root });
+  }), tools: [], permissions: new RulePolicy([]), systemPrompt: "test", store, repoMap: false, hooks }).run("test", { cwd: root });
   cleanup.push(async () => { finish.resolve(); session.control.abort(); await session.done; });
   return { session, finish: () => finish.resolve(), events: async () => {
     const events: HarnessEvent[] = []; for await (const event of store.read(session.id)) events.push(event); return events;
@@ -129,6 +129,26 @@ const detectStart = { id: "once", observe: (event: HarnessEvent) => event.type =
 const policy = { decide: () => [{ type: "run_reviewer" as const, reason: "fixture" }] };
 
 describe("real-session auxiliary lifetime and durable records", () => {
+  it("cancels the observer before independently budgeted session-end hooks finish", async () => {
+    const hookEntered = Promise.withResolvers<void>();
+    const releaseHook = Promise.withResolvers<void>();
+    cleanup.push(async () => { releaseHook.resolve(); });
+    const main = await mainSession([{ point: "session_end", handler: async ctx => {
+      expect(ctx.signal.aborted).toBe(false);
+      hookEntered.resolve(); await releaseHook.promise;
+      return { action: "continue" };
+    } }]);
+    const entered = Promise.withResolvers<void>();
+    let signal: AbortSignal | undefined;
+    const sup = attach(main.session, { detectors: [detectStart], policy, reviewer: { review: async (_input, opts) => {
+      signal = opts!.signal; entered.resolve(); return new Promise(() => {});
+    } } });
+    await entered.promise; main.finish(); await hookEntered.promise;
+    expect(signal!.aborted).toBe(true);
+    await sup.done;
+    releaseHook.resolve(); await main.session.done;
+  });
+
   it("records final auxiliary usage before session.end without inflating main usage", async () => {
     const main = await mainSession();
     const finished = Promise.withResolvers<void>();
