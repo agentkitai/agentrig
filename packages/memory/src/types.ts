@@ -99,6 +99,8 @@ export interface DreamReport {
   pinsAffected: Array<{ pin: string; status: "kept" | "conflict" | "orphaned" }>;
   /** Counts per input check, not distinct pins; absent on legacy reports. */
   pinPersistence?: { applied: number; skipped: number };
+  /** Known ledger omissions. Incomplete reports are review-only, never automatically applied. */
+  scan?: { complete: boolean; unreadableAttempts: string[] };
 }
 
 export interface DreamResult {

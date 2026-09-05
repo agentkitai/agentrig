@@ -4,6 +4,7 @@ import type { FileMemoryStore } from "../store.js";
 import type { WikiPage } from "../types.js";
 import type { Consolidation } from "./phases.js";
 import type { StructuralFindings } from "./lint.js";
+import type { ScanOptions } from "../scan.js";
 
 /**
  * Actually edits the dreamt wiki. Without this the dream is a liar: it would report merges and
@@ -48,7 +49,7 @@ function matchesRemoval(line: string, target: string): boolean {
   return l !== "" && sameLine(l, strip(target));
 }
 
-export interface ApplyOptions {
+export interface ApplyOptions extends ScanOptions {
   /** ISO date the dream ran, used when rewriting relative dates. */
   today: string;
   /** Ranges over the structural findings too (relative dates). */
@@ -66,7 +67,7 @@ export async function applyConsolidation(
 ): Promise<AppliedChanges> {
   const changes = empty();
   const pages = new Map<string, WikiPage>();
-  for (const p of await out.pages()) pages.set(p.path, p);
+  for (const p of await out.pages(opts)) pages.set(p.path, p);
   // only pages that actually changed are rewritten: an untouched page must come out of a dream
   // byte-identical, or every dream would churn `updated` on the whole wiki
   const dirty = new Set<string>();

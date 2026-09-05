@@ -32,11 +32,22 @@ is unchanged so existing bounded H5c1 artifacts remain usable.
 FileRawStore session/document enumeration is bounded by default and only missing directories are
 treated as empty. Its legacy no-options readAttempts/attempts remain unchanged; ingest and dream
 pass explicit ledger bounds. FileMemoryStore.pages(opts) is strict and bounded; no-options generic
-search retains the old behavior for now. Dream uses the strict path, and corrupt attempt entries
-fail the dream instead of letting a partial scan claim to be clean. The immutable files remain
-untouched. Custom SDK stores must honor scan options; returned lengths are checked too, but the
+search retains the old behavior for now. Dream uses the strict path, including consolidation's
+reread. Enumeration/byte cap failures stop the dream; known unreadable/corrupt attempt entries
+instead produce an explicitly incomplete, review-only artifact with the affected paths. Model
+consolidation and CLI/hook automatic apply are disabled, and the report cannot claim a clean scan.
+The immutable files remain untouched; fixing permissions can resolve a transient read failure
+without deleting history. Manual SDK artifact application remains an explicit trusted operation.
+Custom SDK stores must honor scan options; returned lengths are checked too, but the
 caller cannot prevent allocation inside trusted custom code.
 
+`dreamScanLimits` config and `--dream-scan-limits <json>` on dream/run/TUI/resume configure these
+caps, including the scheduler's initial cadence enumeration. Pin metadata and repeated checked-page
+reads share one aggregate budget across inspection and guarded revalidation; pin entry counts and
+serialized pins/index output are capped. Short reads reuse a geometrically grown buffer, preventing
+retained backing buffers from multiplying the byte cap. A fixed H5c1 hash vector covers files,
+empty directories, relative file/directory symlinks, modes and the excluded scheduling stamp.
+
 Scan signals are observed by tree/page/raw/evidence reads and at phase transitions. Full provider
-lifetime, regeneration commit cancellation, final accounting and CLI configuration remain H5c2b;
+lifetime, regeneration commit cancellation, final accounting and lifetime CLI configuration remain H5c2b;
 passing a scan signal alone is not yet a guarantee that a stuck model call terminates.

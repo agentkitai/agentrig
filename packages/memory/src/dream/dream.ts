@@ -144,7 +144,7 @@ async function dreamInto(
 
   // ---- phase 2: gather signal
   phase("gather");
-  const since = await lastDreamAt(workspace.outputRoot, readOpts);
+  const since = await lastDreamAt(workspace.outputRoot, { ...readOpts, maxFileBytes: Math.min(4096, readOpts.maxFileBytes) });
   const maxSessions = opts.maxSessions ?? 100;
   const available = await opts.raw.sessions(since, opts);
   if (available.length > scan.limits.maxEntries) throw new MaintenanceLimitError("raw session entry limit exceeded");
@@ -157,8 +157,11 @@ async function dreamInto(
       : { attempts: [] };
   const allAttempts = ledger.attempts;
   if (allAttempts.length > scan.limits.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
-  if ((ledger.corrupt?.length ?? 0) > 0) {
-    throw new Error(`dream cannot claim a complete scan: ${ledger.corrupt!.length} corrupt attempt ledger entries: ${ledger.corrupt!.join(", ")}`);
+  const unreadableAttempts = ledger.corrupt ?? [];
+  if (allAttempts.length + unreadableAttempts.length > scan.limits.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
+  if (unreadableAttempts.length > 0) {
+    const warning = new Error(`dream raw scan incomplete: ${unreadableAttempts.length} unreadable or corrupt attempt ledger entries; model consolidation and auto-apply are disabled`);
+    if (opts.onError !== undefined) opts.onError(warning); else process.emitWarning(warning.message);
   }
   // `since` has to actually filter something. It previously reached only a log line: attempts —
   // the material signals are built from — were read unfiltered and uncapped, so `.last-dream`
@@ -176,7 +179,7 @@ async function dreamInto(
   phase("consolidate");
   let consolidationError: string | undefined;
   const consolidation: Consolidation =
-    opts.structuralOnly === true || pages.length === 0 || opts.provider === undefined
+    opts.structuralOnly === true || unreadableAttempts.length > 0 || pages.length === 0 || opts.provider === undefined
       ? { contradictions: [], superseded: [], merged: [], removed: [] }
       : await consolidate({
           provider: opts.provider,
@@ -193,6 +196,7 @@ async function dreamInto(
   // the input and the report would describe changes nobody made.
   phase("apply");
   const applied = await applyConsolidation(out, consolidation, {
+    ...opts,
     today: new Date(now()).toISOString().slice(0, 10),
     structural,
   });
@@ -202,10 +206,11 @@ async function dreamInto(
   // re-read: applyConsolidation rewrote bodies and deleted merged-away pages, and the index has
   // to describe the wiki as it now stands rather than as it was found
   const finalPages = (await out.pages(opts)).filter((p) => p.path !== OVERVIEW_FILE);
-  await out.writeIndex(rebuildIndex(finalPages, index));
-  const pins = await readPins(workspace.outputRoot);
-  const pinChecks = await recheckPins(out, pins);
-  const persistedPins = await applyPinChecks(out, pinChecks);
+  await out.writeIndex(rebuildIndex(finalPages, index), readOpts);
+  const pinOpts = { ...readOpts, scanBudget: new ScanBudget(opts) };
+  const pins = await readPins(workspace.outputRoot, pinOpts);
+  const pinChecks = await recheckPins(out, pins, pinOpts);
+  const persistedPins = await applyPinChecks(out, pinChecks, pinOpts);
   if (persistedPins.skipped > 0) opts.onError?.(new Error(`dream inspected pins but skipped ${persistedPins.skipped} status check(s): page/pin changed, pin removed, or check unversioned`));
 
   // ---- promotion proposals: validate final pages against immutable runtime observations.
@@ -224,6 +229,7 @@ async function dreamInto(
   for (const m of applied.mergedPages) mergedInto.set(m.into, [...(mergedInto.get(m.into) ?? []), m.from]);
 
   const report: DreamReport = {
+    scan: { complete: unreadableAttempts.length === 0, unreadableAttempts },
     contradictions: consolidation.contradictions,
     superseded: applied.supersededMarked.map((s) => {
       const found = consolidation.superseded.find((x) => x.page === s.page && x.old === s.old);
@@ -244,7 +250,7 @@ async function dreamInto(
   await out.appendLog(
     `${new Date(now()).toISOString()} | dream | ${sessions.length} session(s) since last | ` +
       `${report.contradictions.length} contradiction(s), ${report.orphans.length} orphan(s), ` +
-      `${report.missingPages.length} missing page(s)`,
+      `${report.missingPages.length} missing page(s)` + (unreadableAttempts.length === 0 ? "" : ` | incomplete raw scan: ${unreadableAttempts.length} omitted attempt(s)`),
   );
   await markDreamed(workspace.outputRoot, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 });
   // ALSO stamp the live wiki. The stamp answers "when was a dream last run", not "last

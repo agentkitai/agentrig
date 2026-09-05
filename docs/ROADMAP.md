@@ -289,6 +289,12 @@ abort and visible cap failures; **H5c2b** integrates full dream/provider deadlin
 auxiliary accounting and CLI/hook reporting; **H5c2c** provides explicit ownership-checked recovery
 of crash-left workspaces/sidecars. A bounded scanner alone does not complete H5c2.
 
+H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
+attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
+apply, and leave immutable history untouched; enumeration/byte cap failures still stop the run.
+H5c3 also migrates the supervisor's remaining legacy unbounded `readAttempts()` caller in
+`packages/cli/src/run.ts` to scoped, bounded lookup.
+
 H5b1 inspection also found older multiline facts are not fully understood by the line-based fact
 parser, and unknown frontmatter keys parsed as `extra` do not survive current store regeneration.
 H5c must diagnose/migrate legacy multiline facts without losing their text or references and preserve

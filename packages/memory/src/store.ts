@@ -169,8 +169,8 @@ export class FileMemoryStore implements MemoryStore {
     return text.split("\n").map(parseEntry).filter((e): e is IndexEntry => e !== null);
   }
 
-  async writeIndex(entries: IndexEntry[]): Promise<void> {
-    return this.withMutationLock(() => this.writeIndexUnlocked(entries));
+  async writeIndex(entries: IndexEntry[], opts: MemoryLockOptions = {}): Promise<void> {
+    return this.withMutationLock(() => this.writeIndexUnlocked(entries, opts.signal, opts.maxFileBytes), opts);
   }
 
   private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal, maxFileBytes?: number): Promise<void> {

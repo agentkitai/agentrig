@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyDream, copyWiki, FileMemoryStore, FileRawStore, fingerprint, loadPromotionEvidence,
-  MaintenanceLimitError, runDream, ScanBudget } from "@agentkitai/agentrig-memory";
+  MaintenanceLimitError, runDream, ScanBudget, witnessesForClaim, findingCount, renderReport,
+  addPin, readPins, recheckPins, applyPinChecks, writePins, type Pin } from "@agentkitai/agentrig-memory";
+import { applyConsolidation } from "../src/dream/apply.ts";
 
 vi.mock("node:fs/promises", async original => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -19,6 +21,68 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: true, force: true }); });
 const absent = (path: string) => expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
 const textFile = (name: string, text: string) => fs.writeFile(join(wiki, name), text);
+
+it.skipIf(process.platform === "win32")("preserves the H5c1 fingerprint framing for saved manifests", async () => {
+  // Fixed vector produced by the unmodified fingerprint at fb8201e, not by this implementation.
+  await fs.chmod(wiki, 0o755);
+  for (const name of ["dir", "empty"]) { await fs.mkdir(join(wiki, name)); await fs.chmod(join(wiki, name), 0o755); }
+  for (const [name, bytes] of [["a", "hello\n"], ["dir/b", "world\n"], [".last-dream", "ignored"]] as const) {
+    await textFile(name, bytes); await fs.chmod(join(wiki, name), 0o644);
+  }
+  await fs.symlink("a", join(wiki, "file-link")); await fs.symlink("dir", join(wiki, "dir-link"));
+  if (process.platform === "darwin") {
+    await fs.lchmod(join(wiki, "file-link"), 0o777); await fs.lchmod(join(wiki, "dir-link"), 0o777);
+  }
+  expect(await fingerprint(wiki)).toBe("551253ea1145289d60d2867d45fba1187332caa8d26e86e02838a3d4ef197e55");
+});
+
+it("bounds the consolidation reread before performing any proposed edits", async () => {
+  const store = new FileMemoryStore({ root: wiki }); await store.init();
+  await fs.writeFile(join(wiki, "concepts/bad.md"), "---\nnot valid frontmatter\n---\nbody");
+  const writes = vi.spyOn(store, "write");
+  const consolidation = { contradictions: [], superseded: [], merged: [], removed: [] };
+  await expect(applyConsolidation(store, consolidation, { today: "2026-09-05" })).rejects.toThrow("invalid frontmatter");
+  await fs.rm(join(wiki, "concepts/bad.md"));
+  await expect(applyConsolidation(store, consolidation, { today: "2026-09-05", scanLimits: { maxTotalBytes: 1 } }))
+    .rejects.toBeInstanceOf(MaintenanceLimitError);
+  expect(writes).not.toHaveBeenCalled();
+});
+
+it("shares pin metadata and repeat page validation byte budgets without committing partial checks", async () => {
+  const store = new FileMemoryStore({ root: wiki }); await store.init();
+  const pin: Pin = { page: "concepts/a.md", kind: "correction", claim: "alpha", anchor: "", provenance: "human",
+    created: "2026-09-05", status: "active" };
+  await store.write(pin.page, { path: pin.page, body: "alpha", frontmatter: { type: "concept", slug: "a",
+    aliases: [], sources: [], updated: "2026-09-05", confidence: "high" } });
+  await addPin(wiki, pin);
+  const original = await fs.readFile(join(wiki, "pins.json"));
+  const pageBytes = (await fs.stat(join(wiki, pin.page))).size;
+  const opts = { scanBudget: new ScanBudget({ scanLimits: { maxTotalBytes: original.length + pageBytes } }) };
+  const pins = await readPins(wiki, opts); const checks = await recheckPins(store, pins, opts);
+  await expect(applyPinChecks(store, checks, opts)).rejects.toBeInstanceOf(MaintenanceLimitError);
+  // Enough for metadata but not the page revalidation inside the guarded apply.
+  await expect(applyPinChecks(store, checks, { scanBudget: new ScanBudget({ scanLimits: { maxTotalBytes: original.length } }) }))
+    .rejects.toBeInstanceOf(MaintenanceLimitError);
+  await expect(recheckPins(store, [pin, pin], { scanBudget: new ScanBudget({ scanLimits: { maxEntries: 1 } }) }))
+    .rejects.toThrow("pin entry limit");
+  await expect(writePins(wiki, [pin], { maxFileBytes: 1 })).rejects.toThrow("pins output limit");
+  expect(await fs.readFile(join(wiki, "pins.json"))).toEqual(original);
+});
+
+it("keeps scheduling stamps capped at 4 KiB within otherwise larger dream scans", async () => {
+  const store = new FileMemoryStore({ root: wiki }); await store.init(); await textFile(".last-dream", "1".repeat(4097));
+  const phases: string[] = [];
+  await expect(runDream({ wiki: store, raw: new FileRawStore({ root }), outputRoot: output, structuralOnly: true,
+    onPhase: phase => phases.push(phase) })).rejects.toThrow("4096 bytes");
+  expect(phases).toEqual(["orient", "gather"]); await absent(output);
+});
+
+it("rejects oversized index replacements without altering the previous index", async () => {
+  const store = new FileMemoryStore({ root: wiki }); await store.init();
+  const before = await fs.readFile(join(wiki, "index.md"));
+  await expect(store.writeIndex([], { maxFileBytes: 1 })).rejects.toBeInstanceOf(MaintenanceLimitError);
+  expect(await fs.readFile(join(wiki, "index.md"))).toEqual(before);
+});
 
 it("copies and applies exact entry/file/aggregate boundaries, including dotfiles and empty directories", async () => {
   await textFile("a", "1234"); await textFile(".hidden", "5678"); await fs.mkdir(join(wiki, "empty"));
@@ -146,12 +210,12 @@ it("counts ignored raw-directory entries and refuses partial session or document
 it("bounded page scans propagate malformed pages and cap aggregate bytes", async () => {
   const store = new FileMemoryStore({ root: wiki }); await store.init();
   await fs.writeFile(join(wiki, "concepts/bad.md"), "---\nnot valid frontmatter\n---\nbody");
-  await expect(store.pages({})).rejects.toThrow();
+  await expect(store.pages({})).rejects.toThrow("invalid frontmatter");
   await fs.rm(join(wiki, "concepts/bad.md"));
   await expect(store.pages({ scanLimits: { maxTotalBytes: 1 } })).rejects.toBeInstanceOf(MaintenanceLimitError);
 });
 
-it.each(["entries", "corrupt"])("dream rejects an incomplete %s ledger scan before model work", async kind => {
+it.each(["entries", "corrupt"])("dream handles %s ledger omissions without claiming a clean scan", async kind => {
   const store = new FileMemoryStore({ root: wiki }); await store.init();
   await store.write("concepts/a.md", { path: "concepts/a.md", body: "- [stated] fact (doc:fixture)",
     frontmatter: { type: "concept", slug: "a", aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
@@ -159,9 +223,21 @@ it.each(["entries", "corrupt"])("dream rejects an incomplete %s ledger scan befo
   for (let i = 0; i < (kind === "entries" ? 13 : 1); i++) await fs.writeFile(join(root, `raw/attempts/${i}.json`), "{bad");
   const stream = vi.fn(async function* () { yield { type: "stop" as const, reason: "end_turn" as const }; });
   const before = await fingerprint(wiki);
-  await expect(runDream({ wiki: store, raw: new FileRawStore({ root }), outputRoot: output, scanLimits: { maxEntries: 12 },
-    provider: { id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10000 }, stream } }))
-    .rejects.toThrow(kind === "entries" ? "entry limit" : "corrupt attempt ledger");
+  const warnings: Error[] = [];
+  const running = runDream({ wiki: store, raw: new FileRawStore({ root }), outputRoot: output, scanLimits: { maxEntries: 12 },
+    onError: error => warnings.push(error),
+    provider: { id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10000 }, stream } });
+  if (kind === "entries") await expect(running).rejects.toThrow("entry limit");
+  else {
+    const result = await running;
+    expect(result.report.scan).toEqual({ complete: false, unreadableAttempts: [join(root, "raw/attempts/0.json")] });
+    expect(warnings[0]!.message).toContain("raw scan incomplete");
+    expect(findingCount(result.report)).toBeGreaterThan(0);
+    expect(renderReport(result.report)).toContain("automatic apply are disabled");
+    expect(renderReport(result.report)).not.toContain("wiki is clean");
+    expect(await fs.readFile(join(root, "raw/attempts/0.json"), "utf8")).toBe("{bad");
+    await result.workspace.dispose();
+  }
   expect(stream).not.toHaveBeenCalled(); expect(await fingerprint(wiki)).toBe(before);
   await absent(output); await absent(output + ".dream.json");
 });
@@ -181,4 +257,69 @@ it("counts duplicate citations as scan work instead of draining an endless itera
   function* citations() { while (true) yield "same"; }
   await expect(loadPromotionEvidence({ sessions: async () => [] }, citations(), { scanLimits: { maxEntries: 2 } }))
     .rejects.toThrow("evidence citation limit");
+});
+
+it("does not allocate one retained buffer per short filesystem read", async () => {
+  const path = join(wiki, "short-reads"); const text = "x".repeat(256); await fs.writeFile(path, text);
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const buffers = new Set<unknown>();
+  vi.mocked(fs.open).mockImplementationOnce(async (file, flags, mode) => {
+    const handle = await actual.open(file, flags, mode); const read = handle.read.bind(handle);
+    vi.spyOn(handle, "read").mockImplementation(async (buffer, offset, length, position) => {
+      buffers.add(buffer);
+      return read(buffer, offset, Math.min(length, 1), position);
+    });
+    return handle;
+  });
+  const bytes = await new ScanBudget({ scanLimits: { maxFileBytes: 256 } }).read(path);
+  expect(bytes.toString()).toBe(text); expect(buffers.size).toBeLessThanOrEqual(2);
+});
+
+it("grows one read buffer geometrically when a file grows within the allowed cap", async () => {
+  const path = join(wiki, "growth"); await fs.writeFile(path, "x");
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const buffers = new Set<Buffer>();
+  vi.mocked(fs.open).mockImplementationOnce(async (file, flags, mode) => {
+    const handle = await actual.open(file, flags, mode); const stat = handle.stat.bind(handle); const read = handle.read.bind(handle);
+    vi.spyOn(handle, "stat").mockImplementationOnce(async () => {
+      const before = await stat(); await actual.writeFile(path, "123456789abc"); return before;
+    });
+    vi.spyOn(handle, "read").mockImplementation(async (buffer, offset, length, position) => {
+      buffers.add(buffer); return read(buffer, offset, length, position);
+    });
+    return handle;
+  });
+  expect((await new ScanBudget({ scanLimits: { maxFileBytes: 12 } }).read(path)).toString()).toBe("123456789abc");
+  expect(buffers.size).toBeGreaterThan(1);
+  expect([...buffers].every(buffer => buffer.length <= 13)).toBe(true);
+  expect([...buffers].reduce((sum, buffer) => sum + buffer.length, 0)).toBeLessThanOrEqual(3 * 13);
+});
+
+it("observes cancellation arriving while closing a completed read", async () => {
+  const store = new FileMemoryStore({ root: wiki }); await store.init();
+  const path = "concepts/a.md"; const controller = new AbortController();
+  await store.write(path, { path, body: "- [stated] original (doc:fixture)",
+    frontmatter: { type: "concept", slug: "a", aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementationOnce(async (file, flags, mode) => {
+    const handle = await actual.open(file, flags, mode); const close = handle.close.bind(handle);
+    vi.spyOn(handle, "close").mockImplementationOnce(async () => { await close(); controller.abort(new Error("stop after read")); });
+    return handle;
+  });
+  await expect(store.read(path, { signal: controller.signal, maxFileBytes: 2048 })).rejects.toThrow("stop after read");
+});
+
+it.each(["file", "aggregate"])("propagates the scan %s byte cap into evidence log reads", async kind => {
+  const refs = [];
+  let bytes = 0;
+  for (const id of ["s1", "s2"]) {
+    const path = join(root, id + ".jsonl");
+    const text = JSON.stringify({ type: "session.start", sessionId: id, seq: 0, ts: 1 }) + "\n";
+    bytes = Buffer.byteLength(text); await fs.writeFile(path, text); refs.push({ id, path, updatedAt: 1 });
+  }
+  const evidence = await loadPromotionEvidence({ sessions: async () => refs }, ["s1", "s2"], {
+    scanLimits: kind === "file" ? { maxFileBytes: bytes - 1 } : { maxTotalBytes: bytes + 1 },
+  });
+  if (kind === "aggregate") expect(witnessesForClaim(evidence, "s1", "fact").error).toBeUndefined();
+  expect(witnessesForClaim(evidence, "s2", "fact").error).toContain("byte limit");
 });

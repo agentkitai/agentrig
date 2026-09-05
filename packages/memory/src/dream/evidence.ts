@@ -75,8 +75,8 @@ export interface EvidenceLimits extends ScanOptions {
 export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, sessionIds: Iterable<string>, limits: EvidenceLimits = {}): Promise<PromotionEvidenceIndex> {
   const budget = new ScanBudget(limits);
   const maxSessions = limits.maxSessions ?? 128;
-  const maxLogBytes = limits.maxLogBytes ?? 8 * 1024 * 1024;
-  const maxTotalBytes = limits.maxTotalBytes ?? 32 * 1024 * 1024;
+  const maxLogBytes = Math.min(limits.maxLogBytes ?? 8 * 1024 * 1024, limits.scanLimits?.maxFileBytes ?? Infinity);
+  const maxTotalBytes = Math.min(limits.maxTotalBytes ?? 32 * 1024 * 1024, limits.scanLimits?.maxTotalBytes ?? Infinity);
   for (const limit of [maxSessions, maxLogBytes, maxTotalBytes]) {
     if (!Number.isSafeInteger(limit) || limit <= 0) throw new Error("promotion evidence limits must be positive integers");
   }

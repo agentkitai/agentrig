@@ -17,12 +17,20 @@ Bounded tree/page/raw/evidence traversal is implemented with explicit per-pass e
 aggregate caps and cooperative scan cancellation. Tree copies use bounded reads and exclusive
 writes, preserving modes and H5c1 fingerprint framing; existing rollback faults still execute on
 the actual new write path. New regressions cover exact caps, growth-after-stat, FIFO/cycles, stage
-failure, manifest-write abort and partial-ledger rejection before model work. Full validation and
+failure, manifest-write abort and incomplete-ledger refusal of model work/automatic apply. Full validation and
 independent review/CI remain gates; provider lifecycle and owned crash recovery are not complete.
 
 Local build/typecheck and explicit Node 22 full suite pass: 1,681 passed plus two platform-specific
-skips (1,683 total, 79 files), including 26 scan-boundary tests. Windows CI now runs those cases,
-with only FIFO creation and POSIX mode-bit checks skipped there. Independent review/CI are pending.
+skips (1,683 total, 79 files), including 26 scan-boundary tests, at initial head b48e3c8. Initial
+PR #126 CI 33964137769 passed all platforms. Review repairs add bounded consolidation/pin rereads,
+pin/index output caps, the 4 KiB stamp guard, configurable scheduler scan limits, explicit incomplete
+review artifacts, short-read allocation regressions and a historical fingerprint vector. Windows
+CI runs scan cases, skipping only FIFO creation and POSIX mode-bit/vector checks there. Follow-up
+full validation, independent repair review and fresh exact-head CI remain gates.
+
+Review-repair validation: build/typecheck and the explicit Node 22 full suite passed with 1,696
+passes plus two skips (1,698 total, 79 files); the scan suite now has 36 cases. All six substantive
+first-review findings are addressed. A follow-up review and exact-head CI remain pending.
 
 ### H5c1 complete (PR #125)
 
