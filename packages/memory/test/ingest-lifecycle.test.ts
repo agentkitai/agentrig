@@ -267,12 +267,12 @@ it.each(["acks", "conflicts"] as const)("rejects oversized backend %s while reta
 });
 
 it("bounds CLI-style attempt loading inside the ingest run before any provider call", async () => {
-  const directory = join(root, "raw/attempts"); await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, "huge.json"), "x".repeat(1000));
+  const raw = new FileRawStore({ root });
+  await raw.addAttempt({ id: "huge", sessionId: "s1", ts: 1, hypothesis: "x".repeat(1000), actions: "test", outcome: "success", evidence: [] });
   const stream = vi.fn(provider().stream);
   await expect(ingest({ attemptsFrom: new FileRawStore({ root }), provider: provider(stream), limits: { maxAttemptFileBytes: 64 } })).rejects.toThrow("file exceeds");
   expect(stream).not.toHaveBeenCalled(); expect(await store.read(source)).toBeNull();
-  await writeFile(join(directory, "other.json"), "{}");
+  await raw.addAttempt({ id: "other", sessionId: "s1", ts: 2, hypothesis: "test", actions: "test", outcome: "success", evidence: [] });
   await expect(ingest({ attemptsFrom: new FileRawStore({ root }), provider: provider(stream), limits: { maxAttemptFiles: 1 } })).rejects.toThrow("ledger entry limit");
 });
 

@@ -60,7 +60,7 @@ export interface AttachOptions extends StateOptions {
   /** The wiki digest the agent is working from, passed through to the reviewer. */
   memoryIndex?: string;
   /** Read lazily when the reviewer runs — the ledger is on disk and usually not needed. */
-  attempts?: () => Promise<Attempt[]> | Attempt[];
+  attempts?: (sessionId: string, signal: AbortSignal) => Promise<Attempt[]> | Attempt[];
   /** Files the grader should judge. Called only when a grade is actually requested. */
   artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
   /** Bounds an LLM-backed rung the same way `escalate` is bounded. */
@@ -203,7 +203,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                   opts.reviewer!.review({
                     task: opts.task ?? "(task not supplied to the supervisor)",
                     trajectory: state.recent,
-                    attempts: opts.attempts === undefined ? [] : await opts.attempts(),
+                    attempts: opts.attempts === undefined ? [] : await opts.attempts(session.id,
+                      AbortSignal.timeout(opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS)),
                     ...(opts.memoryIndex === undefined ? {} : { memoryIndex: opts.memoryIndex }),
                   }))(),
                 opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
@@ -280,7 +281,7 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   grader?: Grader;
   task?: string;
   memoryIndex?: string;
-  attempts?: () => Promise<Attempt[]> | Attempt[];
+  attempts?: (sessionId: string, signal: AbortSignal) => Promise<Attempt[]> | Attempt[];
   artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
   reviewTimeoutMs?: number;
   onError?: (where: string, err: Error) => void;

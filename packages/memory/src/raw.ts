@@ -5,6 +5,7 @@ import { z } from "zod";
 import { readBoundedFile } from "./bounded-file.js";
 import { MaintenanceLimitError } from "./maintenance.js";
 import { ScanBudget, type ScanOptions } from "./scan.js";
+import { withMemoryLock } from "./lock.js";
 import type { Attempt, DocRef, RawStore, SessionLogRef } from "./types.js";
 
 /**
@@ -23,6 +24,22 @@ export const AttemptSchema = z.object({
   evidence: z.array(z.string()).default([]),
   lesson: z.string().optional(),
 });
+
+export interface AttemptReadLimits {
+  signal: AbortSignal;
+  maxEntries: number;
+  maxFileBytes: number;
+  maxTotalBytes: number;
+}
+
+const INDEX_BYTES = 8 * 1024 * 1024;
+const REBUILD_LIMITS = { maxEntries: 10_000, maxFileBytes: 64 * 1024, maxTotalBytes: 64 * 1024 * 1024 };
+const AttemptIndexSchema = z.object({
+  version: z.literal(1), token: z.string(),
+  entries: z.array(z.object({ name: z.string().regex(/^[^/\\]+\.json$/), sessionId: z.string() })),
+  corrupt: z.array(z.string().regex(/^[^/\\]+\.json$/)),
+});
+type AttemptIndex = z.infer<typeof AttemptIndexSchema>;
 
 /**
  * Core writes `<id>.snapshot.json` and `<id>.lock` beside the session logs as its resume cache
@@ -132,6 +149,16 @@ export class FileRawStore implements RawStore {
    * in a directory the rest of the system treats as trustworthy.
    */
   async addAttempt(attempt: Attempt): Promise<void> {
+    const parsed = AttemptSchema.parse(attempt);
+    z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/).parse(attempt.id);
+    if (Buffer.byteLength(JSON.stringify(parsed, null, 2)) > REBUILD_LIMITS.maxFileBytes) {
+      throw new MaintenanceLimitError("new attempt exceeds 64 KiB; summarize its evidence before recording it");
+    }
+    return withMemoryLock(join(this.root, "attempt-index"), () => this.addAttemptUnlocked(parsed));
+  }
+
+  private async addAttemptUnlocked(attempt: z.infer<typeof AttemptSchema>): Promise<void> {
+    await rm(join(this.root, "attempt-index.json"), { force: true });
     await mkdir(this.dir("attempts"), { recursive: true });
     const parsed = AttemptSchema.parse(attempt);
     const dest = join(this.dir("attempts"), `${parsed.id}.json`);
@@ -164,13 +191,73 @@ export class FileRawStore implements RawStore {
     return attempts;
   }
 
-  async readAttempts(sessionId?: string, opts?: { signal: AbortSignal; maxEntries: number; maxFileBytes: number; maxTotalBytes: number }): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
+  /** Explicit bounded rebuild for legacy flat ledgers. Cache is disposable; raw is never rewritten.
+   * Cooperating writers serialize with this operation. External edits require an explicit rebuild. */
+  async rebuildAttemptIndex(opts: AttemptReadLimits = { signal: new AbortController().signal, ...REBUILD_LIMITS }): Promise<void> {
+    await withMemoryLock(join(this.root, "attempt-index"), async () => { await this.buildAttemptIndex(opts); }, { signal: opts.signal });
+  }
+
+  private async attemptToken(): Promise<string> {
+    try {
+      const s = await stat(this.dir("attempts"), { bigint: true });
+      return `${s.dev}:${s.ino}:${s.birthtimeNs}:${s.mtimeNs}:${s.ctimeNs}`;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent"; throw error; }
+  }
+
+  private async buildAttemptIndex(opts: AttemptReadLimits): Promise<AttemptIndex> {
+    const token = await this.attemptToken();
+    const result = await this.scanAttempts(undefined, opts, undefined, true);
+    const index: AttemptIndex = { version: 1, token,
+      entries: result.records, corrupt: result.corrupt.map(path => basename(path)) };
+    opts.signal.throwIfAborted();
+    if (token !== await this.attemptToken()) throw new Error("attempt ledger changed during index rebuild; retry with writers stopped");
+    const text = JSON.stringify(index);
+    if (Buffer.byteLength(text) > INDEX_BYTES) throw new MaintenanceLimitError("attempt index byte limit exceeded");
+    const dest = join(this.root, "attempt-index.json");
+    const tmp = `${dest}.${randomBytes(6).toString("hex")}.tmp`;
+    // A failed exclusive create must never authorize unlinking a pre-existing temp.
+    await writeFile(tmp, text, { flag: "wx" });
+    try {
+      opts.signal.throwIfAborted();
+      await rename(tmp, dest);
+    } finally { await rm(tmp, { force: true }); }
+    return index;
+  }
+
+  async readAttempts(sessionId?: string, opts?: AttemptReadLimits): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
+    if (sessionId === undefined) {
+      const { attempts, corrupt } = await this.scanAttempts(undefined, opts);
+      return { attempts, corrupt };
+    }
+    const limits = opts ?? { signal: new AbortController().signal, ...REBUILD_LIMITS };
+    return withMemoryLock(join(this.root, "attempt-index"), async () => {
+      let index: AttemptIndex | undefined;
+      try {
+        index = AttemptIndexSchema.parse(JSON.parse((await readBoundedFile(join(this.root, "attempt-index.json"), INDEX_BYTES, limits.signal)).toString("utf8")));
+      } catch (error) {
+        limits.signal.throwIfAborted();
+        if (error instanceof MaintenanceLimitError) throw error;
+        // Missing/corrupt cache is rebuilt, never interpreted as empty history.
+      }
+      if (index === undefined || index.token !== await this.attemptToken()) {
+        index = await this.buildAttemptIndex({ signal: limits.signal, ...REBUILD_LIMITS });
+      }
+      const names = index.entries.filter(entry => entry.sessionId === sessionId).map(entry => entry.name);
+      const result = await this.scanAttempts(sessionId, limits, names);
+      return { attempts: result.attempts, corrupt: [...new Set([...result.corrupt, ...index.corrupt.map(name => join(this.dir("attempts"), name))])] };
+    }, { signal: limits.signal });
+  }
+
+  private async scanAttempts(sessionId?: string, opts?: AttemptReadLimits, selectedNames?: string[], skipOversized = false): Promise<{ attempts: Attempt[]; corrupt: string[]; records: AttemptIndex["entries"] }> {
     if (opts !== undefined) new ScanBudget({ signal: opts.signal, scanLimits: {
       maxEntries: opts.maxEntries, maxFileBytes: opts.maxFileBytes, maxTotalBytes: opts.maxTotalBytes,
     } });
     let names: string[];
     try {
-      if (opts === undefined) names = await readdir(this.dir("attempts"));
+      if (selectedNames !== undefined) {
+        names = selectedNames;
+        if (opts !== undefined && names.length > opts.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
+      } else if (opts === undefined) names = await readdir(this.dir("attempts"));
       else {
         opts.signal.throwIfAborted();
         names = [];
@@ -183,10 +270,11 @@ export class FileRawStore implements RawStore {
       }
     } catch (error) {
       if (opts !== undefined && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      return { attempts: [], corrupt: [] };
+      return { attempts: [], corrupt: [], records: [] };
     }
     const out: Attempt[] = [];
     const corrupt: string[] = [];
+    const records: AttemptIndex["entries"] = [];
     let bytes = 0;
     for (const name of names) {
       opts?.signal.throwIfAborted();
@@ -198,6 +286,14 @@ export class FileRawStore implements RawStore {
           if (bytes > opts.maxTotalBytes) throw new MaintenanceLimitError("attempt ledger total byte limit exceeded");
           return buffer.toString("utf8");
         })).catch(error => {
+          opts?.signal.throwIfAborted();
+          if (opts !== undefined && skipOversized && error instanceof MaintenanceLimitError
+            && opts.maxTotalBytes - bytes >= opts.maxFileBytes + 1) {
+            // Legacy oversized records must not poison every session. Charge even a failed
+            // read's worst-case allocation/read (cap + EOF probe) to the aggregate budget.
+            bytes += opts.maxFileBytes + 1;
+            return null;
+          }
           if (opts?.signal.aborted || error instanceof MaintenanceLimitError) throw error;
           return null;
         });
@@ -217,11 +313,15 @@ export class FileRawStore implements RawStore {
         corrupt.push(path);
         continue;
       }
-      if (sessionId !== undefined && parsed.data.sessionId !== sessionId) continue;
+      if (sessionId !== undefined && parsed.data.sessionId !== sessionId) {
+        corrupt.push(path); // A cached entry changed scope: never silently omit it.
+        continue;
+      }
+      records.push({ name, sessionId: parsed.data.sessionId });
       const { lesson, ...rest } = parsed.data;
       out.push(lesson === undefined ? rest : { ...rest, lesson });
     }
     opts?.signal.throwIfAborted();
-    return { attempts: out.sort((a, b) => a.ts - b.ts), corrupt };
+    return { attempts: out.sort((a, b) => a.ts - b.ts), corrupt, records };
   }
 }

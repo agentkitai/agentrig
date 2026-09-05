@@ -201,7 +201,7 @@ export class LoreBackend implements MemoryBackend {
       project: this.project,
       scope: "shared",
       memory: {
-        content: serializePage(page.frontmatter, page.body),
+        content: serializePage(page.frontmatter, page.body, {}, page.extraFrontmatter),
         tags: ["agentrig", `project:${this.project}`, `page:${pageRef}`],
         // same namespace onIngest uses, so a promoted page and its facts are traceable together
         metadata: { agentrig: `${this.project}/${pageRef}` },

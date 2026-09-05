@@ -26,6 +26,7 @@ import {
   indexInjection,
   ingestOnSessionEnd,
   memoryTools,
+  maintenanceDiagnostic,
 } from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
 import {
@@ -267,9 +268,17 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ? {
           reviewer: new TrajectoryReviewer({ provider: reviewProvider }),
           grader: new RubricGrader({ provider: reviewProvider }),
-          attempts: async () => {
+          attempts: async (sessionId: string, signal: AbortSignal) => {
             if (o.memory === undefined) return [];
-            return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;
+            const ledger = await new FileRawStore({ root: o.memory }).readAttempts(sessionId, {
+              signal, maxEntries: 128, maxFileBytes: 64 * 1024, maxTotalBytes: 2 * 1024 * 1024,
+            });
+            if (ledger.corrupt.length > 0) maintenanceDiagnostic(() => {
+              const warning = new Error(`attempt ledger is incomplete; reviewing readable attempts only: ${ledger.corrupt.join(", ")}`);
+              if (w.onError !== undefined) return w.onError("attempts", warning);
+              process.emitWarning(warning.message, { code: "AGENTRIG_ATTEMPT_INCOMPLETE" });
+            });
+            return ledger.attempts;
           },
         }
       : {}),

@@ -80,7 +80,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
   const conflict = (path: string, current: WikiPage | null, warnings: string[]) => ({
     output: { conflict: true, path, current, version: current?.version ?? null, warnings },
     display: `STALE WRITE: ${path}. Merge the current content, then retry with if_version=${JSON.stringify(current?.version ?? null)}.\n` +
-      (current === null ? "The page is currently absent." : serializePage(current.frontmatter, current.body)) + warningsText(warnings),
+      (current === null ? "The page is currently absent." : serializePage(current.frontmatter, current.body, {}, current.extraFrontmatter)) + warningsText(warnings),
     isError: true,
   });
   const completedWrite = async (verb: "wrote" | "filed", path: string, result: { version: string; warnings: string[] }) => {
@@ -141,7 +141,7 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
       try { page = await store.read(input.path); }
       catch (err) { return { output: null, display: `cannot read ${input.path}: ${err instanceof Error ? err.message : String(err)}`, isError: true }; }
       if (page === null) return { output: null, display: `no such page: ${input.path}`, isError: true };
-      return { output: page, display: `version: ${page.version}\n${serializePage(page.frontmatter, page.body)}` };
+      return { output: page, display: `version: ${page.version}\n${serializePage(page.frontmatter, page.body, {}, page.extraFrontmatter)}` };
     },
   };
 

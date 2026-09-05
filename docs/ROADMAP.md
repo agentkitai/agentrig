@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5 workspace recovery, then remaining persistence and auxiliary lifecycle checks; PRs #118–#128 complete.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5 persistence, then auxiliary lifecycle checks; PRs #118–#129 complete.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -279,14 +279,12 @@ in STATUS, but do not define an expanding hierarchy. Close the original H5 accep
 and proceed to E1; nonblocking follow-ups belong at the END of this roadmap, outside the sequence.
 
 Completed dream work: guarded snapshot/apply and preserved backups (#125), bounded scans (#126),
-full-lifecycle cancellation/accounting (#127), and explicit stamp repair/log preflight (#128).
+full-lifecycle cancellation/accounting (#127), explicit stamp repair/log preflight (#128), and
+registered workspace recovery (#129).
 
 Remaining H5 deliverables, in order:
 
-- **Workspace recovery (current PR):** persisted producer ownership and explicit discard of one
-  registered abandoned or handed-off output/sidecar. Refuse active/ambiguous/replacement owners
-  and existing writer locks. Preserve source and install backups; unknown provenance stays manual.
-- **Persistence and target/child-abort closure:** preserve legacy multiline facts/references and
+- **Persistence and target/child-abort closure (current PR):** preserve legacy multiline facts/references and
   unknown frontmatter; provide session-scoped attempt lookup with bounded rebuilds. Confirm
   deterministic target-preservation and child-cleanup evidence; distinguish a proven fix from
   the historical unreproduced timeout. No separate PR is needed just to restate existing evidence.
@@ -856,3 +854,10 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   handoff temp that cleanup already removed; optionally align release/dispose lock waits with
   caller configuration; validate generated manifests through their schema before writing (for
   unusual host metadata such as an empty hostname). These do not block the current contract.
+- Persistence follow-ups from PR #130: explicitly report metadata-based skipped merges; optimize
+  cache maintenance after appends; expose more lock-wait configuration and clearer contention
+  guidance; simplify the legacy `extra`/opaque-frontmatter serialization API. Current bounded
+  rebuilds, explicit lock failures, and retained merge sources remain the contract. Consolidating
+  supervisor timer ownership belongs to the already-active H5d lifecycle work, not a new row.
+- Optionally deduplicate repeated partial-ledger warnings across reviews. Each current warning
+  remains explicit; reducing repetition must not hide newly unreadable history.

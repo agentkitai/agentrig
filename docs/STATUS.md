@@ -1,11 +1,45 @@
 # Status
 
-Current roadmap row: **H5 — workspace recovery, then remaining persistence and auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5 — remaining persistence, then auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5 workspace recovery in progress
+### H5 persistence in progress
+
+Fresh branch from updated main ba4569c after PR #129 final-head CI 33970456552 and post-merge
+main CI 33970638299 passed all platforms. See `docs/plans/H5-memory-persistence.md` for the
+remaining acceptance checklist. No additional recursive milestones; optional polish stays at
+the END of ROADMAP.
+
+Implemented opaque frontmatter retention, whole multiline fact parsing/removal, conservative
+metadata-bearing merge refusal, and scoped attempt lookup with separately bounded disposable
+index rebuilds. CLI supervisor supplies session/timeout/query limits and warns on incomplete
+ledger results while reviewing readable attempts. Existing staged-target and actual child cleanup evidence is documented without
+claiming an unproven production fix. Build/typecheck and explicit Node22 full suite pass:
+1,782 passed plus two skips (1,784 total, 84 files) at initial head 8c58e75, whose CI 33971331288
+passed all platforms. Three isolated negative mutations were detected and restored.
+
+First Claude review identified two blockers: oversized legacy records poisoned all scoped reads,
+and torn claims disabled every reviewer. Repairs cap new records before claiming IDs, report
+oversized legacy entries under the rebuild budget, and warn/continue on partial reviewer history.
+Regressions cover raw preservation, repeated append/rebuild, aggregate limits and rejecting
+diagnostics. Maintainer/review compatibility fixes also preserve legacy indented known metadata,
+exclude continued reservation placeholders and protect existing temps on exclusive-create failure.
+Build/typecheck and full explicit Node22 suite now pass: 1,786 plus two skips (1,788 total, 84 files).
+Focused independent repair review approved all five repairs; no further blockers. That pass ran
+no tests (alternate test command spellings were denied); maintainer Node22 results above are the
+test evidence. Two Claude CLI review rounds total; the first's skill spawned extra finders despite
+the prompt, and the focused second disabled delegation/skills. Two further negative mutations
+reproduced both blockers, were restored, and all 40 targeted tests passed in the clean isolated
+checkout. Optional findings are at the END of ROADMAP. Final documentation-only head still needs
+exact-head PR CI, then merge and exact post-merge main CI before H5d.
+
+### H5 workspace recovery complete (PR #129)
+
+Completion gate: final head b618b2a, merge ba4569c, PR CI 33970456552 and main CI 33970638299
+all green. One approving Claude pass, three detected/restored negative mutations, build/typecheck
+and 1,770 passing Node22 tests plus two skips. Following notes record intermediate gates.
 
 Fresh branch from updated main c820c84 after PR #128 exact-head CI 33969076711 and main CI
 33969215100 passed all platforms. See `docs/plans/H5-workspace-recovery.md`. Recovery is explicit and limited to

@@ -207,22 +207,23 @@ export class FileMemoryStore implements MemoryStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    const { frontmatter, body } = parsePage(bytes.toString("utf8"), path);
-    return { path, frontmatter, body, updatedAt: mtime, version: versionOf(bytes) };
+    const { frontmatter, body, extraFrontmatter } = parsePage(bytes.toString("utf8"), path);
+    return { path, frontmatter, body, extraFrontmatter, updatedAt: mtime, version: versionOf(bytes) };
   }
 
   /** Trusted unconditional replacement. Use compareAndSwap/update for read-modify-write. */
   async write(path: string, page: PageWrite, opts: MemoryLockOptions = {}): Promise<void> {
-    await this.withMutationLock(() => this.atomicWrite(path, serializePage(page.frontmatter, page.body), opts.signal), opts);
+    await this.withMutationLock(() => this.atomicWrite(path, serializePage(page.frontmatter, page.body, {}, page.extraFrontmatter), opts.signal), opts);
   }
 
   async compareAndSwap(path: string, page: PageWrite | ((current: WikiPage | null) => PageWrite), ifVersion: string | null, opts: MemoryLockOptions & { index?: IndexEntry } = {}): Promise<MemoryWriteResult> {
     const warnings: string[] = [];
     return this.withMutationLock(async () => {
-      const current = await this.read(path);
+      const current = await this.read(path, opts);
       if ((current?.version ?? null) !== ifVersion) return { ok: false, current, warnings };
       const next = typeof page === "function" ? page(current) : page;
-      const text = serializePage(next.frontmatter, next.body);
+      const text = serializePage(next.frontmatter, next.body, {}, next.extraFrontmatter ?? current?.extraFrontmatter);
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(text) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance page output limit exceeded");
       await this.atomicWrite(path, text, opts.signal);
       // Once the page commits, finish its index bookkeeping even if cancellation arrives.
       // A filesystem failure is explicit partial success, not a claim that the page was unwritten.
@@ -241,8 +242,9 @@ export class FileMemoryStore implements MemoryStore {
   /** Synchronous transform under the short mutation lock; never call providers here. */
   async update(path: string, transform: (current: WikiPage | null) => PageWrite, opts: MemoryLockOptions = {}): Promise<WikiPage> {
     return this.withMutationLock(async () => {
-      const next = transform(await this.read(path, opts));
-      const contents = serializePage(next.frontmatter, next.body);
+      const current = await this.read(path, opts);
+      const next = transform(current);
+      const contents = serializePage(next.frontmatter, next.body, {}, next.extraFrontmatter ?? current?.extraFrontmatter);
       if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance page output limit exceeded");
       await this.atomicWrite(path, contents, opts.signal);
       // Reading the committed receipt is allowed after cancellation; do not claim no commit.

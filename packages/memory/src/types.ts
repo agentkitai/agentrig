@@ -23,6 +23,8 @@ export interface WikiPage {
   path: string;
   frontmatter: PageFrontmatter;
   body: string;
+  /** Opaque unknown frontmatter lines, retained by read-modify-write operations. */
+  extraFrontmatter?: string;
   updatedAt: number;
   /** Hash of persisted bytes, supplied by version-aware stores. Not a model assertion. */
   version?: string;
