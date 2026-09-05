@@ -231,6 +231,14 @@ export const EventPayload = z.discriminatedUnion("type", [
     reason: z.string(),
   }),
   z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
+  z.object({
+    type: z.literal("checkpoint.created"),
+    turn: z.number().int().positive(),
+    ref: z.string().startsWith("refs/agentrig/"),
+    commit: z.string(),
+    tree: z.string(),
+  }),
+  z.object({ type: z.literal("checkpoint.warning"), message: z.string() }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
   z.object({

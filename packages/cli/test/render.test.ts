@@ -19,6 +19,31 @@ describe("formatUsage", () => {
 });
 
 describe("renderEvent", () => {
+  it("renders checkpoint refs and warnings", () => {
+    const created = HarnessEvent.parse({
+      seq: 1,
+      sessionId: "s",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.created",
+      turn: 2,
+      ref: "refs/agentrig/s/2",
+      commit: "commit123",
+      tree: "tree123",
+    });
+    expect(renderEvent(created)).toContain("turn=2 ref=refs/agentrig/s/2 commit=commit123 tree=tree123");
+    expect(renderChatEvent(created)).toBeNull();
+
+    const warning = HarnessEvent.parse({
+      seq: 2,
+      sessionId: "s",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.warning",
+      message: "checkpointing disabled",
+    });
+    expect(renderEvent(warning)).toContain("checkpointing disabled");
+    expect(renderChatEvent(warning)).toContain("checkpointing disabled");
+  });
+
   it("preserves labelled fields while adding cached usage to model.response traces", () => {
     const line = renderEvent(HarnessEvent.parse({
       seq: 1,

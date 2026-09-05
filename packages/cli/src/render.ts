@@ -65,6 +65,8 @@ export function renderEvent(e: HarnessEvent): string {
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
     case "sandbox.denied": return `${p} ${e.name}#${e.id} mode=${e.mode} ${JSON.stringify(e.reason)}`;
     case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
+    case "checkpoint.created": return `${p} turn=${e.turn} ref=${e.ref} commit=${e.commit} tree=${e.tree}`;
+    case "checkpoint.warning": return `${p} ${e.message}`;
     case "permission.request":
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
     case "permission.decision": return `${p} ${e.d}`;
@@ -156,6 +158,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `✗ denied ${e.name}`;
     case "file.changed":
       return `± ${e.op} ${e.path}`;
+    case "checkpoint.warning":
+      return `⚠ ${oneLine(e.message, 200)}`;
     case "plan.updated": {
       const current = e.items.find((i) => i.status === "in_progress") ?? e.items.find((i) => i.status === "pending");
       const done = e.items.filter((i) => i.status === "done").length;
@@ -196,6 +200,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.loaded":
     case "context.manifest":
     case "context.repo_map":
+    case "checkpoint.created":
     case "memory.note":
     case "skill.used":
     // The adjacent failed tool.result carries the model-facing sandbox error. R2c will add the

@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips checkpoint events and requires a namespaced ref", () => {
+    const event = HarnessEvent.parse({
+      seq: 2,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.created",
+      turn: 1,
+      ref: "refs/agentrig/abc/1",
+      commit: "commit123",
+      tree: "tree123",
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(HarnessEvent.safeParse({ ...event, ref: "refs/heads/main" }).success).toBe(false);
+
+    const warning = HarnessEvent.parse({
+      seq: 3,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.warning",
+      message: "not a git repository",
+    });
+    expect(parseEvent(serializeEvent(warning))).toEqual(warning);
+  });
+
   it("round-trips a tool.call event through JSONL", () => {
     const event = HarnessEvent.parse({
       seq: 3,
