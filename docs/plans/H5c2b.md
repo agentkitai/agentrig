@@ -38,3 +38,13 @@ Successful returned review artifacts intentionally outlive that deadline. Callba
 not model-work budgets; accounting callbacks are isolated from throws and asynchronous rejections.
 `localCommitState` describes maintenance writes (artifact and scheduling metadata, plus an optional
 live swap), not a multi-file transaction or a claim that every failure changed the live wiki.
+
+Review dispositions: zero-finding scheduled reviews now dispose copies after advisory model
+failures without calling the wiki clean. The executable catches rejected commands and prints
+their message (including backup/restore paths), with interruption exit code 130. First SIGINT
+cancels and joins cooperative work; a second explicitly forces exit with a recovery warning.
+Forced exit can interrupt a writer and leave locks/artifacts; it is not graceful cancellation.
+Completed artifacts retained at the install boundary remain intentional, including stale apply
+failures. Their recovery/disposal and known log-capacity preflight belong to H5c2c. A configured
+file cap can already be raised without deleting log history. The remaining late-TUI diagnostics
+audit is named under H5d rather than claiming visibility after the frame has disappeared.

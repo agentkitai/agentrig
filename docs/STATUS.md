@@ -18,6 +18,16 @@ timer starvation, writer lock lifetime, post-swap cancellation, callback failure
 Local build/typecheck and explicit Node 22 suite passed: 1,728 passes plus two skips (1,730 total,
 80 files). Independent review and exact-head PR/main CI remain required before H5c2c.
 
+PR #127 initial head e0f42f6 passed CI 33967197739. One Claude pass recommended approval after
+fixing zero-finding scheduled review retention on model failure; a repeated-cadence regression
+now proves disposal without a false clean report. Final maintainer repairs also add clean CLI
+rejection handling and warned second-SIGINT force exit, tested in real child processes. Shared
+dream defaults, early SDK hook-limit validation and the shared-run API documentation close its
+nits. Retained install artifacts/log-capacity preflight are assigned to H5c2c; late-TUI diagnostics
+to H5d. Final build/typecheck and explicit Node 22 suite pass: 1,735 passes plus two skips
+(1,737 total, 81 files). These repairs are maintainer-tested, not a second Claude pass; fresh
+exact-head PR CI and post-merge main CI remain gates.
+
 ### H5c2a complete (PR #126)
 
 Completion gate: final head 9c06f1c, merge 3e97b65, PR CI 33965907380 and main CI 33966024863

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
 import type { Attempt, IndexEntry, WikiPage } from "../types.js";
 import { extractJson } from "../ingest.js";
-import { MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
+import { DEFAULT_DREAM_LIMITS, MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
 import { factLines } from "../page.js";
 
 /**
@@ -146,8 +146,10 @@ export interface ConsolidateOptions {
   onError?: (err: Error) => void;
 }
 
+/** With a shared run, that owner supplies limits/signal/accounting; opts.limits/onUsage apply only
+ * to standalone calls. The dream uses this seam to keep consolidation in its single lifetime. */
 export async function consolidate(opts: ConsolidateOptions, sharedRun?: MaintenanceRun): Promise<Consolidation> {
-  const run = sharedRun ?? new MaintenanceRun("dream", { maxInputChars: 65_536, maxCalls: 1, ...opts.limits }, opts.signal);
+  const run = sharedRun ?? new MaintenanceRun("dream", { ...DEFAULT_DREAM_LIMITS, ...opts.limits }, opts.signal);
   let failure: unknown;
   try { return await consolidateWithin(opts, run, error => { failure = error; }); }
   catch (error) { failure = error; throw error; }

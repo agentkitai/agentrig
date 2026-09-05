@@ -349,11 +349,36 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     expect(await fingerprint(store.root)).toBe(before);
   });
 
+  it("discards zero-finding scheduled review copies after repeated model failures without calling them clean", async () => {
+    await writeLog("a"); const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "- [observed] original fact (doc:fixture)", frontmatter: { type: "concept", slug: "a",
+      aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
+    await store.upsertIndex({ path: "concepts/a.md", type: "concept", slug: "a", summary: "original fact", status: "active" });
+    const before = await fingerprint(store.root); const append = FileMemoryStore.prototype.appendLog; const outputs: string[] = [];
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) { outputs.push(this.root); return append.apply(this, args); });
+    const done: string[] = []; const errors: Error[] = [];
+    const hook = dreamOnSessionEnd({ dir, provider: exploding, everySessions: 1, now: () => 1,
+      onDone: text => done.push(text), onError: error => errors.push(error) });
+    await hook.handler(ctx("a")); await hook.handler(ctx("a"));
+    expect(errors).toHaveLength(2); expect(done).toHaveLength(2); expect(outputs).toHaveLength(2);
+    expect(done.every(text => text.includes("consolidation failed; no structural findings; temporary copy discarded"))).toBe(true);
+    expect(done.join("\n")).not.toContain("ran clean");
+    for (const output of outputs) {
+      await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(output + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await fingerprint(store.root)).toBe(before);
+  });
+
   it("does no cadence scan for an already cancelled hook, even if its error callback throws", async () => {
     const controller = new AbortController(); controller.abort();
     const hook = dreamOnSessionEnd({ dir: join(dir, "missing"), onError: () => { throw new Error("notification failed"); } });
     expect(await hook.handler({ ...ctx("a"), signal: controller.signal })).toEqual({ action: "continue" });
     await expect(lstat(join(dir, "missing"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each([NaN, 0, "invalid"])("rejects invalid SDK dream timeout %s before constructing an outer hook timer", timeoutMs => {
+    expect(() => dreamOnSessionEnd({ dir, limits: { timeoutMs: timeoutMs as number } })).toThrow();
   });
 
   it("a failed dream never changes the session's outcome", async () => {

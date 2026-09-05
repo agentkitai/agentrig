@@ -12,6 +12,7 @@ export const DEFAULT_MAINTENANCE_LIMITS: Readonly<MaintenanceLimits> = Object.fr
   timeoutMs: 300_000, callTimeoutMs: 30_000, maxCalls: 66,
   maxInputChars: 32_768, maxOutputChars: 65_536, maxModelEvents: 4096,
 });
+export const DEFAULT_DREAM_LIMITS = Object.freeze({ maxInputChars: 65_536, maxCalls: 1 });
 
 export function positiveLimit(name: string, value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) throw new Error(`invalid maintenance limit ${name}`);

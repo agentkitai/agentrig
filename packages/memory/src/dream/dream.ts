@@ -23,13 +23,12 @@ import { SCHEMA_MD } from "../ingest.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 import { readBoundedFile } from "../bounded-file.js";
 import { ScanBudget, type ScanOptions } from "../scan.js";
-import { MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
+import { DEFAULT_DREAM_LIMITS, MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
 const limit = z.number().int().positive().max(2_147_483_647);
 export const DreamLimitsSchema = z.object({ timeoutMs: limit, callTimeoutMs: limit, maxCalls: limit,
   maxInputChars: limit, maxOutputChars: limit, maxModelEvents: limit } satisfies Record<keyof MaintenanceLimits, typeof limit>).partial().strict();
-export const DEFAULT_DREAM_LIMITS = Object.freeze({ maxInputChars: 65_536, maxCalls: 1 });
 
 export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions {
   limits?: Partial<MaintenanceLimits>;

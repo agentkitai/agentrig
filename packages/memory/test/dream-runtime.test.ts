@@ -173,6 +173,7 @@ it("does not race a cancelled local writer or release its lock before the write 
     expect((await fs.readFile(output + ".write.lock", "utf8")).split(":")[0]).toBe(String(process.pid));
     await new Promise(resolve => setImmediate(resolve)); expect(settled).toBe(false);
   } finally { release(); await assertion; }
+  expect(vi.mocked(fs.rename).mock.calls.some(([, to]) => String(to) === join(output, path))).toBe(false);
   await absent(output); await absent(output + ".write.lock"); expect(await fingerprint(wiki.root)).toBe(before);
 });
 

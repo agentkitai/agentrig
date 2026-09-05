@@ -4,8 +4,8 @@ import type { AuxiliaryReport, Hook, HookContext, HookResult, ModelProvider } fr
 import { FileMemoryStore } from "./store.js";
 import { FileRawStore } from "./raw.js";
 import { ingestSession, type IngestLimits } from "./ingest.js";
-import { formatAuxiliaryUsage, maintenanceDiagnostic, type MaintenanceLimits } from "./maintenance.js";
-import { lastDreamAt, runDream } from "./dream/dream.js";
+import { formatAuxiliaryUsage, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "./maintenance.js";
+import { DreamLimitsSchema, lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
 import type { ScanLimits } from "./scan.js";
@@ -124,6 +124,8 @@ export interface DreamTriggerOptions {
  * maintenance must never be able to fail a session that succeeded.
  */
 export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
+  DreamLimitsSchema.parse(opts.limits ?? {});
+  for (const [key, value] of Object.entries(opts.limits ?? {})) positiveLimit(key, value);
   const everySessions = opts.everySessions ?? 10;
   const everyHours = opts.everyHours ?? 24;
   const now = opts.now ?? (() => Date.now());
@@ -191,11 +193,13 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         if (result.autoApply?.status === "applied") {
           await dispose();
           done(`dream applied (${findings} finding(s)); previous wiki kept at ${result.autoApply.backup}`);
-        } else if (findings === 0 && result.consolidationError === undefined) {
+        } else if (findings === 0) {
           // nothing to look at, so nothing to keep: a clean dream that left a full wiki copy in
           // /tmp on every trigger is how an unattended maintenance task fills a disk
           const disposed = await dispose();
-          done("dream ran clean; nothing to review" + (disposed ? "" : `; cleanup pending at ${result.outputRoot}`));
+          done((result.consolidationError === undefined ? "dream ran clean; nothing to review"
+            : "dream consolidation failed; no structural findings; temporary copy " + (disposed ? "discarded" : "retained"))
+            + (disposed ? "" : `; cleanup pending at ${result.outputRoot}`));
         } else {
           done(
             `${result.report.scan?.complete === false ? "dream raw scan incomplete; auto-apply disabled; " : ""}dream found ${findings} thing(s) to review: inspect ${result.outputRoot} (manifest: ${result.workspace.manifestPath}); agentrig dream --review runs a fresh review`,
