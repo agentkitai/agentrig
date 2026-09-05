@@ -46,7 +46,10 @@ export function globTool(): Tool<GlobInput, string[]> {
         output: matches,
         display: matches.length === 0 ? `no files match ${input.pattern}` : matches.join("\n"),
       };
-      if (truncated) result.truncated = true;
+      if (truncated) {
+        result.truncated = true;
+        result.display = `Search incomplete: stopped after ${MAX_MATCHES} matches; narrow the pattern or path.\n${result.display}`;
+      }
       return result;
     },
   };

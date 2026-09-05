@@ -97,8 +97,8 @@ describe("read_file", () => {
   it("returns numbered lines and honors offset/limit", async () => {
     await writeFile(join(root, "a.txt"), "one\ntwo\nthree\nfour");
     const r = await readFileTool().execute({ path: "a.txt", offset: 2, limit: 2 }, ctx);
-    expect(r.display).toBe("2\ttwo\n3\tthree");
-    expect(r.truncated).toBe(true);
+    expect(r.display).toBe("More lines available; continue with offset 4.\n2\ttwo\n3\tthree");
+    expect(r.truncated).toBeUndefined();
   });
 
   it("reports a missing file as an error", async () => {
@@ -336,6 +336,15 @@ describe("CRLF files (every checkout on Windows)", () => {
 });
 
 describe("glob", () => {
+  it("makes a collection cap visible without claiming an exhaustive result", async () => {
+    for (let i = 0; i < 1001; i++) await writeFile(join(root, `match-${i}.txt`), "");
+    const r = await globTool().execute({ pattern: "*.txt" }, ctx);
+    expect(r.output).toHaveLength(1000);
+    expect(r.truncated).toBe(true);
+    expect(r.fullDisplay).toBeUndefined();
+    expect(r.display).toContain("Search incomplete: stopped after 1000 matches");
+  });
+
   it("matches patterns and skips node_modules", async () => {
     await mkdir(join(root, "src"), { recursive: true });
     await mkdir(join(root, "node_modules/pkg"), { recursive: true });
@@ -412,11 +421,21 @@ describe("grep", () => {
     expect(r.output[0]).toMatchObject({ path: "d.ts", line: 1 });
   });
 
-  it("caps matches in a single-file search and says so via truncated", async () => {
+  it("caps matches in a single-file search and tells the model the search is incomplete", async () => {
     await writeFile(join(root, "many.txt"), "hit\n".repeat(300));
     const r = await grepTool().execute({ pattern: "hit", path: "many.txt" }, ctx);
     expect(r.output).toHaveLength(200);
     expect(r.truncated).toBe(true);
+    expect(r.display).toContain("Search incomplete: stopped after 200 matches");
+  });
+
+  it("reports abbreviated matching lines rather than silently discarding their tails", async () => {
+    await writeFile(join(root, "long.txt"), `match ${"x".repeat(300)}TAIL`);
+    const r = await grepTool().execute({ pattern: "TAIL", path: "long.txt" }, ctx);
+    expect(r.output).toHaveLength(1);
+    expect(r.truncated).toBe(true);
+    expect(r.fullDisplay).toBeUndefined();
+    expect(r.display).toContain("1 matching line(s) abbreviated to 250 characters; use read_file for full lines.");
   });
 
   it("says why a named file cannot be searched instead of silently skipping it", async () => {

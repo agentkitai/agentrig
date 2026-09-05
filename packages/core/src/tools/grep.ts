@@ -55,6 +55,7 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
 
       const matches: GrepMatch[] = [];
       let truncated = false;
+      let clippedLines = 0;
       /** Returns false when the match cap was hit mid-file. */
       const searchFile = (text: string, rel: string): boolean => {
         // `\r?\n`: a trailing carriage return breaks an anchored pattern and shows up in output
@@ -65,6 +66,7 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
             truncated = true;
             return false;
           }
+          if (lines[i]!.length > MAX_LINE_CHARS) clippedLines++;
           matches.push({ path: rel, line: i + 1, text: lines[i]!.slice(0, MAX_LINE_CHARS) });
         }
         return true;
@@ -107,7 +109,13 @@ export function grepTool(): Tool<GrepInput, GrepMatch[]> {
             ? `no matches for /${input.pattern}/`
             : matches.map((m) => `${m.path}:${m.line}: ${m.text}`).join("\n"),
       };
-      if (truncated) result.truncated = true;
+      const notices: string[] = [];
+      if (truncated) notices.push(`Search incomplete: stopped after ${MAX_MATCHES} matches; narrow the pattern or path.`);
+      if (clippedLines > 0) notices.push(`${clippedLines} matching line(s) abbreviated to ${MAX_LINE_CHARS} characters; use read_file for full lines.`);
+      if (notices.length > 0) {
+        result.truncated = true;
+        result.display = `${notices.join("\n")}\n${result.display}`;
+      }
       return result;
     },
   };
