@@ -283,6 +283,9 @@ this is not a claim that all old pages have been migrated.
 H5b2 adds bounded named-session ingest and attempt-ledger loading. H5c should reuse those read
 bounds for its broader raw-session/attempt enumeration and workspace scans; generic search and
 dream scans are not implicitly bounded by H5b2's ingest-only migration.
+Add session-scoped attempt lookup/indexing under H5c: the current ledger-wide bounded scan can
+reach its cap because of unrelated historical sessions. Keep immutable attempt files, avoid
+silently cherry-picking partial history, and make any index rebuild bounded and inspectable.
 
 ### E — Measure outcomes before expanding capabilities
 

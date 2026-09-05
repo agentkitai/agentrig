@@ -27,6 +27,14 @@ attempt-ledger scanning inside the run's bounds and removed pre-run initializati
 cover shipped composition, write-side file caps and FIFO rejection. Repair review and fresh CI
 remain pending; these are not yet completion claims.
 
+The second review reran typecheck/full tests and confirmed all five original findings closed.
+Its two remaining integration regressions are corrected: scheduled ingest retains backend failure
+diagnostics, and malformed CLI session IDs report clean errors. Span flags validate at parse time;
+tests cover agent-builder forwarding and Lore's own fetch deadline. Full suite: 1,618 passed plus
+two platform-specific skips (1,620 total, 77 files). CI 33960504444 passed all platforms at af7b4f8;
+the final narrow delta still needs review and fresh CI. Ledger-wide limits intentionally fail
+visibly; session-scoped attempt lookup is recorded under H5c rather than silently omitting history.
+
 ### H5b1 complete (PR #123)
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.

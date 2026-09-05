@@ -32,6 +32,13 @@ it("validates and resolves ingest limits for both explicit and session-end CLI e
   expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { maxCalls: 0 } }))).toThrow();
   expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { unknown: 1 } }))).toThrow();
 });
+
+it.each(["1", "abc", "1.5", "4294967296"])("rejects invalid ingest span size %s while parsing CLI flags", value => {
+  const program = buildProgram().exitOverride().configureOutput({ writeErr: () => {} });
+  const run = program.commands.find(cmd => cmd.name() === "run")!;
+  run.exitOverride().configureOutput({ writeErr: () => {} });
+  expect(() => run.parseOptions(["--ingest-span-chars", value])).toThrow("ingest span characters must be an integer");
+});
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();

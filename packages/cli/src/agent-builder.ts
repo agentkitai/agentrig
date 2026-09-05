@@ -42,7 +42,7 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
 import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
-import { openBackend } from "./memory.js";
+import { backendError, openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 
 function promptBlocks(options: {
@@ -458,6 +458,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
         ...(backend === null ? {} : { backend }),
         onError: (err) => extras.onHookError?.(`memory ingest failed (session still succeeded): ${err.message}`),
+        onBackendError: backendError,
         onDone: (summary) => extras.onHookDone?.(`memory: ${summary}`),
       }),
     );

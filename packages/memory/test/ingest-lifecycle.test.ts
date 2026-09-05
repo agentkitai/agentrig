@@ -307,6 +307,17 @@ it("passes ingest cancellation into the real Lore fetch adapter", async () => {
   await entered.promise; abort.abort(); await rejected; expect(received!.aborted).toBe(true);
 });
 
+it("classifies Lore's own fetch deadline as timeout, not user abort or completed delivery", async () => {
+  const lore = new LoreBackend({ apiUrl: "http://fixture", apiKey: "test", project: "test", timeoutMs: 30,
+    fetchFn: (async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init!.signal!;
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    })) as typeof fetch,
+  });
+  const result = await ingest({ backend: lore });
+  expect(result.auxiliary!.calls[1]).toMatchObject({ operation: "backend.onIngest", outcome: "timeout" });
+});
+
 it("caps Lore response bodies and cancels oversized streams", async () => {
   const cancelled = vi.fn();
   const lore = new LoreBackend({ apiUrl: "http://fixture", apiKey: "test", project: "test", fetchFn: async () => new Response(new ReadableStream({

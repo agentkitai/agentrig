@@ -28,6 +28,7 @@ export interface SessionEndIngestOptions {
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
   onUsage?: (report: AuxiliaryReport) => void;
+  onBackendError?: (operation: string, error: Error) => void;
   limits?: Partial<IngestLimits>;
   maxSpanChars?: number;
   maxTokens?: number;
@@ -70,6 +71,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           ...(opts.limits === undefined ? {} : { limits: opts.limits }),
           ...(opts.maxSpanChars === undefined ? {} : { maxSpanChars: opts.maxSpanChars }),
           ...(opts.maxTokens === undefined ? {} : { maxTokens: opts.maxTokens }),
+          ...(opts.onBackendError === undefined ? {} : { onBackendError: opts.onBackendError }),
           onUsage: report => {
             auxiliary = report;
             opts.onUsage?.(report);

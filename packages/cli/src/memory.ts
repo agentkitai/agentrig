@@ -140,7 +140,11 @@ export type MemoryIngestOptions = MemoryOptions & ProviderOptions & {
 
 export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions): Promise<void> {
   const { root } = layout(opts.dir);
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) throw new Error("invalid ingest session id");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+    console.error("invalid ingest session id: use the ID, not a filename or path");
+    process.exitCode = 1;
+    return;
+  }
   const store = new FileMemoryStore({ root: layout(opts.dir).wiki });
   const raw = new FileRawStore({ root });
   const logPath = join(root, "raw", "sessions", `${sessionId}.jsonl`);

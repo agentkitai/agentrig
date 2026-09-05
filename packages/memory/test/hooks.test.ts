@@ -58,6 +58,17 @@ async function writeLog(id: string): Promise<void> {
 }
 
 describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
+  it("keeps scheduled backend failure diagnostics visible while local ingest succeeds", async () => {
+    await writeLog("s1"); const errors: string[] = []; const done: string[] = [];
+    const hook = ingestOnSessionEnd({ dir, provider: scripted([{ facts: [{ pageType: "concept", slug: "retry", tag: "observed", text: "Retry per request" }] }]),
+      backend: { id: "lore", onIngest: async () => { throw new Error("backend offline"); }, recall: async () => [], promote: async () => {} },
+      onBackendError: (operation, error) => errors.push(`${operation}: ${error.message}`), onDone: text => done.push(text),
+    });
+    expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+    expect(errors).toEqual(["onIngest: backend offline"]);
+    expect(done[0]).toContain("ingested 1 fact");
+  });
+
   it("forwards bounds and reports failure before auxiliary completion without pre-ingest init", async () => {
     await writeLog("s1");
     const order: string[] = [];
