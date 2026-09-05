@@ -3,6 +3,7 @@
  * the dream (M5) is still interface-only. Nothing here imports core internals beyond types.
  */
 import type { ModelProvider } from "@agentkitai/agentrig-core";
+import type { ClaimPromotionAssessment } from "./dream/promote.js";
 
 export type Scope = "project" | "global";
 export type PageType = "entity" | "concept" | "source" | "analysis";
@@ -89,7 +90,9 @@ export interface DreamReport {
   missingPages: Array<{ concept: string; mentionedIn: string[] }>;
   merged: Array<{ from: string[]; to: string }>;
   removed: Array<{ page: string; line: string; reason: string }>;
-  promoted: Array<{ from: string; toGlobal: string; evidence: string[] }>;
+  promoted: Array<{ from: string; toGlobal: string; evidence: string[];
+    claims?: ClaimPromotionAssessment[]; requiresHumanReview?: true; semanticAssessment?: "not-assessed";
+    advisoryConfidence?: PageFrontmatter["confidence"]; publicationBody?: string; publicationSources?: string[] }>;
   pinsAffected: Array<{ pin: string; status: "kept" | "conflict" | "orphaned" }>;
 }
 

@@ -5,6 +5,26 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-05
 
+### H4 implementation (2026-09-05; review and CI pending)
+
+Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
+validation claims. Bounded regular raw logs are checked for identity, sequence, lineage and exact
+claim locations in complete tool-result text. Each distinct claim needs at least two independent
+witnesses; related fork/subagent ancestry and whitespace-normalized copied payloads count once.
+Unsupported prose cannot accompany checked claims. The initial literal support rule deliberately
+rejects unsupported paraphrases; semantic truth remains unassessed and page confidence advisory.
+
+Dream selects final post-consolidation pages and reports event/field/character ranges, hashes and
+excerpts without publishing. Manual promotion previews by default and rechecks with `--confirm`;
+only checked claim lines/supporting references reach the backend, not invented extra citations.
+Transport failures no longer print a false success. Local wiki pages and raw logs are untouched
+by promotion. See [plans/H4.md](plans/H4.md) for the trust boundary and bounded-validation limits.
+
+Initial build/typecheck and all 1,434 tests passed. Focused regressions cover fabricated citations,
+unrelated sessions, split claim support, copied/forked evidence, location hashes, incomplete output,
+resource limits, malformed logs, final dream pages and CLI confirmation. Additional publication
+artifact tests, final full-suite validation and independent review are pending.
+
 ### H3 complete (2026-09-05; PR #120)
 
 Ingest preserves canonical assistant text with labeled legacy/interrupted-stream fallback,

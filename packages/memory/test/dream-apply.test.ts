@@ -282,10 +282,10 @@ describe("promotion cannot be talked past by page text", () => {
     expect(selectForPromotion([p]).promote).toEqual([]);
   });
 
-  it("a genuine second source in the provenance group still counts", async () => {
+  it("a second provenance reference remains only a claim until runtime validation", async () => {
     const p = single("- [stated] corroborated (session:s1, session:s2)\n");
     expect(sessionEvidence(p)).toEqual(["session:s1", "session:s2"]);
-    expect(selectForPromotion([p]).promote).toHaveLength(1);
+    expect(selectForPromotion([p]).promote).toEqual([]);
   });
 });
 

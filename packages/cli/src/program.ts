@@ -305,9 +305,9 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search over the wiki"))
     .option("-k, --k <n>", "max results", "8")
     .action(async (query: string[], opts: { dir: string; k?: string }) => memorySearch(query.join(" "), opts));
-  memoryDir(memory.command("promote <path>").description("Promote a wiki page to the backend's shared scope")).action(
-    async (path: string, opts: { dir: string }) => memoryPromote(path, opts),
-  );
+  memoryDir(memory.command("promote <path>").description("Review runtime-backed promotion evidence; publish only with --confirm"))
+    .option("--confirm", "publish after reviewing claim-level evidence (eligibility is still required)")
+    .action(async (path: string, opts: { dir: string; confirm?: boolean }) => memoryPromote(path, opts));
   memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store")).action(
     async (opts: { dir: string }) => memoryLint(opts),
   );
