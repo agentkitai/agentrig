@@ -22,7 +22,12 @@ corrupt logs and capture migration. Initial code head bf915c4 passes build/typec
 tests and Linux/macOS/Windows CI. Independent review requested a missing-log test, explicit
 denial records and duplicate-preview labeling; local diagnostics additionally caught omitted
 canonical-only tool requests and nested images. Repairs and regression tests cover all five.
-Full repaired-suite validation and delta review are pending.
+The repaired head e82eced passes build/typecheck, all 1,395 tests and all CI platforms. Delta
+review closed those findings and requested identity/error flags on canonical-only array results;
+both array and string paths now preserve them. A further real-agent regression showed collection
+limits were lost before reaching ingest: the additive `tool.result.outputIncomplete` field now
+survives durable logging, including when a partial recorded-output artifact exists. Ingest reports
+the uncollected range as unavailable rather than covered. Final validation and delta review are pending.
 
 ### H2 complete (2026-09-05; PR #119)
 

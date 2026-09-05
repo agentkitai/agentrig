@@ -163,6 +163,7 @@ describe("output overflow artifacts", () => {
       output: fullOutput,
     });
     if (largeResult?.type !== "tool.result") throw new Error("missing large result");
+    expect(largeResult).not.toHaveProperty("outputIncomplete");
     expect(largeResult.display.length).toBeLessThanOrEqual(30_000);
     const truncation = /\n… \[truncated (\d+) UTF-16 code units\]$/.exec(largeResult.display);
     expect(Number(truncation?.[1]) + (truncation?.index ?? Infinity)).toBe(fullOutput.length);
@@ -459,6 +460,29 @@ describe("output overflow artifacts", () => {
     const session = createAgent(config(provider, new SessionStore({ root }), [header])).run("go", { cwd: root });
     await collect(session.events);
     expect((await session.done).reason).toBe("done");
+  });
+
+  it.each([20, 40_000])("preserves collection-limit incompleteness with %s recorded characters", async size => {
+    const provider: ModelProvider = {
+      id: "limited", model: "limited", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+      stream: async function* (req): AsyncIterable<ModelEvent> {
+        if (!req.messages.some(message => message.content.some(block => block.type === "tool_result"))) {
+          yield { type: "tool_use", id: "limited-1", name: "limited", input: {} };
+          yield { type: "stop", reason: "tool_use" };
+        } else yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const limited: AnyTool = { ...largeTool("unused"), name: "limited",
+      execute: async () => ({ output: {}, display: "x".repeat(size), truncated: true }) };
+    const store = new SessionStore({ root });
+    const session = createAgent(config(provider, store, [limited])).run("go", { cwd: root });
+    const events = await collect(session.events);
+    const summary = await session.done;
+    const result = events.find(event => event.type === "tool.result");
+    expect(result).toMatchObject({ outputIncomplete: true });
+    expect((await store.readAll(summary.id)).find(event => event.type === "tool.result")).toMatchObject({ outputIncomplete: true });
+    if (size > 30_000) expect(result).toMatchObject({ output: "x".repeat(size), truncated: true });
+    else expect(result).not.toHaveProperty("output");
   });
 
   it("ignores an empty fullDisplay from a malformed tool result", async () => {

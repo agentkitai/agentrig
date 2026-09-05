@@ -151,9 +151,11 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
             // canonical-only results (e.g. interrupted/exported logs), but always inspect nested
             // content for non-text omissions even when the textual display was already rendered.
             const includeResult = !renderedResults.has(String(block.toolUseId));
+            const header = `[model.tool-result] id=${String(block.toolUseId)} error=${String(block.isError === true)} (model-facing view)`;
             if (typeof block.content === "string") {
-              if (includeResult) lines.push(`[model.tool-result] id=${String(block.toolUseId)} (model-facing view) ${block.content}`);
+              if (includeResult) lines.push(`${header} ${block.content}`);
             } else if (Array.isArray(block.content)) {
+              if (includeResult) lines.push(header);
               for (const [i, child] of block.content.entries()) renderBlock(child, `${field}.content[${i}]`, "model.tool-result", includeResult);
             } else omit(eventIndex, `${field}.content`, "unsupported tool-result content is not inspected");
           } else if (block.type === "image") {
@@ -172,7 +174,9 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
         if (typeof e.id === "string") renderedResults.add(e.id);
         const output = typeof e.output === "string" ? e.output : String(e.display ?? "");
         lines.push(`[tool.result] ok=${String(e.ok)} ${output}`);
-        if (e.truncated === true && typeof e.output !== "string") {
+        if (e.outputIncomplete === true) {
+          omit(eventIndex, "tool.result.output", "the tool did not record complete output; the uncollected range is unavailable (length unknown)");
+        } else if (e.truncated === true && typeof e.output !== "string") {
           omit(eventIndex, "tool.result.output", "full output was not recorded; the undisplayed range is unavailable (length unknown)");
         }
         break;
