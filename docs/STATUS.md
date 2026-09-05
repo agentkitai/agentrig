@@ -20,6 +20,16 @@ plus two skips (1,814 total, 85 files); an additional real built-in partial-usag
 passes in the 19-test lifecycle suite. Full final rerun, independent review, negative mutations
 and PR/main CI remain required.
 
+PR #131 initial head c809b18 passed three-platform CI 33973353340. One bounded Claude pass
+approved with no blockers, independently passing typecheck and 430 relevant tests; no delegated
+reviewers. Three isolated negative mutations caught missing early cancellation, discarded usage,
+and missing durable records, then were restored. Maintainer follow-up adds the explicit
+pre-session-end-hook cancellation test and tightens total timeout across loaders as well as
+model calls; that small deadline repair is maintainer-tested, not a second review round.
+Final build/typecheck and explicit Node22 full suite pass: 1,815 plus two skips (1,817 total,
+85 files), including 21 new lifecycle cases. Optional polish is at the END of ROADMAP.
+Fresh exact-head PR CI and post-merge main CI remain required before E1.
+
 ### H5 persistence complete (PR #130)
 
 Completion gate: final head d4fa2a2, merge 661634a, PR CI 33972036578 and main CI 33972161624

@@ -39,7 +39,8 @@ JavaScript that blocks the thread cannot be preempted, and remote work may ignor
 Core supplies optional `SessionControl.auxiliarySignal`, cancelled when main work enters shutdown
 or the user aborts, without cancelling independently budgeted session-end memory hooks. Older
 custom Sessions fall back to `session.done`; they can implement the signal for earlier shutdown.
-The observer uses one deadline across attempt/artifact loading and the review/grade. Detach also
+The observer uses the tighter of `reviewTimeoutMs` and `auxiliaryLimits.timeoutMs` across
+attempt/artifact loading and the review/grade. Detach also
 cancels idle waits and pending work. No late result may steer after the observer lifetime closes.
 Opaque custom reviewers are conservatively one unknown auxiliary operation unless they provide
 reports; a loader cancelled before invoking them remains zero calls. No runtime dependency on

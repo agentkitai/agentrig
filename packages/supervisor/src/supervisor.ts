@@ -135,7 +135,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
     const controller = new AbortController();
     const abort = () => controller.abort(lifetime.signal.reason);
     lifetime.signal.addEventListener("abort", abort, { once: true });
-    const ms = opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;
+    const ms = Math.min(opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
+      opts.auxiliaryLimits?.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
     const started = performance.now();
     const timer = setTimeout(() => controller.abort(new DOMException(`${operation} did not answer within ${ms}ms`, "TimeoutError")), ms);
     const id = randomUUID();

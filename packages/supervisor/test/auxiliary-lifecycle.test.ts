@@ -232,6 +232,20 @@ describe("real-session auxiliary lifetime and durable records", () => {
     main.finish(); await main.session.done;
   });
 
+  it("applies a shorter auxiliary total deadline to the loader as well as the model", async () => {
+    const main = await mainSession();
+    const reported = Promise.withResolvers<AuxiliaryReport>();
+    const reviewer = { review: vi.fn() } as unknown as Reviewer;
+    const started = performance.now();
+    const sup = attach(main.session, { detectors: [detectStart], policy, reviewer,
+      reviewTimeoutMs: 1000, auxiliaryLimits: { timeoutMs: 20 },
+      attempts: () => new Promise(() => {}), onUsage: report => reported.resolve(report) });
+    expect(await reported.promise).toMatchObject({ outcome: "timeout", calls: [], costUsd: 0 });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(reviewer.review).not.toHaveBeenCalled();
+    sup.detach(); await sup.done; main.finish(); await main.session.done;
+  });
+
   it("detach resolves an idle observer without waiting for another event", async () => {
     const main = await mainSession();
     const sup = attach(main.session, { detectors: [], policy: { decide: () => [] } });

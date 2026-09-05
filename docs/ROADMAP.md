@@ -858,3 +858,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   supervisor timer ownership belongs to the already-active H5d lifecycle work, not a new row.
 - Optionally deduplicate repeated partial-ledger warnings across reviews. Each current warning
   remains explicit; reducing repetition must not hide newly unreadable history.
+- Auxiliary polish from PR #131's approving review: give provisional call records a neutral
+  running-state marker (the current `final: false` flag and UI already identify unfinished work),
+  and optionally ignore explicitly undefined entries in partial-limit objects rather than reject
+  them before work starts. Neither is an H5/E1 prerequisite.
