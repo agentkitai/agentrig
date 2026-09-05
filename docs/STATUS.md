@@ -1,11 +1,33 @@
 # Status
 
-Current roadmap row: **E1 — frozen tasks and independent outcome checks.** H1–H5 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **E2 — compact outcome reporting.** H1–H5 and E1 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### E1 in progress
+### E2 in progress
+
+Fresh branch from updated main aeb5ac6 after E1 PR #132 final-head CI 33975625109 and
+post-merge main CI 33975763463 passed all three platforms. Produce a compact report from
+validated session events, independently checked outcomes and evaluator-owned configuration/
+timing/auxiliary receipts. Unknown usage stays unknown; main and auxiliary work remain separate.
+No live comparison or spend is authorized by this reporting row.
+
+Implemented the typed bounded report and JSON/text script, additive main-usage completeness flag,
+explicit role pricing/coverage, separate main/child and auxiliary totals, check/config/evidence
+linkage and a synthetic negative-control bundle. One bounded Claude review approved with 63
+named tests passing (typecheck commands denied; maintainer verified it). Maintainer additions
+exercise real observer/maintenance integration, fix a reproduced same-millisecond snapshot-order
+failure, and reject actual POSIX FIFOs without blocking. No second general review or new milestone.
+Build/typecheck and full explicit Node22 suite pass 1,857 plus two skips (1,859 total, 87 files),
+including 25 report cases plus schema/render regressions. Exact-head PR/main CI pending.
+
+### E1 complete (PR #132)
+
+Completion gate: final head 3ff8ba9, merge aeb5ac6, exact-head PR CI 33975625109 and main CI
+33975763463 all green. Two Claude passes, focused approval after repairs; maintainer CI repair
+for Windows exit metadata; build/typecheck and 1,830 Node22 passes plus two skips. Following
+notes record intermediate gates, not outstanding prerequisites.
 
 Fresh branch from updated main a14dd57 after PR #131 exact-head CI 33973659278 and
 post-merge main CI 33973789052 passed all three platforms. Eight frozen tasks will cover

@@ -203,7 +203,11 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
-  z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string() }),
+  z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string(),
+    /** E2: missing on legacy logs means unknown, not a provider-reported zero. Retried,
+     * synthesized, unclosed or errored calls cannot establish complete total consumption. */
+    usageComplete: z.boolean().optional(),
+  }),
   /** Authoritative conversation boundary persisted after the in-memory message is appended. */
   z.object({ type: z.literal("message.append"), message: MessageSchema }),
   /**

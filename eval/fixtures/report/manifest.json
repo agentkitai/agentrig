@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "runId": "00000000-0000-4000-8000-000000000001",
+  "task": "A1",
+  "evidenceLane": "scripted",
+  "evaluatorRevision": "0000000000000000000000000000000000000000",
+  "startingRevision": "a14dd57cca42e00693bfa4dbda36d246c9e39bcf",
+  "configuration": {
+    "supervisor": false,
+    "memory": false,
+    "memoryCorpusSha256": null,
+    "roles": [{ "role": "main", "provider": "fixture", "model": "scripted", "usdPerMillionTokens": { "input": 1, "output": 2 } }],
+    "budgets": { "maxTurns": 1 }
+  },
+  "logs": [{ "path": "main.jsonl", "sessionId": "fixture-main", "role": "main" }],
+  "checks": "checks.json",
+  "auxiliary": "auxiliary.json",
+  "coverage": { "sessionLogsComplete": true, "auxiliaryComplete": true, "externalCostsUsd": 0, "evidence": ["synthetic fixture: no other calls"] },
+  "timing": { "startedAt": 90, "settledAt": 200, "includesObserverAndMaintenance": true, "evidence": "synthetic fixture clock" },
+  "changes": { "independentlyChecked": true, "unintended": [], "evidence": "synthetic fixture diff" }
+}
