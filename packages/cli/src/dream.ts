@@ -55,7 +55,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   // when nothing could reach it.
   let globalWiki: FileMemoryStore | undefined;
   if (opts.global !== undefined) {
-    globalWiki = new FileMemoryStore({ root: join(opts.global, "wiki"), scope: "global" });
+    globalWiki = new FileMemoryStore({ root: join(opts.global, "wiki"), scope: "global", lockTimeoutMs });
     await globalWiki.init();
   }
 

@@ -155,16 +155,17 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
 
         const findings = findingCount(result.report, result.structural);
         if (opts.auto === true) {
+          let backup: string;
           try {
             const { applyDream } = await import("./dream/copy.js");
             const stamp = `${now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
-            opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
+            backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
           } catch (error) {
             throw new Error(String(error) + "; dream artifact retained at " + result.outputRoot
               + "; manifest: " + result.workspace.manifestPath, { cause: error });
           }
           await result.workspace.dispose().catch(() => {});
+          opts.onDone?.(`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`);
         } else if (findings === 0) {
           // nothing to look at, so nothing to keep: a clean dream that left a full wiki copy in
           // /tmp on every trigger is how an unattended maintenance task fills a disk

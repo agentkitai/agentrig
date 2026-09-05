@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -268,6 +268,25 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
       // These are the exact artifacts created by this test's hook, verified by its manifest.
       await rm(output, { recursive: true, force: true }); await rm(manifestPath, { force: true });
     }
+  });
+
+  it("cleans the applied artifact before a throwing completion callback", async () => {
+    await writeLog("a");
+    const append = FileMemoryStore.prototype.appendLog;
+    let outputRoot = "";
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
+      // A structural dream appends only to its output, not to the live wiki.
+      outputRoot = this.root; return append.apply(this, args);
+    });
+    const errors: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, auto: true,
+      onError: error => errors.push(error), onDone: text => { done.push(text); throw new Error("notification failed"); } });
+    expect(await hook.handler(ctx("a"))).toEqual({ action: "continue" });
+    expect(done[0]).toContain("dream applied");
+    expect(errors.map(error => error.message)).toEqual(["notification failed"]);
+    expect(outputRoot).not.toBe("");
+    await expect(lstat(outputRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(outputRoot + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("stays free without a provider — structural only, no model call", async () => {

@@ -35,6 +35,14 @@ stale-artifact regressions. CLI review text names both artifact and manifest. CI
 now uses canonical output paths on macOS/Windows. Build/typecheck and full Node 22 suite pass:
 1,654 passed plus two skips (1,656 total, 78 files). Repair review and fresh CI remain required.
 
+Second independent review verified all eight findings resolved and found no blocking regression;
+CI 33962954177 passed all platforms at ed792ea. Its two final small refinements are applied:
+completion callbacks run after successful disposal and outside the apply-error catch, and global
+store construction receives the configured timeout. A throwing-callback regression proves cleanup
+and notification-only diagnostics. Final build/typecheck and Node 22 full suite: 1,655 passed plus
+two skips (1,657 total, 78 files). Two Claude passes; these final small refinements are maintainer-
+tested, not a third independent review. Final-head CI and post-merge main CI remain pending.
+
 ### H5b2 complete (PR #124)
 
 Completion gate: final PR CI 33961342727 passed at f2edf579, PR #124 merged at 3eee3ea,
