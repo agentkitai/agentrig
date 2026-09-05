@@ -160,7 +160,10 @@ describe("versioned memory mutations", () => {
 
   it("names the lock path when parent permissions prevent acquisition", async () => {
     vi.mocked(fs.open).mockRejectedValueOnce(Object.assign(new Error("read-only filesystem"), { code: "EROFS" }));
-    await expect(store.write(path, page())).rejects.toThrow(`${await fs.realpath(store.root)}.write.lock`);
+    const failure = await store.write(path, page()).catch(error => error as Error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(`${await fs.realpath(store.root)}.write.lock`);
+    expect((failure as Error).message).not.toContain("Windows delete-pending");
     expect(await store.read(path)).toBeNull();
   });
 
@@ -172,7 +175,7 @@ describe("versioned memory mutations", () => {
   it.skipIf(process.platform !== "win32")("bounds persistent access failures separately from contention", async () => {
     vi.mocked(fs.open).mockRejectedValue(Object.assign(new Error("access denied"), { code: "EACCES" }));
     const started = performance.now();
-    await expect(store.write(path, page(), { timeoutMs: 30_000 })).rejects.toThrow("cannot acquire memory lock");
+    await expect(store.write(path, page(), { timeoutMs: 30_000 })).rejects.toThrow("persistent Windows delete-pending/busy state");
     expect(performance.now() - started).toBeLessThan(5000);
     expect(await store.read(path)).toBeNull();
   });
