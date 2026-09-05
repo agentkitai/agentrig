@@ -19,6 +19,21 @@ function section(title: string, lines: string[]): string[] {
   return lines.length === 0 ? [] : ["", `## ${title} (${lines.length})`, ...lines];
 }
 
+export function renderPromotionProposal(proposal: DreamReport["promoted"][number]): string {
+  const lines = [`- ${proposal.from} → global (proposal; human review required; semantic truth not assessed)`];
+  if (proposal.advisoryConfidence !== undefined) lines.push(`  page confidence (advisory, not evidence): ${proposal.advisoryConfidence}`);
+  if (proposal.claims === undefined) lines.push("  No runtime witness metadata in this legacy proposal.");
+  for (const claim of proposal.claims ?? []) {
+    lines.push(`  claim [${claim.tag}]: ${JSON.stringify(claim.claim)}`);
+    for (const witness of claim.witnesses) {
+      lines.push(`  ${witness.citation} → session:${witness.sessionId} event=${witness.seq} ${witness.field}[${witness.from},${witness.to}) family=${witness.family} eventHash=${witness.eventHash}`);
+      lines.push(`    excerpt: ${JSON.stringify(witness.excerpt.slice(0, 1000))}${witness.excerpt.length > 1000 ? " (display abbreviated; full range above)" : ""}`);
+    }
+  }
+  if (proposal.publicationBody !== undefined) lines.push("  Publication contains only the checked claim lines and supporting session references; extra citations are omitted.");
+  return lines.join("\n");
+}
+
 export function renderReport(report: DreamReport, opts: RenderOptions = {}): string {
   const out: string[] = ["# Dream report"];
   if (opts.outputRoot !== undefined) {
@@ -59,7 +74,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
     ),
     ...section(
       "Promotion proposals",
-      report.promoted.map((p) => `- ${p.from} → global (${p.evidence.length} sessions: ${p.evidence.join(", ")})`),
+      report.promoted.map(renderPromotionProposal),
     ),
     ...section(
       "Pins",
@@ -89,7 +104,8 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
     out.push(
       ...section(
         "Not promoted",
-        rejected.map((r) => `- ${r.page}: ${r.reason}`),
+        rejected.map((r) => `- ${r.page}: ${r.reason}` + (r.claims ?? []).filter(claim => !claim.eligible)
+          .map(claim => `\n  ${JSON.stringify(claim.claim)}: ${claim.reason}`).join("")),
       ),
     );
   }

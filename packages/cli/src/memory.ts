@@ -8,6 +8,10 @@ import {
   findingCount,
   ingestSession,
   loreConfigFromEnv,
+  loadPromotionEvidence,
+  selectForPromotion,
+  sessionEvidence,
+  renderPromotionProposal,
   renderReport,
   runDream,
   tolerant,
@@ -187,14 +191,8 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
 }
 
-/** Promote one wiki page to the backend's shared scope (PLAN §3.8, private→shared). */
-export async function memoryPromote(path: string, opts: MemoryOptions): Promise<void> {
-  const backend = openBackend();
-  if (backend === null) {
-    console.error("no memory backend configured (set LORE_API_URL and LORE_API_KEY)");
-    process.exitCode = 1;
-    return;
-  }
+/** Preview checked witnesses; an explicit confirmation is required before shared-scope writes. */
+export async function memoryPromote(path: string, opts: MemoryOptions & { confirm?: boolean }): Promise<void> {
   let page;
   try {
     page = await (await openStore(opts.dir)).read(path);
@@ -208,8 +206,38 @@ export async function memoryPromote(path: string, opts: MemoryOptions): Promise<
     process.exitCode = 1;
     return;
   }
-  await backend.promote(page);
-  console.log(`promoted ${page.path} to ${backend.id} shared scope`);
+  const evidenceIndex = await loadPromotionEvidence(new FileRawStore({ root: opts.dir }),
+    sessionEvidence(page).map(ref => ref.slice("session:".length)));
+  const checked = selectForPromotion([page], { evidenceIndex });
+  const proposal = checked.promote[0];
+  if (proposal === undefined) {
+    for (const rejected of checked.rejected) {
+      console.error(`not eligible: ${rejected.reason}`);
+      for (const claim of rejected.claims ?? []) if (!claim.eligible) console.error(`  ${claim.claim}: ${claim.reason}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+  console.log(renderPromotionProposal(proposal));
+  if (opts.confirm !== true) {
+    console.log("Review these excerpts and the claim's meaning; rerun with --confirm to request shared-scope promotion. Nothing was published.");
+    return;
+  }
+  if (loreConfigFromEnv() === null) {
+    console.error("no memory backend configured (set LORE_API_URL and LORE_API_KEY)");
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    // An explicit publication must not report success after tolerant() swallowed a transport error.
+    const backend = new LoreBackend();
+    await backend.promote({ ...page, body: proposal.publicationBody,
+      frontmatter: { ...page.frontmatter, sources: proposal.publicationSources } });
+    console.log(`promoted ${page.path} to ${backend.id} shared scope`);
+  } catch (err) {
+    console.error(`promotion failed; the backend may have accepted a partial update: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+  }
 }
 
 /** `lint` = a dry-run dream report. M3 ships the pin re-check; M5 adds the rest. */

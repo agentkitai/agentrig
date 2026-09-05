@@ -1,9 +1,46 @@
 # Status
 
-Current roadmap row: **H4 — runtime-backed, claim-level promotion eligibility.** H1–H3 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5 — memory lifecycle, concurrency, cancellation and accounting.** H1–H4 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
+
+### H4 complete (2026-09-05; PR #121)
+
+Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
+validation claims. Bounded regular raw logs are checked for identity, sequence, lineage and exact
+claim locations in complete tool-result text. Each distinct claim needs at least two independent
+witnesses; related fork/subagent ancestry and whitespace-normalized copied payloads count once.
+Unsupported prose cannot accompany checked claims. The initial literal support rule deliberately
+rejects unsupported paraphrases; semantic truth remains unassessed and page confidence advisory.
+
+Dream selects final post-consolidation pages and reports event/field/character ranges, hashes and
+excerpts without publishing. Manual promotion previews by default and rechecks with `--confirm`;
+only checked claim lines/supporting references reach the backend, not invented extra citations.
+Transport failures no longer print a false success. Local wiki pages and raw logs are untouched
+by promotion. See [plans/H4.md](plans/H4.md) for the trust boundary and bounded-validation limits.
+
+Initial build/typecheck and all 1,436 tests passed; initial PR CI was green on all three platforms.
+Focused regressions cover fabricated citations,
+unrelated sessions, split claim support, copied/forked evidence, location hashes, incomplete output,
+resource limits, malformed logs, final dream pages, checked publication artifacts and CLI confirmation.
+Independent review found agent-input echoes and legacy truncation markers could establish false
+witnesses. Repairs reject claims present in session/ancestry tool inputs, exclude receipt/memory
+views, recognize legacy truncation and bind receipt exclusions to registered tool names. Windows
+CI exposed native-separator wiki identifiers; discovery and legacy index parsing now keep identifiers
+portable while preserving literal backslashes in POSIX filenames. Every excluded tool receives a
+behavioral rejection test. Build/typecheck and all 1,456 tests (72 files) pass; the promotion/CLI
+pair has 46 tests and the Windows trio (including store tests) has 54. Six independent review
+passes close all findings, ending with no findings at 76e368a; Linux/macOS/Windows CI is green
+on that code head. Mutation tests prove that restoring citation counting, independent
+fork families or the wrong skill name makes the corresponding regressions fail. The temporary
+mutations were restored. Cross-session/encoded self-authorship and custom/MCP receipt semantics
+remain explicit human-review limitations; H4 does not prove semantic truth.
+
+The earlier macOS run 33952067241 timed out in H1's staged-write-abort test (not an H4 test).
+The isolated local test and the next full macOS run pass; its cause is not established. H5 tracks
+investigation of that abort/cleanup timing alongside the newly found reservation-placeholder bug.
+Neither the timeout nor assertions were weakened. H5 starts after PR and post-merge main CI pass.
 
 ### H3 complete (2026-09-05; PR #120)
 
@@ -86,16 +123,17 @@ promotion eligibility based on nonexistent session citations. The repository map
 nested review worktree, exhausting its budget. These gaps must be corrected before expanding
 the system's authority or turning memory into durable instructions.
 
-Current limitations after H1: only supported effects cross the sandbox; trusted SDK code and
+Current limitations after H4: only supported effects cross the sandbox; trusted SDK code and
 bookkeeping remain host operations. Shell authority is path-based and pre-existing hardlinks may
-alias outside inodes; the file broker avoids that alias through atomic replacement. Promotion counts
-page-supplied citations, not independently verified claim support. Neither supervisor nor memory
+alias outside inodes; the file broker avoids that alias through atomic replacement. Promotion now
+checks located textual witnesses, but does not prove semantic truth or all source independence.
+Neither supervisor nor memory
 benefit is established by scripted-provider tests alone. In-process extensions, if added, remain
 trusted code with ambient env/filesystem access despite a restricted API object.
 
 Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
 worktree in the repository map), one skipped. The original roadmap revision changed documentation
-only and preserved existing R identifiers. H1–H3 implementation and validation are recorded above;
+only and preserved existing R identifiers. H1–H4 implementation and validation are recorded above;
 the remaining H/E rows are still planned. Older notes below
 record decisions at the time; they do not override these priorities or current limitations.
 

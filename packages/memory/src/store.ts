@@ -47,7 +47,8 @@ function parseEntry(line: string): IndexEntry | null {
   const claimMatch = /\(claimed:\s*([^)]*)\)/.exec(statusCell);
   const entry: IndexEntry = {
     slug,
-    path,
+    // Older Windows dreams persisted native separators; normalize the identifier on read.
+    path: path.includes("/") ? path : path.replace(/\\/g, "/"),
     type: type as PageType,
     status: statusCell.startsWith("planned") ? "planned" : "active",
     summary: rest.join("|").replace(/\\\|/g, "|"),
@@ -276,7 +277,9 @@ export class FileMemoryStore implements MemoryStore {
       }
       for (const name of names) {
         if (!name.endsWith(".md")) continue;
-        const page = await this.read(join(dir, name)).catch(() => null);
+        // Wiki identifiers use forward slashes on every host, like pagePath() and index rows.
+        // Native Windows separators would make model consolidation targets miss these pages.
+        const page = await this.read(`${dir}/${name}`).catch(() => null);
         if (page !== null) out.push(page);
       }
     }

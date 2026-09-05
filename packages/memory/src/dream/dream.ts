@@ -13,7 +13,8 @@ import {
   type Consolidation,
   type Signal,
 } from "./phases.js";
-import { selectForPromotion, type PromotionRejection } from "./promote.js";
+import { selectForPromotion, sessionEvidence, type PromotionRejection } from "./promote.js";
+import { loadPromotionEvidence } from "./evidence.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
 
@@ -164,10 +165,12 @@ async function dreamInto(
   const pinChecks = await recheckPins(out, pins);
   await applyPinChecks(workspace.outputRoot, pinChecks);
 
-  // ---- promotion proposals (structurally gated: never from a single session)
+  // ---- promotion proposals: validate final pages against immutable runtime observations.
+  const evidenceIndex = await loadPromotionEvidence(opts.raw,
+    finalPages.flatMap(page => sessionEvidence(page).map(ref => ref.slice("session:".length))));
   const { promote, rejected } = selectForPromotion(
-    pages,
-    opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote },
+    finalPages,
+    { evidenceIndex, ...(opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote }) },
   );
   // with no global wiki attached there is nowhere to promote *to*, so propose nothing
   const promoted = opts.globalWiki === undefined ? [] : promote;

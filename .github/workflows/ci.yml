@@ -49,3 +49,5 @@ jobs:
       # F3 is the Windows no-op seam proof, not a claim that POSIX process integration tests run on
       # Windows. This test uses process.platform and fails unless `none` selects the identity provider.
       - run: pnpm exec vitest run packages/cli/test/sandbox-wiring.test.ts
+      # H4's raw-file/lineage validation and explicit publication gate must also work on Windows.
+      - run: pnpm exec vitest run packages/memory/test/promotion-evidence.test.ts packages/memory/test/store.test.ts packages/cli/test/memory-promotion.test.ts

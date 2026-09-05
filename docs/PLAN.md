@@ -299,9 +299,15 @@ Duplicate captures (`session_end` firing twice on a growing transcript) are dete
 **Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
 
 **Promotion is structural.** "Never promote anything derived from a single session" is enforced
-by counting distinct `session:` refs in a page's frontmatter and fact-line provenance, not by
-asking the model to respect it — one session's conclusion may be true only of that branch, that
-machine, that afternoon.
+by runtime-backed, claim-level evidence, not citation counts (H4). Every claim needs at least two
+independent located observations from validated immutable session logs. Related lineage and
+copied result payloads count once. The initial conservative support rule requires an exact textual
+line in complete recorded tool output; paraphrases without that support remain ineligible.
+This is structural eligibility for human review, not semantic proof. Reports show source events,
+character ranges, hashes and excerpts; page confidence is advisory. Dream validates final pages
+and only proposes promotion. `memory promote` previews; `--confirm` rechecks and publishes only
+checked claims/references, never unsupported prose or extra unverified citations. Backend adapters
+remain trusted transport primitives. See `docs/plans/H4.md` for limits and trust assumptions.
 
 **Lint = dream.** The scheduled dream runs the pattern's lint pass offline on a copy of the wiki: contradictions between pages, claims superseded by newer sources, orphan pages, concepts mentioned but lacking a page, missing cross-links, relative dates → absolute, references to files that no longer exist, index rebuilt lean. Output is a new `wiki/` directory plus a change report; the input is untouched; review or auto apply; promotion proposals to global. Never promote anything derived from a single session.
 
