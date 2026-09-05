@@ -61,7 +61,8 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           logPath,
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
-        opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)`);
+        opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
+          (result.omissions.length === 0 ? "" : `; ${result.omissions.length} uninspected evidence omission(s), see source-page coverage`));
       } catch (err) {
         opts.onError?.(err instanceof Error ? err : new Error(String(err)));
       }

@@ -5,6 +5,21 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-05
 
+### H3 implementation (2026-09-05; review and CI pending)
+
+Ingest preserves canonical assistant text with labeled legacy/interrupted-stream fallback,
+complete recorded tool output/input and full steering/errors. Patched displays remain separate
+from original evidence. Lossless bounded spans carry line coordinates and half-open UTF-16
+character ranges; prompts retain evidence-origin labels even in long-event continuation spans.
+Missing historical full output and non-text evidence are reported as omissions, not inspected
+coverage. Source pages persist coverage/omission accounting, CLI/hooks surface omissions, and
+old projector captures are reprocessed once under the new contract. Corrupt/torn JSONL fails
+before provider calls or wiki writes and can be retried when complete.
+
+See [plans/H3.md](plans/H3.md). Tests pin canonical/legacy deduplication, assistant-only conclusions,
+late tool evidence reaching distillation, exact bounded ranges, Unicode/blank lines, omissions,
+corrupt logs and capture migration. Full-suite validation and independent review are pending.
+
 ### H2 complete (2026-09-05; PR #119)
 
 Repository maps prune `.claude/worktrees` and `.worktrees` descendant containers before scanning,
