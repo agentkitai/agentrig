@@ -37,6 +37,7 @@ import {
   memoryLint,
   memoryLs,
   memoryPromote,
+  memoryResetDreamStamp,
   memorySearch,
   memoryShow,
   type MemoryIngestOptions,
@@ -341,6 +342,9 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await memoryLint(resolved);
     });
+  memoryDir(memory.command("reset-dream-stamp").description("Reset scheduling metadata into a preserved backup; stop running/scheduled dreams first"))
+    .option("--confirm", "archive the regular .last-dream file and reset scheduling; never removes writer locks")
+    .action(async (opts: { dir: string; confirm?: boolean }) => memoryResetDreamStamp(opts));
   withProviderOptions(
     memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
   ).option("--ingest-limits <json>", "bounded ingest limits (JSON object)", parseIngestLimits)

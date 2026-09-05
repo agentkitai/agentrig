@@ -1,11 +1,41 @@
 # Status
 
-Current roadmap row: **H5c2b — dream lifecycle and auxiliary accounting.** H1–H4, H5a, H5b, H5c1 and H5c2a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5c2c1 — dream metadata recovery and log preflight.** H1–H4, H5a, H5b, H5c1, H5c2a and H5c2b are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5c2b in progress
+### H5c2c1 in progress
+
+Fresh branch from updated main 74ffbf8 after PR #127 exact-head CI 33968092090 and post-merge
+main CI 33968348026 passed all platforms. H5c2c is split into metadata/log preflight (c1),
+abandoned workspace ownership/recovery (c2), and interrupted-install recovery (c3), each with
+its own review/PR/CI gates. See `docs/plans/H5c2c1.md` for the current bounded scope.
+
+Implemented log preflight with shared header/UTF-8/newline framing and a bounded contradiction
+count allowance, before model calls. Explicit SDK/CLI stamp reset creates an exclusive sibling
+hard-link backup then removes only the regular stamp under its canonical root lock. Missing
+roots, replaced roots, active locks and non-files are refused; late abort finishes after backup,
+and unlink failure names both retained links. Operators stop scheduled/running dreams first.
+Build/typecheck and explicit Node22 full suite pass: 1,750 passes plus two skips (1,752 total,
+82 files). Review and exact-head PR/main CI remain required.
+
+PR #128 head 988a72d passed CI 33968775029 on all platforms. One Claude pass approved with
+no blocking findings (Node24 full suite independently reproduced). Its hard-link portability
+note is addressed with a safe-failure hint and documentation; scheduling-reset discoverability
+is documented next to the command, and log dates explicitly mean consolidation start. This is
+not a claim of richer in-error help for every scheduler/ENOENT path. Final-head CI remains a gate.
+
+A final maintainer check found retained-review apply could resurrect an explicitly reset stamp.
+Apply now mirrors absent live metadata as well as present metadata, before its first rename;
+the copy and archived stamp remain intact. A real reset→apply regression covers this sequence.
+This semantic repair receives a focused follow-up review; it is not covered by the first approval.
+
+### H5c2b complete (PR #127)
+
+Completion gate: final head ef7e072, merge 74ffbf8, PR CI 33968092090 and main CI 33968348026
+all green. One Claude pass with conditional approval; F1/F2 and nits fixed with regression and
+mutation evidence. The following notes are historical intermediate gates, not outstanding work.
 
 PR #126 merged at 3e97b65 after exact-head PR CI 33965907380; main CI 33966024863 passed
 all platforms. Fresh branch starts from updated main. See `docs/plans/H5c2b.md` for this row.

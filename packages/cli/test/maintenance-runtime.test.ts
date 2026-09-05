@@ -1,5 +1,5 @@
 import { execFile, fork } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -42,3 +42,24 @@ it("the built CLI prints a maintenance failure without an unhandled-rejection st
     expect(result.stderr).not.toContain("triggerUncaughtException"); expect(result.stderr).not.toMatch(/\n\s+at /);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("the built CLI requires explicit stamp-reset confirmation and preserves a usable backup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-cli-stamp-"));
+  const cli = (...args: string[]) => promisify(execFile)(process.execPath,
+    [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "memory", "reset-dream-stamp", "--dir", root, ...args], { timeout: 5000 });
+  try {
+    const preview = await cli(); expect(preview.stdout).toContain("--confirm"); expect(preview.stdout).toContain("Nothing changed");
+    expect(await readdir(root)).toEqual([]);
+    const missing = await cli("--confirm").then(() => { throw new Error("expected missing wiki failure"); }, error => error);
+    expect(missing.code).toBe(1); expect(await readdir(root)).toEqual([]);
+    const wiki = join(root, "wiki"); await mkdir(wiki); const stamp = join(wiki, ".last-dream");
+    const original = "bad stamp".repeat(1000); await writeFile(stamp, original);
+    await cli(); expect(await readFile(stamp, "utf8")).toBe(original);
+    const reset = await cli("--confirm"); expect(reset.stdout).toContain("Previous stamp preserved at");
+    const backup = (await readdir(root)).find(name => name.startsWith("wiki.last-dream-before-reset-"))!;
+    expect(backup).toBeDefined(); expect(await readFile(join(root, backup), "utf8")).toBe(original);
+    expect(await readdir(wiki)).toEqual([]);
+    expect((await cli("--confirm")).stdout).toContain("nothing changed");
+    expect((await readdir(root)).filter(name => name.includes("before-reset"))).toEqual([backup]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 15_000);

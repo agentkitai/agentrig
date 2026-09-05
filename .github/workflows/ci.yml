@@ -60,5 +60,6 @@ jobs:
       # H5c2a: bounded traversal, cap failures and actual cancellation cleanup.
       - run: pnpm exec vitest run packages/memory/test/dream-scans.test.ts
       - run: pnpm exec vitest run packages/memory/test/dream-runtime.test.ts
+      - run: pnpm exec vitest run packages/memory/test/dream-metadata.test.ts
       - run: pnpm exec vitest run packages/cli/test/maintenance-runtime.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'

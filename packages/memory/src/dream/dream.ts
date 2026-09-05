@@ -225,6 +225,15 @@ async function dreamInto(
 
   // ---- phase 3: consolidate (the only phase that costs tokens)
   phase("consolidate");
+  const modelEnabled = opts.structuralOnly !== true && unreadableAttempts.length === 0 && pages.length > 0 && opts.provider !== undefined;
+  const logDate = new Date(now()).toISOString(); // Consolidation-start timestamp, frozen for the preflight/append pair.
+  const logEntry = (contradictions: number) =>
+    `${logDate} | dream | ${sessions.length} session(s) since last | ` +
+    `${contradictions} contradiction(s), ${structural.orphans.length} orphan(s), ` +
+    `${structural.missingPages.length} missing page(s)` + (unreadableAttempts.length === 0 ? "" : ` | incomplete raw scan: ${unreadableAttempts.length} omitted attempt(s)`);
+  // Each parsed contradiction needs at least one output character. Reserve only the count's
+  // digit width, not a giant placeholder string. Final append uses the same framing and rechecks.
+  await out.checkLogCapacity(Buffer.byteLength(logEntry(modelEnabled ? run.limits.maxOutputChars : 0) + "\n"), readOpts);
   let consolidationError: string | undefined;
   const consolidation: Consolidation =
     opts.structuralOnly === true || unreadableAttempts.length > 0 || pages.length === 0 || opts.provider === undefined
@@ -296,12 +305,7 @@ async function dreamInto(
     pinPersistence: persistedPins,
   };
 
-  await out.appendLog(
-    `${new Date(now()).toISOString()} | dream | ${sessions.length} session(s) since last | ` +
-      `${report.contradictions.length} contradiction(s), ${report.orphans.length} orphan(s), ` +
-      `${report.missingPages.length} missing page(s)` + (unreadableAttempts.length === 0 ? "" : ` | incomplete raw scan: ${unreadableAttempts.length} omitted attempt(s)`),
-    readOpts,
-  );
+  await out.appendLog(logEntry(report.contradictions.length), readOpts);
   run.check();
   const stampOpts = { ...readOpts, maxFileBytes: Math.min(4096, readOpts.maxFileBytes) };
   await markDreamed(workspace.outputRoot, now(), stampOpts);

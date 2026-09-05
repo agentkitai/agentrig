@@ -5,3 +5,4 @@ export * from "./promote.js";
 export * from "./evidence.js";
 export * from "./dream.js";
 export * from "./report.js";
+export * from "./metadata.js";

@@ -15,6 +15,7 @@ import {
   renderPromotionProposal,
   renderReport,
   runDream,
+  resetDreamStamp,
   tolerant,
   unionRetrieve,
   withBackendRecall,
@@ -33,6 +34,19 @@ import { withMaintenanceSignal } from "./maintenance.js";
 
 export interface MemoryOptions {
   dir: string;
+}
+
+export async function memoryResetDreamStamp(opts: MemoryOptions & { confirm?: boolean }): Promise<void> {
+  const wiki = layout(opts.dir).wiki;
+  if (opts.confirm !== true) {
+    console.log(`Reset only ${join(wiki, ".last-dream")}, preserving a named sibling backup. Stop running/scheduled dreams first; rerun with --confirm. Nothing changed.`);
+    return;
+  }
+  await withMaintenanceSignal(async signal => {
+    const result = await resetDreamStamp(wiki, { signal });
+    console.log(result.status === "absent" ? "No dream scheduling stamp; nothing changed."
+      : `Dream scheduling stamp reset; the next scheduled dream is due. Previous stamp preserved at ${result.backup}`);
+  });
 }
 
 /** `.agentrig` layout (PLAN §3.1): raw/ beside wiki/ beside SCHEMA.md. */

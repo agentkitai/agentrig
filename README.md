@@ -47,8 +47,18 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 - `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.
 - `agentrig memory init|ls|show|search|promote|lint|ingest` — create, inspect, search, maintain, or populate the Markdown wiki.
 - `agentrig dream` — run structural and model-backed wiki consolidation on a copy; review is the default and `--auto` applies it while retaining the previous wiki.
+- `agentrig memory reset-dream-stamp --dir <memory-dir>` — preview a scheduling reset. Stop running/scheduled dreams, then add `--confirm` to archive the regular `.last-dream` file in a named sibling backup and reset cadence. It never initializes missing wikis or removes locks; symlinks and special files require manual inspection.
 
 The CLI also exposes provider, permission, budget, output, and command-specific controls through its generated command help.
+
+Dream log capacity is checked before paid consolidation. If the log needs more room, deliberately
+raise `dreamScanLimits.maxFileBytes` (or `--dream-scan-limits '{"maxFileBytes":16777216}'`);
+other scan caps may also need adjustment. History is never automatically truncated. The stamp
+reset above repairs scheduling metadata, not log capacity, abandoned workspaces or writer locks.
+If a scheduler reports an unreadable or oversized `.last-dream`, inspect that file and use the
+confirmed reset above only after stopping running/scheduled dreams. Backups require filesystem
+hard-link support and permission; failure leaves the original stamp in place. Dream log dates
+mark consolidation start, not the later append/completion time.
 
 ## Optional run flag groups
 
