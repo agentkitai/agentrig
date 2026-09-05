@@ -460,7 +460,8 @@ it("corrects legacy comment-only pin satisfaction without changing the page", as
 });
 
 it("returns and renders skipped dream pin persistence even without an error callback", async () => {
-  await store.write(path, page("different fact")); await addPin(store.root, pin());
+  await store.write(path, page("- [stated] original evidence (doc:fixture)")); await addPin(store.root, pin());
+  await store.upsertIndex({ path, slug: "shared", type: "concept", status: "active", summary: "original evidence" });
   const outputRoot = join(root, "dream-output");
   let phase = ""; let pruneReads = 0; let injected = false;
   const read = FileMemoryStore.prototype.read;
@@ -479,7 +480,8 @@ it("returns and renders skipped dream pin persistence even without an error call
     expect(injected).toBe(true);
     expect(dream.report.pinPersistence).toEqual({ applied: 0, skipped: 1 });
     expect(renderReport(dream.report)).toContain("pin status check(s) were not persisted");
-    expect(findingCount(dream.report)).toBeGreaterThanOrEqual(1);
+    expect(dream.report.pinsAffected).toMatchObject([{ status: "kept" }]);
+    expect(findingCount(dream.report)).toBe(1);
     expect((await readPins(outputRoot))[0]!.anchor).toBe("new human anchor");
     expect((await readPins(store.root))[0]!.anchor).toBe("");
   } finally { await dream.workspace.dispose(); }
