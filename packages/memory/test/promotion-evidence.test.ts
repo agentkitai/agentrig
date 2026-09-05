@@ -155,7 +155,7 @@ describe("runtime-backed claim promotion", () => {
     expect(result.rejected[0]!.claims![0]!.reason).toContain("self-authored text");
   });
 
-  it.each(["write_file", "edit_file", "memory_write", "memory_file_analysis", "attempt_log", "subagent", "memory_read"])("does not count %s receipts/views as independent observations", async tool => {
+  it.each([...NON_OBSERVATION_TOOLS])("does not count %s receipts/views as independent observations", async tool => {
     await session("s1", `context one\n${claim}`, { tool });
     await session("s2", `context two\n${claim}`, { tool });
     expect(selectForPromotion([page()], { evidenceIndex: await loadPromotionEvidence(raw, ["s1", "s2"]) }).promote).toEqual([]);

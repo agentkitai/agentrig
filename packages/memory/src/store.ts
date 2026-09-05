@@ -48,7 +48,7 @@ function parseEntry(line: string): IndexEntry | null {
   const entry: IndexEntry = {
     slug,
     // Older Windows dreams persisted native separators; normalize the identifier on read.
-    path: path.replace(/\\/g, "/"),
+    path: path.includes("/") ? path : path.replace(/\\/g, "/"),
     type: type as PageType,
     status: statusCell.startsWith("planned") ? "planned" : "active",
     summary: rest.join("|").replace(/\\\|/g, "|"),

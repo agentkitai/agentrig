@@ -114,4 +114,10 @@ describe("FileMemoryStore", () => {
       path: "entities/a.md", status: "planned", claimedBy: ["session:a"],
     });
   });
+
+  it("preserves an index identifier with a literal backslash inside a POSIX filename", async () => {
+    const path = "entities/a\\b.md";
+    await store.writeIndex([{ slug: "hand-created", path, type: "entity", status: "active", summary: "manual file" }]);
+    expect((await store.index())[0]!.path).toBe(path);
+  });
 });

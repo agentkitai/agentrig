@@ -26,8 +26,15 @@ unrelated sessions, split claim support, copied/forked evidence, location hashes
 resource limits, malformed logs, final dream pages, checked publication artifacts and CLI confirmation.
 Independent review found agent-input echoes and legacy truncation markers could establish false
 witnesses. Repairs reject claims present in session/ancestry tool inputs, exclude receipt/memory
-views and recognize legacy truncation. All 40 focused tests pass; full validation and delta review
-are pending. Cross-session/encoded self-authorship remains an explicit human-review limitation.
+views, recognize legacy truncation and bind receipt exclusions to registered tool names. Windows
+CI exposed native-separator wiki identifiers; discovery and legacy index parsing now keep identifiers
+portable while preserving literal backslashes in POSIX filenames. Every excluded tool receives a
+behavioral rejection test. Build/typecheck and all 1,456 tests (72 files) pass; the promotion/CLI
+pair has 46 tests and the Windows trio (including store tests) has 54. Final delta review and
+latest-head CI are pending. Mutation tests prove that restoring citation counting, independent
+fork families or the wrong skill name makes the corresponding regressions fail. The temporary
+mutations were restored. Cross-session/encoded self-authorship and custom/MCP receipt semantics
+remain explicit human-review limitations; H4 does not prove semantic truth.
 
 ### H3 complete (2026-09-05; PR #120)
 
