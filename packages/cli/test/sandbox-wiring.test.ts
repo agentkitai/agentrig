@@ -17,7 +17,8 @@ describe("CLI sandbox wiring", () => {
     vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     try {
-      const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "workspace-write", repoMap: false });
+      const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "workspace-write", repoMap: false,
+        maxTurns: "2", maxTokensPerTurn: "1024" });
       const search = built.tools.find(t => t.name === "memory_search");
       expect(search?.sandbox).toBe("compatible");
       const result = await search!.execute({ query: "anything" }, { cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
