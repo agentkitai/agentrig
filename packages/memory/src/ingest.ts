@@ -7,7 +7,7 @@ import { PAGE_DIR, isReservationPlaceholder, pagePath, serializePage } from "./p
 import { recheckStoredPins } from "./pins.js";
 import { withMemoryLock } from "./lock.js";
 import type { MemoryLockOptions } from "./lock.js";
-import { MaintenanceRun, MaintenanceLimitError, positiveLimit, type MaintenanceLimits } from "./maintenance.js";
+import { MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "./maintenance.js";
 import { readBoundedFile } from "./bounded-file.js";
 import type { MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
@@ -464,7 +464,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     if (result !== undefined) result.auxiliary = report;
     if (rejection !== undefined) rejection.auxiliary = report;
     if (state.committed !== undefined) state.committed.auxiliary = report;
-    try { opts.onUsage?.(structuredClone(report)); } catch { /* diagnostic only */ }
+    maintenanceDiagnostic(() => opts.onUsage?.(structuredClone(report)));
   }
 }
 
@@ -546,7 +546,7 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
     const ledger = await opts.attemptsFrom.readAttempts(sessionId, { signal: run.signal, maxEntries: limits.maxAttemptFiles,
       maxFileBytes: limits.maxAttemptFileBytes, maxTotalBytes: limits.maxAttemptTotalBytes });
     attempts = ledger.attempts;
-    for (const path of ledger.corrupt) { try { opts.onCorruptAttempt?.(path); } catch { /* diagnostic only */ } }
+    for (const path of ledger.corrupt) maintenanceDiagnostic(() => opts.onCorruptAttempt?.(path));
   }
   if ((attempts?.length ?? 0) > limits.maxAttempts) throw new MaintenanceLimitError("ingest attempt count limit exceeded");
   let attemptChars = 0;
@@ -752,7 +752,7 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
       catch (error) {
         run.check();
         if (error instanceof MaintenanceLimitError) throw error;
-        try { opts.onBackendError?.(operation, error instanceof Error ? error : new Error(String(error))); } catch { /* diagnostic only */ }
+        maintenanceDiagnostic(() => opts.onBackendError?.(operation, error instanceof Error ? error : new Error(String(error))));
         return fallback;
       }
     };

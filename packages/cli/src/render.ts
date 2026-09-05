@@ -1,4 +1,21 @@
-import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
+import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
+
+/** Surface unfinished paid work at session end, even if its final snapshot was too late for
+ * the closed log. Cumulative snapshots replace by run id; they never inflate main usage. */
+export class AuxiliaryText {
+  private readonly pending = new Map<string, AuxiliaryReport>();
+  push(event: HarnessEvent): string[] {
+    if (event.type === "session.start" || event.type === "session.resume") this.pending.clear();
+    if (event.type === "auxiliary.usage") {
+      if (event.final) this.pending.delete(event.id);
+      else this.pending.set(event.id, event.report);
+    }
+    if (event.type !== "session.end") return [];
+    const lines = [...this.pending.values()].map(report => formatAuxiliaryUsage(report, { final: false }));
+    this.pending.clear(); return lines;
+  }
+}
 
 /**
  * Two views of one event stream.
@@ -80,6 +97,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
+    case "auxiliary.usage": return `${p} ${e.id} ${e.final ? "final" : "provisional"} ${formatAuxiliaryUsage(e.report, { final: e.final })}`;
     case "supervisor.intervention": {
       const detail = interventionDetail(e.intervention);
       return `${p} ${e.intervention.type}${detail === "" ? "" : `: ${detail.replace(/\s+/g, " ").slice(0, 200)}`}`;
@@ -145,6 +163,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "auxiliary.usage": return e.final ? formatAuxiliaryUsage(e.report) : null;
     case "tool.call":
       return `⚒ ${toolSummary(e.name, e.input)}`;
     case "tool.result":

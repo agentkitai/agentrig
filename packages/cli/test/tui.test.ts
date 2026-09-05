@@ -171,6 +171,27 @@ it("a synchronous dream callback failure does not leave the controller stuck in 
   await controller.submit("/dream"); expect(next).toHaveBeenCalledOnce();
 });
 
+it("shutdown suppresses late diagnostics and prevents a new session", async () => {
+  const controller = makeController([]);
+  await controller.shutdown();
+  const state = controller.snapshot();
+  controller.print("late provider warning", "error");
+  expect(await controller.submit("new work")).toBe(false);
+  expect(controller.snapshot()).toBe(state);
+});
+
+it("joins a returned session observer before considering the turn settled", async () => {
+  const detached = vi.fn();
+  const done = Promise.withResolvers<void>();
+  const controller = makeController([[stop("end_turn")]], { onSession: () => ({ detach: detached, done: done.promise }) });
+  let settled = false;
+  const running = controller.submit("test").then(() => { settled = true; });
+  await vi.waitFor(() => expect(detached).toHaveBeenCalledOnce());
+  expect(settled).toBe(false);
+  done.resolve(); await running;
+  expect(settled).toBe(true);
+});
+
 function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},

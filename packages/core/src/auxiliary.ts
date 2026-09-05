@@ -4,11 +4,11 @@ import type { Usage } from "./events.js";
 export interface AuxiliaryCall {
   operation: string;
   provider: string;
-  model?: string;
+  model?: string | undefined;
   outcome: "completed" | "failed" | "aborted" | "timeout" | "limit";
   durationMs: number;
   /** Last provider-reported cumulative snapshot. Undefined is unknown, not zero. */
-  usage?: Usage;
+  usage?: Usage | undefined;
   /** Partial snapshots on failed/abandoned calls do not establish total consumption. */
   usageComplete: boolean;
 }
@@ -23,5 +23,5 @@ export interface AuxiliaryReport {
   /** No price assumptions: missing pricing/remote backend cost is never represented as free. */
   costUsd: number | null;
   /** Ingest/local maintenance status; cancellation never rolls back an earlier commit. */
-  localCommitState?: "not-started" | "may-be-partial" | "completed";
+  localCommitState?: "not-started" | "may-be-partial" | "completed" | undefined;
 }

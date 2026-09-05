@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+
+it("labels auxiliary reported and unknown usage without presenting it as main usage or free", () => {
+  const event = HarnessEvent.parse({ type: "auxiliary.usage", id: "review-1", final: true, seq: 2, ts: 1, sessionId: "s",
+    report: { operation: "reviewer", outcome: "aborted", durationMs: 2, calls: [
+      { operation: "completion", provider: "fixture", outcome: "aborted", durationMs: 2, usageComplete: false },
+    ], reportedUsage: { input: 7, output: 2 }, unknownUsageCalls: 1, costUsd: null } });
+  expect(renderEvent(event)).toContain("final auxiliary reviewer");
+  expect(renderChatEvent(event)).toContain("7 input / 2 output");
+  expect(renderChatEvent(event)).toContain("1 call(s) with unknown total usage; cost unknown");
+  expect(renderChatEvent({ ...event, final: false })).toBeNull();
+  expect(renderEvent({ ...event, final: false })).toContain("provisional");
+  const view = new AuxiliaryText();
+  view.push({ ...event, final: false });
+  view.push({ ...event, final: false, report: { ...event.report, reportedUsage: { input: 9, output: 3 } } });
+  const end = HarnessEvent.parse({ type: "session.end", reason: "done", seq: 3, ts: 2, sessionId: "s" });
+  const unfinished = view.push(end);
+  expect(unfinished).toHaveLength(1);
+  expect(unfinished[0]).toContain("9 input / 3 output");
+  expect(unfinished[0]).toContain("unfinished; final outcome and total usage unknown");
+  view.push({ ...event, final: false }); view.push(event);
+  expect(view.push(end)).toEqual([]);
+});
 
 describe("formatUsage", () => {
   it("shows total input and its cached subset in compact user-facing form", () => {

@@ -552,6 +552,15 @@ its cooldown does not advance the rung, so suppression can never walk a session 
 
 ### 4.3 Reviewer & grader (LLM-backed, invoked only by policy)
 
+H5d bounds these calls and passes cancellation through loaders/providers. Core's optional
+`SessionControl.auxiliarySignal` ends observer work before independently budgeted session-end
+hooks; detach also cancels idle waits. Validated `auxiliary.usage` records carry a run ID,
+cumulative `AuxiliaryReport` and `final` flag. Replace snapshots by ID, never sum them or fold
+them into main-model totals. An unfinished snapshot keeps total consumption/cost unknown when
+the log closes; `session.end` remains its final event. CLI/TUI render final and unfinished usage
+separately. See `docs/plans/H5-auxiliary-lifecycle.md` for defaults, SDK options and the limits of
+cancelling uncooperative JavaScript/remote work. Evaluation-wide aggregation/pricing remains E2.
+
 ```ts
 interface Reviewer {
   review(input: { task: string; trajectory: HarnessEvent[]; attempts: Attempt[]; memory: MemoryStore })

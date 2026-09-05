@@ -280,6 +280,18 @@ it("does not let a usage callback failure mask a completed ingest", async () => 
   expect((await ingest({ onUsage: () => { throw new Error("broken UI"); } })).factCount).toBe(1);
 });
 
+it("isolates asynchronous ingest usage, corrupt-entry and backend diagnostics", async () => {
+  const raw = new FileRawStore({ root });
+  await mkdir(join(root, "raw/attempts"), { recursive: true });
+  await writeFile(join(root, "raw/attempts/torn.json"), "");
+  const reject = vi.fn(async () => { throw new Error("diagnostic rejected"); });
+  const result = await ingest({ attemptsFrom: raw, onUsage: reject, onCorruptAttempt: reject, onBackendError: reject,
+    backend: backend(async () => { throw new Error("backend unavailable"); }) });
+  expect(result.factCount).toBe(1);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(reject).toHaveBeenCalledTimes(3);
+});
+
 it("checks an already-aborted run before provider work and mutation-lock acquisition", async () => {
   const controller = new AbortController(); controller.abort(); const onUsage = vi.fn();
   const stream = vi.fn(provider().stream);

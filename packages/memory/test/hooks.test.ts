@@ -59,6 +59,16 @@ async function writeLog(id: string): Promise<void> {
 }
 
 describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
+  it("isolates async success, usage and failure diagnostics", async () => {
+    await writeLog("s1"); await writeLog("s2");
+    const reject = vi.fn(async () => { throw new Error("UI rejected"); });
+    const success = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]), onDone: reject, onUsage: reject });
+    expect(await success.handler(ctx("s1"))).toEqual({ action: "continue" });
+    const failed = ingestOnSessionEnd({ dir, provider: exploding, onError: reject });
+    expect(await failed.handler(ctx("s2"))).toEqual({ action: "continue" });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(reject.mock.calls.length).toBeGreaterThanOrEqual(4);
+  });
   it("keeps scheduled backend failure diagnostics visible while local ingest succeeds", async () => {
     await writeLog("s1"); const errors: string[] = []; const done: string[] = [];
     const hook = ingestOnSessionEnd({ dir, provider: scripted([{ facts: [{ pageType: "concept", slug: "retry", tag: "observed", text: "Retry per request" }] }]),

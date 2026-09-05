@@ -16,7 +16,7 @@ import {
   type Pricing,
   type Session,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
@@ -402,7 +402,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   process.on("SIGINT", onSigint);
   try {
     const assistant = new AssistantText();
+    const auxiliary = new AuxiliaryText();
     for await (const e of session.events) {
+      const unfinished = auxiliary.push(e);
+      if (opts.json !== true) for (const line of unfinished) console.error(line);
       if (opts.json === true) {
         console.log(JSON.stringify(e));
         // machine consumers read stdout; humans tailing stderr still deserve fatal errors
@@ -435,15 +438,11 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = summary.reason === "done" ? 0 : 1;
   } finally {
     process.removeListener("SIGINT", onSigint);
+    supervisor?.detach();
     // a server left running would outlive the session that spawned it
     for (const server of built.mcp) await server.close().catch(() => {});
     if (supervisor !== null) {
-      const timedOut = Symbol("timeout");
-      const raced = await Promise.race([
-        supervisor.done,
-        new Promise<symbol>((r) => setTimeout(() => r(timedOut), 2000).unref()),
-      ]);
-      if (raced === timedOut) supervisor.detach();
+      await supervisor.done;
     }
   }
 }
