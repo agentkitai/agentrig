@@ -19,7 +19,9 @@ is declared by trusted registration code, never by a model, MCP annotation or pe
 Initial validation: build/typecheck and all 1,363 tests passed in a clean checkout, including live
 Docker file effects. Claude's six initial findings prompted atomic target replacement, local
 retrieval/subagent compatibility, runtime policy for SDK providers, stronger negative tests and
-documentation corrections. Final validation and delta review are pending. The existing nested-worktree map failure remains H2; no user worktrees were
+documentation corrections. The repaired head passes build/typecheck and all 1,367 tests in the
+clean checkout, including live Docker, interrupted-target preservation, hardlink replacement,
+local memory retrieval and subagent boundary checks. Delta review is pending. The existing nested-worktree map failure remains H2; no user worktrees were
 removed to obtain this result. The concrete implementation and limitations are in
 [plans/H1.md](plans/H1.md). Independent review and CI must complete before H2 begins.
 
@@ -35,15 +37,17 @@ promotion eligibility based on nonexistent session citations. The repository map
 nested review worktree, exhausting its budget. These gaps must be corrected before expanding
 the system's authority or turning memory into durable instructions.
 
-Review-baseline limitations (the H1 implementation above supersedes the execution details): sandboxing wrapped participating process launches, not all host-process
-effects; `--yolo` + sandbox is not yet a sufficient containment recommendation. Promotion counts
+Current limitations after H1: only supported effects cross the sandbox; trusted SDK code and
+bookkeeping remain host operations. Shell authority is path-based and pre-existing hardlinks may
+alias outside inodes; the file broker avoids that alias through atomic replacement. Promotion counts
 page-supplied citations, not independently verified claim support. Neither supervisor nor memory
 benefit is established by scripted-provider tests alone. In-process extensions, if added, remain
 trusted code with ambient env/filesystem access despite a restricted API object.
 
 Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
 worktree in the repository map), one skipped. H/E rows are **planned, not implemented**. This
-revision changes documentation only and preserves existing R identifiers. Older notes below
+roadmap revision changed documentation only and preserved existing R identifiers. H1's implementation
+and validation are recorded above; the remaining H/E rows are still planned. Older notes below
 record decisions at the time; they do not override these priorities or current limitations.
 
 | M | Deliverable | Status |
