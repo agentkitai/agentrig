@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import type { RawStore, SessionLogRef } from "../types.js";
+import { ScanBudget, type ScanOptions } from "../scan.js";
+import { MaintenanceLimitError } from "../maintenance.js";
 
 export interface PromotionWitness {
   /** Citation being checked, and the actual owner of an inherited event. */
@@ -62,7 +64,7 @@ function inputText(input: unknown): string {
   return normalized(parts.join("\n"));
 }
 
-export interface EvidenceLimits {
+export interface EvidenceLimits extends ScanOptions {
   maxSessions?: number;
   maxLogBytes?: number;
   maxTotalBytes?: number;
@@ -71,6 +73,7 @@ export interface EvidenceLimits {
 /** Load only cited sessions and their ancestors, with hard read/allocation bounds. Paths come
  * from the trusted raw store, never from page-written citations. No raw record is rewritten. */
 export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, sessionIds: Iterable<string>, limits: EvidenceLimits = {}): Promise<PromotionEvidenceIndex> {
+  const budget = new ScanBudget(limits);
   const maxSessions = limits.maxSessions ?? 128;
   const maxLogBytes = limits.maxLogBytes ?? 8 * 1024 * 1024;
   const maxTotalBytes = limits.maxTotalBytes ?? 32 * 1024 * 1024;
@@ -79,16 +82,21 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
   }
   const refs = new Map<string, SessionLogRef>();
   const duplicates = new Set<string>();
-  for (const ref of await raw.sessions()) {
+  let refCount = 0;
+  for (const ref of await raw.sessions(undefined, limits)) {
+    budget.check();
+    if (++refCount > budget.limits.maxEntries) throw new MaintenanceLimitError("evidence session enumeration limit exceeded");
     if (refs.has(ref.id)) duplicates.add(ref.id);
     refs.set(ref.id, ref);
   }
+  budget.check();
   const sessions = new Map<string, LoadedSession>();
   let bytesRead = 0;
   let filesRead = 0;
   const failed = (id: string, error: string): LoadedSession => ({ family: id, own: [], inherited: [], ownInputs: [], inheritedInputs: [], eventCount: 0, error });
 
   async function readLog(ref: SessionLogRef): Promise<Array<Record<string, unknown>>> {
+    budget.check();
     if (++filesRead > maxSessions) throw new Error("session validation limit exceeded");
     const cap = Math.min(maxLogBytes, maxTotalBytes - bytesRead);
     if (cap <= 0) throw new Error("total evidence byte limit exceeded");
@@ -103,6 +111,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
       const buffer = Buffer.alloc(cap + 1);
       let length = 0;
       while (length < buffer.length) {
+        budget.check();
         const read = await handle.read(buffer, length, buffer.length - length, length);
         if (read.bytesRead === 0) break;
         length += read.bytesRead;
@@ -113,6 +122,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
     } finally { await handle.close(); }
     const events: Array<Record<string, unknown>> = [];
     for (const line of text.split("\n")) {
+      budget.check();
       if (line.trim() === "") continue;
       const event: unknown = JSON.parse(line);
       if (typeof event !== "object" || event === null || Array.isArray(event)) throw new Error("invalid session event");
@@ -129,6 +139,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
   }
 
   async function load(id: string, ancestry = new Set<string>()): Promise<LoadedSession> {
+    budget.check();
     if (ancestry.has(id) || ancestry.size >= 32) return failed(id, "cyclic or excessive session ancestry");
     const cached = sessions.get(id);
     if (cached !== undefined) return cached;
@@ -154,6 +165,7 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
       } else if (first.type === "session.fork") throw new Error("missing fork parent");
       const tools = new Map<string, string>();
       for (const event of events) {
+        budget.check();
         if (event.type === "tool.call" && typeof event.id === "string" && typeof event.name === "string") {
           tools.set(event.id, event.name);
           result.ownInputs.push({ seq: Number(event.seq), text: inputText(event.input) });
@@ -172,11 +184,22 @@ export async function loadPromotionEvidence(raw: Pick<RawStore, "sessions">, ses
         result.own.push({ sessionId: id, seq: Number(event.seq), field, text, tool,
           eventHash: hash(JSON.stringify(event)), observationHash: hash(normalized(text)) });
       }
-    } catch (err) { result = failed(id, err instanceof Error ? err.message : String(err)); }
+    } catch (err) {
+      budget.check(); // Cancellation must not be converted into an ordinary evidence rejection.
+      result = failed(id, err instanceof Error ? err.message : String(err));
+    }
     sessions.set(id, result);
     return result;
   }
-  for (const id of [...new Set(sessionIds)].sort()) await load(id);
+  const requested = new Set<string>();
+  let citationCount = 0;
+  for (const id of sessionIds) {
+    budget.check();
+    if (++citationCount > budget.limits.maxEntries) throw new MaintenanceLimitError("evidence citation limit exceeded");
+    requested.add(id);
+  }
+  for (const id of [...requested].sort()) await load(id);
+  budget.check();
   const index: PromotionEvidenceIndex = Object.freeze({ kind: "runtime-session-evidence" });
   indexes.set(index, sessions);
   return index;

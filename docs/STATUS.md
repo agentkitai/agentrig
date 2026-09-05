@@ -1,11 +1,33 @@
 # Status
 
-Current roadmap row: **H5c1 — guarded dream snapshots and apply.** H1–H4, H5a and H5b are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5c2a — bounded wiki/raw scans.** H1–H4, H5a, H5b and H5c1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5c1 in progress
+### H5c2a in progress
+
+PR #125 merged at fb8201e after final PR CI 33963220803 passed; main CI 33963323981 passed
+all platforms. H5c2a starts from that updated main. H5c2 is split into bounded wiki/raw scans,
+full dream cancellation/accounting integration, and explicit owned crash recovery; each gets its
+own sequential PR and gates. CI action-runtime deprecation warnings are recorded as non-blocking
+maintenance rather than silently broadening this memory change.
+
+Bounded tree/page/raw/evidence traversal is implemented with explicit per-pass entry/depth/file/
+aggregate caps and cooperative scan cancellation. Tree copies use bounded reads and exclusive
+writes, preserving modes and H5c1 fingerprint framing; existing rollback faults still execute on
+the actual new write path. New regressions cover exact caps, growth-after-stat, FIFO/cycles, stage
+failure, manifest-write abort and partial-ledger rejection before model work. Full validation and
+independent review/CI remain gates; provider lifecycle and owned crash recovery are not complete.
+
+Local build/typecheck and explicit Node 22 full suite pass: 1,681 passed plus two platform-specific
+skips (1,683 total, 79 files), including 26 scan-boundary tests. Windows CI now runs those cases,
+with only FIFO creation and POSIX mode-bit checks skipped there. Independent review/CI are pending.
+
+### H5c1 complete (PR #125)
+
+Completion gate: final PR CI 33963220803 passed at b26f260, merge fb8201e, main CI 33963323981
+passed all platforms. The notes below record intermediate implementation and validation gates.
 
 H5b2 merged in PR #124 at 3eee3ea; main CI 33961430044 passed all platforms. H5c1 starts from
 that updated main. H5c is split into guarded snapshot/apply, bounded dream lifecycle/recovery,

@@ -8,7 +8,7 @@ import { applyDream, copyWiki, FileMemoryStore, FileRawStore, fingerprint, markD
 
 vi.mock("node:fs/promises", async original => {
   const actual = await original<typeof import("node:fs/promises")>();
-  return { ...actual, rename: vi.fn(actual.rename), cp: vi.fn(actual.cp), open: vi.fn(actual.open) };
+  return { ...actual, rename: vi.fn(actual.rename), cp: vi.fn(actual.cp), open: vi.fn(actual.open), writeFile: vi.fn(actual.writeFile) };
 });
 let root: string; let store: FileMemoryStore;
 const path = "concepts/a.md";
@@ -171,7 +171,7 @@ it("preserves backup and stage and names both when restore also fails", async ()
 
 it("fails before any rename when copying the proposed artifact fails", async () => {
   const ws = await copy(); const before = await fingerprint(store.root);
-  vi.mocked(fs.cp).mockRejectedValueOnce(new Error("injected copy failure"));
+  vi.mocked(fs.writeFile).mockRejectedValueOnce(new Error("injected copy failure"));
   vi.mocked(fs.rename).mockClear();
   await expect(applyDream(store.root, ws.outputRoot, "copy-fail")).rejects.toThrow("injected copy failure");
   expect(fs.rename).not.toHaveBeenCalled(); expect(await fingerprint(store.root)).toBe(before);
@@ -183,8 +183,8 @@ it.each(["before-swap", "after-original-moved"])("handles abort %s without losin
   const ws = await copy(); const controller = new AbortController();
   await new FileMemoryStore({ root: ws.outputRoot }).write(path, page("proposed fact"));
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-  if (when === "before-swap") vi.mocked(fs.cp).mockImplementationOnce(async (from, to, options) => {
-    await actual.cp(from, to, options); controller.abort(new Error("injected abort"));
+  if (when === "before-swap") vi.mocked(fs.writeFile).mockImplementationOnce(async (file, data, options) => {
+    await actual.writeFile(file, data, options); controller.abort(new Error("injected abort"));
   });
   else vi.mocked(fs.rename).mockImplementation(async (from, to) => {
     await actual.rename(from, to);
@@ -257,9 +257,9 @@ it("does not dispose a workspace while another owner holds its mutation lock", a
 it("blocks a store writer while copying a guarded source snapshot", async () => {
   const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-  vi.mocked(fs.cp).mockImplementationOnce(async (from, to, options) => {
+  vi.mocked(fs.writeFile).mockImplementationOnce(async (file, data, options) => {
     expect(await readFile(store.root + ".write.lock", "utf8")).toMatch(new RegExp(`^${process.pid}:`));
-    entered.resolve(); await release.promise; await actual.cp(from, to, options);
+    entered.resolve(); await release.promise; await actual.writeFile(file, data, options);
   });
   const copying = copy();
   await entered.promise;
