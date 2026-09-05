@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
 import { FileMemoryStore, OVERVIEW_FILE } from "../store.js";
@@ -17,6 +18,7 @@ import { selectForPromotion, sessionEvidence, type PromotionRejection } from "./
 import { loadPromotionEvidence } from "./evidence.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
+import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
 
@@ -66,8 +68,20 @@ export async function lastDreamAt(wikiRoot: string): Promise<number | undefined>
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-export async function markDreamed(wikiRoot: string, at: number): Promise<void> {
-  await writeFile(join(wikiRoot, LAST_DREAM_FILE), `${at}\n`, "utf8");
+export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLockOptions = {}): Promise<void> {
+  if (!Number.isFinite(at) || at < 0) throw new Error("invalid dream timestamp");
+  await withMemoryLock(wikiRoot, async () => {
+    const previous = await lastDreamAt(wikiRoot);
+    if (previous !== undefined && previous >= at) return;
+    const path = join(wikiRoot, LAST_DREAM_FILE);
+    const temp = path + "." + randomUUID() + ".tmp";
+    try {
+      opts.signal?.throwIfAborted();
+      await writeFile(temp, `${at}\n`, { flag: "wx", mode: 0o600 });
+      opts.signal?.throwIfAborted();
+      await rename(temp, path);
+    } finally { await rm(temp, { force: true }).catch(() => {}); }
+  }, opts);
 }
 
 /**

@@ -1,11 +1,30 @@
 # Status
 
-Current roadmap row: **H5b2 — bounded ingest cancellation and auxiliary accounting.** H1–H4, H5a and H5b1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5c1 — guarded dream snapshots and apply.** H1–H4, H5a and H5b are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5b2 in progress
+### H5c1 in progress
+
+H5b2 merged in PR #124 at 3eee3ea; main CI 33961430044 passed all platforms. H5c1 starts from
+that updated main. H5c is split into guarded snapshot/apply, bounded dream lifecycle/recovery,
+lossless regeneration/session-scoped ledger lookup, and the staged-child abort investigation.
+Each is a separate sequential PR with review, PR CI, merge and main-CI gates. Current work closes
+unlocked/stale apply and unsafe destination/staging reuse; it does not claim all dream calls are
+already bounded or cancelable.
+
+Guarded copy/apply and persisted source/output identities are implemented. The new fault tests
+exercise actual failed second rename, failed restore, pre-swap abort and finish-after-first-rename
+behavior. A separate child process holds the real store mutation lock while apply waits, then
+apply rejects its now-stale snapshot. Linux local build/typecheck and the full suite pass
+(1,643 passed plus two platform-specific skips, 78 files), including both additional abort cases.
+Independent review and exact-head CI remain pending. Windows CI now includes lifecycle/apply tests.
+
+### H5b2 complete (PR #124)
+
+Completion gate: final PR CI 33961342727 passed at f2edf579, PR #124 merged at 3eee3ea,
+and main CI 33961430044 passed all three platforms. The notes below record intermediate gates.
 
 H5b1 merged in PR #123 at 5fc2cb8; post-merge CI 33958820304 passed all platforms.
 H5b2 starts from that updated main. It bounds ingest input/model/backend work, propagates abort
@@ -43,6 +62,9 @@ refinement commit still requires fresh CI before merge. Three review passes, not
 review cycle for the final two targeted changes.
 
 ### H5b1 complete (PR #123)
+
+Completion gate: final PR CI 33958721558 passed at ee5afc2, PR #123 merged at 5fc2cb8,
+and main CI 33958820304 passed all three platforms. The notes below record intermediate gates.
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
 H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate
