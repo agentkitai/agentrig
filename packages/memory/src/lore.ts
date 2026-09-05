@@ -107,7 +107,7 @@ export class LoreBackend implements MemoryBackend {
 
   private async request(path: string, body: JsonObject, opts: BackendCallOptions = {}): Promise<JsonObject> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(new DOMException(`lore request timed out after ${this.timeoutMs}ms`, "TimeoutError")), this.timeoutMs);
     const signal = opts.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, opts.signal]);
     try {
       signal.throwIfAborted();
@@ -129,7 +129,7 @@ export class LoreBackend implements MemoryBackend {
           signal.throwIfAborted();
           if (item.done) break;
           bytes += item.value.byteLength;
-          if (bytes > 2 * 1024 * 1024) throw new Error("lore: response exceeds 2 MiB");
+          if (bytes > 2 * 1024 * 1024) throw new Error(`lore: HTTP ${res.status}; response exceeds 2 MiB`);
           chunks.push(item.value);
         }
       } finally {

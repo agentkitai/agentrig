@@ -1,9 +1,11 @@
-import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
-import { FileMemoryStore, ingestSession, MaintenanceRun, LoreBackend, type IngestOptions, type MemoryBackend } from "@agentkitai/agentrig-memory";
+import { FileMemoryStore, FileRawStore, formatAuxiliaryUsage, ingestSession, MaintenanceRun, LoreBackend, recheckStoredPins, type IngestOptions, type MemoryBackend, type Pin } from "@agentkitai/agentrig-memory";
 
 let root: string; let store: FileMemoryStore; let logPath: string;
 const source = "sources/session-s1.md";
@@ -88,6 +90,31 @@ it("retains partial reported usage on failure but marks total usage unknown", as
   expect(onUsage.mock.calls[0]![0]).toMatchObject({ outcome: "failed", reportedUsage: { input: 17, output: 2 }, unknownUsageCalls: 1 });
 });
 
+it("malformed usage does not discard valid distillation or its last valid accounting snapshot", async () => {
+  const result = await ingest({ provider: provider(async function* () {
+    yield { type: "usage", usage: { input: 8, output: 2 } };
+    yield { type: "usage", usage: { input: -1, output: 3 } };
+    yield { type: "text_delta", text: answer };
+  }) });
+  expect(result.factCount).toBe(1);
+  expect(result.auxiliary).toMatchObject({ reportedUsage: { input: 8, output: 2 }, unknownUsageCalls: 1 });
+});
+
+it("ignores usage extension fields and absent optional counts", async () => {
+  const result = await ingest({ provider: provider(async function* () {
+    yield { type: "usage", usage: { input: 8, output: 2, cacheRead: undefined, vendor: "extra" } as unknown as { input: number; output: number } };
+    yield { type: "text_delta", text: answer };
+  }) });
+  expect(result.auxiliary).toMatchObject({ reportedUsage: { input: 8, output: 2 }, unknownUsageCalls: 0 });
+});
+
+it("formats separate usage, unknown cost, local state, and a nonzero known price without claiming free work", () => {
+  const run = new MaintenanceRun("ingest"); const report = run.finish();
+  expect(formatAuxiliaryUsage({ ...report, costUsd: 1.5 })).toContain("cost $1.5");
+  expect(formatAuxiliaryUsage({ ...report, costUsd: null, unknownUsageCalls: 2, localCommitState: "completed" }))
+    .toContain("2 call(s) with unknown total usage; cost unknown; completed; local writes completed");
+});
+
 it("counts retry overhead as unknown even when the successful attempt reports usage", async () => {
   const result = await ingest({ provider: provider(async function* () {
     yield { type: "retry", attempt: 1, maxAttempts: 3, delayMs: 1, reason: "transport" };
@@ -153,7 +180,7 @@ it("aborts a queued source mutation, retains completed reservations, and retries
   vi.restoreAllMocks(); expect((await ingest()).skipped).toBe(false);
 });
 
-it("checks cancellation before index, log, and final completion writes", async () => {
+it("checks cancellation before log and final completion writes", async () => {
   const abort = new AbortController(); const original = store.appendLog.bind(store);
   vi.spyOn(store, "appendLog").mockImplementation(async (entry, opts) => { abort.abort(); return original(entry, opts); });
   const beforeLog = await readFile(join(store.root, "log.md"), "utf8");
@@ -167,6 +194,7 @@ it("aborts backend delivery without late provenance commits; local completion is
   const entered = gate(); const late = gate(); const abort = new AbortController(); let signal: AbortSignal | undefined;
   const sink = backend(async (_facts, _source, opts) => { signal = opts!.signal; entered.resolve(); await late.promise; return [{ factText: fact.text, memoryId: "late" }]; });
   const onUsage = vi.fn(); const work = ingest({ signal: abort.signal, backend: sink, onUsage });
+  const failure = work.catch(error => error);
   const rejected = expect(work).rejects.toMatchObject({ name: "AbortError" });
   await entered.promise;
   const before = await readFile(join(store.root, "concepts/retry.md"), "utf8");
@@ -176,6 +204,7 @@ it("aborts backend delivery without late provenance commits; local completion is
   expect((await store.read(source))!.body).toContain("ingest:events-v1");
   expect(onUsage.mock.calls[0]![0].calls[1]).toMatchObject({ operation: "backend.onIngest", outcome: "aborted", usageComplete: false });
   expect(onUsage.mock.calls[0]![0].localCommitState).toBe("completed");
+  expect(await failure).toMatchObject({ name: "AbortError", committedResult: { factCount: 1, pagesWritten: [source, "concepts/retry.md"], coverage: [{ outcome: "distilled" }] }, auxiliary: { localCommitState: "completed" } });
 });
 
 it("tolerates backend timeout while reporting unknown remote cost and aborting cooperative work", async () => {
@@ -194,6 +223,57 @@ it("bounded file reads reject directories and oversized existing pages without p
   await store.write(source, { path: source, frontmatter: { type: "source", slug: "session-s1", aliases: [], sources: [], updated: "2026-09-05", confidence: "high" }, body: "x".repeat(3000) });
   await expect(ingest({ limits: { maxFileBytes: 1024 }, provider: provider(stream) })).rejects.toThrow("file exceeds");
   expect(stream).not.toHaveBeenCalled();
+});
+
+it.skipIf(process.platform === "win32")("rejects a FIFO without waiting for a writer", async () => {
+  const fifo = join(root, "fifo"); await promisify(execFile)("mkfifo", [fifo]);
+  await expect(ingest({ logPath: fifo })).rejects.toThrow("regular file");
+});
+
+it("enforces each write-side byte limit and leaves the original artifacts intact", async () => {
+  const path = "concepts/limited.md";
+  const page = { path, body: "x".repeat(1024), frontmatter: { type: "concept" as const, slug: "limited", aliases: [], sources: [], updated: "2026-09-05", confidence: "low" as const } };
+  await expect(store.update(path, () => page, { maxFileBytes: 512 })).rejects.toThrow("page output limit");
+  expect(await store.read(path)).toBeNull();
+  await expect(store.upsertIndex({ path, slug: "limited", type: "concept", status: "active", summary: "x".repeat(1024) }, { maxFileBytes: 512 })).rejects.toThrow("index output limit");
+  expect(await store.index()).toEqual([]);
+  await expect(store.reserve("limited", "session:s1", "concept", { maxFileBytes: 16 })).rejects.toThrow("reservation output limit");
+  expect(await store.read(path)).toBeNull();
+  const chronology = await readFile(join(store.root, "log.md"), "utf8");
+  await expect(store.appendLog("x".repeat(1024), { maxFileBytes: 512 })).rejects.toThrow("log output limit");
+  expect(await readFile(join(store.root, "log.md"), "utf8")).toBe(chronology);
+  await store.write(path, { ...page, body: "unrelated text" });
+  const pins: Pin[] = Array.from({ length: 5 }, (_, i) => ({ page: path, kind: "addition", claim: `missing claim ${i}`, anchor: "", provenance: "human", created: "2026-09-05", status: "active" }));
+  const compact = JSON.stringify(pins); await writeFile(join(store.root, "pins.json"), compact);
+  const maxFileBytes = Buffer.byteLength(compact) + 1;
+  expect(Buffer.byteLength(JSON.stringify(pins, null, 2))).toBeGreaterThan(maxFileBytes);
+  await expect(recheckStoredPins(store, undefined, { maxFileBytes })).rejects.toThrow("pins output limit");
+  expect(await readFile(join(store.root, "pins.json"), "utf8")).toBe(compact);
+  // Failure released the mutation lock; a normal retry can persist the status.
+  expect((await recheckStoredPins(store))[0]!.status).toBe("conflict");
+});
+
+it("reserves backend call budget before distillation, avoiding post-commit exhaustion", async () => {
+  const stream = vi.fn(provider().stream); const sink = backend(vi.fn(async () => []));
+  await expect(ingest({ provider: provider(stream), backend: sink, limits: { maxCalls: 1 } })).rejects.toThrow("span/call limit");
+  expect(stream).not.toHaveBeenCalled(); expect(await store.read(source)).toBeNull();
+});
+
+it.each(["acks", "conflicts"] as const)("rejects oversized backend %s while retaining the local result", async kind => {
+  const sink = backend(async () => kind === "acks" ? [{ factText: fact.text, memoryId: "a" }, { factText: fact.text, memoryId: "b" }] : []);
+  if (kind === "conflicts") sink.conflicts = async () => [1, 2].map(() => ({ fact: fact.text, existing: "opposite", existingId: "x" }));
+  await expect(ingest({ backend: sink, checkBackendConflicts: true, limits: { maxFacts: 1 } }))
+    .rejects.toMatchObject({ committedResult: { factCount: 1 }, auxiliary: { localCommitState: "completed", outcome: "limit" } });
+});
+
+it("bounds CLI-style attempt loading inside the ingest run before any provider call", async () => {
+  const directory = join(root, "raw/attempts"); await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, "huge.json"), "x".repeat(1000));
+  const stream = vi.fn(provider().stream);
+  await expect(ingest({ attemptsFrom: new FileRawStore({ root }), provider: provider(stream), limits: { maxAttemptFileBytes: 64 } })).rejects.toThrow("file exceeds");
+  expect(stream).not.toHaveBeenCalled(); expect(await store.read(source)).toBeNull();
+  await writeFile(join(directory, "other.json"), "{}");
+  await expect(ingest({ attemptsFrom: new FileRawStore({ root }), provider: provider(stream), limits: { maxAttemptFiles: 1 } })).rejects.toThrow("ledger entry limit");
 });
 
 it("does not let a usage callback failure mask a completed ingest", async () => {

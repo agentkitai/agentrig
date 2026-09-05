@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
 import { dreamOnSessionEnd, FileMemoryStore, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
 
@@ -58,6 +58,27 @@ async function writeLog(id: string): Promise<void> {
 }
 
 describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
+  it("forwards bounds and reports failure before auxiliary completion without pre-ingest init", async () => {
+    await writeLog("s1");
+    const order: string[] = [];
+    const init = vi.spyOn(FileMemoryStore.prototype, "init");
+    try {
+      const hook = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]),
+        limits: { maxOutputChars: 2 }, maxSpanChars: 1000,
+        onError: error => order.push(`error:${error.message}`), onDone: text => order.push(`done:${text}`) });
+      expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+      expect(init).not.toHaveBeenCalled();
+      expect(order).toHaveLength(2);
+      expect(order[0]).toContain("output limit"); expect(order[1]).toContain("auxiliary ingest");
+      expect(order[1]).toContain("local writes not-started");
+    } finally { init.mockRestore(); }
+  });
+
+  it("keeps an extended run budget below its outer hook timeout", () => {
+    const hook = ingestOnSessionEnd({ dir, provider: exploding, limits: { timeoutMs: 900_000 } });
+    expect(hook.timeoutMs).toBe(960_000);
+  });
+
   it("surfaces uninspected evidence in the completion notice", async () => {
     await writeFile(join(dir, "raw", "sessions", "s1.jsonl"), JSON.stringify({
       type: "tool.result", ok: true, display: "recorded prefix only", truncated: true,
@@ -88,6 +109,8 @@ describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
     const page = await readFile(join(dir, "wiki", "concepts", "retry.md"), "utf8");
     expect(page).toContain("retries are per request");
     expect(done[0]).toContain("ingested");
+    expect(done).toHaveLength(2);
+    expect(done[1]).toContain("auxiliary ingest");
   });
 
   it("is a no-op when the session wrote no log — nothing to distil, no model call", async () => {

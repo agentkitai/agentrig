@@ -19,6 +19,14 @@ ingest expose reported/unknown usage and local-write completion state; durable s
 remains H5d. See [plans/H5b2.md](plans/H5b2.md) for exact limits and OS/remote cancellation boundaries.
 New lifecycle/adapter tests pass; full validation, independent review and CI remain merge gates.
 
+PR #124's first review ran typecheck and the full suite (1,594 passed + two platform skips).
+CI 33959675267 passed all three platforms at ca3fd26. Review fixes expose limits through CLI/config
+and hooks, avoid swallowed backend failure outcomes, tolerate malformed usage as unknown, reserve
+backend call slots, and preserve committed results on later abort. Inspection also moved CLI
+attempt-ledger scanning inside the run's bounds and removed pre-run initialization. Added tests
+cover shipped composition, write-side file caps and FIFO rejection. Repair review and fresh CI
+remain pending; these are not yet completion claims.
+
 ### H5b1 complete (PR #123)
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.

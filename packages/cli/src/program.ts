@@ -1,6 +1,7 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
 import { SessionStore } from "@agentkitai/agentrig-core";
+import { IngestLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
@@ -8,6 +9,11 @@ import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
+
+function parseIngestLimits(text: string) {
+  try { return IngestLimitsSchema.parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid ingest limits: ${String(error)}`); }
+}
 import { diagnose, type DoctorCliValues, type DoctorOptions } from "./doctor.js";
 import {
   memoryIngest,
@@ -220,6 +226,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--no-supervisor-abort", "override config and disable supervisor aborts")
       .option("--no-supervisor-review", "override config and disable trajectory review")
       .option("--no-ingest-on-end", "override config and skip session-end memory ingest")
+      .option("--ingest-limits <json>", "bounded ingest limits (JSON object; e.g. maxSpans, maxCalls, timeoutMs)", parseIngestLimits)
+      .option("--ingest-span-chars <n>", "maximum characters per ingest span (default 6000)")
       .option("--no-dream-on-end", "override config and skip scheduled session-end dream")
       .option("--no-dream-structural-only", "override config and allow model-backed dream consolidation")
       .option("--no-subagents", "override config and disable subagents")
@@ -313,7 +321,9 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   );
   withProviderOptions(
     memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
-  ).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) => {
+  ).option("--ingest-limits <json>", "bounded ingest limits (JSON object)", parseIngestLimits)
+    .option("--ingest-span-chars <n>", "maximum characters per ingest span (default 6000)")
+    .action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) => {
     // R3.5a: ingest is the memory role; without config it stays exactly the flags it was given
     const resolved = await configured(opts, cmd, false);
     if (resolved !== undefined) await memoryIngest(sessionId, { ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });

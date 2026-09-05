@@ -280,6 +280,10 @@ H5c must diagnose/migrate legacy multiline facts without losing their text or re
 unknown frontmatter across regeneration, with round-trip tests. New ingest normalizes line breaks;
 this is not a claim that all old pages have been migrated.
 
+H5b2 adds bounded named-session ingest and attempt-ledger loading. H5c should reuse those read
+bounds for its broader raw-session/attempt enumeration and workspace scans; generic search and
+dream scans are not implicitly bounded by H5b2's ingest-only migration.
+
 ### E — Measure outcomes before expanding capabilities
 
 This is the minimum useful subset of R9 and R14, not a requirement to build a full exporter,

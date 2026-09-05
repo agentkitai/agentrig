@@ -11,6 +11,7 @@ import { MaintenanceRun, MaintenanceLimitError, positiveLimit, type MaintenanceL
 import { readBoundedFile } from "./bounded-file.js";
 import type { MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
+import type { FileRawStore } from "./raw.js";
 import type { Attempt, PageType } from "./types.js";
 
 /**
@@ -332,6 +333,9 @@ export interface IngestOptions {
   /** Path to the session's JSONL log. */
   logPath: string;
   attempts?: Attempt[];
+  /** Load a ledger inside the run's deadline and byte/entry bounds; explicit attempts win. */
+  attemptsFrom?: FileRawStore;
+  onCorruptAttempt?: (path: string) => void;
   maxSpanChars?: number;
   maxTokens?: number;
   now?: () => number;
@@ -347,7 +351,7 @@ export interface IngestOptions {
   checkBackendConflicts?: boolean;
   /** Reported when a tolerated backend call fails; defaults to silence. */
   onBackendError?: (op: string, err: Error) => void;
-  /** Same-session ingest serialization; distinct sessions still distill concurrently. */
+  /** Wait budget for session and short mutation locks; distinct sessions still distill concurrently. */
   lockTimeoutMs?: number;
   /** Abort propagates to providers/backends and is checked before subsequent local commits. */
   signal?: AbortSignal;
@@ -363,11 +367,32 @@ export interface IngestLimits extends MaintenanceLimits {
   maxFacts: number;
   maxPages: number;
   maxFileBytes: number;
+  maxAttempts: number;
+  maxAttemptFiles: number;
+  maxAttemptFileBytes: number;
+  maxAttemptTotalBytes: number;
 }
+const limitValue = z.number().int().positive().max(2_147_483_647);
+export const IngestLimitsSchema = z.object({
+  timeoutMs: limitValue, callTimeoutMs: limitValue, maxCalls: limitValue, maxInputChars: limitValue,
+  maxOutputChars: limitValue, maxModelEvents: limitValue, maxRawBytes: limitValue, maxEvents: limitValue,
+  maxSpans: limitValue, maxFacts: limitValue, maxPages: limitValue, maxFileBytes: limitValue, maxAttempts: limitValue,
+  maxAttemptFiles: limitValue, maxAttemptFileBytes: limitValue, maxAttemptTotalBytes: limitValue,
+} satisfies Record<keyof IngestLimits, typeof limitValue>).partial().strict();
 export const DEFAULT_INGEST_LIMITS = Object.freeze({
   maxRawBytes: 8 * 1024 * 1024, maxEvents: 20_000, maxSpans: 64,
-  maxFacts: 1024, maxPages: 256, maxFileBytes: 8 * 1024 * 1024,
+  maxFacts: 1024, maxPages: 256, maxFileBytes: 8 * 1024 * 1024, maxAttempts: 128,
+  maxAttemptFiles: 10_000, maxAttemptFileBytes: 64 * 1024, maxAttemptTotalBytes: 2 * 1024 * 1024,
 });
+
+/** Failure retains accounting and, after local completion, the complete local result. */
+export class IngestError extends Error {
+  auxiliary?: AuxiliaryReport;
+  constructor(error: unknown, readonly committedResult?: IngestResult) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = error instanceof Error ? error.name : "Error";
+  }
+}
 
 const CaptureHashes = z.array(z.string().regex(/^[a-f0-9]{64}$/));
 function captureHashes(body: string): string[] | undefined {
@@ -425,22 +450,25 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
   const run = new MaintenanceRun("ingest", opts.limits, opts.signal);
   run.localCommitState = "not-started";
   const limits: IngestLimits = { ...run.limits, ...DEFAULT_INGEST_LIMITS, ...opts.limits };
-  let failure: unknown; let result: IngestResult | undefined;
+  let failure: unknown; let result: IngestResult | undefined; let rejection: IngestError | undefined;
+  const state: { committed?: IngestResult } = {};
   try {
     for (const [key, value] of Object.entries(limits)) positiveLimit(key, value);
     positiveLimit("maxSpanChars", opts.maxSpanChars ?? 6000);
     positiveLimit("maxTokens", opts.maxTokens ?? 2048);
-    result = await ingestSessionGuarded({ ...opts, signal: run.signal }, run, limits);
+    result = await ingestSessionGuarded({ ...opts, signal: run.signal }, run, limits, state);
     return result;
-  } catch (error) { failure = error; throw error; }
+  } catch (error) { failure = error ?? new Error(String(error)); rejection = new IngestError(error, state.committed); throw rejection; }
   finally {
     const report = run.finish(failure);
     if (result !== undefined) result.auxiliary = report;
+    if (rejection !== undefined) rejection.auxiliary = report;
+    if (state.committed !== undefined) state.committed.auxiliary = report;
     try { opts.onUsage?.(structuredClone(report)); } catch { /* diagnostic only */ }
   }
 }
 
-async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits): Promise<IngestResult> {
+async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits, state: { committed?: IngestResult }): Promise<IngestResult> {
   // Match core's filename contract without introducing a runtime dependency on core.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)) throw new Error("invalid ingest session id: expected 1-128 characters of [A-Za-z0-9_-]");
   opts.signal?.throwIfAborted();
@@ -453,7 +481,7 @@ async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, li
   const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex").slice(0, 32);
   let entered = false;
   try {
-    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts, run, limits); }, {
+    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts, run, limits, state); }, {
       ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }),
       ...(opts.signal === undefined ? {} : { signal: opts.signal }),
     });
@@ -463,7 +491,7 @@ async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, li
   }
 }
 
-async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits): Promise<IngestResult> {
+async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits, state: { committed?: IngestResult }): Promise<IngestResult> {
   const { store, provider, sessionId, logPath } = opts;
   const now = opts.now ?? (() => Date.now());
   const today = new Date(now()).toISOString().slice(0, 10);
@@ -506,16 +534,23 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
   }
 
   const existingIndexSummary = (await store.index(mutation)).find((e) => e.slug === `session-${sessionId}`)?.summary;
-  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000, Math.min(limits.maxSpans, limits.maxCalls));
-  if (spans.length > limits.maxSpans || spans.length > limits.maxCalls) throw new MaintenanceLimitError("ingest span/call limit exceeded");
+  const backendSlots = opts.backend === undefined ? 0 : 1 + Number(opts.checkBackendConflicts === true && opts.backend.conflicts !== undefined);
+  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000, Math.min(limits.maxSpans, Math.max(0, limits.maxCalls - backendSlots)));
   const coverage: IngestResult["coverage"] = [];
   const facts: DistilledFact[] = [];
   const summaries: string[] = [];
 
   const emptyButNotClosed: string[] = [];
-  if ((opts.attempts?.length ?? 0) > 128) throw new MaintenanceLimitError("ingest attempt count limit exceeded");
+  let attempts = opts.attempts;
+  if (attempts === undefined && opts.attemptsFrom !== undefined) {
+    const ledger = await opts.attemptsFrom.readAttempts(sessionId, { signal: run.signal, maxEntries: limits.maxAttemptFiles,
+      maxFileBytes: limits.maxAttemptFileBytes, maxTotalBytes: limits.maxAttemptTotalBytes });
+    attempts = ledger.attempts;
+    for (const path of ledger.corrupt) { try { opts.onCorruptAttempt?.(path); } catch { /* diagnostic only */ } }
+  }
+  if ((attempts?.length ?? 0) > limits.maxAttempts) throw new MaintenanceLimitError("ingest attempt count limit exceeded");
   let attemptChars = 0;
-  for (const attempt of opts.attempts ?? []) {
+  for (const attempt of attempts ?? []) {
     attemptChars += attempt.hypothesis.length + attempt.actions.length + (attempt.lesson?.length ?? 0) + attempt.outcome.length + 10;
     if (attemptChars > limits.maxInputChars) throw new MaintenanceLimitError("ingest attempts input limit exceeded");
   }
@@ -530,9 +565,9 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
       origins.push(`${record.kind} [${Math.max(record.from, span.charFrom)}, ${Math.min(record.to, span.charTo)})`);
     }
     const attemptNote =
-      opts.attempts === undefined || opts.attempts.length === 0
+      attempts === undefined || attempts.length === 0
         ? ""
-        : `\n\nAttempts recorded this session:\n${opts.attempts
+        : `\n\nAttempts recorded this session:\n${attempts
             .map((a) => `- ${a.outcome}: ${a.hypothesis} — ${a.actions}${a.lesson ? ` (lesson: ${a.lesson})` : ""}`)
             .join("\n")}`;
     const raw = await run.completeJson(
@@ -700,6 +735,8 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
   // PLAN §3.8: the backend runs LAST — after every page, the pin re-check, and the log entry —
   // so no backend outcome, including an unwrapped throw, can leave the wiki half-written.
   const backendConflicts: IngestResult["backendConflicts"] = [];
+  state.committed = { sessionId, coverage, omissions, pagesWritten, pagesReserved, factCount: facts.length,
+    supersededPrevious, skipped: false, pinConflicts, backendConflicts };
   if (opts.backend !== undefined && facts.length > 0) {
     const sink = opts.backend;
     const bounded: MemoryBackend = { id: sink.id,
@@ -743,18 +780,7 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
   }
 
   run.check();
-  return {
-    sessionId,
-    coverage,
-    omissions,
-    pagesWritten,
-    pagesReserved,
-    factCount: facts.length,
-    supersededPrevious,
-    skipped: false,
-    pinConflicts,
-    backendConflicts,
-  };
+  return state.committed;
 }
 
 /**

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
 import { REASONING_EFFORTS } from "@agentkitai/agentrig-core";
+import { IngestLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
@@ -101,6 +102,8 @@ const ConfigValuesSchema = z
     priceCacheWrite: positiveSetting.optional(),
     maxTokensPerTurn: positiveSetting.optional(),
     ingestOnEnd: z.boolean().optional(),
+    ingestLimits: IngestLimitsSchema.optional(),
+    ingestSpanChars: integerSetting.refine(value => Number(value) >= 2, "must be at least 2").optional(),
     dreamOnEnd: z.boolean().optional(),
     dreamEverySessions: positiveSetting.optional(),
     dreamEveryHours: positiveSetting.optional(),

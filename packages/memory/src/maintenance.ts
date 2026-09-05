@@ -71,6 +71,7 @@ export class MaintenanceRun {
     this.calls.push(record);
     let accepting = true;
     let reported = false;
+    let malformedUsage = false;
     let rejectAbort!: () => void;
     try {
       const aborted = new Promise<never>((_, reject) => {
@@ -83,15 +84,21 @@ export class MaintenanceRun {
         return fn(controller.signal, (value, complete = true) => {
           if (!accepting || controller.signal.aborted) return;
           // ModelEvent usage is cumulative per request, not additive per event.
-          if (![value.input, value.output, ...Object.values(value)].every(n => typeof n === "number" && Number.isSafeInteger(n) && n >= 0)) throw new Error("invalid auxiliary usage");
-          record.usage = { ...value };
+          const valid = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+          if (value === null || typeof value !== "object" || !valid(value.input) || !valid(value.output)
+            || (value.cacheRead !== undefined && !valid(value.cacheRead)) || (value.cacheWrite !== undefined && !valid(value.cacheWrite))) {
+            malformedUsage = true; reported = false; return;
+          }
+          record.usage = { input: value.input, output: value.output,
+            ...(value.cacheRead === undefined ? {} : { cacheRead: value.cacheRead }),
+            ...(value.cacheWrite === undefined ? {} : { cacheWrite: value.cacheWrite }) };
           reported = complete;
         });
       });
       const result = await Promise.race([work, aborted]);
       controller.signal.throwIfAborted(); this.check();
       record.outcome = "completed";
-      record.usageComplete = record.usage !== undefined && reported;
+      record.usageComplete = record.usage !== undefined && reported && !malformedUsage;
       return result;
     } catch (error) {
       record.outcome = controller.signal.aborted ? (outcome(controller.signal.reason) === "timeout" ? "timeout" : "aborted") : outcome(error);
@@ -157,5 +164,5 @@ export class MaintenanceRun {
 }
 
 export function formatAuxiliaryUsage(report: AuxiliaryReport): string {
-  return `auxiliary ${report.operation}: ${report.calls.length} call(s), ${report.reportedUsage.input} input / ${report.reportedUsage.output} output reported tokens; ${report.unknownUsageCalls} call(s) with unknown total usage; cost ${report.costUsd === null ? "unknown" : "$0"}; ${report.outcome}${report.localCommitState === undefined ? "" : `; local writes ${report.localCommitState}`}`;
+  return `auxiliary ${report.operation}: ${report.calls.length} call(s), ${report.reportedUsage.input} input / ${report.reportedUsage.output} output / ${report.reportedUsage.cacheRead ?? 0} cache-read / ${report.reportedUsage.cacheWrite ?? 0} cache-write reported tokens; ${report.unknownUsageCalls} call(s) with unknown total usage; cost ${report.costUsd === null ? "unknown" : `$${report.costUsd}`}; ${report.outcome}${report.localCommitState === undefined ? "" : `; local writes ${report.localCommitState}`}`;
 }
