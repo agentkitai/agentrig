@@ -444,10 +444,19 @@ it("reports skipped unversioned pin checks and avoids rewriting unchanged status
 it("keeps the empty-pin snapshot read-only even behind a stale mutation lock", async () => {
   await writePins(store.root, []);
   await utimes(join(store.root, "pins.json"), new Date(0), new Date(0));
-  await writeFile(`${store.root}.write.lock`, "fixture owner");
+  const lockPath = `${await realpath(store.root)}.write.lock`;
+  await writeFile(lockPath, "fixture owner");
   expect(await recheckStoredPins(store, undefined, { timeoutMs: 0 })).toEqual([]);
-  expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("fixture owner");
+  expect(await readFile(lockPath, "utf8")).toBe("fixture owner");
   expect((await stat(join(store.root, "pins.json"))).mtimeMs).toBe(0);
+});
+
+it("counts duplicate status-changing checks against the same inspected pin snapshot", async () => {
+  await store.write(path, page("unrelated text")); await addPin(store.root, pin());
+  const check = (await recheckPins(store, [pin()]))[0]!;
+  expect(check.status).toBe("conflict");
+  expect(await applyPinChecks(store, [check, check])).toEqual({ applied: 2, skipped: 0 });
+  expect((await readPins(store.root))[0]!.status).toBe("conflict");
 });
 
 it("corrects legacy comment-only pin satisfaction without changing the page", async () => {
@@ -482,6 +491,8 @@ it("returns and renders skipped dream pin persistence even without an error call
     expect(renderReport(dream.report)).toContain("pin status check(s) were not persisted");
     expect(dream.report.pinsAffected).toMatchObject([{ status: "kept" }]);
     expect(findingCount(dream.report)).toBe(1);
+    // A conflict and failure to persist its status are two findings, not two distinct pins.
+    expect(findingCount({ ...dream.report, pinsAffected: [{ ...dream.report.pinsAffected[0]!, status: "conflict" }] })).toBe(2);
     expect((await readPins(outputRoot))[0]!.anchor).toBe("new human anchor");
     expect((await readPins(store.root))[0]!.anchor).toBe("");
   } finally { await dream.workspace.dispose(); }

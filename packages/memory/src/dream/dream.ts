@@ -38,7 +38,7 @@ export interface DreamOptions extends Omit<DreamInput, "provider"> {
   /** Skips the model-backed consolidation pass — the free, structural-only dream. */
   structuralOnly?: boolean;
   onPhase?: (phase: string) => void;
-  /** The consolidation pass failing is reported, not thrown — the rest of the dream still runs. */
+  /** Advisory warnings, including consolidation failure and skipped pin persistence; not fatal. */
   onError?: (err: Error) => void;
 }
 

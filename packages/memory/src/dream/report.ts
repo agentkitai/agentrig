@@ -116,7 +116,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   return `${out.join("\n")}\n`;
 }
 
-/** Total findings, so a caller can decide an exit code without re-walking the report. */
+/** Total issues, not distinct pins: a conflict and skipped persistence are separate findings. */
 export function findingCount(report: DreamReport, structural?: StructuralFindings): number {
   const base =
     report.contradictions.length +

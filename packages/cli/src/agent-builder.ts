@@ -465,7 +465,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         everySessions: positiveNumber("--dream-every-sessions", opts.dreamEverySessions ?? "10"),
         everyHours: positiveNumber("--dream-every-hours", opts.dreamEveryHours ?? "24"),
         ...(opts.dreamStructuralOnly === true ? { structuralOnly: true } : {}),
-        onError: (err) => extras.onHookError?.(`dream failed (session still succeeded): ${err.message}`),
+        onError: (err) => extras.onHookError?.(`dream warning or failure (session still succeeded): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`dream: ${summary}`),
       }),
     );

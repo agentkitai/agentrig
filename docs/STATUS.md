@@ -25,8 +25,8 @@ blank lines, no-findings bookkeeping, lazy initialization, bounded/cancelable lo
 applied/skipped pin counts, comment-free pin matching and no-op status writes. Tests also prove
 dream pin persistence and malformed-input failure without modifying its source wiki.
 
-Current local validation: build/typecheck and 1,555 tests pass plus two Windows-only skips
-(1,557 total, 74 files), including 52 persistence cases. Real processes test same-session skipping
+Current local validation: build/typecheck and 1,556 tests pass plus two Windows-only skips
+(1,558 total, 74 files), including 53 persistence cases. Real processes test same-session skipping
 and distinct-session fact/source/index/pin conservation; fixture assertions pin own-PID session-lock
 ownership during providers and mutation-lock ownership during source/concept transform reads.
 Isolated mutations of shorter-prefix detection, provenance locking, page-update locking and pin
@@ -42,6 +42,13 @@ without that callback; a deterministic pin-edit fixture proves it. Dream passes 
 to validation; per-input-check counts and upgrade-induced comment-only status corrections are
 documented. CI 33957190843 passed all platforms at 4746913; this final reporting delta still needs
 independent review and latest-head CI.
+
+Six independent Claude review passes are complete. The final pass verified guarded pin snapshot
+comparison and external staleness checks; its remaining canonical-path fixtures and advisory-channel
+documentation are corrected. Duplicate status-changing checks now count consistently against the
+original guarded snapshot. The CLI labels advisory dream diagnostics as warnings or failures, not
+necessarily a failed dream. All-platform CI 33957831735 passed at e75a8ef; final corrections await
+fresh CI. Provider lifetime and dream swaps remain explicitly in H5b2/H5c.
 
 ### H5a complete (2026-09-05; PR #122)
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +38,7 @@ function backend() { vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1"); vi.stubEn
 describe("memory promotion publication gate", () => {
   it("keeps CLI inspection available while a stale write lock needs recovery", async () => {
     await wiki.upsertIndex({ slug: "retries", path, type: "concept", status: "active", summary: "retry evidence" });
-    await writeFile(`${wiki.root}.write.lock`, "stale owner");
+    await writeFile(`${await realpath(wiki.root)}.write.lock`, "stale owner");
     await memoryLs({ dir: root });
     await memoryShow(path, { dir: root });
     const output = vi.mocked(console.log).mock.calls.flat().join("\n");

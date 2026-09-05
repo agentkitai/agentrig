@@ -197,6 +197,7 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
  * needing a fresh persisted status should use recheckStoredPins instead of retrying old checks.
  * Counts are per input check, not distinct pins or physical writes; already-current statuses
  * count as applied. Pass the inspected store to preserve custom read/scope semantics.
+ * Lock options are independent of the store constructor; pass timeoutMs here explicitly.
  */
 export async function applyPinChecks(wiki: string | MemoryStore, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<{ applied: number; skipped: number }> {
   const store = typeof wiki === "string" ? new FileMemoryStore({ root: wiki }) : wiki;
@@ -220,16 +221,18 @@ function mergeChecks(current: Pin[], checks: PinCheck[]): { pins: Pin[]; applied
   let applied = 0;
   for (const c of checks) {
     const updated = { ...c.pin, status: statusOf[c.status] };
-    const i = merged.findIndex((p) => p.page === c.pin.page && p.claim === c.pin.claim);
+    const i = current.findIndex((p) => p.page === c.pin.page && p.claim === c.pin.claim);
     // A stale check must not resurrect a deleted pin or overwrite a newer human correction.
-    if (i !== -1 && JSON.stringify(PinSchema.parse(merged[i])) === JSON.stringify(PinSchema.parse(c.pin))) {
+    if (i !== -1 && JSON.stringify(PinSchema.parse(current[i])) === JSON.stringify(PinSchema.parse(c.pin))) {
       merged[i] = updated; applied++;
     }
   }
   return { pins: merged, applied };
 }
 
-/** Read current pins/pages and persist statuses under the same lock as page and pin writers. */
+/** Read current pins/pages and persist statuses under the same lock as page and pin writers.
+ * Lock options are independent of the store constructor, as with applyPinChecks.
+ */
 export async function recheckStoredPins(store: MemoryStore, paths?: ReadonlySet<string>, opts: MemoryLockOptions = {}): Promise<PinCheck[]> {
   // An empty snapshot needs no mutation. Pins added after it belong to a later operation.
   if ((await readPins(store.root)).length === 0) return [];
