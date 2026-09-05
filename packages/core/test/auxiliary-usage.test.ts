@@ -1,8 +1,22 @@
 import { expect, it } from "vitest";
-import { parseAnthropicSse, parseOpenAISse, parseResponsesSse, type ModelEvent } from "@agentkitai/agentrig-core";
+import { HarnessEvent, SupervisorRecord, parseEvent, serializeEvent, parseAnthropicSse, parseOpenAISse, parseResponsesSse, type ModelEvent } from "@agentkitai/agentrig-core";
 
 async function* stream(events: unknown[]) { for (const event of events) yield `data: ${JSON.stringify(event)}\n\n`; }
 async function usage(events: AsyncIterable<ModelEvent>) { for await (const event of events) if (event.type === "usage") return event; throw new Error("missing usage event"); }
+
+it("validates and round-trips cumulative auxiliary snapshots separately from model responses", () => {
+  const record = { type: "auxiliary.usage", id: "review-1", final: false, report: {
+    operation: "reviewer", outcome: "completed", durationMs: 1,
+    calls: [{ operation: "completion", provider: "fixture", durationMs: 1, outcome: "completed", usageComplete: false }],
+    reportedUsage: { input: 0, output: 0 }, unknownUsageCalls: 1, costUsd: null,
+  } };
+  expect(SupervisorRecord.safeParse(record).success).toBe(true);
+  const event = HarnessEvent.parse({ ...record, seq: 1, ts: 1, sessionId: "s" });
+  expect(parseEvent(serializeEvent(event))).toEqual(event);
+  expect(SupervisorRecord.safeParse({ ...record, report: { ...record.report, durationMs: NaN } }).success).toBe(false);
+  expect(SupervisorRecord.safeParse({ ...record, report: { ...record.report, costUsd: -1 } }).success).toBe(false);
+  expect(SupervisorRecord.safeParse({ ...record, report: { ...record.report, reportedUsage: { input: -1, output: 0 } } }).success).toBe(false);
+});
 
 it("distinguishes missing OpenAI usage from a reported zero", async () => {
   expect(await usage(parseOpenAISse(stream([])))).toMatchObject({ reported: false, usage: { input: 0, output: 0 } });

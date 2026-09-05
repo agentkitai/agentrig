@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { HarnessEvent, ModelProvider } from "@agentkitai/agentrig-core";
-import { complete, condenseTrajectory, lastValid } from "./reviewer.js";
+import { condenseTrajectory, lastValid } from "./reviewer.js";
+import { AuxiliaryRun, auxiliaryDiagnostic, positiveLimit, type AuxiliaryOptions } from "./auxiliary.js";
 
 /**
  * PLAN §4.3. The grader is the Outcomes piece: a written rubric checked by a *separate*
@@ -29,7 +30,7 @@ export interface GradeOutput {
 }
 
 export interface Grader {
-  grade(input: GradeInput): Promise<GradeOutput>;
+  grade(input: GradeInput, opts?: AuxiliaryOptions): Promise<GradeOutput>;
 }
 
 export const GradeSchema = z.object({
@@ -54,7 +55,7 @@ Rules:
 
 Reply with ONLY this JSON: {"pass":true|false,"gaps":["...","..."]}`;
 
-export interface RubricGraderOptions {
+export interface RubricGraderOptions extends AuxiliaryOptions {
   provider: ModelProvider;
   maxTokens?: number;
   /** Characters of artifact content sent. */
@@ -65,43 +66,57 @@ export interface RubricGraderOptions {
 export class RubricGrader implements Grader {
   constructor(private readonly opts: RubricGraderOptions) {}
 
-  async grade(input: GradeInput): Promise<GradeOutput> {
-    const budgetTotal = this.opts.maxArtifactChars ?? 20_000;
-    let budget = budgetTotal;
-    const rendered: string[] = [];
-    for (const a of input.artifacts) {
-      if (a.content === undefined) {
-        const line = `--- ${a.path}\n(not read)`;
-        // still costs budget: N named-but-unread paths would otherwise grow the prompt unbounded
-        if (line.length > budget) break;
-        rendered.push(line);
-        budget -= line.length;
-        continue;
+  async grade(input: GradeInput, opts: AuxiliaryOptions = {}): Promise<GradeOutput> {
+    const signals = [opts.signal, this.opts.signal].filter((signal): signal is AbortSignal => signal !== undefined);
+    const run = new AuxiliaryRun("grader", { ...this.opts.limits, ...opts.limits }, signals.length === 0 ? undefined : AbortSignal.any(signals),
+      report => { auxiliaryDiagnostic(() => this.opts.onProgress?.(structuredClone(report))); auxiliaryDiagnostic(() => opts.onProgress?.(structuredClone(report))); });
+    let failure: unknown;
+    try {
+      run.check();
+      const budgetTotal = this.opts.maxArtifactChars ?? 20_000;
+      positiveLimit("maxArtifactChars", budgetTotal);
+      positiveLimit("maxEvents", this.opts.maxEvents ?? 60);
+      let budget = budgetTotal;
+      const rendered: string[] = [];
+      for (const a of input.artifacts) {
+        if (a.content === undefined) {
+          const line = `--- ${a.path}\n(not read)`;
+          // still costs budget: N named-but-unread paths would otherwise grow the prompt unbounded
+          if (line.length > budget) break;
+          rendered.push(line);
+          budget -= line.length;
+          continue;
+        }
+        const block = `--- ${a.path}\n${a.content}`;
+        if (block.length > budget) {
+          rendered.push(`${block.slice(0, Math.max(0, budget))}\n…(truncated)`);
+          break;
+        }
+        rendered.push(block);
+        budget -= block.length;
       }
-      const block = `--- ${a.path}\n${a.content}`;
-      if (block.length > budget) {
-        rendered.push(`${block.slice(0, Math.max(0, budget))}\n…(truncated)`);
-        break;
+
+      const user = [
+        `# Rubric\n${input.rubric}`,
+        `# Artifacts\n${rendered.length === 0 ? "(none provided)" : rendered.join("\n\n")}`,
+        `# Trajectory\n${condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 60)}`,
+      ].join("\n\n");
+
+      const text = await run.completeJson(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1000, { requireEndTurn: true });
+      // last valid, not first: a model echoing the format or thinking aloud puts its real verdict
+      // at the end, and taking the first silently certified the work on an echoed `pass: true`
+      const parsed = lastValid(text, (v) => GradeSchema.safeParse(v));
+      if (parsed === null) {
+        // An unparseable grader must fail closed. Defaulting to pass would mean a broken grader
+        // silently certifies everything, which is worse than having no grader at all.
+        return { pass: false, gaps: ["the grader's response could not be parsed"] };
       }
-      rendered.push(block);
-      budget -= block.length;
+      return parsed;
+    } catch (error) { failure = error ?? new Error(String(error)); throw error; }
+    finally {
+      const report = run.finish(failure);
+      auxiliaryDiagnostic(() => this.opts.onUsage?.(structuredClone(report)));
+      auxiliaryDiagnostic(() => opts.onUsage?.(structuredClone(report)));
     }
-
-    const user = [
-      `# Rubric\n${input.rubric}`,
-      `# Artifacts\n${rendered.length === 0 ? "(none provided)" : rendered.join("\n\n")}`,
-      `# Trajectory\n${condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 60)}`,
-    ].join("\n\n");
-
-    const text = await complete(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1000);
-    // last valid, not first: a model echoing the format or thinking aloud puts its real verdict
-    // at the end, and taking the first silently certified the work on an echoed `pass: true`
-    const parsed = lastValid(text, (v) => GradeSchema.safeParse(v));
-    if (parsed === null) {
-      // An unparseable grader must fail closed. Defaulting to pass would mean a broken grader
-      // silently certifies everything, which is worse than having no grader at all.
-      return { pass: false, gaps: ["the grader's response could not be parsed"] };
-    }
-    return parsed;
   }
 }

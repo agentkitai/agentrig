@@ -1,5 +1,6 @@
 import type { DistilledFact } from "./ingest.js";
 import type { WikiPage } from "./types.js";
+import { maintenanceDiagnostic } from "./maintenance.js";
 
 /**
  * The optional backend seam (PLAN §3.8).
@@ -76,11 +77,7 @@ export function tolerant(
   const timeoutMs = opts.timeoutMs ?? 15_000;
   // a throwing logger must not become the failure it was reporting
   const report = (op: string, err: Error) => {
-    try {
-      onError(op, err);
-    } catch {
-      // e.g. EPIPE from console.error when stdout is piped to `head`
-    }
+    maintenanceDiagnostic(() => onError(op, err));
   };
   const guard = async <T>(op: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
     let timer: NodeJS.Timeout | undefined;

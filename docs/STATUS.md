@@ -1,11 +1,31 @@
 # Status
 
-Current roadmap row: **H5 — remaining persistence, then auxiliary lifecycle checks.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5d — auxiliary lifecycle closure, then E1.** H1–H4, H5a and H5b are complete; completed dream work is recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5 persistence in progress
+### H5d auxiliary lifecycle in progress
+
+Fresh branch from updated main 661634a after PR #130 final-head CI 33972036578 and main CI
+33972161624 passed all platforms. See `docs/plans/H5-auxiliary-lifecycle.md`. This is the last
+existing H5 deliverable before E1; no further recursive subdivisions or optional-polish gates.
+
+Implemented bounded reviewer/grader SDK calls, observer cancellation through loaders and calls,
+core observer-lifetime signal, validated cumulative auxiliary events and CLI/TUI unfinished-work
+reporting. Main usage remains separate; late work cannot steer or append after session.end.
+Shutdown joins the observer and suppresses later TUI diagnostics; remaining ingest/recall/observer
+async diagnostic rejections are isolated. Build/typecheck and Node22 full suite passed 1,812 tests
+plus two skips (1,814 total, 85 files); an additional real built-in partial-usage integration test
+passes in the 19-test lifecycle suite. Full final rerun, independent review, negative mutations
+and PR/main CI remain required.
+
+### H5 persistence complete (PR #130)
+
+Completion gate: final head d4fa2a2, merge 661634a, PR CI 33972036578 and main CI 33972161624
+all green. Two Claude CLI rounds, focused approval after repairs; five detected/restored negative
+mutations; final build/typecheck and 1,786 Node22 passes plus two skips. Following notes are
+historical intermediate gates, not outstanding work.
 
 Fresh branch from updated main ba4569c after PR #129 final-head CI 33970456552 and post-merge
 main CI 33970638299 passed all platforms. See `docs/plans/H5-memory-persistence.md` for the

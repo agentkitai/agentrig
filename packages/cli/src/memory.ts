@@ -77,14 +77,16 @@ export function layout(dir: string) {
  * The optional Lore backend (PLAN §3.8), or null when unconfigured — the no-infra default.
  * Always wrapped so a backend failure is reported and then ignored.
  */
-export function openBackend(opts: { tolerate?: boolean } = {}): MemoryBackend | null {
+export function openBackend(opts: { tolerate?: boolean; onError?: (op: string, err: Error) => void } = {}): MemoryBackend | null {
   if (loreConfigFromEnv() === null) return null;
   try {
     const backend = new LoreBackend();
-    return opts.tolerate === false ? backend : tolerant(backend, backendError);
+    return opts.tolerate === false ? backend : tolerant(backend, opts.onError ?? backendError);
   } catch (err) {
     // a misconfigured OPTIONAL backend must not take down the harness
-    console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
+    if (opts.onError !== undefined) {
+      try { void Promise.resolve(opts.onError("initialization", err instanceof Error ? err : new Error(String(err)))).catch(() => {}); } catch { /* diagnostic */ }
+    } else console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
     return null;
   }
 }

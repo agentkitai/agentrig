@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5 persistence, then auxiliary lifecycle checks; PRs #118–#129 complete.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5d auxiliary lifecycle closure, then E1; PRs #118–#130 complete.** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -280,15 +280,12 @@ and proceed to E1; nonblocking follow-ups belong at the END of this roadmap, out
 
 Completed dream work: guarded snapshot/apply and preserved backups (#125), bounded scans (#126),
 full-lifecycle cancellation/accounting (#127), explicit stamp repair/log preflight (#128), and
-registered workspace recovery (#129).
+registered workspace recovery (#129), and lossless persistence/scoped attempts plus target/child
+abort evidence closure (#130).
 
 Remaining H5 deliverables, in order:
 
-- **Persistence and target/child-abort closure (current PR):** preserve legacy multiline facts/references and
-  unknown frontmatter; provide session-scoped attempt lookup with bounded rebuilds. Confirm
-  deterministic target-preservation and child-cleanup evidence; distinguish a proven fix from
-  the historical unreproduced timeout. No separate PR is needed just to restate existing evidence.
-- **Auxiliary lifecycle (H5d):** finish reviewer/grader cancellation, bounded usage and CLI/session
+- **Auxiliary lifecycle (H5d, current PR):** finish reviewer/grader cancellation, bounded usage and CLI/session
   accounting against the acceptance already stated above. Then begin E1.
 
 Each implementation PR retains independent review, proper tests, exact-head green PR CI and

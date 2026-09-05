@@ -33,6 +33,26 @@ export const Usage = z.object({
 });
 export type Usage = z.infer<typeof Usage>;
 
+export const AuxiliaryReportSchema = z.object({
+  operation: z.enum(["ingest", "dream", "reviewer", "grader"]),
+  outcome: z.enum(["completed", "failed", "aborted", "timeout", "limit"]),
+  durationMs: z.number().finite().nonnegative(),
+  calls: z.array(z.object({
+    operation: z.string(), provider: z.string(), model: z.string().optional(),
+    outcome: z.enum(["completed", "failed", "aborted", "timeout", "limit"]),
+    durationMs: z.number().finite().nonnegative(), usage: Usage.optional(), usageComplete: z.boolean(),
+  })),
+  reportedUsage: Usage, unknownUsageCalls: z.number().int().nonnegative(),
+  costUsd: z.number().finite().nonnegative().nullable(),
+  localCommitState: z.enum(["not-started", "may-be-partial", "completed"]).optional(),
+});
+/** Replace cumulative snapshots by id, never sum them. A non-final last snapshot means
+ * completion/total usage is unknown; auxiliary consumption never joins main model usage. */
+export const AuxiliaryUsageRecord = z.object({
+  type: z.literal("auxiliary.usage"), id: z.string().min(1).max(128),
+  report: AuxiliaryReportSchema, final: z.boolean(),
+});
+
 export const PermissionRequest = z.object({
   tool: z.string(),
   input: z.unknown(),
@@ -91,6 +111,7 @@ export type Intervention = z.infer<typeof Intervention>;
  * `memory ingest` for that session, with no repair path because `raw/` is immutable.
  */
 export const SupervisorRecord = z.discriminatedUnion("type", [
+  AuxiliaryUsageRecord,
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
 ]);
@@ -305,6 +326,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+  AuxiliaryUsageRecord,
   z.object({ type: z.literal("error"), message: z.string(), fatal: z.boolean() }),
 ]);
 export type EventPayload = z.infer<typeof EventPayload>;

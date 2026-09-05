@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { HarnessEvent, ModelProvider } from "@agentkitai/agentrig-core";
+import { AuxiliaryRun, auxiliaryDiagnostic, positiveLimit, type AuxiliaryOptions } from "./auxiliary.js";
 
 /**
  * PLAN §4.3. The reviewer is the AVO piece: read the *whole trajectory* plus the attempts ledger
@@ -38,7 +39,7 @@ export interface ReviewOutput {
 }
 
 export interface Reviewer {
-  review(input: ReviewInput): Promise<ReviewOutput>;
+  review(input: ReviewInput, opts?: AuxiliaryOptions): Promise<ReviewOutput>;
 }
 
 export const ReviewSchema = z.object({
@@ -117,7 +118,7 @@ export function renderAttempts(attempts: Attempt[], max = 40): string {
     .join("\n");
 }
 
-export interface TrajectoryReviewerOptions {
+export interface TrajectoryReviewerOptions extends AuxiliaryOptions {
   provider: ModelProvider;
   maxTokens?: number;
   maxEvents?: number;
@@ -128,39 +129,53 @@ export interface TrajectoryReviewerOptions {
 export class TrajectoryReviewer implements Reviewer {
   constructor(private readonly opts: TrajectoryReviewerOptions) {}
 
-  async review(input: ReviewInput): Promise<ReviewOutput> {
-    const maxPromptChars = this.opts.maxPromptChars ?? 24_000;
-    const trajectory = condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 120);
-    const parts = [
-      `# Task\n${input.task}`,
-      input.memoryIndex === undefined || input.memoryIndex === "" ? "" : `# What the agent knows\n${input.memoryIndex}`,
-      `# Attempts ledger\n${renderAttempts(input.attempts ?? [])}`,
-      `# Trajectory (most recent last)\n${trajectory}`,
-    ].filter((p) => p !== "");
-    let user = parts.join("\n\n");
-    if (user.length > maxPromptChars) {
-      // keep the TAIL: what the agent just did matters more than how it opened. The marker
-      // counts against the budget, or `maxPromptChars` would not actually bound the prompt.
-      const marker = "…(earlier context truncated)\n";
-      let cut = user.length - Math.max(0, maxPromptChars - marker.length);
-      // never cut between a surrogate pair
-      const code = user.charCodeAt(cut);
-      if (code >= 0xdc00 && code <= 0xdfff) cut += 1;
-      user = `${marker}${user.slice(cut)}`;
-    }
+  async review(input: ReviewInput, opts: AuxiliaryOptions = {}): Promise<ReviewOutput> {
+    const signals = [opts.signal, this.opts.signal].filter((signal): signal is AbortSignal => signal !== undefined);
+    const run = new AuxiliaryRun("reviewer", { ...this.opts.limits, ...opts.limits }, signals.length === 0 ? undefined : AbortSignal.any(signals),
+      report => { auxiliaryDiagnostic(() => this.opts.onProgress?.(structuredClone(report))); auxiliaryDiagnostic(() => opts.onProgress?.(structuredClone(report))); });
+    let failure: unknown;
+    try {
+      run.check();
+      const maxPromptChars = this.opts.maxPromptChars ?? 24_000;
+      positiveLimit("maxPromptChars", maxPromptChars);
+      positiveLimit("maxEvents", this.opts.maxEvents ?? 120);
+      const trajectory = condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 120);
+      const parts = [
+        `# Task\n${input.task}`,
+        input.memoryIndex === undefined || input.memoryIndex === "" ? "" : `# What the agent knows\n${input.memoryIndex}`,
+        `# Attempts ledger\n${renderAttempts(input.attempts ?? [])}`,
+        `# Trajectory (most recent last)\n${trajectory}`,
+      ].filter((p) => p !== "");
+      let user = parts.join("\n\n");
+      if (user.length > maxPromptChars) {
+        // keep the TAIL: what the agent just did matters more than how it opened. The marker
+        // counts against the budget, or `maxPromptChars` would not actually bound the prompt.
+        const marker = "…(earlier context truncated)\n";
+        let cut = user.length - Math.max(0, maxPromptChars - marker.length);
+        // never cut between a surrogate pair
+        const code = user.charCodeAt(cut);
+        if (code >= 0xdc00 && code <= 0xdfff) cut += 1;
+        user = maxPromptChars < marker.length ? marker.slice(0, maxPromptChars) : `${marker}${user.slice(cut)}`;
+      }
 
-    const text = await complete(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1500);
-    const parsed = lastValid(text, (v) => ReviewSchema.safeParse(v));
-    if (parsed === null) {
-      // a reviewer that cannot be parsed must not become a crash in the supervisor; the ladder
-      // simply gets no useful guidance and moves on
-      return {
-        diagnosis: "the reviewer's response could not be parsed",
-        directions: [],
-        guidance: "",
-      };
+      const text = await run.completeJson(this.opts.provider, SYSTEM, user, this.opts.maxTokens ?? 1500, { requireEndTurn: true });
+      const parsed = lastValid(text, (v) => ReviewSchema.safeParse(v));
+      if (parsed === null) {
+        // a reviewer that cannot be parsed must not become a crash in the supervisor; the ladder
+        // simply gets no useful guidance and moves on
+        return {
+          diagnosis: "the reviewer's response could not be parsed",
+          directions: [],
+          guidance: "",
+        };
+      }
+      return parsed;
+    } catch (error) { failure = error ?? new Error(String(error)); throw error; }
+    finally {
+      const report = run.finish(failure);
+      auxiliaryDiagnostic(() => this.opts.onUsage?.(structuredClone(report)));
+      auxiliaryDiagnostic(() => opts.onUsage?.(structuredClone(report)));
     }
-    return parsed;
   }
 }
 
@@ -170,15 +185,13 @@ export async function complete(
   system: string,
   user: string,
   maxTokens: number,
+  opts: AuxiliaryOptions = {},
 ): Promise<string> {
-  let text = "";
-  for await (const ev of provider.stream(
-    { system, messages: [{ role: "user", content: [{ type: "text", text: user }] }], tools: [], maxTokens },
-    new AbortController().signal,
-  )) {
-    if (ev.type === "text_delta") text += ev.text;
-  }
-  return text;
+  const run = new AuxiliaryRun("reviewer", opts.limits, opts.signal, opts.onProgress);
+  let failure: unknown;
+  try { return await run.completeJson(provider, system, user, maxTokens, { requireEndTurn: true }); }
+  catch (error) { failure = error ?? new Error(String(error)); throw error; }
+  finally { const report = run.finish(failure); auxiliaryDiagnostic(() => opts.onUsage?.(report)); }
 }
 
 /**

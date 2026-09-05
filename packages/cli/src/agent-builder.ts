@@ -397,7 +397,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (opts.memory !== undefined) {
     memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
     memoryIndex = await indexInjection(memoryStore).catch(() => "");
-    let backend = openBackend();
+    let backend = openBackend({ onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
     if (backend !== null && opts.sandbox !== undefined && opts.sandbox !== "none") {
       backend = null;
       extras.onNotice?.("sandbox: Lore recall is disabled; local memory read/search remain available");
@@ -454,7 +454,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
 
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
-    const backend = openBackend({ tolerate: false });
+    const backend = openBackend({ tolerate: false, onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,

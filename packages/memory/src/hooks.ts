@@ -51,7 +51,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
         const sessionDir = resolve(join(opts.dir, "raw", "sessions"));
         const logPath = resolve(join(sessionDir, `${ctx.sessionId}.jsonl`));
         if (logPath !== sessionDir && !logPath.startsWith(sessionDir + sep)) {
-          opts.onError?.(new Error(`refusing to ingest a session log outside ${sessionDir}: ${ctx.sessionId}`));
+          maintenanceDiagnostic(() => opts.onError?.(new Error(`refusing to ingest a session log outside ${sessionDir}: ${ctx.sessionId}`)));
           return { action: "continue" };
         }
         // a session that never wrote a log (an immediate error) has nothing to distil
@@ -75,16 +75,16 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           ...(opts.onBackendError === undefined ? {} : { onBackendError: opts.onBackendError }),
           onUsage: report => {
             auxiliary = report;
-            opts.onUsage?.(report);
+            maintenanceDiagnostic(() => opts.onUsage?.(report));
           },
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
-        opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
-          (result.omissions.length === 0 ? "" : `; ${result.omissions.length} uninspected evidence omission(s), see source-page coverage`));
+        maintenanceDiagnostic(() => opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
+          (result.omissions.length === 0 ? "" : `; ${result.omissions.length} uninspected evidence omission(s), see source-page coverage`)));
       } catch (err) {
-        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+        maintenanceDiagnostic(() => opts.onError?.(err instanceof Error ? err : new Error(String(err))));
       } finally {
-        try { if (auxiliary !== undefined) opts.onDone?.(formatAuxiliaryUsage(auxiliary)); } catch { /* accounting is diagnostic */ }
+        maintenanceDiagnostic(() => { if (auxiliary !== undefined) return opts.onDone?.(formatAuxiliaryUsage(auxiliary)); });
       }
       return { action: "continue" };
     },

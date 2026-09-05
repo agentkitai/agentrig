@@ -137,6 +137,9 @@ export interface SessionSummary {
 }
 
 export interface SessionControl {
+  /** Observer lifetime: aborts on user cancellation or when main work enters shutdown.
+   * Optional for compatibility with older custom Session implementations. */
+  auxiliarySignal?: AbortSignal;
   /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
   steer(message: string, source?: "user" | "supervisor" | "hook"): void;
   pause(): void;
@@ -379,6 +382,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   const stream = new EventStream();
   const gate = new PauseGate();
   const abortController = new AbortController();
+  const auxiliaryController = new AbortController();
   /**
    * `session_end` hooks run under this signal, not the session's (#88). The session's signal is
    * aborted by definition on an aborted session, and `runHooks` skips a point whose signal is
@@ -1071,6 +1075,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
       ending = true;
+      auxiliaryController.abort(new DOMException("session main work ended", "AbortError"));
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
       // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.
@@ -1444,10 +1449,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     id,
     events: stream,
     control: {
+      auxiliarySignal: auxiliaryController.signal,
       steer: (message, source = "user") => pendingSteers.push({ message, source }),
       pause: () => gate.pause(),
       resume: () => gate.resume(),
       abort: () => {
+        auxiliaryController.abort(new DOMException("session aborted", "AbortError"));
         // an abort while the session is already ending is the second one: stop the end hooks too
         if (ending || abortController.signal.aborted) endController.abort();
         abortController.abort();

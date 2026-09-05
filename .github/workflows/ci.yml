@@ -63,5 +63,6 @@ jobs:
       - run: pnpm exec vitest run packages/memory/test/dream-metadata.test.ts
       - run: pnpm exec vitest run packages/memory/test/dream-recovery.test.ts
       - run: pnpm exec vitest run packages/memory/test/persistence.test.ts
+      - run: pnpm exec vitest run packages/supervisor/test/auxiliary-lifecycle.test.ts packages/core/test/auxiliary-usage.test.ts packages/cli/test/render.test.ts
       - run: pnpm exec vitest run packages/cli/test/maintenance-runtime.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'

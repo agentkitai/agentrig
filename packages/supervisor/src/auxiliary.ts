@@ -1,6 +1,8 @@
+// Kept local to preserve the core-types-only package boundary. Shares memory's accounting
+// semantics; changes to bounds, cancellation or usage must keep both implementations aligned.
 import type { AuxiliaryCall, AuxiliaryReport, ModelProvider, Usage } from "@agentkitai/agentrig-core";
 
-export interface MaintenanceLimits {
+export interface AuxiliaryLimits {
   timeoutMs: number;
   callTimeoutMs: number;
   maxCalls: number;
@@ -8,24 +10,30 @@ export interface MaintenanceLimits {
   maxOutputChars: number;
   maxModelEvents: number;
 }
-export const DEFAULT_MAINTENANCE_LIMITS: Readonly<MaintenanceLimits> = Object.freeze({
-  timeoutMs: 300_000, callTimeoutMs: 30_000, maxCalls: 66,
+export interface AuxiliaryOptions {
+  signal?: AbortSignal;
+  limits?: Partial<AuxiliaryLimits>;
+  onUsage?: (report: AuxiliaryReport) => void;
+  /** Cumulative, non-final snapshots. Consumers replace by run ID, never add snapshots. */
+  onProgress?: (report: AuxiliaryReport) => void;
+}
+export const DEFAULT_AUXILIARY_LIMITS: Readonly<AuxiliaryLimits> = Object.freeze({
+  timeoutMs: 90_000, callTimeoutMs: 30_000, maxCalls: 1,
   maxInputChars: 32_768, maxOutputChars: 65_536, maxModelEvents: 4096,
 });
-export const DEFAULT_DREAM_LIMITS = Object.freeze({ maxInputChars: 65_536, maxCalls: 1 });
 
 export function positiveLimit(name: string, value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) throw new Error(`invalid maintenance limit ${name}`);
+  if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) throw new Error(`invalid supervisor auxiliary limit ${name}`);
   return value;
 }
-export class MaintenanceLimitError extends Error { override name = "MaintenanceLimitError"; }
+export class AuxiliaryLimitError extends Error { override name = "AuxiliaryLimitError"; }
 /** Diagnostic callbacks are not work: neither a throw nor an async rejection changes commits. */
-export function maintenanceDiagnostic(callback: () => unknown): void {
+export function auxiliaryDiagnostic(callback: () => unknown): void {
   try { void Promise.resolve(callback()).catch(() => {}); } catch { /* diagnostic only */ }
 }
-const timeout = (ms: number) => new DOMException(`maintenance timed out after ${ms}ms`, "TimeoutError");
+const timeout = (ms: number) => new DOMException(`supervisor auxiliary timed out after ${ms}ms`, "TimeoutError");
 function outcome(error: unknown): AuxiliaryCall["outcome"] {
-  if (error instanceof MaintenanceLimitError) return "limit";
+  if (error instanceof AuxiliaryLimitError) return "limit";
   if (error instanceof Error && error.name === "TimeoutError") return "timeout";
   if (error instanceof Error && error.name === "AbortError") return "aborted";
   return "failed";
@@ -35,9 +43,9 @@ function outcome(error: unknown): AuxiliaryCall["outcome"] {
  * A JS provider that blocks the event loop cannot be preempted; uncooperative remote work may
  * continue outside this process. Its final usage remains unknown.
  */
-export class MaintenanceRun {
+export class AuxiliaryRun {
   localCommitState?: AuxiliaryReport["localCommitState"];
-  readonly limits: MaintenanceLimits;
+  readonly limits: AuxiliaryLimits;
   readonly signal: AbortSignal;
   private readonly controller = new AbortController();
   private readonly started = performance.now();
@@ -47,8 +55,9 @@ export class MaintenanceRun {
   private readonly abortParent = () => this.controller.abort(this.parent?.reason);
   private finished = false;
 
-  constructor(private readonly operation: AuxiliaryReport["operation"], limits: Partial<MaintenanceLimits> = {}, signal?: AbortSignal) {
-    this.limits = { ...DEFAULT_MAINTENANCE_LIMITS, ...limits };
+  constructor(private readonly operation: AuxiliaryReport["operation"], limits: Partial<AuxiliaryLimits> = {}, signal?: AbortSignal,
+    private readonly onProgress?: (report: AuxiliaryReport) => void) {
+    this.limits = { ...DEFAULT_AUXILIARY_LIMITS, ...limits };
     for (const [key, value] of Object.entries(this.limits)) positiveLimit(key, value);
     this.signal = this.controller.signal;
     this.parent = signal;
@@ -58,14 +67,14 @@ export class MaintenanceRun {
   }
 
   check(): void {
-    if (this.finished) throw new Error("maintenance run is closed");
+    if (this.finished) throw new Error("supervisor auxiliary run is closed");
     if (performance.now() - this.started >= this.limits.timeoutMs) this.controller.abort(timeout(this.limits.timeoutMs));
     this.signal.throwIfAborted();
   }
 
   async call<T>(operation: string, provider: string, fn: (signal: AbortSignal, usage: (value: Usage, complete?: boolean) => void) => Promise<T>, model?: string): Promise<T> {
     this.check();
-    if (this.calls.length >= this.limits.maxCalls) throw new MaintenanceLimitError("maintenance call limit exceeded");
+    if (this.calls.length >= this.limits.maxCalls) throw new AuxiliaryLimitError("supervisor auxiliary call limit exceeded");
     const controller = new AbortController();
     const abort = () => controller.abort(this.signal.reason);
     this.signal.addEventListener("abort", abort, { once: true });
@@ -74,6 +83,7 @@ export class MaintenanceRun {
     const record: AuxiliaryCall = { operation, provider, ...(model === undefined ? {} : { model }),
       outcome: "failed", durationMs: 0, usageComplete: false };
     this.calls.push(record);
+    auxiliaryDiagnostic(() => this.onProgress?.(this.snapshot()));
     let accepting = true;
     let reported = false;
     let malformedUsage = false;
@@ -98,6 +108,7 @@ export class MaintenanceRun {
             ...(value.cacheRead === undefined ? {} : { cacheRead: value.cacheRead }),
             ...(value.cacheWrite === undefined ? {} : { cacheWrite: value.cacheWrite }) };
           reported = complete;
+          auxiliaryDiagnostic(() => this.onProgress?.(this.snapshot()));
         });
       });
       const result = await Promise.race([work, aborted]);
@@ -122,7 +133,7 @@ export class MaintenanceRun {
 
   async completeJson(provider: ModelProvider, system: string, user: string, maxTokens: number, opts: { requireEndTurn?: boolean } = {}): Promise<string> {
     positiveLimit("maxTokens", maxTokens);
-    if (system.length + user.length > this.limits.maxInputChars) throw new MaintenanceLimitError("maintenance model input limit exceeded");
+    if (system.length + user.length > this.limits.maxInputChars) throw new AuxiliaryLimitError("supervisor auxiliary model input limit exceeded");
     return this.call("completion", provider.id, async (signal, usage) => {
       const iterator = provider.stream({ system, messages: [{ role: "user", content: [{ type: "text", text: user }] }], tools: [], maxTokens }, signal)[Symbol.asyncIterator]();
       let closed = false;
@@ -138,10 +149,10 @@ export class MaintenanceRun {
           const next = await iterator.next();
           signal.throwIfAborted();
           if (next.done) break;
-          if (++events > this.limits.maxModelEvents) throw new MaintenanceLimitError("maintenance model event limit exceeded");
+          if (++events > this.limits.maxModelEvents) throw new AuxiliaryLimitError("supervisor auxiliary model event limit exceeded");
           const ev = next.value;
           if (ev.type === "text_delta") {
-            if (text.length + ev.text.length > this.limits.maxOutputChars) throw new MaintenanceLimitError("maintenance model output limit exceeded");
+            if (text.length + ev.text.length > this.limits.maxOutputChars) throw new AuxiliaryLimitError("supervisor auxiliary model output limit exceeded");
             text += ev.text;
           } else if (ev.type === "usage") { lastUsage = ev.usage; usage(ev.usage, ev.reported !== false && !retried); }
           else if (ev.type === "retry") { retried = true; if (lastUsage !== undefined) usage(lastUsage, false); }
@@ -164,6 +175,10 @@ export class MaintenanceRun {
     this.finished = true;
     clearTimeout(this.timer);
     this.parent?.removeEventListener("abort", this.abortParent);
+    return this.snapshot(error);
+  }
+
+  snapshot(error?: unknown): AuxiliaryReport {
     const reportedUsage: Usage = { input: 0, output: 0 };
     for (const call of this.calls) {
       if (!call.usage) continue;
@@ -177,8 +192,4 @@ export class MaintenanceRun {
       unknownUsageCalls: this.calls.filter(c => !c.usageComplete).length, costUsd: this.calls.length === 0 ? 0 : null,
       ...(this.localCommitState === undefined ? {} : { localCommitState: this.localCommitState }) };
   }
-}
-
-export function formatAuxiliaryUsage(report: AuxiliaryReport, opts: { final?: boolean } = {}): string {
-  return `auxiliary ${report.operation}: ${report.calls.length} call(s), ${report.reportedUsage.input} input / ${report.reportedUsage.output} output / ${report.reportedUsage.cacheRead ?? 0} cache-read / ${report.reportedUsage.cacheWrite ?? 0} cache-write reported tokens; ${report.unknownUsageCalls} call(s) with unknown total usage; cost ${report.costUsd === null ? "unknown" : `$${report.costUsd}`}; ${opts.final === false ? "unfinished; final outcome and total usage unknown" : report.outcome}${report.localCommitState === undefined ? "" : `; local writes ${report.localCommitState}`}`;
 }

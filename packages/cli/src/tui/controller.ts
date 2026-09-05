@@ -9,7 +9,7 @@ import type {
   Signal,
   Skill,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
@@ -153,7 +153,8 @@ export interface TuiControllerOptions {
    * TUI and silently did nothing: every detector, the whole ladder, the reviewer and the grader
    * were unreachable from the default entry point.
    */
-  onSession?: (session: Session) => void;
+  /** May return a detachable observer; legacy incidental return values are ignored. */
+  onSession?: (session: Session) => unknown;
   /**
    * Cap on retained lines. Generous because `Static` renders each line once — the old 500 was
    * sized for a live tree whose cost grew with the buffer.
@@ -190,6 +191,7 @@ export class TuiController {
   };
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
+  private readonly auxiliary = new AuxiliaryText();
   /** Tool name -> standing answer for this session. Never written to disk. */
   private readonly standing = new Map<string, Exclude<Decision, "ask">>();
   /**
@@ -266,6 +268,9 @@ export class TuiController {
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
   private dreamAbort: AbortController | undefined;
   private dreaming: Promise<void> | undefined;
+  private observer: { detach(): void; done: Promise<void> } | undefined;
+  private closing = false;
+  private closed = false;
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
   private tree: ((id: string) => Promise<string[]>) | undefined;
   private children: ((children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>) | undefined;
@@ -283,11 +288,13 @@ export class TuiController {
   }
 
   private set(patch: Partial<TuiState>): void {
+    if (this.closed) return;
     this.state = { ...this.state, ...patch };
     for (const fn of this.listeners) fn(this.state);
   }
 
   print(text: string, tone: TuiLine["tone"] = "system"): void {
+    if (this.closed) return;
     const lines = [...this.state.lines, { key: this.nextKey++, text, tone }];
     // Append-only, ALWAYS. Ink's `Static` remembers how many items it has already written and
     // renders `items.slice(thatIndex)`. Dropping items off the front shifts every index, the
@@ -454,6 +461,9 @@ export class TuiController {
    * running with the terminal gone keeps executing tools and billing, unwatched.
    */
   async shutdown(): Promise<void> {
+    if (this.closed) return;
+    this.closing = true;
+    this.observer?.detach();
     if (this.session !== null || this.dreamAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
@@ -461,10 +471,12 @@ export class TuiController {
     this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
+    this.closed = true;
   }
 
   /** Handles one submitted line. Returns false when the app should exit. */
   async submit(line: string): Promise<boolean> {
+    if (this.closing) return false;
     const cmd = parseCommand(line);
     if (cmd === null) return true;
     if (cmd.kind !== "task") this.print(line, "you");
@@ -749,7 +761,9 @@ export class TuiController {
     // before the events are consumed: an observer attached late misses the start of the session
     // it is meant to be watching
     try {
-      this.opts.onSession?.(session);
+      const observer = this.opts.onSession?.(session);
+      if (observer !== null && typeof observer === "object" && "detach" in observer && typeof observer.detach === "function"
+        && "done" in observer && observer.done instanceof Promise) this.observer = observer as { detach(): void; done: Promise<void> };
     } catch (err) {
       this.print(`supervisor could not attach: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
@@ -780,6 +794,10 @@ export class TuiController {
     } catch (err) {
       this.print(`session failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
+      const observer = this.observer;
+      this.observer = undefined;
+      observer?.detach();
+      await observer?.done.catch(() => {});
       this.session = null;
       this.running = null;
       // settle rather than drop: clearing either prompt would leave a resolver unsettled and the
@@ -832,6 +850,7 @@ export class TuiController {
   }
 
   private consume(e: HarnessEvent): void {
+    for (const line of this.auxiliary.push(e)) this.print(line, "system");
     this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "context.manifest") this.set({ manifest: e });

@@ -55,7 +55,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
           // The same `supervisorOptions` the `run` command builds, rather than a second copy:
           // this entry point had NO supervisor at all, so `--supervise` was accepted and ignored.
           onSession: (session) =>
-            void supervise(
+            supervise(
               session,
               supervisorOptions({
                 opts,
