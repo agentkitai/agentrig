@@ -195,11 +195,14 @@ export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinC
  * checks must never delete the pins it didn't cover.
  * Stale/unversioned checks and pins deleted or changed since inspection are skipped; callers
  * needing a fresh persisted status should use recheckStoredPins instead of retrying old checks.
+ * Counts are per input check, not distinct pins or physical writes; already-current statuses
+ * count as applied. Pass the inspected store to preserve custom read/scope semantics.
  */
-export async function applyPinChecks(wikiRoot: string, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<{ applied: number; skipped: number }> {
+export async function applyPinChecks(wiki: string | MemoryStore, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<{ applied: number; skipped: number }> {
+  const store = typeof wiki === "string" ? new FileMemoryStore({ root: wiki }) : wiki;
+  const wikiRoot = store.root;
   return withMemoryLock(wikiRoot, async () => {
     const current = await readPins(wikiRoot);
-    const store = new FileMemoryStore({ root: wikiRoot });
     const fresh: PinCheck[] = [];
     for (const check of checks) {
       if (check.pageVersion === undefined) continue;

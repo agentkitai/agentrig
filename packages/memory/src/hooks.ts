@@ -129,6 +129,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           ...(opts.provider === undefined ? {} : { provider: opts.provider }),
           ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
           now,
+          ...(opts.onError === undefined ? {} : { onError: opts.onError }),
         });
 
         const findings = findingCount(result.report, result.structural);

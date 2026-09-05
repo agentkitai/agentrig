@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { isValidSessionId } from "@agentkitai/agentrig-core";
-import { FileMemoryStore, FileRawStore, addPin, applyPinChecks, factLines, ingestSession, memoryTools, readPins, recheckPins, runDream,
+import { FileMemoryStore, FileRawStore, addPin, applyPinChecks, factLines, findingCount, ingestSession, memoryTools, readPins, recheckPins, renderReport, runDream,
   recheckStoredPins, writePins, type MemoryBackend, type Pin } from "@agentkitai/agentrig-memory";
 
 let root: string;
@@ -351,10 +351,10 @@ it("preserves interior blank lines in existing source narrative", async () => {
   expect((await store.read(sourcePath))!.body).toContain("human paragraph\n\nsecond paragraph");
 });
 
-it("treats no-findings text as bookkeeping and removes the old sentinel when findings arrive", async () => {
+it.each([false, true])("removes no-findings bookkeeping when findings arrive (legacy=%s)", async legacy => {
   await log([]); await ingest();
   expect(factLines((await store.read(sourcePath))!.body)).toEqual([]);
-  await store.update(sourcePath, current => ({ ...current!, body: current!.body.replace("<!-- Session produced no durable findings. -->",
+  if (legacy) await store.update(sourcePath, current => ({ ...current!, body: current!.body.replace("<!-- Session produced no durable findings. -->",
     "- [observed] Session produced no durable findings.") }));
   await log(events); await ingest();
   expect((await store.read(sourcePath))!.body).not.toContain("Session produced no durable findings");
@@ -389,12 +389,32 @@ it("cancels a session-lock wait without disturbing the live owner", async () => 
   void first.catch(() => {});
   try {
     await started.promise;
-    const waiting = expect(ingest(provider(), { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    const waiter = provider();
+    const waiting = expect(ingest(waiter, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
     controller.abort(); await waiting;
+    expect(waiter.calls).toBe(0);
   } finally { release.resolve(); }
   await first;
   expect((await ingest()).skipped).toBe(true);
 });
+
+it("uses the casefolded session lock across actual processes on every filesystem", async () => {
+  const workers = launchWorkers("case");
+  try {
+    await Promise.all(workers.map(w => w.ready)); workers.forEach(w => w.child.send("go"));
+    const results = await Promise.all(workers.map(w => w.done));
+    for (const result of results) expect(result.calls + result.skipped).toBe(1);
+    const calls = results.reduce((sum, result) => sum + result.calls, 0);
+    // Case-sensitive filesystems keep two distinct captures; case-insensitive filesystems
+    // alias them and skip one. Both providers, when entered, assert ownership of the SAME lock.
+    expect([1, 2]).toContain(calls);
+    expect(await readdir(join(store.root, "sources"))).toHaveLength(calls);
+    expect(factLines((await store.read(path))!.body)).toHaveLength(calls);
+  } finally {
+    for (const w of workers) if (w.child.exitCode === null) w.child.kill();
+    await Promise.all(workers.map(w => w.exited));
+  }
+}, 30_000);
 
 it.each(["ok", "S_1-a", "a".repeat(128), "a".repeat(129), "a/b", "", "é", "a.b"])
 ("pins the duplicated session-id filename contract to core: %j", async id => {
@@ -414,8 +434,55 @@ it("reports skipped unversioned pin checks and avoids rewriting unchanged status
   expect(opened).toHaveBeenCalled();
   const before = await readFile(join(store.root, "pins.json"), "utf8");
   expect(await applyPinChecks(store.root, [check])).toEqual({ applied: 1, skipped: 0 });
+  opened.mockClear();
+  expect(await applyPinChecks(store, [check, check])).toEqual({ applied: 2, skipped: 0 });
+  expect(opened).toHaveBeenCalledWith(path);
   expect(await readFile(join(store.root, "pins.json"), "utf8")).toBe(before);
   expect((await stat(join(store.root, "pins.json"))).mtimeMs).toBe(0);
+});
+
+it("keeps the empty-pin snapshot read-only even behind a stale mutation lock", async () => {
+  await writePins(store.root, []);
+  await utimes(join(store.root, "pins.json"), new Date(0), new Date(0));
+  await writeFile(`${store.root}.write.lock`, "fixture owner");
+  expect(await recheckStoredPins(store, undefined, { timeoutMs: 0 })).toEqual([]);
+  expect(await readFile(`${store.root}.write.lock`, "utf8")).toBe("fixture owner");
+  expect((await stat(join(store.root, "pins.json"))).mtimeMs).toBe(0);
+});
+
+it("corrects legacy comment-only pin satisfaction without changing the page", async () => {
+  await store.write(path, page("unrelated text\n<!-- distilled -->"));
+  await addPin(store.root, pin("distilled"));
+  const version = (await store.read(path))!.version;
+  await recheckStoredPins(store);
+  expect((await readPins(store.root))[0]!.status).toBe("conflict");
+  expect((await store.read(path))!.version).toBe(version);
+});
+
+it("returns and renders skipped dream pin persistence even without an error callback", async () => {
+  await store.write(path, page("different fact")); await addPin(store.root, pin());
+  const outputRoot = join(root, "dream-output");
+  let phase = ""; let pruneReads = 0; let injected = false;
+  const read = FileMemoryStore.prototype.read;
+  vi.spyOn(FileMemoryStore.prototype, "read").mockImplementation(async function(target) {
+    const current = await read.call(this, target);
+    // The prune pass reads pages for the final index, then snapshots the pinned page. Change
+    // the pin after that second read but before applyPinChecks's guarded validation.
+    if (this.root === outputRoot && phase === "prune" && target === path && ++pruneReads === 2) {
+      await addPin(outputRoot, { ...pin(), anchor: "new human anchor" }); injected = true;
+    }
+    return current;
+  });
+  const dream = await runDream({ wiki: store, raw: new FileRawStore({ root }), outputRoot,
+    structuralOnly: true, onPhase: value => { phase = value; } });
+  try {
+    expect(injected).toBe(true);
+    expect(dream.report.pinPersistence).toEqual({ applied: 0, skipped: 1 });
+    expect(renderReport(dream.report)).toContain("pin status check(s) were not persisted");
+    expect(findingCount(dream.report)).toBeGreaterThanOrEqual(1);
+    expect((await readPins(outputRoot))[0]!.anchor).toBe("new human anchor");
+    expect((await readPins(store.root))[0]!.anchor).toBe("");
+  } finally { await dream.workspace.dispose(); }
 });
 
 it("excludes capture comments from pin claim and anchor matching", async () => {

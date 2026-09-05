@@ -25,9 +25,9 @@ process.once("message", async () => {
       }
       return read(path);
     };
-    for (let i = 0; i < (mode === "same" ? 1 : 4); i++) {
+    for (let i = 0; i < (mode === "distinct" ? 4 : 1); i++) {
       const text = `fact ${name} ${i}`;
-      const sessionId = mode === "same" ? "s1" : `${name}-${i}`;
+      const sessionId = mode === "same" ? "s1" : mode === "case" ? (name === "first" ? "s1" : "S1") : `${name}-${i}`;
       const provider = { id: "fixture", model: "fixture",
         capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100_000 },
         async *stream() {
