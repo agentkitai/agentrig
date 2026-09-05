@@ -280,6 +280,16 @@ H5c must diagnose/migrate legacy multiline facts without losing their text or re
 unknown frontmatter across regeneration, with round-trip tests. New ingest normalizes line breaks;
 this is not a claim that all old pages have been migrated.
 
+H5b2 adds bounded named-session ingest and attempt-ledger loading. H5c should reuse those read
+bounds for its broader raw-session/attempt enumeration and workspace scans; generic search and
+dream scans are not implicitly bounded by H5b2's ingest-only migration.
+Add session-scoped attempt lookup/indexing under H5c: the current ledger-wide bounded scan can
+reach its cap because of unrelated historical sessions. Keep immutable attempt files, avoid
+silently cherry-picking partial history, and make any index rebuild bounded and inspectable.
+H5d should also route remaining auxiliary diagnostics (including tolerant recall failures) through
+the CLI/TUI diagnostic channels rather than raw stderr, which a TUI redraw can overwrite. H5b2
+fixes that routing for scheduled ingest; it does not claim a complete diagnostic-channel audit.
+
 ### E — Measure outcomes before expanding capabilities
 
 This is the minimum useful subset of R9 and R14, not a requirement to build a full exporter,

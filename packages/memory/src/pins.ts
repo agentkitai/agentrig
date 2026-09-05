@@ -5,6 +5,8 @@ import { z } from "zod";
 import { searchableBody, tokenize } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
 import { FileMemoryStore } from "./store.js";
+import { readBoundedFile } from "./bounded-file.js";
+import { MaintenanceLimitError } from "./maintenance.js";
 import type { MemoryStore, Pin } from "./types.js";
 
 /**
@@ -27,10 +29,11 @@ export const PinSchema = z.object({
 
 const PINS_FILE = "pins.json";
 
-export async function readPins(wikiRoot: string): Promise<Pin[]> {
+export async function readPins(wikiRoot: string, opts: MemoryLockOptions = {}): Promise<Pin[]> {
   let text: string;
   try {
-    text = await readFile(join(wikiRoot, PINS_FILE), "utf8");
+    text = opts.maxFileBytes === undefined ? await readFile(join(wikiRoot, PINS_FILE), "utf8")
+      : (await readBoundedFile(join(wikiRoot, PINS_FILE), opts.maxFileBytes, opts.signal)).toString("utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -159,10 +162,11 @@ export function claimSatisfied(claim: string, pageBody: string): boolean {
  * A contradicted pin is never silently deleted. Losing a human correction quietly is the exact
  * failure this mechanism exists to prevent.
  */
-export async function recheckPins(store: MemoryStore, pins: Pin[]): Promise<PinCheck[]> {
+export async function recheckPins(store: MemoryStore, pins: Pin[], opts: MemoryLockOptions = {}): Promise<PinCheck[]> {
   const out: PinCheck[] = [];
   for (const pin of pins) {
-    const page = await store.read(pin.page);
+    opts.signal?.throwIfAborted();
+    const page = store instanceof FileMemoryStore ? await store.read(pin.page, opts) : await store.read(pin.page);
     const snapshot = page === null ? { pageVersion: null } : page.version === undefined ? {} : { pageVersion: page.version };
     if (page === null) {
       out.push({ ...snapshot, pin, status: "orphaned", reason: `page ${pin.page} no longer exists` });
@@ -235,12 +239,14 @@ function mergeChecks(current: Pin[], checks: PinCheck[]): { pins: Pin[]; applied
  */
 export async function recheckStoredPins(store: MemoryStore, paths?: ReadonlySet<string>, opts: MemoryLockOptions = {}): Promise<PinCheck[]> {
   // An empty snapshot needs no mutation. Pins added after it belong to a later operation.
-  if ((await readPins(store.root)).length === 0) return [];
+  opts.signal?.throwIfAborted();
+  if ((await readPins(store.root, opts)).length === 0) return [];
   return withMemoryLock(store.root, async () => {
-    const pins = await readPins(store.root);
+    const pins = await readPins(store.root, opts);
     const relevant = paths === undefined ? pins : pins.filter(pin => paths.has(pin.page));
-    const checks = await recheckPins(store, relevant);
+    const checks = await recheckPins(store, relevant, opts);
     const merged = mergeChecks(pins, checks);
+    if (opts.maxFileBytes !== undefined && Buffer.byteLength(JSON.stringify(merged.pins, null, 2)) + 1 > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance pins output limit exceeded");
     if (JSON.stringify(merged.pins) !== JSON.stringify(pins)) await writePinsUnlocked(store.root, merged.pins, opts.signal);
     return checks;
   }, opts);

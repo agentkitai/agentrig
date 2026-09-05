@@ -1,7 +1,9 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, opendir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
 import { z } from "zod";
+import { readBoundedFile } from "./bounded-file.js";
+import { MaintenanceLimitError } from "./maintenance.js";
 import type { Attempt, DocRef, RawStore, SessionLogRef } from "./types.js";
 
 /**
@@ -149,19 +151,40 @@ export class FileRawStore implements RawStore {
     return attempts;
   }
 
-  async readAttempts(sessionId?: string): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
+  async readAttempts(sessionId?: string, opts?: { signal: AbortSignal; maxEntries: number; maxFileBytes: number; maxTotalBytes: number }): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
     let names: string[];
     try {
-      names = await readdir(this.dir("attempts"));
-    } catch {
+      if (opts === undefined) names = await readdir(this.dir("attempts"));
+      else {
+        opts.signal.throwIfAborted();
+        names = [];
+        const directory = await opendir(this.dir("attempts"));
+        for await (const entry of directory) {
+          opts.signal.throwIfAborted();
+          if (names.length >= opts.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
+          names.push(entry.name);
+        }
+      }
+    } catch (error) {
+      if (opts !== undefined && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return { attempts: [], corrupt: [] };
     }
     const out: Attempt[] = [];
     const corrupt: string[] = [];
+    let bytes = 0;
     for (const name of names) {
+      opts?.signal.throwIfAborted();
       if (!name.endsWith(".json")) continue;
       const path = join(this.dir("attempts"), name);
-      const text = await readFile(path, "utf8").catch(() => null);
+      const text = await (opts === undefined ? readFile(path, "utf8") : readBoundedFile(path, Math.min(opts.maxFileBytes, Math.max(1, opts.maxTotalBytes - bytes)), opts.signal)
+        .then(buffer => {
+          bytes += buffer.length;
+          if (bytes > opts.maxTotalBytes) throw new MaintenanceLimitError("attempt ledger total byte limit exceeded");
+          return buffer.toString("utf8");
+        })).catch(error => {
+          if (opts?.signal.aborted || error instanceof MaintenanceLimitError) throw error;
+          return null;
+        });
       if (text === null) {
         corrupt.push(path);
         continue;

@@ -30,7 +30,8 @@ export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "e
 export type ModelEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
-  | { type: "usage"; usage: Usage }
+  /** reported:false marks synthesized/partial fallback counts, not a known zero-cost call. */
+  | { type: "usage"; usage: Usage; reported?: boolean }
   /** `raw` carries the provider's verbatim stop reason when it doesn't map cleanly. */
   | { type: "stop"; reason: StopReason; raw?: string }
   /**

@@ -5,6 +5,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 export interface MemoryLockOptions {
   signal?: AbortSignal;
+  /** Optional bound for maintenance callers' file reads/writes. */
+  maxFileBytes?: number;
   timeoutMs?: number;
   /** Release failures are warnings, never a replacement for the work's committed outcome. */
   onReleaseError?: (error: Error) => void;

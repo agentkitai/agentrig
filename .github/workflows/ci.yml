@@ -53,3 +53,5 @@ jobs:
       - run: pnpm exec vitest run packages/memory/test/promotion-evidence.test.ts packages/memory/test/store.test.ts packages/memory/test/store-versions.test.ts packages/cli/test/memory-promotion.test.ts
       # H5b1 exercises real cross-process ingest/pin writers and portable capture/log recovery.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts packages/memory/test/ingest.test.ts packages/memory/test/raw-pins.test.ts
+      # H5b2: actual cancellation, bounded inputs and auxiliary usage must be portable too.
+      - run: pnpm exec vitest run packages/memory/test/ingest-lifecycle.test.ts packages/memory/test/hooks.test.ts packages/memory/test/backend.test.ts packages/cli/test/memory-ingest-lifecycle.test.ts packages/core/test/auxiliary-usage.test.ts

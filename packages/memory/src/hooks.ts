@@ -1,9 +1,10 @@
 import { stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, Hook, HookContext, HookResult, ModelProvider } from "@agentkitai/agentrig-core";
 import { FileMemoryStore } from "./store.js";
 import { FileRawStore } from "./raw.js";
-import { ingestSession } from "./ingest.js";
+import { ingestSession, type IngestLimits } from "./ingest.js";
+import { formatAuxiliaryUsage } from "./maintenance.js";
 import { lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
@@ -26,6 +27,11 @@ export interface SessionEndIngestOptions {
   backend?: MemoryBackend;
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
+  onUsage?: (report: AuxiliaryReport) => void;
+  onBackendError?: (operation: string, error: Error) => void;
+  limits?: Partial<IngestLimits>;
+  maxSpanChars?: number;
+  maxTokens?: number;
 }
 
 /** Distils the session that just ended into the wiki. */
@@ -34,8 +40,10 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
     point: "session_end",
     id: "memory:ingest",
     // ingest is a multi-call distillation over a whole transcript; the default 30s is too tight
-    timeoutMs: 10 * 60_000,
+    // Outer hook timeout includes cleanup headroom; it is not the model-work budget.
+    timeoutMs: Math.min(2_147_483_647, Math.max(10 * 60_000, (opts.limits?.timeoutMs ?? 300_000) + 60_000)),
     handler: async (ctx: HookContext): Promise<HookResult> => {
+      let auxiliary: AuxiliaryReport | undefined;
       try {
         // defence in depth: core validates session ids, but this hook builds a path from one and
         // must not depend on a caller upstream having done the right thing
@@ -54,19 +62,28 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
 
         if (ctx.signal.aborted) return { action: "continue" };
         const store = new FileMemoryStore({ root: join(opts.dir, "wiki") });
-        await store.init();
         const result = await ingestSession({
           store,
           provider: opts.provider,
           sessionId: ctx.sessionId,
           logPath,
           signal: ctx.signal,
+          ...(opts.limits === undefined ? {} : { limits: opts.limits }),
+          ...(opts.maxSpanChars === undefined ? {} : { maxSpanChars: opts.maxSpanChars }),
+          ...(opts.maxTokens === undefined ? {} : { maxTokens: opts.maxTokens }),
+          ...(opts.onBackendError === undefined ? {} : { onBackendError: opts.onBackendError }),
+          onUsage: report => {
+            auxiliary = report;
+            opts.onUsage?.(report);
+          },
           ...(opts.backend === undefined ? {} : { backend: opts.backend }),
         });
         opts.onDone?.(`ingested ${result.factCount} fact(s) into ${result.pagesWritten.length} page(s)` +
           (result.omissions.length === 0 ? "" : `; ${result.omissions.length} uninspected evidence omission(s), see source-page coverage`));
       } catch (err) {
         opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        try { if (auxiliary !== undefined) opts.onDone?.(formatAuxiliaryUsage(auxiliary)); } catch { /* accounting is diagnostic */ }
       }
       return { action: "continue" };
     },

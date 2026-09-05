@@ -43,13 +43,15 @@ export interface BackendAck {
   memoryId: string;
 }
 
+export interface BackendCallOptions { signal?: AbortSignal }
+
 export interface MemoryBackend {
   id: string;
   /** Returns the ids assigned to each fact, for the `lore:<memory-id>` half of provenance. */
-  onIngest(facts: DistilledFact[], source: SourceRef): Promise<BackendAck[]>;
-  recall(query: string, k: number): Promise<BackendHit[]>;
-  promote(page: WikiPage): Promise<void>;
-  conflicts?(facts: DistilledFact[]): Promise<Conflict[]>;
+  onIngest(facts: DistilledFact[], source: SourceRef, opts?: BackendCallOptions): Promise<BackendAck[]>;
+  recall(query: string, k: number, opts?: BackendCallOptions): Promise<BackendHit[]>;
+  promote(page: WikiPage, opts?: BackendCallOptions): Promise<void>;
+  conflicts?(facts: DistilledFact[], opts?: BackendCallOptions): Promise<Conflict[]>;
 }
 
 export interface TolerantOptions {
@@ -99,13 +101,13 @@ export function tolerant(
   };
   const wrapped: MemoryBackend = {
     id: backend.id,
-    onIngest: (facts, source) => guard("onIngest", () => backend.onIngest(facts, source), []),
-    recall: (query, k) => guard("recall", () => backend.recall(query, k), []),
-    promote: (page) => guard("promote", () => backend.promote(page), undefined),
+    onIngest: (facts, source, options) => guard("onIngest", () => backend.onIngest(facts, source, options), []),
+    recall: (query, k, options) => guard("recall", () => backend.recall(query, k, options), []),
+    promote: (page, options) => guard("promote", () => backend.promote(page, options), undefined),
   };
   if (backend.conflicts !== undefined) {
     const conflicts = backend.conflicts.bind(backend);
-    wrapped.conflicts = (facts) => guard("conflicts", () => conflicts(facts), []);
+    wrapped.conflicts = (facts, options) => guard("conflicts", () => conflicts(facts, options), []);
   }
   return wrapped;
 }

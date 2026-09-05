@@ -4,6 +4,8 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PAGE_DIR, pagePath, parsePage, reservationPlaceholder, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
+import { readBoundedFile } from "./bounded-file.js";
+import { MaintenanceLimitError } from "./maintenance.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
 
 /**
@@ -154,10 +156,11 @@ export class FileMemoryStore implements MemoryStore {
     }
   }
 
-  async index(): Promise<IndexEntry[]> {
+  async index(opts: MemoryLockOptions = {}): Promise<IndexEntry[]> {
     let text: string;
     try {
-      text = await readFile(this.abs(INDEX_FILE), "utf8");
+      text = opts.maxFileBytes === undefined ? await readFile(this.abs(INDEX_FILE), "utf8")
+        : (await readBoundedFile(this.abs(INDEX_FILE), opts.maxFileBytes, opts.signal)).toString("utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
@@ -169,32 +172,34 @@ export class FileMemoryStore implements MemoryStore {
     return this.withMutationLock(() => this.writeIndexUnlocked(entries));
   }
 
-  private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal): Promise<void> {
+  private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
     const sorted = [...entries].sort((a, b) =>
       a.type === b.type ? a.slug.localeCompare(b.slug) : a.type.localeCompare(b.type),
     );
-    await this.atomicWrite(INDEX_FILE, `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`, signal);
+    const contents = `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`;
+    if (maxFileBytes !== undefined && Buffer.byteLength(contents) > maxFileBytes) throw new MaintenanceLimitError("maintenance index output limit exceeded");
+    await this.atomicWrite(INDEX_FILE, contents, signal);
   }
 
   /** Insert or replace one index row, preserving everything else. */
-  async upsertIndex(entry: IndexEntry): Promise<void> {
-    await this.withMutationLock(() => this.upsertIndexUnlocked(entry));
+  async upsertIndex(entry: IndexEntry, opts: MemoryLockOptions = {}): Promise<void> {
+    await this.withMutationLock(() => this.upsertIndexUnlocked(entry, opts.signal, opts.maxFileBytes), opts);
   }
 
-  private async upsertIndexUnlocked(entry: IndexEntry, signal?: AbortSignal): Promise<void> {
-    const entries = await this.index();
+  private async upsertIndexUnlocked(entry: IndexEntry, signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
+    const entries = await this.index({ ...(signal === undefined ? {} : { signal }), ...(maxFileBytes === undefined ? {} : { maxFileBytes }) });
     const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
     if (i === -1) entries.push(entry);
     else entries[i] = entry;
-    await this.writeIndexUnlocked(entries, signal);
+    await this.writeIndexUnlocked(entries, signal, maxFileBytes);
   }
 
-  async read(path: string): Promise<WikiPage | null> {
+  async read(path: string, opts: MemoryLockOptions = {}): Promise<WikiPage | null> {
     const full = this.abs(path);
     let bytes: Buffer;
     let mtime: number;
     try {
-      bytes = await readFile(full);
+      bytes = opts.maxFileBytes === undefined ? await readFile(full) : await readBoundedFile(full, opts.maxFileBytes, opts.signal);
       mtime = (await stat(full)).mtimeMs;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -234,9 +239,12 @@ export class FileMemoryStore implements MemoryStore {
   /** Synchronous transform under the short mutation lock; never call providers here. */
   async update(path: string, transform: (current: WikiPage | null) => PageWrite, opts: MemoryLockOptions = {}): Promise<WikiPage> {
     return this.withMutationLock(async () => {
-      const next = transform(await this.read(path));
-      await this.atomicWrite(path, serializePage(next.frontmatter, next.body), opts.signal);
-      return (await this.read(path))!;
+      const next = transform(await this.read(path, opts));
+      const contents = serializePage(next.frontmatter, next.body);
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance page output limit exceeded");
+      await this.atomicWrite(path, contents, opts.signal);
+      // Reading the committed receipt is allowed after cancellation; do not claim no commit.
+      return (await this.read(path, { ...(opts.maxFileBytes === undefined ? {} : { maxFileBytes: opts.maxFileBytes }) }))!;
     }, opts);
   }
 
@@ -245,11 +253,11 @@ export class FileMemoryStore implements MemoryStore {
    * first and this one should update that page rather than fork a near-duplicate slug.
    * The LLM call that fills the page happens outside this — the lock is only the placeholder.
    */
-  async reserve(slug: string, claimant: string, type: PageType = "entity"): Promise<"created" | "exists"> {
-    return this.withMutationLock(() => this.reserveUnlocked(slug, claimant, type));
+  async reserve(slug: string, claimant: string, type: PageType = "entity", opts: MemoryLockOptions = {}): Promise<"created" | "exists"> {
+    return this.withMutationLock(() => this.reserveUnlocked(slug, claimant, type, opts), opts);
   }
 
-  private async reserveUnlocked(slug: string, claimant: string, type: PageType): Promise<"created" | "exists"> {
+  private async reserveUnlocked(slug: string, claimant: string, type: PageType, opts: MemoryLockOptions): Promise<"created" | "exists"> {
     const rel = pagePath(type, slug);
     const full = this.abs(rel);
     await mkdir(dirname(full), { recursive: true });
@@ -257,6 +265,8 @@ export class FileMemoryStore implements MemoryStore {
       { type, slug, aliases: [], sources: [], updated: this.today(), confidence: "low" },
       reservationPlaceholder(claimant),
     );
+    if (opts.maxFileBytes !== undefined && Buffer.byteLength(placeholder) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance reservation output limit exceeded");
+    opts.signal?.throwIfAborted();
     try {
       const handle = await open(full, "wx");
       try {
@@ -266,7 +276,8 @@ export class FileMemoryStore implements MemoryStore {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-        const entries = await this.index();
+        opts.signal?.throwIfAborted();
+        const entries = await this.index(opts);
         const i = entries.findIndex((e) => e.slug === slug && e.type === type);
         if (i === -1) {
           // Re-adopt pages whose catalog row was lost in an earlier interrupted operation.
@@ -274,7 +285,7 @@ export class FileMemoryStore implements MemoryStore {
         } else {
           entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
         }
-        await this.writeIndexUnlocked(entries);
+        await this.writeIndexUnlocked(entries, opts.signal, opts.maxFileBytes);
         return "exists";
       }
       throw err;
@@ -286,23 +297,26 @@ export class FileMemoryStore implements MemoryStore {
       status: "planned",
       summary: `(reserved by ${claimant})`,
       claimedBy: [claimant],
-    });
+    }, undefined, opts.maxFileBytes);
     return "created";
   }
 
-  async appendLog(entry: string): Promise<void> {
+  async appendLog(entry: string, opts: MemoryLockOptions = {}): Promise<void> {
     // read-modify-atomicWrite rather than appendFile: appendFile follows a symlink, which let a
     // dream's log line write through a symlinked log.md into the wiki it was supposed to be
     // copying. Every other writer here already goes through atomicWrite.
     await this.withMutationLock(async () => {
       const line = entry.endsWith("\n") ? entry : `${entry}\n`;
-      const existing = await readFile(this.abs(LOG_FILE), "utf8").catch((err: NodeJS.ErrnoException) => {
+      const existing = await (opts.maxFileBytes === undefined ? readFile(this.abs(LOG_FILE), "utf8")
+        : readBoundedFile(this.abs(LOG_FILE), opts.maxFileBytes, opts.signal).then(bytes => bytes.toString("utf8"))).catch((err: NodeJS.ErrnoException) => {
         if (err.code === "ENOENT") return LOG_HEADER;
         throw err;
       });
       const repaired = recoverLogHeader(existing);
-      await this.atomicWrite(LOG_FILE, repaired + (repaired.endsWith("\n") ? "" : "\n") + line);
-    });
+      const contents = repaired + (repaired.endsWith("\n") ? "" : "\n") + line;
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance log output limit exceeded");
+      await this.atomicWrite(LOG_FILE, contents, opts.signal);
+    }, opts);
   }
 
   /** Every page on disk, for search and lint. */

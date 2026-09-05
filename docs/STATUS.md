@@ -1,11 +1,48 @@
 # Status
 
-Current roadmap row: **H5b1 — conflict-safe ingest persistence.** H1–H4 and H5a are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H5b2 — bounded ingest cancellation and auxiliary accounting.** H1–H4, H5a and H5b1 are complete. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-05
 
-### H5b1 in progress
+### H5b2 in progress
+
+H5b1 merged in PR #123 at 5fc2cb8; post-merge CI 33958820304 passed all platforms.
+H5b2 starts from that updated main. It bounds ingest input/model/backend work, propagates abort
+through commit boundaries, and reports auxiliary usage separately, including unreported usage.
+Dream lifecycle and reviewer/grader adoption remain H5c/H5d, not implicitly complete here.
+
+Implementation now includes linked call/run deadlines, late-result isolation, bounded file/model/
+coverage work, signal-aware ingest mutations and optional backend requests, plus a shared types-only
+auxiliary accounting contract. Synthesized adapter zeros are explicitly unreported. CLI and scheduled
+ingest expose reported/unknown usage and local-write completion state; durable session aggregation
+remains H5d. See [plans/H5b2.md](plans/H5b2.md) for exact limits and OS/remote cancellation boundaries.
+New lifecycle/adapter tests pass; full validation, independent review and CI remain merge gates.
+
+PR #124's first review ran typecheck and the full suite (1,594 passed + two platform skips).
+CI 33959675267 passed all three platforms at ca3fd26. Review fixes expose limits through CLI/config
+and hooks, avoid swallowed backend failure outcomes, tolerate malformed usage as unknown, reserve
+backend call slots, and preserve committed results on later abort. Inspection also moved CLI
+attempt-ledger scanning inside the run's bounds and removed pre-run initialization. Added tests
+cover shipped composition, write-side file caps and FIFO rejection. Repair review and fresh CI
+remain pending; these are not yet completion claims.
+
+The second review reran typecheck/full tests and confirmed all five original findings closed.
+Its two remaining integration regressions are corrected: scheduled ingest retains backend failure
+diagnostics, and malformed CLI session IDs report clean errors. Span flags validate at parse time;
+tests cover agent-builder forwarding and Lore's own fetch deadline. Full suite: 1,618 passed plus
+two platform-specific skips (1,620 total, 77 files). CI 33960504444 passed all platforms at af7b4f8;
+the final narrow delta still needs review and fresh CI. Ledger-wide limits intentionally fail
+visibly; session-scoped attempt lookup is recorded under H5c rather than silently omitting history.
+
+Third, narrow review reran typecheck/full tests and verified those fixes. Its final two small
+refinements are applied and regression-tested: scheduled backend diagnostics use the visible
+onHookError channel (including TUI), and config span sizes share the CLI upper bound. Broader
+recall diagnostic routing is queued in H5d. CI 33961117588 passed all platforms at d309c30; the
+refinement commit still requires fresh CI before merge. Three review passes, not a new broad
+review cycle for the final two targeted changes.
+
+### H5b1 complete (PR #123)
 
 H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
 H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate

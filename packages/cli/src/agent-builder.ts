@@ -36,6 +36,7 @@ import {
   indexInjection,
   ingestOnSessionEnd,
   memoryTools,
+  type IngestLimits,
 } from "@agentkitai/agentrig-memory";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
@@ -131,6 +132,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   priceCacheWrite?: string;
   maxTokensPerTurn: string;
   ingestOnEnd?: boolean;
+  ingestLimits?: Partial<IngestLimits>;
+  ingestSpanChars?: string;
   dreamOnEnd?: boolean;
   dreamEverySessions?: string;
   dreamEveryHours?: string;
@@ -446,13 +449,16 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
 
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
-    const backend = openBackend();
+    const backend = openBackend({ tolerate: false });
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,
         provider: providers.memory,
+        ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
+        ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
         ...(backend === null ? {} : { backend }),
         onError: (err) => extras.onHookError?.(`memory ingest failed (session still succeeded): ${err.message}`),
+        onBackendError: (op, err) => extras.onHookError?.(`memory ingest: lore ${op} failed (continuing): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`memory: ${summary}`),
       }),
     );

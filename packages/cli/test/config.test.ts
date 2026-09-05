@@ -17,6 +17,29 @@ import type { RunOptions } from "../src/run.ts";
 import type { TuiOptions } from "../src/tui/start.tsx";
 
 const dirs: string[] = [];
+
+it("validates and resolves ingest limits for both explicit and session-end CLI entry points", async () => {
+  const { cwd, home } = await fixture();
+  await configAt(home, { ingestLimits: { maxSpans: 100, maxCalls: 102 }, ingestSpanChars: 8000 });
+  for (const names of [["run"], ["memory", "ingest"]]) {
+    let cmd = buildProgram();
+    for (const name of names) cmd = cmd.commands.find(c => c.name() === name)!;
+    cmd.parseOptions(["--ingest-limits", '{"maxSpans":120,"maxCalls":122}', "--ingest-span-chars", "9000"]);
+    const resolved = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false });
+    expect(resolved.ingestLimits).toEqual({ maxSpans: 120, maxCalls: 122 });
+    expect(resolved.ingestSpanChars).toBe("9000");
+  }
+  expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { maxCalls: 0 } }))).toThrow();
+  expect(() => parseConfigText("fixture", JSON.stringify({ ingestLimits: { unknown: 1 } }))).toThrow();
+  expect(() => parseConfigText("fixture", JSON.stringify({ ingestSpanChars: 4294967296 }))).toThrow("must be from 2 to 2147483647");
+});
+
+it.each(["1", "abc", "1.5", "4294967296"])("rejects invalid ingest span size %s while parsing CLI flags", value => {
+  const program = buildProgram().exitOverride().configureOutput({ writeErr: () => {} });
+  const run = program.commands.find(cmd => cmd.name() === "run")!;
+  run.exitOverride().configureOutput({ writeErr: () => {} });
+  expect(() => run.parseOptions(["--ingest-span-chars", value])).toThrow("ingest span characters must be an integer");
+});
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();

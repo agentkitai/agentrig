@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import {
   FileMemoryStore,
@@ -6,6 +6,7 @@ import {
   LoreBackend,
   SCHEMA_MD,
   findingCount,
+  formatAuxiliaryUsage,
   ingestSession,
   loreConfigFromEnv,
   loadPromotionEvidence,
@@ -18,6 +19,7 @@ import {
   unionRetrieve,
   withBackendRecall,
   type MemoryBackend,
+  type IngestLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
 
@@ -39,10 +41,11 @@ export function layout(dir: string) {
  * The optional Lore backend (PLAN §3.8), or null when unconfigured — the no-infra default.
  * Always wrapped so a backend failure is reported and then ignored.
  */
-export function openBackend(): MemoryBackend | null {
+export function openBackend(opts: { tolerate?: boolean } = {}): MemoryBackend | null {
   if (loreConfigFromEnv() === null) return null;
   try {
-    return tolerant(new LoreBackend(), backendError);
+    const backend = new LoreBackend();
+    return opts.tolerate === false ? backend : tolerant(backend, backendError);
   } catch (err) {
     // a misconfigured OPTIONAL backend must not take down the harness
     console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
@@ -130,15 +133,23 @@ export async function memorySearch(query: string, opts: MemoryOptions & { k?: st
   }
 }
 
-export type MemoryIngestOptions = MemoryOptions & ProviderOptions;
+export type MemoryIngestOptions = MemoryOptions & ProviderOptions & {
+  ingestLimits?: Partial<IngestLimits>;
+  ingestSpanChars?: string;
+};
 
 export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions): Promise<void> {
   const { root } = layout(opts.dir);
-  const store = await openStore(opts.dir);
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+    console.error("invalid ingest session id: use the ID, not a filename or path");
+    process.exitCode = 1;
+    return;
+  }
+  const store = new FileMemoryStore({ root: layout(opts.dir).wiki });
   const raw = new FileRawStore({ root });
-  const sessions = await raw.sessions();
-  const session = sessions.find((s) => s.id === sessionId);
-  if (session === undefined) {
+  const logPath = join(root, "raw", "sessions", `${sessionId}.jsonl`);
+  const exists = await stat(logPath).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return false; throw error; });
+  if (!exists) {
     console.error(`no session log for ${sessionId} under ${root}/raw/sessions`);
     process.exitCode = 1;
     return;
@@ -153,17 +164,19 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
     process.exitCode = 1;
     return;
   }
-  const { attempts, corrupt } = await raw.readAttempts(sessionId);
-  for (const path of corrupt) console.error(`warning: unreadable attempt file, skipped: ${path}`);
-  const backend = openBackend();
+  const backend = openBackend({ tolerate: false });
   const result = await ingestSession({
     store,
     provider,
     sessionId,
-    logPath: session.path,
-    attempts,
+    logPath,
+    attemptsFrom: raw,
+    onCorruptAttempt: path => console.error(`warning: unreadable attempt file, skipped: ${path}`),
     project: projectName(),
+    ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
+    ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
     onBackendError: backendError,
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     ...(backend === null ? {} : { backend, checkBackendConflicts: true }),
   });
   for (const omission of result.omissions) {
