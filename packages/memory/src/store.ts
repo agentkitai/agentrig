@@ -276,7 +276,9 @@ export class FileMemoryStore implements MemoryStore {
       }
       for (const name of names) {
         if (!name.endsWith(".md")) continue;
-        const page = await this.read(join(dir, name)).catch(() => null);
+        // Wiki identifiers use forward slashes on every host, like pagePath() and index rows.
+        // Native Windows separators would make model consolidation targets miss these pages.
+        const page = await this.read(`${dir}/${name}`).catch(() => null);
         if (page !== null) out.push(page);
       }
     }
