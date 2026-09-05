@@ -38,7 +38,7 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
       const accessError = process.platform === "win32" && ["EPERM", "EACCES", "EBUSY"].includes(code ?? "");
       if (accessError) accessDeadline ??= performance.now() + 250;
       const retryable = code === "EEXIST" || (accessError && performance.now() < accessDeadline!);
-      if (!retryable) throw new Error(`cannot acquire memory lock ${lockPath}: ${(err as Error).message}; check parent-directory permissions`, { cause: err });
+      if (!retryable) throw new Error(`cannot acquire memory lock ${lockPath}: ${(err as Error).message}; check parent-directory permissions or persistent Windows delete-pending/busy state`, { cause: err });
       if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath} (${code}); check parent-directory permissions; if its owner crashed, stop all writers before removing that lock`);
       await delay(Math.min(20, Math.max(1, deadline - performance.now())), undefined,
         opts.signal === undefined ? {} : { signal: opts.signal });
@@ -64,7 +64,7 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
         if (err.code === "ENOENT") return undefined;
         throw err;
       });
-      if (identity !== undefined && current?.dev === identity.dev && current.ino === identity.ino) await rm(lockPath, { force: true });
+      if (current?.dev === identity.dev && current.ino === identity.ino) await rm(lockPath, { force: true });
     } catch (error) { releaseErrors.push(error); }
     try { await handle.close(); } catch (error) { releaseErrors.push(error); }
     for (const error of releaseErrors) {
