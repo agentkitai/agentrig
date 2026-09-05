@@ -861,3 +861,8 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   running-state marker (the current `final: false` flag and UI already identify unfinished work),
   and optionally ignore explicitly undefined entries in partial-limit objects rather than reject
   them before work starts. Neither is an H5/E1 prerequisite.
+- E1 evaluator polish: remove its mechanics tests' prior-build requirement by compiling isolated
+  fixtures; add a distinct NOT_RUN lane state for scope-rejected submissions; strengthen ignored/
+  Git-internal change inventory if adversarial submission checking becomes a goal. Current limits
+  are explicit. Expand the lightweight AgentRig lane integration checks in CI if their runtime is
+  justified; actual fresh-workspace A1/A2/A3 build/check trials are already maintainer evidence.

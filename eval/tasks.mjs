@@ -19,7 +19,7 @@ export const tasks = Object.freeze({
   A3: {
     repository: 'https://github.com/agentkitai/agentrig', revision: AGENTRIG_REVISION,
     title: 'Extract wiki-link parsing without behavior changes',
-    prompt: 'Move the wikilinks implementation into packages/memory/src/wikilinks.ts, exporting the same named function. Keep the existing page.ts and package exports compatible by re-exporting that function. Preserve trimming, empty-link exclusion, first-occurrence order and deduplication. Add regression coverage. Do not otherwise change page parsing.',
+    prompt: 'Move the wikilinks implementation into packages/memory/src/wikilinks.ts as an exported function declaration with its implementation body. The new module must not depend back on page.ts. Keep the existing page.ts and package exports compatible by re-exporting that function. Preserve trimming, empty-link exclusion, first-occurrence order and deduplication. Add regression coverage. Do not otherwise change page parsing.',
     allowed: ['packages/memory/src/page.ts', 'packages/memory/src/wikilinks.ts'],
   },
   A4: {

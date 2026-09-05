@@ -9,6 +9,7 @@ import { taskFor, allowedPath } from './tasks.mjs';
 
 const require = createRequire(new URL('../packages/cli/package.json', import.meta.url));
 const { z } = require('zod');
+const ts = require('typescript');
 const Receipt = z.object({ version: z.literal(1), id: z.string(), runId: z.string().uuid(), workspace: z.string(),
   repository: z.string(), revision: z.string().regex(/^[a-f0-9]{40}$/), baseline: z.string().regex(/^[a-f0-9]{40}$/) }).strict();
 const Evidence = z.array(z.object({ path: z.string(), quote: z.string().min(12).max(1000) }).strict()).min(1).max(8);
@@ -21,6 +22,9 @@ const command = (cwd, program, args, options = {}) => execFileSync(program, args
   cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024, ...options,
 });
 const git = (cwd, args) => command(cwd, 'git', args);
+export const infrastructureFailure = (error) => ['ENOENT', 'EACCES', 'ETIMEDOUT', 'ENOBUFS'].includes(error?.code)
+  || error?.signal != null;
+const INFRASTRUCTURE_MARKER = 'AGENTRIG_EVAL_INFRASTRUCTURE:';
 const leafImport = (root, path) => import(pathToFileURL(join(root, path)).href);
 const fm = { type: 'entity', slug: 'fixture', aliases: [], sources: ['doc:fixture'], updated: '2026-09-05', confidence: 'high' };
 const page = (slug, body) => ({ path: `entities/${slug}.md`, frontmatter: { ...fm, slug }, body, updatedAt: 0 });
@@ -55,6 +59,20 @@ export async function behavior(id, root) {
     // The requested extraction must be real, not a second wrapper around the old implementation.
     const old = await readFile(join(root, 'packages/memory/src/page.ts'), 'utf8');
     assert.doesNotMatch(old, /(?:function|const|let)\s+wikilinks\b/);
+    const source = await readFile(join(root, 'packages/memory/src/wikilinks.ts'), 'utf8');
+    const tree = ts.createSourceFile('wikilinks.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    assert.ok(tree.statements.some((s) => ts.isFunctionDeclaration(s) && s.name?.text === 'wikilinks'
+      && s.body?.statements.length > 0 && s.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)),
+    'new module must own the exported function declaration with a body');
+    const visit = (node) => {
+      // Includes import, re-export, require and dynamic-import literals, but not comments.
+      if (ts.isStringLiteralLike(node)) {
+        const target = resolve(root, 'packages/memory/src', node.text).replace(/\.(?:js|ts)$/, '');
+        assert.notEqual(target, resolve(root, 'packages/memory/src/page'), 'new module must not depend back on page');
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
   } else if (id === 'A4' || id === 'X4') {
     const bytes = await readFile(join(root, 'answer.json'), 'utf8');
     assert.ok(bytes.length <= 16_384, 'answer is too large');
@@ -126,7 +144,7 @@ export async function check(receiptPath) {
   const result = { task: receipt.id, runId: receipt.runId, outcome: 'FAIL', behavior: 'BLOCKED', regression: 'BLOCKED', submittedTests: 'BLOCKED',
     scope: 'PASS', manual: receipt.id === 'A4' || receipt.id === 'X4' ? 'PENDING' : 'NOT_REQUIRED', evidence: [] };
   // Compare against the external baseline receipt, not HEAD (an agent may commit its work).
-  const changed = git(root, ['diff', '--name-only', '-z', receipt.baseline, '--']).split('\0').filter(Boolean);
+  const changed = git(root, ['diff', '--no-renames', '--name-only', '-z', receipt.baseline, '--']).split('\0').filter(Boolean);
   const added = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0').filter(Boolean);
   const forbidden = [...new Set([...changed, ...added])].filter((path) => !allowedPath(receipt.id, path));
   if (forbidden.length) { result.scope = 'FAIL'; result.evidence.push(`out-of-scope changes: ${forbidden.join(', ')}`); }
@@ -139,17 +157,24 @@ export async function check(receiptPath) {
     // Missing prerequisites are BLOCKED; compilation failures in a prepared run are FAIL.
     await lstat(join(root, 'node_modules/typescript/bin/tsc'));
     await lstat(join(root, 'node_modules/vitest/vitest.mjs'));
+    const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+    command(root, pnpm, ['--version'], { shell: process.platform === 'win32' }); // unavailable toolchain => BLOCKED
     try {
-      const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
       // pnpm.cmd requires a shell on Windows; no user-controlled argument is interpolated.
       result.evidence.push(command(root, pnpm, ['build'], { shell: process.platform === 'win32' }));
-    } catch (error) { result.behavior = 'FAIL'; result.evidence.push(`build failed: ${error.message}`); return result; }
+    } catch (error) {
+      result.behavior = infrastructureFailure(error) ? 'BLOCKED' : 'FAIL';
+      result.outcome = result.behavior; result.evidence.push(`build failed: ${error.message}`); return result;
+    }
   }
   for (const kind of ['behavior', 'regression']) {
     try {
       const output = command(root, process.execPath, [fileURLToPath(import.meta.url), '--worker', kind, receipt.id, root]);
       result[kind] = 'PASS'; result.evidence.push(`${kind}: ${output.trim()}`);
-    } catch (error) { result[kind] = 'FAIL'; result.evidence.push(`${kind}: ${error.stderr || error.message}`); }
+    } catch (error) {
+      result[kind] = infrastructureFailure(error) || (error.status === 2 && String(error.stderr).includes(INFRASTRUCTURE_MARKER)) ? 'BLOCKED' : 'FAIL';
+      result.evidence.push(`${kind}: ${error.stderr || error.message}`);
+    }
   }
   if (receipt.id === 'A4' || receipt.id === 'X4') result.submittedTests = 'NOT_REQUIRED';
   else {
@@ -160,10 +185,11 @@ export async function check(receiptPath) {
         ['node_modules/vitest/vitest.mjs', 'run', ...testFiles]));
       else for (const file of testFiles) result.evidence.push(command(root, process.execPath, [file]));
       result.submittedTests = 'PASS';
-    } catch (error) { result.submittedTests = 'FAIL'; result.evidence.push(`submitted tests: ${error.stderr || error.message}`); }
+    } catch (error) { result.submittedTests = infrastructureFailure(error) ? 'BLOCKED' : 'FAIL'; result.evidence.push(`submitted tests: ${error.stderr || error.message}`); }
   }
-  result.outcome = result.behavior === 'PASS' && result.regression === 'PASS' && result.submittedTests !== 'FAIL'
-    ? result.manual === 'PENDING' ? 'BLOCKED' : 'PASS' : 'FAIL';
+  const lanes = [result.behavior, result.regression, result.submittedTests];
+  result.outcome = lanes.includes('BLOCKED') ? 'BLOCKED' : lanes.includes('FAIL') ? 'FAIL'
+    : result.manual === 'PENDING' ? 'BLOCKED' : 'PASS';
   if (result.manual === 'PENDING') result.evidence.push('Independent human must assess answer.md against EVALSET rubric; record signed verdict separately.');
   return result;
 }
@@ -182,7 +208,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       process.exitCode = result.outcome === 'PASS' ? 0 : result.outcome === 'FAIL' ? 1 : 2;
     }
   } catch (error) {
-    if (process.argv[2] === '--worker') { console.error(error); process.exitCode = 1; }
+    if (process.argv[2] === '--worker') {
+      // Missing answer/source files are task failures, not missing executables. Only regression
+      // workers launch another process; outer launch/timeouts are classified by the parent.
+      const infrastructure = process.argv[3] === 'regression' && infrastructureFailure(error);
+      if (infrastructure) console.error(INFRASTRUCTURE_MARKER);
+      console.error(error); process.exitCode = infrastructure ? 2 : 1;
+    }
     else { console.log(JSON.stringify({ outcome: 'BLOCKED', reason: error.message })); process.exitCode = 2; }
   }
 }

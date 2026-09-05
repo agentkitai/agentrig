@@ -22,6 +22,15 @@ AgentRig A1/A2/A3 workspaces fail before repair and pass all lanes after repair;
 why passing old regression tests alone is insufficient. Build/typecheck and full explicit Node22
 suite pass 1,827 plus two skips (1,829 total, 86 files). Independent review and PR/main CI pending.
 
+PR #132 initial head 73a3bad passed all-platform CI 33974947019. Claude review found two
+blockers: infrastructure failures counted as task failures and a false-positive extraction check.
+Both repaired; a focused second pass approved and independently passed all 14 mechanics tests.
+Maintainer then normalized alternate back-import paths with an additional assertion inside the
+same extraction test (not a third review). Final build/typecheck and explicit Node22 suite pass
+1,829 plus two skips (1,831 total, 86 files). All eight actual pinned task workspaces have correct
+controls: six code tasks pass; A4/X4 automatic lanes pass and honestly remain BLOCKED pending a
+human verdict. These are maintainer controls, not model results. Final-head/main CI still required.
+
 ### H5d auxiliary lifecycle complete (PR #131)
 
 Completion gate: final head a1a586f, merge a14dd57, PR CI 33973659278 and main CI 33973789052

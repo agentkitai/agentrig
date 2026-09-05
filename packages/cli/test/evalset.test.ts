@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtemp, readFile, writeFile, mkdir, cp, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -105,10 +105,20 @@ describe("E1 independent outcome checks", () => {
     expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
     const extracted = pageJs.slice(start, end);
     await writeFile(join(path, "packages/memory/dist/wikilinks.js"), extracted);
+    await writeFile(join(path, "packages/memory/src/wikilinks.ts"), extracted);
     for (const file of ["page.js", "index.js"]) await writeFile(join(path, "packages/memory/dist", file), 'export { wikilinks } from "./wikilinks.js";');
     await writeFile(join(path, "packages/memory/src/page.ts"), 'export { wikilinks } from "./wikilinks.js";');
     passed(worker("A3", path));
     await writeFile(join(path, "packages/memory/dist/wikilinks.js"), 'export const wikilinks = () => [];');
+    failed(worker("A3", path));
+    // Review repair: behavior/export identity alone must not certify a fake extraction.
+    await writeFile(join(path, "packages/memory/dist/wikilinks.js"), extracted);
+    await writeFile(join(path, "packages/memory/src/page.ts"), extracted.replace('function wikilinks', 'function parseWikilinks'));
+    await writeFile(join(path, "packages/memory/src/wikilinks.ts"), 'export { parseWikilinks as wikilinks } from "./page.js";');
+    failed(worker("A3", path));
+    await writeFile(join(path, "packages/memory/src/wikilinks.ts"), 'import { parseWikilinks } from "./page.js"; export function wikilinks(body: string) { return parseWikilinks(body); }');
+    failed(worker("A3", path));
+    await writeFile(join(path, "packages/memory/src/wikilinks.ts"), 'import { parseWikilinks } from "../src/page.js"; export function wikilinks(body: string) { return parseWikilinks(body); }');
     failed(worker("A3", path));
   });
 
@@ -132,6 +142,13 @@ describe("E1 independent outcome checks", () => {
 });
 
 describe("E1 workspace and outcome mechanics", () => {
+  it("distinguishes launch/timeout/signal infrastructure failures from failed assertions", async () => {
+    const { infrastructureFailure } = await import(pathToFileURL(checker).href);
+    for (const error of [{ code: "ENOENT" }, { code: "EACCES" }, { code: "ETIMEDOUT" }, { code: "ENOBUFS" }, { signal: "SIGTERM" }]) {
+      expect(infrastructureFailure(error)).toBe(true);
+    }
+    for (const error of [{ status: 1 }, { status: 2 }, new Error("assertion failed"), { code: "ERR_ASSERTION" }]) expect(infrastructureFailure(error)).toBe(false);
+  });
   async function receiptFor(id: string, path: string) {
     const git = (...args: string[]) => execFileSync("git", ["-C", path, ...args], { encoding: "utf8" });
     git("init", "--quiet"); git("config", "core.autocrlf", "false");
@@ -176,6 +193,21 @@ describe("E1 workspace and outcome mechanics", () => {
     const result = spawnSync(process.execPath, [checker, receiptPath], { encoding: "utf8", timeout: 30_000 });
     expect(result.status).toBe(2);
     expect(JSON.parse(result.stdout)).toMatchObject({ behavior: "PASS", regression: "PASS", scope: "PASS", manual: "PENDING", outcome: "BLOCKED" });
+  });
+
+  it("records a signaled checker worker as BLOCKED, but ordinary exit 2 as FAIL", async () => {
+    const path = await external();
+    await writeFile(join(path, "index.js"), "process.kill(process.pid, 'SIGTERM');");
+    const { receiptPath } = await receiptFor("X1", path);
+    await writeFile(join(path, "eval-test-worker.js"), "require('node:assert').ok(true);");
+    const check = () => spawnSync(process.execPath, [checker, receiptPath], { encoding: "utf8", timeout: 30_000 });
+    let result = check();
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "BLOCKED", behavior: "BLOCKED", regression: "BLOCKED" });
+    await writeFile(join(path, "index.js"), "process.exit(2);");
+    result = check();
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "FAIL", behavior: "FAIL", regression: "FAIL" });
   });
 
   it("exports a real pinned tree without copying dirty source or overwriting existing work", async () => {

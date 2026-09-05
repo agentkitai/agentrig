@@ -34,7 +34,7 @@ filenames; existing tests, package scripts, dependencies and task inputs are imm
 |---|---|---|
 | A1 | Fix; serializer's list item encoding is replaced with plain string conversion | Alias round trips preserve commas, both quote kinds, backslashes, whitespace and newline; ordinary values, body and opaque metadata survive |
 | A2 | Fix; index-only hits are filtered from the final union | A summary-only hit survives beside a body-only hit at `k=1`; overlaps are deduplicated as `both`; empty query returns none |
-| A3 | Refactor; unmodified starting tree | New `wikilinks.ts` owns the implementation; old module and package exports are the same function; trimming, first occurrence, deduplication and empty handling are unchanged |
+| A3 | Refactor; unmodified starting tree | New `wikilinks.ts` owns an exported function declaration with a body, without depending back on `page.ts`; old module and package exports are the same function; trimming, first occurrence, deduplication and empty handling are unchanged |
 | A4 | Investigation; unmodified tree | Structured answer identifies `auxiliary.usage`, replace-by-ID snapshots, terminal `session.end`, unknown missing usage and separate main totals; exact quotes from two current implementation files; human rubric below |
 | X1 | Fix; whitespace guard checks untrimmed input | Blank/whitespace strings are false; finite primitive numbers and valid numeric strings remain true; other types, nonfinite values, bigint and symbols are false without throwing |
 | X2 | Repeated knowledge use; unmodified tree | New `strict.js` accepts only finite primitive numbers, not numeric strings or boxed/coercible values; existing `index.js` is unchanged |
@@ -89,6 +89,7 @@ BLOCKED and retains any partial artifacts for inspection. It never cleans an exi
 Do not retry into the failed path. **Reset means prepare another fresh destination**, not `git
 reset`, `git clean`, or deletion of a user's checkout. Retain all attempted work and receipts until
 the comparison is published; manual removal is a separate, explicitly targeted operator action.
+On Windows, resolve `%TEMP%`/8.3 aliases to their canonical long path before choosing a destination.
 
 For AgentRig workspaces, install locked dependencies and build before the agent starts. Record
 those preparation logs separately from task wall time. Resolve infrastructure failures before
@@ -132,6 +133,15 @@ The selected source test suites are regression evidence, not independent task su
 both lanes even when one fails. Review unintended changes using the fixed allowed-path list;
 production edits outside it fail. Generated build/dependency artifacts are not evaluated as product
 changes, but sandbox escape/external actions invalidate the run and are recorded as failures.
+Git scope inspection is not tamper-proof: ignored files and changes inside `.git` are outside its
+inventory. Isolation and independent artifact review remain required. Scope rejection returns
+FAIL without executing submitted code; the remaining automatic lanes are left BLOCKED (not run).
+Worker launch errors, timeout, output overflow or termination by signal are BLOCKED with evidence;
+ordinary nonzero test/build exits and missing submitted artifacts are FAIL. A check timeout makes
+that run inconclusive until diagnosed; it is distinct from the model's declared task budget.
+
+E1's mechanics tests currently read built package leaves: run `pnpm build` before `pnpm test` for
+this suite. This is a narrow exception to source-only tests, not a live-provider requirement.
 
 ## Training / held-out boundary for repeated knowledge and stale memory
 
