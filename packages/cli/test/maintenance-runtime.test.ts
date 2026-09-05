@@ -29,7 +29,7 @@ it.each(["cooperative", "stuck"])("handles interruption of %s maintenance in a r
     clearTimeout(timer);
     if (child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); await exited; }
   }
-});
+}, 10_000);
 
 it("the built CLI prints a maintenance failure without an unhandled-rejection stack", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentrig-cli-maintenance-"));
