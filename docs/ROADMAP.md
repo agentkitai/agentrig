@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H1.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H2; H1 complete (PR #118).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -184,7 +184,7 @@ their cost and complexity.
 The tables below are the original research snapshot, **not current implementation status**.
 R1, R1.5, R2, R3 and R3.5 have since landed. Project context, configuration, trust, doctor,
 context manifests, eviction and session trees exist; recorded fork replay executes no tools.
-Sandbox enforcement remains incomplete for direct in-process effects (H1). See the priority
+H1 repaired supported tool effects and explicitly gates unsupported host effects. See the priority
 table above and STATUS for current work; competitor columns are historical research claims.
 
 | Capability | Codex | pi | dsh | Hermes | OpenClaw | nanobot | AgentRig today | Milestone |
