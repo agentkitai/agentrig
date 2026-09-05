@@ -11,7 +11,7 @@ export const DEFAULT_REPO_MAP_BYTES = 8 * 1024;
 
 export interface RepoMapOptions {
   maxBytes?: number;
-  /** Exact files omitted from traversal/freshness (used for the active session's mutable files). */
+  /** Files/directories omitted from traversal/freshness (e.g. mutable session files or checkouts). */
   excludePaths?: string[];
 }
 
@@ -35,9 +35,31 @@ const SKIP_DIRECTORIES = new Set([".git", ".agentrig", "node_modules", "dist", "
 
 /** Generated checkout containers, not entire instruction/config directories. Applied to
  * descendants only: mapping a checkout itself still maps its project normally. Other checkout
- * locations can be omitted with excludePaths; a nested .git alone may belong to a submodule. */
+ * locations with ordinary linked-worktree gitfiles are detected separately. */
 function generatedCheckouts(parent: string, name: string): boolean {
   return name === ".worktrees" || (basename(parent) === ".claude" && name === "worktrees");
+}
+
+/** Inspect only a bounded, regular in-tree gitfile; never follow it into Git metadata.
+ * Ordinary submodule gitfiles point into .git/modules, not .git/worktrees. */
+async function linkedWorktree(directory: string): Promise<boolean> {
+  const path = join(directory, ".git");
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.size > 4096) return false;
+    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const bytes = Buffer.alloc(4097);
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      if (bytesRead > 4096) return false;
+      const match = /^gitdir: ([^\r\n]+)\r?\n?$/.exec(bytes.subarray(0, bytesRead).toString("utf8"));
+      return match !== null && /(?:^|\/)\.git\/worktrees\/[^/]+\/?$/.test(match[1]!.replaceAll("\\", "/"));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
 }
 const TS_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 const MAX_TS_SOURCE_BYTES = 256 * 1024;
@@ -52,7 +74,10 @@ function pathOrder(a: string, b: string): number {
 
 async function scan(root: string, excludePaths: string[] = []): Promise<Entry[]> {
   const entries: Entry[] = [];
-  const excluded = new Set(excludePaths.map((path) => resolve(path)));
+  const excluded = new Set(await Promise.all(excludePaths.map(async (path) => {
+    const absolute = resolve(path);
+    return realpath(absolute).catch(() => absolute);
+  })));
 
   async function walk(directory: string): Promise<void> {
     let children;
@@ -63,11 +88,12 @@ async function scan(root: string, excludePaths: string[] = []): Promise<Entry[]>
     }
     children.sort((a, b) => pathOrder(a.name, b.name));
     for (const child of children) {
-      if (child.name.includes("\n") || child.name.includes("\r")) continue;
+      if (child.name === ".git" || child.name.includes("\n") || child.name.includes("\r")) continue;
       const absolute = join(directory, child.name);
       if (excluded.has(resolve(absolute))) continue;
       if (child.isDirectory()) {
-        if (!SKIP_DIRECTORIES.has(child.name) && !generatedCheckouts(directory, child.name)) await walk(absolute);
+        if (!SKIP_DIRECTORIES.has(child.name) && !generatedCheckouts(directory, child.name)
+          && !await linkedWorktree(absolute)) await walk(absolute);
         continue;
       }
       // Never follow symlinks: a repository map cannot become an ambient read outside the cwd.

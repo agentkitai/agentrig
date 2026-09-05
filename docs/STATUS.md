@@ -10,15 +10,17 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 Repository maps prune `.claude/worktrees` and `.worktrees` descendant containers before scanning,
 so generated files consume neither the prompt budget nor the freshness snapshot. `.claude`
 instructions/commands, ordinary `worktrees` directories and submodule contents remain visible.
-Mapping a checkout as the requested root still works. Nonstandard checkout locations remain
-available to the existing `excludePaths` option; no Git commands or reads into external Git
-metadata are used. This intentionally recognizes generated-container conventions, not every
-directory containing `.git` (which would incorrectly hide submodules).
+Mapping a checkout as the requested root still works. Bounded regular in-tree gitfiles pointing
+into `.git/worktrees` identify linked checkouts in other containers; `.git/modules` submodules
+remain visible. Gitfiles themselves are omitted. Other layouts can use `excludePaths`; existing
+exclusions are canonicalized so aliases such as macOS `/var` match the canonical map root.
+No Git commands or reads into external Git metadata are used.
 
-Seven repository-map tests pass in the actual workspace with the existing review worktrees
-present, including the previously failing whole-repository budget regression. New fixtures pin
-budget isolation, freshness isolation, instruction visibility, submodule preservation, explicit
-exclusions and checkout-root behavior. Full-suite validation and independent review are pending.
+The initial full suite passed all 1,372 tests in the actual workspace with existing review
+worktrees present. macOS CI exposed the exclusion alias bug; independent review also requested
+arbitrary-container linked-worktree detection and omitted gitfiles. Repairs add alias-path and
+gitfile regressions alongside budget/freshness isolation, instruction visibility, submodule
+preservation and checkout-root behavior. Repaired full-suite validation and delta review are pending.
 
 ### H1 complete (2026-09-05; PR #118)
 
