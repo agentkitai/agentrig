@@ -38,6 +38,12 @@ async function independent() {
 
 describe("runtime-backed claim promotion", () => {
   it("ties the receipt exclusion list to registered built-in tool names", () => {
+    // Derive behavior cases below, but independently pin required members so removal cannot
+    // silently remove its own test. The registration check also catches invented names.
+    expect(NON_OBSERVATION_TOOLS).toEqual(expect.arrayContaining([
+      "write_file", "edit_file", "memory_write", "memory_file_analysis", "attempt_log",
+      "memory_ingest", "memory_read", "memory_search", "update_plan", "subagent", "skill",
+    ]));
     const store = new FileMemoryStore({ root: join(root, "wiki") });
     const names = new Set([...builtinTools(), ...memoryTools({ store, raw }), skillTool([])].map(tool => tool.name));
     names.add(SUBAGENT_TOOL);
