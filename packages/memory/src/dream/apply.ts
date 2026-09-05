@@ -5,6 +5,10 @@ import type { WikiPage } from "../types.js";
 import type { Consolidation } from "./phases.js";
 import type { StructuralFindings } from "./lint.js";
 import type { ScanOptions } from "../scan.js";
+import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
+import { serializePage } from "../page.js";
+import { MaintenanceLimitError } from "../maintenance.js";
+import { DEFAULT_SCAN_LIMITS } from "../scan.js";
 
 /**
  * Actually edits the dreamt wiki. Without this the dream is a liar: it would report merges and
@@ -49,7 +53,7 @@ function matchesRemoval(line: string, target: string): boolean {
   return l !== "" && sameLine(l, strip(target));
 }
 
-export interface ApplyOptions extends ScanOptions {
+export interface ApplyOptions extends ScanOptions, MemoryLockOptions {
   /** ISO date the dream ran, used when rewriting relative dates. */
   today: string;
   /** Ranges over the structural findings too (relative dates). */
@@ -78,6 +82,7 @@ export async function applyConsolidation(
     removalsByPage.set(r.page, [...(removalsByPage.get(r.page) ?? []), r.line]);
   }
   for (const [path, targets] of removalsByPage) {
+    opts.signal?.throwIfAborted();
     const page = pages.get(path);
     if (page === undefined) continue;
     const kept: string[] = [];
@@ -102,6 +107,7 @@ export async function applyConsolidation(
   // ---- superseded: annotate rather than delete. A claim a newer source replaced is still
   // evidence of what was believed, and the wiki's own format has a tag for exactly this.
   for (const s of consolidation.superseded) {
+    opts.signal?.throwIfAborted();
     const page = pages.get(s.page);
     if (page === undefined) continue;
     const lines = page.body.split("\n");
@@ -123,6 +129,7 @@ export async function applyConsolidation(
   // ---- relative dates → absolute (PLAN §3.2). Rewriting in place would guess at what
   // "yesterday" meant; annotating preserves the text and makes it unambiguous from here on.
   for (const rd of opts.structural?.relativeDates ?? []) {
+    opts.signal?.throwIfAborted();
     const page = pages.get(rd.page);
     if (page === undefined) continue;
     const marker = `[relative date "${rd.phrase}"`;
@@ -145,13 +152,17 @@ export async function applyConsolidation(
 
   // ---- merges last, so a merged-away page carries the edits above with it
   for (const m of consolidation.merged) {
+    opts.signal?.throwIfAborted();
     const target = pages.get(m.to);
     if (target === undefined) continue;
     const sources = m.from.filter((f) => f !== m.to && pages.has(f));
     if (sources.length === 0) continue;
 
     for (const from of sources) {
+      opts.signal?.throwIfAborted();
       const src = pages.get(from)!;
+      if (Buffer.byteLength(target.body) + Buffer.byteLength(src.body) + Buffer.byteLength(from) + 32
+        > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) throw new MaintenanceLimitError("dream merged page output limit exceeded");
       // append rather than interleave: the merge is a model's judgement, and a wrong ordering
       // that keeps every fact is recoverable where a wrong interleaving is not
       target.body = `${target.body.replace(/\s*$/, "")}\n\n<!-- merged from ${from} -->\n${src.body.trim()}\n`;
@@ -161,7 +172,7 @@ export async function applyConsolidation(
       ];
       pages.delete(from);
       dirty.delete(from);
-      await rm(join(out.root, from), { force: true });
+      await withMemoryLock(out.root, async () => { opts.signal?.throwIfAborted(); await rm(join(out.root, from), { force: true }); }, opts);
       changes.mergedPages.push({ from, into: m.to });
     }
     pages.set(m.to, target);
@@ -169,9 +180,13 @@ export async function applyConsolidation(
   }
 
   for (const path of dirty) {
+    opts.signal?.throwIfAborted();
     const page = pages.get(path);
     if (page === undefined) continue;
-    await out.write(path, { path, frontmatter: page.frontmatter, body: page.body });
+    if (Buffer.byteLength(serializePage(page.frontmatter, page.body)) > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) {
+      throw new MaintenanceLimitError("dream page output limit exceeded");
+    }
+    await out.write(path, { path, frontmatter: page.frontmatter, body: page.body }, opts);
   }
   return changes;
 }

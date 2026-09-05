@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5c2a; H1–H4, H5a, H5b and H5c1 complete (PRs #118–#125).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5c2b; H1–H4, H5a, H5b, H5c1 and H5c2a complete (PRs #118–#126).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -290,6 +290,9 @@ auxiliary accounting and CLI/hook reporting; **H5c2c** provides explicit ownersh
 of crash-left workspaces/sidecars. A bounded scanner alone does not complete H5c2.
 H5c2b includes configurable bounds for `memory lint`. H5c2c includes explicit repair of unreadable/
 oversized mutable scheduling metadata; scanner failures must not silently overwrite it.
+H5c2c also covers explicit disposal/recovery of retained pre-install/failed-install artifacts and
+preflight of known wiki-log capacity before paid consolidation. Preserve log history; configured
+scan caps can be raised deliberately, so truncating history is not the only capacity remedy.
 
 H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
 attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
@@ -312,6 +315,10 @@ silently cherry-picking partial history, and make any index rebuild bounded and 
 H5d should also route remaining auxiliary diagnostics (including tolerant recall failures) through
 the CLI/TUI diagnostic channels rather than raw stderr, which a TUI redraw can overwrite. H5b2
 fixes that routing for scheduled ingest; it does not claim a complete diagnostic-channel audit.
+H5d should isolate asynchronous diagnostic callback rejections in the remaining ingest/reviewer/
+grader paths too; H5c2b supplies the shared helper for dreams.
+Include late diagnostics after the TUI frame has unmounted; shutdown currently joins the work but
+controller-buffer messages emitted during that join may no longer be visible on screen.
 
 ### E — Measure outcomes before expanding capabilities
 

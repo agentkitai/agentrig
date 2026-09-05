@@ -1,15 +1,16 @@
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   FileMemoryStore,
   FileRawStore,
-  applyDream,
+  formatAuxiliaryUsage,
   findingCount,
   renderReport,
   runDream,
   type ScanLimits,
+  type MaintenanceLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
+import { withMaintenanceSignal } from "./maintenance.js";
 
 /**
  * `agentrig dream` — PLAN §3.7/§5. Thin: every decision lives in the memory package, this
@@ -26,9 +27,15 @@ export interface DreamOptions extends ProviderOptions {
   modelExplicit?: boolean;
   lockTimeout?: string;
   dreamScanLimits?: Partial<ScanLimits>;
+  dreamLimits?: Partial<MaintenanceLimits>;
+  signal?: AbortSignal;
 }
 
 export async function dreamCommand(opts: DreamOptions): Promise<void> {
+  return withMaintenanceSignal(signal => dreamWithSignal(opts, signal), opts.signal);
+}
+
+async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise<void> {
   const lockTimeoutMs = opts.lockTimeout === undefined ? 5000 : Number(opts.lockTimeout);
   if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs < 0 || lockTimeoutMs > 2_147_483_647) {
     console.error("--lock-timeout must be an integer from 0 to 2147483647 milliseconds");
@@ -83,6 +90,10 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   const result = await runDream({
     wiki,
+    signal,
+    autoApply: auto,
+    limits: opts.dreamLimits ?? {},
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     lockTimeoutMs,
     scanLimits: opts.dreamScanLimits ?? {},
     raw: new FileRawStore({ root: opts.dir }),
@@ -95,22 +106,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
     onError: error => console.error(`dream warning: ${error.message}`),
   });
 
-  let applied = false;
-  let backup: string | undefined;
-  if (auto && result.report.scan?.complete === false) console.error("auto-apply refused: raw scan incomplete; review artifact retained");
-  if (auto && result.report.scan?.complete !== false) {
-    try {
-      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()), { timeoutMs: lockTimeoutMs, scanLimits: opts.dreamScanLimits ?? {} });
-      applied = true;
-    } catch (err) {
-      // applyDream's message names the directory the wiki is actually in when a restore failed;
-      // it is the only thing that will tell the user, so it must not be swallowed here
-      console.error(`\n${(err as Error).message}`);
-      console.error(`the dreamt wiki is still at ${result.outputRoot}`);
-      process.exitCode = 1;
-      return;
-    }
-  }
+  const applied = result.autoApply?.status === "applied";
+  const backup = result.autoApply?.status === "applied" ? result.autoApply.backup : undefined;
+  if (result.autoApply?.status === "refused") console.error(`auto-apply refused: ${result.autoApply.reason}; review artifact retained`);
 
   console.log(
     renderReport(result.report, {
@@ -124,7 +122,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   // in review mode the copy IS the deliverable, so it is kept for inspection; once applied it
   // has been copied into place and the temp copy is redundant
-  if (applied) await result.workspace.dispose().catch(() => {});
+  if (applied) await result.workspace.dispose().catch(error => console.error(`dream cleanup failed; inspect ${result.outputRoot} and ${result.workspace.manifestPath}: ${String(error)}`));
   if (!applied) {
     console.log(result.report.scan?.complete === false
       ? "\nresolve the reported unreadable attempts before retrying; do not delete immutable history"
@@ -133,5 +131,5 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
     console.log("keep both together; discard both only after stopping users of this artifact (SDK: workspace.dispose())");
   }
 
-  process.exitCode = findingCount(result.report, result.structural) > 0 && !applied ? 1 : 0;
+  process.exitCode = !applied && (findingCount(result.report, result.structural) > 0 || result.consolidationError !== undefined) ? 1 : 0;
 }

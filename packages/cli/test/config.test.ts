@@ -20,18 +20,22 @@ const dirs: string[] = [];
 
 it("resolves configurable dream scan limits for standalone, run and TUI entry points", async () => {
   const { cwd, home } = await fixture();
-  await configAt(home, { dreamScanLimits: { maxEntries: 20000 } });
-  for (const name of ["dream", "run", "tui"]) {
-    const program = buildProgram();
-    const cmd = program.commands.find(c => c.name() === name)!;
+  await configAt(home, { dreamScanLimits: { maxEntries: 20000 }, dreamLimits: { timeoutMs: 20000 } });
+  for (const names of [["dream"], ["run"], ["tui"], ["sessions", "resume"], ["memory", "lint"]]) {
+    let cmd = buildProgram();
+    for (const name of names) cmd = cmd.commands.find(c => c.name() === name)!;
     const defaults = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false });
     expect(defaults.dreamScanLimits).toEqual({ maxEntries: 20000 });
-    cmd.parseOptions(["--dream-scan-limits", '{"maxEntries":30000}']);
+    expect(defaults.dreamLimits).toEqual({ timeoutMs: 20000 });
+    cmd.parseOptions(["--dream-scan-limits", '{"maxEntries":30000}', "--dream-limits", '{"timeoutMs":30000}']);
     const resolved = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false });
     expect(resolved.dreamScanLimits).toEqual({ maxEntries: 30000 });
+    expect(resolved.dreamLimits).toEqual({ timeoutMs: 30000 });
   }
   expect(() => parseConfigText("fixture", JSON.stringify({ dreamScanLimits: { maxEntries: 0 } }))).toThrow();
   expect(() => parseConfigText("fixture", JSON.stringify({ dreamScanLimits: { unknown: 1 } }))).toThrow();
+  expect(() => parseConfigText("fixture", JSON.stringify({ dreamLimits: { timeoutMs: 0 } }))).toThrow();
+  expect(() => parseConfigText("fixture", JSON.stringify({ dreamLimits: { unknown: 1 } }))).toThrow();
 });
 
 it("validates and resolves ingest limits for both explicit and session-end CLI entry points", async () => {

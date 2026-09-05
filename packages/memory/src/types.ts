@@ -2,7 +2,7 @@
  * Shared types for the LLM Wiki memory (PLAN §3). Implementations live alongside;
  * the dream (M5) is still interface-only. Nothing here imports core internals beyond types.
  */
-import type { ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
 import type { ClaimPromotionAssessment } from "./dream/promote.js";
 import type { ScanOptions } from "./scan.js";
 
@@ -104,6 +104,7 @@ export interface DreamReport {
 }
 
 export interface DreamResult {
+  auxiliary?: AuxiliaryReport;
   outputRoot: string; // a NEW wiki directory; input untouched
   report: DreamReport;
 }

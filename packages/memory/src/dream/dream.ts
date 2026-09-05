@@ -1,10 +1,12 @@
 import { rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { z } from "zod";
+import type { AuxiliaryReport } from "@agentkitai/agentrig-core";
 import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
 import { FileMemoryStore, OVERVIEW_FILE } from "../store.js";
 import { readPins, recheckPins, applyPinChecks } from "../pins.js";
-import { copyWiki, type DreamWorkspace } from "./copy.js";
+import { applyDream, copyWiki, type DreamWorkspace } from "./copy.js";
 import { structuralLint, type StructuralFindings } from "./lint.js";
 import {
   consolidate,
@@ -21,11 +23,19 @@ import { SCHEMA_MD } from "../ingest.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 import { readBoundedFile } from "../bounded-file.js";
 import { ScanBudget, type ScanOptions } from "../scan.js";
-import { MaintenanceLimitError, positiveLimit } from "../maintenance.js";
+import { DEFAULT_DREAM_LIMITS, MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
+const limit = z.number().int().positive().max(2_147_483_647);
+export const DreamLimitsSchema = z.object({ timeoutMs: limit, callTimeoutMs: limit, maxCalls: limit,
+  maxInputChars: limit, maxOutputChars: limit, maxModelEvents: limit } satisfies Record<keyof MaintenanceLimits, typeof limit>).partial().strict();
 
 export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions {
+  limits?: Partial<MaintenanceLimits>;
+  /** Runs guarded apply within the same deadline. Incomplete/failed consolidation is refused. */
+  autoApply?: boolean;
+  /** Delivered on success and failure; throwing cannot alter the operation's outcome. */
+  onUsage?: (report: AuxiliaryReport) => void;
   /**
    * Optional: a structural-only dream never reaches a model. Typed optional rather than passed
    * as `undefined as never` so that anyone later adding a model call to `orient` or `prune`
@@ -51,6 +61,7 @@ export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions 
 
 /** The report plus the structural findings, which `DreamReport` has no field for on its own. */
 export interface FullDreamResult extends DreamResult {
+  autoApply?: { status: "applied"; backup: string } | { status: "refused"; reason: string };
   /** Set when the model-backed pass failed; the structural findings are still complete. */
   consolidationError?: string;
   /** What was actually written to the output wiki — the report is built from this, not from
@@ -108,18 +119,54 @@ export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLock
  * be the *result*, not a plan to produce one.
  */
 export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
-  new ScanBudget(opts);
-  positiveLimit("maxSessions", opts.maxSessions ?? 100);
-  const now = opts.now ?? (() => Date.now());
-  const phase = (p: string): void => { opts.signal?.throwIfAborted(); opts.onPhase?.(p); opts.signal?.throwIfAborted(); };
-  const workspace = await copyWiki(opts.wiki.root, opts.outputRoot, { ...opts, timeoutMs: opts.lockTimeoutMs ?? 5000 });
+  DreamLimitsSchema.parse(opts.limits ?? {});
+  const run = new MaintenanceRun("dream", { ...DEFAULT_DREAM_LIMITS, ...opts.limits }, opts.signal);
+  const warning = (error: Error): void => {
+    maintenanceDiagnostic(() => opts.onError === undefined ? process.emitWarning(error.message) : opts.onError(error));
+  };
+  const bounded = { ...opts, signal: run.signal, onError: warning };
+  let workspace: DreamWorkspace | undefined; let result: FullDreamResult | undefined;
+  let failure: unknown; let retain = false;
+  run.localCommitState = "not-started";
   try {
-    return await dreamInto(workspace, opts, now, phase);
+    new ScanBudget(bounded); positiveLimit("maxSessions", opts.maxSessions ?? 100); run.check();
+    const now = opts.now ?? (() => Date.now());
+    const phase = (p: string): void => { run.check(); opts.onPhase?.(p); run.check(); };
+    run.localCommitState = "may-be-partial";
+    workspace = await copyWiki(opts.wiki.root, opts.outputRoot, { ...bounded, timeoutMs: opts.lockTimeoutMs ?? 5000 });
+    result = await dreamInto(workspace, bounded, now, phase, run);
+    run.check();
+    if (opts.autoApply === true) {
+      if (result.report.scan?.complete === false || result.consolidationError !== undefined) {
+        result.autoApply = { status: "refused", reason: result.report.scan?.complete === false ? "raw scan incomplete" : "model consolidation failed" };
+      } else {
+        retain = true; phase("install");
+        const backup = await applyDream(opts.wiki.root, workspace.outputRoot, `${now()}-${randomUUID()}`, {
+          ...bounded, timeoutMs: opts.lockTimeoutMs ?? 5000,
+        });
+        // No abort check after a committed live swap: late cancellation cannot undo this result.
+        result.autoApply = { status: "applied", backup };
+      }
+    }
+    run.localCommitState = "completed";
+    return result;
   } catch (err) {
-    // `memory lint` runs on every session end, so leaking a full wiki copy per failure (a
-    // malformed pins.json is enough) would quietly fill the disk
-    await workspace.dispose().catch(() => {});
+    failure = err ?? new Error(String(err));
+    if (workspace !== undefined) {
+      if (retain) {
+        const retained = new Error(String(err) + "; dream artifact retained at " + workspace.outputRoot
+          + "; manifest: " + workspace.manifestPath, { cause: err });
+        retained.name = err instanceof Error ? err.name : "Error";
+        throw retained;
+      }
+      await workspace.dispose().catch(cleanup => warning(new Error("dream cleanup failed; inspect " + workspace!.outputRoot
+        + "; manifest: " + workspace!.manifestPath + "; " + String(cleanup))));
+    }
     throw err;
+  } finally {
+    const report = run.finish(failure ?? (result?.consolidationError === undefined ? undefined : new Error(result.consolidationError)));
+    if (result !== undefined) result.auxiliary = report;
+    maintenanceDiagnostic(() => opts.onUsage?.(structuredClone(report)));
   }
 }
 
@@ -128,9 +175,10 @@ async function dreamInto(
   opts: DreamOptions,
   now: () => number,
   phase: (p: string) => void,
+  run: MaintenanceRun,
 ): Promise<FullDreamResult> {
   const scan = new ScanBudget(opts);
-  const readOpts = { maxFileBytes: scan.limits.maxFileBytes, ...(opts.signal === undefined ? {} : { signal: opts.signal }) };
+  const readOpts = { maxFileBytes: scan.limits.maxFileBytes, timeoutMs: opts.lockTimeoutMs ?? 5000, ...(opts.signal === undefined ? {} : { signal: opts.signal }) };
   // concretely a FileMemoryStore, not the MemoryStore interface: the dream needs `pages()` and
   // `writeIndex()`, which are implementation surface rather than part of the read/write contract
   const out = new FileMemoryStore({ root: workspace.outputRoot, scope: opts.wiki.scope, lockTimeoutMs: opts.lockTimeoutMs ?? 5000 });
@@ -173,7 +221,7 @@ async function dreamInto(
   // ---- structural lint (free, no model)
   phase("lint");
   const pages = (await out.pages(opts)).filter((p) => p.path !== OVERVIEW_FILE);
-  const structural = await structuralLint(pages, index, opts.cwd === undefined ? {} : { cwd: opts.cwd });
+  const structural = await structuralLint(pages, index, { ...opts });
 
   // ---- phase 3: consolidate (the only phase that costs tokens)
   phase("consolidate");
@@ -190,13 +238,14 @@ async function dreamInto(
             consolidationError = err.message;
             opts.onError?.(err);
           },
-        });
+        }, run);
 
   // ---- apply: edit the dreamt pages. Without this the "corrected wiki" would be identical to
   // the input and the report would describe changes nobody made.
   phase("apply");
   const applied = await applyConsolidation(out, consolidation, {
     ...opts,
+    timeoutMs: opts.lockTimeoutMs ?? 5000,
     today: new Date(now()).toISOString().slice(0, 10),
     structural,
   });
@@ -251,14 +300,19 @@ async function dreamInto(
     `${new Date(now()).toISOString()} | dream | ${sessions.length} session(s) since last | ` +
       `${report.contradictions.length} contradiction(s), ${report.orphans.length} orphan(s), ` +
       `${report.missingPages.length} missing page(s)` + (unreadableAttempts.length === 0 ? "" : ` | incomplete raw scan: ${unreadableAttempts.length} omitted attempt(s)`),
+    readOpts,
   );
-  await markDreamed(workspace.outputRoot, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 });
+  run.check();
+  const stampOpts = { ...readOpts, maxFileBytes: Math.min(4096, readOpts.maxFileBytes) };
+  await markDreamed(workspace.outputRoot, now(), stampOpts);
   // ALSO stamp the live wiki. The stamp answers "when was a dream last run", not "last
   // applied" — writing it only into the copy meant review mode never advanced it, so a
   // scheduled trigger stayed permanently due and re-dreamt on every single session end,
   // spending consolidate-phase tokens and leaking a wiki copy each time. This is the one
   // write a dream makes to its input, and it is metadata about the dream, not wiki content.
-  await markDreamed(opts.wiki.root, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 }).catch(error => {
+  run.check();
+  await markDreamed(opts.wiki.root, now(), stampOpts).catch(error => {
+    run.check();
     const warning = new Error("dream scheduling stamp was not updated; the next session may trigger another dream: " + String(error), { cause: error });
     if (opts.onError !== undefined) opts.onError(warning);
     else process.emitWarning(warning.message);
@@ -278,9 +332,9 @@ async function dreamInto(
 
 /** The `Dreamer` interface from PLAN §3.7, for callers that only want the narrow contract. */
 export class WikiDreamer implements Dreamer {
-  constructor(private readonly opts: Omit<DreamOptions, keyof DreamInput> = {}) {}
+  constructor(private readonly opts: Omit<DreamOptions, keyof DreamInput | "autoApply"> = {}) {}
   async dream(input: DreamInput): Promise<DreamResult> {
-    const { outputRoot, report } = await runDream({ ...this.opts, ...input });
-    return { outputRoot, report };
+    const { outputRoot, report, auxiliary } = await runDream({ ...this.opts, ...input, autoApply: false });
+    return { outputRoot, report, ...(auxiliary === undefined ? {} : { auxiliary }) };
   }
 }

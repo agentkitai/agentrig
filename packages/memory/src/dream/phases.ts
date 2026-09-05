@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { ModelProvider } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
 import type { Attempt, IndexEntry, WikiPage } from "../types.js";
-import { completeJson, extractJson } from "../ingest.js";
+import { extractJson } from "../ingest.js";
+import { DEFAULT_DREAM_LIMITS, MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "../maintenance.js";
 import { factLines } from "../page.js";
 
 /**
@@ -128,6 +129,9 @@ Reply with ONLY this JSON:
  "removed":[{"page":"...","line":"...","reason":"..."}]}`;
 
 export interface ConsolidateOptions {
+  signal?: AbortSignal;
+  limits?: Partial<MaintenanceLimits>;
+  onUsage?: (report: AuxiliaryReport) => void;
   provider: ModelProvider;
   pages: WikiPage[];
   signals: Signal[];
@@ -138,15 +142,35 @@ export interface ConsolidateOptions {
   /** Signals sent, and their total characters — the attempts ledger grows without bound. */
   maxSignals?: number;
   maxSignalChars?: number;
-  /** A failed consolidation is reported, never thrown — the structural findings still stand. */
+  /** Ordinary model/JSON failures are advisory; cancellation, timeouts and caps throw. */
   onError?: (err: Error) => void;
 }
 
-export async function consolidate(opts: ConsolidateOptions): Promise<Consolidation> {
+/** With a shared run, that owner supplies limits/signal/accounting; opts.limits/onUsage apply only
+ * to standalone calls. The dream uses this seam to keep consolidation in its single lifetime. */
+export async function consolidate(opts: ConsolidateOptions, sharedRun?: MaintenanceRun): Promise<Consolidation> {
+  const run = sharedRun ?? new MaintenanceRun("dream", { ...DEFAULT_DREAM_LIMITS, ...opts.limits }, opts.signal);
+  let failure: unknown;
+  try { return await consolidateWithin(opts, run, error => { failure = error; }); }
+  catch (error) { failure = error; throw error; }
+  finally {
+    if (sharedRun === undefined) {
+      const report = run.finish(failure);
+      maintenanceDiagnostic(() => opts.onUsage?.(structuredClone(report)));
+    }
+  }
+}
+
+async function consolidateWithin(opts: ConsolidateOptions, run: MaintenanceRun, failed: (error: unknown) => void): Promise<Consolidation> {
+  run.check();
   const maxPageChars = opts.maxPageChars ?? 24_000;
+  positiveLimit("maxPageChars", maxPageChars);
+  positiveLimit("maxSignals", opts.maxSignals ?? 40);
+  positiveLimit("maxSignalChars", opts.maxSignalChars ?? 6000);
   let budget = maxPageChars;
   const rendered: string[] = [];
   for (const p of opts.pages) {
+    run.check();
     const block = `--- ${p.path} (updated ${p.frontmatter.updated}, sources: ${p.frontmatter.sources.join(", ")})\n${p.body}`;
     if (block.length > budget) {
       rendered.push(`${block.slice(0, Math.max(0, budget))}\n…(truncated)`);
@@ -189,15 +213,19 @@ export async function consolidate(opts: ConsolidateOptions): Promise<Consolidati
   // keeping on their own.
   let extracted: unknown;
   try {
-    const raw = await completeJson(opts.provider, CONSOLIDATE_SYSTEM, user, opts.maxTokens ?? 4096);
+    const raw = await run.completeJson(opts.provider, CONSOLIDATE_SYSTEM, user, opts.maxTokens ?? 4096, { requireEndTurn: true });
+    run.check();
     extracted = extractJson(raw);
   } catch (err) {
-    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+    failed(err);
+    if (run.signal.aborted || err instanceof MaintenanceLimitError || (err instanceof Error && err.name === "TimeoutError")) throw err;
+    maintenanceDiagnostic(() => opts.onError?.(err instanceof Error ? err : new Error(String(err))));
     return empty;
   }
   const parsed = ConsolidationSchema.safeParse(extracted);
   if (!parsed.success) {
-    opts.onError?.(new Error(`consolidation response did not match the schema: ${parsed.error.issues[0]?.message ?? ""}`));
+    const error = new Error(`consolidation response did not match the schema: ${parsed.error.issues[0]?.message ?? ""}`);
+    failed(error); maintenanceDiagnostic(() => opts.onError?.(error));
     return empty;
   }
   return dropUnknownPages(parsed.data, opts.pages);

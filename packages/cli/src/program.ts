@@ -1,7 +1,7 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
 import { SessionStore } from "@agentkitai/agentrig-core";
-import { IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
+import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
@@ -18,6 +18,11 @@ function parseIngestLimits(text: string) {
 function parseDreamScanLimits(text: string) {
   try { return ScanLimitsSchema.partial().parse(JSON.parse(text)); }
   catch (error) { throw new InvalidArgumentError(`invalid dream scan limits: ${String(error)}`); }
+}
+
+function parseDreamLimits(text: string) {
+  try { return DreamLimitsSchema.parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid dream limits: ${String(error)}`); }
 }
 
 function ingestSpanChars(value: string): string {
@@ -221,6 +226,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
       .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
       .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object; includes scheduler enumeration)", parseDreamScanLimits)
+      .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
       .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session")
       .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
@@ -328,9 +334,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   memoryDir(memory.command("promote <path>").description("Review runtime-backed promotion evidence; publish only with --confirm"))
     .option("--confirm", "publish after reviewing claim-level evidence (eligibility is still required)")
     .action(async (path: string, opts: { dir: string; confirm?: boolean }) => memoryPromote(path, opts));
-  memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store")).action(
-    async (opts: { dir: string }) => memoryLint(opts),
-  );
+  memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store"))
+    .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
+    .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
+    .action(async (opts: { dir: string; profile?: string }, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved !== undefined) await memoryLint(resolved);
+    });
   withProviderOptions(
     memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
   ).option("--ingest-limits <json>", "bounded ingest limits (JSON object)", parseIngestLimits)
@@ -355,6 +365,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--since <n>", "cap on raw sessions scanned")
     .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
     .option("--lock-timeout <ms>", "wait for memory mutation locks (default 5000 ms); not a scan deadline")
+    .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
