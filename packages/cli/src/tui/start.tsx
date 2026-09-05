@@ -1,16 +1,10 @@
 import { render } from "ink";
-import { join } from "node:path";
 import {
-  applyDream,
-  FileMemoryStore,
-  FileRawStore,
-  findingCount,
-  renderReport,
-  runDream,
   unionRetrieve,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
+import { interactiveDream } from "./dream.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { SessionStore, liveChildren, summarizeSession } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
@@ -132,33 +126,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     });
   }
   if (opts.memory !== undefined) {
-    const dir = opts.memory;
-    controller.setDream(async (auto) => {
-      const wiki = new FileMemoryStore({ root: join(dir, "wiki") });
-      await wiki.init();
-      const result = await runDream({
-        wiki,
-        raw: new FileRawStore({ root: dir }),
-        // the memory role, like the `--dream-on-end` hook and the standalone `dream` command
-        provider: built!.providers.memory,
-        cwd: process.cwd(),
-      });
-      const findings = findingCount(result.report, result.structural);
-      if (!auto) {
-        return [
-          renderReport(result.report, {
-            structural: result.structural,
-            promotionRejected: result.promotionRejected,
-            outputRoot: result.outputRoot,
-            applied: false,
-          }),
-          `to accept: agentrig dream --auto  |  to discard: rm -rf ${result.outputRoot}`,
-        ];
-      }
-      const backup = await applyDream(join(dir, "wiki"), result.outputRoot, `${Date.now()}-tui`);
-      await result.workspace.dispose().catch(() => {});
-      return [`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`];
-    });
+    controller.setDream(interactiveDream({ dir: opts.memory, provider: built.providers.memory,
+      cwd: process.cwd(), scanLimits: opts.dreamScanLimits ?? {} }));
   }
 
   // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the

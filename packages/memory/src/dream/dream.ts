@@ -1,4 +1,4 @@
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
@@ -19,10 +19,13 @@ import { loadPromotionEvidence } from "./evidence.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
+import { readBoundedFile } from "../bounded-file.js";
+import { ScanBudget, type ScanOptions } from "../scan.js";
+import { MaintenanceLimitError, positiveLimit } from "../maintenance.js";
 
 export const LAST_DREAM_FILE = ".last-dream";
 
-export interface DreamOptions extends Omit<DreamInput, "provider"> {
+export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions {
   /**
    * Optional: a structural-only dream never reaches a model. Typed optional rather than passed
    * as `undefined as never` so that anyone later adding a model call to `orient` or `prune`
@@ -59,13 +62,23 @@ export interface FullDreamResult extends DreamResult {
   workspace: DreamWorkspace;
 }
 
-async function readOr(root: string, file: string, fallback = ""): Promise<string> {
-  return readFile(join(root, file), "utf8").catch(() => fallback);
+async function readOr(root: string, file: string, fallback = "", opts: ScanOptions = {}): Promise<string> {
+  const budget = new ScanBudget(opts);
+  return budget.read(join(root, file)).then(bytes => bytes.toString("utf8")).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return fallback;
+    throw error;
+  });
 }
 
 /** Timestamp of the last dream, so "raw sources since last dream" means something. */
-export async function lastDreamAt(wikiRoot: string): Promise<number | undefined> {
-  const raw = await readOr(wikiRoot, LAST_DREAM_FILE);
+export async function lastDreamAt(wikiRoot: string, opts: MemoryLockOptions = {}): Promise<number | undefined> {
+  const raw = await readBoundedFile(join(wikiRoot, LAST_DREAM_FILE), opts.maxFileBytes ?? 4096, opts.signal)
+    .then(bytes => bytes.toString("utf8")).catch((error: NodeJS.ErrnoException) => {
+      opts.signal?.throwIfAborted();
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+  opts.signal?.throwIfAborted();
   const n = Number(raw.trim());
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
@@ -73,7 +86,7 @@ export async function lastDreamAt(wikiRoot: string): Promise<number | undefined>
 export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLockOptions = {}): Promise<void> {
   if (!Number.isFinite(at) || at < 0) throw new Error("invalid dream timestamp");
   await withMemoryLock(wikiRoot, async () => {
-    const previous = await lastDreamAt(wikiRoot);
+    const previous = await lastDreamAt(wikiRoot, opts);
     if (previous !== undefined && previous >= at) return;
     const path = join(wikiRoot, LAST_DREAM_FILE);
     const temp = path + "." + randomUUID() + ".tmp";
@@ -95,9 +108,11 @@ export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLock
  * be the *result*, not a plan to produce one.
  */
 export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
+  new ScanBudget(opts);
+  positiveLimit("maxSessions", opts.maxSessions ?? 100);
   const now = opts.now ?? (() => Date.now());
-  const phase = (p: string): void => opts.onPhase?.(p);
-  const workspace = await copyWiki(opts.wiki.root, opts.outputRoot, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
+  const phase = (p: string): void => { opts.signal?.throwIfAborted(); opts.onPhase?.(p); opts.signal?.throwIfAborted(); };
+  const workspace = await copyWiki(opts.wiki.root, opts.outputRoot, { ...opts, timeoutMs: opts.lockTimeoutMs ?? 5000 });
   try {
     return await dreamInto(workspace, opts, now, phase);
   } catch (err) {
@@ -114,26 +129,40 @@ async function dreamInto(
   now: () => number,
   phase: (p: string) => void,
 ): Promise<FullDreamResult> {
+  const scan = new ScanBudget(opts);
+  const readOpts = { maxFileBytes: scan.limits.maxFileBytes, ...(opts.signal === undefined ? {} : { signal: opts.signal }) };
   // concretely a FileMemoryStore, not the MemoryStore interface: the dream needs `pages()` and
   // `writeIndex()`, which are implementation surface rather than part of the read/write contract
   const out = new FileMemoryStore({ root: workspace.outputRoot, scope: opts.wiki.scope, lockTimeoutMs: opts.lockTimeoutMs ?? 5000 });
 
   // ---- phase 1: orient
   phase("orient");
-  const index = await out.index();
-  const schema = await readOr(workspace.outputRoot, "SCHEMA.md", SCHEMA_MD);
-  const overviewPage = await out.read(OVERVIEW_FILE).catch(() => null);
+  const index = await out.index(readOpts);
+  const schema = await readOr(workspace.outputRoot, "SCHEMA.md", SCHEMA_MD, opts);
+  const overviewPage = await out.read(OVERVIEW_FILE, readOpts);
   const orientation = orient(index, schema, overviewPage?.body ?? "");
 
   // ---- phase 2: gather signal
   phase("gather");
-  const since = await lastDreamAt(opts.wiki.root);
+  const since = await lastDreamAt(workspace.outputRoot, { ...readOpts, maxFileBytes: Math.min(4096, readOpts.maxFileBytes) });
   const maxSessions = opts.maxSessions ?? 100;
-  const sessions = (await opts.raw.sessions(since)).slice(0, maxSessions);
-  const allAttempts: Attempt[] =
+  const available = await opts.raw.sessions(since, opts);
+  if (available.length > scan.limits.maxEntries) throw new MaintenanceLimitError("raw session entry limit exceeded");
+  const sessions = available.slice(0, maxSessions);
+  const ledger =
     "readAttempts" in opts.raw
-      ? (await (opts.raw as { readAttempts: () => Promise<{ attempts: Attempt[] }> }).readAttempts()).attempts
-      : [];
+      ? await (opts.raw as { readAttempts: (id?: string, limits?: { signal: AbortSignal; maxEntries: number; maxFileBytes: number; maxTotalBytes: number }) => Promise<{ attempts: Attempt[]; corrupt?: string[] }> })
+        .readAttempts(undefined, { signal: opts.signal ?? new AbortController().signal,
+          maxEntries: scan.limits.maxEntries, maxFileBytes: scan.limits.maxFileBytes, maxTotalBytes: scan.limits.maxTotalBytes })
+      : { attempts: [] };
+  const allAttempts = ledger.attempts;
+  if (allAttempts.length > scan.limits.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
+  const unreadableAttempts = ledger.corrupt ?? [];
+  if (allAttempts.length + unreadableAttempts.length > scan.limits.maxEntries) throw new MaintenanceLimitError("attempt ledger entry limit exceeded");
+  if (unreadableAttempts.length > 0) {
+    const warning = new Error(`dream raw scan incomplete: ${unreadableAttempts.length} unreadable or corrupt attempt ledger entries; model consolidation and auto-apply are disabled`);
+    if (opts.onError !== undefined) opts.onError(warning); else process.emitWarning(warning.message);
+  }
   // `since` has to actually filter something. It previously reached only a log line: attempts —
   // the material signals are built from — were read unfiltered and uncapped, so `.last-dream`
   // and `--since` changed nothing about what the dream considered.
@@ -143,14 +172,14 @@ async function dreamInto(
 
   // ---- structural lint (free, no model)
   phase("lint");
-  const pages = (await out.pages()).filter((p) => p.path !== OVERVIEW_FILE);
+  const pages = (await out.pages(opts)).filter((p) => p.path !== OVERVIEW_FILE);
   const structural = await structuralLint(pages, index, opts.cwd === undefined ? {} : { cwd: opts.cwd });
 
   // ---- phase 3: consolidate (the only phase that costs tokens)
   phase("consolidate");
   let consolidationError: string | undefined;
   const consolidation: Consolidation =
-    opts.structuralOnly === true || pages.length === 0 || opts.provider === undefined
+    opts.structuralOnly === true || unreadableAttempts.length > 0 || pages.length === 0 || opts.provider === undefined
       ? { contradictions: [], superseded: [], merged: [], removed: [] }
       : await consolidate({
           provider: opts.provider,
@@ -167,6 +196,7 @@ async function dreamInto(
   // the input and the report would describe changes nobody made.
   phase("apply");
   const applied = await applyConsolidation(out, consolidation, {
+    ...opts,
     today: new Date(now()).toISOString().slice(0, 10),
     structural,
   });
@@ -175,16 +205,18 @@ async function dreamInto(
   phase("prune");
   // re-read: applyConsolidation rewrote bodies and deleted merged-away pages, and the index has
   // to describe the wiki as it now stands rather than as it was found
-  const finalPages = (await out.pages()).filter((p) => p.path !== OVERVIEW_FILE);
-  await out.writeIndex(rebuildIndex(finalPages, index));
-  const pins = await readPins(workspace.outputRoot);
-  const pinChecks = await recheckPins(out, pins);
-  const persistedPins = await applyPinChecks(out, pinChecks);
+  const finalPages = (await out.pages(opts)).filter((p) => p.path !== OVERVIEW_FILE);
+  await out.writeIndex(rebuildIndex(finalPages, index), readOpts);
+  const pinOpts = { ...readOpts, scanBudget: new ScanBudget(opts) };
+  const pins = await readPins(workspace.outputRoot, pinOpts);
+  const pinChecks = await recheckPins(out, pins, pinOpts);
+  const persistedPins = await applyPinChecks(out, pinChecks, pinOpts);
   if (persistedPins.skipped > 0) opts.onError?.(new Error(`dream inspected pins but skipped ${persistedPins.skipped} status check(s): page/pin changed, pin removed, or check unversioned`));
 
   // ---- promotion proposals: validate final pages against immutable runtime observations.
   const evidenceIndex = await loadPromotionEvidence(opts.raw,
-    finalPages.flatMap(page => sessionEvidence(page).map(ref => ref.slice("session:".length))));
+    finalPages.flatMap(page => sessionEvidence(page).map(ref => ref.slice("session:".length))),
+    { scanLimits: scan.limits, ...(opts.signal === undefined ? {} : { signal: opts.signal }) });
   const { promote, rejected } = selectForPromotion(
     finalPages,
     { evidenceIndex, ...(opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote }) },
@@ -197,6 +229,7 @@ async function dreamInto(
   for (const m of applied.mergedPages) mergedInto.set(m.into, [...(mergedInto.get(m.into) ?? []), m.from]);
 
   const report: DreamReport = {
+    scan: { complete: unreadableAttempts.length === 0, unreadableAttempts },
     contradictions: consolidation.contradictions,
     superseded: applied.supersededMarked.map((s) => {
       const found = consolidation.superseded.find((x) => x.page === s.page && x.old === s.old);
@@ -217,7 +250,7 @@ async function dreamInto(
   await out.appendLog(
     `${new Date(now()).toISOString()} | dream | ${sessions.length} session(s) since last | ` +
       `${report.contradictions.length} contradiction(s), ${report.orphans.length} orphan(s), ` +
-      `${report.missingPages.length} missing page(s)`,
+      `${report.missingPages.length} missing page(s)` + (unreadableAttempts.length === 0 ? "" : ` | incomplete raw scan: ${unreadableAttempts.length} omitted attempt(s)`),
   );
   await markDreamed(workspace.outputRoot, now(), { timeoutMs: opts.lockTimeoutMs ?? 5000 });
   // ALSO stamp the live wiki. The stamp answers "when was a dream last run", not "last

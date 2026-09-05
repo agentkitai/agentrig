@@ -7,6 +7,7 @@ import {
   findingCount,
   renderReport,
   runDream,
+  type ScanLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
 
@@ -24,6 +25,7 @@ export interface DreamOptions extends ProviderOptions {
   structuralOnly?: boolean;
   modelExplicit?: boolean;
   lockTimeout?: string;
+  dreamScanLimits?: Partial<ScanLimits>;
 }
 
 export async function dreamCommand(opts: DreamOptions): Promise<void> {
@@ -82,6 +84,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   const result = await runDream({
     wiki,
     lockTimeoutMs,
+    scanLimits: opts.dreamScanLimits ?? {},
     raw: new FileRawStore({ root: opts.dir }),
     ...(globalWiki === undefined ? {} : { globalWiki }),
     ...(provider === undefined ? {} : { provider }),
@@ -94,9 +97,10 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   let applied = false;
   let backup: string | undefined;
-  if (auto) {
+  if (auto && result.report.scan?.complete === false) console.error("auto-apply refused: raw scan incomplete; review artifact retained");
+  if (auto && result.report.scan?.complete !== false) {
     try {
-      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()), { timeoutMs: lockTimeoutMs });
+      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()), { timeoutMs: lockTimeoutMs, scanLimits: opts.dreamScanLimits ?? {} });
       applied = true;
     } catch (err) {
       // applyDream's message names the directory the wiki is actually in when a restore failed;
@@ -122,7 +126,9 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   // has been copied into place and the temp copy is redundant
   if (applied) await result.workspace.dispose().catch(() => {});
   if (!applied) {
-    console.log(`\nto run and apply a fresh dream: agentrig dream --auto`);
+    console.log(result.report.scan?.complete === false
+      ? "\nresolve the reported unreadable attempts before retrying; do not delete immutable history"
+      : "\nto run and apply a fresh dream: agentrig dream --auto");
     console.log(`review artifact: ${result.outputRoot}\nmanifest: ${result.workspace.manifestPath}`);
     console.log("keep both together; discard both only after stopping users of this artifact (SDK: workspace.dispose())");
   }

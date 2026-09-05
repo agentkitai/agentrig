@@ -29,10 +29,13 @@ export const PinSchema = z.object({
 
 const PINS_FILE = "pins.json";
 
-export async function readPins(wikiRoot: string, opts: MemoryLockOptions = {}): Promise<Pin[]> {
+export interface PinReadOptions extends MemoryLockOptions { scanBudget?: import("./scan.js").ScanBudget }
+
+export async function readPins(wikiRoot: string, opts: PinReadOptions = {}): Promise<Pin[]> {
   let text: string;
   try {
-    text = opts.maxFileBytes === undefined ? await readFile(join(wikiRoot, PINS_FILE), "utf8")
+    text = opts.scanBudget !== undefined ? (await opts.scanBudget.read(join(wikiRoot, PINS_FILE))).toString("utf8")
+      : opts.maxFileBytes === undefined ? await readFile(join(wikiRoot, PINS_FILE), "utf8")
       : (await readBoundedFile(join(wikiRoot, PINS_FILE), opts.maxFileBytes, opts.signal)).toString("utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
@@ -40,21 +43,24 @@ export async function readPins(wikiRoot: string, opts: MemoryLockOptions = {}): 
   }
   const parsed = z.array(PinSchema).safeParse(JSON.parse(text));
   if (!parsed.success) throw new Error(`${join(wikiRoot, PINS_FILE)}: invalid pins file`);
+  if (opts.scanBudget !== undefined && parsed.data.length > opts.scanBudget.limits.maxEntries) throw new MaintenanceLimitError("pin entry limit exceeded");
   return parsed.data;
 }
 
 /** Trusted unconditional replacement; use addPin/recheckStoredPins for read-modify-write. */
 export async function writePins(wikiRoot: string, pins: Pin[], opts: MemoryLockOptions = {}): Promise<void> {
-  await withMemoryLock(wikiRoot, () => writePinsUnlocked(wikiRoot, pins, opts.signal), opts);
+  await withMemoryLock(wikiRoot, () => writePinsUnlocked(wikiRoot, pins, opts.signal, opts.maxFileBytes), opts);
 }
 
-async function writePinsUnlocked(wikiRoot: string, pins: Pin[], signal?: AbortSignal): Promise<void> {
+async function writePinsUnlocked(wikiRoot: string, pins: Pin[], signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
   signal?.throwIfAborted();
+  const text = `${JSON.stringify(z.array(PinSchema).parse(pins), null, 2)}\n`;
+  if (maxFileBytes !== undefined && Buffer.byteLength(text) > maxFileBytes) throw new MaintenanceLimitError("maintenance pins output limit exceeded");
   const full = join(wikiRoot, PINS_FILE);
   await mkdir(dirname(full), { recursive: true });
   const tmp = `${full}.${randomBytes(6).toString("hex")}.tmp`;
   try {
-    await writeFile(tmp, `${JSON.stringify(z.array(PinSchema).parse(pins), null, 2)}\n`, "utf8");
+    await writeFile(tmp, text, "utf8");
     signal?.throwIfAborted();
     await rename(tmp, full);
   } catch (err) {
@@ -65,11 +71,11 @@ async function writePinsUnlocked(wikiRoot: string, pins: Pin[], signal?: AbortSi
 
 export async function addPin(wikiRoot: string, pin: Pin, opts: MemoryLockOptions = {}): Promise<void> {
   await withMemoryLock(wikiRoot, async () => {
-    const pins = await readPins(wikiRoot);
+    const pins = await readPins(wikiRoot, opts);
     const i = pins.findIndex((p) => p.page === pin.page && p.claim === pin.claim);
     if (i === -1) pins.push(PinSchema.parse(pin));
     else pins[i] = PinSchema.parse(pin);
-    await writePinsUnlocked(wikiRoot, pins, opts.signal);
+    await writePinsUnlocked(wikiRoot, pins, opts.signal, opts.maxFileBytes);
   }, opts);
 }
 
@@ -162,7 +168,8 @@ export function claimSatisfied(claim: string, pageBody: string): boolean {
  * A contradicted pin is never silently deleted. Losing a human correction quietly is the exact
  * failure this mechanism exists to prevent.
  */
-export async function recheckPins(store: MemoryStore, pins: Pin[], opts: MemoryLockOptions = {}): Promise<PinCheck[]> {
+export async function recheckPins(store: MemoryStore, pins: Pin[], opts: PinReadOptions = {}): Promise<PinCheck[]> {
+  if (opts.scanBudget !== undefined && pins.length > opts.scanBudget.limits.maxEntries) throw new MaintenanceLimitError("pin entry limit exceeded");
   const out: PinCheck[] = [];
   for (const pin of pins) {
     opts.signal?.throwIfAborted();
@@ -203,18 +210,21 @@ export async function recheckPins(store: MemoryStore, pins: Pin[], opts: MemoryL
  * count as applied. Pass the inspected store to preserve custom read/scope semantics.
  * Lock options are independent of the store constructor; pass timeoutMs here explicitly.
  */
-export async function applyPinChecks(wiki: string | MemoryStore, checks: PinCheck[], opts: MemoryLockOptions = {}): Promise<{ applied: number; skipped: number }> {
+export async function applyPinChecks(wiki: string | MemoryStore, checks: PinCheck[], opts: PinReadOptions = {}): Promise<{ applied: number; skipped: number }> {
+  if (opts.scanBudget !== undefined && checks.length > opts.scanBudget.limits.maxEntries) throw new MaintenanceLimitError("pin entry limit exceeded");
   const store = typeof wiki === "string" ? new FileMemoryStore({ root: wiki }) : wiki;
   const wikiRoot = store.root;
   return withMemoryLock(wikiRoot, async () => {
-    const current = await readPins(wikiRoot);
+    const current = await readPins(wikiRoot, opts);
     const fresh: PinCheck[] = [];
     for (const check of checks) {
+      opts.signal?.throwIfAborted();
       if (check.pageVersion === undefined) continue;
-      if (((await store.read(check.pin.page))?.version ?? null) === check.pageVersion) fresh.push(check);
+      const page = store instanceof FileMemoryStore ? await store.read(check.pin.page, opts) : await store.read(check.pin.page);
+      if ((page?.version ?? null) === check.pageVersion) fresh.push(check);
     }
     const merged = mergeChecks(current, fresh);
-    if (JSON.stringify(merged.pins) !== JSON.stringify(current)) await writePinsUnlocked(wikiRoot, merged.pins, opts.signal);
+    if (JSON.stringify(merged.pins) !== JSON.stringify(current)) await writePinsUnlocked(wikiRoot, merged.pins, opts.signal, opts.maxFileBytes);
     return { applied: merged.applied, skipped: checks.length - merged.applied };
   }, opts);
 }

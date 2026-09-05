@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: H5c1; H1–H4, H5a and H5b complete (PRs #118–#124).** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-05. Current work: H5c2a; H1–H4, H5a, H5b and H5c1 complete (PRs #118–#125).** The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -282,6 +282,20 @@ H5c is likewise sequential and not complete until all sub-items land:
 | H5c2 | Bound/cancel the full dream lifecycle with H5b2 accounting; safe workspace lifecycle and explicit ownership-checked crash recovery. | Cooperative abort reaches providers, no later apply occurs, failures clean only owned artifacts, and crash recovery never steals active/replacement owners. |
 | H5c3 | Lossless legacy multiline/frontmatter regeneration and session-scoped attempt lookup with bounded index rebuilds. | Old facts/references and unknown keys survive; unrelated immutable ledger history does not consume a session's entire scan budget. |
 | H5c4 | Complete the staged-write-abort/child-cleanup investigation pulled forward from H1. | Deterministic target-preservation and child-lifetime regressions; clearly distinguish proven fixes from an unreproduced historical timeout. |
+
+H5c2 is delivered as three sequential PRs with the same review/CI/updated-main gates:
+**H5c2a** bounds wiki snapshot/copy/fingerprint and raw enumeration reads, with cooperative scan
+abort and visible cap failures; **H5c2b** integrates full dream/provider deadlines, cancellation,
+auxiliary accounting and CLI/hook reporting; **H5c2c** provides explicit ownership-checked recovery
+of crash-left workspaces/sidecars. A bounded scanner alone does not complete H5c2.
+H5c2b includes configurable bounds for `memory lint`. H5c2c includes explicit repair of unreadable/
+oversized mutable scheduling metadata; scanner failures must not silently overwrite it.
+
+H5c2a includes configurable scan caps through the scheduler's cadence check. Known unreadable
+attempts yield an explicitly incomplete review artifact, disable model consolidation/automatic
+apply, and leave immutable history untouched; enumeration/byte cap failures still stop the run.
+H5c3 also migrates the supervisor's remaining legacy unbounded `readAttempts()` caller in
+`packages/cli/src/run.ts` to scoped, bounded lookup.
 
 H5b1 inspection also found older multiline facts are not fully understood by the line-based fact
 parser, and unknown frontmatter keys parsed as `extra` do not survive current store regeneration.
@@ -781,6 +795,7 @@ independently of their surrounding feature bands.
 | R10 parallelism | Measured sequential latency bottleneck; safe effect ordering and isolated writers |
 | R11 network tools | A task that needs structured network access and an enforceable network policy |
 | R9/R12/R13/R14 remainder, R6g | A measured evaluation, permission, provenance or usability gap; reuse E rather than duplicating its machinery |
+| CI action-runtime maintenance | Main CI 33963323981 warns that checkout/setup-node/pnpm action v4 runtimes target deprecated Node 20 and are forced onto Node 24. Audit supported action versions/runtime compatibility in a separate maintenance PR; retain all three platform checks. Non-blocking while current CI passes. |
 
 Exit criteria for active work: appropriate build/typecheck/regression checks pass; a named
 negative case fails without the fix; current guarantees and limitations are updated; and the

@@ -2,7 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { FileMemoryStore, FileRawStore, ingestOnSessionEnd, ingestSession, LoreBackend } from "@agentkitai/agentrig-memory";
+import { applyDream, runDream, FileMemoryStore, FileRawStore, dreamOnSessionEnd, fingerprint, ingestOnSessionEnd, ingestSession, LoreBackend } from "@agentkitai/agentrig-memory";
+import { dreamCommand } from "../src/dream.js";
+import { interactiveDream } from "../src/tui/dream.js";
 import { memoryIngest } from "../src/memory.js";
 import { buildProviders, buildRoleProvider } from "../src/provider.js";
 import { buildAgent } from "../src/agent-builder.js";
@@ -10,7 +12,7 @@ import { buildAgent } from "../src/agent-builder.js";
 vi.mock("../src/provider.js", async original => ({ ...await original<typeof import("../src/provider.js")>(), buildRoleProvider: vi.fn(), buildProviders: vi.fn() }));
 vi.mock("@agentkitai/agentrig-memory", async original => {
   const actual = await original<typeof import("@agentkitai/agentrig-memory")>();
-  return { ...actual, ingestSession: vi.fn(actual.ingestSession), ingestOnSessionEnd: vi.fn(actual.ingestOnSessionEnd) };
+  return { ...actual, applyDream: vi.fn(actual.applyDream), runDream: vi.fn(actual.runDream), ingestSession: vi.fn(actual.ingestSession), ingestOnSessionEnd: vi.fn(actual.ingestOnSessionEnd), dreamOnSessionEnd: vi.fn(actual.dreamOnSessionEnd) };
 });
 let root: string;
 const priorExit = process.exitCode;
@@ -20,6 +22,8 @@ beforeEach(async () => {
   await writeFile(join(root, "raw/sessions/s1.jsonl"), JSON.stringify({ type: "session.start", task: "inspect retry", cwd: root }) + "\n");
   vi.mocked(ingestSession).mockClear();
   vi.mocked(ingestOnSessionEnd).mockClear();
+  vi.mocked(dreamOnSessionEnd).mockClear();
+  vi.mocked(applyDream).mockClear(); vi.mocked(runDream).mockClear();
   vi.mocked(buildRoleProvider).mockReturnValue({ id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100_000 },
     async *stream() { yield { type: "text_delta", text: JSON.stringify({ facts: [{ pageType: "concept", slug: "retry", tag: "observed", text: "Retry each request" }] }) }; },
   });
@@ -28,6 +32,34 @@ beforeEach(async () => {
     names: ["default"], roleNames: { main: "default", memory: "default", supervisor: "default", subagents: "default" }, get: () => model });
   vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
   vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
+});
+
+it("interactive /dream --auto refuses incomplete scans and retains its named review artifact", async () => {
+  const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
+  await mkdir(join(root, "raw/attempts"), { recursive: true }); await writeFile(join(root, "raw/attempts/torn.json"), "{bad");
+  const before = await fingerprint(wiki.root);
+  const lines = await interactiveDream({ dir: root, provider: buildRoleProvider({}), cwd: root,
+    scanLimits: { maxEntries: 20000 } })(true);
+  const result = await vi.mocked(runDream).mock.results[0]!.value;
+  try {
+    expect(lines.join("\n")).toContain("auto-apply refused: raw scan incomplete");
+    expect(lines.join("\n")).toContain(result.workspace.manifestPath);
+    expect(lines.join("\n")).not.toContain("dream applied");
+    expect(applyDream).not.toHaveBeenCalled();
+    expect(runDream).toHaveBeenCalledWith(expect.objectContaining({ scanLimits: { maxEntries: 20000 } }));
+    expect(await fingerprint(wiki.root)).toBe(before);
+    expect(JSON.parse(await readFile(result.workspace.manifestPath, "utf8")).outputRoot).toBe(result.outputRoot);
+  } finally { await result.workspace.dispose(); }
+});
+
+it("interactive /dream forwards scan caps to both generation and successful apply", async () => {
+  const scanLimits = { maxEntries: 20000 };
+  const lines = await interactiveDream({ dir: root, provider: buildRoleProvider({}), cwd: root, scanLimits })(true);
+  expect(lines[0]).toContain("dream applied");
+  expect(runDream).toHaveBeenCalledWith(expect.objectContaining({ scanLimits }));
+  expect(applyDream).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.any(String), { scanLimits });
+  const result = await vi.mocked(runDream).mock.results[0]!.value;
+  await expect(readFile(result.workspace.manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCode = priorExit; await rm(root, { recursive: true, force: true }); });
 
@@ -66,4 +98,26 @@ it("wires agent-builder limits, span size and backend diagnostics into the sched
   vi.mocked(ingestOnSessionEnd).mock.calls[0]![0].onBackendError!("onIngest", new Error("backend offline"));
   expect(onHookError).toHaveBeenCalledWith("memory ingest: lore onIngest failed (continuing): backend offline");
   expect(console.error).not.toHaveBeenCalled(); // TUI must not lose this message to a stderr redraw.
+});
+
+it("forwards dream scan limits to the scheduled hook instead of leaving its cadence scan fixed", async () => {
+  await buildAgent({ root: join(root, "raw/sessions"), memory: root, maxTurns: "1", maxTokensPerTurn: "20",
+    dreamOnEnd: true, dreamScanLimits: { maxEntries: 20000 }, skillDiscovery: false, sandbox: "none" });
+  expect(dreamOnSessionEnd).toHaveBeenCalledWith(expect.objectContaining({ scanLimits: { maxEntries: 20000 } }));
+});
+
+it("the dream CLI refuses auto-apply of incomplete scans and retains the exact review artifact", async () => {
+  const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
+  await mkdir(join(root, "raw/attempts"), { recursive: true }); await writeFile(join(root, "raw/attempts/torn.json"), "{bad");
+  const before = await fingerprint(wiki.root); const append = FileMemoryStore.prototype.appendLog; let output = "";
+  vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
+    output = this.root; return append.apply(this, args);
+  });
+  await dreamCommand({ dir: root, scope: "project", auto: true, structuralOnly: true });
+  expect(process.exitCode).toBe(1);
+  expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("auto-apply refused: raw scan incomplete");
+  expect(vi.mocked(console.log).mock.calls.flat().join("\n")).toContain("Not applied.");
+  expect(await fingerprint(wiki.root)).toBe(before); expect(output).not.toBe("");
+  try { expect(JSON.parse(await readFile(output + ".dream.json", "utf8")).outputRoot).toBe(output); }
+  finally { await rm(output, { recursive: true, force: true }); await rm(output + ".dream.json", { force: true }); }
 });

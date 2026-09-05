@@ -8,6 +8,7 @@ import { formatAuxiliaryUsage } from "./maintenance.js";
 import { lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
+import type { ScanLimits } from "./scan.js";
 
 /**
  * The `session_end` integrations PLAN §3.2 and §3.7 both specify and which M3 and M5 each left
@@ -91,6 +92,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
 }
 
 export interface DreamTriggerOptions {
+  scanLimits?: Partial<ScanLimits>;
   dir: string;
   provider?: ModelProvider;
   /** Sessions ingested since the last dream before one is due. PLAN §3.7's "≥ N sessions". */
@@ -133,7 +135,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
         const wikiRoot = join(opts.dir, "wiki");
         const since = await lastDreamAt(wikiRoot);
         const raw = new FileRawStore({ root: opts.dir });
-        const sessionsSince = (await raw.sessions(since)).length;
+        const sessionsSince = (await raw.sessions(since, { scanLimits: opts.scanLimits ?? {} })).length;
         // A wiki that has never been dreamt is NOT immediately overdue — treating it that way
         // made the first session end trigger a full dream regardless of the configured cadence.
         // The session count is the honest signal for a fresh wiki.
@@ -150,16 +152,27 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           ...(opts.structuralOnly === true || opts.provider === undefined ? { structuralOnly: true } : {}),
           now,
           lockTimeoutMs: opts.lockTimeoutMs ?? 5000,
+          scanLimits: opts.scanLimits ?? {},
           ...(opts.onError === undefined ? {} : { onError: opts.onError }),
         });
 
         const findings = findingCount(result.report, result.structural);
-        if (opts.auto === true) {
+        if (opts.auto === true && result.report.scan?.complete === false) {
+          // A persistent immutable-ledger fault must not retain a fresh wiki every cadence.
+          // No model work ran; explicit review commands can still produce an inspectable copy.
+          await result.workspace.dispose();
+          opts.onDone?.("dream raw scan incomplete; auto-apply disabled; temporary copy discarded; unreadable attempts: "
+            + result.report.scan.unreadableAttempts.slice(0, 20).join(", ")
+            + (result.report.scan.unreadableAttempts.length > 20 ? "; more entries omitted from this summary" : "")
+            + "; run an explicit dream review to retain an artifact");
+          return { action: "continue" };
+        }
+        if (opts.auto === true && result.report.scan?.complete !== false) {
           let backup: string;
           try {
             const { applyDream } = await import("./dream/copy.js");
             const stamp = `${now()}-${Math.random().toString(36).slice(2, 8)}`;
-            backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000 });
+            backup = await applyDream(wikiRoot, result.outputRoot, stamp, { timeoutMs: opts.lockTimeoutMs ?? 5000, scanLimits: opts.scanLimits ?? {} });
           } catch (error) {
             throw new Error(String(error) + "; dream artifact retained at " + result.outputRoot
               + "; manifest: " + result.workspace.manifestPath, { cause: error });
@@ -173,7 +186,7 @@ export function dreamOnSessionEnd(opts: DreamTriggerOptions): Hook {
           opts.onDone?.("dream ran clean; nothing to review");
         } else {
           opts.onDone?.(
-            `dream found ${findings} thing(s) to review: inspect ${result.outputRoot} (manifest: ${result.workspace.manifestPath}); agentrig dream --review runs a fresh review`,
+            `${result.report.scan?.complete === false ? "dream raw scan incomplete; auto-apply disabled; " : ""}dream found ${findings} thing(s) to review: inspect ${result.outputRoot} (manifest: ${result.workspace.manifestPath}); agentrig dream --review runs a fresh review`,
           );
         }
       } catch (err) {

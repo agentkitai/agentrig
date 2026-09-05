@@ -4,6 +4,7 @@
  */
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import type { ClaimPromotionAssessment } from "./dream/promote.js";
+import type { ScanOptions } from "./scan.js";
 
 export type Scope = "project" | "global";
 export type PageType = "entity" | "concept" | "source" | "analysis";
@@ -52,8 +53,8 @@ export interface SessionLogRef { id: string; path: string; updatedAt: number }
 export interface DocRef { id: string; path: string; addedAt: number }
 
 export interface RawStore {
-  sessions(since?: number): Promise<SessionLogRef[]>;
-  docs(): Promise<DocRef[]>;
+  sessions(since?: number, opts?: ScanOptions): Promise<SessionLogRef[]>;
+  docs(opts?: ScanOptions): Promise<DocRef[]>;
   addDoc(path: string): Promise<DocRef>;
 }
 
@@ -98,6 +99,8 @@ export interface DreamReport {
   pinsAffected: Array<{ pin: string; status: "kept" | "conflict" | "orphaned" }>;
   /** Counts per input check, not distinct pins; absent on legacy reports. */
   pinPersistence?: { applied: number; skipped: number };
+  /** Known ledger omissions. Incomplete reports are review-only, never automatically applied. */
+  scan?: { complete: boolean; unreadableAttempts: string[] };
 }
 
 export interface DreamResult {

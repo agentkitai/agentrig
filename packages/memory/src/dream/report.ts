@@ -36,6 +36,10 @@ export function renderPromotionProposal(proposal: DreamReport["promoted"][number
 
 export function renderReport(report: DreamReport, opts: RenderOptions = {}): string {
   const out: string[] = ["# Dream report"];
+  if (report.scan?.complete === false) out.push("", "WARNING: Raw scan incomplete; model consolidation and automatic apply are disabled.",
+    `${report.scan.unreadableAttempts.length} unreadable or corrupt attempt entries; immutable originals are unchanged:`,
+    ...report.scan.unreadableAttempts.slice(0, 20).map(path => `- ${path}`),
+    ...(report.scan.unreadableAttempts.length > 20 ? [`- ${report.scan.unreadableAttempts.length - 20} more (full list in report.scan.unreadableAttempts)`] : []));
   if ((report.pinPersistence?.skipped ?? 0) > 0) out.push("",
     `WARNING: ${report.pinPersistence!.skipped} pin status check(s) were not persisted because the page/pin changed, the pin was removed, or the check was unversioned. Reported pin statuses are observations, not all persisted updates.`);
   if (opts.outputRoot !== undefined) {
@@ -126,7 +130,8 @@ export function findingCount(report: DreamReport, structural?: StructuralFinding
     report.orphans.length +
     report.missingPages.length +
     report.pinsAffected.filter((p) => p.status !== "kept").length +
-    (report.pinPersistence?.skipped ?? 0);
+    (report.pinPersistence?.skipped ?? 0) +
+    (report.scan?.complete === false ? Math.max(1, report.scan.unreadableAttempts.length) : 0);
   if (structural === undefined) return base;
   return (
     base +

@@ -37,6 +37,7 @@ import {
   ingestOnSessionEnd,
   memoryTools,
   type IngestLimits,
+  type ScanLimits,
 } from "@agentkitai/agentrig-memory";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
@@ -138,6 +139,7 @@ export interface AgentBuildOptions extends ProviderOptions {
   dreamEverySessions?: string;
   dreamEveryHours?: string;
   dreamStructuralOnly?: boolean;
+  dreamScanLimits?: Partial<ScanLimits>;
   /** Path to a JSON file of MCP servers (PLAN §6's MCP client row). */
   mcpConfig?: string;
   /** Give the agent a `subagent` tool for context-isolated sub-tasks. */
@@ -471,6 +473,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         everySessions: positiveNumber("--dream-every-sessions", opts.dreamEverySessions ?? "10"),
         everyHours: positiveNumber("--dream-every-hours", opts.dreamEveryHours ?? "24"),
         ...(opts.dreamStructuralOnly === true ? { structuralOnly: true } : {}),
+        ...(opts.dreamScanLimits === undefined ? {} : { scanLimits: opts.dreamScanLimits }),
         onError: (err) => extras.onHookError?.(`dream warning or failure (session still succeeded): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`dream: ${summary}`),
       }),

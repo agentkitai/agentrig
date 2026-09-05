@@ -57,3 +57,5 @@ jobs:
       - run: pnpm exec vitest run packages/memory/test/ingest-lifecycle.test.ts packages/memory/test/hooks.test.ts packages/memory/test/backend.test.ts packages/cli/test/memory-ingest-lifecycle.test.ts packages/core/test/auxiliary-usage.test.ts
       # H5c1: real writer serialization, directory identity and fault-injected rollback.
       - run: pnpm exec vitest run packages/memory/test/dream-lifecycle.test.ts packages/memory/test/dream-apply.test.ts
+      # H5c2a: bounded traversal, cap failures and actual cancellation cleanup.
+      - run: pnpm exec vitest run packages/memory/test/dream-scans.test.ts

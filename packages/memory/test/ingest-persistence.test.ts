@@ -436,7 +436,7 @@ it("reports skipped unversioned pin checks and avoids rewriting unchanged status
   expect(await applyPinChecks(store.root, [check])).toEqual({ applied: 1, skipped: 0 });
   opened.mockClear();
   expect(await applyPinChecks(store, [check, check])).toEqual({ applied: 2, skipped: 0 });
-  expect(opened).toHaveBeenCalledWith(path);
+  expect(opened).toHaveBeenCalledWith(path, {});
   expect(await readFile(join(store.root, "pins.json"), "utf8")).toBe(before);
   expect((await stat(join(store.root, "pins.json"))).mtimeMs).toBe(0);
 });

@@ -6,6 +6,7 @@ import { bm25Search } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
 import { readBoundedFile } from "./bounded-file.js";
 import { MaintenanceLimitError } from "./maintenance.js";
+import { ScanBudget, type ScanOptions } from "./scan.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
 
 /**
@@ -168,8 +169,8 @@ export class FileMemoryStore implements MemoryStore {
     return text.split("\n").map(parseEntry).filter((e): e is IndexEntry => e !== null);
   }
 
-  async writeIndex(entries: IndexEntry[]): Promise<void> {
-    return this.withMutationLock(() => this.writeIndexUnlocked(entries));
+  async writeIndex(entries: IndexEntry[], opts: MemoryLockOptions = {}): Promise<void> {
+    return this.withMutationLock(() => this.writeIndexUnlocked(entries, opts.signal, opts.maxFileBytes), opts);
   }
 
   private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
@@ -194,12 +195,13 @@ export class FileMemoryStore implements MemoryStore {
     await this.writeIndexUnlocked(entries, signal, maxFileBytes);
   }
 
-  async read(path: string, opts: MemoryLockOptions = {}): Promise<WikiPage | null> {
+  async read(path: string, opts: MemoryLockOptions & { scanBudget?: ScanBudget } = {}): Promise<WikiPage | null> {
     const full = this.abs(path);
     let bytes: Buffer;
     let mtime: number;
     try {
-      bytes = opts.maxFileBytes === undefined ? await readFile(full) : await readBoundedFile(full, opts.maxFileBytes, opts.signal);
+      bytes = opts.scanBudget !== undefined ? await opts.scanBudget.read(full)
+        : opts.maxFileBytes === undefined ? await readFile(full) : await readBoundedFile(full, opts.maxFileBytes, opts.signal);
       mtime = (await stat(full)).mtimeMs;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -320,25 +322,33 @@ export class FileMemoryStore implements MemoryStore {
   }
 
   /** Every page on disk, for search and lint. */
-  async pages(): Promise<WikiPage[]> {
+  async pages(opts?: ScanOptions): Promise<WikiPage[]> {
+    const budget = opts === undefined ? undefined : new ScanBudget(opts);
+    const read = async (path: string) => {
+      if (budget === undefined) return this.read(path).catch(() => null);
+      budget.check();
+      return this.read(path, { scanBudget: budget });
+    };
     const out: WikiPage[] = [];
     for (const dir of Object.values(PAGE_DIR)) {
       let names: string[];
       try {
-        names = await readdir(this.abs(dir));
-      } catch {
+        names = budget === undefined ? await readdir(this.abs(dir)) : await budget.names(this.abs(dir));
+      } catch (error) {
+        if (budget !== undefined && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         continue;
       }
       for (const name of names) {
         if (!name.endsWith(".md")) continue;
         // Wiki identifiers use forward slashes on every host, like pagePath() and index rows.
         // Native Windows separators would make model consolidation targets miss these pages.
-        const page = await this.read(`${dir}/${name}`).catch(() => null);
+        const page = await read(`${dir}/${name}`);
         if (page !== null) out.push(page);
       }
     }
-    const overview = await this.read(OVERVIEW_FILE).catch(() => null);
+    const overview = await read(OVERVIEW_FILE);
     if (overview !== null) out.push(overview);
+    budget?.check();
     return out;
   }
 

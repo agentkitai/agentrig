@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { readBoundedFile } from "./bounded-file.js";
 import { MaintenanceLimitError } from "./maintenance.js";
+import { ScanBudget, type ScanOptions } from "./scan.js";
 import type { Attempt, DocRef, RawStore, SessionLogRef } from "./types.js";
 
 /**
@@ -52,40 +53,52 @@ export class FileRawStore implements RawStore {
   }
 
   /** Session logs, newest first; `since` filters on mtime so a dream can scan only new work. */
-  async sessions(since?: number): Promise<SessionLogRef[]> {
+  async sessions(since?: number, opts: ScanOptions = {}): Promise<SessionLogRef[]> {
+    const budget = new ScanBudget(opts);
     let names: string[];
     try {
-      names = await readdir(this.dir("sessions"));
-    } catch {
+      names = await budget.names(this.dir("sessions"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return [];
     }
     const out: SessionLogRef[] = [];
     for (const name of names) {
+      budget.check();
       if (!isSessionLog(name)) continue;
       const path = join(this.dir("sessions"), name);
-      const s = await stat(path).catch(() => null);
-      if (s === null) continue;
+      const s = await stat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (s === null || !s.isFile()) continue;
       if (since !== undefined && s.mtimeMs <= since) continue;
       out.push({ id: name.slice(0, -".jsonl".length), path, updatedAt: s.mtimeMs });
     }
-    return out.sort((a, b) => b.updatedAt - a.updatedAt);
+    budget.check(); return out.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async docs(): Promise<DocRef[]> {
+  async docs(opts: ScanOptions = {}): Promise<DocRef[]> {
+    const budget = new ScanBudget(opts);
     let names: string[];
     try {
-      names = await readdir(this.dir("docs"));
-    } catch {
+      names = await budget.names(this.dir("docs"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return [];
     }
     const out: DocRef[] = [];
     for (const name of names) {
+      budget.check();
       const path = join(this.dir("docs"), name);
-      const s = await stat(path).catch(() => null);
+      const s = await stat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
       if (s === null || !s.isFile()) continue;
       out.push({ id: name.replace(/\.[^.]+$/, ""), path, addedAt: s.mtimeMs });
     }
-    return out.sort((a, b) => b.addedAt - a.addedAt);
+    budget.check(); return out.sort((a, b) => b.addedAt - a.addedAt);
   }
 
   /**
@@ -152,6 +165,9 @@ export class FileRawStore implements RawStore {
   }
 
   async readAttempts(sessionId?: string, opts?: { signal: AbortSignal; maxEntries: number; maxFileBytes: number; maxTotalBytes: number }): Promise<{ attempts: Attempt[]; corrupt: string[] }> {
+    if (opts !== undefined) new ScanBudget({ signal: opts.signal, scanLimits: {
+      maxEntries: opts.maxEntries, maxFileBytes: opts.maxFileBytes, maxTotalBytes: opts.maxTotalBytes,
+    } });
     let names: string[];
     try {
       if (opts === undefined) names = await readdir(this.dir("attempts"));
@@ -205,6 +221,7 @@ export class FileRawStore implements RawStore {
       const { lesson, ...rest } = parsed.data;
       out.push(lesson === undefined ? rest : { ...rest, lesson });
     }
+    opts?.signal.throwIfAborted();
     return { attempts: out.sort((a, b) => a.ts - b.ts), corrupt };
   }
 }

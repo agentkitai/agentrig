@@ -1,10 +1,13 @@
-import { chmod, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, open, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
 import { readBoundedFile } from "../bounded-file.js";
+import { ScanBudget, walkTree, type ScanOptions } from "../scan.js";
+
+export interface DreamFileOptions extends MemoryLockOptions, ScanOptions {}
 
 export interface DreamWorkspace {
   outputRoot: string;
@@ -84,12 +87,24 @@ async function removeOwnedDirectory(path: string, expected: z.infer<typeof Ident
   await rm(path, { recursive: true });
 }
 
-/** The root is already exclusively owned. Copy children to absent paths: Node 22 rejects
- * cp(source, existingRoot, { errorOnExist: true }) even when that root is empty. */
-async function copyContents(source: string, destination: string): Promise<void> {
-  for (const name of await readdir(source)) {
-    await cp(join(source, name), join(destination, name), { recursive: true, force: false, errorOnExist: true, dereference: true });
-  }
+/** Bounded reads and exclusive writes into an already-owned empty root. Never delegate an
+ * unbounded recursive copy after checking only a possibly stale pre-scan. */
+async function copyContents(source: string, destination: string, opts: ScanOptions): Promise<void> {
+  const budget = new ScanBudget(opts);
+  await walkTree(source, budget, {
+    entry: async entry => {
+      budget.check(); const target = join(destination, entry.relative);
+      if (entry.kind === "directory") await mkdir(target, { mode: 0o700 });
+      else {
+        await writeFile(target, entry.bytes!, { flag: "wx", mode: entry.targetMode,
+          ...(opts.signal === undefined ? {} : { signal: opts.signal }) });
+        budget.check(); await chmod(target, entry.targetMode); // preserve bits masked by umask
+      }
+      budget.check();
+    },
+    leaveDirectory: async entry => { budget.check(); await chmod(join(destination, entry.relative), entry.targetMode); },
+  });
+  budget.check();
   await chmod(destination, (await stat(source)).mode & 0o777);
 }
 
@@ -118,7 +133,8 @@ function workspace(manifest: Manifest): DreamWorkspace {
 /** Fresh, owned copy plus a persisted source snapshot. No model work holds these locks.
  * Symlinks are materialized in the copy; the source fingerprint includes their targets.
  */
-export async function copyWiki(sourceRoot: string, destRoot?: string, opts: MemoryLockOptions = {}): Promise<DreamWorkspace> {
+export async function copyWiki(sourceRoot: string, destRoot?: string, opts: DreamFileOptions = {}): Promise<DreamWorkspace> {
+  new ScanBudget(opts); // Validate before creating an owned directory.
   opts.signal?.throwIfAborted();
   const src = await realpath(sourceRoot);
   const sourceIdentity = await identity(src);
@@ -143,10 +159,10 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Memo
       if (precreated === undefined) { await mkdir(out); owned = await identity(out); }
       else if (!sameIdentity(await identity(out), precreated)) throw new Error("dream output root was replaced before copy");
       if (await exists(manifestPath(out))) throw new Error("dream manifest already exists; preserving " + manifestPath(out));
-      const before = await fingerprint(src);
-      await copyContents(src, out);
+      const before = await fingerprint(src, opts);
+      await copyContents(src, out, opts);
       opts.signal?.throwIfAborted();
-      if (await fingerprint(src) !== before) throw new Error("dream source changed while copying; retry from a fresh snapshot");
+      if (await fingerprint(src, opts) !== before) throw new Error("dream source changed while copying; retry from a fresh snapshot");
       const manifest: Manifest = {
         version: 1, owner: randomUUID(), sourceRoot: src, sourceIdentity,
         sourceFingerprint: before, outputRoot: out, outputIdentity: owned!,
@@ -156,6 +172,7 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Memo
         ownedManifest = await handle.stat({ bigint: true });
         await handle.writeFile(JSON.stringify(manifest) + "\n", "utf8");
       } finally { await handle.close(); }
+      opts.signal?.throwIfAborted();
       return workspace(manifest);
     }, opts);
   } catch (error) {
@@ -176,41 +193,27 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Memo
 /** Source content, paths, empty directories and symlink targets. Only the ROOT scheduling stamp
  * is excluded. Read errors and cycles fail visibly rather than hashing a silently partial tree.
  */
-export async function fingerprint(root: string): Promise<string> {
+export async function fingerprint(root: string, opts: ScanOptions = {}): Promise<string> {
+  const budget = new ScanBudget(opts);
   const hash = createHash("sha256");
   hash.update(JSON.stringify(["root", (await stat(root)).mode & 0o777]));
-  const active = new Set<string>();
-  const walk = async (dir: string, prefix: string): Promise<void> => {
-    const canonical = await realpath(dir);
-    if (active.has(canonical)) throw new Error("cyclic directory symlink in dream snapshot: " + dir);
-    active.add(canonical);
-    try {
-      for (const name of (await readdir(dir)).sort()) {
-        if (prefix === "" && name === ".last-dream") continue;
-        const path = join(dir, name);
-        const rel = prefix === "" ? name : prefix + "/" + name;
-        const link = await lstat(path);
-        hash.update(JSON.stringify([rel, link.isSymbolicLink() ? "link" : "entry", link.mode & 0o777]));
-        if (link.isSymbolicLink()) hash.update(JSON.stringify(await readlink(path)));
-        const info = link.isSymbolicLink() ? await stat(path) : link;
-        if (info.isDirectory()) { hash.update("directory"); await walk(path, rel); }
-        else if (info.isFile()) {
-          const bytes = await readFile(path);
-          hash.update(JSON.stringify(["file", bytes.length, createHash("sha256").update(bytes).digest("hex")]));
-        }
-        else throw new Error("unsupported file in dream snapshot: " + path);
-        hash.update("\0");
-      }
-    } finally { active.delete(canonical); }
-  };
-  await walk(root, "");
+  await walkTree(root, budget, {
+    entry: async entry => {
+      hash.update(JSON.stringify([entry.relative, entry.linkTarget === undefined ? "entry" : "link", entry.mode]));
+      if (entry.linkTarget !== undefined) hash.update(JSON.stringify(entry.linkTarget));
+      if (entry.kind === "directory") hash.update("directory");
+      else hash.update(JSON.stringify(["file", entry.bytes!.length, createHash("sha256").update(entry.bytes!).digest("hex")]) + "\0");
+    },
+    leaveDirectory: async () => { hash.update("\0"); },
+  }, true);
   return hash.digest("hex");
 }
 
 /** Apply only a registered, unchanged source snapshot. Backups and failed-restore artifacts are
  * retained. Cooperating writers serialize around the two-rename gap; unlocked readers do not.
  */
-export async function applyDream(sourceRoot: string, outputRoot: string, stamp: string, opts: MemoryLockOptions = {}): Promise<string> {
+export async function applyDream(sourceRoot: string, outputRoot: string, stamp: string, opts: DreamFileOptions = {}): Promise<string> {
+  new ScanBudget(opts);
   opts.signal?.throwIfAborted();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(stamp)) throw new Error("applyDream: invalid backup stamp");
   const src = await realpath(sourceRoot);
@@ -220,7 +223,7 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
     const manifest = await readManifest(out, opts);
     await verifyOutput(out, manifest);
     if (manifest.sourceRoot !== src || !sameIdentity(await identity(src), manifest.sourceIdentity)
-      || await fingerprint(src) !== manifest.sourceFingerprint) {
+      || await fingerprint(src, opts) !== manifest.sourceFingerprint) {
       throw new Error("applyDream: stale dream snapshot; live wiki changed; keep the artifact and rerun/review against current content");
     }
     const backup = src + ".before-dream-" + stamp;
@@ -229,9 +232,9 @@ export async function applyDream(sourceRoot: string, outputRoot: string, stamp: 
     const stagedIdentity = await identity(staged);
     let preserveStage = false;
     try {
-      await copyContents(out, staged);
+      await copyContents(out, staged, opts);
       // A concurrent completed review can advance scheduling metadata without changing content.
-      const currentStamp = await readFile(join(src, ".last-dream")).catch((error: NodeJS.ErrnoException) => {
+      const currentStamp = await readBoundedFile(join(src, ".last-dream"), 4096, opts.signal).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") return undefined;
         throw error;
       });

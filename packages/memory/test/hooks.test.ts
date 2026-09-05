@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
-import { dreamOnSessionEnd, FileMemoryStore, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
+import { dreamOnSessionEnd, FileMemoryStore, fingerprint, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
 
 function scripted(bodies: unknown[]): ModelProvider {
   let n = 0;
@@ -46,6 +46,7 @@ beforeEach(async () => {
   await store.init();
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -287,6 +288,41 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     expect(outputRoot).not.toBe("");
     await expect(lstat(outputRoot)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(outputRoot + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("never auto-applies an incomplete raw scan or accumulates copies on repeated cadences", async () => {
+    await writeLog("a"); await mkdir(join(dir, "raw/attempts"), { recursive: true });
+    await writeFile(join(dir, "raw/attempts/torn.json"), "{bad");
+    const before = await fingerprint(join(dir, "wiki"));
+    const append = FileMemoryStore.prototype.appendLog; const outputs: string[] = [];
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
+      outputs.push(this.root); return append.apply(this, args);
+    });
+    const warnings: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, auto: true, structuralOnly: true, now: () => 1,
+      onError: error => warnings.push(error), onDone: text => done.push(text) });
+    await hook.handler(ctx("a"));
+    await hook.handler(ctx("a"));
+    expect(warnings[0]!.message).toContain("raw scan incomplete");
+    expect(done[0]).toContain("auto-apply disabled"); expect(done[0]).not.toContain("ran clean");
+    expect(await fingerprint(join(dir, "wiki"))).toBe(before);
+    expect(done).toHaveLength(2); expect(outputs).toHaveLength(2);
+    expect(done.every(text => text.includes("temporary copy discarded"))).toBe(true);
+    for (const output of outputs) {
+      await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(output + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await readFile(join(dir, "raw/attempts/torn.json"), "utf8")).toBe("{bad");
+  });
+
+  it("uses configurable scan limits before checking the scheduler cadence", async () => {
+    await writeLog("a"); await writeLog("b"); const errors: Error[] = []; const done: string[] = [];
+    await dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, scanLimits: { maxEntries: 1 },
+      onError: error => errors.push(error) }).handler(ctx("b"));
+    expect(errors[0]!.message).toContain("entry limit");
+    await dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, scanLimits: { maxEntries: 20 },
+      onError: error => errors.push(error), onDone: text => done.push(text) }).handler(ctx("b"));
+    expect(errors).toHaveLength(1); expect(done[0]).toContain("dream ran clean");
   });
 
   it("stays free without a provider — structural only, no model call", async () => {

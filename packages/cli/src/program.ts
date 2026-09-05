@@ -1,7 +1,7 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
 import { SessionStore } from "@agentkitai/agentrig-core";
-import { IngestLimitsSchema } from "@agentkitai/agentrig-memory";
+import { IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
@@ -13,6 +13,11 @@ import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 function parseIngestLimits(text: string) {
   try { return IngestLimitsSchema.parse(JSON.parse(text)); }
   catch (error) { throw new InvalidArgumentError(`invalid ingest limits: ${String(error)}`); }
+}
+
+function parseDreamScanLimits(text: string) {
+  try { return ScanLimitsSchema.partial().parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid dream scan limits: ${String(error)}`); }
 }
 
 function ingestSpanChars(value: string): string {
@@ -215,6 +220,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
       .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
+      .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object; includes scheduler enumeration)", parseDreamScanLimits)
       .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session")
       .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
@@ -347,6 +353,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--scope <scope>", "project | global", "project")
     .option("--global <dir>", "global memory directory; enables promotion proposals")
     .option("--since <n>", "cap on raw sessions scanned")
+    .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
     .option("--lock-timeout <ms>", "wait for memory mutation locks (default 5000 ms); not a scan deadline")
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
     .action(async (opts: DreamOptions, cmd: Command) => {
