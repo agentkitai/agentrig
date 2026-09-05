@@ -1230,6 +1230,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           turn: turns,
           tool: { name: tu.name, input },
           permission: permClass,
+          checkpointExcludes: [config.store.root],
           emitCheckpoint: async (event) => {
             // This seam is available only in the dedicated built-in-hook pass. Validate before the
             // immutable append just as tool and supervisor record seams do.

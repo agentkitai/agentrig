@@ -55,6 +55,8 @@ export interface HookContext {
   permission?: PermissionClass;
   /** Core-only event seam supplied to the built-in Checkpointer, never to ordinary hooks. */
   emitCheckpoint?(event: CheckpointHookEvent): Promise<void>;
+  /** Absolute paths omitted by the built-in Checkpointer (notably the active session store). */
+  checkpointExcludes?: string[];
   /**
    * `post_tool`: what the tool returned. `display` is the string the model will see and the one
    * a `modify` patch replaces; `output` is the tool's own value, which is very often NOT a

@@ -71,8 +71,12 @@ and none reopened. A new finding is the next round's work until the cap.
 it reads the complete repository worktree into a throw-away index, writes a commit object, and
 updates only `refs/agentrig/<session>/<turn>`. HEAD, the repository index, and worktree are not
 modified. Concurrent writes in one turn share one in-flight snapshot. `checkpoint.created` records
-the ref, commit, and tree. A non-git cwd continues normally and emits one `checkpoint.warning` for
-the session; read calls and denied writes do not checkpoint. R4b will consume these refs for undo.
+the ref, commit, and tree. Existing checkpoint refs are reused rather than overwritten on resume;
+symbolic refs and Git/object/ref failures block the pending write. The active session store is
+excluded, sparse paths and gitlinks retain Git semantics, and a bounded stability check refuses a
+worktree that changes during capture. A non-git cwd continues normally and emits one
+`checkpoint.warning` for the session; read calls and denied writes do not checkpoint. R4b will
+consume these refs for undo.
 
 ## Abort grace: a parent waits for the children its abort orphaned (#86)
 

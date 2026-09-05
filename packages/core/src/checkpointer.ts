@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
 
 /** Events the built-in checkpointer may append through its deliberately narrow hook seam. */
@@ -42,6 +42,9 @@ function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: Abor
     execFile("git", args, {
       cwd,
       encoding: "utf8",
+      // execFile drains both pipes; a larger explicit cap avoids false checkpoint failures in
+      // repositories with unusually verbose diagnostics while retaining a bounded allocation.
+      maxBuffer: 16 * 1024 * 1024,
       env: env ?? gitEnvironment(),
       ...(signal === undefined ? {} : { signal }),
     }, (error, stdout, stderr) => {
@@ -75,6 +78,90 @@ async function hasGitMetadata(cwd: string): Promise<boolean> {
   }
 }
 
+async function existingCheckpoint(
+  repo: string,
+  ref: string,
+  signal: AbortSignal,
+): Promise<{ commit: string; tree: string } | undefined> {
+  try {
+    const symref = (await git(repo, ["symbolic-ref", "-q", ref], undefined, signal)).stdout.trim();
+    throw new Error(`checkpoint ref ${ref} is symbolic (${symref}); refusing to overwrite it`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("checkpoint ref ")) throw error;
+    if (signal.aborted) throw error;
+    if (error === null || typeof error !== "object" || !("code" in error) || error.code !== 1) throw error;
+  }
+
+  const format = "%(refname)%00%(objectname)";
+  const output = (await git(repo, ["for-each-ref", `--format=${format}`, ref], undefined, signal)).stdout;
+  for (const line of output.split("\n")) {
+    if (line === "") continue;
+    const [foundRef, commit] = line.split("\0");
+    if (foundRef !== ref) continue;
+    if (commit === undefined || commit === "") throw new Error(`checkpoint ref ${ref} has no object`);
+    const tree = (await git(repo, ["rev-parse", `${commit}^{tree}`], undefined, signal)).stdout.trim();
+    return { commit, tree };
+  }
+  return undefined;
+}
+
+async function worktreeMatchesIndex(
+  repo: string,
+  pathspecs: string[],
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+): Promise<boolean> {
+  try {
+    await git(repo, ["diff", "--quiet", "--ignore-submodules=all", "--", ...pathspecs], env, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (error !== null && typeof error === "object" && "code" in error && error.code === 1) return false;
+    throw error;
+  }
+  // Files created after `git add` are not in the index and therefore invisible to `git diff`.
+  // `--directory` bounds output for whole untracked trees while still detecting their presence.
+  const untracked = await git(
+    repo,
+    ["ls-files", "--others", "--exclude-standard", "--directory", "--no-empty-directory", "--", ...pathspecs],
+    env,
+    signal,
+  );
+  return untracked.stdout === "";
+}
+
+function snapshotPathspecs(repo: string, excludes: readonly string[] | undefined): string[] {
+  const pathspecs = ["."];
+  for (const excluded of excludes ?? []) {
+    const rel = relative(repo, resolve(excluded));
+    if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) continue;
+    const normalized = rel.replaceAll("\\", "/");
+    pathspecs.push(normalized === "" ? ":(exclude,top)**" : `:(exclude,top)${normalized}`);
+  }
+  return pathspecs;
+}
+
+async function readParent(repo: string, env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<string | undefined> {
+  try {
+    const parent = (await git(repo, ["rev-parse", "--verify", "HEAD"], undefined, signal)).stdout.trim();
+    await git(repo, ["read-tree", parent], env, signal);
+    return parent;
+  } catch (error) {
+    if (signal.aborted) throw error;
+    // Only a genuinely unborn symbolic HEAD has no parent. Detached/corrupt HEAD and object-read
+    // failures are checkpoint failures and must not silently become an empty snapshot.
+    let target: string;
+    try {
+      target = (await git(repo, ["symbolic-ref", "-q", "HEAD"], undefined, signal)).stdout.trim();
+    } catch {
+      throw error;
+    }
+    const found = (await git(repo, ["for-each-ref", "--format=%(refname)", target], undefined, signal)).stdout.trim();
+    if (found !== "") throw error;
+    await git(repo, ["read-tree", "--empty"], env, signal);
+    return undefined;
+  }
+}
+
 async function snapshot(ctx: HookContext): Promise<void> {
   if (ctx.emitCheckpoint === undefined) {
     throw new Error("Checkpointer must be run by an AgentRig agent");
@@ -98,22 +185,39 @@ async function snapshot(ctx: HookContext): Promise<void> {
     return;
   }
 
+  const ref = `refs/agentrig/${ctx.sessionId}/${ctx.turn}`;
+  const previous = await existingCheckpoint(repo, ref, ctx.signal);
+  if (previous !== undefined) {
+    await ctx.emitCheckpoint({ type: "checkpoint.created", turn: ctx.turn, ref, ...previous });
+    return;
+  }
+
   const dir = await mkdtemp(join(tmpdir(), "agentrig-index-"));
   const index = join(dir, "index");
   const env = gitEnvironment();
   env.GIT_INDEX_FILE = index;
   try {
-    let parent: string | undefined;
-    try {
-      parent = (await git(repo, ["rev-parse", "--verify", "HEAD"], undefined, ctx.signal)).stdout.trim();
-      await git(repo, ["read-tree", parent], env, ctx.signal);
-    } catch {
-      await git(repo, ["read-tree", "--empty"], env, ctx.signal);
-    }
+    const parent = await readParent(repo, env, ctx.signal);
+    const pathspecs = snapshotPathspecs(repo, ctx.checkpointExcludes);
 
     // `git add` reads the worktree into the throw-away index. It never updates the repository's
-    // real index, and the following plumbing commands write objects/our private ref only.
-    await git(repo, ["add", "-A", "--", "."], env, ctx.signal);
+    // real index. `--sparse` ensures a sparse checkout does not omit dirty skip-worktree paths.
+    // Verify the worktree still matches that private index so a file changing during the scan
+    // cannot produce an internally inconsistent checkpoint; bounded retries fail closed on churn.
+    let stable = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) {
+        if (parent === undefined) await git(repo, ["read-tree", "--empty"], env, ctx.signal);
+        else await git(repo, ["read-tree", parent], env, ctx.signal);
+      }
+      await git(repo, ["add", "--sparse", "-A", "--", ...pathspecs], env, ctx.signal);
+      if (await worktreeMatchesIndex(repo, pathspecs, env, ctx.signal)) {
+        stable = true;
+        break;
+      }
+    }
+    if (!stable) throw new Error("worktree changed while checkpointing; refusing an inconsistent snapshot");
+
     const tree = (await git(repo, ["write-tree"], env, ctx.signal)).stdout.trim();
     const commitArgs = ["commit-tree", tree, "-m", `AgentRig checkpoint ${ctx.sessionId} turn ${ctx.turn}`];
     if (parent !== undefined) commitArgs.push("-p", parent);
@@ -125,12 +229,17 @@ async function snapshot(ctx: HookContext): Promise<void> {
       GIT_COMMITTER_EMAIL: "checkpointer@agentrig.invalid",
     };
     const commit = (await git(repo, commitArgs, identity, ctx.signal)).stdout.trim();
-    const ref = `refs/agentrig/${ctx.sessionId}/${ctx.turn}`;
-    await git(repo, ["update-ref", ref, commit], undefined, ctx.signal);
+    // Never dereference a hostile symbolic ref, and never replace a checkpoint another process won
+    // the race to create. A later attempt will safely reuse the winner through existingCheckpoint.
+    await git(repo, ["update-ref", "--no-deref", ref, commit, "0000000000000000000000000000000000000000"], undefined, ctx.signal);
     await ctx.emitCheckpoint({ type: "checkpoint.created", turn: ctx.turn, ref, commit, tree });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
+  } catch (error) {
+    // Cleanup must not replace the primary Git/append error that explains why the write was blocked.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    throw error;
   }
+  // A cleanup failure after a successful checkpoint still blocks the write and remains visible.
+  await rm(dir, { recursive: true, force: true });
 }
 
 /**
@@ -140,8 +249,13 @@ async function snapshot(ctx: HookContext): Promise<void> {
 export class Checkpointer implements Hook {
   readonly point = "pre_tool" as const;
   readonly id = "core:checkpointer";
+  readonly timeoutMs: number;
   readonly [CHECKPOINTER] = true;
   private readonly attempts = new Map<string, { turn: number; work: Promise<void> }>();
+
+  constructor(options: { timeoutMs?: number } = {}) {
+    this.timeoutMs = options.timeoutMs ?? 60_000;
+  }
   private readonly warned = new Set<string>();
 
   /** Release state retained only to coordinate calls within one active session. */
