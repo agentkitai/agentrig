@@ -39,7 +39,7 @@ For example, a dedicated clean project config can contain:
       "maxTurns": 10, "maxMinutes": 2, "maxTokens": 20000,
       "supervise": false, "subagents": false,
       "ingestOnEnd": false, "dreamOnEnd": false,
-      "extensions": [], "extensionDiscovery": false,
+      "extension": [], "extensionDiscovery": false, "packages": false,
       "skills": [], "skillDiscovery": false, "generatedSkills": false
     }
   }
