@@ -40,6 +40,7 @@ type ReadOutputInput = z.infer<typeof ReadOutputInput>;
 export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, string> {
   return {
     name: READ_OUTPUT_TOOL,
+    sandbox: "compatible",
     description:
       "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. " +
       "Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, " +
@@ -47,6 +48,9 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
       "This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
     inputSchema: ReadOutputInput,
     permission: "read",
+    effects: "read-only",
+    // Artifact logs predate source labels; recovery must never upgrade unknown ancestry.
+    resultSource: "external",
     async execute(input, ctx): Promise<ToolResult<string>> {
       let event: EventOf<"tool.result"> | undefined;
       let sealed = false;

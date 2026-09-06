@@ -2,6 +2,63 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips bounded instruction delegation audit records, distinct from tool grants", () => {
+    for (const action of ["delegated", "revoked"]) {
+      const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,
+        type: "context.delegation", principal: "hook:notes", action, delegation: "receipt" });
+      expect(parseEvent(serializeEvent(event))).toEqual(event);
+      expect(HarnessEvent.safeParse({ ...event, principal: "user" }).success).toBe(false);
+      expect(HarnessEvent.safeParse({ ...event, delegation: "x".repeat(65) }).success).toBe(false);
+      expect(HarnessEvent.safeParse({ ...event, action: "allow" }).success).toBe(false);
+    }
+  });
+  it("round-trips additive call provenance and preserves legacy claims/results", () => {
+    for (const payload of [
+      { type: "file.changed", path: "a", op: "edit", contentHash: "h" },
+      { type: "tool.result", id: "call", ok: true, display: "done", durationMs: 0 },
+    ]) {
+      for (const provenance of [{}, { toolCallSeq: 3, ...(payload.type === "tool.result" ? { permission: "write" } : {}) }]) {
+        const event = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, ...payload, ...provenance });
+        expect(parseEvent(serializeEvent(event))).toEqual(event);
+        expect(HarnessEvent.safeParse({ ...event, toolCallSeq: -1 }).success).toBe(false);
+      }
+    }
+  });
+  it("round-trips ownership seals and restoration audit records with bounded Git identifiers",()=>{
+    const seal={seq:2,sessionId:"s",ts:1,type:"checkpoint.sealed",turn:1,ref:"refs/agentrig/s/sealed/1",commit:"a".repeat(40),tree:"b".repeat(40),head:"unborn\nrefs/heads/main",indexHash:"c".repeat(64),repo:"/repo",excludes:["/repo/logs"]};
+    const restored={seq:0,sessionId:"audit",ts:1,type:"checkpoint.restored",targetSession:"s",turn:1,ref:"refs/agentrig/s/1",tree:"b".repeat(40),recovery:"/repo/.git/recovery"};
+    for(const raw of [seal,restored]) {
+      const event=HarnessEvent.parse(raw);expect(parseEvent(serializeEvent(event))).toEqual(event);
+      expect(HarnessEvent.safeParse({...raw,ref:"refs/heads/main"}).success).toBe(false);
+      expect(HarnessEvent.safeParse({...raw,tree:"invalid"}).success).toBe(false);
+    }
+  });
+  it("round-trips checkpoint events and requires a namespaced ref", () => {
+    const event = HarnessEvent.parse({
+      seq: 2,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.created",
+      turn: 1,
+      ref: "refs/agentrig/abc/1",
+      commit: "a".repeat(40),
+      tree: "b".repeat(40),
+    });
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    expect(HarnessEvent.safeParse({ ...event, ref: "refs/heads/main" }).success).toBe(false);
+    expect(HarnessEvent.safeParse({ ...event, ref: "refs/agentrig/../1" }).success).toBe(false);
+    expect(HarnessEvent.safeParse({ ...event, commit: "not-an-object" }).success).toBe(false);
+
+    const warning = HarnessEvent.parse({
+      seq: 3,
+      sessionId: "abc",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.warning",
+      message: "not a git repository",
+    });
+    expect(parseEvent(serializeEvent(warning))).toEqual(warning);
+  });
+
   it("round-trips a tool.call event through JSONL", () => {
     const event = HarnessEvent.parse({
       seq: 3,

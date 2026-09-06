@@ -1,4 +1,21 @@
-import { safeSliceEnd, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
+import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
+
+/** Surface unfinished paid work at session end, even if its final snapshot was too late for
+ * the closed log. Cumulative snapshots replace by run id; they never inflate main usage. */
+export class AuxiliaryText {
+  private readonly pending = new Map<string, AuxiliaryReport>();
+  push(event: HarnessEvent): string[] {
+    if (event.type === "session.start" || event.type === "session.resume") this.pending.clear();
+    if (event.type === "auxiliary.usage") {
+      if (event.final) this.pending.delete(event.id);
+      else this.pending.set(event.id, event.report);
+    }
+    if (event.type !== "session.end") return [];
+    const lines = [...this.pending.values()].map(report => formatAuxiliaryUsage(report, { final: false }));
+    this.pending.clear(); return lines;
+  }
+}
 
 /**
  * Two views of one event stream.
@@ -50,7 +67,7 @@ export function renderEvent(e: HarnessEvent): string {
       const cacheWrite = e.usage.cacheWrite === undefined || e.usage.cacheWrite === 0
         ? ""
         : ` cacheWrite=${formatTokens(e.usage.cacheWrite)}`;
-      return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}`;
+      return `${p} in=${formatTokens(input)}${cacheRead}${cacheWrite} out=${formatTokens(e.usage.output)} stop=${e.stop}${e.usageComplete === true ? "" : " total-usage=unknown"}`;
     }
     case "message.append": return `${p} role=${e.message.role} blocks=${e.message.content.length}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
@@ -64,22 +81,30 @@ export function renderEvent(e: HarnessEvent): string {
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
     case "sandbox.denied": return `${p} ${e.name}#${e.id} mode=${e.mode} ${JSON.stringify(e.reason)}`;
-    case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
+    case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}${e.toolCallSeq === undefined ? "" : ` claim from tool.call #${e.toolCallSeq}`}`;
+    case "checkpoint.created": return `${p} turn=${e.turn} ref=${e.ref} commit=${e.commit} tree=${e.tree}`;
+    case "checkpoint.warning": return `${p} ${e.message}`;
+    case "checkpoint.sealed": return `${p} turn=${e.turn} tree=${e.tree} ref=${e.ref}`;
+    case "checkpoint.restored": return `${p} session=${e.targetSession} turn=${e.turn} recovery=${e.recovery}`;
     case "permission.request":
-      return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
+      return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}${e.req.operation === undefined ? "" : ` operation=${JSON.stringify(e.req.operation)}`}`;
     case "permission.decision": return `${p} ${e.d}`;
+    case "permission.granted": return `${p} ${e.grant.id} ${e.grant.decision} ${e.grant.operation.tool} ${JSON.stringify(e.grant.resource)} ${e.grant.duration.kind}=${e.grant.duration.id}`;
+    case "permission.revoked": return `${p} ${e.grantId} ${e.reason}`;
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
     case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
-    case "skill.used": return `${p} ${e.name} by=${e.invokedBy}`;
+    case "skill.used": return `${p} ${e.name} by=${e.invokedBy}${e.generated === true ? " generated=true" : ""}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
+    case "context.delegation": return `${p} ${e.action} principal=${JSON.stringify(e.principal)} receipt=${e.delegation}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
+    case "auxiliary.usage": return `${p} ${e.id} ${e.final ? "final" : "provisional"} ${formatAuxiliaryUsage(e.report, { final: e.final })}`;
     case "supervisor.intervention": {
       const detail = interventionDetail(e.intervention);
       return `${p} ${e.intervention.type}${detail === "" ? "" : `: ${detail.replace(/\s+/g, " ").slice(0, 200)}`}`;
@@ -145,6 +170,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "auxiliary.usage": return e.final ? formatAuxiliaryUsage(e.report) : null;
     case "tool.call":
       return `⚒ ${toolSummary(e.name, e.input)}`;
     case "tool.result":
@@ -156,6 +182,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `✗ denied ${e.name}`;
     case "file.changed":
       return `± ${e.op} ${e.path}`;
+    case "checkpoint.warning":
+      return `⚠ ${oneLine(e.message, 200)}`;
     case "plan.updated": {
       const current = e.items.find((i) => i.status === "in_progress") ?? e.items.find((i) => i.status === "pending");
       const done = e.items.filter((i) => i.status === "done").length;
@@ -167,6 +195,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return e.reason === "done" ? null : `⤶ subagent ${e.reason ?? "ended"}`;
     case "steer":
       return `↪ ${e.source}: ${oneLine(e.message)}`;
+    case "context.delegation":
+      return `↪ instruction authority ${e.action}: ${oneLine(e.principal)} (no tool permission)`;
     case "supervisor.signal":
       return `⚠ ${e.signal.type} (${e.signal.confidence}) ${oneLine(e.signal.evidence.join("; "), 80)}`;
     case "supervisor.intervention": {
@@ -191,11 +221,16 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "model.retry":
     case "permission.request":
     case "permission.decision":
+    case "permission.granted":
+    case "permission.revoked":
     case "context.compact":
     case "context.evicted":
     case "context.loaded":
     case "context.manifest":
     case "context.repo_map":
+    case "checkpoint.created":
+    case "checkpoint.sealed":
+    case "checkpoint.restored":
     case "memory.note":
     case "skill.used":
     // The adjacent failed tool.result carries the model-facing sandbox error. R2c will add the

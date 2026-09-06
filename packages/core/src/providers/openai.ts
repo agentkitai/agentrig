@@ -70,6 +70,8 @@ export function toOpenAIRequest(
 
 /** One unified message can fan out: tool_result blocks become individual `tool` role messages. */
 function toOpenAIMessages(m: Message): JsonObject[] {
+  // Trust metadata stays in unified history; this explicit projection does not mutate it or
+  // invent a vendor trust field. Response JSON/prose likewise cannot supply trusted labels.
   const out: JsonObject[] = [];
   if (m.role === "assistant") {
     const text = m.content
@@ -207,7 +209,7 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
     }
     yield { type: "tool_use", id: tc.id || `call_${Math.random().toString(36).slice(2, 10)}`, name: tc.name, input };
   }
-  yield { type: "usage", usage: usage ?? { input: 0, output: 0 } };
+  yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
   const mapped = mapFinishReason(finishReason ?? "stop");
   yield mapped.raw === undefined
     ? { type: "stop", reason: mapped.reason }

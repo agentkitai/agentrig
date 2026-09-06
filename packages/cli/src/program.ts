@@ -1,13 +1,42 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
-import { SessionStore } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, SessionStore } from "@agentkitai/agentrig-core";
+import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
+import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
+
+function parseIngestLimits(text: string) {
+  try { return IngestLimitsSchema.parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid ingest limits: ${String(error)}`); }
+}
+
+function collectCommandPrefix(text: string, previous: string[][]): string[][] {
+  if (Buffer.byteLength(text) > 16_384 || previous.length >= 128) throw new InvalidArgumentError("command prefixes are limited to 128 entries of at most 16 KiB");
+  try { return [...previous, CommandPrefixSchema.parse(JSON.parse(text))]; }
+  catch (error) { throw new InvalidArgumentError(`invalid command argv prefix: ${String(error)}`); }
+}
+
+function parseDreamScanLimits(text: string) {
+  try { return ScanLimitsSchema.partial().parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid dream scan limits: ${String(error)}`); }
+}
+
+function parseDreamLimits(text: string) {
+  try { return DreamLimitsSchema.parse(JSON.parse(text)); }
+  catch (error) { throw new InvalidArgumentError(`invalid dream limits: ${String(error)}`); }
+}
+
+function ingestSpanChars(value: string): string {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 2 || parsed > 2_147_483_647) throw new InvalidArgumentError("ingest span characters must be an integer from 2 to 2147483647");
+  return value;
+}
 import { diagnose, type DoctorCliValues, type DoctorOptions } from "./doctor.js";
 import {
   memoryIngest,
@@ -15,9 +44,12 @@ import {
   memoryLint,
   memoryLs,
   memoryPromote,
+  memoryResetDreamStamp,
+  memoryDiscardDream,
   memorySearch,
   memoryShow,
   type MemoryIngestOptions,
+  type MemoryPromoteOptions,
 } from "./memory.js";
 
 /**
@@ -159,6 +191,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         [],
       )
       .option("--drift-scope <path>", "path the drift detector may change (repeatable)", collect, [])
+      .option("--allow-command <argv-json>", "allow a literal foreground shell argv prefix, e.g. '[\"git\",\"status\"]' (repeatable; not a read-only guarantee)", collectCommandPrefix, [])
       .option(
         "--drift-contract <path>",
         "build or test contract path the drift detector watches (repeatable)",
@@ -171,9 +204,10 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "allow every tool call without asking, including outside the working directory; --deny still applies",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
+      .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
-        "execution boundary: read-only, workspace-write, or none",
+        "execution boundary: read-only, workspace-write, or none; enforcing modes refuse host hooks and MCP startup",
         "none",
       )
       .option("--max-turns <n>", "turn budget", maxTurnsDefault)
@@ -187,6 +221,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
       .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
+      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires --supervise --supervisor-abort --checkpoints and stopped external writers")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8")
       .option(
@@ -203,6 +238,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
       .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
+      .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object; includes scheduler enumeration)", parseDreamScanLimits)
+      .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
       .option("--mcp-config <path>", "JSON file of MCP servers whose tools are added to this session")
       .option("--subagents", "give the agent a `subagent` tool for context-isolated sub-tasks")
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
@@ -212,7 +249,9 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "--skill-discovery",
         "override config and auto-load .agentrig/skills from the trusted project root and home",
       )
-      .option("--no-skill-discovery", "do not auto-load conventional .agentrig/skills directories")
+      .option("--no-skill-discovery", "do not auto-load ordinary or generated skill directories")
+      .option("--generated-skills", "opt in to generated skills from selected project memory and safe home; provenance is not approval")
+      .option("--no-generated-skills", "override config and omit automatic generated-skill roots (explicit --skills directories remain)")
       // Config may enable a boolean; paired negations let one invocation still override it.
       .option("--no-dangerously-skip-permissions", "override config and require permission checks")
       .option("--no-yolo", "override config and require permission checks")
@@ -220,6 +259,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--no-supervisor-abort", "override config and disable supervisor aborts")
       .option("--no-supervisor-review", "override config and disable trajectory review")
       .option("--no-ingest-on-end", "override config and skip session-end memory ingest")
+      .option("--ingest-limits <json>", "bounded ingest limits (JSON object; e.g. maxSpans, maxCalls, timeoutMs)", parseIngestLimits)
+      .option("--ingest-span-chars <n>", "maximum characters per ingest span (default 6000)", ingestSpanChars)
       .option("--no-dream-on-end", "override config and skip scheduled session-end dream")
       .option("--no-dream-structural-only", "override config and allow model-backed dream consolidation")
       .option("--no-subagents", "override config and disable subagents")
@@ -293,6 +334,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   const memoryDir = (cmd: Command): Command =>
     cmd.option("-d, --dir <dir>", "memory directory", ".agentrig");
 
+  memory.command("discard-dream <outputRoot>").description("Preview one owned dream artifact; discard only a released or stopped producer's copy")
+    .option("--owner <uuid>", "exact owner UUID observed in preview")
+    .option("--confirm", "discard this output/sidecar; never reclaim writer locks or source/install backups")
+    .action(async (outputRoot: string, opts: { owner?: string; confirm?: boolean }) => memoryDiscardDream(outputRoot, opts));
+
   memoryDir(memory.command("init").description("Create the .agentrig raw/ + wiki/ layout and SCHEMA.md")).action(
     async (opts: { dir: string }) => memoryInit(opts),
   );
@@ -305,15 +351,28 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search over the wiki"))
     .option("-k, --k <n>", "max results", "8")
     .action(async (query: string[], opts: { dir: string; k?: string }) => memorySearch(query.join(" "), opts));
-  memoryDir(memory.command("promote <path>").description("Promote a wiki page to the backend's shared scope")).action(
-    async (path: string, opts: { dir: string }) => memoryPromote(path, opts),
-  );
-  memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store")).action(
-    async (opts: { dir: string }) => memoryLint(opts),
-  );
+  withProviderOptions(memoryDir(memory.command("promote <path>").description("Preview evidence offline; --confirm also requires a bounded memory-role effect assessment")))
+    .option("--confirm", "request publication after evidence review and model effect assessment; no guard bypass")
+    .option("--guardrail-limits <json>", "promotion effect-assessment lifetime/model limits (JSON object)", parseDreamLimits)
+    .action(async (path: string, opts: MemoryPromoteOptions, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved !== undefined) await memoryPromote(path, { ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
+    });
+  memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store"))
+    .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
+    .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
+    .action(async (opts: { dir: string; profile?: string }, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved !== undefined) await memoryLint(resolved);
+    });
+  memoryDir(memory.command("reset-dream-stamp").description("Reset scheduling metadata into a preserved backup; stop running/scheduled dreams first"))
+    .option("--confirm", "archive the regular .last-dream file and reset scheduling; never removes writer locks")
+    .action(async (opts: { dir: string; confirm?: boolean }) => memoryResetDreamStamp(opts));
   withProviderOptions(
     memoryDir(memory.command("ingest <sessionId>").description("Distill a session log into the wiki")),
-  ).action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) => {
+  ).option("--ingest-limits <json>", "bounded ingest limits (JSON object)", parseIngestLimits)
+    .option("--ingest-span-chars <n>", "maximum characters per ingest span (default 6000)", ingestSpanChars)
+    .action(async (sessionId: string, opts: MemoryIngestOptions, cmd: Command) => {
     // R3.5a: ingest is the memory role; without config it stays exactly the flags it was given
     const resolved = await configured(opts, cmd, false);
     if (resolved !== undefined) await memoryIngest(sessionId, { ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
@@ -331,7 +390,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--scope <scope>", "project | global", "project")
     .option("--global <dir>", "global memory directory; enables promotion proposals")
     .option("--since <n>", "cap on raw sessions scanned")
+    .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
+    .option("--lock-timeout <ms>", "wait for memory mutation locks (default 5000 ms); not a scan deadline")
+    .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
+    .option("--skill-candidates", "report evidence-backed procedures; model refinement/effect checks share --dream-limits (no skill files emitted)")
+    .option("--emit-skills", "preview exact generated SKILL.md files; opt-in only, never activates skills")
+    .option("--apply <review-digest>", "with --emit-skills, confirm the exact preview digest; fresh evidence/effect checks required, never applies wiki changes")
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await dreamCommand({ ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
@@ -356,6 +421,15 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   const sessions = program.command("sessions").description("Inspect session event logs");
+
+  sessions.command("undo <id>")
+    .description("Restore an owned checkpoint; stop external writers first; preserves index/history and retains originals")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .option("--to-turn <n>", "checkpoint turn (default: latest in the latest run)", sequence)
+    .action(async (id: string, opts: {root:string;toTurn?:number}) => {
+      const result = await undoSession(new SessionStore({root:opts.root}),id,opts.toTurn===undefined?{}:{toTurn:opts.toTurn});
+      console.log(result.message);
+    });
 
   withRunOptions(
     sessions

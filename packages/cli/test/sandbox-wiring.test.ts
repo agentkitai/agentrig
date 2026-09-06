@@ -9,8 +9,47 @@ import {
   type ModelEvent,
 } from "@agentkitai/agentrig-core";
 import { buildAgent, buildSandbox } from "../src/agent-builder.ts";
+import { LoreBackend } from "@agentkitai/agentrig-memory";
 
 describe("CLI sandbox wiring", () => {
+  it("routes tolerant recall failures to the caller's diagnostic channel, not raw stderr", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentrig-recall-diagnostic-"));
+    vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1");
+    vi.stubEnv("LORE_API_KEY", "test-key"); vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(LoreBackend.prototype, "recall").mockRejectedValue(new Error("recall offline"));
+    try {
+      const errors: string[] = [];
+      const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "none", repoMap: false,
+        maxTurns: "2", maxTokensPerTurn: "1024" },
+        { onHookError: message => { errors.push(message); } });
+      const search = built.tools.find(tool => tool.name === "memory_search")!;
+      await search.execute({ query: "anything" }, { cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
+      expect(errors.some(message => message.includes("recall offline"))).toBe(true);
+      expect(stderr).not.toHaveBeenCalled();
+    } finally { vi.restoreAllMocks(); vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
+  });
+  it("keeps local search available when sandboxing a configured Lore backend", async () => {
+    if (process.platform === "win32") return; // enforcing modes are explicitly unsupported here
+    const root = await mkdtemp(join(tmpdir(), "agentrig-local-recall-"));
+    vi.stubEnv("LORE_API_URL", "http://127.0.0.1:1");
+    vi.stubEnv("LORE_API_KEY", "test-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    try {
+      const notices: string[] = [];
+      const built = await buildAgent({ root, memory: root, provider: "anthropic", model: "m", sandbox: "workspace-write", repoMap: false,
+        maxTurns: "2", maxTokensPerTurn: "1024" }, { onNotice: notice => notices.push(notice) });
+      expect(notices.some(notice => notice.includes("Lore recall is disabled"))).toBe(true);
+      const search = built.tools.find(t => t.name === "memory_search");
+      expect(search?.sandbox).toBe("compatible");
+      const result = await search!.execute({ query: "anything" }, { cwd: root, sessionId: "fixture", signal: new AbortController().signal, emit() {} });
+      expect(result.display).toContain("no memory matches");
+    } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
+  });
+  it("refuses MCP startup before reading a config or starting a host server", async () => {
+    await expect(buildAgent({ root: "/unused", sandbox: "workspace-write", mcpConfig: "/must-not-read" } as never))
+      .rejects.toThrow("MCP servers start in the host process");
+  });
   it("routes the assembled parent agent through the selected provider, including Windows none", async () => {
     const mode = process.env.AGENTRIG_CI_SANDBOX ?? "none";
     const root = await mkdtemp(join(tmpdir(), "agentrig-sandbox-wire-"));

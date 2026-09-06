@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
-import { REASONING_EFFORTS } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
+import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
@@ -80,14 +81,17 @@ const ConfigValuesSchema = z
     root: z.string().min(1).optional(),
     system: z.string().min(1).optional(),
     allow: stringList.optional(),
+    allowCommand: z.array(CommandPrefixSchema).max(128).optional(),
     deny: stringList.optional(),
     dangerouslySkipPermissions: z.boolean().optional(),
     yolo: z.boolean().optional(),
     sandbox: z.enum(["read-only", "workspace-write", "none"]).optional(),
+    checkpoints: z.boolean().optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),
     supervisorAbort: z.boolean().optional(),
+    supervisorAbortRestores: z.boolean().optional(),
     supervisorSoft: softSetting.optional(),
     supervisorTurnsRemaining: integerSetting.optional(),
     supervisorReview: z.boolean().optional(),
@@ -101,10 +105,14 @@ const ConfigValuesSchema = z
     priceCacheWrite: positiveSetting.optional(),
     maxTokensPerTurn: positiveSetting.optional(),
     ingestOnEnd: z.boolean().optional(),
+    ingestLimits: IngestLimitsSchema.optional(),
+    ingestSpanChars: integerSetting.refine(value => Number(value) >= 2 && Number(value) <= 2_147_483_647, "must be from 2 to 2147483647").optional(),
     dreamOnEnd: z.boolean().optional(),
     dreamEverySessions: positiveSetting.optional(),
     dreamEveryHours: positiveSetting.optional(),
     dreamStructuralOnly: z.boolean().optional(),
+    dreamScanLimits: ScanLimitsSchema.partial().optional(),
+    dreamLimits: DreamLimitsSchema.optional(),
     mcpConfig: z.string().min(1).optional(),
     subagents: z.boolean().optional(),
     subagentMaxTurns: positiveSetting.optional(),
@@ -112,6 +120,8 @@ const ConfigValuesSchema = z
     skills: stringList.optional(),
     /** Auto-load conventional `.agentrig/skills` directories (trusted project + home). Default on. */
     skillDiscovery: z.boolean().optional(),
+    /** Include selected-memory and safe-home generated roots. Default off; no benefit claim. */
+    generatedSkills: z.boolean().optional(),
     shell: z.string().min(1).optional(),
     repoMap: z.boolean().optional(),
   })
@@ -328,11 +338,21 @@ export async function loadRunConfig(
         ...(trust.trusted ? [join(trust.projectRoot, ".agentrig", "skills")] : []),
         ...(boundary.userStateSafe ? [join(home, ".agentrig", "skills")] : []),
       ];
+  // Generated skill discovery is a separate opt-in, not a permission/evidence receipt. Keep
+  // explicit and ordinary roots first so enabling it cannot displace existing manual skills.
+  // An explicitly selected memory directory follows the same cwd-relative rule as --memory;
+  // the default belongs to the trusted project root even when invoked from a nested cwd.
+  const selectedMemory = typeof resolved.memory === "string" && (cli.memory !== undefined || configHas("memory"))
+    ? resolve(cwd, resolved.memory) : join(trust.projectRoot, ".agentrig");
+  const generatedSkills = resolved.generatedSkills !== true || resolved.skillDiscovery === false ? [] : [
+    ...(trust.trusted ? [join(selectedMemory, "skills", "generated")] : []),
+    ...(boundary.userStateSafe ? [join(home, ".agentrig", "skills", "generated")] : []),
+  ];
   return {
     ...resolved,
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
-    skills: [...new Set([...explicitSkills, ...discoveredSkills])],
+    skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),

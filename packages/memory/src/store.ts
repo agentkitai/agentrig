@@ -1,8 +1,14 @@
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { PAGE_DIR, pagePath, parsePage, serializePage } from "./page.js";
+import { platform } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
+import { PAGE_DIR, pagePath, parsePage, reservationPlaceholder, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
+import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
+import { readBoundedFile } from "./bounded-file.js";
+import { MaintenanceLimitError } from "./maintenance.js";
+import { ScanBudget, type ScanOptions } from "./scan.js";
 import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types.js";
 
 /**
@@ -16,6 +22,22 @@ import type { IndexEntry, MemoryStore, PageType, Scope, WikiPage } from "./types
 
 export const INDEX_FILE = "index.md";
 export const LOG_FILE = "log.md";
+const LOG_HEADER = "# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\n";
+/** Recover known initialization fragments; keep every non-header line, including custom notes. */
+function recoverLogHeader(text: string): string {
+  if (text.startsWith(LOG_HEADER)) return text;
+  if (LOG_HEADER.startsWith(text)) return LOG_HEADER;
+  let rest = text;
+  if (rest.startsWith("# Log\n")) {
+    rest = rest.slice("# Log\n".length).replace(/^\n/, "");
+    const end = rest.indexOf("\n");
+    const first = end === -1 ? rest : rest.slice(0, end);
+    if (first !== "" && "Append-only chronology of ingests, dreams, and corrections.".startsWith(first)) {
+      rest = end === -1 ? "" : rest.slice(end + 1);
+    }
+  }
+  return LOG_HEADER + rest;
+}
 export const OVERVIEW_FILE = "overview.md";
 const INDEX_HEADER = `# Index
 
@@ -28,7 +50,12 @@ export interface FileMemoryStoreOptions {
   root: string;
   scope?: Scope;
   now?: () => number;
+  lockTimeoutMs?: number;
 }
+
+export type PageWrite = Omit<WikiPage, "updatedAt" | "version">;
+export type MemoryWriteResult = ({ ok: true; version: string } | { ok: false; current: WikiPage | null }) & { warnings: string[] };
+const versionOf = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex").slice(0, 32);
 
 function serializeEntry(e: IndexEntry): string {
   const claimed = e.claimedBy === undefined || e.claimedBy.length === 0 ? "" : ` (claimed: ${e.claimedBy.join(", ")})`;
@@ -47,7 +74,8 @@ function parseEntry(line: string): IndexEntry | null {
   const claimMatch = /\(claimed:\s*([^)]*)\)/.exec(statusCell);
   const entry: IndexEntry = {
     slug,
-    path,
+    // Older Windows dreams persisted native separators; normalize the identifier on read.
+    path: path.includes("/") ? path : path.replace(/\\/g, "/"),
     type: type as PageType,
     status: statusCell.startsWith("planned") ? "planned" : "active",
     summary: rest.join("|").replace(/\\\|/g, "|"),
@@ -62,13 +90,13 @@ export class FileMemoryStore implements MemoryStore {
   readonly root: string;
   readonly scope: Scope;
   private readonly now: () => number;
-  /** In-process serialization of index read-modify-write. */
-  private indexChain: Promise<unknown> = Promise.resolve();
+  private readonly lockTimeoutMs: number;
 
   constructor(opts: FileMemoryStoreOptions) {
     this.root = opts.root;
     this.scope = opts.scope ?? "project";
     this.now = opts.now ?? (() => Date.now());
+    this.lockTimeoutMs = opts.lockTimeoutMs ?? 5000;
   }
 
   /**
@@ -77,37 +105,8 @@ export class FileMemoryStore implements MemoryStore {
    * retrieval forever. Mutations run one at a time in this process and hold an O_EXCL lock
    * file across processes.
    */
-  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
-    const run = async (): Promise<T> => {
-      await mkdir(this.root, { recursive: true });
-      const lockPath = join(resolve(this.root), "index.md.lock");
-      const deadline = this.now() + 5000;
-      for (;;) {
-        try {
-          const handle = await open(lockPath, "wx");
-          await handle.close();
-          break;
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-          // a crashed holder must not wedge the wiki forever
-          const age = await stat(lockPath).then((st) => Date.now() - st.mtimeMs, () => 0);
-          if (age > 10_000) {
-            await rm(lockPath, { force: true }).catch(() => {});
-            continue;
-          }
-          if (this.now() > deadline) throw new Error(`timed out waiting for ${lockPath}`);
-          await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
-        }
-      }
-      try {
-        return await fn();
-      } finally {
-        await rm(lockPath, { force: true }).catch(() => {});
-      }
-    };
-    const next = this.indexChain.then(run, run);
-    this.indexChain = next.catch(() => {});
-    return next;
+  private async withMutationLock<T>(fn: () => Promise<T>, opts: MemoryLockOptions = {}): Promise<T> {
+    return withMemoryLock(this.root, fn, { timeoutMs: this.lockTimeoutMs, ...opts });
   }
 
   /**
@@ -132,10 +131,12 @@ export class FileMemoryStore implements MemoryStore {
 
   /** Create the wiki skeleton if absent. Idempotent; never overwrites existing content. */
   async init(): Promise<void> {
+    // mkdir/ensure(O_EXCL) never replace existing content. In particular, a stale write lock
+    // must not prevent read-only CLI commands from opening and inspecting an existing wiki.
     await mkdir(this.root, { recursive: true });
     for (const dir of Object.values(PAGE_DIR)) await mkdir(this.abs(dir), { recursive: true });
     await this.ensure(INDEX_FILE, `${INDEX_HEADER}\n`);
-    await this.ensure(LOG_FILE, "# Log\n\nAppend-only chronology of ingests, dreams, and corrections.\n");
+    await this.ensure(LOG_FILE, LOG_HEADER);
     await this.ensure(
       OVERVIEW_FILE,
       serializePage(
@@ -158,10 +159,11 @@ export class FileMemoryStore implements MemoryStore {
     }
   }
 
-  async index(): Promise<IndexEntry[]> {
+  async index(opts: MemoryLockOptions = {}): Promise<IndexEntry[]> {
     let text: string;
     try {
-      text = await readFile(this.abs(INDEX_FILE), "utf8");
+      text = opts.maxFileBytes === undefined ? await readFile(this.abs(INDEX_FILE), "utf8")
+        : (await readBoundedFile(this.abs(INDEX_FILE), opts.maxFileBytes, opts.signal)).toString("utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
@@ -169,41 +171,87 @@ export class FileMemoryStore implements MemoryStore {
     return text.split("\n").map(parseEntry).filter((e): e is IndexEntry => e !== null);
   }
 
-  async writeIndex(entries: IndexEntry[]): Promise<void> {
+  async writeIndex(entries: IndexEntry[], opts: MemoryLockOptions = {}): Promise<void> {
+    return this.withMutationLock(() => this.writeIndexUnlocked(entries, opts.signal, opts.maxFileBytes), opts);
+  }
+
+  private async writeIndexUnlocked(entries: IndexEntry[], signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
     const sorted = [...entries].sort((a, b) =>
       a.type === b.type ? a.slug.localeCompare(b.slug) : a.type.localeCompare(b.type),
     );
-    await this.atomicWrite(INDEX_FILE, `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`);
+    const contents = `${INDEX_HEADER}\n${sorted.map(serializeEntry).join("\n")}\n`;
+    if (maxFileBytes !== undefined && Buffer.byteLength(contents) > maxFileBytes) throw new MaintenanceLimitError("maintenance index output limit exceeded");
+    await this.atomicWrite(INDEX_FILE, contents, signal);
   }
 
-  /** Insert or replace one index row, preserving everything else. Serialized; see withIndexLock. */
-  async upsertIndex(entry: IndexEntry): Promise<void> {
-    await this.withIndexLock(async () => {
-      const entries = await this.index();
-      const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
-      if (i === -1) entries.push(entry);
-      else entries[i] = entry;
-      await this.writeIndex(entries);
-    });
+  /** Insert or replace one index row, preserving everything else. */
+  async upsertIndex(entry: IndexEntry, opts: MemoryLockOptions = {}): Promise<void> {
+    await this.withMutationLock(() => this.upsertIndexUnlocked(entry, opts.signal, opts.maxFileBytes), opts);
   }
 
-  async read(path: string): Promise<WikiPage | null> {
+  private async upsertIndexUnlocked(entry: IndexEntry, signal?: AbortSignal, maxFileBytes?: number): Promise<void> {
+    const entries = await this.index({ ...(signal === undefined ? {} : { signal }), ...(maxFileBytes === undefined ? {} : { maxFileBytes }) });
+    const i = entries.findIndex((e) => e.slug === entry.slug && e.type === entry.type);
+    if (i === -1) entries.push(entry);
+    else entries[i] = entry;
+    await this.writeIndexUnlocked(entries, signal, maxFileBytes);
+  }
+
+  async read(path: string, opts: MemoryLockOptions & { scanBudget?: ScanBudget } = {}): Promise<WikiPage | null> {
     const full = this.abs(path);
-    let text: string;
+    let bytes: Buffer;
     let mtime: number;
     try {
-      text = await readFile(full, "utf8");
+      bytes = opts.scanBudget !== undefined ? await opts.scanBudget.read(full)
+        : opts.maxFileBytes === undefined ? await readFile(full) : await readBoundedFile(full, opts.maxFileBytes, opts.signal);
       mtime = (await stat(full)).mtimeMs;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    const { frontmatter, body } = parsePage(text, path);
-    return { path, frontmatter, body, updatedAt: mtime };
+    const { frontmatter, body, extraFrontmatter } = parsePage(bytes.toString("utf8"), path);
+    return { path, frontmatter, body, extraFrontmatter, updatedAt: mtime, version: versionOf(bytes) };
   }
 
-  async write(path: string, page: Omit<WikiPage, "updatedAt">): Promise<void> {
-    await this.atomicWrite(path, serializePage(page.frontmatter, page.body));
+  /** Trusted unconditional replacement. Use compareAndSwap/update for read-modify-write. */
+  async write(path: string, page: PageWrite, opts: MemoryLockOptions = {}): Promise<void> {
+    await this.withMutationLock(() => this.atomicWrite(path, serializePage(page.frontmatter, page.body, {}, page.extraFrontmatter), opts.signal), opts);
+  }
+
+  async compareAndSwap(path: string, page: PageWrite | ((current: WikiPage | null) => PageWrite), ifVersion: string | null, opts: MemoryLockOptions & { index?: IndexEntry } = {}): Promise<MemoryWriteResult> {
+    const warnings: string[] = [];
+    return this.withMutationLock(async () => {
+      const current = await this.read(path, opts);
+      if ((current?.version ?? null) !== ifVersion) return { ok: false, current, warnings };
+      const next = typeof page === "function" ? page(current) : page;
+      const text = serializePage(next.frontmatter, next.body, {}, next.extraFrontmatter ?? current?.extraFrontmatter);
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(text) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance page output limit exceeded");
+      await this.atomicWrite(path, text, opts.signal);
+      // Once the page commits, finish its index bookkeeping even if cancellation arrives.
+      // A filesystem failure is explicit partial success, not a claim that the page was unwritten.
+      if (opts.index !== undefined) {
+        try { await this.upsertIndexUnlocked(opts.index); }
+        catch (error) { warnings.push(`page committed at ${path}; index update failed: ${String(error)}`); }
+      }
+      return { ok: true, version: versionOf(text), warnings };
+    }, { ...opts, onReleaseError: error => {
+      warnings.push(error.message);
+      if (opts.onReleaseError !== undefined) opts.onReleaseError(error);
+      else process.emitWarning(error.message, { code: "AGENTRIG_MEMORY_LOCK_RELEASE" });
+    } });
+  }
+
+  /** Synchronous transform under the short mutation lock; never call providers here. */
+  async update(path: string, transform: (current: WikiPage | null) => PageWrite, opts: MemoryLockOptions = {}): Promise<WikiPage> {
+    return this.withMutationLock(async () => {
+      const current = await this.read(path, opts);
+      const next = transform(current);
+      const contents = serializePage(next.frontmatter, next.body, {}, next.extraFrontmatter ?? current?.extraFrontmatter);
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance page output limit exceeded");
+      await this.atomicWrite(path, contents, opts.signal);
+      // Reading the committed receipt is allowed after cancellation; do not claim no commit.
+      return (await this.read(path, { ...(opts.maxFileBytes === undefined ? {} : { maxFileBytes: opts.maxFileBytes }) }))!;
+    }, opts);
   }
 
   /**
@@ -211,14 +259,20 @@ export class FileMemoryStore implements MemoryStore {
    * first and this one should update that page rather than fork a near-duplicate slug.
    * The LLM call that fills the page happens outside this — the lock is only the placeholder.
    */
-  async reserve(slug: string, claimant: string, type: PageType = "entity"): Promise<"created" | "exists"> {
+  async reserve(slug: string, claimant: string, type: PageType = "entity", opts: MemoryLockOptions = {}): Promise<"created" | "exists"> {
+    return this.withMutationLock(() => this.reserveUnlocked(slug, claimant, type, opts), opts);
+  }
+
+  private async reserveUnlocked(slug: string, claimant: string, type: PageType, opts: MemoryLockOptions): Promise<"created" | "exists"> {
     const rel = pagePath(type, slug);
     const full = this.abs(rel);
     await mkdir(dirname(full), { recursive: true });
     const placeholder = serializePage(
       { type, slug, aliases: [], sources: [], updated: this.today(), confidence: "low" },
-      `- [inferred] Reserved by ${claimant}; content pending ingest.`,
+      reservationPlaceholder(claimant),
     );
+    if (opts.maxFileBytes !== undefined && Buffer.byteLength(placeholder) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance reservation output limit exceeded");
+    opts.signal?.throwIfAborted();
     try {
       const handle = await open(full, "wx");
       try {
@@ -228,60 +282,93 @@ export class FileMemoryStore implements MemoryStore {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-        await this.withIndexLock(async () => {
-          const entries = await this.index();
-          const i = entries.findIndex((e) => e.slug === slug && e.type === type);
-          if (i === -1) {
-            // page on disk with no catalog row (a crash between create and upsert, or a lost
-            // row): re-adopt it rather than leaving it invisible to index-first retrieval
-            entries.push({ slug, path: rel, type, status: "planned", summary: `(reserved by ${claimant})`, claimedBy: [claimant] });
-          } else {
-            entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
-          }
-          await this.writeIndex(entries);
-        });
+        opts.signal?.throwIfAborted();
+        const entries = await this.index(opts);
+        const i = entries.findIndex((e) => e.slug === slug && e.type === type);
+        if (i === -1) {
+          // Re-adopt pages whose catalog row was lost in an earlier interrupted operation.
+          entries.push({ slug, path: rel, type, status: "planned", summary: `(reserved by ${claimant})`, claimedBy: [claimant] });
+        } else {
+          entries[i] = { ...entries[i]!, claimedBy: [...new Set([...(entries[i]!.claimedBy ?? []), claimant])] };
+        }
+        await this.writeIndexUnlocked(entries, opts.signal, opts.maxFileBytes);
         return "exists";
       }
       throw err;
     }
-    await this.upsertIndex({
+    await this.upsertIndexUnlocked({
       slug,
       path: rel,
       type,
       status: "planned",
       summary: `(reserved by ${claimant})`,
       claimedBy: [claimant],
-    });
+    }, undefined, opts.maxFileBytes);
     return "created";
   }
 
-  async appendLog(entry: string): Promise<void> {
+  /** Checks a byte allowance including its final newline. Not a durable reservation: callers
+   * must own an isolated copy or tolerate intervening appenders; appendLog checks again. */
+  async checkLogCapacity(entryBytes: number, opts: MemoryLockOptions & { maxFileBytes: number }): Promise<void> {
+    if (!Number.isSafeInteger(entryBytes) || entryBytes < 1) throw new Error("invalid log entry byte allowance");
+    await this.withMutationLock(async () => {
+      const prefix = await this.logPrefix(opts);
+      if (Buffer.byteLength(prefix) + entryBytes > opts.maxFileBytes) {
+        throw new MaintenanceLimitError("dream log capacity preflight failed; raise the configured scan maxFileBytes deliberately; log history was preserved");
+      }
+    }, opts);
+  }
+
+  private async logPrefix(opts: MemoryLockOptions): Promise<string> {
+    const existing = await (opts.maxFileBytes === undefined ? readFile(this.abs(LOG_FILE), "utf8")
+      : readBoundedFile(this.abs(LOG_FILE), opts.maxFileBytes, opts.signal).then(bytes => bytes.toString("utf8"))).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return LOG_HEADER;
+      throw err;
+    });
+    const repaired = recoverLogHeader(existing);
+    return repaired + (repaired.endsWith("\n") ? "" : "\n");
+  }
+
+  async appendLog(entry: string, opts: MemoryLockOptions = {}): Promise<void> {
     // read-modify-atomicWrite rather than appendFile: appendFile follows a symlink, which let a
     // dream's log line write through a symlinked log.md into the wiki it was supposed to be
     // copying. Every other writer here already goes through atomicWrite.
-    const line = entry.endsWith("\n") ? entry : `${entry}\n`;
-    const existing = await readFile(this.abs(LOG_FILE), "utf8").catch(() => "");
-    await this.atomicWrite(LOG_FILE, existing + line);
+    await this.withMutationLock(async () => {
+      const line = entry.endsWith("\n") ? entry : `${entry}\n`;
+      const contents = await this.logPrefix(opts) + line;
+      if (opts.maxFileBytes !== undefined && Buffer.byteLength(contents) > opts.maxFileBytes) throw new MaintenanceLimitError("maintenance log output limit exceeded");
+      await this.atomicWrite(LOG_FILE, contents, opts.signal);
+    }, opts);
   }
 
   /** Every page on disk, for search and lint. */
-  async pages(): Promise<WikiPage[]> {
+  async pages(opts?: ScanOptions): Promise<WikiPage[]> {
+    const budget = opts === undefined ? undefined : new ScanBudget(opts);
+    const read = async (path: string) => {
+      if (budget === undefined) return this.read(path).catch(() => null);
+      budget.check();
+      return this.read(path, { scanBudget: budget });
+    };
     const out: WikiPage[] = [];
     for (const dir of Object.values(PAGE_DIR)) {
       let names: string[];
       try {
-        names = await readdir(this.abs(dir));
-      } catch {
+        names = budget === undefined ? await readdir(this.abs(dir)) : await budget.names(this.abs(dir));
+      } catch (error) {
+        if (budget !== undefined && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         continue;
       }
       for (const name of names) {
         if (!name.endsWith(".md")) continue;
-        const page = await this.read(join(dir, name)).catch(() => null);
+        // Wiki identifiers use forward slashes on every host, like pagePath() and index rows.
+        // Native Windows separators would make model consolidation targets miss these pages.
+        const page = await read(`${dir}/${name}`);
         if (page !== null) out.push(page);
       }
     }
-    const overview = await this.read(OVERVIEW_FILE).catch(() => null);
+    const overview = await read(OVERVIEW_FILE);
     if (overview !== null) out.push(overview);
+    budget?.check();
     return out;
   }
 
@@ -289,13 +376,31 @@ export class FileMemoryStore implements MemoryStore {
     return bm25Search(await this.pages(), query, k);
   }
 
-  private async atomicWrite(rel: string, contents: string): Promise<void> {
+  private async atomicWrite(rel: string, contents: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const full = this.abs(rel);
     await mkdir(dirname(full), { recursive: true });
     const tmp = `${full}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       await writeFile(tmp, contents, "utf8");
-      await rename(tmp, full);
+      let retryDeadline: number | undefined;
+      let lastError: unknown;
+      for (;;) {
+        signal?.throwIfAborted();
+        // Retry only Windows access/busy failures, under the existing writer lock. Never
+        // remove the destination or rewrite the temporary file to make replacement succeed.
+        if (retryDeadline !== undefined && performance.now() >= retryDeadline) throw lastError;
+        try { await rename(tmp, full); break; }
+        catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (platform() !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(code ?? "")) throw error;
+          retryDeadline ??= performance.now() + 250;
+          lastError = error;
+          const remaining = retryDeadline - performance.now();
+          if (remaining <= 0) throw error;
+          await delay(Math.min(20, remaining), undefined, signal === undefined ? {} : { signal });
+        }
+      }
     } catch (err) {
       await rm(tmp, { force: true }).catch(() => {});
       throw err;

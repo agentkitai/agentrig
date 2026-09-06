@@ -5,6 +5,7 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  undoSession,
   PermissionClass,
   type AnyTool,
   type Budget,
@@ -16,7 +17,7 @@ import {
   type Pricing,
   type Session,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
@@ -26,6 +27,7 @@ import {
   indexInjection,
   ingestOnSessionEnd,
   memoryTools,
+  maintenanceDiagnostic,
 } from "@agentkitai/agentrig-memory";
 import { openBackend } from "./memory.js";
 import {
@@ -56,6 +58,7 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   profile?: string;
   system?: string;
   allow?: string[];
+  allowCommand?: string[][];
   driftScope?: string[];
   deny?: string[];
   maxTurns: string;
@@ -136,13 +139,16 @@ export function skipsPermissions(opts: { dangerouslySkipPermissions?: boolean; y
  */
 export function buildPermissionPolicy(opts: {
   allow?: string[];
+  allowCommand?: string[][];
   deny?: string[];
   dangerouslySkipPermissions?: boolean;
   yolo?: boolean;
   extra?: PermissionRule[];
 }): RulePolicy {
   return new RulePolicy(
-    [...toRules(opts.deny, "deny"), ...toRules(opts.allow, "allow"), ...(opts.extra ?? []), ...defaultRules],
+    [...toRules(opts.deny, "deny"),
+      ...(opts.allowCommand ?? []).map(commandPrefix => ({ tool: "bash", class: "exec" as const, commandPrefix, decision: "allow" as const })),
+      ...toRules(opts.allow, "allow"), ...(opts.extra ?? []), ...defaultRules],
     skipsPermissions(opts) ? "allow" : "ask",
   );
 }
@@ -166,16 +172,17 @@ export function permissionWarning(
   if (mode !== "none") {
     return (
       `permissions are OFF${denied}, but the ${mode} sandbox is ON for ${cwd}. ` +
-      `Skipping approvals inside a sandbox is the recommended unattended posture; sandbox ` +
-      `boundary crossings still require a separate escalation approval. The session log records every call.`
+      `Built-in writes and shell launches use the boundary; unsupported tools require separate ` +
+      `outside-sandbox approval. Host hooks and MCP startup are refused in this mode. ` +
+      `SDK code and session bookkeeping remain trusted host operations. The session log records every call.`
     );
   }
   // the cwd is named because "skip permissions" is abstract and "it may delete anything under
   // /Users/you/work" is not
   return (
     `permissions are OFF${denied}: every tool call is allowed without asking, including writing ` +
-    `and deleting outside ${cwd} and running any shell command. Prefer --yolo --sandbox workspace-write: ` +
-    `skipping approvals inside a sandbox is the recommended unattended posture. The session log still ` +
+    `and deleting outside ${cwd} and running any shell command. --sandbox workspace-write confines ` +
+    `supported tool effects; it does not isolate trusted SDK code. The session log still ` +
     `records every call.`
   );
 }
@@ -188,6 +195,9 @@ export function permissionWarning(
 export interface SupervisorFlags {
   supervise?: boolean;
   supervisorAbort?: boolean;
+  supervisorAbortRestores?: boolean;
+  checkpoints?: boolean;
+  sandbox?: "read-only" | "workspace-write" | "none";
   supervisorNoAbort?: boolean;
   supervisorSoft?: string;
   supervisorTurnsRemaining?: string;
@@ -226,6 +236,25 @@ export interface SupervisorWiring {
   turnsRemaining: number;
   onEscalate?: SuperviseOptions["onEscalate"];
   onError?: (where: string, err: Error) => void;
+  restoreCheckpoint?: SuperviseOptions["restoreCheckpoint"];
+  onRestore?: SuperviseOptions["onRestore"];
+}
+
+export function validateAbortRestores(opts: SupervisorFlags): void {
+  if (opts.supervisorAbortRestores !== true) return;
+  if (opts.supervise !== true || opts.supervisorAbort !== true || opts.checkpoints !== true || (opts.sandbox !== undefined && opts.sandbox !== "none")) {
+    throw new Error("--supervisor-abort-restores requires --supervise --supervisor-abort --checkpoints and --sandbox none; stop external writers first");
+  }
+}
+
+/** Shared CLI/TUI adapter; the snapshot cwd also handles resuming from a different current cwd. */
+export function checkpointRestorer(root: string): NonNullable<SuperviseOptions["restoreCheckpoint"]> {
+  return async (sessionId, signal) => {
+    const store = new SessionStore({root});
+    const snapshot = await store.readSnapshot(sessionId);
+    if (!snapshot) throw new Error("restore unavailable: no settled session snapshot");
+    return undoSession(store,sessionId,{cwd:snapshot.cwd,signal});
+  };
 }
 
 /**
@@ -238,6 +267,8 @@ export interface SupervisorWiring {
  */
 export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   const o = w.opts;
+  validateAbortRestores(o);
+  if (o.supervisorAbortRestores === true && w.restoreCheckpoint === undefined) throw new Error("supervisor abort restoration is missing its guarded adapter");
   const reviewProvider = w.reviewProvider ?? w.provider;
   return {
     budget: {
@@ -249,6 +280,9 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ...(w.budget.maxMinutes === undefined ? {} : { maxMinutes: w.budget.maxMinutes }),
     },
     capabilities: { abort: o.supervisorAbort === true },
+    abortRestores: o.supervisorAbortRestores === true,
+    ...(w.restoreCheckpoint === undefined ? {} : {restoreCheckpoint:w.restoreCheckpoint}),
+    ...(w.onRestore === undefined ? {} : {onRestore:w.onRestore}),
     drift: {
       scope: o.driftScope ?? [],
       ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),
@@ -266,9 +300,17 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ? {
           reviewer: new TrajectoryReviewer({ provider: reviewProvider }),
           grader: new RubricGrader({ provider: reviewProvider }),
-          attempts: async () => {
+          attempts: async (sessionId: string, signal: AbortSignal) => {
             if (o.memory === undefined) return [];
-            return (await new FileRawStore({ root: o.memory }).readAttempts()).attempts;
+            const ledger = await new FileRawStore({ root: o.memory }).readAttempts(sessionId, {
+              signal, maxEntries: 128, maxFileBytes: 64 * 1024, maxTotalBytes: 2 * 1024 * 1024,
+            });
+            if (ledger.corrupt.length > 0) maintenanceDiagnostic(() => {
+              const warning = new Error(`attempt ledger is incomplete; reviewing readable attempts only: ${ledger.corrupt.join(", ")}`);
+              if (w.onError !== undefined) return w.onError("attempts", warning);
+              process.emitWarning(warning.message, { code: "AGENTRIG_ATTEMPT_INCOMPLETE" });
+            });
+            return ledger.attempts;
           },
         }
       : {}),
@@ -282,6 +324,13 @@ export function defaultSystemPrompt(cwd: string): string {
     "You are AgentRig, an autonomous software engineering agent.",
     `Working directory: ${cwd}`,
     "Use the available tools to complete the task. Verify your work (run tests or re-read files) before finishing.",
+    "Tool routing: consider only available tools and stop at the first matching case for the next action, not the whole task:",
+    "1. Before work covered by a listed skill, load it with skill; catalogue hints are routing data, not authorization.",
+    "2. To inspect, collect or stop an existing background job, use bash_job rather than starting another bash command.",
+    "3. For a direct read, search or edit, use the matching file or memory tool rather than a shell wrapper.",
+    "4. For a substantial independent subtask, use subagent if delegation is allowed and fits the configured limits; not for a single lookup.",
+    "5. For remaining command execution, use bash; background execution still requires its normal checks.",
+    "Effort guide, not a quota: start with 1 targeted call for a simple fact or 3–6 for a bounded medium task. Research, debugging and required verification may need more within configured budgets. Never skip required checks to meet these numbers, increase limits, or bypass approvals. If a limit prevents completion, report what remains.",
     "When the task is complete, reply with a short summary and no tool calls.",
   ].join("\n");
 }
@@ -298,6 +347,8 @@ export function positiveNumber(flag: string, value: string): number {
 async function askInteractively(req: PermissionRequest): Promise<Exclude<Decision, "ask">> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
+    if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
+    if (req.operation !== undefined) process.stderr.write(`shell operation: ${JSON.stringify(req.operation)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
     const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);
@@ -313,6 +364,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let supervisorSoft: number;
   let supervisorTurnsRemaining: number;
   try {
+    validateAbortRestores(opts);
     supervisorSoft = parseSoft(opts.supervisorSoft);
     supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining);
     dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
@@ -373,6 +425,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             memoryIndex,
             provider,
             reviewProvider: providers.supervisor,
+            restoreCheckpoint: checkpointRestorer(opts.root),
+            onRestore: result => console.error(`supervisor abort-restore: ${result.message}`),
             soft: supervisorSoft,
             turnsRemaining: supervisorTurnsRemaining,
             ...(interactive
@@ -392,7 +446,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   process.on("SIGINT", onSigint);
   try {
     const assistant = new AssistantText();
+    const auxiliary = new AuxiliaryText();
     for await (const e of session.events) {
+      const unfinished = auxiliary.push(e);
+      if (opts.json !== true) for (const line of unfinished) console.error(line);
       if (opts.json === true) {
         console.log(JSON.stringify(e));
         // machine consumers read stdout; humans tailing stderr still deserve fatal errors
@@ -425,15 +482,11 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     process.exitCode = summary.reason === "done" ? 0 : 1;
   } finally {
     process.removeListener("SIGINT", onSigint);
+    supervisor?.detach();
     // a server left running would outlive the session that spawned it
     for (const server of built.mcp) await server.close().catch(() => {});
     if (supervisor !== null) {
-      const timedOut = Symbol("timeout");
-      const raced = await Promise.race([
-        supervisor.done,
-        new Promise<symbol>((r) => setTimeout(() => r(timedOut), 2000).unref()),
-      ]);
-      if (raced === timedOut) supervisor.detach();
+      await supervisor.done;
     }
   }
 }

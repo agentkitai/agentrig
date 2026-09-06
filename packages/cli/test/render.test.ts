@@ -1,6 +1,61 @@
 import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+
+it("makes instruction delegation and revocation visible without implying tool permission", () => {
+  for (const action of ["delegated", "revoked"]) {
+    const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,
+      type: "context.delegation", principal: "hook:notes", action, delegation: "receipt" });
+    expect(renderEvent(event)).toContain(action);
+    expect(renderEvent(event)).toContain("hook:notes");
+    expect(renderEvent(event)).toContain("receipt");
+    expect(renderChatEvent(event)).toContain(`instruction authority ${action}: hook:notes`);
+    expect(renderChatEvent(event)).toContain("no tool permission");
+  }
+});
+
+it("renders validated grant/revocation records without replaying authority", () => {
+  const grant = { id: "g", subject: "group", operation: { tool: "bash" }, resource: "*", constraints: {}, duration: { kind: "session", id: "s" }, delegable: true, decision: "allow", createdAt: 1 };
+  const granted = HarnessEvent.parse({ type: "permission.granted", grant, seq: 1, sessionId: "s", ts: 1 });
+  expect(renderEvent(granted)).toContain('g allow bash "*" session=s'); expect(renderChatEvent(granted)).toBeNull();
+  const revoked = HarnessEvent.parse({ type: "permission.revoked", grantId: "g", subject: "group", reason: "explicit-reset", seq: 2, sessionId: "s", ts: 2 });
+  expect(renderEvent(revoked)).toContain("g explicit-reset"); expect(renderChatEvent(revoked)).toBeNull();
+});
+
+it("shows file-change call attribution as a claim, never proof of a write", () => {
+  const legacy = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, type: "file.changed", path: "a", op: "edit", contentHash: "h" });
+  expect(renderEvent(legacy)).not.toContain("claim from");
+  expect(renderEvent(HarnessEvent.parse({ ...legacy, toolCallSeq: 2 }))).toContain("claim from tool.call #2");
+});
+
+it("labels legacy and incomplete main usage as unknown, not a known zero", () => {
+  const event = HarnessEvent.parse({ type: "model.response", seq: 1, ts: 1, sessionId: "s", usage: { input: 0, output: 0 }, stop: "end_turn" });
+  expect(renderEvent(event)).toContain("total-usage=unknown");
+  expect(renderEvent({ ...event, usageComplete: false })).toContain("total-usage=unknown");
+  expect(renderEvent({ ...event, usageComplete: true })).not.toContain("total-usage=unknown");
+});
+
+it("labels auxiliary reported and unknown usage without presenting it as main usage or free", () => {
+  const event = HarnessEvent.parse({ type: "auxiliary.usage", id: "review-1", final: true, seq: 2, ts: 1, sessionId: "s",
+    report: { operation: "reviewer", outcome: "aborted", durationMs: 2, calls: [
+      { operation: "completion", provider: "fixture", outcome: "aborted", durationMs: 2, usageComplete: false },
+    ], reportedUsage: { input: 7, output: 2 }, unknownUsageCalls: 1, costUsd: null } });
+  expect(renderEvent(event)).toContain("final auxiliary reviewer");
+  expect(renderChatEvent(event)).toContain("7 input / 2 output");
+  expect(renderChatEvent(event)).toContain("1 call(s) with unknown total usage; cost unknown");
+  expect(renderChatEvent({ ...event, final: false })).toBeNull();
+  expect(renderEvent({ ...event, final: false })).toContain("provisional");
+  const view = new AuxiliaryText();
+  view.push({ ...event, final: false });
+  view.push({ ...event, final: false, report: { ...event.report, reportedUsage: { input: 9, output: 3 } } });
+  const end = HarnessEvent.parse({ type: "session.end", reason: "done", seq: 3, ts: 2, sessionId: "s" });
+  const unfinished = view.push(end);
+  expect(unfinished).toHaveLength(1);
+  expect(unfinished[0]).toContain("9 input / 3 output");
+  expect(unfinished[0]).toContain("unfinished; final outcome and total usage unknown");
+  view.push({ ...event, final: false }); view.push(event);
+  expect(view.push(end)).toEqual([]);
+});
 
 describe("formatUsage", () => {
   it("shows total input and its cached subset in compact user-facing form", () => {
@@ -19,6 +74,38 @@ describe("formatUsage", () => {
 });
 
 describe("renderEvent", () => {
+  it("renders ownership seals and separate undo audit events",()=>{
+    const seal=HarnessEvent.parse({seq:1,ts:1,sessionId:"s",type:"checkpoint.sealed",turn:1,ref:"refs/agentrig/s/sealed/1",commit:"a".repeat(40),tree:"b".repeat(40),head:"c".repeat(40),indexHash:"d".repeat(64),repo:"/repo",excludes:["/repo/logs"]});
+    expect(renderEvent(seal)).toContain("refs/agentrig/s/sealed/1"); expect(renderChatEvent(seal)).toBeNull();
+    const restored=HarnessEvent.parse({seq:0,ts:1,sessionId:"audit",type:"checkpoint.restored",targetSession:"s",turn:1,ref:"refs/agentrig/s/1",tree:"b".repeat(40),recovery:"/repo/.git/recovery"});
+    expect(renderEvent(restored)).toContain("session=s turn=1 recovery=/repo/.git/recovery");
+    expect(()=>HarnessEvent.parse({...seal,indexHash:"invalid"})).toThrow();
+  });
+  it("renders checkpoint refs and warnings", () => {
+    const created = HarnessEvent.parse({
+      seq: 1,
+      sessionId: "s",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.created",
+      turn: 2,
+      ref: "refs/agentrig/s/2",
+      commit: "a".repeat(40),
+      tree: "b".repeat(40),
+    });
+    expect(renderEvent(created)).toContain(`turn=2 ref=refs/agentrig/s/2 commit=${"a".repeat(40)} tree=${"b".repeat(40)}`);
+    expect(renderChatEvent(created)).toBeNull();
+
+    const warning = HarnessEvent.parse({
+      seq: 2,
+      sessionId: "s",
+      ts: 1_700_000_000_000,
+      type: "checkpoint.warning",
+      message: "checkpointing disabled",
+    });
+    expect(renderEvent(warning)).toContain("checkpointing disabled");
+    expect(renderChatEvent(warning)).toContain("checkpointing disabled");
+  });
+
   it("preserves labelled fields while adding cached usage to model.response traces", () => {
     const line = renderEvent(HarnessEvent.parse({
       seq: 1,

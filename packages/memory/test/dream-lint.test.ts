@@ -200,17 +200,16 @@ describe("promotion is structurally gated (PLAN §3.4, §7)", () => {
       page("concepts/a.md", "- [stated] alpha (session:s1)\n", { sources: ["session:s1"] }),
     ]);
     expect(promote).toEqual([]);
-    expect(rejected[0]!.reason).toContain("derived from 1 session(s)");
+    expect(rejected[0]!.reason).toContain("not every claim");
   });
 
-  it("promotes a page corroborated by two independent sessions", () => {
+  it("does not treat two page-written citations as runtime corroboration", () => {
     const { promote } = selectForPromotion([
       page("concepts/a.md", "- [stated] alpha (session:s1)\n- [stated] again (session:s2)\n", {
         sources: ["session:s1", "session:s2"],
       }),
     ]);
-    expect(promote).toHaveLength(1);
-    expect(promote[0]!.evidence).toEqual(["session:s1", "session:s2"]);
+    expect(promote).toEqual([]);
   });
 
   it("counts distinct sessions, so one session cited five times is still one", () => {
@@ -223,16 +222,17 @@ describe("promotion is structurally gated (PLAN §3.4, §7)", () => {
     expect(rejected[0]!.evidence).toEqual(["session:s1"]);
   });
 
-  it("gathers evidence from fact lines as well as frontmatter", () => {
-    const { promote } = selectForPromotion([
+  it("retains claimed-source discovery without letting frontmatter fill claim support", () => {
+    const { promote, rejected } = selectForPromotion([
       page("concepts/a.md", "- [stated] alpha (session:s2, lore:m0)\n", { sources: ["session:s1"] }),
     ]);
-    expect(promote[0]!.evidence).toEqual(["session:s1", "session:s2"]);
+    expect(promote).toEqual([]);
+    expect(rejected[0]!.evidence).toEqual(["session:s1", "session:s2"]);
   });
 
   it("rejects a page with no provenance at all", () => {
     const { rejected } = selectForPromotion([page("concepts/a.md", "- [stated] alpha\n", { sources: [] })]);
-    expect(rejected[0]!.reason).toBe("no session provenance at all");
+    expect(rejected[0]!.claims![0]!.reason).toContain("0 independent runtime-supported observation(s)");
   });
 
   it("refuses to drop the floor below two, whatever the caller asks", () => {

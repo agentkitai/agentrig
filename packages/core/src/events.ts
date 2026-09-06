@@ -1,6 +1,10 @@
 import { z } from "zod";
-import { MessageSchema } from "./messages.js";
+import { MessageSchema, InstructionContextSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
+import { ShellOperationSchema } from "./shell-operation.js";
+import { PermissionClass, Decision } from "./permission-types.js";
+import { PermissionGrantEventSchema } from "./permission-grants.js";
+export { PermissionClass, Decision } from "./permission-types.js";
 
 /**
  * The event spine. Every session is an append-only log of these events.
@@ -11,12 +15,6 @@ import { SandboxMode } from "./sandbox.js";
  * - Anything a detector needs to compare cheaply is a hash (inputHash, contentHash).
  * - `seq`, `sessionId`, and `ts` are stamped by the SessionStore, not by emitters.
  */
-
-export const PermissionClass = z.enum(["read", "write", "exec", "network"]);
-export type PermissionClass = z.infer<typeof PermissionClass>;
-
-export const Decision = z.enum(["allow", "deny", "ask"]);
-export type Decision = z.infer<typeof Decision>;
 
 /**
  * The four counts are DISJOINT: `input` is the uncached input tokens only, excluding both
@@ -33,6 +31,26 @@ export const Usage = z.object({
 });
 export type Usage = z.infer<typeof Usage>;
 
+export const AuxiliaryReportSchema = z.object({
+  operation: z.enum(["ingest", "dream", "reviewer", "grader"]),
+  outcome: z.enum(["completed", "failed", "aborted", "timeout", "limit"]),
+  durationMs: z.number().finite().nonnegative(),
+  calls: z.array(z.object({
+    operation: z.string(), provider: z.string(), model: z.string().optional(),
+    outcome: z.enum(["completed", "failed", "aborted", "timeout", "limit"]),
+    durationMs: z.number().finite().nonnegative(), usage: Usage.optional(), usageComplete: z.boolean(),
+  })),
+  reportedUsage: Usage, unknownUsageCalls: z.number().int().nonnegative(),
+  costUsd: z.number().finite().nonnegative().nullable(),
+  localCommitState: z.enum(["not-started", "may-be-partial", "completed"]).optional(),
+});
+/** Replace cumulative snapshots by id, never sum them. A non-final last snapshot means
+ * completion/total usage is unknown; auxiliary consumption never joins main model usage. */
+export const AuxiliaryUsageRecord = z.object({
+  type: z.literal("auxiliary.usage"), id: z.string().min(1).max(128),
+  report: AuxiliaryReportSchema, final: z.boolean(),
+});
+
 export const PermissionRequest = z.object({
   tool: z.string(),
   input: z.unknown(),
@@ -40,6 +58,8 @@ export const PermissionRequest = z.object({
   cwd: z.string(),
   /** Filesystem paths the call touches, as declared by the tool's `paths()`; absent when the tool declares none. */
   paths: z.array(z.string()).optional(),
+  /** Derived by trusted tool wiring from final validated input, never copied from model metadata. */
+  operation: ShellOperationSchema.optional(),
   /**
    * M7: who is asking, when it is not the session the user is watching — a subagent routes its
    * asks through its parent's prompt, and answering "allow" for a child you cannot see is a
@@ -91,6 +111,7 @@ export type Intervention = z.infer<typeof Intervention>;
  * `memory ingest` for that session, with no repair path because `raw/` is immutable.
  */
 export const SupervisorRecord = z.discriminatedUnion("type", [
+  AuxiliaryUsageRecord,
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
 ]);
@@ -153,6 +174,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.start"),
     task: z.string(),
+    context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
     model: z.string(),
@@ -171,6 +193,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.resume"),
     task: z.string(),
+    context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
     model: z.string(),
@@ -182,9 +205,15 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
-  z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string() }),
+  z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string(),
+    /** E2: missing on legacy logs means unknown, not a provider-reported zero. Retried,
+     * synthesized, unclosed or errored calls cannot establish complete total consumption. */
+    usageComplete: z.boolean().optional(),
+  }),
   /** Authoritative conversation boundary persisted after the in-memory message is appended. */
   z.object({ type: z.literal("message.append"), message: MessageSchema }),
+  z.object({ type: z.literal("context.delegation"), principal: z.string().max(256).regex(/^hook:.+/),
+    action: z.enum(["delegated", "revoked"]), delegation: z.string().max(64) }),
   /**
    * A transient provider failure was retried before anything streamed. Informational, but
    * load-bearing for diagnosis: two real sessions died on overload errors and the logs said
@@ -197,15 +226,21 @@ export const EventPayload = z.discriminatedUnion("type", [
     delayMs: z.number().int().nonnegative(),
     reason: z.string(),
   }),
-  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string() }),
+  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string(), context: InstructionContextSchema.optional() }),
   z.object({
     type: z.literal("tool.result"),
     id: z.string(),
     ok: z.boolean(),
     display: z.string(),
     durationMs: z.number().int(),
+    /** Resolved by core after validation/permission, never supplied by tool output. */
+    permission: PermissionClass.optional(),
+    toolCallSeq: z.number().int().nonnegative().optional(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
+    /** The tool stopped collecting or did not supply its full text; even an output artifact
+     * contains only the recorded portion. Distinct from representational display truncation. */
+    outputIncomplete: z.boolean().optional(),
     /** Additive for compatibility with logs written before output artifacts existed. */
     truncated: z.boolean().optional(),
   }),
@@ -230,9 +265,33 @@ export const EventPayload = z.discriminatedUnion("type", [
     mode: SandboxMode,
     reason: z.string(),
   }),
-  z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
+  z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string(),
+    /** Core-stamped emitting call; legacy/unattributed claims prove no progress. */
+    toolCallSeq: z.number().int().nonnegative().optional() }),
+  z.object({
+    type: z.literal("checkpoint.created"),
+    turn: z.number().int().positive(),
+    ref: z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
+    commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+    tree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+  }),
+  z.object({ type: z.literal("checkpoint.warning"), message: z.string() }),
+  z.object({
+    type: z.literal("checkpoint.sealed"), turn: z.number().int().positive(),
+    ref: z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/sealed\/[1-9][0-9]*$/),
+    commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+    tree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+    repo: z.string().min(1), excludes: z.array(z.string()), head: z.string().min(1),
+    indexHash: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
+  z.object({
+    type:z.literal("checkpoint.restored"),targetSession:z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),turn:z.number().int().positive(),
+    ref:z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
+    tree:z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),recovery:z.string().min(1),
+  }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
+  ...PermissionGrantEventSchema.options,
   z.object({
     type: z.literal("context.compact"),
     before: z.number().int(),
@@ -264,6 +323,7 @@ export const EventPayload = z.discriminatedUnion("type", [
       ]),
       origin: z.string(),
       authority: z.enum(["instruction", "data"]),
+      context: InstructionContextSchema.optional(),
       hash: z.string(),
       reason: z.string(),
       bytes: z.number().int().nonnegative(),
@@ -290,6 +350,8 @@ export const EventPayload = z.discriminatedUnion("type", [
      * the CLI cannot (by design) append events to the session log.
      */
     invokedBy: z.enum(["model", "user"]),
+    /** Selected skill's validated manifest label; never proof of generation, approval or benefit. */
+    generated: z.literal(true).optional(),
   }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({
@@ -298,10 +360,11 @@ export const EventPayload = z.discriminatedUnion("type", [
     /** M7: how the child finished. Optional so logs written before this still parse. */
     reason: z.enum(["done", "aborted", "error", "budget"]).optional(),
   }),
-  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string() }),
+  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string(), context: InstructionContextSchema.optional() }),
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+  AuxiliaryUsageRecord,
   z.object({ type: z.literal("error"), message: z.string(), fatal: z.boolean() }),
 ]);
 export type EventPayload = z.infer<typeof EventPayload>;

@@ -19,10 +19,12 @@ export function isExcludedPath(p: string): boolean {
 export function globTool(): Tool<GlobInput, string[]> {
   return {
     name: "glob",
+    sandbox: "compatible",
     description:
       "Find files matching a glob pattern, sorted. node_modules and .git are skipped.",
     inputSchema: GlobInput,
     permission: "read",
+    effects: "read-only",
     paths: (input) => [input.path ?? "."],
     async execute(input, ctx): Promise<ToolResult<string[]>> {
       const cwd = resolveIn(ctx.cwd, input.path ?? ".");
@@ -45,7 +47,10 @@ export function globTool(): Tool<GlobInput, string[]> {
         output: matches,
         display: matches.length === 0 ? `no files match ${input.pattern}` : matches.join("\n"),
       };
-      if (truncated) result.truncated = true;
+      if (truncated) {
+        result.truncated = true;
+        result.display = `Search incomplete: stopped after ${MAX_MATCHES} matches; narrow the pattern or path.\n${result.display}`;
+      }
       return result;
     },
   };

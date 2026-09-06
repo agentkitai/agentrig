@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
-import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
+import { mkdir, realpath } from "node:fs/promises";
 import { z } from "zod";
-import type { ModelProvider } from "@agentkitai/agentrig-core";
-import { PAGE_DIR, pagePath, serializePage } from "./page.js";
-import { applyPinChecks, readPins, recheckPins } from "./pins.js";
-import { tolerant, type MemoryBackend } from "./backend.js";
+import type { AuxiliaryReport, ModelProvider } from "@agentkitai/agentrig-core";
+import { PAGE_DIR, isReservationPlaceholder, pagePath, serializePage } from "./page.js";
+import { recheckStoredPins } from "./pins.js";
+import { withMemoryLock } from "./lock.js";
+import type { MemoryLockOptions } from "./lock.js";
+import { MaintenanceRun, MaintenanceLimitError, maintenanceDiagnostic, positiveLimit, type MaintenanceLimits } from "./maintenance.js";
+import { readBoundedFile } from "./bounded-file.js";
+import type { MemoryBackend } from "./backend.js";
 import type { FileMemoryStore } from "./store.js";
+import type { FileRawStore } from "./raw.js";
 import type { Attempt, PageType } from "./types.js";
 
 /**
@@ -19,17 +23,18 @@ import type { Attempt, PageType } from "./types.js";
  * out. An unaccounted span is a hard error, not a shrug.
  */
 
+const singleLine = (text: string) => text.replace(/[ \t]*[\r\n]+[ \t\r\n]*/g, " ").trim();
 export const DistilledFact = z.object({
   pageType: z.enum(["entity", "concept", "source", "analysis"]),
   slug: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]*$/, "slug must be kebab-case"),
   tag: z.enum(["stated", "observed", "inferred"]),
-  text: z.string().min(1),
+  text: z.string().transform(singleLine).pipe(z.string().min(1)),
 });
 export type DistilledFact = z.infer<typeof DistilledFact>;
 
 export const SpanDistillation = z.object({
   nothingDurable: z.boolean().default(false),
-  summary: z.string().default(""),
+  summary: z.string().default("").transform(singleLine),
   facts: z.array(DistilledFact).default([]),
 });
 export type SpanDistillation = z.infer<typeof SpanDistillation>;
@@ -38,13 +43,27 @@ export interface Span {
   id: string;
   from: number;
   to: number;
+  /** Half-open UTF-16 offsets into the complete rendered transcript. */
+  charFrom: number;
+  charTo: number;
   text: string;
 }
 
+export interface EvidenceOmission {
+  /** Zero-based event index in the parsed log. */
+  eventIndex: number;
+  field: string;
+  reason: string;
+}
+
 export interface IngestResult {
+  /** Also delivered on failure through onUsage; absent on legacy results. */
+  auxiliary?: AuxiliaryReport;
   sessionId: string;
   /** Every span, and whether it was distilled or explicitly closed — the coverage guarantee. */
-  coverage: Array<{ spanId: string; from: number; to: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
+  coverage: Array<{ spanId: string; from: number; to: number; charFrom: number; charTo: number; outcome: "distilled" | "nothing-durable" | "empty" }>;
+  /** Evidence not present in the textual transcript; never counted as inspected coverage. */
+  omissions: EvidenceOmission[];
   pagesWritten: string[];
   pagesReserved: string[];
   factCount: number;
@@ -52,7 +71,7 @@ export interface IngestResult {
   pinConflicts: Array<{ page: string; claim: string; reason: string }>;
   /** Contradictions an optional backend reported against these facts (PLAN §3.8). */
   backendConflicts: Array<{ fact: string; existing: string; detail?: string }>;
-  /** True when this session was already ingested and the new log is a prefix-superset. */
+  /** Historical name: the raw capture extends a completed prefix; prior narrative is retained. */
   supersededPrevious: boolean;
   skipped: boolean;
 }
@@ -67,38 +86,129 @@ Rules:
   count, a current version number, or a file's present contents.
 - "stated" = the user or a doc said it. "observed" = it happened in this session (a command
   failed, a test passed). "inferred" = you concluded it from evidence.
+- Assistant messages are model claims, not independently verified tool evidence. Streamed fallback
+  text may be an interrupted/uncommitted response. Tool-result patches describe what the model saw,
+  not a replacement for original tool evidence. Omission markers are unavailable evidence.
+- Tool calls and assistant tool requests are intent, not proof of execution; inspect results and
+  denial records. Preview copies and model-facing tool-result copies are not independent evidence.
+- Calibrate inferred prose explicitly (may, suggests, hypothesis); never turn one observed run
+  into an always/never rule. Tags describe provenance, not independently verified semantic truth.
+- File each claim under its subject's slug, not whichever page is open. Repetition is not a new
+  fact. Keep durable reasons/contracts useful a month out; session status belongs only in history.
 - entity = a module, service, tool, command, external system. concept = a convention, decision,
   recurring pattern, gotcha.
 - If this span contains nothing worth remembering next week, set nothingDurable true and return
   no facts. That is a normal and useful answer — do not invent facts to fill space.`;
 
-/** Render session events into a compact transcript the model can read. */
+/** Render textual evidence without prefix truncation; canonical assistant messages beat deltas. */
 export function eventsToTranscript(events: unknown[]): string {
+  return transcriptEvidence(events).text;
+}
+
+interface TranscriptRecord { from: number; to: number; kind: string }
+
+function transcriptEvidence(events: unknown[]): { text: string; omissions: EvidenceOmission[]; records: TranscriptRecord[] } {
   const lines: string[] = [];
-  for (const raw of events) {
+  const omissions: EvidenceOmission[] = [];
+  const renderedResults = new Set<string>();
+  let streamed = "";
+  let responseEnded = false;
+  const flushStream = () => {
+    if (streamed !== "") lines.push(`[assistant:streamed-uncommitted] ${streamed}`);
+    streamed = "";
+    responseEnded = false;
+  };
+  const omit = (eventIndex: number, field: string, reason: string) => {
+    omissions.push({ eventIndex, field, reason });
+    lines.push(`[evidence.omitted] event=${eventIndex} field=${field}: ${reason}`);
+  };
+  for (const [eventIndex, raw] of events.entries()) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`invalid session event ${eventIndex}`);
     const e = raw as Record<string, unknown>;
     const type = String(e.type ?? "");
+    if (["model.request", "turn.start", "turn.end", "tool.call", "session.start", "session.resume", "session.end"].includes(type)) flushStream();
+    if (["model.request", "turn.start", "session.start", "session.resume"].includes(type)) renderedResults.clear();
     switch (type) {
       case "session.start":
       case "session.resume":
         lines.push(`[${type}] task=${JSON.stringify(e.task)} cwd=${String(e.cwd)}`);
         break;
       case "model.delta":
-        break; // deltas are noise; model.response carries the outcome
-      case "tool.call":
-        lines.push(`[tool.call] ${String(e.name)} ${JSON.stringify(e.input).slice(0, 300)}`);
+        if (responseEnded) flushStream();
+        if (typeof e.text === "string") streamed += e.text;
         break;
-      case "tool.result":
-        lines.push(`[tool.result] ok=${String(e.ok)} ${String(e.display).slice(0, 500)}`);
+      case "model.response":
+        responseEnded = true;
+        break;
+      case "message.append": {
+        const message = e.message as { role?: unknown; content?: unknown } | null;
+        if (message === null || typeof message !== "object" || !Array.isArray(message.content)
+          || (message.role !== "assistant" && message.role !== "user")) {
+          throw new Error(`invalid message.append at event ${eventIndex}`);
+        }
+        if (message.role === "assistant") { streamed = ""; responseEnded = false; renderedResults.clear(); }
+        const renderBlock = (rawBlock: unknown, field: string, label: string, includeText = true): void => {
+          if (typeof rawBlock !== "object" || rawBlock === null) {
+            omit(eventIndex, field, "unsupported message content is not inspected");
+            return;
+          }
+          const block = rawBlock as Record<string, unknown>;
+          if (block.type === "text" && typeof block.text === "string") {
+            if (includeText) lines.push(`[${label}] ${block.text}`);
+          } else if (block.type === "tool_use") {
+            lines.push(`[assistant.tool-request] id=${String(block.id)} name=${String(block.name)} ${JSON.stringify(block.input)}`);
+          } else if (block.type === "tool_result") {
+            // The ordinary event path already rendered the raw result and any patches. Retain
+            // canonical-only results (e.g. interrupted/exported logs), but always inspect nested
+            // content for non-text omissions even when the textual display was already rendered.
+            const includeResult = !renderedResults.has(String(block.toolUseId));
+            const header = `[model.tool-result] id=${String(block.toolUseId)} error=${String(block.isError === true)} (model-facing view)`;
+            if (typeof block.content === "string") {
+              if (includeResult) lines.push(`${header} ${block.content}`);
+            } else if (Array.isArray(block.content)) {
+              if (includeResult) lines.push(header);
+              for (const [i, child] of block.content.entries()) renderBlock(child, `${field}.content[${i}]`, "model.tool-result", includeResult);
+            } else omit(eventIndex, `${field}.content`, "unsupported tool-result content is not inspected");
+          } else if (block.type === "image") {
+            omit(eventIndex, field, "image content is not inspected by textual ingest");
+          } else omit(eventIndex, field, "unsupported message content is not inspected");
+        };
+        for (const [blockIndex, block] of message.content.entries()) {
+          renderBlock(block, `message.content[${blockIndex}]`, message.role === "assistant" ? "assistant" : "user.message");
+        }
+        break;
+      }
+      case "tool.call":
+        lines.push(`[tool.call] ${String(e.name)} ${JSON.stringify(e.input)}`);
+        break;
+      case "tool.result": {
+        if (typeof e.id === "string") renderedResults.add(e.id);
+        const output = typeof e.output === "string" ? e.output : String(e.display ?? "");
+        lines.push(`[tool.result] ok=${String(e.ok)} ${output}`);
+        if (e.outputIncomplete === true) {
+          omit(eventIndex, "tool.result.output", "the tool did not record complete output; the uncollected range is unavailable (length unknown)");
+        } else if (e.truncated === true && typeof e.output !== "string") {
+          omit(eventIndex, "tool.result.output", "full output was not recorded; the undisplayed range is unavailable (length unknown)");
+        }
+        break;
+      }
+      case "tool.result.patched":
+        lines.push(`[tool.result.patched${e.by === "core:output-overflow" ? ":preview-copy" : ""}] id=${String(e.id)} by=${String(e.by)} mode=${String(e.mode ?? "modify")} ${String(e.display ?? "")}`);
+        break;
+      case "tool.denied":
+        lines.push(`[tool.denied] id=${String(e.id)} name=${String(e.name)}`);
+        break;
+      case "sandbox.denied":
+        lines.push(`[sandbox.denied] id=${String(e.id)} name=${String(e.name)} mode=${String(e.mode)} ${String(e.reason)}`);
         break;
       case "file.changed":
         lines.push(`[file.changed] ${String(e.op)} ${String(e.path)}`);
         break;
       case "error":
-        lines.push(`[error] fatal=${String(e.fatal)} ${String(e.message).slice(0, 300)}`);
+        lines.push(`[error] fatal=${String(e.fatal)} ${String(e.message)}`);
         break;
       case "steer":
-        lines.push(`[steer:${String(e.source)}] ${String(e.message).slice(0, 300)}`);
+        lines.push(`[steer:${String(e.source)}] ${String(e.message)}`);
         break;
       case "session.end":
         lines.push(`[session.end] reason=${String(e.reason)}`);
@@ -107,41 +217,47 @@ export function eventsToTranscript(events: unknown[]): string {
         break;
     }
   }
-  return lines.join("\n");
+  flushStream();
+  let offset = 0;
+  const records = lines.map((line, index) => {
+    const from = offset;
+    offset += line.length + (index < lines.length - 1 ? 1 : 0);
+    return { from, to: offset, kind: /^\[([^\]]+)\]/.exec(line)![1]! };
+  });
+  return { text: lines.join("\n"), omissions, records };
 }
 
 /**
  * Split a transcript into bounded spans. Bounded by characters rather than events so one
  * enormous tool result can't produce a span that blows the context window.
  */
-export function planCoverage(transcript: string, maxChars = 6000): Span[] {
-  // keep original line numbers so a coverage error names something a human can open
-  const all = transcript.split("\n");
-  const lines: Array<{ text: string; lineNo: number }> = [];
-  for (let i = 0; i < all.length; i++) {
-    if (all[i] !== "") lines.push({ text: all[i]!, lineNo: i });
-  }
-  if (lines.length === 0) return [];
+export function planCoverage(transcript: string, maxChars = 6000, maxSpans = Infinity): Span[] {
+  if (!Number.isSafeInteger(maxChars) || maxChars < 2) throw new Error("maxSpanChars must be an integer of at least 2");
   const spans: Span[] = [];
-  let buf: Array<{ text: string; lineNo: number }> = [];
-  let size = 0;
-  const flush = () => {
-    if (buf.length === 0) return;
+  let charFrom = 0;
+  let line = 0;
+  while (charFrom < transcript.length) {
+    if (spans.length >= maxSpans) throw new MaintenanceLimitError("ingest span/call limit exceeded");
+    let charTo = Math.min(charFrom + maxChars, transcript.length);
+    if (charTo < transcript.length) {
+      const newline = transcript.lastIndexOf("\n", charTo - 1);
+      if (newline >= charFrom) charTo = newline + 1;
+      // Keep a surrogate pair together when splitting a very long line.
+      else if (/[\uD800-\uDBFF]/.test(transcript[charTo - 1]!) && /[\uDC00-\uDFFF]/.test(transcript[charTo]!)) charTo--;
+    }
+    const text = transcript.slice(charFrom, charTo);
+    const newlines = text.split("\n").length - 1;
     spans.push({
       id: `span-${spans.length + 1}`,
-      from: buf[0]!.lineNo,
-      to: buf[buf.length - 1]!.lineNo,
-      text: buf.map((l) => l.text).join("\n"),
+      from: line,
+      to: line + newlines - (text.endsWith("\n") ? 1 : 0),
+      charFrom,
+      charTo,
+      text,
     });
-    buf = [];
-    size = 0;
-  };
-  for (const line of lines) {
-    if (size + line.text.length > maxChars && buf.length > 0) flush();
-    buf.push(line);
-    size += line.text.length + 1;
+    charFrom = charTo;
+    line += newlines;
   }
-  flush();
   return spans;
 }
 
@@ -221,11 +337,14 @@ export interface IngestOptions {
   /** Path to the session's JSONL log. */
   logPath: string;
   attempts?: Attempt[];
+  /** Load a ledger inside the run's deadline and byte/entry bounds; explicit attempts win. */
+  attemptsFrom?: FileRawStore;
+  onCorruptAttempt?: (path: string) => void;
   maxSpanChars?: number;
   maxTokens?: number;
   now?: () => number;
   /**
-   * Optional sink (PLAN §3.8). Wrapped in `tolerant()` internally — the guarantee that a
+   * Optional sink (PLAN §3.8). Failures are tolerated internally — the guarantee that a
    * backend cannot break an ingest must not depend on the caller remembering to wrap it.
    */
   backend?: MemoryBackend;
@@ -236,17 +355,88 @@ export interface IngestOptions {
   checkBackendConflicts?: boolean;
   /** Reported when a tolerated backend call fails; defaults to silence. */
   onBackendError?: (op: string, err: Error) => void;
+  /** Wait budget for session and short mutation locks; distinct sessions still distill concurrently. */
+  lockTimeoutMs?: number;
+  /** Abort propagates to providers/backends and is checked before subsequent local commits. */
+  signal?: AbortSignal;
+  limits?: Partial<IngestLimits>;
+  /** Delivered once on success/failure; reporter exceptions cannot mask the outcome. */
+  onUsage?: (report: AuxiliaryReport) => void;
 }
 
-async function readEvents(logPath: string): Promise<unknown[]> {
+export interface IngestLimits extends MaintenanceLimits {
+  maxRawBytes: number;
+  maxEvents: number;
+  maxSpans: number;
+  maxFacts: number;
+  maxPages: number;
+  maxFileBytes: number;
+  maxAttempts: number;
+  maxAttemptFiles: number;
+  maxAttemptFileBytes: number;
+  maxAttemptTotalBytes: number;
+}
+const limitValue = z.number().int().positive().max(2_147_483_647);
+export const IngestLimitsSchema = z.object({
+  timeoutMs: limitValue, callTimeoutMs: limitValue, maxCalls: limitValue, maxInputChars: limitValue,
+  maxOutputChars: limitValue, maxModelEvents: limitValue, maxRawBytes: limitValue, maxEvents: limitValue,
+  maxSpans: limitValue, maxFacts: limitValue, maxPages: limitValue, maxFileBytes: limitValue, maxAttempts: limitValue,
+  maxAttemptFiles: limitValue, maxAttemptFileBytes: limitValue, maxAttemptTotalBytes: limitValue,
+} satisfies Record<keyof IngestLimits, typeof limitValue>).partial().strict();
+export const DEFAULT_INGEST_LIMITS = Object.freeze({
+  maxRawBytes: 8 * 1024 * 1024, maxEvents: 20_000, maxSpans: 64,
+  maxFacts: 1024, maxPages: 256, maxFileBytes: 8 * 1024 * 1024, maxAttempts: 128,
+  maxAttemptFiles: 10_000, maxAttemptFileBytes: 64 * 1024, maxAttemptTotalBytes: 2 * 1024 * 1024,
+});
+
+/** Failure retains accounting and, after local completion, the complete local result. */
+export class IngestError extends Error {
+  auxiliary?: AuxiliaryReport;
+  constructor(error: unknown, readonly committedResult?: IngestResult) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = error instanceof Error ? error.name : "Error";
+  }
+}
+
+const CaptureHashes = z.array(z.string().regex(/^[a-f0-9]{64}$/));
+function captureHashes(body: string): string[] | undefined {
+  // Only the final generated trailer is authoritative. Marker-shaped model text earlier in
+  // the narrative must neither wedge parsing nor force perpetual re-distillation.
+  const marker = /(?:^|\n)<!-- ingest:version=2 -->\n<!-- ingest:events-v1=(.*) -->\n<!-- ingest:coverage=.* -->\s*$/.exec(body);
+  if (marker === null) return undefined; // one-time migration of older projection-only captures
+  return CaptureHashes.parse(JSON.parse(marker[1]!));
+}
+
+function withoutCapture(body: string): string {
+  const lines = body.trimEnd().split("\n");
+  while (lines.length > 0) {
+    const last = lines.at(-1)!;
+    if (last.trim() === "" || /^<!-- (?:capture:prefix=.*|ingest:(?:coverage=.*|version=\d+|events-v1=.*|pending)) -->$/.test(last)) lines.pop();
+    else break;
+  }
+  return lines.join("\n").trim();
+}
+const NO_FINDINGS = "<!-- Session produced no durable findings. -->";
+const OLD_NO_FINDINGS = "- [observed] Session produced no durable findings.";
+
+/** Backend annotations extend a fact's source list rather than create a different fact. */
+const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function containsFact(body: string, line: string): boolean {
+  return new RegExp(`(^|\\n)${escapePattern(line.slice(0, -1))}(?:\\)|, [^\\n]*\\))(?=\\n|$)`).test(body);
+}
+
+async function readEvents(logPath: string, limits: IngestLimits, signal: AbortSignal): Promise<unknown[]> {
   const out: unknown[] = [];
-  const rl = createInterface({ input: createReadStream(logPath, "utf8"), crlfDelay: Infinity });
-  for await (const line of rl) {
+  const text = (await readBoundedFile(logPath, limits.maxRawBytes, signal)).toString("utf8");
+  let lineNumber = 0;
+  for (const line of text.split(/\r?\n/)) {
+    lineNumber++;
     if (line.trim() === "") continue;
+    if (out.length >= limits.maxEvents) throw new MaintenanceLimitError("ingest event limit exceeded");
     try {
       out.push(JSON.parse(line));
     } catch {
-      // a torn final line (session still being written) is not a reason to lose the rest
+      throw new Error(`invalid session JSON at line ${lineNumber}; retry ingest after the log is complete`);
     }
   }
   return out;
@@ -261,27 +451,79 @@ async function readEvents(logPath: string): Promise<unknown[]> {
  * dropped — only a provably superseded snapshot is.
  */
 export async function ingestSession(opts: IngestOptions): Promise<IngestResult> {
+  const run = new MaintenanceRun("ingest", opts.limits, opts.signal);
+  run.localCommitState = "not-started";
+  const limits: IngestLimits = { ...run.limits, ...DEFAULT_INGEST_LIMITS, ...opts.limits };
+  let failure: unknown; let result: IngestResult | undefined; let rejection: IngestError | undefined;
+  const state: { committed?: IngestResult } = {};
+  try {
+    for (const [key, value] of Object.entries(limits)) positiveLimit(key, value);
+    positiveLimit("maxSpanChars", opts.maxSpanChars ?? 6000);
+    positiveLimit("maxTokens", opts.maxTokens ?? 2048);
+    result = await ingestSessionGuarded({ ...opts, signal: run.signal }, run, limits, state);
+    return result;
+  } catch (error) { failure = error ?? new Error(String(error)); rejection = new IngestError(error, state.committed); throw rejection; }
+  finally {
+    const report = run.finish(failure);
+    if (result !== undefined) result.auxiliary = report;
+    if (rejection !== undefined) rejection.auxiliary = report;
+    if (state.committed !== undefined) state.committed.auxiliary = report;
+    maintenanceDiagnostic(() => opts.onUsage?.(structuredClone(report)));
+  }
+}
+
+async function ingestSessionGuarded(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits, state: { committed?: IngestResult }): Promise<IngestResult> {
+  // Match core's filename contract without introducing a runtime dependency on core.
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)) throw new Error("invalid ingest session id: expected 1-128 characters of [A-Za-z0-9_-]");
+  opts.signal?.throwIfAborted();
+  // Long-lived per-session guard, distinct from the short page/pin mutation lock. Never hold
+  // the wiki mutation lock across a provider/backend call. The run bounds those call lifetimes.
+  await mkdir(opts.store.root, { recursive: true });
+  const root = await realpath(opts.store.root);
+  // Conservatively serialize case aliases even on case-sensitive hosts; on macOS/Windows
+  // those aliases can name the same source file.
+  const sessionKey = createHash("sha256").update(opts.sessionId.toLowerCase()).digest("hex").slice(0, 32);
+  let entered = false;
+  try {
+    return await withMemoryLock(`${root}.ingest-${sessionKey}`, () => { entered = true; return ingestSessionLocked(opts, run, limits, state); }, {
+      ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }),
+      ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+    });
+  } catch (error) {
+    if (entered || opts.signal?.aborted || !(error instanceof Error) || !error.message.startsWith("timed out waiting for memory lock")) throw error;
+    throw new Error(`ingest ${opts.sessionId}: another ingest of this session may be running; ${String(error)}`, { cause: error });
+  }
+}
+
+async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, limits: IngestLimits, state: { committed?: IngestResult }): Promise<IngestResult> {
   const { store, provider, sessionId, logPath } = opts;
   const now = opts.now ?? (() => Date.now());
   const today = new Date(now()).toISOString().slice(0, 10);
 
-  const events = await readEvents(logPath);
-  const transcript = eventsToTranscript(events);
+  const mutation = { signal: run.signal, maxFileBytes: limits.maxFileBytes,
+    ...(opts.lockTimeoutMs === undefined ? {} : { timeoutMs: opts.lockTimeoutMs }) };
+  run.check();
+  const events = await readEvents(logPath, limits, run.signal);
+  const { text: transcript, omissions, records } = transcriptEvidence(events);
   const sourcePath = pagePath("source", `session-${sessionId}`);
 
   // prefix comparison against the previous capture of this same session
-  const existing = await store.read(sourcePath).catch(() => null);
-  const previousPrefix = /<!-- capture:prefix=([a-f0-9]+):len=(\d+) -->/.exec(existing?.body ?? "");
+  const existing = await store.read(sourcePath, mutation);
+  const hashes = events.map(event => createHash("sha256").update(JSON.stringify(event)).digest("hex"));
+  const previous = captureHashes(existing?.body ?? "");
   let supersededPrevious = false;
-  if (previousPrefix !== null) {
-    const prevLen = Number(previousPrefix[2]);
-    const prevHash = previousPrefix[1]!;
-    const thisPrefixHash = createHash("sha256").update(transcript.slice(0, prevLen)).digest("hex").slice(0, 16);
-    if (thisPrefixHash === prevHash) {
-      if (transcript.length <= prevLen) {
+  // Compare original event prefixes, not a projection whose streamed fallback can be replaced
+  // by a canonical assistant message when the raw log grows. Retain hashes of every event so a
+  // strictly shorter prefix is verifiable without guessing from a longer capture's full hash.
+  if (previous !== undefined) {
+    const common = Math.min(previous.length, hashes.length);
+    if (previous.slice(0, common).every((hash, i) => hash === hashes[i])) {
+      if (hashes.length <= previous.length) {
+        run.check();
         return {
           sessionId,
           coverage: [],
+          omissions,
           pagesWritten: [],
           pagesReserved: [],
           factCount: 0,
@@ -295,24 +537,47 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     }
   }
 
-  const existingIndexSummary = (await store.index()).find((e) => e.slug === `session-${sessionId}`)?.summary;
-  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000);
+  const existingIndexSummary = (await store.index(mutation)).find((e) => e.slug === `session-${sessionId}`)?.summary;
+  const backendSlots = opts.backend === undefined ? 0 : 1 + Number(opts.checkBackendConflicts === true && opts.backend.conflicts !== undefined);
+  const spans = planCoverage(transcript, opts.maxSpanChars ?? 6000, Math.min(limits.maxSpans, Math.max(0, limits.maxCalls - backendSlots)));
   const coverage: IngestResult["coverage"] = [];
   const facts: DistilledFact[] = [];
   const summaries: string[] = [];
 
   const emptyButNotClosed: string[] = [];
+  let attempts = opts.attempts;
+  if (attempts === undefined && opts.attemptsFrom !== undefined) {
+    const ledger = await opts.attemptsFrom.readAttempts(sessionId, { signal: run.signal, maxEntries: limits.maxAttemptFiles,
+      maxFileBytes: limits.maxAttemptFileBytes, maxTotalBytes: limits.maxAttemptTotalBytes });
+    attempts = ledger.attempts;
+    for (const path of ledger.corrupt) maintenanceDiagnostic(() => opts.onCorruptAttempt?.(path));
+  }
+  if ((attempts?.length ?? 0) > limits.maxAttempts) throw new MaintenanceLimitError("ingest attempt count limit exceeded");
+  let attemptChars = 0;
+  for (const attempt of attempts ?? []) {
+    attemptChars += attempt.hypothesis.length + attempt.actions.length + (attempt.lesson?.length ?? 0) + attempt.outcome.length + 10;
+    if (attemptChars > limits.maxInputChars) throw new MaintenanceLimitError("ingest attempts input limit exceeded");
+  }
+  let recordIndex = 0;
   for (const span of spans) {
+    run.check();
+    const range = { spanId: span.id, from: span.from, to: span.to, charFrom: span.charFrom, charTo: span.charTo };
+    while (recordIndex < records.length && records[recordIndex]!.to <= span.charFrom) recordIndex++;
+    const origins: string[] = [];
+    for (let i = recordIndex; i < records.length && records[i]!.from < span.charTo; i++) {
+      const record = records[i]!;
+      origins.push(`${record.kind} [${Math.max(record.from, span.charFrom)}, ${Math.min(record.to, span.charTo)})`);
+    }
     const attemptNote =
-      opts.attempts === undefined || opts.attempts.length === 0
+      attempts === undefined || attempts.length === 0
         ? ""
-        : `\n\nAttempts recorded this session:\n${opts.attempts
+        : `\n\nAttempts recorded this session:\n${attempts
             .map((a) => `- ${a.outcome}: ${a.hypothesis} — ${a.actions}${a.lesson ? ` (lesson: ${a.lesson})` : ""}`)
             .join("\n")}`;
-    const raw = await completeJson(
+    const raw = await run.completeJson(
       provider,
       SYSTEM,
-      `Session ${sessionId}, span ${span.id} of ${spans.length}:\n\n${span.text}${attemptNote}`,
+      `Session ${sessionId}, span ${span.id} of ${spans.length}, transcript characters [${span.charFrom}, ${span.charTo}), lines ${span.from}-${span.to}. A span may continue a long event from an adjacent span. Evidence origins: ${origins.join("; ")}.\n\n${span.text}${attemptNote}`,
       opts.maxTokens ?? 2048,
     );
     let parsed: SpanDistillation;
@@ -330,7 +595,7 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     if (parsed.summary !== "") summaries.push(parsed.summary);
     if (parsed.nothingDurable) {
       // the model explicitly closed this span — that is the coverage guarantee being met
-      coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "nothing-durable" });
+      coverage.push({ ...range, outcome: "nothing-durable" });
       continue;
     }
     if (parsed.facts.length === 0) {
@@ -338,16 +603,17 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
         // Nothing at all: no facts, no summary, and no explicit close. A truncated or degenerate
         // reply looks exactly like this, and calling it "covered" is the silent hole the
         // coverage plan exists to prevent — so fail at the end naming the span.
-        coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "empty" });
+        coverage.push({ ...range, outcome: "empty" });
         emptyButNotClosed.push(`${span.id} (lines ${span.from}-${span.to})`);
         continue;
       }
       // a summary but no page-level facts is a real answer: the span was read and weighed
-      coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
+      coverage.push({ ...range, outcome: "distilled" });
       continue;
     }
-    coverage.push({ spanId: span.id, from: span.from, to: span.to, outcome: "distilled" });
+    coverage.push({ ...range, outcome: "distilled" });
     facts.push(...parsed.facts);
+    if (facts.length > limits.maxFacts) throw new MaintenanceLimitError("ingest fact limit exceeded");
   }
 
   if (emptyButNotClosed.length > 0) {
@@ -373,44 +639,44 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     targets.set(key, target);
   }
   const pagesReserved: string[] = [];
+  if (targets.size + 1 > limits.maxPages) throw new MaintenanceLimitError("ingest page limit exceeded");
+  run.check();
+  run.localCommitState = "may-be-partial";
   for (const t of targets.values()) {
-    const outcome = await store.reserve(t.slug, `session:${sessionId}`, t.type);
+    run.check();
+    const outcome = await store.reserve(t.slug, `session:${sessionId}`, t.type, mutation);
     if (outcome === "created") pagesReserved.push(pagePath(t.type, t.slug));
   }
 
   const pagesWritten: string[] = [];
   const ref = `session:${sessionId}`;
 
-  // The source page: what happened, plus the capture marker used for prefix comparison.
-  // Only a provably superseded capture may replace the previous body; otherwise merge, because
-  // a re-ingest of a *different* transcript must not delete narrative that is still unique.
-  const newLines = [
-    ...summaries.map((s) => `- [observed] ${s} (${ref})`),
+  // Merge against the locked current source page, never against the pre-provider snapshot.
+  // Even a growing capture can omit earlier facts in its new distillation: retain that narrative.
+  // Completion is marked only after every local page/index/pin/log mutation succeeds, so an
+  // interrupted ingest is retried instead of being mistaken for a completed duplicate.
+  const sourceFactTexts = new Set(sourceFacts.map(f => f.text));
+  const newLines = [...new Set([
+    // Preserve the explicit fact's provenance when a summary merely repeats that source fact.
+    ...summaries.filter(s => !sourceFactTexts.has(s)).map((s) => `- [inferred] Model synthesis: ${s} (${ref})`),
     ...sourceFacts.map((f) => `- [${f.tag}] ${f.text} (${ref})`),
-  ];
-  const priorSourceBody =
-    existing === null || supersededPrevious
-      ? ""
-      : existing.body.replace(/<!-- capture:prefix=[^>]*-->/g, "").trim();
-  const keptLines = priorSourceBody === "" ? [] : priorSourceBody.split("\n").filter((l) => l.trim() !== "");
-  const merged = [...keptLines, ...newLines.filter((l) => !keptLines.includes(l))];
-  const sourceBody = [
-    ...(merged.length === 0 ? ["- [observed] Session produced no durable findings."] : merged),
-    "",
-    `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
-  ].join("\n");
-  await store.write(sourcePath, {
-    path: sourcePath,
-    frontmatter: {
-      type: "source",
-      slug: `session-${sessionId}`,
-      aliases: [],
-      sources: [ref],
-      updated: today,
-      confidence: "high",
-    },
-    body: sourceBody,
-  });
+  ])];
+  await store.update(sourcePath, current => {
+    const keptBody = withoutCapture(current?.body ?? "").split("\n")
+      .filter(line => line !== NO_FINDINGS && line !== OLD_NO_FINDINGS).join("\n");
+    const kept = keptBody === "" ? [] : keptBody.split("\n");
+    const merged = [...kept, ...newLines.filter(line => !containsFact(keptBody, line))];
+    return {
+      path: sourcePath,
+      frontmatter: {
+        type: "source", slug: `session-${sessionId}`, aliases: current?.frontmatter.aliases ?? [],
+        sources: [...new Set([...(current?.frontmatter.sources ?? []), ref])], updated: today,
+        confidence: current?.frontmatter.confidence ?? "high",
+      },
+      body: [...(merged.length === 0 ? [NO_FINDINGS] : merged),
+        "", "<!-- ingest:pending -->"].join("\n"),
+    };
+  }, mutation);
   pagesWritten.push(sourcePath);
   await store.upsertIndex({
     slug: `session-${sessionId}`,
@@ -418,30 +684,25 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
     type: "source",
     status: "active",
     summary: summaries[0] ?? existingIndexSummary ?? "session with no durable findings",
-  });
+  }, mutation);
 
   // entity/concept pages: append new fact lines, never rewriting what is already there
   for (const t of targets.values()) {
     const path = pagePath(t.type, t.slug);
-    const page = await store.read(path).catch(() => null);
-    const priorBody = page === null ? "" : page.body.replace(/^- \[inferred\] Reserved by .*$/gm, "").trim();
-    const newLines = t.facts
-      .map((f) => `- [${f.tag}] ${f.text} (${ref})`)
-      .filter((line) => !priorBody.includes(line));
-    const body = [priorBody, ...newLines].filter((s) => s !== "").join("\n");
-    const sources = [...new Set([...(page?.frontmatter.sources ?? []), ref])];
-    await store.write(path, {
-      path,
-      frontmatter: {
-        type: t.type,
-        slug: t.slug,
-        aliases: page?.frontmatter.aliases ?? [],
-        sources,
-        updated: today,
-        confidence: page?.frontmatter.confidence ?? "medium",
-      },
-      body,
-    });
+    await store.update(path, page => {
+      const priorBody = page === null ? "" : page.body.split("\n").filter(line => !isReservationPlaceholder(line)).join("\n").trim();
+      const newLines = [...new Set(t.facts.map(f => `- [${f.tag}] ${f.text} (${ref})`))]
+        .filter(line => !containsFact(priorBody, line));
+      return {
+        path,
+        frontmatter: {
+          type: t.type, slug: t.slug, aliases: page?.frontmatter.aliases ?? [],
+          sources: [...new Set([...(page?.frontmatter.sources ?? []), ref])], updated: today,
+          confidence: page?.frontmatter.confidence ?? "medium",
+        },
+        body: [priorBody, ...newLines].filter(s => s !== "").join("\n"),
+      };
+    }, mutation);
     pagesWritten.push(path);
     await store.upsertIndex({
       slug: t.slug,
@@ -449,34 +710,65 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
       type: t.type,
       status: "active",
       summary: t.facts[0]?.text.slice(0, 120) ?? "",
-    });
+    }, mutation);
   }
 
   // PLAN §3.6: pins are re-checked after ANY regeneration, and surfaced where the change
   // happened — not only when a human remembers to run `memory lint`
   const touched = new Set(pagesWritten);
-  const allPins = await readPins(store.root).catch(() => []);
-  const relevant = allPins.filter((pin) => touched.has(pin.page));
-  const checks = relevant.length === 0 ? [] : await recheckPins(store, relevant);
-  if (checks.length > 0) await applyPinChecks(store.root, checks);
+  const checks = await recheckStoredPins(store, touched, mutation);
   const pinConflicts = checks
     .filter((c) => c.status !== "kept")
     .map((c) => ({ page: c.pin.page, claim: c.pin.claim, reason: c.reason }));
 
   await store.appendLog(
     `## [${today}] ingest | ${ref} | ${facts.length} facts, ${pagesWritten.length} pages` +
-      `${supersededPrevious ? " (superseded an earlier capture)" : ""}` +
+      `${supersededPrevious ? " (extended an earlier capture)" : ""}` +
       `${pinConflicts.length === 0 ? "" : ` | ${pinConflicts.length} pin conflict(s)`}`,
+    mutation,
   );
+
+  await store.update(sourcePath, current => {
+    if (current === null) throw new Error(`ingest source disappeared before completion: ${sourcePath}`);
+    return { ...current, body: [withoutCapture(current.body), "",
+      // Compatibility-only projection marker. Current stale detection uses raw event hashes.
+      `<!-- capture:prefix=${createHash("sha256").update(transcript).digest("hex").slice(0, 16)}:len=${transcript.length} -->`,
+      "<!-- ingest:version=2 -->", `<!-- ingest:events-v1=${JSON.stringify(hashes)} -->`,
+      `<!-- ingest:coverage=${JSON.stringify({ coverage, omissions })} -->`].join("\n") };
+  }, mutation);
+  run.localCommitState = "completed";
 
   // PLAN §3.8: the backend runs LAST — after every page, the pin re-check, and the log entry —
   // so no backend outcome, including an unwrapped throw, can leave the wiki half-written.
   const backendConflicts: IngestResult["backendConflicts"] = [];
+  state.committed = { sessionId, coverage, omissions, pagesWritten, pagesReserved, factCount: facts.length,
+    supersededPrevious, skipped: false, pinConflicts, backendConflicts };
   if (opts.backend !== undefined && facts.length > 0) {
-    const backend = tolerant(opts.backend, opts.onBackendError ?? (() => {}));
+    const sink = opts.backend;
+    const bounded: MemoryBackend = { id: sink.id,
+      onIngest: (items, source) => run.call("backend.onIngest", sink.id, signal => sink.onIngest(items, source, { signal })),
+      recall: (query, k) => run.call("backend.recall", sink.id, signal => sink.recall(query, k, { signal })),
+      promote: page => run.call("backend.promote", sink.id, signal => sink.promote(page, { signal })),
+    };
+    if (sink.conflicts !== undefined) bounded.conflicts = items => run.call("backend.conflicts", sink.id, signal => sink.conflicts!(items, { signal }));
+    // The runner owns timeout/cancellation/accounting; tolerate remote failure, not run abort
+    // or exhausted harness limits. No second timer races the accounting runner.
+    const bestEffort = async <T>(operation: string, work: () => Promise<T>, fallback: T): Promise<T> => {
+      try { return await work(); }
+      catch (error) {
+        run.check();
+        if (error instanceof MaintenanceLimitError) throw error;
+        maintenanceDiagnostic(() => opts.onBackendError?.(operation, error instanceof Error ? error : new Error(String(error))));
+        return fallback;
+      }
+    };
+    const backend = bounded;
     const project = opts.project ?? (basename(resolve(process.cwd())) || "default");
     if (opts.checkBackendConflicts === true && backend.conflicts !== undefined) {
-      for (const c of await backend.conflicts(facts)) {
+      const conflicts = await bestEffort("conflicts", () => backend.conflicts!(facts), []);
+      run.check();
+      if (conflicts.length > limits.maxFacts) throw new MaintenanceLimitError("backend conflict limit exceeded");
+      for (const c of conflicts) {
         backendConflicts.push(
           c.detail === undefined
             ? { fact: c.fact, existing: c.existing }
@@ -484,24 +776,17 @@ export async function ingestSession(opts: IngestOptions): Promise<IngestResult> 
         );
       }
     }
-    const acks = await backend.onIngest(facts, { ref, project });
+    const acks = await bestEffort("onIngest", () => backend.onIngest(facts, { ref, project }), []);
+    run.check();
+    if (acks.length > limits.maxFacts) throw new MaintenanceLimitError("backend acknowledgement limit exceeded");
     // provenance the wiki's way: annotate the fact lines we just wrote with their memory ids
     if (acks.length > 0) {
-      await annotateProvenance(store, targets, acks, opts.backend.id, ref);
+      await annotateProvenance(store, targets, acks, opts.backend.id, ref, mutation);
     }
   }
 
-  return {
-    sessionId,
-    coverage,
-    pagesWritten,
-    pagesReserved,
-    factCount: facts.length,
-    supersededPrevious,
-    skipped: false,
-    pinConflicts,
-    backendConflicts,
-  };
+  run.check();
+  return state.committed;
 }
 
 /**
@@ -515,24 +800,25 @@ async function annotateProvenance(
   acks: Array<{ factText: string; memoryId: string }>,
   backendId: string,
   ref: string,
+  mutation: MemoryLockOptions,
 ): Promise<void> {
   const idByText = new Map(acks.map((a) => [a.factText, a.memoryId]));
   for (const t of targets.values()) {
+    mutation.signal?.throwIfAborted();
     const path = pagePath(t.type, t.slug);
     try {
-      const page = await store.read(path);
-      if (page === null) continue;
-      let body = page.body;
-      let changed = false;
-      for (const fact of t.facts) {
-        const memoryId = idByText.get(fact.text);
-        if (memoryId === undefined) continue;
-        const line = `- [${fact.tag}] ${fact.text} (${ref})`;
-        if (!body.includes(line)) continue;
-        body = body.replace(line, `${line.slice(0, -1)}, ${backendId}:${memoryId})`);
-        changed = true;
-      }
-      if (changed) await store.write(path, { path, frontmatter: page.frontmatter, body });
+      await store.update(path, page => {
+        if (page === null) throw new Error(`provenance target disappeared: ${path}`);
+        let body = page.body;
+        for (const fact of t.facts) {
+          const memoryId = idByText.get(fact.text);
+          if (memoryId === undefined) continue;
+          const line = `- [${fact.tag}] ${fact.text} (${ref})`;
+          body = body.replace(new RegExp(`(^|\\n)${escapePattern(line)}(?=\\n|$)`, "g"),
+            (_match, prefix: string) => `${prefix}${line.slice(0, -1)}, ${backendId}:${memoryId})`);
+        }
+        return { path, frontmatter: page.frontmatter, body };
+      }, mutation);
     } catch {
       // provenance is an annotation, never a reason to fail an ingest that already succeeded
     }
@@ -568,6 +854,11 @@ ${serializePage(
 \`\`\`
 
 - Every fact line carries a tag and a source ref.
+- Tags: stated = user/document input; observed = tool evidence; inferred = model conclusion.
+  Model-written summaries are explicitly inferred synthesis, never verified observations.
+- Calibrate uncertainty in the prose. A single run is not a universal rule. File claims by
+  subject, avoid restating existing facts, and keep temporary status in source history.
+- Write-quality lint is advisory and text-based, not a truth verifier or an automatic rewrite.
 - \`[[wikilinks]]\` connect pages.
 - **Shape, not value.** Contracts, decisions, and reasons — never a SHA, a line count, or a
   current version. Read volatile state live from the repo. Historical narrative is the exception.
@@ -579,6 +870,34 @@ ${serializePage(
 - **Query** — \`index.md\` first, then the union of index-selected pages and BM25 over bodies.
   Additive only: BM25 adds recall, it never replaces an index pick.
 - **Lint (dream)** — scheduled, offline, over a copy. Never modifies its input.
+
+## Procedure candidates (opt-in report only)
+
+For a repeatable procedure, use a page containing only tagged, cited fact lines: Scope: ...,
+Step 1: ..., Step 2: ..., Step 3: ..., and Limitation: ... . Keep steps ordered; include all
+conditions and constraints. The exact complete claim (including its marker) must occur in
+independent raw observations. Never invent missing scope/limitations or relabel guesses to
+satisfy this shape. Ordinary prose remains valid wiki content but is not detected by this
+conservative first procedure pass. Example shape (references below must be real):
+
+- [observed] Scope: Local release validation only (session:s1, session:s2)
+- [observed] Step 1: Inspect the changed files (session:s1, session:s2)
+- [observed] Step 2: Run the applicable tests (session:s1, session:s2)
+- [observed] Step 3: Request review of the tested revision (session:s1, session:s2)
+- [observed] Limitation: Not a substitute for deployment approval (session:s1, session:s2)
+
+Run agentrig dream --skill-candidates --structural-only for zero-call proposals. Model
+classification and effect review share the existing --dream-limits ceiling, with no automatic
+increase. Three calls cover consolidation + classification + effects (four with global
+promotion). A structural/unassessed candidate is not approval; no skill files are emitted.
+
+Explicit skill emission is separate: agentrig dream --emit-skills --structural-only previews
+exact files and a review digest. After human review, rerun with --emit-skills --apply <digest>
+--dream-limits '{"maxCalls":3}' (without --structural-only/--review/--auto). Fresh evidence and
+effect checks are mandatory. Files go under the selected memory directory's skills/generated;
+they are not activated. Human edits or metadata locked: "true" protect existing files. Generated
+metadata values are quoted strings, not bare booleans. Never edit immutable raw history to
+manufacture evidence or treat a saved candidate report as approval.
 
 ## Pins
 

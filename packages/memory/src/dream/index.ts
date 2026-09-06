@@ -1,6 +1,12 @@
 export * from "./lint.js";
+export * from "./write-quality.js";
 export * from "./copy.js";
 export * from "./phases.js";
 export * from "./promote.js";
+export * from "./guardrails.js";
+export { detectProcedureCandidates, type ProcedureCandidate, type ProcedureDetection } from "./procedures.js";
+export * from "./evidence.js";
 export * from "./dream.js";
 export * from "./report.js";
+export * from "./metadata.js";
+export type { SkillEmissionOptions, SkillEmissionReport, SkillProposal } from "./skills.js";

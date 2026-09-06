@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import type { Command } from "commander";
 import { buildProgram, describeStray } from "../src/program.ts";
+import { dreamCommand } from "../src/dream.ts";
 import { supervisorOptions, type SupervisorFlags } from "../src/run.ts";
 
 /**
@@ -50,6 +51,35 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("carries explicit argv-prefix permissions for run, TUI and resume", async () => {
+    for (const argv of [["run", "task"], ["tui"], ["sessions", "resume", "s"]]) {
+      expect((await stub(buildProgram()).run([...argv, "--allow-command", '["git","status"]']))?.opts.allowCommand).toEqual([["git", "status"]]);
+    }
+    for (const value of ["git status", "[]", '[""]', '["git",42]']) {
+      const command = buildProgram().commands.find(cmd => cmd.name() === "run")!;
+      command.exitOverride().configureOutput({ writeErr: () => {} });
+      expect(() => command.parseOptions(["--allow-command", value])).toThrow("invalid command argv prefix");
+    }
+  });
+  it("carries checkpoint opt-in and the explicit undo target", async()=>{
+    for (const argv of [["run","task","--checkpoints"],["--checkpoints"],["sessions","resume","s","--checkpoints"]]) {
+      expect((await stub(buildProgram()).run(argv))?.opts.checkpoints).toBe(true);
+    }
+    expect((await stub(buildProgram()).run(["sessions","undo","s","--to-turn","2","--root","logs"]))?.opts).toMatchObject({toTurn:2,root:"logs"});
+  });
+  it("carries supervisor restore opt-in for headless, TUI and resume",async()=>{
+    for(const argv of [["run","task","--supervisor-abort-restores"],["--supervisor-abort-restores"],["sessions","resume","s","--supervisor-abort-restores"]]) {
+      expect((await stub(buildProgram()).run(argv))?.opts.supervisorAbortRestores).toBe(true);
+    }
+  });
+  it.each(["bad", "-1", "1.5", "2147483648"])("rejects invalid dream lock wait %s before work", async lockTimeout => {
+    const prior = process.exitCode;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await dreamCommand({ dir: "not-used-invalid-option", scope: "project", structuralOnly: true, lockTimeout });
+      expect(process.exitCode).toBe(1); expect(error).toHaveBeenCalledWith(expect.stringContaining("--lock-timeout must be"));
+    } finally { process.exitCode = prior; error.mockRestore(); }
+  });
   it("a subcommand's own options are not swallowed by the root", async () => {
     const { run } = stub(buildProgram());
     // each of these was silently lost when the TUI's options lived on the root program
@@ -61,6 +91,7 @@ describe("argv parsing", () => {
     expect((await run(["run", "x", "--max-tokens-per-turn", "99"]))?.opts.maxTokensPerTurn).toBe("99");
     expect((await run(["run", "x", "--base-url", "http://h/v1"]))?.opts.baseUrl).toBe("http://h/v1");
     expect((await run(["dream", "--model", "m"]))?.opts.model).toBe("m");
+    expect((await run(["dream", "--lock-timeout", "15000"]))?.opts.lockTimeout).toBe("15000");
     expect((await run(["memory", "ingest", "s1", "--model", "m"]))?.opts.model).toBe("m");
     expect((await run(["sessions", "resume", "s1", "--max-turns", "7"]))?.opts.maxTurns).toBe("7");
   });

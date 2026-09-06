@@ -615,8 +615,9 @@ describe("review regressions", () => {
     await sup.done;
     const summary = await session.done;
 
-    // the detector did fire on session.end, but nothing was applied or recorded past it
-    expect(applied).toBe(1);
+    // The explicit observer lifetime now closes before session.end; even policy evaluation
+    // is suppressed, in addition to retaining the no-late-record/no-intervention assertions.
+    expect(applied).toBe(0);
     const store = new SessionStore({ root });
     const read: HarnessEvent[] = [];
     for await (const e of store.read(summary.id)) read.push(e);

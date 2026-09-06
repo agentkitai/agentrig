@@ -524,8 +524,8 @@ function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
   let streamedText = "";
   let activeAssistant: Message | undefined;
 
-  const pushUserText = (text: string): void => {
-    messages.push({ role: "user", content: [{ type: "text", text }] });
+  const pushUserText = (text: string, context?: ContentBlock["context"]): void => {
+    messages.push({ role: "user", content: [{ type: "text", text, ...(context === undefined ? {} : { context }) }] });
     activeAssistant = undefined;
   };
   const latestToolResult = (id: string): Extract<ContentBlock, { type: "tool_result" }> | undefined => {
@@ -564,13 +564,13 @@ function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
 
     switch (event.type) {
       case "session.start":
-        pushUserText(event.task);
+        pushUserText(event.task, event.context);
         break;
       case "session.resume":
-        if (event.task !== "") pushUserText(event.task);
+        if (event.task !== "") pushUserText(event.task, event.context);
         break;
       case "steer":
-        pushUserText(event.message);
+        pushUserText(event.message, event.context);
         break;
       case "model.request":
         activeAssistant = undefined;

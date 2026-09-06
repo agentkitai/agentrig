@@ -17,6 +17,16 @@ import {
 import type { BackendHit, MemoryBackend, UnionHit, WikiPage } from "@agentkitai/agentrig-memory";
 
 const at = () => Date.parse("2026-08-29T00:00:00Z");
+
+it("isolates an asynchronously rejecting tolerant-recall diagnostic", async () => {
+  let reported = false;
+  const backend: MemoryBackend = { id: "broken", onIngest: async () => [], promote: async () => {},
+    recall: async () => { throw new Error("backend offline"); } };
+  const safe = tolerant(backend, async () => { reported = true; throw new Error("UI offline"); });
+  expect(await safe.recall("test", 5)).toEqual([]);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(reported).toBe(true);
+});
 let root: string;
 let store: FileMemoryStore;
 

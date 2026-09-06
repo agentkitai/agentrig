@@ -1,6 +1,8 @@
 import { join } from "node:path";
+import { homedir } from "node:os";
 import {
   assertShellExists,
+  Checkpointer,
   builtinTools,
   createAgent,
   defaultRules,
@@ -36,10 +38,14 @@ import {
   indexInjection,
   ingestOnSessionEnd,
   memoryTools,
+  type IngestLimits,
+  type ScanLimits,
+  type MaintenanceLimits,
+  formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { z } from "zod";
-import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
+import { McpClient, FileMcpPins, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
 import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
@@ -114,6 +120,7 @@ export interface AgentBuildOptions extends ProviderOptions {
   memory?: string;
   system?: string;
   allow?: string[];
+  allowCommand?: string[][];
   deny?: string[];
   /** Allow everything nothing else matched, rather than asking. `--deny` still wins. */
   dangerouslySkipPermissions?: boolean;
@@ -121,6 +128,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   yolo?: boolean;
   /** OS execution boundary, independent of permission approvals. Defaults to none. */
   sandbox?: SandboxMode;
+  /** Opt-in raw checkpoints and terminal ownership receipts; requires stopped external writers. */
+  checkpoints?: boolean;
   maxTurns: string;
   maxTokens?: string;
   maxMinutes?: string;
@@ -131,10 +140,14 @@ export interface AgentBuildOptions extends ProviderOptions {
   priceCacheWrite?: string;
   maxTokensPerTurn: string;
   ingestOnEnd?: boolean;
+  ingestLimits?: Partial<IngestLimits>;
+  ingestSpanChars?: string;
   dreamOnEnd?: boolean;
   dreamEverySessions?: string;
   dreamEveryHours?: string;
   dreamStructuralOnly?: boolean;
+  dreamScanLimits?: Partial<ScanLimits>;
+  dreamLimits?: Partial<MaintenanceLimits>;
   /** Path to a JSON file of MCP servers (PLAN §6's MCP client row). */
   mcpConfig?: string;
   /** Give the agent a `subagent` tool for context-isolated sub-tasks. */
@@ -150,6 +163,8 @@ export interface AgentBuildOptions extends ProviderOptions {
    * the discovered dirs into `skills` — by the time an agent is built, `skills` is final.
    */
   skillDiscovery?: boolean;
+  /** Opt-in generated roots, resolved by loadRunConfig. A label confers no authority. */
+  generatedSkills?: boolean;
   /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
   shell?: string;
   /** Canonical root approved by the CLI trust boundary; absent means no project context. */
@@ -282,6 +297,9 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
+  /** Trusted host override for isolated state; never loaded from project config. */
+  mcpPinRoot?: string;
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
@@ -346,6 +364,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // load them, and the catalogue costs one line each
       tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
       permissions: w.permissionPolicy,
+      ...(w.extras.permissionGrants === undefined ? {} : { permissionGrants: w.extras.permissionGrants }),
       ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
       // The same policy object, and the same asker. A child that could do MORE than its parent
       // is a permission bypass; a child that can do LESS is the failure this originally had —
@@ -376,6 +395,9 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.mcpConfig !== undefined) {
+    throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
+  }
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
   const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
   const provider = providers.main;
@@ -386,7 +408,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (opts.memory !== undefined) {
     memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
     memoryIndex = await indexInjection(memoryStore).catch(() => "");
-    const backend = openBackend();
+    let backend = openBackend({ onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
+    if (backend !== null && opts.sandbox !== undefined && opts.sandbox !== "none") {
+      backend = null;
+      extras.onNotice?.("sandbox: Lore recall is disabled; local memory read/search remain available");
+    }
     memoryToolset = memoryTools({
       store: memoryStore,
       raw: new FileRawStore({ root: opts.memory }),
@@ -402,6 +428,18 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     const configs = await readMcpConfig(opts.mcpConfig);
     const connected = await connectServers({
       servers: configs.map((c) => new McpClient(c, { onError: (e) => extras.onHookError?.(`mcp: ${e.message}`) })),
+      pins: new FileMcpPins(extras.mcpPinRoot ?? join(homedir(), ".agentrig", "mcp-pins"), await realpath(opts.mcpConfig)),
+      onDefinitionNotice: (message) => extras.onNotice?.(message),
+      onDefinitionChange: async (change, ctx) => {
+        // A separate user decision, never the ordinary allow/yolo policy. Server prose is data.
+        return await extras.onAsk?.({
+          tool: "mcp_definition_change",
+          origin: "mcp-definition-change",
+          class: "exec",
+          cwd: ctx.cwd,
+          input: { action: "Approve these changed MCP definitions? This does not approve tool execution or certify safety.", ...change },
+        }) === "allow";
+      },
       onError: (server, err) => extras.onHookError?.(`mcp ${server} unavailable (continuing): ${err.message}`),
     });
     mcpTools = connected.tools;
@@ -423,6 +461,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const sandbox = buildSandbox(opts.sandbox ?? "none");
   const permissionPolicy = buildPermissionPolicy({
     ...(opts.allow === undefined ? {} : { allow: opts.allow }),
+    ...(opts.allowCommand === undefined ? {} : { allowCommand: opts.allowCommand }),
     ...(opts.deny === undefined ? {} : { deny: opts.deny }),
     ...(opts.dangerouslySkipPermissions === undefined
       ? {}
@@ -438,14 +477,18 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
+  if (opts.checkpoints === true) hooks.push(new Checkpointer());
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
-    const backend = openBackend();
+    const backend = openBackend({ tolerate: false, onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,
         provider: providers.memory,
+        ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
+        ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
         ...(backend === null ? {} : { backend }),
         onError: (err) => extras.onHookError?.(`memory ingest failed (session still succeeded): ${err.message}`),
+        onBackendError: (op, err) => extras.onHookError?.(`memory ingest: lore ${op} failed (continuing): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`memory: ${summary}`),
       }),
     );
@@ -458,7 +501,10 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         everySessions: positiveNumber("--dream-every-sessions", opts.dreamEverySessions ?? "10"),
         everyHours: positiveNumber("--dream-every-hours", opts.dreamEveryHours ?? "24"),
         ...(opts.dreamStructuralOnly === true ? { structuralOnly: true } : {}),
-        onError: (err) => extras.onHookError?.(`dream failed (session still succeeded): ${err.message}`),
+        ...(opts.dreamScanLimits === undefined ? {} : { scanLimits: opts.dreamScanLimits }),
+        ...(opts.dreamLimits === undefined ? {} : { limits: opts.dreamLimits }),
+        onUsage: report => extras.onHookDone?.(formatAuxiliaryUsage(report)),
+        onError: (err) => extras.onHookError?.(`dream warning or failure (session still succeeded): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`dream: ${summary}`),
       }),
     );
@@ -509,6 +555,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     repoMap: opts.repoMap === false ? false : {},
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
+    ...(extras.permissionGrants === undefined ? {} : { permissionGrants: extras.permissionGrants }),
     sandbox,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({

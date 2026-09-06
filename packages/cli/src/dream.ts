@@ -1,14 +1,16 @@
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   FileMemoryStore,
   FileRawStore,
-  applyDream,
+  formatAuxiliaryUsage,
   findingCount,
   renderReport,
   runDream,
+  type ScanLimits,
+  type MaintenanceLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
+import { withMaintenanceSignal } from "./maintenance.js";
 
 /**
  * `agentrig dream` — PLAN §3.7/§5. Thin: every decision lives in the memory package, this
@@ -22,10 +24,31 @@ export interface DreamOptions extends ProviderOptions {
   global?: string;
   since?: string;
   structuralOnly?: boolean;
+  skillCandidates?: boolean;
+  emitSkills?: boolean;
+  apply?: string;
   modelExplicit?: boolean;
+  lockTimeout?: string;
+  dreamScanLimits?: Partial<ScanLimits>;
+  dreamLimits?: Partial<MaintenanceLimits>;
+  signal?: AbortSignal;
 }
 
 export async function dreamCommand(opts: DreamOptions): Promise<void> {
+  return withMaintenanceSignal(signal => dreamWithSignal(opts, signal), opts.signal);
+}
+
+async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise<void> {
+  if (opts.apply !== undefined && (opts.emitSkills !== true || opts.review === true || opts.auto === true || opts.structuralOnly === true || !/^[a-f0-9]{64}$/.test(opts.apply))) {
+    console.error("--apply <64-character review-digest> requires --emit-skills and cannot combine with --review, --auto or --structural-only");
+    process.exitCode = 1; return;
+  }
+  const lockTimeoutMs = opts.lockTimeout === undefined ? 5000 : Number(opts.lockTimeout);
+  if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs < 0 || lockTimeoutMs > 2_147_483_647) {
+    console.error("--lock-timeout must be an integer from 0 to 2147483647 milliseconds");
+    process.exitCode = 1;
+    return;
+  }
   let sinceCap: number | undefined;
   if (opts.since !== undefined) {
     sinceCap = Number(opts.since);
@@ -40,7 +63,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   const scope = opts.scope === "global" ? "global" : "project";
   const wikiRoot = join(opts.dir, "wiki");
-  const wiki = new FileMemoryStore({ root: wikiRoot, scope });
+  const wiki = new FileMemoryStore({ root: wikiRoot, scope, lockTimeoutMs });
   await wiki.init();
 
   // Promotion proposals need somewhere to propose *to*. Without a global wiki the report's
@@ -48,7 +71,7 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
   // when nothing could reach it.
   let globalWiki: FileMemoryStore | undefined;
   if (opts.global !== undefined) {
-    globalWiki = new FileMemoryStore({ root: join(opts.global, "wiki"), scope: "global" });
+    globalWiki = new FileMemoryStore({ root: join(opts.global, "wiki"), scope: "global", lockTimeoutMs });
     await globalWiki.init();
   }
 
@@ -74,30 +97,27 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 
   const result = await runDream({
     wiki,
+    signal,
+    autoApply: auto,
+    limits: opts.dreamLimits ?? {},
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
+    lockTimeoutMs,
+    scanLimits: opts.dreamScanLimits ?? {},
     raw: new FileRawStore({ root: opts.dir }),
     ...(globalWiki === undefined ? {} : { globalWiki }),
     ...(provider === undefined ? {} : { provider }),
     cwd: process.cwd(),
     ...(opts.structuralOnly === true ? { structuralOnly: true } : {}),
+    ...(opts.skillCandidates === true ? { procedureCandidates: true } : {}),
+    ...(opts.emitSkills === true ? { emitSkills: { root: join(opts.dir, "skills", "generated"), ...(opts.apply === undefined ? {} : { apply: opts.apply }) } } : {}),
     ...(sinceCap === undefined ? {} : { maxSessions: sinceCap }),
     onPhase: (p) => console.error(`… ${p}`),
+    onError: error => console.error(`dream warning: ${error.message}`),
   });
 
-  let applied = false;
-  let backup: string | undefined;
-  if (auto) {
-    try {
-      backup = await applyDream(wikiRoot, result.outputRoot, String(Date.now()));
-      applied = true;
-    } catch (err) {
-      // applyDream's message names the directory the wiki is actually in when a restore failed;
-      // it is the only thing that will tell the user, so it must not be swallowed here
-      console.error(`\n${(err as Error).message}`);
-      console.error(`the dreamt wiki is still at ${result.outputRoot}`);
-      process.exitCode = 1;
-      return;
-    }
-  }
+  const applied = result.autoApply?.status === "applied";
+  const backup = result.autoApply?.status === "applied" ? result.autoApply.backup : undefined;
+  if (result.autoApply?.status === "refused") console.error(`auto-apply refused: ${result.autoApply.reason}; review artifact retained`);
 
   console.log(
     renderReport(result.report, {
@@ -108,13 +128,26 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
     }),
   );
   if (backup !== undefined) console.log(`previous wiki kept at ${backup}`);
+  if (result.skillEmission !== undefined) {
+    const emission = result.skillEmission;
+    console.log(`\nskill emission: ${emission.status}${emission.reason === undefined ? "" : ` — ${emission.reason}`}`);
+    for (const item of emission.proposals) console.log(`\n${item.path}\n${item.text}`);
+    console.log(`skill review digest: ${emission.digest}`);
+    for (const path of emission.written) console.log(`written (not activated): ${path}`);
+    for (const item of emission.preserved) console.log(`preserved ${item.path}: ${item.reason}`);
+    if (emission.status === "preview") console.log(`after reviewing every file, rerun with the same options plus --apply ${emission.digest} (remove --review/--structural-only; fresh model/effect checks share --dream-limits)`);
+  }
 
   // in review mode the copy IS the deliverable, so it is kept for inspection; once applied it
   // has been copied into place and the temp copy is redundant
-  if (applied) await result.workspace.dispose().catch(() => {});
+  if (applied) await result.workspace.dispose().catch(error => console.error(`dream cleanup failed; inspect ${result.outputRoot} and ${result.workspace.manifestPath}: ${String(error)}`));
   if (!applied) {
-    console.log(`\nto accept: agentrig dream --auto   |   to discard: rm -rf ${result.outputRoot}`);
+    console.log(result.report.scan?.complete === false
+      ? "\nresolve the reported unreadable attempts before retrying; do not delete immutable history"
+      : "\nto run and apply a fresh dream: agentrig dream --auto");
+    console.log(`review artifact: ${result.outputRoot}\nmanifest: ${result.workspace.manifestPath}`);
+    console.log("keep both together; after review, preview agentrig memory discard-dream <outputRoot>, then confirm its owner UUID (SDK: workspace.dispose())");
   }
 
-  process.exitCode = findingCount(result.report, result.structural) > 0 && !applied ? 1 : 0;
+  process.exitCode = result.skillEmission?.status === "refused" || (!applied && (findingCount(result.report, result.structural) > 0 || result.consolidationError !== undefined)) ? 1 : 0;
 }

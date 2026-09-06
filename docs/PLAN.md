@@ -92,6 +92,8 @@ interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;            // JSON Schema derived for ToolSpec
   permission: PermissionClass | ((input: I) => PermissionClass);
+  effects?: 'read-only' | 'workspace' | 'background' | ((input: I) => 'read-only' | 'workspace' | 'background');
+  hasBackgroundWork?(): boolean;       // trusted integration's live unfinished-writer probe
   paths?(input: I): string[];           // declared touched paths; enables cwd-confined policy rules
   execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
 }
@@ -110,6 +112,19 @@ interface PermissionRequest { tool: string; input: unknown; class: PermissionCla
 type Decision = 'allow' | 'deny' | 'ask';
 interface PermissionPolicy { decide(req: PermissionRequest): Promise<Decision> }
 ```
+
+R12e adds explicit literal argv-prefix rules over trusted post-hook operation descriptors.
+R12a adds optional live `AgentConfig.permissionGrants`: validated operation/resource/constraint/
+duration records answer only base-policy `ask`, with grant/revocation events audited before
+dispatch. Session/task lifecycle is enforced in the runtime; persisted events never restore
+authority. TUI standing answers use the same registry and revoke at conversation boundaries.
+See [R12a](plans/R12a.md) for advisory lexical scopes, shared-child compatibility pending R12d,
+and bounded pending audit behavior. Explicit blanket permissions retain their authority.
+R12b adds honest declared-effect/unknown summaries and explicit bounded path/argv scope editing
+with a separate exact-scope preview and confirmation in the TUI. The proposal must cover the
+current request using the same pure scope matcher as runtime enforcement. No effects are inferred
+from names/prose/MCP hints; separate sandbox/MCP-change consent never becomes standing authority.
+See [R12b](plans/R12b.md). Grant inspection/reasons and delegation remain R12c/R12d.
 
 v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
 `cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so
@@ -171,6 +186,12 @@ interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?:
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
+H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
+tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
+delivery, pause/cancellation, orphan settlement and terminal resource release. Live plan state
+and current turn/cwd are supplied explicitly. These are internal components, not new SDK or plugin
+APIs; public exports and behavior stay unchanged. See [H6](plans/H6.md) for baseline trace checks.
+
 ### 2.7 Hooks
 
 ```ts
@@ -187,6 +208,24 @@ hook system and a footgun: a handler that **throws** is reported and skipped, a 
 before it is applied. A hook is third-party code, so its patch is a proposal rather than an
 instruction. Each point declares which actions it accepts — `session_end` takes only `continue`,
 because the session is already over — and the first `deny` stops the chain.
+
+R4a adds opt-in `hooks: [new Checkpointer()]` for pre-mutation Git snapshots. This built-in
+safety hook runs separately after final permission approval and fails closed on errors/timeouts.
+Permission classes do not establish tool effects: only trusted `read-only` declarations skip it;
+unknown effects and foreground shell calls require capture. Raw worktree trees are retained under
+`refs/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
+`checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
+background-work refusal, coverage exclusions and host quiescence preconditions are specified in
+[R4a](plans/R4a.md). R4b exposes opt-in `--checkpoints` / config `checkpoints: true` in run/TUI,
+subject to the existing host-hook sandbox restriction. It tracks stable post-tool ownership,
+rejects later external edits, and records `checkpoint.sealed` at a quiescent session end.
+`undoSession` powers `sessions undo <id> [--to-turn n]` and idle TUI `/undo [turn]`: require a
+closed latest run, matching seal/current raw tree/HEAD/index, then restore only differing covered
+files. Displaced originals and a manifest remain in a Git-metadata recovery directory;
+`checkpoint.restored` goes to a separate audit log, never rewriting the original conversation.
+Older unsealed runs refuse. TUI starts a fresh conversation after undo; explicit resume does not
+replay tools. See [R4b](plans/R4b.md) for cooperative-writer and partial-failure limits.
+Supervisor restoration remains R4c.
 
 ### 2.8 Context management
 
@@ -299,9 +338,15 @@ Duplicate captures (`session_end` firing twice on a growing transcript) are dete
 **Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
 
 **Promotion is structural.** "Never promote anything derived from a single session" is enforced
-by counting distinct `session:` refs in a page's frontmatter and fact-line provenance, not by
-asking the model to respect it — one session's conclusion may be true only of that branch, that
-machine, that afternoon.
+by runtime-backed, claim-level evidence, not citation counts (H4). Every claim needs at least two
+independent located observations from validated immutable session logs. Related lineage and
+copied result payloads count once. The initial conservative support rule requires an exact textual
+line in complete recorded tool output; paraphrases without that support remain ineligible.
+This is structural eligibility for human review, not semantic proof. Reports show source events,
+character ranges, hashes and excerpts; page confidence is advisory. Dream validates final pages
+and only proposes promotion. `memory promote` previews; `--confirm` rechecks and publishes only
+checked claims/references, never unsupported prose or extra unverified citations. Backend adapters
+remain trusted transport primitives. See `docs/plans/H4.md` for limits and trust assumptions.
 
 **Lint = dream.** The scheduled dream runs the pattern's lint pass offline on a copy of the wiki: contradictions between pages, claims superseded by newer sources, orphan pages, concepts mentioned but lacking a page, missing cross-links, relative dates → absolute, references to files that no longer exist, index rebuilt lean. Output is a new `wiki/` directory plus a change report; the input is untouched; review or auto apply; promotion proposals to global. Never promote anything derived from a single session.
 
@@ -325,8 +370,29 @@ confidence: high | medium | low
 
 ### 3.4 Store interface and tools
 
+R6d adds advisory, model-free write-quality findings to lint/dream: prose calibration of inferred
+claims, temporary status outside source history, exact repeated claims, thinly cited universal
+observations and explicit subject-link routing. Missing provenance tags are reported for review.
+New ingest summaries are inferred model synthesis, not observed evidence. No quality finding
+automatically edits or promotes a claim; tags/citation counts are not semantic verification.
+See [R6d](plans/R6d.md) for heuristic limits and controls.
+
+R6e separates `assessPromotionEvidence` (offline evidence-only previews) from `selectForPromotion`
+(evidence plus effect approval). `reviewPromotionEffects` makes one bounded model call over exact
+candidate artifacts and mints process-local receipts; missing, copied, changed or uncertain
+receipts refuse. Any weakening of verification, scrutiny, failure disclosure, review, workaround
+scope or honest reporting refuses the whole candidate without a replacement lesson. Model effect
+assessment is fallible and never replaces human confirmation or H4's runtime witnesses.
+
+`memory promote` previews offline; `--confirm` also requires the bounded memory-role assessment
+and fresh page/evidence validation before backend publication. `--guardrail-limits` controls its
+limits. A full dream with an eligible global candidate uses at most one additional batch call;
+its default total call ceiling is two, sharing accounting and cancellation. Structural-only
+dream remains zero-call and reports unassessed candidates as refused. [R6e](plans/R6e.md) records
+the exact contract and limits. Generated skills are a later row in ROADMAP §5's committed queue.
+
 ```ts
-interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number }
+interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number; version?: string }
 
 interface MemoryStore {
   root: string;
@@ -350,14 +416,43 @@ Tools exposed to the agent:
 
 - `memory_search(query)` — index ∪ BM25, progressive disclosure
 - `memory_read(path)`
-- `memory_write(path, page)` — wiki only; `raw/` is not writable by the agent
-- `memory_file_analysis(slug, body)` — file an answer back into `analyses/`
+- `memory_write(type, slug, body, if_version?)` — wiki only; `raw/` is not writable by the agent.
+  Replacement requires the content version from `memory_read` or the last write receipt;
+  absent/null is create-only. Tokens are the first 128 bits of SHA-256 over persisted bytes.
+  A stale response returns the current page/version for intentional merge and retry. The same
+  rule applies to `memory_file_analysis`. Version-aware reads hash persisted bytes, not mtime.
+- `memory_file_analysis(slug, body, if_version?)` — file an answer back into `analyses/`
 - `attempt_log(attempt)` — record a direction while it's fresh (lands in `raw/attempts/`)
 - `memory_ingest(path)` — ingest a doc the user pointed at
+
+H5a's `FileMemoryStore.compareAndSwap()` serializes version checking and replacement across
+cooperating processes; metadata defaults can be derived from that checked state in a synchronous
+transform. Optional index updates share that lock and finish after a committed page even if
+cancellation arrives. Index/release failures are explicit warnings, not a false uncommitted result.
+`update()` runs a synchronous
+transform under the mutation lock. The original SDK `write()` remains a trusted unconditional
+replacement, not a safe read-modify-write API. Index additions, reservations and log appends are
+serialized too. Locks have bounded waits and no age-based stealing; crashed-owner recovery requires
+stopping writers before removing the named lock. Human/external file edits and multi-file crash
+atomicity are outside this cooperative lock contract. H5b/H5c migrate ingest/dream callers.
+
+`WikiPage.extraFrontmatter` retains unknown human metadata as opaque lines. Guarded updates/CAS
+preserve it when omitted; an explicit empty string clears it. The trusted `write()` replacement
+requires callers to pass any metadata they want retained. Dream retains metadata-bearing merge
+sources rather than guessing cross-page metadata precedence. See
+`docs/plans/H5-memory-persistence.md` for multiline fact boundaries and persistence limits.
 
 An `Embedder` interface exists for optional vector search later; BM25 is the default and needs no API key.
 
 ### 3.5 Attempts ledger (the "every attempt incl. failures" requirement)
+
+Session-scoped reads use disposable `.agentrig/attempt-index.json` with a separate bounded rebuild
+and a shared writer lock; raw records remain immutable. New records are capped at 64 KiB before
+claiming their ID. Oversized/torn legacy entries remain visible as unreadable, not silently absent.
+Reviewer input can proceed with a partial-history warning; dream's automatic-apply completeness
+gate is unchanged. Explicit `FileRawStore.rebuildAttemptIndex()` supports operator-selected scan
+limits and must be called after out-of-contract in-place raw repair. See the H5 persistence plan
+for cache caps, cooperative-writer assumptions and exact rebuild/query budget separation.
 
 ```ts
 interface Attempt {
@@ -508,6 +603,17 @@ interface Policy { decide(signals: Signal[], state: SupervisorState): Interventi
 
 Default ladder (per signal type, escalating on repeat): inject_guidance → force_replan → run reviewer → escalate → abort. Cooldowns prevent nagging every turn.
 
+R4c optionally restores after a supervisor-requested abort: `abortRestores: true` plus a trusted
+`restoreCheckpoint(sessionId, signal)` seam. The supervisor imports only core types; CLI/TUI
+provide guarded `undoSession` and require `--supervise --supervisor-abort --checkpoints
+--supervisor-abort-restores` (or equivalent trusted config). Restoration waits for an aborted
+`session.done`, never overrides R4b ownership checks, and is joined by observer `done` even after
+cleanup detach. User abort alone does not trigger it. The restore signal has a 60-second budget;
+trusted destructive callbacks must cooperate and settle, not be abandoned while still mutating.
+Reports use the UI/stderr and separate undo audit, not events after the original `session.end`.
+TUI clears automatic resume state after success. See [R4c](plans/R4c.md); this does not implement
+the independent mid-session `checkpoint_rollback` rung.
+
 A rung is **skipped when the harness cannot perform it** rather than parked on, so one ladder
 definition is correct at every milestone: in M4 (no reviewer, no pre-tool hook, and no human in a
 headless run) it collapses to inject_guidance → abort, and it deepens on its own as M6 attaches a
@@ -516,6 +622,19 @@ supplied — a headless run must never stop on a question nobody will answer. A 
 its cooldown does not advance the rung, so suppression can never walk a session into `abort`.
 
 ### 4.3 Reviewer & grader (LLM-backed, invoked only by policy)
+
+H5d bounds these calls and passes cancellation through loaders/providers. Core's optional
+`SessionControl.auxiliarySignal` ends observer work before independently budgeted session-end
+hooks; detach also cancels idle waits. Validated `auxiliary.usage` records carry a run ID,
+cumulative `AuxiliaryReport` and `final` flag. Replace snapshots by ID, never sum them or fold
+them into main-model totals. An unfinished snapshot keeps total consumption/cost unknown when
+the log closes; `session.end` remains its final event. CLI/TUI render final and unfinished usage
+separately. See `docs/plans/H5-auxiliary-lifecycle.md` for defaults, SDK options and the limits of
+cancelling uncooperative JavaScript/remote work. E2's bounded evidence-bundle report keeps main,
+child and auxiliary consumption explicit and prices only supplied role/provider/model rates;
+see `docs/EVALUATION-REPORTS.md`. Missing collector coverage remains unknown. Optional
+`model.response.usageComplete` distinguishes new reported-zero calls from synthesized/missing
+usage; legacy absence is conservative unknown, never a schema incompatibility.
 
 ```ts
 interface Reviewer {

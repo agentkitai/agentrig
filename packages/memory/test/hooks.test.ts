@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
-import { dreamOnSessionEnd, FileMemoryStore, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuxiliaryReport, HookContext, ModelEvent, ModelProvider } from "@agentkitai/agentrig-core";
+import { dreamOnSessionEnd, FileMemoryStore, fingerprint, ingestOnSessionEnd, markDreamed } from "@agentkitai/agentrig-memory";
 
 function scripted(bodies: unknown[]): ModelProvider {
   let n = 0;
@@ -46,6 +46,7 @@ beforeEach(async () => {
   await store.init();
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -58,6 +59,58 @@ async function writeLog(id: string): Promise<void> {
 }
 
 describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
+  it("isolates async success, usage and failure diagnostics", async () => {
+    await writeLog("s1"); await writeLog("s2");
+    const reject = vi.fn(async () => { throw new Error("UI rejected"); });
+    const success = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]), onDone: reject, onUsage: reject });
+    expect(await success.handler(ctx("s1"))).toEqual({ action: "continue" });
+    const failed = ingestOnSessionEnd({ dir, provider: exploding, onError: reject });
+    expect(await failed.handler(ctx("s2"))).toEqual({ action: "continue" });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(reject.mock.calls.length).toBeGreaterThanOrEqual(4);
+  });
+  it("keeps scheduled backend failure diagnostics visible while local ingest succeeds", async () => {
+    await writeLog("s1"); const errors: string[] = []; const done: string[] = [];
+    const hook = ingestOnSessionEnd({ dir, provider: scripted([{ facts: [{ pageType: "concept", slug: "retry", tag: "observed", text: "Retry per request" }] }]),
+      backend: { id: "lore", onIngest: async () => { throw new Error("backend offline"); }, recall: async () => [], promote: async () => {} },
+      onBackendError: (operation, error) => errors.push(`${operation}: ${error.message}`), onDone: text => done.push(text),
+    });
+    expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+    expect(errors).toEqual(["onIngest: backend offline"]);
+    expect(done[0]).toContain("ingested 1 fact");
+  });
+
+  it("forwards bounds and reports failure before auxiliary completion without pre-ingest init", async () => {
+    await writeLog("s1");
+    const order: string[] = [];
+    const init = vi.spyOn(FileMemoryStore.prototype, "init");
+    try {
+      const hook = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]),
+        limits: { maxOutputChars: 2 }, maxSpanChars: 1000,
+        onError: error => order.push(`error:${error.message}`), onDone: text => order.push(`done:${text}`) });
+      expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+      expect(init).not.toHaveBeenCalled();
+      expect(order).toHaveLength(2);
+      expect(order[0]).toContain("output limit"); expect(order[1]).toContain("auxiliary ingest");
+      expect(order[1]).toContain("local writes not-started");
+    } finally { init.mockRestore(); }
+  });
+
+  it("keeps an extended run budget below its outer hook timeout", () => {
+    const hook = ingestOnSessionEnd({ dir, provider: exploding, limits: { timeoutMs: 900_000 } });
+    expect(hook.timeoutMs).toBe(960_000);
+  });
+
+  it("surfaces uninspected evidence in the completion notice", async () => {
+    await writeFile(join(dir, "raw", "sessions", "s1.jsonl"), JSON.stringify({
+      type: "tool.result", ok: true, display: "recorded prefix only", truncated: true,
+    }) + "\n");
+    const done: string[] = [];
+    const hook = ingestOnSessionEnd({ dir, provider: scripted([{ nothingDurable: true }]), onDone: text => done.push(text) });
+    expect(await hook.handler(ctx("s1"))).toEqual({ action: "continue" });
+    expect(done[0]).toContain("1 uninspected evidence omission(s)");
+  });
+
   it("distils the session that just ended into the wiki", async () => {
     await writeLog("s1");
     const done: string[] = [];
@@ -78,6 +131,8 @@ describe("ingestOnSessionEnd (PLAN §3.2's session_end trigger)", () => {
     const page = await readFile(join(dir, "wiki", "concepts", "retry.md"), "utf8");
     expect(page).toContain("retries are per request");
     expect(done[0]).toContain("ingested");
+    expect(done).toHaveLength(2);
+    expect(done[1]).toContain("auxiliary ingest");
   });
 
   it("is a no-op when the session wrote no log — nothing to distil, no model call", async () => {
@@ -195,11 +250,145 @@ describe("dreamOnSessionEnd (PLAN §3.7's scheduled trigger)", () => {
     expect(done[0]).toContain("previous wiki kept at");
   });
 
+  it("retains and names a stale auto-apply artifact and its manifest", async () => {
+    await writeLog("a");
+    const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "- [stated] a durable fact (doc:fixture)",
+      frontmatter: { type: "concept", slug: "a", aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
+    let changed = false;
+    const provider: ModelProvider = { ...scripted([{}]), async *stream() {
+      await store.appendLog("a cooperating write during consolidation"); changed = true;
+      yield { type: "text_delta", text: "{}" };
+      yield { type: "stop", reason: "end_turn" };
+    } };
+    const errors: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, provider, everySessions: 1, auto: true,
+      onError: error => errors.push(error), onDone: text => done.push(text) });
+    expect(await hook.handler(ctx("a"))).toEqual({ action: "continue" });
+    expect(changed).toBe(true); expect(done).toEqual([]);
+    expect(errors).toHaveLength(1); expect(errors[0]!.message).toContain("stale dream snapshot");
+    const retained = /dream artifact retained at (.*); manifest: (.*)$/.exec(errors[0]!.message)!;
+    expect(retained).not.toBeNull();
+    const output = retained[1]!; const manifestPath = retained[2]!;
+    try {
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      expect(manifest.outputRoot).toBe(output);
+      expect(await readFile(join(output, "index.md"), "utf8")).toContain("# Index");
+      expect(await readFile(join(store.root, "log.md"), "utf8")).toContain("cooperating write");
+    } finally {
+      // These are the exact artifacts created by this test's hook, verified by its manifest.
+      await rm(output, { recursive: true, force: true }); await rm(manifestPath, { force: true });
+    }
+  });
+
+  it("cleans the applied artifact before a throwing completion callback", async () => {
+    await writeLog("a");
+    const append = FileMemoryStore.prototype.appendLog;
+    let outputRoot = "";
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
+      // A structural dream appends only to its output, not to the live wiki.
+      outputRoot = this.root; return append.apply(this, args);
+    });
+    const errors: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, auto: true,
+      onError: error => errors.push(error), onDone: text => { done.push(text); throw new Error("notification failed"); } });
+    expect(await hook.handler(ctx("a"))).toEqual({ action: "continue" });
+    expect(done[0]).toContain("dream applied");
+    expect(errors.map(error => error.message)).toEqual(["notification failed"]);
+    expect(outputRoot).not.toBe("");
+    await expect(lstat(outputRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(outputRoot + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("never auto-applies an incomplete raw scan or accumulates copies on repeated cadences", async () => {
+    await writeLog("a"); await mkdir(join(dir, "raw/attempts"), { recursive: true });
+    await writeFile(join(dir, "raw/attempts/torn.json"), "{bad");
+    const before = await fingerprint(join(dir, "wiki"));
+    const append = FileMemoryStore.prototype.appendLog; const outputs: string[] = [];
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) {
+      outputs.push(this.root); return append.apply(this, args);
+    });
+    const warnings: Error[] = []; const done: string[] = [];
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, auto: true, structuralOnly: true, now: () => 1,
+      onError: error => warnings.push(error), onDone: text => done.push(text) });
+    await hook.handler(ctx("a"));
+    await hook.handler(ctx("a"));
+    expect(warnings[0]!.message).toContain("raw scan incomplete");
+    expect(done[0]).toContain("auto-apply disabled"); expect(done[0]).not.toContain("ran clean");
+    expect(await fingerprint(join(dir, "wiki"))).toBe(before);
+    expect(done).toHaveLength(2); expect(outputs).toHaveLength(2);
+    expect(done.every(text => text.includes("temporary copy discarded"))).toBe(true);
+    for (const output of outputs) {
+      await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(output + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await readFile(join(dir, "raw/attempts/torn.json"), "utf8")).toBe("{bad");
+  });
+
+  it("uses configurable scan limits before checking the scheduler cadence", async () => {
+    await writeLog("a"); await writeLog("b"); const errors: Error[] = []; const done: string[] = [];
+    await dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, scanLimits: { maxEntries: 1 },
+      onError: error => errors.push(error) }).handler(ctx("b"));
+    expect(errors[0]!.message).toContain("entry limit");
+    await dreamOnSessionEnd({ dir, everySessions: 1, structuralOnly: true, scanLimits: { maxEntries: 20 },
+      onError: error => errors.push(error), onDone: text => done.push(text) }).handler(ctx("b"));
+    expect(errors).toHaveLength(1); expect(done[0]).toContain("dream ran clean");
+  });
+
   it("stays free without a provider — structural only, no model call", async () => {
     await markDreamed(join(dir, "wiki"), 1);
     for (const id of ["a", "b"]) await writeLog(id);
     const hook = dreamOnSessionEnd({ dir, provider: exploding, everySessions: 1, everyHours: 1, structuralOnly: true });
     expect(await hook.handler(ctx("b"))).toEqual({ action: "continue" });
+  });
+
+  it("forwards hook cancellation into dream providers and delivers failure accounting", async () => {
+    await writeLog("a"); const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "original", frontmatter: { type: "concept", slug: "a",
+      aliases: [], sources: [], updated: "2026-09-05", confidence: "high" } });
+    const controller = new AbortController(); let signal: AbortSignal | undefined;
+    const provider: ModelProvider = { ...scripted([{}]), stream(_request, nextSignal) {
+      signal = nextSignal; controller.abort();
+      return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) };
+    } };
+    const errors: Error[] = []; const reports: AuxiliaryReport[] = []; const before = await fingerprint(store.root);
+    const hook = dreamOnSessionEnd({ dir, everySessions: 1, provider, auto: true, onError: error => errors.push(error), onUsage: report => reports.push(report) });
+    expect(await hook.handler({ ...ctx("a"), signal: controller.signal })).toEqual({ action: "continue" });
+    expect(signal?.aborted).toBe(true); expect(errors[0]!.name).toBe("AbortError");
+    expect(reports[0]).toMatchObject({ operation: "dream", outcome: "aborted", unknownUsageCalls: 1 });
+    expect(await fingerprint(store.root)).toBe(before);
+  });
+
+  it("discards zero-finding scheduled review copies after repeated model failures without calling them clean", async () => {
+    await writeLog("a"); const store = new FileMemoryStore({ root: join(dir, "wiki") });
+    await store.write("concepts/a.md", { path: "concepts/a.md", body: "- [observed] original fact (doc:fixture)", frontmatter: { type: "concept", slug: "a",
+      aliases: [], sources: ["doc:fixture"], updated: "2026-09-05", confidence: "high" } });
+    await store.upsertIndex({ path: "concepts/a.md", type: "concept", slug: "a", summary: "original fact", status: "active" });
+    const before = await fingerprint(store.root); const append = FileMemoryStore.prototype.appendLog; const outputs: string[] = [];
+    vi.spyOn(FileMemoryStore.prototype, "appendLog").mockImplementation(async function(...args) { outputs.push(this.root); return append.apply(this, args); });
+    const done: string[] = []; const errors: Error[] = [];
+    const hook = dreamOnSessionEnd({ dir, provider: exploding, everySessions: 1, now: () => 1,
+      onDone: text => done.push(text), onError: error => errors.push(error) });
+    await hook.handler(ctx("a")); await hook.handler(ctx("a"));
+    expect(errors).toHaveLength(2); expect(done).toHaveLength(2); expect(outputs).toHaveLength(2);
+    expect(done.every(text => text.includes("consolidation failed; no structural findings; temporary copy discarded"))).toBe(true);
+    expect(done.join("\n")).not.toContain("ran clean");
+    for (const output of outputs) {
+      await expect(lstat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(output + ".dream.json")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await fingerprint(store.root)).toBe(before);
+  });
+
+  it("does no cadence scan for an already cancelled hook, even if its error callback throws", async () => {
+    const controller = new AbortController(); controller.abort();
+    const hook = dreamOnSessionEnd({ dir: join(dir, "missing"), onError: () => { throw new Error("notification failed"); } });
+    expect(await hook.handler({ ...ctx("a"), signal: controller.signal })).toEqual({ action: "continue" });
+    await expect(lstat(join(dir, "missing"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each([NaN, 0, "invalid"])("rejects invalid SDK dream timeout %s before constructing an outer hook timer", timeoutMs => {
+    expect(() => dreamOnSessionEnd({ dir, limits: { timeoutMs: timeoutMs as number } })).toThrow();
   });
 
   it("a failed dream never changes the session's outcome", async () => {

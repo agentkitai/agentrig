@@ -148,7 +148,7 @@ describe("parseOpenAISse", () => {
     const events = await collect(parseOpenAISse(truncated()));
     expect(events).toEqual([
       { type: "tool_use", id: "c1", name: "bash", input: {} },
-      { type: "usage", usage: { input: 0, output: 0 } },
+      { type: "usage", usage: { input: 0, output: 0 }, reported: false },
       { type: "stop", reason: "max_tokens" },
     ]);
   });

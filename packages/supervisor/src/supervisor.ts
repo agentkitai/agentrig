@@ -1,4 +1,6 @@
-import type { Session } from "@agentkitai/agentrig-core";
+import type { AuxiliaryReport, Session } from "@agentkitai/agentrig-core";
+import { randomUUID } from "node:crypto";
+import { AuxiliaryLimitError, auxiliaryDiagnostic, positiveLimit, DEFAULT_AUXILIARY_LIMITS, type AuxiliaryOptions, type AuxiliaryLimits } from "./auxiliary.js";
 import type { Detachable, Detector, EscalationOutcome, Policy } from "./types.js";
 import { initialState, reduce, type StateOptions, type SupervisorState } from "./state.js";
 import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js";
@@ -12,26 +14,49 @@ export const DEFAULT_REVIEW_TIMEOUT_MS = 90_000;
 
 class ObserverTimeoutError extends Error {}
 
+async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  let abort!: () => void;
+  try {
+    const stopped = new Promise<never>((_, reject) => {
+      abort = () => reject(signal.reason);
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+    });
+    return await Promise.race([work, stopped]);
+  } finally { signal.removeEventListener("abort", abort); }
+}
+
 /**
  * Races `work` against a timer. The timer is unref'd so a pending escalation cannot by itself
  * hold the process open, and cleared on the winning path so it does not leak per intervention.
  */
-async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
+    const pending = Promise.race([
       work,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new ObserverTimeoutError(`${label} did not answer within ${ms}ms`)), ms);
         timer.unref?.();
       }),
     ]);
+    return await (signal === undefined ? pending : untilAborted(pending, signal));
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
 }
 
-export interface AttachOptions extends StateOptions {
+export interface AbortRestoreResult { restored: boolean; message: string }
+
+export interface AbortRestoreOptions {
+  /** Opt-in only. An abort by this observer may restore after the agent fully settles. */
+  abortRestores?: boolean;
+  /** Trusted destructive seam; must honor cancellation and settle before the join can finish. */
+  restoreCheckpoint?: (sessionId: string, signal: AbortSignal) => Promise<AbortRestoreResult>;
+  onRestore?: (result: AbortRestoreResult) => void;
+}
+
+export interface AttachOptions extends StateOptions, AbortRestoreOptions {
   detectors: Detector[];
   policy: Policy;
   /**
@@ -60,11 +85,13 @@ export interface AttachOptions extends StateOptions {
   /** The wiki digest the agent is working from, passed through to the reviewer. */
   memoryIndex?: string;
   /** Read lazily when the reviewer runs — the ledger is on disk and usually not needed. */
-  attempts?: () => Promise<Attempt[]> | Attempt[];
+  attempts?: (sessionId: string, signal: AbortSignal) => Promise<Attempt[]> | Attempt[];
   /** Files the grader should judge. Called only when a grade is actually requested. */
-  artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
+  artifacts?: (sessionId: string, signal: AbortSignal) => Promise<Array<{ path: string; content?: string }>>;
   /** Bounds an LLM-backed rung the same way `escalate` is bounded. */
   reviewTimeoutMs?: number;
+  auxiliaryLimits?: Partial<AuxiliaryLimits>;
+  onUsage?: (report: AuxiliaryReport) => void;
   /** Reported rather than thrown: a detector that throws must not take the session with it. */
   onError?: (where: string, err: Error) => void;
 }
@@ -92,6 +119,11 @@ export interface AttachOptions extends StateOptions {
  * `onError` report rather than silence.
  */
 export function attach(session: Session, opts: AttachOptions): Detachable {
+  if (opts.abortRestores === true && opts.restoreCheckpoint === undefined) {
+    throw new Error("abortRestores requires a guarded restoreCheckpoint implementation");
+  }
+  positiveLimit("reviewTimeoutMs", opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
+  for (const [key, value] of Object.entries(opts.auxiliaryLimits ?? {})) positiveLimit(key, value);
   const state = initialState();
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
@@ -100,17 +132,78 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   if (opts.cacheWriteMultiplier !== undefined) stateOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
 
   let detached = false;
+  let restoreRequested = false;
+  const lifetime = new AbortController();
+  const stop = () => lifetime.abort(new DOMException("supervisor detached or session ended", "AbortError"));
+  session.control.auxiliarySignal?.addEventListener("abort", stop, { once: true });
+  if (session.control.auxiliarySignal?.aborted) stop();
+  void session.done.then(stop, stop);
   const report = (where: string, err: unknown): void => {
-    try {
+    auxiliaryDiagnostic(() => {
       opts.onError?.(where, err instanceof Error ? err : new Error(String(err)));
-    } catch {
-      // a throwing reporter must not become the failure it was reporting
+    });
+  };
+
+  const runAuxiliary = async <T>(operation: "reviewer" | "grader", work: (call: AuxiliaryOptions, start: () => void) => Promise<T>): Promise<T> => {
+    lifetime.signal.throwIfAborted();
+    const controller = new AbortController();
+    const abort = () => controller.abort(lifetime.signal.reason);
+    lifetime.signal.addEventListener("abort", abort, { once: true });
+    const ms = Math.min(opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
+      opts.auxiliaryLimits?.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
+    const started = performance.now();
+    const timer = setTimeout(() => controller.abort(new DOMException(`${operation} did not answer within ${ms}ms`, "TimeoutError")), ms);
+    const id = randomUUID();
+    let accepting = true;
+    let opaque = false;
+    let failure: unknown;
+    let latest: AuxiliaryReport = { operation, outcome: "completed", durationMs: 0, calls: [],
+      reportedUsage: { input: 0, output: 0 }, unknownUsageCalls: 0, costUsd: 0 };
+    const progress = (value: AuxiliaryReport): void => {
+      if (!accepting) return;
+      opaque = false;
+      latest = structuredClone(value);
+      session.control.record({ type: "auxiliary.usage", id, report: latest, final: false });
+    };
+    try {
+      const pending = Promise.resolve().then(() => {
+        controller.signal.throwIfAborted();
+        return work({ signal: controller.signal, ...(opts.auxiliaryLimits === undefined ? {} : { limits: opts.auxiliaryLimits }),
+          onProgress: progress, onUsage: value => { if (accepting) { opaque = false; latest = structuredClone(value); } } }, () => {
+          // A custom reviewer need not use our model adapter. Its opaque work has unknown cost,
+          // not a fabricated zero. Built-in model snapshots replace this conservative marker.
+          controller.signal.throwIfAborted();
+          progress({ ...latest, calls: [{ operation, provider: "custom", outcome: "failed", durationMs: 0, usageComplete: false }],
+            unknownUsageCalls: 1, costUsd: null });
+          opaque = true;
+        });
+      });
+      const result = await untilAborted(pending, controller.signal);
+      if (performance.now() - started >= ms) controller.abort(new DOMException(`${operation} did not answer within ${ms}ms`, "TimeoutError"));
+      controller.signal.throwIfAborted();
+      if (JSON.stringify(result).length > (opts.auxiliaryLimits?.maxOutputChars ?? DEFAULT_AUXILIARY_LIMITS.maxOutputChars)) throw new AuxiliaryLimitError(`${operation} result exceeds output limit`);
+      return result;
+    } catch (error) { failure = error ?? new Error(String(error)); throw error; }
+    finally {
+      accepting = false;
+      clearTimeout(timer);
+      lifetime.signal.removeEventListener("abort", abort);
+      const name = (failure as Error | undefined)?.name;
+      const final: AuxiliaryReport = { ...latest, operation, durationMs: Math.max(0, performance.now() - started),
+        outcome: failure === undefined ? latest.outcome : name === "TimeoutError" ? "timeout" : name === "AbortError" ? "aborted" : name === "AuxiliaryLimitError" ? "limit" : "failed" };
+      if (opaque) final.calls = final.calls.map(call => ({ ...call, outcome: final.outcome, durationMs: final.durationMs }));
+      controller.abort(new DOMException("auxiliary intervention closed", "AbortError"));
+      auxiliaryDiagnostic(() => session.control.record({ type: "auxiliary.usage", id, report: final, final: true }));
+      auxiliaryDiagnostic(() => opts.onUsage?.(structuredClone(final)));
     }
   };
 
   const done = (async () => {
-    for await (const event of session.events) {
-      if (detached) return;
+    const iterator = session.events[Symbol.asyncIterator]();
+    try { for (;;) {
+      const next = await untilAborted(iterator.next(), lifetime.signal);
+      if (next.done || detached || lifetime.signal.aborted) return;
+      const event = next.value;
       try {
         reduce(state, event, stateOpts);
       } catch (err) {
@@ -119,11 +212,13 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       }
       // the supervisor's own records come back through the stream; folding them is right
       // (lastInterventionSeq) but re-detecting on them is not
-      if (event.type === "supervisor.signal" || event.type === "supervisor.intervention") continue;
+      if (event.type === "supervisor.signal" || event.type === "supervisor.intervention" || event.type === "auxiliary.usage") continue;
 
       const signals = [];
       for (const d of opts.detectors) {
         try {
+          if (d.prepare !== undefined) await d.prepare(event, state, lifetime.signal);
+          if (detached || lifetime.signal.aborted) return;
           const s = d.observe(event, state);
           if (s !== null) signals.push(s);
         } catch (err) {
@@ -142,7 +237,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       }
 
       for (const intervention of interventions) {
-        if (detached || state.ended) break;
+        if (detached || state.ended || lifetime.signal.aborted) break;
 
         session.control.record({ type: "supervisor.intervention", intervention });
         const active = intervention;
@@ -164,6 +259,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                   Promise.resolve(opts.onEscalate(active.question)),
                   opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
                   "onEscalate",
+                  lifetime.signal,
                 );
                 // Legacy non-interactive handlers only report that delivery returned; they do not
                 // prove a human answered. Treat void as closed (which, like answered, suppresses
@@ -180,6 +276,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
             }
             case "abort":
               session.control.abort();
+              if (opts.abortRestores === true) restoreRequested = true;
               break;
             case "force_replan":
               // real as of M6: the loop refuses every tool except `update_plan` until a fresh
@@ -196,19 +293,17 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 report("apply", new Error("run_reviewer was reached with no reviewer attached; nothing was reviewed"));
                 break;
               }
-              const review = await withTimeout(
-                // the loader is INSIDE the timeout: a hanging attempts read would wedge the
-                // observer exactly as a hanging reviewer would
-                (async () =>
-                  opts.reviewer!.review({
+              const review = await runAuxiliary("reviewer", async (call, start) => {
+                const attempts = opts.attempts === undefined ? [] : await opts.attempts(session.id, call.signal!);
+                start();
+                return opts.reviewer!.review({
                     task: opts.task ?? "(task not supplied to the supervisor)",
                     trajectory: state.recent,
-                    attempts: opts.attempts === undefined ? [] : await opts.attempts(),
+                    attempts,
                     ...(opts.memoryIndex === undefined ? {} : { memoryIndex: opts.memoryIndex }),
-                  }))(),
-                opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
-                "reviewer",
-              );
+                  }, call);
+              });
+              if (detached || state.ended || lifetime.signal.aborted) break;
               if (review.guidance.trim() === "") break;
               // the reviewer's product is guidance, so it lands through the same `steer` channel
               // as inject_guidance — a better message, not a different mechanism
@@ -227,16 +322,16 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 report("apply", new Error("run_grader was reached with no grader attached; nothing was graded"));
                 break;
               }
-              const grade = await withTimeout(
-                (async () =>
-                  opts.grader!.grade({
+              const grade = await runAuxiliary("grader", async (call, start) => {
+                const artifacts = opts.artifacts === undefined ? [] : await opts.artifacts(session.id, call.signal!);
+                start();
+                return opts.grader!.grade({
                     rubric: active.rubric,
-                    artifacts: opts.artifacts === undefined ? [] : await opts.artifacts(),
+                    artifacts,
                     trajectory: state.recent,
-                  }))(),
-                opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
-                "grader",
-              );
+                  }, call);
+              });
+              if (detached || state.ended || lifetime.signal.aborted) break;
               if (!grade.pass && grade.gaps.length > 0) {
                 session.control.steer(
                   `[supervisor: grader] The work does not yet meet the rubric:\n` +
@@ -256,20 +351,37 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
           report(`apply:${active.type}`, err);
         }
       }
+    } } finally {
+      session.control.auxiliarySignal?.removeEventListener("abort", stop);
+      auxiliaryDiagnostic(() => iterator.return?.());
     }
   })().catch((err: unknown) => {
-    report("observer", err);
+    if (!lifetime.signal.aborted) report("observer", err);
+  }).then(async () => {
+    if (!restoreRequested) return;
+    try {
+      const summary = await session.done;
+      if (summary.reason !== "aborted") {
+        report("abort-restore", new Error(`restore skipped: session ended ${summary.reason}, not aborted`));
+        return;
+      }
+      // The ordinary observer signal is already aborted here. Restoration is a separate,
+      // authorized post-settlement phase, joined even if the caller detaches for cleanup.
+      const result = await opts.restoreCheckpoint!(session.id, AbortSignal.timeout(60_000));
+      auxiliaryDiagnostic(() => opts.onRestore?.(result));
+    } catch (error) { report("abort-restore", error); }
   });
 
   return {
     detach: () => {
       detached = true;
+      stop();
     },
     done,
   };
 }
 
-export interface SuperviseOptions extends DefaultDetectorOptions {
+export interface SuperviseOptions extends DefaultDetectorOptions, AbortRestoreOptions {
   ladder?: Omit<LadderOptions, "capabilities">;
   /** Rubric for the `run_grader` rung; without it the rung stays unreachable. */
   rubric?: string;
@@ -280,9 +392,11 @@ export interface SuperviseOptions extends DefaultDetectorOptions {
   grader?: Grader;
   task?: string;
   memoryIndex?: string;
-  attempts?: () => Promise<Attempt[]> | Attempt[];
-  artifacts?: () => Promise<Array<{ path: string; content?: string }>>;
+  attempts?: (sessionId: string, signal: AbortSignal) => Promise<Attempt[]> | Attempt[];
+  artifacts?: (sessionId: string, signal: AbortSignal) => Promise<Array<{ path: string; content?: string }>>;
   reviewTimeoutMs?: number;
+  auxiliaryLimits?: Partial<AuxiliaryLimits>;
+  onUsage?: (report: AuxiliaryReport) => void;
   onError?: (where: string, err: Error) => void;
   pricing?: StateOptions["pricing"];
   cacheReadDiscount?: number;
@@ -313,10 +427,10 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
     forceReplan: session.control.canRequirePlan(),
   };
   if (opts.capabilities?.forceReplan === true && !session.control.canRequirePlan()) {
-    opts.onError?.(
+    auxiliaryDiagnostic(() => opts.onError?.(
       "capabilities",
       new Error("force_replan was requested but this session has no update_plan tool; the rung is disabled"),
-    );
+    ));
   }
   const attachOpts: AttachOptions = {
     detectors: defaultDetectors(opts),
@@ -327,6 +441,9 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
     }),
   };
   if (opts.onEscalate !== undefined) attachOpts.onEscalate = opts.onEscalate;
+  if (opts.abortRestores !== undefined) attachOpts.abortRestores = opts.abortRestores;
+  if (opts.restoreCheckpoint !== undefined) attachOpts.restoreCheckpoint = opts.restoreCheckpoint;
+  if (opts.onRestore !== undefined) attachOpts.onRestore = opts.onRestore;
   if (opts.reviewer !== undefined) attachOpts.reviewer = opts.reviewer;
   if (opts.grader !== undefined) attachOpts.grader = opts.grader;
   if (opts.task !== undefined) attachOpts.task = opts.task;
@@ -334,6 +451,8 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
   if (opts.attempts !== undefined) attachOpts.attempts = opts.attempts;
   if (opts.artifacts !== undefined) attachOpts.artifacts = opts.artifacts;
   if (opts.reviewTimeoutMs !== undefined) attachOpts.reviewTimeoutMs = opts.reviewTimeoutMs;
+  if (opts.auxiliaryLimits !== undefined) attachOpts.auxiliaryLimits = opts.auxiliaryLimits;
+  if (opts.onUsage !== undefined) attachOpts.onUsage = opts.onUsage;
   if (opts.escalateTimeoutMs !== undefined) attachOpts.escalateTimeoutMs = opts.escalateTimeoutMs;
   if (opts.onError !== undefined) attachOpts.onError = opts.onError;
   if (opts.pricing !== undefined) attachOpts.pricing = opts.pricing;

@@ -2,6 +2,7 @@ import { access } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { IndexEntry, WikiPage } from "../types.js";
 import { factLines, pagePath, wikilinks } from "../page.js";
+import { writeQualityLint, type WriteQualityFinding } from "./write-quality.js";
 
 /**
  * The structural half of the dream (PLAN §3.4's lint list). Everything here is derivable from
@@ -9,8 +10,8 @@ import { factLines, pagePath, wikilinks } from "../page.js";
  * `agentrig memory lint` free to run on every session end and makes the dream's expensive
  * phases (contradictions, merges) the only ones that cost tokens.
  *
- * Judgment stays out of here on purpose: "these two pages contradict each other" needs a model,
- * "this page links to a page that does not exist" does not.
+ * Topology checks are structural. The write-quality pack separately labels text-shape concerns
+ * as advisory; it never claims to decide semantic truth or automatically rewrite a claim.
  */
 
 export interface StructuralFindings {
@@ -28,6 +29,8 @@ export interface StructuralFindings {
   unfilled: string[];
   /** Fact lines with no `(source:...)` — unattributable, so unverifiable. */
   unsourced: Array<{ page: string; line: string }>;
+  /** Advisory R6d text-shape findings; absent on older SDK-produced reports. */
+  writeQuality?: WriteQualityFinding[];
 }
 
 /** Wikilink → the page path it should resolve to, matching `pagePath`'s layout. */
@@ -67,6 +70,7 @@ const RELATIVE_DATE =
 const FILE_REF = /`([^`\s]+\.[A-Za-z0-9]{1,6})`/g;
 
 export interface StructuralOptions {
+  signal?: AbortSignal;
   /** Root the file refs are relative to. Omit to skip the file-existence check entirely. */
   cwd?: string;
 }
@@ -76,6 +80,7 @@ export async function structuralLint(
   index: IndexEntry[],
   opts: StructuralOptions = {},
 ): Promise<StructuralFindings> {
+  opts.signal?.throwIfAborted();
   const byPath = new Map(pages.map((p) => [p.path, p]));
   const linkedTo = new Set<string>();
   const missing = new Map<string, string[]>();
@@ -84,6 +89,7 @@ export async function structuralLint(
   const unsourced: StructuralFindings["unsourced"] = [];
 
   for (const page of pages) {
+    opts.signal?.throwIfAborted();
     for (const link of wikilinks(page.body)) {
       const target = resolveLink(link, pages);
       if (target === undefined) {
@@ -103,6 +109,7 @@ export async function structuralLint(
 
     const prose = stripCode(page.body);
     for (const line of prose.split("\n")) {
+      opts.signal?.throwIfAborted();
       for (const m of stripInlineCode(line).matchAll(RELATIVE_DATE)) {
         relativeDates.push({ page: page.path, line: line.trim().slice(0, 160), phrase: m[0] });
       }
@@ -112,6 +119,7 @@ export async function structuralLint(
       const seen = new Set<string>();
       const base = resolve(opts.cwd);
       for (const m of stripCode(page.body).matchAll(FILE_REF)) {
+        opts.signal?.throwIfAborted();
         const ref = m[1]!;
         if (seen.has(ref)) continue;
         seen.add(ref);
@@ -125,12 +133,14 @@ export async function structuralLint(
           () => true,
           () => false,
         );
+        opts.signal?.throwIfAborted();
         if (!exists) staleFileRefs.push({ page: page.path, ref });
       }
     }
   }
 
   const indexPaths = new Set(index.map((e) => e.path));
+  opts.signal?.throwIfAborted();
   const orphans = pages
     .filter((p) => !linkedTo.has(p.path) && !indexPaths.has(p.path))
     .map((p) => p.path)
@@ -154,6 +164,7 @@ export async function structuralLint(
     relativeDates,
     unfilled: index.filter((e) => e.status === "planned").map((e) => e.path).sort(),
     unsourced,
+    writeQuality: writeQualityLint(pages, opts.signal),
   };
 }
 
@@ -167,7 +178,8 @@ export function isClean(f: StructuralFindings): boolean {
     f.staleFileRefs.length === 0 &&
     f.relativeDates.length === 0 &&
     f.unfilled.length === 0 &&
-    f.unsourced.length === 0
+    f.unsourced.length === 0 &&
+    (f.writeQuality?.length ?? 0) === 0
   );
 }
 

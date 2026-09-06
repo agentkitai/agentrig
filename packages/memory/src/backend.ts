@@ -1,5 +1,6 @@
 import type { DistilledFact } from "./ingest.js";
 import type { WikiPage } from "./types.js";
+import { maintenanceDiagnostic } from "./maintenance.js";
 
 /**
  * The optional backend seam (PLAN §3.8).
@@ -43,13 +44,15 @@ export interface BackendAck {
   memoryId: string;
 }
 
+export interface BackendCallOptions { signal?: AbortSignal }
+
 export interface MemoryBackend {
   id: string;
   /** Returns the ids assigned to each fact, for the `lore:<memory-id>` half of provenance. */
-  onIngest(facts: DistilledFact[], source: SourceRef): Promise<BackendAck[]>;
-  recall(query: string, k: number): Promise<BackendHit[]>;
-  promote(page: WikiPage): Promise<void>;
-  conflicts?(facts: DistilledFact[]): Promise<Conflict[]>;
+  onIngest(facts: DistilledFact[], source: SourceRef, opts?: BackendCallOptions): Promise<BackendAck[]>;
+  recall(query: string, k: number, opts?: BackendCallOptions): Promise<BackendHit[]>;
+  promote(page: WikiPage, opts?: BackendCallOptions): Promise<void>;
+  conflicts?(facts: DistilledFact[], opts?: BackendCallOptions): Promise<Conflict[]>;
 }
 
 export interface TolerantOptions {
@@ -74,11 +77,7 @@ export function tolerant(
   const timeoutMs = opts.timeoutMs ?? 15_000;
   // a throwing logger must not become the failure it was reporting
   const report = (op: string, err: Error) => {
-    try {
-      onError(op, err);
-    } catch {
-      // e.g. EPIPE from console.error when stdout is piped to `head`
-    }
+    maintenanceDiagnostic(() => onError(op, err));
   };
   const guard = async <T>(op: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
     let timer: NodeJS.Timeout | undefined;
@@ -99,13 +98,13 @@ export function tolerant(
   };
   const wrapped: MemoryBackend = {
     id: backend.id,
-    onIngest: (facts, source) => guard("onIngest", () => backend.onIngest(facts, source), []),
-    recall: (query, k) => guard("recall", () => backend.recall(query, k), []),
-    promote: (page) => guard("promote", () => backend.promote(page), undefined),
+    onIngest: (facts, source, options) => guard("onIngest", () => backend.onIngest(facts, source, options), []),
+    recall: (query, k, options) => guard("recall", () => backend.recall(query, k, options), []),
+    promote: (page, options) => guard("promote", () => backend.promote(page, options), undefined),
   };
   if (backend.conflicts !== undefined) {
     const conflicts = backend.conflicts.bind(backend);
-    wrapped.conflicts = (facts) => guard("conflicts", () => conflicts(facts), []);
+    wrapped.conflicts = (facts, options) => guard("conflicts", () => conflicts(facts, options), []);
   }
   return wrapped;
 }

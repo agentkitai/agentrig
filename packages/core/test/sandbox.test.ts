@@ -48,7 +48,7 @@ describe("R2b sandbox providers", () => {
       return sandboxSpawnInvocation("tool", ["arg"], "/work");
     };
 
-    await expect(provider.prepare(command, { mode: "workspace-write", cwd: "/work" })())
+    await expect(provider.prepare(command, { mode: "none", cwd: "/work" })())
       .resolves.toEqual({ command: "tool", args: ["arg"], sandboxed: false });
     expect(calls).toBe(1);
   });

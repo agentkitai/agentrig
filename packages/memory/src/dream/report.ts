@@ -19,8 +19,32 @@ function section(title: string, lines: string[]): string[] {
   return lines.length === 0 ? [] : ["", `## ${title} (${lines.length})`, ...lines];
 }
 
+export function renderPromotionProposal(proposal: DreamReport["promoted"][number]): string {
+  const lines = [`- ${proposal.from} → global (proposal; human review required; semantic truth not assessed)`];
+  lines.push(proposal.guardrails === undefined ? "  guardrails: not assessed; evidence-only preview, not promotion approval"
+    : `  guardrails: ${proposal.guardrails.status} — ${proposal.guardrails.reason}`);
+  if (proposal.guardrails?.assessor !== undefined) lines.push(`  effect assessor: ${proposal.guardrails.assessor.provider}/${proposal.guardrails.assessor.model} (model judgment, not proof)`);
+  if (proposal.advisoryConfidence !== undefined) lines.push(`  page confidence (advisory, not evidence): ${proposal.advisoryConfidence}`);
+  if (proposal.claims === undefined) lines.push("  No runtime witness metadata in this legacy proposal.");
+  for (const claim of proposal.claims ?? []) {
+    lines.push(`  claim [${claim.tag}]: ${JSON.stringify(claim.claim)}`);
+    for (const witness of claim.witnesses) {
+      lines.push(`  ${witness.citation} → session:${witness.sessionId} event=${witness.seq} ${witness.field}[${witness.from},${witness.to}) family=${witness.family} eventHash=${witness.eventHash}`);
+      lines.push(`    excerpt: ${JSON.stringify(witness.excerpt.slice(0, 1000))}${witness.excerpt.length > 1000 ? " (display abbreviated; full range above)" : ""}`);
+    }
+  }
+  if (proposal.publicationBody !== undefined) lines.push("  Publication contains only the checked claim lines and supporting session references; extra citations are omitted.");
+  return lines.join("\n");
+}
+
 export function renderReport(report: DreamReport, opts: RenderOptions = {}): string {
   const out: string[] = ["# Dream report"];
+  if (report.scan?.complete === false) out.push("", "WARNING: Raw scan incomplete; model consolidation and automatic apply are disabled.",
+    `${report.scan.unreadableAttempts.length} unreadable or corrupt attempt entries; immutable originals are unchanged:`,
+    ...report.scan.unreadableAttempts.slice(0, 20).map(path => `- ${path}`),
+    ...(report.scan.unreadableAttempts.length > 20 ? [`- ${report.scan.unreadableAttempts.length - 20} more (full list in report.scan.unreadableAttempts)`] : []));
+  if ((report.pinPersistence?.skipped ?? 0) > 0) out.push("",
+    `WARNING: ${report.pinPersistence!.skipped} pin status check(s) were not persisted because the page/pin changed, the pin was removed, or the check was unversioned. Reported pin statuses are observations, not all persisted updates.`);
   if (opts.outputRoot !== undefined) {
     out.push(
       "",
@@ -59,7 +83,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
     ),
     ...section(
       "Promotion proposals",
-      report.promoted.map((p) => `- ${p.from} → global (${p.evidence.length} sessions: ${p.evidence.join(", ")})`),
+      report.promoted.map(renderPromotionProposal),
     ),
     ...section(
       "Pins",
@@ -68,6 +92,13 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   );
 
   const s = opts.structural;
+  if (report.procedures !== undefined) {
+    out.push(...section("Skill candidates (report only; fresh evidence/effect review required before emission)", report.procedures.candidates.map(candidate =>
+      `- skill-candidate [${candidate.status}] ${candidate.pages.join(", ")}\n`
+      + renderPromotionProposal(candidate.artifact).replace("→ global", "→ procedure review"))));
+    out.push(...section("Procedure refusals", report.procedures.rejected.map(item => `- ${item.pages.join(", ")}: ${item.reason}`)));
+    if (report.procedures.refinementError !== undefined) out.push("", `Procedure refinement incomplete; retained candidates are structural/unassessed: ${report.procedures.refinementError}`);
+  }
   if (s !== undefined) {
     out.push(
       ...section("Index drift", [
@@ -81,15 +112,18 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
       ),
       ...section("Reserved but never filled", s.unfilled.map((u) => `- ${u}`)),
       ...section("Facts with no source", s.unsourced.map((u) => `- ${u.page}: ${u.line}`)),
+      ...section("Write quality (advisory; semantic truth not assessed)", (s.writeQuality ?? []).map(f =>
+        `- [${f.kind}] ${f.page}: ${JSON.stringify(f.line)}${f.relatedPage === undefined ? "" : ` → ${f.relatedPage}`}\n  ${f.reason}`)),
     );
   }
 
-  const rejected = opts.promotionRejected ?? [];
+  const rejected = opts.promotionRejected ?? report.guardrailRejected ?? [];
   if (rejected.length > 0) {
     out.push(
       ...section(
         "Not promoted",
-        rejected.map((r) => `- ${r.page}: ${r.reason}`),
+        rejected.map((r) => `- ${r.page}: ${r.reason}` + (r.claims ?? []).filter(claim => !claim.eligible)
+          .map(claim => `\n  ${JSON.stringify(claim.claim)}: ${claim.reason}`).join("")),
       ),
     );
   }
@@ -98,16 +132,20 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   return `${out.join("\n")}\n`;
 }
 
-/** Total findings, so a caller can decide an exit code without re-walking the report. */
+/** Total issues, not distinct pins: a conflict and skipped persistence are separate findings. */
 export function findingCount(report: DreamReport, structural?: StructuralFindings): number {
   const base =
+    (report.procedures?.candidates.length ?? 0) + (report.procedures?.rejected.length ?? 0) + (report.procedures?.refinementError === undefined ? 0 : 1) +
+    (report.guardrailRejected?.length ?? 0) +
     report.contradictions.length +
     report.superseded.length +
     report.merged.length +
     report.removed.length +
     report.orphans.length +
     report.missingPages.length +
-    report.pinsAffected.filter((p) => p.status !== "kept").length;
+    report.pinsAffected.filter((p) => p.status !== "kept").length +
+    (report.pinPersistence?.skipped ?? 0) +
+    (report.scan?.complete === false ? Math.max(1, report.scan.unreadableAttempts.length) : 0);
   if (structural === undefined) return base;
   return (
     base +
@@ -116,6 +154,7 @@ export function findingCount(report: DreamReport, structural?: StructuralFinding
     structural.staleFileRefs.length +
     structural.relativeDates.length +
     structural.unfilled.length +
-    structural.unsourced.length
+    structural.unsourced.length +
+    (structural.writeQuality?.length ?? 0)
   );
 }

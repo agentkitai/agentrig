@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { EventPayload, PermissionClass } from "./events.js";
+import type { ShellOperation } from "./shell-operation.js";
 
 export interface ToolContext {
   cwd: string;
@@ -38,6 +39,23 @@ export interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;
   permission: PermissionClass | ((input: I) => PermissionClass);
+  /** Trusted host descriptor of the actual implementation/validated input. Never a model or
+   * MCP hint. Narrow rules cannot match tools without a supported descriptor. */
+  operation?(input: I): ShellOperation;
+  /** Trusted SDK effect declaration, not a permission or model/MCP annotation. Omission is
+   * potentially mutating. Only read-only calls can skip an opt-in checkpoint. */
+  effects?: "read-only" | "workspace" | "background" | ((input: I) => "read-only" | "workspace" | "background");
+  /** Trusted registration provenance, never server/model metadata or permission authority.
+   * File paths are checked canonically against the approved project root by core. */
+  resultSource?: "external" | { file(input: I): string };
+  /** Trusted registry probe; unfinished work makes checkpoint ownership uncertain. */
+  hasBackgroundWork?(): boolean;
+  /**
+   * Trusted SDK registration only: the implementation has no unrestricted host effects and
+   * routes mutations/processes through the active sandbox. Never infer this from tool names,
+   * permission classes, model input or MCP annotations. Omitted tools require outside approval.
+   */
+  sandbox?: "compatible";
   /**
    * The filesystem paths a call would touch (raw, as given — relative paths are resolved
    * against the session cwd by the policy). Lets policies confine a tool to the working

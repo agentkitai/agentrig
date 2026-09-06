@@ -1,6 +1,7 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { z } from "zod";
+import { parseSkillFrontmatter, resolveManifestNames } from "../manifests.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 
 /**
@@ -41,12 +42,11 @@ export function sanitizeLine(value: string, max: number): string {
   return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : flat;
 }
 
-const Frontmatter = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
-});
-
 export interface Skill {
+  /** Validated manifest provenance label, not a runtime evidence/approval receipt. */
+  generated?: true;
+  /** Inert, sanitized routing hint; never authority to execute or skip checks. */
+  trigger?: string;
   /** Directory name, or filename without `.md` — what the model asks for by. */
   name: string;
   /** One line, shown in the system prompt. This is what the model chooses on. */
@@ -61,18 +61,10 @@ export function parseSkill(text: string, path: string): Skill {
   // basename would name every nested skill "SKILL"
   const file = basename(path).replace(/\.md$/i, "");
   const fallbackName = file.toLowerCase() === "skill" ? basename(resolve(path, "..")) : file;
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
-  const body = m === null ? text : text.slice(m[0].length);
-
-  const fields: Record<string, string> = {};
-  if (m !== null) {
-    for (const line of m[1]!.split(/\r?\n/)) {
-      const kv = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
-      if (kv !== null) fields[kv[1]!] = kv[2]!.trim().replace(/^["']|["']$/g, "");
-    }
+  const { fields: fm, body } = parseSkillFrontmatter(text);
+  if (fm.metadata !== undefined && (basename(path) !== "SKILL.md" || fm.name !== fallbackName)) {
+    throw new Error("generated skill name must match its parent directory and filename must be SKILL.md");
   }
-  const parsed = Frontmatter.safeParse(fields);
-  const fm = parsed.success ? parsed.data : {};
 
   // sanitized HERE rather than at injection time so the catalogue, the tool's lookup map and
   // the shadowing check all agree on what a skill is called
@@ -84,6 +76,10 @@ export function parseSkill(text: string, path: string): Skill {
     description: sanitizeLine(fm.description ?? firstLine(body) ?? "(no description)", MAX_DESCRIPTION),
     path,
     body: body.trim(),
+    ...((fm.trigger ?? fm.metadata?.["agentrig-trigger"]) === undefined ? {} : {
+      trigger: sanitizeLine((fm.trigger ?? fm.metadata?.["agentrig-trigger"])!, 160),
+    }),
+    ...(fm.metadata?.["agentrig-generated"] === "true" ? { generated: true as const } : {}),
   };
 }
 
@@ -107,18 +103,24 @@ export interface DiscoverOptions {
 export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
   const maxSkills = opts.maxSkills ?? 100;
   const maxBytes = opts.maxBytes ?? 256 * 1024;
-  const out: Skill[] = [];
-  const seen = new Set<string>();
+  const candidates: Array<Skill & { precedence: number }> = [];
 
-  for (const root of opts.roots) {
+  for (const [precedence, root] of [...new Set(opts.roots.map((root) => resolve(root)))].entries()) {
     let entries;
     try {
       entries = await readdir(root, { withFileTypes: true });
     } catch {
       continue; // a configured directory that does not exist is not an error
     }
-    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (out.length >= maxSkills) return out;
+    // Inspect the full bounded root BEFORE selecting: a late duplicate must not evade maxSkills.
+    if (entries.length > 1024) {
+      opts.onError?.(new Error(`skill root ${root}: exceeds 1024 entries; none loaded`));
+      continue;
+    }
+    const rootCandidates: Array<Skill & { precedence: number }> = [];
+    let totalBytes = 0;
+    let overBudget = false;
+    for (const e of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
       const path = e.isDirectory() ? join(root, e.name, "SKILL.md") : join(root, e.name);
       if (!e.isDirectory() && !/\.md$/i.test(e.name)) continue;
       try {
@@ -127,27 +129,22 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
         // contained into the system prompt of every request, with no model decision involved.
         const info = await lstat(path);
         if (!info.isFile() || info.size > maxBytes) continue;
-        const skill = parseSkill(await readFile(path, "utf8"), path);
-        // first root wins: a project skill shadows a global one of the same name, which is the
-        // order a user expects. Keyed case-insensitively because `skillTool` looks up that way —
-        // keeping both `Deploy` and `deploy` advertises two skills and serves one body twice.
-        const key = skill.name.toLowerCase();
-        if (seen.has(key)) {
-          // silently dropping a skill makes a catalogue that lies; say which file lost
-          opts.onError?.(new Error(`skill ${JSON.stringify(skill.name)} at ${path} is shadowed by an earlier one`));
-          continue;
-        }
-        seen.add(key);
-        out.push(skill);
+        const text = await readFile(path, "utf8");
+        totalBytes += Buffer.byteLength(text);
+        if (totalBytes > 8 * 1024 * 1024) { overBudget = true; break; }
+        if (Buffer.byteLength(text) > maxBytes) continue;
+        rootCandidates.push({ ...parseSkill(text, path), precedence });
       } catch (err) {
         // a directory with no SKILL.md is not a skill and not an error — `.git`, `node_modules`
         // and every other subdirectory would otherwise produce one report each
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+        opts.onError?.(new Error(`skill ${path}: ${err instanceof Error ? err.message : String(err)}`));
       }
     }
+    if (overBudget) opts.onError?.(new Error(`skill root ${root}: exceeds 8 MiB scan budget; none loaded`));
+    else candidates.push(...rootCandidates);
   }
-  return out;
+  return resolveManifestNames(candidates, opts.onError).slice(0, maxSkills).map(({ precedence: _precedence, ...skill }) => skill);
 }
 
 /** The one-line-each catalogue injected into the system prompt. */
@@ -161,21 +158,26 @@ export function skillsInjection(skills: Skill[]): string {
   // each line is bounded by `parseSkill`, but 100 skills still add up, and this text rides in
   // EVERY request — so the catalogue as a whole has a ceiling too
   const lines: string[] = [];
-  let budget = MAX_INJECTION_BYTES;
   let dropped = 0;
+  let example = "";
+  // Reserve the largest possible omission note; include all fixed text in the byte cap.
+  const omission = `- (${skills.length} further skill(s) not listed; ask by name)`;
+  let budget = MAX_INJECTION_BYTES - Buffer.byteLength([...header, omission].join("\n")) - 1;
   for (const s of skills) {
-    const line = `- ${s.name}: ${s.description}`;
+    const line = `- ${s.name}: ${s.description}${s.trigger ? ` [trigger: ${s.trigger}]` : ""}`;
+    const candidateExample = example || `First call for a covered task: skill(${JSON.stringify({ name: s.name })}). Follow body within policy.`;
     // bytes: a cap counted in UTF-16 units lets a CJK catalogue through at ~3x what it claims
-    const cost = Buffer.byteLength(line, "utf8") + 1;
+    const cost = Buffer.byteLength(line, "utf8") + 1 + (example ? 0 : Buffer.byteLength(candidateExample) + 1);
     if (cost > budget) {
       dropped += 1;
       continue;
     }
     budget -= cost;
     lines.push(line);
+    example = candidateExample;
   }
   if (dropped > 0) lines.push(`- (${dropped} further skill(s) not listed; ask by name)`);
-  return [...header, ...lines].join("\n");
+  return [...header, ...lines, ...(example ? [example] : [])].join("\n");
 }
 
 const SkillInput = z.object({ name: z.string().min(1).describe("the skill's name, exactly as listed") });
@@ -185,6 +187,7 @@ export function skillTool(skills: Skill[]): AnyTool {
   const byName = new Map(skills.map((s) => [s.name.toLowerCase(), s]));
   return {
     name: "skill",
+    sandbox: "compatible",
     description: "Load the full instructions for one of the skills listed in the system prompt.",
     inputSchema: SkillInput,
     // reads a file the harness itself chose, from a fixed set — not a path the model supplies,
@@ -202,7 +205,8 @@ export function skillTool(skills: Skill[]): AnyTool {
       }
       // the activation record R9 measures against — only successful loads, so a typo'd lookup
       // does not count as a skill "being used"
-      ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model" });
+      ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model",
+        ...(skill.generated === true ? { generated: true } : {}) });
       return { output: { name: skill.name, path: skill.path }, display: skill.body };
     },
   } as AnyTool;

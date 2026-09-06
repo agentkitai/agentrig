@@ -57,6 +57,7 @@ class FakeProvider implements ModelProvider {
 
 const echoTool = (): AnyTool => ({
   name: "echo",
+  sandbox: "compatible",
   description: "echo text back",
   inputSchema: z.object({ text: z.string() }),
   permission: "read",
@@ -230,7 +231,7 @@ describe("agent loop", () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot!.messages).toContainEqual({
       role: "user",
-      content: [{ type: "text", text: "also remember X" }],
+      content: [{ type: "text", text: "also remember X", context: { principal: "hook:anonymous:1", authority: "advisory" } }],
     });
     expect(await store.materializeMessages(session.id)).toEqual(snapshot!.messages);
 
@@ -244,9 +245,9 @@ describe("agent loop", () => {
 
     const child = await store.fork(session.id, injection.seq);
     expect(await store.materializeMessages(child)).toEqual([
-      { role: "user", content: [{ type: "text", text: "original task" }] },
-      { role: "user", content: [{ type: "text", text: "rewritten task context" }] },
-      { role: "user", content: [{ type: "text", text: "also remember X" }] },
+      { role: "user", content: [{ type: "text", text: "original task", context: { principal: "user", authority: "instruction" } }] },
+      { role: "user", content: [{ type: "text", text: "rewritten task context", context: { principal: "hook:anonymous:0", authority: "advisory" } }] },
+      { role: "user", content: [{ type: "text", text: "also remember X", context: { principal: "hook:anonymous:1", authority: "advisory" } }] },
     ]);
   });
 
@@ -275,7 +276,7 @@ describe("agent loop", () => {
     // Ignored means IGNORED (#100): the exact conversation the model saw is the task alone — not
     // the task plus an empty user message, not the task plus a stringified object. A mutant that
     // reported the error and then injected "" passed the old "poison is absent" assertions.
-    const task = { role: "user", content: [{ type: "text", text: "original task" }] };
+    const task = { role: "user", content: [{ type: "text", text: "original task", context: { principal: "user", authority: "instruction" } }] };
     expect(provider.requests).toHaveLength(1);
     expect(provider.requests[0]!.messages).toEqual([task]);
 
@@ -358,6 +359,8 @@ describe("agent loop", () => {
     };
     const writeTool: AnyTool = {
       name: "write_fixture",
+      // This test supplies its own enforcing provider; H1 tests the concrete providers/tools.
+      sandbox: "compatible",
       description: "write a test fixture",
       inputSchema: z.object({ path: z.string(), text: z.string() }),
       permission: "write",
@@ -1219,7 +1222,7 @@ describe("compaction in the loop", () => {
     expect(compact?.type).toBe("context.compact");
     if (compact?.type !== "context.compact") throw new Error("missing context.compact");
     expect(await store.materializeMessages("materialized", compact.seq - 1)).toEqual([
-      { role: "user", content: [{ type: "text", text: "compare replay" }] },
+      { role: "user", content: [{ type: "text", text: "compare replay", context: { principal: "user", authority: "instruction" } }] },
       {
         role: "assistant",
         content: [
@@ -1231,8 +1234,8 @@ describe("compaction in the loop", () => {
       {
         role: "user",
         content: [
-          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact" },
-          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact" },
+          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact", trust: "tool-output" },
+          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact", trust: "tool-output" },
         ],
       },
     ]);
@@ -1434,8 +1437,8 @@ describe("tool-result eviction in the loop", () => {
 
     expect(compactedPayload).toBe(payloads["large-a.ts"]);
     expect(provider.requests[1]!.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "compact then send" }] },
-      { role: "user", content: [{ type: "text", text: "[compacted fixture history]" }] },
+      { role: "user", content: [{ type: "text", text: "compact then send", context: { principal: "user", authority: "instruction" } }] },
+      { role: "user", content: [{ type: "text", text: "[compacted fixture history]", trust: "external", context: { principal: "platform", authority: "advisory" } }] },
     ]);
     expect(events.some((event) => event.type === "context.compact")).toBe(true);
     expect(events.some((event) => event.type === "context.evicted")).toBe(false);

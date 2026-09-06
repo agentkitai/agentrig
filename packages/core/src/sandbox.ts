@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /** The filesystem authority granted to one tool execution. */
 export const SandboxMode = z.enum(["read-only", "workspace-write", "none"]);
@@ -10,6 +11,16 @@ export interface SandboxPolicy {
   cwd: string;
   /** Network access is a separate grant and is denied by container/OS providers by default. */
   network?: boolean;
+}
+
+const executionPolicy = new AsyncLocalStorage<SandboxPolicy | undefined>();
+/** Runtime policy established by the loop even when the provider is SDK-supplied. */
+export function withSandboxPolicy<T>(policy: SandboxPolicy | undefined, command: () => T): T {
+  return executionPolicy.run(policy, command);
+}
+export function currentSandboxPolicy(): SandboxPolicy | undefined {
+  const policy = executionPolicy.getStore();
+  return policy === undefined ? undefined : { ...policy };
 }
 
 /**
@@ -24,8 +35,8 @@ export interface SandboxProvider {
 }
 
 /**
- * Providers throw this only when their OS boundary denied an action. Ordinary tool failures keep
- * their existing tool.result behavior and must not be mislabeled as sandbox denials.
+ * An OS boundary denied an action, runtime policy forbids it, or a required enforcing execution
+ * path is unavailable. Ordinary tool failures must not be mislabeled as sandbox denials.
  */
 export class SandboxDeniedError extends Error {
   override readonly name = "SandboxDeniedError";

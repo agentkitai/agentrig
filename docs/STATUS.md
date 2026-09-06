@@ -1,7 +1,1107 @@
 # Status
 
-Current roadmap row: **R3.5 is complete (R3.5a, R3.5b — inserted band, see ROADMAP §R3.5); R4a is next.** R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete.
+Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d PR #154 is merged, pending main CI; R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
+
+## Current priorities — revised 2026-09-06
+
+### R12b implemented — pending delivery gates
+
+The TUI explains declared paths/class/argv separately from unknown effects and network access.
+Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
+the shared pure matcher must cover the current request before any grant is installed. Exact
+future scope is printed before separate confirmation. Both ordinary and protocol-adjacent input
+paths retain y/a/n/d behavior; framed paste and separate sandbox/MCP-change consent cannot mint
+scoped authority. R12a audit/lifecycle and explicit base decisions remain intact. [Contract](plans/R12b.md).
+
+Real Ink/CLI/runtime tests exercise inert shell commands, file writes, compatible reuse,
+outside-scope refusal, no dispatch for a mismatched initial scope, and persisted audit ordering.
+R12c inspection/reasons and R12d inheritance remain separate. Integrated R6g main `714732d`,
+preserving catalogue/routing/effort guidance and all previous done markers. Build/typecheck/full
+suite, restored mutations, one bounded review and exact-head CI remain delivery gates.
+
+Integrated build/typecheck and full four-worker suite pass: 2,224 tests plus two skips across
+116 files; focused scope/core-grant tests pass 45 cases. Missing-path coverage and before-preview
+confirmation mutations failed the named controls and were restored. One bounded Claude review
+`3c9c00d0-9e6c-4765-86e3-752b2e5ba17d` independently passed 216 tests (12 turns). Its one
+material stale-preview finding was reproduced in actual Ink: an old preview allowed a single
+protocol chunk to edit/re-preview/confirm. Exact prior-preview identity now gates confirmation;
+the regression failed before the fix and passes after, along with 30 scope/UI cases. Optional
+polish stays at the roadmap end. R13d main `2ad720f` is integrated; combined-head checks and
+exact-head CI follow, without another general review.
+The combined source passes build/typecheck and 2,243 tests plus two skips across 117 files
+(four workers, 30 seconds); exact-head three-platform CI remains mandatory.
+
+R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 34023253550;
+the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
+delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
+
+### R13d merged — PR #154; main CI pending
+
+Runtime context principals distinguish source trust, instruction authority and tool permissions.
+All accepted hook injection/modification surfaces use collision-safe registered identities;
+user steers are user/instruction, supervisor/hook contributions and platform-assembled replan
+reminders default advisory. Optional recursive metadata survives canonical events, storage,
+resume, unified provider requests and conservative compaction. Vendor fields/prose cannot
+mint authority; vendor wire formats remain unchanged. [Contract](plans/R13d.md).
+
+Trusted SDK config/control can explicitly delegate instruction authority to unique named hooks.
+Visible bounded `context.delegation` receipts do not grant tool permissions. Revocation downgrades
+retained content on the next request; replay and regrant cannot revive an old receipt. Historical
+events remain immutable. SDK JavaScript is not sandboxed, and metadata does not enforce model
+obedience; R13c permission restrictions remain a separate committed row.
+
+Dependency-order rationale: R13a/R13b are delivered, including R13b main `97e18bf` all-platform
+post-merge CI 34021998986. R13d's instruction-source registry is independent of parallel R12a
+tool-dispatch grants and R6c/R6g generated-skill work. Integrated R6c main `09157ae` preserves its
+schema/config/render changes. Ten new actual-runtime/schema/provider tests pass; revocation
+bypass, hook-as-user and custom-compactor authority-laundering mutations fail and are restored.
+Full integrated validation, one bounded independent review and exact-head/post-merge CI remain
+delivery gates. No new submilestones or live evaluation spend.
+
+Integrated R12a main `35f37ba` retains tool-grant lifecycle/audit and its permission schema split.
+One bounded Claude review `6d68f4c2-7567-4dc6-a8ad-d91cd0aa6b8b` independently passed build,
+typecheck and 2,203 tests plus two skips across 114 files (16 turns, 200 seconds). It found one
+material inject-only post-tool authority laundering issue: retained tool text borrowed a delegated
+hook note's authority. Success/error-path tests reproduced both failures; joining retained display
+as advisory fixes both, while full hook replacements retain explicit delegation. All 12 focused
+tests pass; optional review notes are at the roadmap end. No second general review.
+
+The analogous pre-tool shallow-merge path is conservative: actual changed inputs keep registered
+mutator identity but remain advisory/no receipt; no-op and ignored patches add no attribution.
+Partial/no-op/ignored regressions all failed before this bounded fix, then passed. Fifteen focused
+tests now pass. H6's inject-only result principal/hash expectations reflect the reviewed mixed
+display downgrade; actual tool text and lifecycle order remain unchanged.
+
+One overlapping local full run timed out the untouched E1 exact-upstream fixture at its existing
+5-second limit; its isolated diagnostic passes in 559 ms and the reviewer's full run passes.
+Final validation uses four local workers to avoid shared-container contention, without changing
+test cases, assertions or timeouts. Remote exact-head CI remains mandatory.
+
+Final updated-main build/typecheck and full suite pass: 2,208 tests plus two existing skips across
+114 files, with four local workers (29 seconds). Source head `a595fb9` includes both reviewed-path
+fixes; PR exact-head three-platform CI and post-merge main CI are the remaining delivery gates.
+
+PR #154 then integrated R6g main `714732d`, retaining catalogue/default-prompt guidance and both
+feature test sets. Build/typecheck and all 2,213 tests plus two skips across 115 files pass
+(four workers, 29 seconds). No second review for this mechanical integration; fresh exact-head
+CI supersedes the earlier pre-integration run.
+
+### R6g done — PR #153; post-merge CI green
+
+Merge `714732d` passed all three post-merge platforms in CI 34023837383 after green PR #153.
+The following validation notes are implementation history, not outstanding delivery gates.
+
+Optional bounded trigger strings reach the compact catalogue through strict parsing and
+sanitization. A worked first-call example names an actually listed skill; the entire catalogue
+stays within 8 KiB. Default routing and effort guidance preserve required verification,
+configured limits and approvals. Generated emission, edit protection and opt-in defaults are
+unchanged. [Contract](plans/R6g.md).
+
+Dependency-order rationale: R6g starts from R6c main `09157ae` after all-platform post-merge
+CI 34022647578 passed. It is independent of concurrent R13d provenance transport work; existing
+prompt source/authority seams remain intact. Named ambiguity-gate and catalogue-byte-cap
+mutations failed their intended controls and were restored. Full validation, one bounded
+independent review and exact-head PR/post-merge CI remain delivery gates.
+
+Integrated main `35f37ba` without production conflicts, preserving R12a grants and all done
+markers. Build/typecheck and the full suite pass: 2,196 tests plus two skips across 114 files,
+with four workers to avoid shared-container contention. One independent Claude review
+`21a600fa-7f06-4d6c-a0ba-20803e760e03` approved source head `f3f07a7`, no material findings.
+Its 20-turn bound ended before a verdict (164 seconds); one authorized tools-disabled final
+summary turn used only gathered evidence (29 seconds). Reviewer build/typecheck passed; its
+initial full run had 23 failures/timeouts across 10 unchanged files. Isolated reruns passed,
+as did 117 related tests. Resource contention is suspected, not proven. There is no independent
+single full-suite pass claim. The four-worker full pass above is our own validation. Optional
+polish is at the roadmap end; exact-head three-platform CI remains authoritative.
+
+### R6c done — PR #151; post-merge CI green
+
+Final head `9c4951d` passed all three PR platforms and merged as `09157ae`.
+Post-merge CI 34022647578 passed all three platforms.
+
+Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
+roots through the existing trust/discovery boundary. Negative overrides and manual-root
+precedence remain intact. Validated manifest metadata labels actual successful model loads
+with optional `skill.used.generated: true`; ordinary events stay unchanged, and denied/missing
+loads never count. Labels grant no permission, approval or benefit. [Contract](plans/R6c.md).
+
+Dependency-order rationale: R6b PR #149 and main `7c680c4` passed all-platform post-merge CI
+34021388430 before this new worktree began. R6c closes the opt-in mechanical learning loop;
+R6g trigger work and live benefit comparisons are separate. Existing TUI slash invocation
+does not acquire new usage telemetry. Integrated main `97e18bf` preserves the R13b provenance
+seams and all previous done labels. Build/typecheck and 2,167 tests plus two skips pass across
+111 files; 15 focused tests pass. Default-on discovery and dropped event-marker mutations fail
+their named controls and are restored. One bounded independent Claude review
+`81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
+independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
+polish is at the roadmap end; exact-head PR and post-merge CI completed successfully.
+
+### R6b done — PR #149; post-merge CI green
+
+Final head `d02ee57` passed all three PR platforms and merged as `7c680c4`.
+Post-merge CI 34021388430 passed all three platforms.
+
+Explicit opt-in skill previews bind human confirmation to an exact artifact digest. Fresh
+runtime evidence, classification and effect receipts are mandatory at apply; saved reports
+cannot authorize emission. Versioned string metadata round-trips through the real loader;
+generated files are not activated. Edited/locked/foreign destinations are preserved. [Contract](plans/R6b.md).
+
+Dependency-order rationale: R6b follows merged R6a/R5e and completed H4/R6e safety foundations,
+independently of R13/R12 permission and provenance work. It does not implement R6c activation.
+Build/typecheck, focused tests, full suite, named mutation controls, one independent review and
+exact-head PR/post-merge CI are the delivery gates; final receipts belong to the closing PR.
+
+Updated-main build/typecheck and full suite pass: 2,134 tests plus two skips across 107 files.
+One bounded independent Claude review `e1112e28-ebef-4ea5-9c7b-0498f06d2f5e` approved head
+`959cc97` with no material findings and independently repeated those checks. Named digest and
+ownership bypass mutations fail the intended tests and are restored. No second general review.
+
+### Committed continuation and parallel delivery
+
+User direction on 2026-09-06: roadmap items are part of AgentRig's vision, not candidates awaiting
+new demand justification. Continue in impact/dependency order. Independent items may run in
+parallel in separate Git worktrees, each on a fresh branch from updated main and each ending in
+its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establishes fail-closed
+manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
+requires consent for changes. These are independent first items.
+
+R6a/R6b/R6c are delivered; the memory track continues with R6g. R12a follows R12e semantic
+authorization, while R13d follows delivered R13a/R13b metadata and assembly. Dependency-aware
+parallel starts preserve the committed queue and introduce no demand veto.
+
+Each exact head needs appropriate tests, one bounded independent review with material findings
+addressed, and green three-platform CI. Integrate current main before merging; serialize merges
+and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, with no recursive
+submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
+an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
+
+### R12a done — PR #152; post-merge CI green
+
+PR #152 merged as `35f37ba` after all three PR platforms passed. Exact post-merge CI
+34023253550 passed all three platforms. Remaining gate wording below is historical.
+
+Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
+path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for
+base-policy `ask`, preserving explicit allows/denies. Permission grant/revocation events flush
+before dispatch; failed audit writes retain their queue head and prevent execution. No event
+replay installs authority. TUI standing allow/deny uses `resource: *` records and now revokes
+across `/new`, fork, session switching and undo instead of leaking across conversations.
+Same-session continuation retains live session grants; task grants expire at run end. Shared
+child groups remain compatible and `delegable` is explicitly unenforced until R12d. See
+[contract](plans/R12a.md) for queue bounds, idle audit and advisory path limits.
+
+Integrated R13b main `97e18bf`, retaining its provenance pipeline and all prior CI steps.
+Build/typecheck pass with 2,176 tests plus two skips across 110 files and 151 focused cases.
+All-path, post-answer-audit and session-transition-revocation mutations were detected and restored.
+One bounded Claude review `8a03542b-c6e2-4b1b-886a-42012a286ad7` approved with no material
+findings, independently repeating 151 focused tests and typecheck. R6c main `09157ae` is now
+integrated; build/typecheck and 2,191 tests plus two skips across 113 files pass.
+Exact-head and post-merge three-platform CI have passed. Optional polish
+stays at the roadmap end. The bounded roadmap cleanup adds missing done
+markers for R4a–R4c (PRs #135–#137), R6d/R6e (#139/#140) and R6f (H5a, #122), using the
+explicit merge/CI receipts below; unfinished rows retain their scope.
+
+### R13b done — PR #150
+
+Final head `8486a53` passed all three jobs in CI 34021725480 and merged as `97e18bf`.
+Exact post-merge CI 34021998986 passed all three platforms. Following notes are implementation
+history, not outstanding delivery gates.
+
+Trusted registered source metadata assigns actual MCP/external results `external`; file readers
+require canonical approved-root containment before and after execution for `project`. Unknown,
+failed or changed identity checks and hook-altered results remain external. Generic tool output
+has unknown ancestry, and immutable overflow recovery is explicitly external. No name/prose
+heuristics, permissions, principals or web-fetch implementation. [Contract](plans/R13b.md).
+
+Built-in summaries join their precise source slice recursively, including repeated/nested
+summaries. Missing/generated/tool-output ancestry is conservatively external. Custom compaction
+receives detached messages: only exact structural copies recover original labels, ambiguous
+duplicates join conservatively and changed output inherits all-input ancestry, never its claimed
+labels. Legacy no-op compaction and aborted-child lifecycle behavior are retained.
+
+Runtime MCP/file/symlink/overflow controls and resumed summary-laundering discrimination pass.
+H6 trace changes are limited to new metadata and its derived request hashes/token estimates.
+Full validation, restored negative controls, one independent review and exact-head/post-merge
+three-platform CI remain closing delivery gates; optional refinements belong at ROADMAP's end.
+
+One bounded Claude review `44f6ca76-9abe-4f58-baf1-e055d241fa4a` independently passed 119 tests
+and typecheck, finding one material post-tool cancellation regression. A failing runtime test
+reproduced duplicate result events; the fix degrades provenance without re-emission. All 18 new
+tests pass. MCP source removal, summary upgrade and custom-retention bypass mutations failed
+and were restored. Integrated R6b main `7c680c4`: build/typecheck and full suite pass 2,152 tests
+plus two existing skips across 108 files. No second general review for mechanical integration.
+
+Integrated-head CI 34021454352 exposed a macOS partial-child-output fixture race: its 25 ms
+timer could abort before any text was emitted. Delaying initial turn persistence reproduced
+the exact failure. The fixture now waits for actual first-tool entry with a bounded timeout,
+then aborts; delayed startup and the exact partial-output assertion remain. Suppressing retained
+child text still fails the assertion (mutation restored). Production code is unchanged; full
+build/typecheck and 2,152 tests plus two skips pass, including 62 focused lifecycle/provenance cases.
+
+### R12e done — PR #148 records delivery gates
+
+Merge `6cf3865` passed three-platform post-merge CI 34019474635.
+
+Explicit `--allow-command '["git","status"]'` / config argv prefixes now match a bounded
+literal POSIX operation descriptor derived by trusted built-in bash after validated pre-tool
+hooks. Names, transcript claims and MCP hints never mint authority. Unsupported syntax and
+background calls cannot satisfy narrow scopes; existing explicit blanket authority is preserved,
+with CLI deny rules first. This is not read-only/binary/PATH/Git-hook attestation and does not
+implement R12a grant records or R12b–R12d lifecycle/UI. [Contract](plans/R12e.md).
+
+Integrated main `76ac082` includes R6a and R13a; build/typecheck pass and the full suite passes
+2,111 tests plus two skips across 105 files. Bypassing argv equality and deriving descriptors
+before hook modifications both fail named negative controls; both mutations are restored.
+Bounded Claude review `fb4da610-4af1-43fa-b597-98c52b1e2c0f` approves the code and independently
+passes typecheck plus 136 tests. Evidence wording and committing docs resolve its two delivery
+findings. Exact-head three-platform CI passed; main `6cf3865` passed post-merge CI 34019474635.
+R5d's merged `008c2ba` passed post-merge CI 34018010003; Windows repair `3c857d0` passed
+post-merge CI 34017665328. R13a main `76ac082` passed post-merge CI 34018763831 on all platforms.
+
+### R13a done — PR #147 records delivery gates
+
+Final head `deef3ab` passed three-platform CI 34018447400 and merged as `76ac082`.
+Exact post-merge CI 34018763831 passed Linux, macOS and Windows.
+
+Optional block-level provenance now round-trips recursively through unified messages, canonical
+events/snapshots, fork materialization, actual provider requests and resumed turns. Custom-provider
+labels are validated and text segments retain their boundaries; vendor JSON/prose cannot supply
+those labels. Wire projections add no unsupported fields. Observing hooks cannot mutate nested
+labels and outbound eviction does not flatten labeled children. [Contract](plans/R13a.md).
+
+Parallel-order rationale: R13a carries metadata only and is independent of pending R12e/grant
+work and R6a wiki procedures. No authority or permission is inferred; R13b assembly/compaction,
+R13d principals and R13c enforcement remain later rows. This is not a claim those policies exist.
+Build/typecheck/full tests, one bounded independent review, restored negative controls and exact
+PR/post-merge three-platform CI are the delivery gates; closing receipts belong to the PR.
+
+One bounded Claude review `128bce32-4807-4eb8-9eef-75511eb6c868` approved with no material
+findings, independently passing 692 core tests and all-package typecheck. Schema-drop and
+stream-assembly-drop mutations fail named persistence/resume controls and are restored. Actual
+vendor text/tool-call provenance spoofing is inert, and a user-labeled call still obeys denial.
+Crash-only raw-delta reconstruction remains unlabeled; no unrecorded provenance is invented.
+After integrating R6a main `42cef62`, local build/typecheck/full suite pass
+2,072 tests plus two existing skips (103 files);
+66 focused trust/hooks/eviction/H6 trace tests pass with unchanged golden traces.
+Previous head `a93406a` passed three-platform CI 34018081611; the integrated head requires
+its own checks before merge. PR #147 records exact-head and post-merge receipts.
+
+### R6a done — PR #146 records delivery gates
+
+Final head `fe12d9a` merged as `42cef62` after green PR CI. Post-merge CI 34018319273
+passed on all three platforms.
+
+R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
+(R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
+permission-grant/provenance interfaces, so it can run in parallel; R6b/R6c remain dependent.
+Opt-in dream/CLI detection carries H4 witnesses for every step, scope and limitation. Structural
+mode is zero-call; bounded classification may reject but never rewrite candidates, then R6e
+effect review is required for the distinct reviewed status. Existing model caps are unchanged.
+No skills emitted, no permission change, no live evaluation or benefit claim. See [R6a](plans/R6a.md).
+Closing PR records validation/review and exact-head/post-merge three-platform CI receipts.
+
+One bounded independent Claude review `b71374d1-cfb4-45f2-b9aa-f219fa707721` approved, independently
+passing build/typecheck, 2,013 tests plus two skips and 20 focused cases before integration.
+Strict-classification and adverse-effect bypass mutations failed and were restored. Current
+main is integrated before final validation; optional refinements remain at the roadmap end.
+
+### Windows memory atomic replacement — merged in PR #145
+
+Final head `0abdfc7` passed three-platform CI 34017429109 and merged as `3c857d0`.
+Post-merge main CI 34017665328 passed on all three platforms; PR #145 records final receipts.
+
+R5d combined-head CI 34016959860 failed the existing Windows two-process ingest conservation
+fixture with `EPERM` renaming a temporary index over `index.md`. This is not evidence of a known
+external actor or a proven transient. A separate bounded repair now retries only Windows
+EPERM/EACCES/EBUSY under the existing writer lock: same temporary file, 250 ms monotonic window,
+at most 20 ms between attempts, signal-aware waits and no destination deletion or force fallback.
+Other errors fail immediately; exhaustion preserves the previous target and existing cleanup.
+See [repair contract](plans/windows-memory-replace.md). Deterministic actual-store regressions,
+the real Windows process fixture, one independent review and exact-head/post-merge CI gate its
+own PR before R5d integrates it. R6a is independent after delivered memory/manifest prerequisites.
+
+Build/typecheck and the full local suite pass 2,024 tests plus two skips (98 files). One bounded
+Claude review `29dd2b60-97d3-4862-aa2e-759c20a5a954` approves with no material findings; it
+independently passes 11 repair tests, 581 memory tests plus two skips and typecheck. Disabling
+eligible retries fails all three error-code controls; removing the per-attempt abort check fails
+the late-attempt control. Both mutations are restored. Windows CI retains the original fixture
+and repeats its conservation case, alongside the deterministic repair tests. Final exact-head
+and post-merge CI receipts belong to the repair PR; R5d's earlier independent review is unchanged.
+
+### R13f done — PR #143 records closing delivery gates
+
+Final head `01127b7` passed three-platform CI 34016646499 and merged as `1a20f4e`.
+That merge passed post-merge main CI 34016868500 on all three platforms.
+
+Core stamps unique runtime call provenance; only matching successful write-class results in the
+same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
+bounded current-worktree bytes before scope classification. Claims stay in immutable JSONL.
+Legacy logs without provenance remain readable but receive no file-progress credit, including
+the stall evidence counter. See [R13f contract](plans/R13f.md) for deletion, race and size limits.
+
+One bounded independent Claude review `2fdeec4f-21ca-4b77-91be-60b0d6d14088` approved with no
+material findings and 162 independently executed tests. Removing the write-class gate and
+bypassing the content hash fail named tests; both mutations are restored. First-head macOS and
+Windows CI caught an absolute-path alias bug (including `/var` versus `/private/var`), fixed with canonical
+containment and a portable symlink/junction regression that fails against the old check. The final
+branch integrates R5e main `26e78ec`; build/typecheck and the full local suite pass 2,013 tests
+plus two skips (97 files), with both Windows targeted suites retained. Exact final-head
+three-platform CI passed as recorded above; post-merge main CI gates the next merge. PR #143
+records the closing receipts.
+Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
+
+### R5e done — PR #142 records delivery gates
+
+Final head `aafaa5b`, PR CI 34016292275 passed all three platforms and merged as `26e78ec`.
+Post-merge main CI 34016511315 passed all three platforms; R5e delivery is complete.
+
+Strict versioned skill/extension/package schemas now reject unknown fields before use. The
+existing skill loader rejects malformed frontmatter and equal-precedence names, including late
+duplicates beyond the catalogue limit; plain Markdown and repository skills remain compatible.
+Extension/package runtime consumers remain R5a/R5c, with reusable validation/surface seams ready.
+See [R5e contract](plans/R5e.md) for the intentionally flat skill dialect and supported npm subset.
+
+One bounded Claude review `989005b4-0c49-4e97-a101-b041c1cdd6f1` independently passed typecheck,
+1,993 tests plus two skips and 58 focused tests. Its one material finding (incomplete package
+script blocklist) is fixed by refusing all nonempty scripts; the added regression fails against
+the old blocklist. Strict-schema and equal-precedence negative mutations also fail and are
+restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
+post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
+
+### R5d done — PR #144 records delivery gates
+
+Merge `008c2ba` passed three-platform post-merge CI 34018010003.
+
+CLI run/TUI now persist MCP tool-definition baselines in trusted user state, scoped by canonical
+config path and server name. First use is explicitly trust-on-first-use, not a safety assessment.
+Changed names, descriptions or input schemas require exact before/after consent independent of
+ordinary allow/YOLO and TUI standing answers. Unattended calls refuse; changes after advertisement
+or during approval require reconnection. Bounded pin reads, complete-list validation and locked
+CAS preserve prior approvals on errors or stale reviews. MCP tools remain `exec`; sandbox limits
+are unchanged. See [R5d contract](plans/R5d.md) for the SDK trusted-host seam and attestation limits.
+
+One bounded Claude review `fc691d69-5cc4-4e35-8b1f-92ac33e9da68` approved with no material findings,
+independently passing typecheck, 42 MCP tests, the TUI consent test and 1,981 tests plus two skips.
+Missing-callback and stale-advertisement mutations failed their named core controls and were
+restored. The CLI adapter independently fails closed on absent user interaction. Real Node stdio
+server tests use an independent effect marker; TUI tests show the exact delta and reject standing
+grants. Integrated with repaired main `3c857d0`: build/typecheck and 2,037 tests plus two skips
+(100 files) pass. The prior integration exposed the Windows memory replacement failure documented
+above; its independently reviewed repair was merged in PR #145 and is now included. No second
+general R5d review was needed. Previous head `65bbc0b` passed all three platforms in CI 34016609070; updated-head and
+post-merge CI remain required before the next merge. PR #144 holds final receipts. Optional polish
+is at ROADMAP's end, not additional release subdivisions.
+
+### R6e complete (PR #140)
+
+Final head `77a8814`, merge `2a3aee8`, PR CI 34013775380 and post-merge CI 34014007805 passed all
+three platforms. One approving independent review, 1,968 local passes plus two skips, and two
+detected/restored mutations. Following notes record the implementation checks, not pending gates.
+
+Fresh branch from updated main `762aa0c`; [contract](plans/R6e.md). Add bounded, fail-closed
+effect assessment beside runtime evidence eligibility. Preserve offline previews and explicit
+publication confirmation; no keyword-only safety claim or automatic rewrite. Build/typecheck and
+the full Node22 suite pass 1,968 tests plus two skips (95 files). One bounded independent review
+approved and independently passed the same full suite. Effect-denial and artifact-binding
+mutations were detected and restored. PR #140 records the final delivery receipts. R6f was
+delivered by H5 and is not repeated. The user-authorized continuation above supersedes the
+previous conditional stop after R6e; generated skills still need separate benefit measurement
+before becoming a default, not before being implemented.
+
+### R6d complete (PR #139)
+
+Final head `2e14117`, merge `762aa0c`, PR CI 34012625855 and post-merge CI 34012808696 passed all
+three platforms. One approving review, full local 1,945 passes plus two skips, final targeted 76,
+and two detected/restored mutations. Following notes record intermediate gates, not pending work.
+
+Fresh branch from updated main `412a9af`; [contract](plans/R6d.md). Complete advisory write-quality
+lint on existing claim tags, and identify new model summaries as inferred synthesis instead of
+observed evidence. No auto-rewrite or promotion change. Build/typecheck and the full Node22 suite
+pass 1,945 plus two skips (94 files). One bounded Claude review approved, independently passing
+the same full suite. Reporting and provenance negative mutations fail and are restored. Optional
+polish stays at ROADMAP's end. R6e remains next, after exact-head and post-merge CI gates.
+
+### H6 complete (PR #138)
+
+Final head `6e6803b`, merge `412a9af`, PR CI 34011748505 and post-merge CI 34011951160 all green.
+One independent review, 1,934 local passes plus two skips, unchanged complete baseline traces
+and two detected/restored mutations. Following notes are intermediate records, not pending gates.
+
+Fresh branch from updated main `3c09f84`; [contract](plans/H6.md). Extract internal tool-execution
+and session-lifecycle components without changing the public API or event behavior. Three complete
+golden traces captured before extraction still match unchanged. Build/typecheck and the full
+Node22 suite pass 1,934 plus two skips (93 files). One bounded Claude review approved, independently
+passing build/typecheck and 372 targeted cases. Two negative mutations were detected/restored;
+one exposed and prompted repair of a replay-only test gap, with expectations unchanged. The final
+trace test also passes against original main agent.ts. PR/main CI gates remain required.
+
+### R4c complete (PR #137)
+
+Final head `15c6e3f`, merge `3c09f84`, PR CI 34010906102 and post-merge CI 34011105236 passed
+all three platforms. One approving independent review, two detected/restored mutations and one
+scoped Windows E1 fixture-timeout repair. Full local 1,931 passes plus two skips. Notes below
+record intermediate gates, not outstanding work.
+
+Fresh branch from updated main `1291c77`; [contract](plans/R4c.md). Add opt-in post-settlement
+supervisor restore using the existing guarded undo seam, joined through observer shutdown and
+shared CLI/TUI wiring. Defaults unchanged; no user-abort-only restore, no force path. Integration
+tests exposed and now cover normal iterator completion after cancellation being mislabeled done;
+core preserves usage but reports aborted. Build/typecheck and the full Node22 suite pass 1,931
+tests plus two skips (92 files). One bounded Claude review `db4e2583-64e6-45c0-9a34-1e42ee8bd5d0`
+approved with no blockers, independently passing build/typecheck and 1,036 selected cases.
+Opt-in-gate and cancellation-classification mutations fail their named tests and are restored.
+Optional polish stays at ROADMAP's end; exact-head PR and post-merge main CI remain pending.
+
+PR #137 initial head `6593f1b` passed Linux/macOS; Windows CI 34010786976 exceeded the unchanged
+E1 signal/numeric-exit fixture's five-second test budget. A scoped test-only 30-second timeout
+keeps all assertions and production limits; final-head three-platform CI is required.
+
+### R4b complete (PR #136)
+
+Final head `0dcbb09`, merge `1291c77`, exact-head CI 34009706860 and post-merge CI 34009896484
+passed all platforms. One independent review approved; one test-only Windows fixture-budget
+repair. Full local suite 1,917 passes plus two skips. Notes below record intermediate gates.
+
+Fresh branch `feat/r4b-guarded-undo` from updated main `45dac7f`. [Contract](plans/R4b.md):
+post-tool ownership checks, terminal seals, explicit guarded CLI/TUI undo, retained recovery
+originals and independent audit logs. Older unsealed sessions refuse; no force option. R4c is
+not pulled forward. Build/typecheck and full explicit Node22 suite pass 1,917 plus two skips
+(91 files). One bounded Claude pass `0d3fecf5-0182-4d8c-9140-72e70d19c1fa` approved, independently
+passing build/typecheck, 125 targeted cases and the full suite. Dirty-guard mutation fails its
+named test and is reverted. Optional polish is at ROADMAP's end; exact-head/post-merge CI pending.
+
+Initial head `365d206` passed Linux/macOS CI; Windows exceeded the 5-second Vitest default in
+three multi-step Git cases. Raised only checkpoint integration fixture budgets to 30 seconds;
+all assertions and production deadlines are unchanged. Final-head CI must pass before merge.
+
+### R4a complete (PR #135)
+
+Final head `cc037e7`, merge `45dac7f`, exact-head CI 34008045638 and post-merge main CI
+34008201624 passed Linux/macOS/Windows. One independent Claude pass approved. Final targeted
+rerun passed 130 tests, and the full suite passed 1,901 plus two skips. Notes below are historical.
+
+Fresh branch from updated main `56b4d8a`, after E3 PR #134 exact-head CI 34006960314 and
+post-merge main CI 34007074990 passed Linux/macOS/Windows. E3 is complete under its explicitly
+amended AI-assessment method: 67 PASS / 29 FAIL; original evidence retained, utility inconclusive.
+See [R4a contract](plans/R4a.md). Old PR #109/worktree are preserved; this new branch ports
+selected reviewed pieces and adds conservative effect coverage, raw-byte capture and writer guards.
+Checkpoint creation only; R4b/R4c are not pulled into this PR. Build/typecheck and the full Node22
+suite pass 1,901 tests plus two skips (90 files). Claude's single bounded pass
+`124693ac-c382-45ef-a044-41be0468eb87` approved and passed 127 targeted tests; its throughput
+request is satisfied by a 1,000-file local sample (3,961 ms) and explicit non-guaranteed size ceilings.
+Both effect-gate and scan-consistency mutation controls fail as expected and are reverted.
+Optional polish is at ROADMAP's end. Exact-head PR CI, merge and post-merge main CI remain pending.
+
+### E3 complete (PR #134)
+
+Delivery complete: final head `9b0751c`, merge `56b4d8a`, exact-head CI 34006960314 and
+post-merge main CI 34007074990 passed all three platforms. The following assessment notes
+record intermediate gates; none remain outstanding.
+
+The user authorized independent AI assessment on 2026-09-06 after collection. The Codex
+maintainer reviewed all 12 X4 explanations under the unchanged rubric: one PASS, 11 FAIL.
+Final amended outcomes: **67 PASS, 29 FAIL, zero pending**. This is non-blind AI review,
+not human validation; original automatic outcomes and the 2,872-file archive remain unchanged.
+See [assessment and sensitivity](reviews/E3-AI-ASSESSMENT.md), [attributed verdicts](e3-ai-review.json),
+[derived outcomes](e3-reviewed-results.json), and [final comparison](E3-RESULTS.md).
+Memory-only meets the numerical thresholds but the overall utility evidence remains inconclusive;
+features stay opt-in. No further user prose assessment or live run is needed. Final-head CI,
+merge and exact post-merge main CI are the remaining delivery gates before R4a.
+
+Final maintainer build/typecheck and Node22 suite: 1,871 passes plus two skips, 89 files.
+Fourth scoped Claude pass `ac90b428-f8b2-4a73-b48c-89d1912144fd` approved the assessor amendment,
+count derivation and borderline-judgment consistency with no material blockers (read-only,
+no tests/delegation). The earlier three passes are recorded below; no new roadmap subdivision.
+
+#### Historical collection record (superseded assessor gate)
+
+All 96 scheduled Luna attempts ran once: 66 PASS, 18 FAIL, 12 BLOCKED awaiting genuine X4
+prose judgments. Total 9,358,630 reported tokens including training/ingest, zero incomplete
+calls, no global guard stop. All regression/scope lanes passed. The full evidence archive and
+[results/limitations](E3-RESULTS.md) are published in this PR; 2,872 file hashes were verified,
+all 96 reports reproduced, and all 48 frozen memory copies matched. No feature benefit is
+established pending human judgments; the supervisor-on memory comparison also exceeds the
+preregistered token-overhead threshold. Features remain opt-in. Human packets:
+[R1](reviews/E3-X4-R1.md), [R2](reviews/E3-X4-R2.md), [R3](reviews/E3-X4-R3.md).
+Do not merge or start R4 before this gate, final analysis, final-head CI and post-merge main CI.
+The notes below record implementation/collection history, not new submilestones.
+
+Subscription-only Luna is authorized and connectivity passed. Protocol and stop rules are in
+[plans/E3.md](plans/E3.md). E2 PR #133 is merged at d6d82f5; exact-head CI 33977198824 and
+post-merge CI 33977351290 passed all three platforms. E3 will preserve A4/X4 human review gates.
+
+The isolated runner, fixed schedule, unknown-usage guards and E2 bundle collection are implemented.
+Claude review cdd0632f-5313-422a-a483-923d4776ccbe requested three repairs, then approved the focused
+second pass with 51 relevant tests passing (actual Docker controls ran). A Docker timeout test
+reproduced SIGTERM client hanging; SIGKILL plus exact UUID cleanup fixed it. All four SDK conditions
+have scripted wiring tests. Maintainer build/typecheck and explicit Node22 full suite pass 1,868
+plus two skips (1,870 total, 89 files). The initial review could not run build; maintainer did.
+Real pinned A1 preparation/build and seeded-failure checker passed their expected controls.
+Frozen runner 5d990d6 passed all-platform CI 33979321280. Training and SDK ingest consumed
+104,010 reported tokens; the unchanged 96-attempt collection is running. Publication-only head
+1054684 passed all-platform CI 33982491430 and maintainer build/typecheck plus 1,870 Node22
+tests and two skips (1,872 total, 89 files). Claude's bounded publication-helper review
+1413271b-8d6d-45b3-be0b-750f61f28dc2 approved without blockers (read-only, no test execution).
+That is three scoped passes total: two runner passes and one publication pass, not new milestones.
+The [first X4 human packet](reviews/E3-X4-R1.md) is awaiting the user's assessment. Read the
+[collection limitations](E3-COLLECTION-NOTES.md), including training task-description overlap
+and A4's ambiguous output contract. Live results, human judgments, final-head CI and post-merge
+main CI remain pending; no benefit is claimed and R4 has not started.
+
+### E2 complete (PR #133)
+
+Fresh branch from updated main aeb5ac6 after E1 PR #132 final-head CI 33975625109 and
+post-merge main CI 33975763463 passed all three platforms. Produce a compact report from
+validated session events, independently checked outcomes and evaluator-owned configuration/
+timing/auxiliary receipts. Unknown usage stays unknown; main and auxiliary work remain separate.
+No live comparison or spend is authorized by this reporting row.
+
+Implemented the typed bounded report and JSON/text script, additive main-usage completeness flag,
+explicit role pricing/coverage, separate main/child and auxiliary totals, check/config/evidence
+linkage and a synthetic negative-control bundle. One bounded Claude review approved with 63
+named tests passing (typecheck commands denied; maintainer verified it). Maintainer additions
+exercise real observer/maintenance integration, fix a reproduced same-millisecond snapshot-order
+failure, and reject actual POSIX FIFOs without blocking. No second general review or new milestone.
+Build/typecheck and full explicit Node22 suite pass 1,857 plus two skips (1,859 total, 87 files),
+including 25 report cases plus schema/render regressions. Exact-head PR/main CI pending.
+
+### E1 complete (PR #132)
+
+Completion gate: final head 3ff8ba9, merge aeb5ac6, exact-head PR CI 33975625109 and main CI
+33975763463 all green. Two Claude passes, focused approval after repairs; maintainer CI repair
+for Windows exit metadata; build/typecheck and 1,830 Node22 passes plus two skips. Following
+notes record intermediate gates, not outstanding prerequisites.
+
+Fresh branch from updated main a14dd57 after PR #131 exact-head CI 33973659278 and
+post-merge main CI 33973789052 passed all three platforms. Eight frozen tasks will cover
+AgentRig and an external repository, with isolated preparation, independent behavioral checks,
+separate regression results and explicit failure/block/skip rules. This is benchmark mechanics,
+not live-model evidence. E2 reporting and E3 paid comparisons are not pulled into this PR.
+
+Implemented `docs/EVALSET.md`, eight exact task definitions, new-directory-only pinned-tree
+preparation and external-receipt checks with separate behavior/regression/submitted-test/scope
+lanes. Investigation explanations require an independent human verdict and remain BLOCKED until
+then. Twelve mechanics tests cover every task's positive/negative controls, exact upstream blobs,
+scope violations after commits, malformed receipts and preserving existing work. Actual fresh
+AgentRig A1/A2/A3 workspaces fail before repair and pass all lanes after repair; A1 demonstrates
+why passing old regression tests alone is insufficient. Build/typecheck and full explicit Node22
+suite pass 1,827 plus two skips (1,829 total, 86 files). Independent review and PR/main CI pending.
+
+PR #132 initial head 73a3bad passed all-platform CI 33974947019. Claude review found two
+blockers: infrastructure failures counted as task failures and a false-positive extraction check.
+Both repaired; a focused second pass approved and independently passed all 14 mechanics tests.
+Maintainer then normalized alternate back-import paths with an additional assertion inside the
+same extraction test (not a third review). Final build/typecheck and explicit Node22 suite pass
+1,829 plus two skips (1,831 total, 86 files). All eight actual pinned task workspaces have correct
+controls: six code tasks pass; A4/X4 automatic lanes pass and honestly remain BLOCKED pending a
+human verdict. These are maintainer controls, not model results. Final-head/main CI still required.
+
+Repair head c163b6b passed Linux/macOS but CI 33975385360 caught a Windows-only test assumption:
+Node exposes the self-SIGTERM fixture as a numeric exit rather than a signal. The test now checks
+the actually reported metadata; a separate real timed-child test verifies portable ETIMEDOUT
+classification. The documented Windows provenance limitation does not invent causes for numeric
+exits. This is maintainer-tested CI repair within E1, not another review round or milestone.
+Final CI-repair validation: build/typecheck and 1,830 explicit Node22 passes plus two skips
+(1,832 total, 86 files), including 15 E1 mechanics tests.
+
+### H5d auxiliary lifecycle complete (PR #131)
+
+Completion gate: final head a1a586f, merge a14dd57, PR CI 33973659278 and main CI 33973789052
+all green. One approving Claude review; four detected/restored negative mutations; final
+build/typecheck and 1,815 Node22 passes plus two skips. H5 is complete. The following notes
+record intermediate gates, not remaining prerequisites. Optional work stays at the END of ROADMAP.
+
+Fresh branch from updated main 661634a after PR #130 final-head CI 33972036578 and main CI
+33972161624 passed all platforms. See `docs/plans/H5-auxiliary-lifecycle.md`. This is the last
+existing H5 deliverable before E1; no further recursive subdivisions or optional-polish gates.
+
+Implemented bounded reviewer/grader SDK calls, observer cancellation through loaders and calls,
+core observer-lifetime signal, validated cumulative auxiliary events and CLI/TUI unfinished-work
+reporting. Main usage remains separate; late work cannot steer or append after session.end.
+Shutdown joins the observer and suppresses later TUI diagnostics; remaining ingest/recall/observer
+async diagnostic rejections are isolated. Build/typecheck and Node22 full suite passed 1,812 tests
+plus two skips (1,814 total, 85 files); an additional real built-in partial-usage integration test
+passes in the 19-test lifecycle suite. Full final rerun, independent review, negative mutations
+and PR/main CI remain required.
+
+PR #131 initial head c809b18 passed three-platform CI 33973353340. One bounded Claude pass
+approved with no blockers, independently passing typecheck and 430 relevant tests; no delegated
+reviewers. Three isolated negative mutations caught missing early cancellation, discarded usage,
+and missing durable records, then were restored. Maintainer follow-up adds the explicit
+pre-session-end-hook cancellation test and tightens total timeout across loaders as well as
+model calls; that small deadline repair is maintainer-tested, not a second review round.
+Final build/typecheck and explicit Node22 full suite pass: 1,815 plus two skips (1,817 total,
+85 files), including 21 new lifecycle cases. Optional polish is at the END of ROADMAP.
+Fresh exact-head PR CI and post-merge main CI remain required before E1.
+
+### H5 persistence complete (PR #130)
+
+Completion gate: final head d4fa2a2, merge 661634a, PR CI 33972036578 and main CI 33972161624
+all green. Two Claude CLI rounds, focused approval after repairs; five detected/restored negative
+mutations; final build/typecheck and 1,786 Node22 passes plus two skips. Following notes are
+historical intermediate gates, not outstanding work.
+
+Fresh branch from updated main ba4569c after PR #129 final-head CI 33970456552 and post-merge
+main CI 33970638299 passed all platforms. See `docs/plans/H5-memory-persistence.md` for the
+remaining acceptance checklist. No additional recursive milestones; optional polish stays at
+the END of ROADMAP.
+
+Implemented opaque frontmatter retention, whole multiline fact parsing/removal, conservative
+metadata-bearing merge refusal, and scoped attempt lookup with separately bounded disposable
+index rebuilds. CLI supervisor supplies session/timeout/query limits and warns on incomplete
+ledger results while reviewing readable attempts. Existing staged-target and actual child cleanup evidence is documented without
+claiming an unproven production fix. Build/typecheck and explicit Node22 full suite pass:
+1,782 passed plus two skips (1,784 total, 84 files) at initial head 8c58e75, whose CI 33971331288
+passed all platforms. Three isolated negative mutations were detected and restored.
+
+First Claude review identified two blockers: oversized legacy records poisoned all scoped reads,
+and torn claims disabled every reviewer. Repairs cap new records before claiming IDs, report
+oversized legacy entries under the rebuild budget, and warn/continue on partial reviewer history.
+Regressions cover raw preservation, repeated append/rebuild, aggregate limits and rejecting
+diagnostics. Maintainer/review compatibility fixes also preserve legacy indented known metadata,
+exclude continued reservation placeholders and protect existing temps on exclusive-create failure.
+Build/typecheck and full explicit Node22 suite now pass: 1,786 plus two skips (1,788 total, 84 files).
+Focused independent repair review approved all five repairs; no further blockers. That pass ran
+no tests (alternate test command spellings were denied); maintainer Node22 results above are the
+test evidence. Two Claude CLI review rounds total; the first's skill spawned extra finders despite
+the prompt, and the focused second disabled delegation/skills. Two further negative mutations
+reproduced both blockers, were restored, and all 40 targeted tests passed in the clean isolated
+checkout. Optional findings are at the END of ROADMAP. Final documentation-only head still needs
+exact-head PR CI, then merge and exact post-merge main CI before H5d.
+
+### H5 workspace recovery complete (PR #129)
+
+Completion gate: final head b618b2a, merge ba4569c, PR CI 33970456552 and main CI 33970638299
+all green. One approving Claude pass, three detected/restored negative mutations, build/typecheck
+and 1,770 passing Node22 tests plus two skips. Following notes record intermediate gates.
+
+Fresh branch from updated main c820c84 after PR #128 exact-head CI 33969076711 and main CI
+33969215100 passed all platforms. See `docs/plans/H5-workspace-recovery.md`. Recovery is explicit and limited to
+registered, ownership-checked workspaces; it never guesses ownership from a temp prefix or age.
+
+Scope reset requested by the user: no further recursive subdivisions. Finish the original H5
+acceptance criteria, then E1. Current PR covers registered workspace handoff/disposal; remaining
+required work is lossless persistence/scoped attempts, closure of the target/child-abort evidence,
+and reviewer/grader auxiliary lifecycle/reporting. Nonblocking follow-ups go at the END of the
+roadmap and are not prerequisites. Automated interrupted-install repair is deferred; protected
+backups and conservative stop-writers manual recovery remain the safety contract.
+
+The recovery draft passed its new process/ownership tests. Its full run exposed a stale repo-map
+test assumption that this growing checkout's entire file list fits 8 KiB forever. Correct that
+test here with controlled tree-before-symbols evidence and retain real-checkout byte/truncation
+checks; no product budget change and no separate milestone/PR for test maintenance.
+
+Implemented manifest-v2 producer/handoff state, UUID-bound preview/discard and CLI confirmation.
+Real child-process tests prove active refusal, explicit release, exited-owner recovery and refusal
+to steal even a crashed writer's lock. Replacement/malformed/legacy/unknown owners, partial
+cleanup, cancellation and failed handoff are covered. Full build/typecheck and explicit Node22
+suite pass: 1,770 passed plus two skips (1,772 total, 83 files). Independent review and exact-head
+PR/main CI are still required.
+
+PR #129 head 9323fb4 passed CI 33970298458 on Linux/macOS/Windows. One Claude pass approved
+without blockers; nonblocking polish is at the END of ROADMAP. Negative mutations caught live
+producer deletion, missing under-lock owner checks, and symbol-first repo-map starvation; all
+restored, with the isolated targeted suite green. The final documentation-only update requires
+fresh exact-head CI, then merge/main CI; it does not reopen implementation scope.
+
+### H5c2c1 complete (PR #128)
+
+Completion gate: final head 19f1a71, merge c820c84, PR CI 33969076711 and main CI 33969215100
+all green. Two Claude passes approved (broad, then focused reset→apply repair). Final build,
+typecheck and explicit Node22 full suite: 1,751 passes plus two skips (1,753 total, 82 files).
+Four negative mutations were detected and restored. Notes below describe intermediate gates.
+
+Fresh branch from updated main 74ffbf8 after PR #127 exact-head CI 33968092090 and post-merge
+main CI 33968348026 passed all platforms. H5c2c is split into metadata/log preflight (c1),
+abandoned workspace ownership/recovery (c2), and interrupted-install recovery (c3), each with
+its own review/PR/CI gates. See `docs/plans/H5c2c1.md` for the current bounded scope.
+
+Implemented log preflight with shared header/UTF-8/newline framing and a bounded contradiction
+count allowance, before model calls. Explicit SDK/CLI stamp reset creates an exclusive sibling
+hard-link backup then removes only the regular stamp under its canonical root lock. Missing
+roots, replaced roots, active locks and non-files are refused; late abort finishes after backup,
+and unlink failure names both retained links. Operators stop scheduled/running dreams first.
+Build/typecheck and explicit Node22 full suite pass: 1,750 passes plus two skips (1,752 total,
+82 files). Review and exact-head PR/main CI remain required.
+
+PR #128 head 988a72d passed CI 33968775029 on all platforms. One Claude pass approved with
+no blocking findings (Node24 full suite independently reproduced). Its hard-link portability
+note is addressed with a safe-failure hint and documentation; scheduling-reset discoverability
+is documented next to the command, and log dates explicitly mean consolidation start. This is
+not a claim of richer in-error help for every scheduler/ENOENT path. Final-head CI remains a gate.
+
+A final maintainer check found retained-review apply could resurrect an explicitly reset stamp.
+Apply now mirrors absent live metadata as well as present metadata, before its first rename;
+the copy and archived stamp remain intact. A real reset→apply regression covers this sequence.
+This semantic repair receives a focused follow-up review; it is not covered by the first approval.
+
+### H5c2b complete (PR #127)
+
+Completion gate: final head ef7e072, merge 74ffbf8, PR CI 33968092090 and main CI 33968348026
+all green. One Claude pass with conditional approval; F1/F2 and nits fixed with regression and
+mutation evidence. The following notes are historical intermediate gates, not outstanding work.
+
+PR #126 merged at 3e97b65 after exact-head PR CI 33965907380; main CI 33966024863 passed
+all platforms. Fresh branch starts from updated main. See `docs/plans/H5c2b.md` for this row.
+
+Implemented one SDK deadline across snapshots, bounded provider consolidation, regeneration and
+opt-in automatic apply. Incomplete/failed model passes are review-only; late cancellation cannot
+undo a live swap already in progress. Auxiliary snapshots/unknown usage reach CLI, lint, TUI and
+scheduled hooks; shutdown joins cancelled maintenance. New tests cover stalled/late providers,
+timer starvation, writer lock lifetime, post-swap cancellation, callback failures and UI wiring.
+Local build/typecheck and explicit Node 22 suite passed: 1,728 passes plus two skips (1,730 total,
+80 files). Independent review and exact-head PR/main CI remain required before H5c2c.
+
+PR #127 initial head e0f42f6 passed CI 33967197739. One Claude pass recommended approval after
+fixing zero-finding scheduled review retention on model failure; a repeated-cadence regression
+now proves disposal without a false clean report. Final maintainer repairs also add clean CLI
+rejection handling and warned second-SIGINT force exit, tested in real child processes. Shared
+dream defaults, early SDK hook-limit validation and the shared-run API documentation close its
+nits. Retained install artifacts/log-capacity preflight are assigned to H5c2c; late-TUI diagnostics
+to H5d. Final build/typecheck and explicit Node 22 suite pass: 1,735 passes plus two skips
+(1,737 total, 81 files). These repairs are maintainer-tested, not a second Claude pass; fresh
+exact-head PR CI and post-merge main CI remain gates.
+
+### H5c2a complete (PR #126)
+
+Completion gate: final head 9c06f1c, merge 3e97b65, PR CI 33965907380 and main CI 33966024863
+all green. Two Claude passes; final conditional-approval repairs maintainer-tested. The following
+notes are historical intermediate gates, not outstanding work.
+
+PR #125 merged at fb8201e after final PR CI 33963220803 passed; main CI 33963323981 passed
+all platforms. H5c2a starts from that updated main. H5c2 is split into bounded wiki/raw scans,
+full dream cancellation/accounting integration, and explicit owned crash recovery; each gets its
+own sequential PR and gates. CI action-runtime deprecation warnings are recorded as non-blocking
+maintenance rather than silently broadening this memory change.
+
+Bounded tree/page/raw/evidence traversal is implemented with explicit per-pass entry/depth/file/
+aggregate caps and cooperative scan cancellation. Tree copies use bounded reads and exclusive
+writes, preserving modes and H5c1 fingerprint framing; existing rollback faults still execute on
+the actual new write path. New regressions cover exact caps, growth-after-stat, FIFO/cycles, stage
+failure, manifest-write abort and incomplete-ledger refusal of model work/automatic apply. Full validation and
+independent review/CI remain gates; provider lifecycle and owned crash recovery are not complete.
+
+Local build/typecheck and explicit Node 22 full suite pass: 1,681 passed plus two platform-specific
+skips (1,683 total, 79 files), including 26 scan-boundary tests, at initial head b48e3c8. Initial
+PR #126 CI 33964137769 passed all platforms. Review repairs add bounded consolidation/pin rereads,
+pin/index output caps, the 4 KiB stamp guard, configurable scheduler scan limits, explicit incomplete
+review artifacts, short-read allocation regressions and a historical fingerprint vector. Windows
+CI runs scan cases, skipping only FIFO creation and POSIX mode-bit/vector checks there. Follow-up
+full validation, independent repair review and fresh exact-head CI remain gates.
+
+Review-repair validation: build/typecheck and the explicit Node 22 full suite passed with 1,696
+passes plus two skips (1,698 total, 79 files); the scan suite now has 36 cases. All six substantive
+first-review findings are addressed. A follow-up review and exact-head CI remain pending.
+
+Second Claude pass confirmed all six original findings closed and recommended approval after
+fixing the interactive TUI auto-apply bypass. That callback now forwards scan caps and rejects
+incomplete auto-apply, with real filesystem tests. Scheduled auto mode disposes incomplete copies
+on repeated cadences (no persistent-fault accumulation); explicit review still retains artifacts.
+These final repairs are maintainer-tested, not a third independent pass. Metadata recovery and
+`memory lint` cap configuration are explicitly assigned to H5c2c/H5c2b respectively.
+
+Final repair validation: build/typecheck and explicit Node 22 full suite passed, 1,698 passes
+plus two skips (1,700 total, 79 files). Fresh PR CI and post-merge main CI remain the final gates.
+
+### H5c1 complete (PR #125)
+
+Completion gate: final PR CI 33963220803 passed at b26f260, merge fb8201e, main CI 33963323981
+passed all platforms. The notes below record intermediate implementation and validation gates.
+
+H5b2 merged in PR #124 at 3eee3ea; main CI 33961430044 passed all platforms. H5c1 starts from
+that updated main. H5c is split into guarded snapshot/apply, bounded dream lifecycle/recovery,
+lossless regeneration/session-scoped ledger lookup, and the staged-child abort investigation.
+Each is a separate sequential PR with review, PR CI, merge and main-CI gates. Current work closes
+unlocked/stale apply and unsafe destination/staging reuse; it does not claim all dream calls are
+already bounded or cancelable.
+
+Guarded copy/apply and persisted source/output identities are implemented. The new fault tests
+exercise actual failed second rename, failed restore, pre-swap abort and finish-after-first-rename
+behavior. A separate child process holds the real store mutation lock while apply waits, then
+apply rejects its now-stale snapshot. Linux local build/typecheck and the full suite pass
+(1,643 passed plus two platform-specific skips, 78 files), including both additional abort cases.
+Independent review and exact-head CI remain pending. Windows CI now includes lifecycle/apply tests.
+
+PR #125's first CI run found a Node 22 incompatibility with copying onto a pre-created empty
+directory using errorOnExist. Copying children into absent paths fixes that without weakening
+ownership checks; root permissions are preserved and included in the stale snapshot check.
+The full suite now passes on Node 22 too: 1,644 passed plus two platform-specific skips (1,646
+total, 78 files). Isolated removal of the content fingerprint check and source apply lock each
+fails its regression; restored code passes. Review and repaired-head CI remain pending.
+
+First independent review's fixes retain stale scheduled-apply artifacts, expose lock acquisition
+waits, surface live stamp failures, and retain physical lock identity through dangling root aliases
+during a swap. Added inverse copy/writer, stamp-lock, alias-gap, bounded-manifest and scheduled
+stale-artifact regressions. CLI review text names both artifact and manifest. CI's pin-race fixture
+now uses canonical output paths on macOS/Windows. Build/typecheck and full Node 22 suite pass:
+1,654 passed plus two skips (1,656 total, 78 files). Repair review and fresh CI remain required.
+
+Second independent review verified all eight findings resolved and found no blocking regression;
+CI 33962954177 passed all platforms at ed792ea. Its two final small refinements are applied:
+completion callbacks run after successful disposal and outside the apply-error catch, and global
+store construction receives the configured timeout. A throwing-callback regression proves cleanup
+and notification-only diagnostics. Final build/typecheck and Node 22 full suite: 1,655 passed plus
+two skips (1,657 total, 78 files). Two Claude passes; these final small refinements are maintainer-
+tested, not a third independent review. Final-head CI and post-merge main CI remain pending.
+
+### H5b2 complete (PR #124)
+
+Completion gate: final PR CI 33961342727 passed at f2edf579, PR #124 merged at 3eee3ea,
+and main CI 33961430044 passed all three platforms. The notes below record intermediate gates.
+
+H5b1 merged in PR #123 at 5fc2cb8; post-merge CI 33958820304 passed all platforms.
+H5b2 starts from that updated main. It bounds ingest input/model/backend work, propagates abort
+through commit boundaries, and reports auxiliary usage separately, including unreported usage.
+Dream lifecycle and reviewer/grader adoption remain H5c/H5d, not implicitly complete here.
+
+Implementation now includes linked call/run deadlines, late-result isolation, bounded file/model/
+coverage work, signal-aware ingest mutations and optional backend requests, plus a shared types-only
+auxiliary accounting contract. Synthesized adapter zeros are explicitly unreported. CLI and scheduled
+ingest expose reported/unknown usage and local-write completion state; durable session aggregation
+remains H5d. See [plans/H5b2.md](plans/H5b2.md) for exact limits and OS/remote cancellation boundaries.
+New lifecycle/adapter tests pass; full validation, independent review and CI remain merge gates.
+
+PR #124's first review ran typecheck and the full suite (1,594 passed + two platform skips).
+CI 33959675267 passed all three platforms at ca3fd26. Review fixes expose limits through CLI/config
+and hooks, avoid swallowed backend failure outcomes, tolerate malformed usage as unknown, reserve
+backend call slots, and preserve committed results on later abort. Inspection also moved CLI
+attempt-ledger scanning inside the run's bounds and removed pre-run initialization. Added tests
+cover shipped composition, write-side file caps and FIFO rejection. Repair review and fresh CI
+remain pending; these are not yet completion claims.
+
+The second review reran typecheck/full tests and confirmed all five original findings closed.
+Its two remaining integration regressions are corrected: scheduled ingest retains backend failure
+diagnostics, and malformed CLI session IDs report clean errors. Span flags validate at parse time;
+tests cover agent-builder forwarding and Lore's own fetch deadline. Full suite: 1,618 passed plus
+two platform-specific skips (1,620 total, 77 files). CI 33960504444 passed all platforms at af7b4f8;
+the final narrow delta still needs review and fresh CI. Ledger-wide limits intentionally fail
+visibly; session-scoped attempt lookup is recorded under H5c rather than silently omitting history.
+
+Third, narrow review reran typecheck/full tests and verified those fixes. Its final two small
+refinements are applied and regression-tested: scheduled backend diagnostics use the visible
+onHookError channel (including TUI), and config span sizes share the CLI upper bound. Broader
+recall diagnostic routing is queued in H5d. CI 33961117588 passed all platforms at d309c30; the
+refinement commit still requires fresh CI before merge. Three review passes, not a new broad
+review cycle for the final two targeted changes.
+
+### H5b1 complete (PR #123)
+
+Completion gate: final PR CI 33958721558 passed at ee5afc2, PR #123 merged at 5fc2cb8,
+and main CI 33958820304 passed all three platforms. The notes below record intermediate gates.
+
+H5a merged in PR #122 at 3393785; post-merge CI 33955259134 passed all three platforms.
+H5b is split into H5b1 persistence/repair and H5b2 bounded cancellation/accounting, each a separate
+updated-main branch/PR with review and CI gates. Current work migrates ingest/provenance/pins,
+corrects stale shorter captures and repairs incomplete log initialization. Provider/backend lifetime
+and accounting remain H5b2; no claim that abort already cancels those calls.
+
+PR #123 migrates source/entity/provenance writes to checked-state transforms and serializes pin
+updates. Pending captures remain retryable; raw-event prefix hashes identify shorter stale logs
+without confusing canonical-message projection changes. Both replacement tools recheck pins.
+Distinct sessions still distill concurrently, while same-session/case aliases share a separate
+lock. See [plans/H5.md](plans/H5.md) for partial-commit, recovery and H5b2/H5c boundaries.
+
+CI 33956220720 passed Linux/macOS/Windows at 2dbce51. Two independent reviews prompted final-trailer
+capture parsing, single-line normalization of newly distilled facts, preserved interior narrative
+blank lines, no-findings bookkeeping, lazy initialization, bounded/cancelable lock acquisition,
+applied/skipped pin counts, comment-free pin matching and no-op status writes. Tests also prove
+dream pin persistence and malformed-input failure without modifying its source wiki.
+
+Current local validation: build/typecheck and 1,556 tests pass plus two Windows-only skips
+(1,558 total, 74 files), including 53 persistence cases. Real processes test same-session skipping
+and distinct-session fact/source/index/pin conservation; fixture assertions pin own-PID session-lock
+ownership during providers and mutation-lock ownership during source/concept transform reads.
+Isolated mutations of shorter-prefix detection, provenance locking, page-update locking and pin
+page-version guards fail relevant regressions; restored tests pass. The process test was strengthened
+after an outcome-only version escaped a lock-removal mutation through favorable scheduling.
+Repair review and repaired-head CI remain pending. Legacy multiline facts and unknown-frontmatter
+preservation discovered during inspection are recorded under H5c, not claimed complete here.
+
+Capture repair review at 4746913 found no blocking issue; its minor test/documentation notes are
+addressed. Pin review verified snapshot guards but found skipped dream statuses only reached an
+optional callback. Counts now travel in the returned/rendered report and count as findings even
+without that callback; a deterministic pin-edit fixture proves it. Dream passes its actual store
+to validation; per-input-check counts and upgrade-induced comment-only status corrections are
+documented. CI 33957190843 passed all platforms at 4746913; this final reporting delta still needs
+independent review and latest-head CI.
+
+Six independent Claude review passes are complete. The final pass verified guarded pin snapshot
+comparison and external staleness checks; its remaining canonical-path fixtures and advisory-channel
+documentation are corrected. Duplicate status-changing checks now count consistently against the
+original guarded snapshot. The CLI labels advisory dream diagnostics as warnings or failures, not
+necessarily a failed dream. All-platform CI 33957831735 passed at e75a8ef; final corrections await
+fresh CI. Provider lifetime and dream swaps remain explicitly in H5b2/H5c.
+
+### H5a complete (2026-09-05; PR #122)
+
+H4 merged at 2eb5632 and post-merge CI run 33952441371 passed. H5 is split into ordered sub-items
+H5a–H5d (ROADMAP); each gets its own branch/PR and all validation gates. H5a adds guarded writes
+and store serialization; maintenance integration/cancellation remains H5b–H5d, not implicitly done.
+
+Page reads and write receipts carry 128-bit content-hash tokens; agent replacement tools require
+the checked token, or create-only absence. Conflicts expose the current content/version for an
+intentional merge. Metadata defaults come from the checked state. Content tokens are not monotonic
+generations. Cross-process locks serialize page/index/log mutations and reservations; they have
+bounded waits, never steal by age, and report stopped-writer recovery paths. Init remains available
+for read-only inspection behind a stale lock. Committed writes remain explicit successes with
+warnings if index, pin recheck or release bookkeeping fails. Real reservation placeholders remain
+planned through dream. See [plans/H5.md](plans/H5.md) for the cooperative-writer boundary.
+
+Build/typecheck and 1,503 tests pass with two Windows-only skips on Linux (1,505 total, 73 files).
+Coverage includes actual two-process CAS plus 50 conserved appends, stale/raw-edit conflicts,
+metadata races, aliases, malformed/absent tools, CLI recovery inspection, failed marker/identity/
+release/index/pin writes, timeout/abort, Windows delete-pending retries, and deterministic missing-log
+initialization races. Isolated mutations removing CAS checks, shared locks or pin-warning handling
+fail their corresponding regressions; all mutations were restored.
+
+Independent reviews closed the correctness findings; the repair review at 58d3d0b reproduced the
+full suite and found no introduced correctness gap. The separate staged-abort fixture review is
+clean; ten readiness/FIFO repetitions retain both AbortError and unchanged-target assertions.
+CI 33954441586 passed Linux/macOS/Windows, including both Windows-only lock tests. Final diagnostic
+wording/readability edits require narrow review and latest-head CI before merge. Main CI must then
+pass before the next updated-main branch. H5b owns ingest/provenance/pins migration and the newly
+recorded empty/partially initialized log recovery; H5c owns dream swaps/recovery. None is implicitly
+protected just because H5a primitives exist.
+
+Final narrow review at 229a365 closed all remaining notes. CI 33954975532 passed Linux/Windows;
+macOS passed every test assertion but detected an unhandled rejection in the injected-fstat test.
+Its expected path is now resolved before starting the rejecting operation, so the rejection
+assertion attaches synchronously. No production behavior or unhandled-error gate was weakened;
+repaired-head CI/review were required. Final fixture review at a7b2cd5 reports no findings, PR CI
+33955143444 passed every platform, and post-merge main CI 33955259134 is green.
+
+### H4 complete (2026-09-05; PR #121)
+
+Promotion selection now requires an opaque runtime-loaded evidence index, not model/page-written
+validation claims. Bounded regular raw logs are checked for identity, sequence, lineage and exact
+claim locations in complete tool-result text. Each distinct claim needs at least two independent
+witnesses; related fork/subagent ancestry and whitespace-normalized copied payloads count once.
+Unsupported prose cannot accompany checked claims. The initial literal support rule deliberately
+rejects unsupported paraphrases; semantic truth remains unassessed and page confidence advisory.
+
+Dream selects final post-consolidation pages and reports event/field/character ranges, hashes and
+excerpts without publishing. Manual promotion previews by default and rechecks with `--confirm`;
+only checked claim lines/supporting references reach the backend, not invented extra citations.
+Transport failures no longer print a false success. Local wiki pages and raw logs are untouched
+by promotion. See [plans/H4.md](plans/H4.md) for the trust boundary and bounded-validation limits.
+
+Initial build/typecheck and all 1,436 tests passed; initial PR CI was green on all three platforms.
+Focused regressions cover fabricated citations,
+unrelated sessions, split claim support, copied/forked evidence, location hashes, incomplete output,
+resource limits, malformed logs, final dream pages, checked publication artifacts and CLI confirmation.
+Independent review found agent-input echoes and legacy truncation markers could establish false
+witnesses. Repairs reject claims present in session/ancestry tool inputs, exclude receipt/memory
+views, recognize legacy truncation and bind receipt exclusions to registered tool names. Windows
+CI exposed native-separator wiki identifiers; discovery and legacy index parsing now keep identifiers
+portable while preserving literal backslashes in POSIX filenames. Every excluded tool receives a
+behavioral rejection test. Build/typecheck and all 1,456 tests (72 files) pass; the promotion/CLI
+pair has 46 tests and the Windows trio (including store tests) has 54. Six independent review
+passes close all findings, ending with no findings at 76e368a; Linux/macOS/Windows CI is green
+on that code head. Mutation tests prove that restoring citation counting, independent
+fork families or the wrong skill name makes the corresponding regressions fail. The temporary
+mutations were restored. Cross-session/encoded self-authorship and custom/MCP receipt semantics
+remain explicit human-review limitations; H4 does not prove semantic truth.
+
+The earlier macOS run 33952067241 timed out in H1's staged-write-abort test (not an H4 test).
+The isolated local test and the next full macOS run pass; its cause is not established. H5 tracks
+investigation of that abort/cleanup timing alongside the newly found reservation-placeholder bug.
+Neither the timeout nor assertions were weakened. H5 starts after PR and post-merge main CI pass.
+
+### H3 complete (2026-09-05; PR #120)
+
+Ingest preserves canonical assistant text with labeled legacy/interrupted-stream fallback,
+complete recorded tool output/input and full steering/errors. Patched displays remain separate
+from original evidence. Lossless bounded spans carry line coordinates and half-open UTF-16
+character ranges; prompts retain evidence-origin labels even in long-event continuation spans.
+Missing historical full output and non-text evidence are reported as omissions, not inspected
+coverage. Source pages persist coverage/omission accounting, CLI/hooks surface omissions, and
+old projector captures are reprocessed once under the new contract. Corrupt/torn JSONL fails
+before provider calls or wiki writes and can be retried when complete.
+
+See [plans/H3.md](plans/H3.md). Tests pin canonical/legacy deduplication, assistant-only conclusions,
+late tool evidence reaching distillation, exact bounded ranges, Unicode/blank lines, omissions,
+corrupt logs and capture migration. Five independent Claude reviews closed all findings, ending
+with no findings at code head 876bd3d. Build/typecheck and all 1,408 tests (70 files) pass; Linux,
+macOS and Windows CI is green. Mutation checks detect removed assistant conclusions and restored
+display-only truncation. Reviews/local diagnostics added denial records, duplicate-preview labels,
+canonical-only request/result identity, nested omissions and missing-log coverage.
+
+The additive `tool.result.outputIncomplete` field preserves collection limits through durable
+logging, even with partial artifacts; ingest reports the unavailable range. Requested read_file
+pages remain complete for their range and advertise further lines without phantom trailing-newline
+pages. Glob/grep caps and abbreviated matching lines are explicit to both the model and ingest.
+Coverage means the recorded textual range was submitted and accounted for, not that the model
+verified its claims; runtime-backed promotion eligibility is the next row, H4.
+
+### H2 complete (2026-09-05; PR #119)
+
+Repository maps prune `.claude/worktrees` and `.worktrees` descendant containers before scanning,
+so generated files consume neither the prompt budget nor the freshness snapshot. `.claude`
+instructions/commands, ordinary `worktrees` directories and submodule contents remain visible.
+Mapping a checkout as the requested root still works. Bounded regular in-tree gitfiles pointing
+into `.git/worktrees` identify linked checkouts in other containers; `.git/modules` submodules
+remain visible. Gitfiles themselves are omitted. Other layouts can use `excludePaths`; existing
+exclusions are canonicalized so aliases such as macOS `/var` match the canonical map root.
+No Git commands or reads into external Git metadata are used.
+
+The initial full suite passed all 1,372 tests in the actual workspace with existing review
+worktrees present. macOS CI exposed the exclusion alias bug; independent review also requested
+arbitrary-container linked-worktree detection and omitted gitfiles. Repairs add alias-path and
+gitfile regressions alongside budget/freshness isolation, instruction visibility, submodule
+preservation and checkout-root behavior. The repaired head ac951a5 passes build/typecheck and
+all 1,375 tests (70 files); Linux/macOS/Windows CI is green. Independent delta review closes all
+three findings with no remaining findings. Mutation checks prove the fixtures detect removal of
+both filtering and canonical exclusions. Bare-repository/custom Git metadata layouts still use
+explicit exclusions when not inside a recognized generated container.
+
+### H1 complete (2026-09-05; PR #118)
+
+Built-in file mutations now cross the actual process sandbox using a fixed program and stdin
+data, staging then renaming to preserve the target on interrupted input. Read-only and outside-workspace writes fail even under allow-all permissions. Docker
+uses the caller's UID/GID so its artifacts do not become root-owned. Unsupported tools, including
+memory mutations and network-backed recall, require explicit one-call outside approval; headless denies.
+Local memory read/search and sandbox-inheriting subagents remain available. Host hooks
+(including end-of-session memory maintenance) and CLI MCP startup are refused in enforcing modes.
+Trusted SDK code, provider calls, reads and session bookkeeping are not isolated; compatibility
+is declared by trusted registration code, never by a model, MCP annotation or permission class.
+
+Validation: build/typecheck and all 1,369 tests pass in a clean checkout, including live Docker,
+interrupted-target preservation, hardlink replacement, physical symlink resolution, local memory
+retrieval and subagent boundary checks. Linux/macOS/Windows CI passed on code head ca81510.
+Four independent Claude review rounds closed all findings; the final delta review has no findings.
+Review prompted atomic writes, SDK policy propagation, retained local recall/subagents, physical
+symlink handling, stronger negative tests and documentation corrections. Mutation checks confirm
+the outside-cwd tests detect bypassed policy and the Lore fixture detects removal of the CLI fix.
+At H1 verification, the nested-worktree map failure remained H2; no user worktrees were removed to obtain
+this result. See [plans/H1.md](plans/H1.md) for implementation and trusted-host limitations.
+Each subsequent row starts only after the preceding PR and post-merge main CI are green.
+
+The user requested a roadmap revision following the code review. The authoritative order is
+[ROADMAP §5](ROADMAP.md#5-sequencing-and-exit-criteria): **H1–H5 → E1–E3 → R4 → H6**, followed
+by memory write-quality hardening and conditional generated skills. R4a is no longer next.
+Broader capability work is backlog, activated by a concrete need and measurable acceptance.
+R6f's stale-write work is pulled into H5; the minimum R9/R14 measurement work is pulled into E.
+
+Why: the review reproduced direct file writes outside the workspace under both sandbox modes,
+loss of assistant conclusions and long tool evidence before ingest coverage planning, and
+promotion eligibility based on nonexistent session citations. The repository map also scans a
+nested review worktree, exhausting its budget. These gaps must be corrected before expanding
+the system's authority or turning memory into durable instructions.
+
+Current limitations after H4: only supported effects cross the sandbox; trusted SDK code and
+bookkeeping remain host operations. Shell authority is path-based and pre-existing hardlinks may
+alias outside inodes; the file broker avoids that alias through atomic replacement. Promotion now
+checks located textual witnesses, but does not prove semantic truth or all source independence.
+Neither supervisor nor memory
+benefit is established by scripted-provider tests alone. In-process extensions, if added, remain
+trusted code with ambient env/filesystem access despite a restricted API object.
+
+Review baseline: build and typecheck passed; tests reported 1,352 passed, one failed (nested
+worktree in the repository map), one skipped. The original roadmap revision changed documentation
+only and preserved existing R identifiers. H1–H4 implementation and validation are recorded above;
+the remaining H/E rows are still planned. Older notes below
+record decisions at the time; they do not override these priorities or current limitations.
 
 | M | Deliverable | Status |
 |---|---|---|

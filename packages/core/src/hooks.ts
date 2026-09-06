@@ -1,5 +1,7 @@
 import { z } from "zod";
-import type { Message } from "./messages.js";
+import type { CheckpointHookEvent } from "./checkpointer.js";
+import type { PermissionClass } from "./events.js";
+import type { ContentBlock, InstructionContext, Message } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import type { SessionSummary } from "./agent.js";
 
@@ -49,6 +51,15 @@ export interface HookContext {
   response?: Message;
   /** `pre_tool` / `post_tool`: which tool, and its (parsed) input. */
   tool?: { name: string; input: unknown };
+  /** Final permission class; present when the Checkpointer is run after approval. */
+  permission?: PermissionClass;
+  /** Trusted final tool effects and live registry probe, supplied only to Checkpointer. */
+  toolEffect?: "read-only" | "workspace" | "background";
+  hasBackgroundWork?(): boolean;
+  /** Core-only event seam supplied to the built-in Checkpointer, never to ordinary hooks. */
+  emitCheckpoint?(event: CheckpointHookEvent): Promise<void>;
+  /** Absolute paths omitted by the built-in Checkpointer (notably the active session store). */
+  checkpointExcludes?: string[];
   /**
    * `post_tool`: what the tool returned. `display` is the string the model will see and the one
    * a `modify` patch replaces; `output` is the tool's own value, which is very often NOT a
@@ -87,7 +98,8 @@ export interface Hook {
 function isolate(ctx: Omit<HookContext, "point">): Omit<HookContext, "point"> {
   const copy: Omit<HookContext, "point"> = { ...ctx };
   if (ctx.request !== undefined) {
-    copy.request = { ...ctx.request, messages: cloneMessages(ctx.request.messages), tools: [...ctx.request.tools] };
+    copy.request = { ...ctx.request, messages: cloneMessages(ctx.request.messages), tools: [...ctx.request.tools],
+      ...(ctx.request.systemContexts === undefined ? {} : { systemContexts: ctx.request.systemContexts.map(value => ({ ...value })) }) };
   }
   if (ctx.messages !== undefined) copy.messages = cloneMessages(ctx.messages);
   if (ctx.response !== undefined) copy.response = cloneMessages([ctx.response])[0]!;
@@ -98,7 +110,11 @@ function isolate(ctx: Omit<HookContext, "point">): Omit<HookContext, "point"> {
 }
 
 function cloneMessages(messages: readonly Message[]): Message[] {
-  return messages.map((m) => ({ ...m, content: m.content.map((c) => ({ ...c })) }));
+  const cloneBlock = (block: ContentBlock): ContentBlock => ({ ...block,
+    ...(block.context === undefined ? {} : { context: { ...block.context } }),
+    ...(block.type === "tool_result" && Array.isArray(block.content) ? { content: block.content.map(cloneBlock) } : {}),
+  });
+  return messages.map((m) => ({ ...m, content: m.content.map(cloneBlock) }));
 }
 
 /** `structuredClone` throws on functions and class instances; a tool input that cannot be cloned
@@ -132,10 +148,14 @@ export interface HookRunnerOptions {
   timeoutMs?: number;
   /** Where a hook's failure is reported. The loop passes an `error` event emitter. */
   onError: (message: string) => void;
+  /** Trusted runtime observer of accepted results; attribution never comes from result fields. */
+  onResult?: (hook: Hook, result: HookResult) => void;
   /** Aborting the session stops waiting on hooks; `ctx.signal` fires for cooperative handlers. */
   signal?: AbortSignal;
   /** Total wall clock for the whole chain, regardless of per-hook overrides. */
   totalTimeoutMs?: number;
+  /** Built-in safety hooks may block the guarded operation instead of being skipped on failure. */
+  failClosed?: boolean;
 }
 
 /**
@@ -158,7 +178,9 @@ export async function runHooks(
   for (const hook of opts.hooks) {
     if (hook.point !== point) continue;
     if (opts.signal?.aborted === true) {
-      opts.onError(`hooks at ${point} stopped: the session was aborted`);
+      const reason = `hooks at ${point} stopped: the session was aborted`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       break;
     }
     const name = hook.id ?? point;
@@ -172,7 +194,9 @@ export async function runHooks(
       opts.totalTimeoutMs === undefined ? own : Math.max(0, opts.totalTimeoutMs - (Date.now() - startedAt));
     const budget = Math.min(own, remaining);
     if (budget <= 0) {
-      opts.onError(`hooks at ${point} stopped: the ${opts.totalTimeoutMs}ms budget for this point is spent`);
+      const reason = `hooks at ${point} stopped: the ${opts.totalTimeoutMs}ms budget for this point is spent`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       break;
     }
 
@@ -193,33 +217,54 @@ export async function runHooks(
         opts.signal,
       );
     } catch (err) {
-      // a third-party handler throwing or hanging must not take the session with it
-      opts.onError(`hook ${name} failed (continuing): ${err instanceof Error ? err.message : String(err)}`);
+      // Ordinary third-party handlers remain fail-open. Built-in safety hooks can require successful
+      // completion before the operation they guard is allowed to proceed.
+      const detail = err instanceof Error ? err.message : String(err);
+      if (opts.failClosed === true) {
+        const reason = `hook ${name} failed (blocking): ${detail}`;
+        opts.onError(reason);
+        return { denied: reason, patches, injects };
+      }
+      opts.onError(`hook ${name} failed (continuing): ${detail}`);
       continue;
     } finally {
       opts.signal?.removeEventListener("abort", onAbort);
     }
 
     if (result === null || typeof result !== "object" || !("action" in result)) {
-      opts.onError(`hook ${name} returned no action; ignoring`);
+      const reason = `hook ${name} returned no action; ${opts.failClosed === true ? "blocking" : "ignoring"}`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       continue;
     }
     if (!ALLOWED[point].has(result.action)) {
-      opts.onError(`hook ${name} returned "${result.action}", which ${point} does not support; ignoring`);
+      const reason = `hook ${name} returned "${result.action}", which ${point} does not support; ${opts.failClosed === true ? "blocking" : "ignoring"}`;
+      opts.onError(reason);
+      if (opts.failClosed === true) return { denied: reason, patches, injects };
       continue;
     }
 
     if (result.action === "deny") return { denied: result.reason, patches, injects };
-    if (result.action === "modify") patches.push(result.patch);
+    if (result.action === "modify") { patches.push(result.patch); opts.onResult?.(hook, result); }
     if (result.action === "inject") {
       if (typeof result.message !== "string") {
         opts.onError(`hook ${name} inject message must be a string (got ${typeof result.message}); ignoring`);
         continue;
       }
       injects.push(result.message);
+      opts.onResult?.(hook, result);
     }
   }
   return { patches, injects };
+}
+
+/** Internal runtime attribution alongside the legacy public runner's unchanged arrays. */
+export interface AttributedHookResult {
+  denied?: string;
+  patches: unknown[];
+  injects: string[];
+  patchContexts?: InstructionContext[];
+  injectContexts?: InstructionContext[];
 }
 
 async function withTimeout<T>(

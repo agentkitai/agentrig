@@ -241,12 +241,14 @@ describe("last-dream marker", () => {
 });
 
 describe("WikiDreamer implements the narrow PLAN §3.7 contract", () => {
-  it("returns just outputRoot and report", async () => {
+  it("returns the narrow outputRoot/report contract plus additive auxiliary accounting", async () => {
     await page("concepts/a.md", "- [stated] alpha (session:s1)\n");
     const dreamer = new WikiDreamer({ structuralOnly: true });
     const result = await dreamer.dream({ wiki: store, raw: new FileRawStore({ root }), provider: exploding });
-    expect(Object.keys(result).sort()).toEqual(["outputRoot", "report"]);
+    expect(Object.keys(result).sort()).toEqual(["auxiliary", "outputRoot", "report"]);
+    expect(result.auxiliary).toMatchObject({ operation: "dream", outcome: "completed", costUsd: 0 });
     await rm(result.outputRoot, { recursive: true, force: true });
+    await rm(result.outputRoot + ".dream.json", { force: true });
   });
 });
 

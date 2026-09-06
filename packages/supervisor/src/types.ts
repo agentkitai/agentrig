@@ -6,6 +6,8 @@ export type SignalType = Signal["type"];
 
 export interface Detector {
   id: string;
+  /** Optional read-only preparation; attach joins it before observe and passes cancellation. */
+  prepare?(event: HarnessEvent, state: SupervisorState, signal: AbortSignal): Promise<void>;
   observe(event: HarnessEvent, state: SupervisorState): Signal | null;
 }
 
@@ -19,7 +21,7 @@ export interface Policy {
 
 export interface Detachable {
   detach(): void;
-  /** Resolves once the observer has drained the stream — tests and shutdown paths need a join. */
+  /** Joins observation and any already-requested post-abort restore, including after detach. */
   done: Promise<void>;
 }
 

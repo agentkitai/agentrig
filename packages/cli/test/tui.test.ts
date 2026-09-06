@@ -8,6 +8,7 @@ import {
   createAgent,
   defaultRules,
   RulePolicy,
+  PermissionGrantRegistry,
   SessionStore,
   liveChildren,
   subagentTool,
@@ -144,18 +145,69 @@ function makeController(turns: Array<ModelEvent[] | Error>, extra: Partial<Const
   return makeControllerWith(new FakeProvider(turns), extra);
 }
 
+it.each(["abort", "shutdown"])("%s cancels an interactive dream and joins its cleanup without an agent session", async action => {
+  const controller = makeController([]); let signal: AbortSignal | undefined; let release!: () => void;
+  const released = new Promise<void>(resolve => { release = resolve; });
+  controller.setDream(async (_auto, nextSignal) => {
+    signal = nextSignal;
+    await new Promise<void>(resolve => nextSignal.addEventListener("abort", () => resolve(), { once: true }));
+    await released; return ["dream cleanup complete"];
+  });
+  const running = controller.submit("/dream --auto");
+  expect(signal).toBeDefined();
+  await controller.submit("/dream"); // no overlapping maintenance callback
+  let shut = false;
+  const stopping = action === "shutdown" ? controller.shutdown().then(() => { shut = true; }) : undefined;
+  if (action === "abort") controller.abort();
+  expect(signal!.aborted).toBe(true); await Promise.resolve(); expect(shut).toBe(false);
+  release(); await running; await stopping;
+  if (action === "shutdown") expect(shut).toBe(true);
+});
+
+it("a synchronous dream callback failure does not leave the controller stuck in maintenance", async () => {
+  const controller = makeController([]);
+  controller.setDream(() => { throw new Error("callback failed"); });
+  await expect(controller.submit("/dream")).resolves.toBe(true);
+  const next = vi.fn(async () => ["next dream"]); controller.setDream(next);
+  await controller.submit("/dream"); expect(next).toHaveBeenCalledOnce();
+});
+
+it("shutdown suppresses late diagnostics and prevents a new session", async () => {
+  const controller = makeController([]);
+  await controller.shutdown();
+  const state = controller.snapshot();
+  controller.print("late provider warning", "error");
+  expect(await controller.submit("new work")).toBe(false);
+  expect(controller.snapshot()).toBe(state);
+});
+
+it("joins a returned session observer before considering the turn settled", async () => {
+  const detached = vi.fn();
+  const done = Promise.withResolvers<void>();
+  const controller = makeController([[stop("end_turn")]], { onSession: () => ({ detach: detached, done: done.promise }) });
+  let settled = false;
+  const running = controller.submit("test").then(() => { settled = true; });
+  await vi.waitFor(() => expect(detached).toHaveBeenCalledOnce());
+  expect(settled).toBe(false);
+  done.resolve(); await running;
+  expect(settled).toBe(true);
+});
+
 function makeControllerWith(
   provider: FakeProvider,
   extra: Partial<ConstructorParameters<typeof TuiController>[0]> = {},
   hooks: Hook[] = [],
   tools: AnyTool[] = [],
 ) {
+  const permissionGrants = new PermissionGrantRegistry();
   const controller: TuiController = new TuiController({
     cwd: root,
+    permissionGrants,
     agent: createAgent({
       provider,
       tools: [askingTool(), ...tools],
       permissions: new RulePolicy(defaultRules),
+      permissionGrants,
       systemPrompt: "test",
       store: new SessionStore({ root }),
       budget: { maxTurns: 5 },
@@ -173,6 +225,56 @@ const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text)
 const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
+  it.each(["new", "fork", "switch"])("revokes session grants across the real %s transition", async transition => {
+    const calls: ModelEvent[][] = [
+      [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+      [{ type: "tool_use", id: "second", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+    ];
+    const store = new SessionStore({ root });
+    const c = makeController(calls, { onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq) });
+    const first = c.submit("first task");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull()); c.answerPermission("allow", true); await first;
+    const oldId = c.snapshot().sessionId!; const oldGrant = c.permissionGrants.list()[0]!;
+    expect(oldGrant.resource).toBe("*"); expect(oldGrant.duration).toEqual({ kind: "session", id: oldId });
+    let next: Promise<boolean>;
+    if (transition === "switch") {
+      const other = makeController([]); await other.submit("other session");
+      next = c.submit(`/resume ${other.snapshot().sessionId!}`);
+    } else {
+      await c.submit(transition === "new" ? "/new" : "/fork");
+      expect(c.permissionGrants.list()).toEqual([]);
+      next = c.submit("next task");
+    }
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    expect(c.permissionGrants.list()).toEqual([]); c.answerPermission("deny"); await next;
+    expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(1);
+    const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
+    expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
+    expect(events.at(-1)?.type).toBe("session.end");
+  });
+  it("same-session continuation retains live session grants but not task grants", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+      [{ type: "tool_use", id: "second", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider); const first = c.submit("first");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    const context = c.permissionGrants.context;
+    const task = c.permissionGrants.grant({ subject: context.subject, operation: { tool: "other" }, resource: "*", constraints: {},
+      duration: { kind: "task", id: context.taskId! }, delegable: false, decision: "allow" });
+    c.answerPermission("allow", true); await first;
+    const id = c.snapshot().sessionId; const live = c.permissionGrants.list();
+    expect(live).toHaveLength(1); expect(live[0]!.id).not.toBe(task.id);
+    await c.submit("continue"); expect(c.snapshot().pending).toBeNull(); expect(c.snapshot().sessionId).toBe(id);
+    expect(c.permissionGrants.list()).toEqual(live); expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(2);
+  });
+  it("a reset invalidates a pending remembered answer without creating new authority", async () => {
+    const c = makeController([[{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")]]);
+    const running = c.submit("first"); await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    await c.submit("/permissions reset"); c.answerPermission("allow", true); await running;
+    expect(c.permissionGrants.list()).toEqual([]); expect(text(c)).toContain("permission context changed");
+    expect(text(c)).not.toContain("⚒ needs_permission");
+  });
   it("runs a task and reports how it finished with cached usage", async () => {
     const c = makeController([[usage(400_000, 12_345, 2_900_000), stop("end_turn")]]);
     expect(await c.submit("do the thing")).toBe(true);
@@ -1288,6 +1390,25 @@ describe("review regressions", () => {
 
     // The attempted remembered escalation answer did not replace the ordinary standing grant.
     await expect(c.ask({ tool: "bash", input: {}, class: "exec", cwd: root })).resolves.toBe("allow");
+  });
+
+  it("MCP definition consent shows exact delta and never remembers or inherits a standing answer", async () => {
+    const c = makeController([]);
+    const req = { tool: "mcp_definition_change", input: { changes: [{ name: "search", before: { description: "old" }, after: { description: "new" } }] }, class: "exec" as const, cwd: root };
+    const ordinary = c.ask(req);
+    c.answerPermission("allow", true);
+    await ordinary;
+    const definition = { ...req, origin: "mcp-definition-change" };
+    const first = c.ask(definition);
+    expect(c.snapshot().pending?.req).toEqual(definition);
+    expect(text(c)).toContain('"description": "old"');
+    expect(text(c)).toContain('"description": "new"');
+    c.answerPermission("allow", true);
+    expect(await first).toBe("allow");
+    const second = c.ask(definition);
+    expect(c.snapshot().pending?.req).toEqual(definition);
+    c.answerPermission("deny");
+    expect(await second).toBe("deny");
   });
 
   it("shutdown settles every outstanding request rather than dropping it", async () => {

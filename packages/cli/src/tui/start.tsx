@@ -1,23 +1,21 @@
 import { render } from "ink";
-import { join } from "node:path";
 import {
-  applyDream,
-  FileMemoryStore,
-  FileRawStore,
-  findingCount,
-  renderReport,
-  runDream,
   unionRetrieve,
+  formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
 import { TuiController } from "./controller.js";
+import { interactiveDream } from "./dream.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { SessionStore, liveChildren, summarizeSession } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
+import { undoSession } from "@agentkitai/agentrig-core";
 import { currentGitBranch } from "../git-branch.js";
 import {
   abortNotice,
+  checkpointRestorer,
+  validateAbortRestores,
   parseSoft,
   parseTurnsRemaining,
   permissionWarning,
@@ -43,6 +41,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   let built;
+  validateAbortRestores(opts);
   const budget = parseBudget(opts);
   // Validate before a session starts. Parsing inside onSession would let an invalid threshold run
   // without supervision after the controller caught the attachment error.
@@ -60,7 +59,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
           // The same `supervisorOptions` the `run` command builds, rather than a second copy:
           // this entry point had NO supervisor at all, so `--supervise` was accepted and ignored.
           onSession: (session) =>
-            void supervise(
+            supervise(
               session,
               supervisorOptions({
                 opts,
@@ -70,6 +69,11 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 memoryIndex: "",
                 provider: built!.provider,
                 reviewProvider: built!.providers.supervisor,
+                restoreCheckpoint: checkpointRestorer(opts.root),
+                onRestore: result => {
+                  controller.print(`supervisor abort-restore: ${result.message}`, "system");
+                  if (result.restored) controller.forgetRestoredConversation();
+                },
                 soft: supervisorSoft,
                 turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),
@@ -83,6 +87,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   try {
     built = await buildAgent(opts, {
+      permissionGrants: controller.permissionGrants,
       onAsk: (req) => controller.ask(req),
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
@@ -104,6 +109,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     const sessions = new SessionStore({ root: opts.root });
     controller.setSessions({
       fork: (parent, atSeq) => forkSessionAt(sessions, parent, atSeq),
+      undo: (id, toTurn) => undoSession(sessions,id,{cwd:process.cwd(),...(toTurn===undefined?{}:{toTurn})}),
       tree: async (id) => renderSessionTree(await sessions.tree(id), id),
       // read-only: each child's own log is the source of truth, and nothing is copied into ours
       children: async (children, now, parent) =>
@@ -132,33 +138,10 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     });
   }
   if (opts.memory !== undefined) {
-    const dir = opts.memory;
-    controller.setDream(async (auto) => {
-      const wiki = new FileMemoryStore({ root: join(dir, "wiki") });
-      await wiki.init();
-      const result = await runDream({
-        wiki,
-        raw: new FileRawStore({ root: dir }),
-        // the memory role, like the `--dream-on-end` hook and the standalone `dream` command
-        provider: built!.providers.memory,
-        cwd: process.cwd(),
-      });
-      const findings = findingCount(result.report, result.structural);
-      if (!auto) {
-        return [
-          renderReport(result.report, {
-            structural: result.structural,
-            promotionRejected: result.promotionRejected,
-            outputRoot: result.outputRoot,
-            applied: false,
-          }),
-          `to accept: agentrig dream --auto  |  to discard: rm -rf ${result.outputRoot}`,
-        ];
-      }
-      const backup = await applyDream(join(dir, "wiki"), result.outputRoot, `${Date.now()}-tui`);
-      await result.workspace.dispose().catch(() => {});
-      return [`dream applied (${findings} finding(s)); previous wiki kept at ${backup}`];
-    });
+    controller.setDream(interactiveDream({ dir: opts.memory, provider: built.providers.memory,
+      cwd: process.cwd(), scanLimits: opts.dreamScanLimits ?? {}, limits: opts.dreamLimits ?? {},
+      onUsage: report => controller.print(formatAuxiliaryUsage(report), "system"),
+      onError: error => controller.print(`dream warning: ${error.message}`, "error") }));
   }
 
   // `agentrig run` installs the same handler. Without it, ctrl-C tears down the UI while the

@@ -1,5 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Decision, PermissionClass, PermissionRequest } from "./events.js";
+import { CommandPrefixSchema, ShellOperationSchema } from "./shell-operation.js";
 
 export interface PermissionPolicy {
   decide(req: PermissionRequest): Promise<Decision>;
@@ -17,6 +18,9 @@ export interface PermissionRule {
   tool?: string;
   class?: PermissionClass;
   cwdOnly?: boolean;
+  /** Explicit literal argv prefix for supported foreground shell operations, not a string glob.
+   * Program behavior/PATH/hooks are not attested. Separate broad rules retain their authority. */
+  commandPrefix?: string[];
   decision: Decision;
 }
 
@@ -28,15 +32,24 @@ export function isInsideCwd(cwd: string, path: string): boolean {
 
 /** First matching rule wins; no match falls through to `fallback` (default `ask`). */
 export class RulePolicy implements PermissionPolicy {
+  private readonly rules: PermissionRule[];
   constructor(
-    private readonly rules: PermissionRule[],
+    rules: PermissionRule[],
     private readonly fallback: Decision = "ask",
-  ) {}
+  ) {
+    this.rules = rules.map(rule => ({ ...rule, ...(rule.commandPrefix === undefined ? {} : { commandPrefix: CommandPrefixSchema.parse(rule.commandPrefix) }) }));
+  }
 
   async decide(req: PermissionRequest): Promise<Decision> {
     for (const rule of this.rules) {
       if (rule.tool !== undefined && rule.tool !== "*" && rule.tool !== req.tool) continue;
       if (rule.class !== undefined && rule.class !== req.class) continue;
+      if (rule.commandPrefix !== undefined) {
+        const operation = ShellOperationSchema.safeParse(req.operation);
+        if (!operation.success || operation.data.status !== "parsed" || operation.data.background) continue;
+        const argv = operation.data.argv;
+        if (!rule.commandPrefix.every((word, index) => argv[index] === word)) continue;
+      }
       if (rule.cwdOnly) {
         if (req.paths === undefined) continue;
         if (!req.paths.every((p) => isInsideCwd(req.cwd, p))) continue;

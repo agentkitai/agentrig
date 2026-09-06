@@ -86,7 +86,7 @@ describe("discoverSkills", () => {
     expect(await discoverSkills({ roots: [dir], maxBytes: 100 })).toEqual([]);
   });
 
-  it("stops at maxSkills rather than reading a whole directory tree", async () => {
+  it("caps the selected catalogue at maxSkills", async () => {
     for (let i = 0; i < 20; i += 1) await skill(`s${i}.md`, `---\ndescription: d${i}\n---\nb`);
     expect(await discoverSkills({ roots: [dir], maxSkills: 5 })).toHaveLength(5);
   });
@@ -163,7 +163,7 @@ describe("what reaches the system prompt is untrusted input", () => {
     expect(found).toHaveLength(100);
     const text = skillsInjection(found);
     // this text rides in EVERY request, so 100 skills must not add up to a quarter megabyte
-    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8 * 1024 + 400);
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(text).toContain("further skill(s) not listed");
   });
 
@@ -187,16 +187,18 @@ describe("what reaches the system prompt is untrusted input", () => {
     expect(s.name).toBe("(unnamed)");
   });
 
-  it("shadows case-insensitively, so the catalogue cannot lie about what loads", async () => {
+  it("rejects equal-precedence duplicates case-insensitively", async () => {
     await skill("a.md", "---\nname: Deploy\ndescription: the first one\n---\nBODY A");
     await skill("b.md", "---\nname: deploy\ndescription: the second one\n---\nBODY B");
     const errors: string[] = [];
     const found = await discoverSkills({ roots: [dir], onError: (e) => errors.push(e.message) });
 
     // `skillTool` looks up lowercased: advertising both would serve one body for both names
-    expect(found.map((s) => s.name)).toEqual(["Deploy"]);
-    expect(errors.join("\n")).toContain("shadowed");
-    expect((await skillTool(found).execute({ name: "deploy" }, ctx)).display).toBe("BODY A");
+    expect(found).toEqual([]);
+    expect(errors.join("\n")).toContain("equal precedence");
+    expect(errors.join("\n")).toContain(join(dir, "a.md"));
+    expect(errors.join("\n")).toContain(join(dir, "b.md"));
+    expect((await skillTool(found).execute({ name: "deploy" }, ctx)).isError).toBe(true);
   });
 
   it("a subdirectory with no SKILL.md is not an error", async () => {

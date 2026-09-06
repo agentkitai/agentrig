@@ -9,7 +9,10 @@ import type {
   Signal,
   Skill,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
+import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
+import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
+  type ScopeKind } from "./permission-prompt.js";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
@@ -35,8 +38,9 @@ export interface TuiLine {
 
 export interface PendingPermission {
   req: PermissionRequest;
+  scope?: { kind: ScopeKind; text: string; preview: boolean; error?: string };
   /** `remember` applies the answer to every later request for the same tool this session. */
-  resolve: (d: Exclude<Decision, "ask">, remember: boolean) => void;
+  resolve: (d: Exclude<Decision, "ask">, remember: boolean, scope?: { kind: ScopeKind; text: string }) => void;
 }
 
 export type SupervisorPromptOutcome = "answered" | "expired" | "closed";
@@ -123,17 +127,19 @@ function bashCommandPrefix(input: unknown): string | undefined {
 
 export interface TuiControllerOptions {
   agent: Agent;
+  permissionGrants?: PermissionGrantRegistry;
   cwd: string;
   /** `/memory <q>` — returns lines to print. Injected so the controller stays free of stores. */
   onMemory?: (query: string) => Promise<string[]>;
   /** `/dream [--auto]` — returns lines to print. */
-  onDream?: (auto: boolean) => Promise<string[]>;
+  onDream?: (auto: boolean, signal: AbortSignal) => Promise<string[]>;
   /**
    * `/fork [seq]` and `/tree` (R3c). Injected like the others so the controller never touches the
    * session store: the TUI reads and writes logs only through the agent, and a fork is the one
    * exception — it writes a new log, never the current one.
    */
   onFork?: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+  onUndo?: (id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>;
   onTree?: (id: string) => Promise<string[]>;
   /**
    * `/children` (R3d): given what this session's log recorded at spawn and end, returns the
@@ -153,7 +159,8 @@ export interface TuiControllerOptions {
    * TUI and silently did nothing: every detector, the whole ladder, the reviewer and the grader
    * were unreachable from the default entry point.
    */
-  onSession?: (session: Session) => void;
+  /** May return a detachable observer; legacy incidental return values are ignored. */
+  onSession?: (session: Session) => unknown;
   /**
    * Cap on retained lines. Generous because `Static` renders each line once — the old 500 was
    * sized for a live tree whose cost grew with the buffer.
@@ -190,8 +197,9 @@ export class TuiController {
   };
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
-  /** Tool name -> standing answer for this session. Never written to disk. */
-  private readonly standing = new Map<string, Exclude<Decision, "ask">>();
+  private readonly auxiliary = new AuxiliaryText();
+  /** Same live core registry is passed to the agent; persisted events never restore authority. */
+  readonly permissionGrants: PermissionGrantRegistry;
   /**
    * Whether the current session can be continued. Set by a completed turn, because that is when
    * the loop writes the snapshot a resume reads — a session that died before finishing a turn
@@ -209,11 +217,13 @@ export class TuiController {
   private readonly maxLines: number;
 
   constructor(private readonly opts: TuiControllerOptions) {
+    this.permissionGrants = opts.permissionGrants ?? new PermissionGrantRegistry();
     this.maxLines = opts.maxLines ?? 5_000;
     this.agent = opts.agent;
     this.memory = opts.onMemory;
     this.dream = opts.onDream;
     this.fork = opts.onFork;
+    this.undo = opts.onUndo;
     this.tree = opts.onTree;
     this.children = opts.onChildren;
     this.spawned = opts.onSpawned;
@@ -241,17 +251,27 @@ export class TuiController {
     this.memory = fn;
   }
 
-  setDream(fn: (auto: boolean) => Promise<string[]>): void {
+  setDream(fn: (auto: boolean, signal: AbortSignal) => Promise<string[]>): void {
     this.dream = fn;
+  }
+
+  /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
+  forgetRestoredConversation(): void {
+    this.resetGrants("conversation-restored");
+    this.resumable = false;
+    this.set({sessionId:null,turns:0,plan:[],signals:[],children:[],manifest:null,context:null});
+    this.print("next prompt starts a fresh conversation; original history is retained", "system");
   }
 
   setSessions(fns: {
     fork: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+    undo?: (id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>;
     tree: (id: string) => Promise<string[]>;
     children?: (children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>;
     spawned?: (id: string) => Promise<TuiChild[]>;
   }): void {
     this.fork = fns.fork;
+    if (fns.undo !== undefined) this.undo = fns.undo;
     this.tree = fns.tree;
     if (fns.children !== undefined) this.children = fns.children;
     if (fns.spawned !== undefined) this.spawned = fns.spawned;
@@ -263,8 +283,15 @@ export class TuiController {
   }
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
-  private dream: ((auto: boolean) => Promise<string[]>) | undefined;
+  private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
+  private dreamAbort: AbortController | undefined;
+  private dreaming: Promise<void> | undefined;
+  private observer: { detach(): void; done: Promise<void> } | undefined;
+  private closing = false;
+  private closed = false;
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
+  private undo: ((id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>) | undefined;
+  private undoing: Promise<void> | undefined;
   private tree: ((id: string) => Promise<string[]>) | undefined;
   private children: ((children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>) | undefined;
   private spawned: ((id: string) => Promise<TuiChild[]>) | undefined;
@@ -281,11 +308,13 @@ export class TuiController {
   }
 
   private set(patch: Partial<TuiState>): void {
+    if (this.closed) return;
     this.state = { ...this.state, ...patch };
     for (const fn of this.listeners) fn(this.state);
   }
 
   print(text: string, tone: TuiLine["tone"] = "system"): void {
+    if (this.closed) return;
     const lines = [...this.state.lines, { key: this.nextKey++, text, tone }];
     // Append-only, ALWAYS. Ink's `Static` remembers how many items it has already written and
     // renders `items.slice(thatIndex)`. Dropping items off the front shifts every index, the
@@ -310,19 +339,31 @@ export class TuiController {
       // all, which is worse than not having one.
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
-      const sandboxEscalation = req.origin === "sandbox-escalation";
-      const standing = sandboxEscalation ? undefined : this.standing.get(req.tool);
-      if (standing !== undefined) {
+      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+      if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
+      const revision = this.permissionGrants.revision;
+      const standing = sandboxEscalation ? "ask" : this.permissionGrants.decide(req);
+      if (standing !== "ask") {
         resolve(standing);
         return;
       }
       const entry: PendingPermission = {
         req,
-        resolve: (d, remember) => {
-          if (remember === true && !sandboxEscalation) {
-            this.standing.set(req.tool, d);
+        resolve: (d, remember, scope) => {
+          if (scope !== undefined || (remember === true && !sandboxEscalation)) {
+            try {
+              if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");
+              if (scope === undefined) this.permissionGrants.remember(req, d);
+              else {
+                if (d !== "allow") throw new Error("scoped approval must be an explicit allow");
+                this.permissionGrants.grant(proposedPermissionGrant(req, scope.kind, scope.text, this.permissionGrants));
+              }
+            } catch (error) {
+              this.print(`standing permission refused: ${String(error)}`, "error");
+              resolve("deny"); this.advanceQueue(); return;
+            }
             this.print(
-              `${d === "allow" ? "allowing" : "denying"} ${req.tool} for the rest of this session (/permissions to review)`,
+              `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} for the rest of this session (/permissions to review)`,
               d === "allow" ? "system" : "error",
             );
           } else {
@@ -336,7 +377,10 @@ export class TuiController {
       // leaving its promise unsettled and the loop wedged with no diagnostic. Core runs tool
       // calls sequentially today, so that is latent rather than live — but parallel tool
       // execution is an obvious near-term change, and a queue costs nothing now.
-      if (this.state.pending === null) this.set({ pending: entry });
+      if (this.state.pending === null) {
+        this.showPermissionEffects(req);
+        this.set({ pending: entry });
+      }
       else {
         this.queue.push(entry);
         this.set({ queued: this.queue.length });
@@ -345,7 +389,14 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
+    if (next !== undefined) this.showPermissionEffects(next.req);
     this.set({ pending: next ?? null, queued: this.queue.length });
+  }
+
+  private showPermissionEffects(req: PermissionRequest): void {
+    if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
+    if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
+    for (const line of permissionEffectLines(req)) this.print(line, "system");
   }
 
   /**
@@ -354,7 +405,54 @@ export class TuiController {
    * for, and nobody would remember making it.
    */
   answerPermission(d: Exclude<Decision, "ask">, remember = false): void {
+    if (this.state.pending?.scope !== undefined) return;
     this.state.pending?.resolve(d, remember);
+  }
+
+  startPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending === null) return;
+    try {
+      const draft = initialPermissionScope(pending.req);
+      if (Buffer.byteLength(draft.text) > MAX_SCOPE_TEXT) throw new Error("initial scope exceeds 24 KiB");
+      this.set({ pending: { ...pending, scope: { ...draft, preview: false } } });
+    } catch (error) { this.print(`scoped approval unavailable: ${String(error).slice(0, 1000)}`, "error"); }
+  }
+
+  editPermissionScope(text: string): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    if (text.length > MAX_SCOPE_TEXT || Buffer.byteLength(text) > MAX_SCOPE_TEXT) {
+      this.set({ pending: { ...pending, scope: { ...pending.scope, preview: false, error: "scope exceeds 24 KiB; input refused" } } });
+      return;
+    }
+    this.set({ pending: { ...pending, scope: { kind: pending.scope.kind, text, preview: false } } });
+  }
+
+  previewPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    try {
+      const spec = proposedPermissionGrant(pending.req, pending.scope.kind, pending.scope.text, this.permissionGrants);
+      this.print(`Exact proposed future grant (NOT installed): ${JSON.stringify(spec)}`, "system");
+      this.print("Covers the current request. Path prefixes include descendants; argv prefixes permit trailing arguments. Cwd is exact. Session-only, shared with children; not OS containment or an effect guarantee. Confirm separately with y.", "system");
+      this.set({ pending: { ...pending, scope: { kind: pending.scope.kind, text: pending.scope.text, preview: true } } });
+    } catch (error) {
+      this.set({ pending: { ...pending, scope: { ...pending.scope, preview: false, error: `scope refused: ${String(error).slice(0, 1000)}` } } });
+    }
+  }
+
+  confirmPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope?.preview !== true) return;
+    pending.resolve("allow", false, pending.scope);
+  }
+
+  cancelPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    const { scope: _scope, ...plain } = pending;
+    this.set({ pending: plain });
   }
 
   /**
@@ -408,11 +506,17 @@ export class TuiController {
 
   /** What has a standing answer, and how to take it back. */
   private describeStanding(): string {
-    if (this.standing.size === 0) {
+    const grants = this.permissionGrants.list();
+    if (grants.length === 0) {
       return "nothing has a standing answer — every request is asked. `a` at a prompt makes one standing.";
     }
-    const lines = [...this.standing].map(([tool, d]) => `  ${d === "allow" ? "allow" : "deny "} ${tool}`);
+    const lines = grants.map(grant => `  ${grant.decision === "allow" ? "allow" : "deny "} ${grant.operation.tool}`);
     return [...lines, "/permissions reset clears these"].join("\n");
+  }
+
+  private resetGrants(reason: string): number | undefined {
+    try { return this.permissionGrants.clear(reason); }
+    catch (error) { this.print(`permission reset failed (grants blocked): ${String(error)}`, "error"); return undefined; }
   }
 
   /** Settles every outstanding request as a denial — nothing may be dropped unsettled. */
@@ -424,6 +528,10 @@ export class TuiController {
   }
 
   abort(): void {
+    if (this.dreamAbort !== undefined) {
+      this.dreamAbort.abort(); this.print("cancelling dream…", "error");
+      if (this.session === null) return;
+    }
     if (this.session === null) {
       this.print("nothing running", "system");
       return;
@@ -448,16 +556,25 @@ export class TuiController {
    * running with the terminal gone keeps executing tools and billing, unwatched.
    */
   async shutdown(): Promise<void> {
-    if (this.session !== null) this.abort();
+    if (this.closed) return;
+    this.closing = true;
+    this.observer?.detach();
+    if (this.session !== null || this.dreamAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
     this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
+    await this.dreaming?.catch(() => {});
+    await this.undoing?.catch(() => {});
+    this.resetGrants("controller-closed");
+    this.closed = true;
   }
 
   /** Handles one submitted line. Returns false when the app should exit. */
   async submit(line: string): Promise<boolean> {
+    if (this.closing) return false;
+    if (this.undoing) { this.print("undo is running; wait for it to finish", "error"); return true; }
     const cmd = parseCommand(line);
     if (cmd === null) return true;
     if (cmd.kind !== "task") this.print(line, "you");
@@ -510,9 +627,13 @@ export class TuiController {
       case "memory":
         await this.delegate("memory", () => this.memory?.(cmd.query));
         return true;
-      case "dream":
-        await this.delegate("dream", () => this.dream?.(cmd.auto));
+      case "dream": {
+        if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
+        const controller = new AbortController(); this.dreamAbort = controller;
+        this.dreaming = this.delegate("dream", () => this.dream?.(cmd.auto, controller.signal));
+        try { await this.dreaming; } finally { this.dreamAbort = undefined; this.dreaming = undefined; }
         return true;
+      }
       case "resume":
         if (cmd.id === "") this.print("usage: /resume <session-id>", "error");
         else {
@@ -523,8 +644,8 @@ export class TuiController {
         return true;
       case "permissions":
         if (cmd.reset) {
-          const had = this.standing.size;
-          this.standing.clear();
+          const had = this.resetGrants("explicit-reset");
+          if (had === undefined) return true;
           this.print(had === 0 ? "nothing to reset" : `cleared ${had} standing answer(s)`, "system");
         } else {
           this.print(this.describeStanding(), "system");
@@ -593,6 +714,24 @@ export class TuiController {
       case "fork":
         await this.forkConversation(cmd.at);
         return true;
+      case "undo": {
+        if (this.state.status === "running" || this.dreaming) { this.print("work is running — stop it before /undo", "error"); return true; }
+        const id = this.state.sessionId;
+        if (!id || !this.undo) { this.print("no session with undo available", "error"); return true; }
+        const turn = cmd.at === "" ? undefined : /^[1-9][0-9]*$/.test(cmd.at) ? Number(cmd.at) : NaN;
+        if (turn !== undefined && !Number.isSafeInteger(turn)) { this.print("usage: /undo [positive turn]", "error"); return true; }
+        this.undoing = (async () => {
+          try {
+            const result = await this.undo!(id,turn);
+            this.print(result.message,"system");
+            if (result.restored) {
+              this.forgetRestoredConversation();
+            }
+          } catch (error) { this.print(`/undo failed: ${String(error)}`,"error"); }
+        })();
+        try { await this.undoing; } finally { this.undoing = undefined; }
+        return true;
+      }
       case "tree": {
         const id = this.state.sessionId;
         if (id === null) {
@@ -626,6 +765,7 @@ export class TuiController {
         await this.continueConversation(cmd.text);
         return true;
       case "new":
+        if (this.resetGrants("new-conversation") === undefined) return true;
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
         this.set({ sessionId: null, plan: [], signals: [], children: [], turns: 0, context: null });
@@ -674,6 +814,7 @@ export class TuiController {
     // The child inherits the parent's conversation up to the fork point, so its plan and signals
     // are still the ones on screen; only the identity changes. Resumable even when the parent was
     // not: a fork resumes from its materialized tree, not from a snapshot.
+    if (this.resetGrants("conversation-forked") === undefined) return;
     this.resumable = true;
     this.set({ sessionId: forked.id });
     this.print(
@@ -684,12 +825,12 @@ export class TuiController {
 
   /** Runs an injected side command, reporting rather than throwing into the render loop. */
   private async delegate(name: string, fn: () => Promise<string[]> | undefined): Promise<void> {
-    const work = fn();
-    if (work === undefined) {
-      this.print(`/${name} is not available in this session`, "error");
-      return;
-    }
     try {
+      const work = fn();
+      if (work === undefined) {
+        this.print(`/${name} is not available in this session`, "error");
+        return;
+      }
       for (const l of await work) this.print(l, "system");
     } catch (err) {
       this.print(`/${name} failed: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -735,10 +876,17 @@ export class TuiController {
       return;
     }
     this.session = session;
+    try { this.permissionGrants.beginSession(session.id); }
+    catch (error) {
+      session.control.abort(); await session.done.catch(() => {}); this.session = null;
+      this.print(`permission session refused: ${String(error)}`, "error"); return;
+    }
     // before the events are consumed: an observer attached late misses the start of the session
     // it is meant to be watching
     try {
-      this.opts.onSession?.(session);
+      const observer = this.opts.onSession?.(session);
+      if (observer !== null && typeof observer === "object" && "detach" in observer && typeof observer.detach === "function"
+        && "done" in observer && observer.done instanceof Promise) this.observer = observer as { detach(): void; done: Promise<void> };
     } catch (err) {
       this.print(`supervisor could not attach: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
@@ -769,6 +917,10 @@ export class TuiController {
     } catch (err) {
       this.print(`session failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
+      const observer = this.observer;
+      this.observer = undefined;
+      observer?.detach();
+      await observer?.done.catch(() => {});
       this.session = null;
       this.running = null;
       // settle rather than drop: clearing either prompt would leave a resolver unsettled and the
@@ -821,6 +973,7 @@ export class TuiController {
   }
 
   private consume(e: HarnessEvent): void {
+    for (const line of this.auxiliary.push(e)) this.print(line, "system");
     this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "context.manifest") this.set({ manifest: e });

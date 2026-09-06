@@ -104,9 +104,7 @@ describe("McpClient", () => {
     );
     const client = new McpClient({ name: "f", command: "x" }, { spawnFn, onError: (e) => errors.push(e) });
     await client.start();
-    const tools = await client.listTools();
-    expect(tools.length).toBeLessThanOrEqual(20);
-    expect(errors.some((e) => e.message.includes("paginated past"))).toBe(true);
+    await expect(client.listTools()).rejects.toThrow("refusing incomplete definitions");
     await client.close();
   });
 

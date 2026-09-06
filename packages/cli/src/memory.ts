@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import {
   FileMemoryStore,
@@ -6,16 +6,30 @@ import {
   LoreBackend,
   SCHEMA_MD,
   findingCount,
+  formatAuxiliaryUsage,
   ingestSession,
   loreConfigFromEnv,
+  loadPromotionEvidence,
+  selectForPromotion,
+  assessPromotionEvidence,
+  reviewPromotionEffects,
+  sessionEvidence,
+  renderPromotionProposal,
   renderReport,
   runDream,
+  resetDreamStamp,
+  inspectDreamWorkspace,
+  discardDreamWorkspace,
   tolerant,
   unionRetrieve,
   withBackendRecall,
   type MemoryBackend,
+  type IngestLimits,
+  type MaintenanceLimits,
+  type ScanLimits,
 } from "@agentkitai/agentrig-memory";
 import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.js";
+import { withMaintenanceSignal } from "./maintenance.js";
 
 /**
  * `agentrig memory …` — thin wrappers over the memory package. Anything with logic in it
@@ -24,6 +38,36 @@ import { buildRoleProvider, memoryRole, type ProviderOptions } from "./provider.
 
 export interface MemoryOptions {
   dir: string;
+}
+
+export async function memoryResetDreamStamp(opts: MemoryOptions & { confirm?: boolean }): Promise<void> {
+  const wiki = layout(opts.dir).wiki;
+  if (opts.confirm !== true) {
+    console.log(`Reset only ${join(wiki, ".last-dream")}, preserving a named sibling backup. Stop running/scheduled dreams first; rerun with --confirm. Nothing changed.`);
+    return;
+  }
+  await withMaintenanceSignal(async signal => {
+    const result = await resetDreamStamp(wiki, { signal });
+    console.log(result.status === "absent" ? "No dream scheduling stamp; nothing changed."
+      : `Dream scheduling stamp reset; the next scheduled dream is due. Previous stamp preserved at ${result.backup}`);
+  });
+}
+
+export async function memoryDiscardDream(outputRoot: string, opts: { owner?: string; confirm?: boolean }): Promise<void> {
+  if (opts.confirm !== true) {
+    const preview = await inspectDreamWorkspace(outputRoot);
+    console.log(`dream output: ${preview.outputRoot}\nmanifest: ${preview.manifestPath}\nowner: ${preview.owner}`
+      + `\nproducer: ${preview.activity}${preview.producer === undefined ? "" : ` (${preview.producer.pid} on ${preview.producer.host})`}`
+      + `\nsource (never discarded): ${preview.sourceRoot}`);
+    console.log("Stop using this artifact. To discard this owner, rerun with --owner <the UUID above> --confirm. Nothing changed. Existing locks are never reclaimed.");
+    return;
+  }
+  if (opts.owner === undefined) throw new Error("discard requires --owner from a fresh preview and --confirm; nothing changed");
+  await withMaintenanceSignal(async signal => {
+    const result = await discardDreamWorkspace(outputRoot, opts.owner!, { signal });
+    console.log(result.status === "absent" ? "Dream output and manifest already absent; nothing changed."
+      : `Discarded dream output and manifest at ${outputRoot}; not recoverable by this command. Source wiki and install backups were not removed.`);
+  });
 }
 
 /** `.agentrig` layout (PLAN §3.1): raw/ beside wiki/ beside SCHEMA.md. */
@@ -35,13 +79,16 @@ export function layout(dir: string) {
  * The optional Lore backend (PLAN §3.8), or null when unconfigured — the no-infra default.
  * Always wrapped so a backend failure is reported and then ignored.
  */
-export function openBackend(): MemoryBackend | null {
+export function openBackend(opts: { tolerate?: boolean; onError?: (op: string, err: Error) => void } = {}): MemoryBackend | null {
   if (loreConfigFromEnv() === null) return null;
   try {
-    return tolerant(new LoreBackend(), backendError);
+    const backend = new LoreBackend();
+    return opts.tolerate === false ? backend : tolerant(backend, opts.onError ?? backendError);
   } catch (err) {
     // a misconfigured OPTIONAL backend must not take down the harness
-    console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
+    if (opts.onError !== undefined) {
+      try { void Promise.resolve(opts.onError("initialization", err instanceof Error ? err : new Error(String(err)))).catch(() => {}); } catch { /* diagnostic */ }
+    } else console.error(`lore backend disabled (${(err as Error).message}); continuing without it`);
     return null;
   }
 }
@@ -126,15 +173,23 @@ export async function memorySearch(query: string, opts: MemoryOptions & { k?: st
   }
 }
 
-export type MemoryIngestOptions = MemoryOptions & ProviderOptions;
+export type MemoryIngestOptions = MemoryOptions & ProviderOptions & {
+  ingestLimits?: Partial<IngestLimits>;
+  ingestSpanChars?: string;
+};
 
 export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions): Promise<void> {
   const { root } = layout(opts.dir);
-  const store = await openStore(opts.dir);
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+    console.error("invalid ingest session id: use the ID, not a filename or path");
+    process.exitCode = 1;
+    return;
+  }
+  const store = new FileMemoryStore({ root: layout(opts.dir).wiki });
   const raw = new FileRawStore({ root });
-  const sessions = await raw.sessions();
-  const session = sessions.find((s) => s.id === sessionId);
-  if (session === undefined) {
+  const logPath = join(root, "raw", "sessions", `${sessionId}.jsonl`);
+  const exists = await stat(logPath).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return false; throw error; });
+  if (!exists) {
     console.error(`no session log for ${sessionId} under ${root}/raw/sessions`);
     process.exitCode = 1;
     return;
@@ -149,19 +204,24 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
     process.exitCode = 1;
     return;
   }
-  const { attempts, corrupt } = await raw.readAttempts(sessionId);
-  for (const path of corrupt) console.error(`warning: unreadable attempt file, skipped: ${path}`);
-  const backend = openBackend();
+  const backend = openBackend({ tolerate: false });
   const result = await ingestSession({
     store,
     provider,
     sessionId,
-    logPath: session.path,
-    attempts,
+    logPath,
+    attemptsFrom: raw,
+    onCorruptAttempt: path => console.error(`warning: unreadable attempt file, skipped: ${path}`),
     project: projectName(),
+    ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
+    ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
     onBackendError: backendError,
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     ...(backend === null ? {} : { backend, checkBackendConflicts: true }),
   });
+  for (const omission of result.omissions) {
+    console.error(`uninspected evidence: event ${omission.eventIndex}, ${omission.field}: ${omission.reason}`);
+  }
   if (result.skipped) {
     console.log(`session ${sessionId} already ingested and unchanged; nothing to do`);
     return;
@@ -184,14 +244,12 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
   }
 }
 
-/** Promote one wiki page to the backend's shared scope (PLAN §3.8, private→shared). */
-export async function memoryPromote(path: string, opts: MemoryOptions): Promise<void> {
-  const backend = openBackend();
-  if (backend === null) {
-    console.error("no memory backend configured (set LORE_API_URL and LORE_API_KEY)");
-    process.exitCode = 1;
-    return;
-  }
+/** Preview checked witnesses; an explicit confirmation is required before shared-scope writes. */
+export interface MemoryPromoteOptions extends MemoryOptions, ProviderOptions { confirm?: boolean; signal?: AbortSignal; guardrailLimits?: Partial<MaintenanceLimits> }
+export async function memoryPromote(path: string, opts: MemoryPromoteOptions): Promise<void> {
+  return withMaintenanceSignal(signal => promoteWithSignal(path, opts, signal), opts.signal);
+}
+async function promoteWithSignal(path: string, opts: MemoryPromoteOptions, signal: AbortSignal): Promise<void> {
   let page;
   try {
     page = await (await openStore(opts.dir)).read(path);
@@ -205,12 +263,63 @@ export async function memoryPromote(path: string, opts: MemoryOptions): Promise<
     process.exitCode = 1;
     return;
   }
-  await backend.promote(page);
-  console.log(`promoted ${page.path} to ${backend.id} shared scope`);
+  const evidenceIndex = await loadPromotionEvidence(new FileRawStore({ root: opts.dir }),
+    sessionEvidence(page).map(ref => ref.slice("session:".length)), { signal });
+  const checked = assessPromotionEvidence([page], { evidenceIndex });
+  let proposal = checked.promote[0];
+  if (proposal === undefined) {
+    for (const rejected of checked.rejected) {
+      console.error(`not eligible: ${rejected.reason}`);
+      for (const claim of rejected.claims ?? []) if (!claim.eligible) console.error(`  ${claim.claim}: ${claim.reason}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+  console.log(renderPromotionProposal(proposal));
+  if (opts.confirm !== true) {
+    console.log("Review these excerpts and the claim's meaning; --confirm additionally runs a bounded memory-role effect assessment before shared-scope promotion. Nothing was published.");
+    return;
+  }
+  if (loreConfigFromEnv() === null) {
+    console.error("no memory backend configured (set LORE_API_URL and LORE_API_KEY)");
+    process.exitCode = 1;
+    return;
+  }
+  let publicationStarted = false;
+  try {
+    const guardrailIndex = await reviewPromotionEffects([proposal], { provider: buildRoleProvider(opts, memoryRole(opts)), signal,
+      ...(opts.guardrailLimits === undefined ? {} : { limits: opts.guardrailLimits }), onUsage: report => console.error(formatAuxiliaryUsage(report)) });
+    const current = await (await openStore(opts.dir)).read(path);
+    if (current === null || current.version !== page.version) throw new Error("wiki page changed during effect assessment; review the current page again");
+    const currentEvidence = await loadPromotionEvidence(new FileRawStore({ root: opts.dir }),
+      sessionEvidence(current).map(ref => ref.slice("session:".length)), { signal });
+    const approved = selectForPromotion([current], { evidenceIndex: currentEvidence, guardrailIndex });
+    proposal = approved.promote[0];
+    if (proposal === undefined) {
+      for (const rejection of approved.rejected) console.error(`not eligible: ${rejection.reason}`);
+      process.exitCode = 1; return;
+    }
+    signal.throwIfAborted();
+    console.log(renderPromotionProposal(proposal));
+    // An explicit publication must not report success after tolerant() swallowed a transport error.
+    const backend = new LoreBackend();
+    publicationStarted = true;
+    await backend.promote({ ...page, body: proposal.publicationBody,
+      frontmatter: { ...page.frontmatter, sources: proposal.publicationSources } });
+    console.log(`promoted ${page.path} to ${backend.id} shared scope`);
+  } catch (err) {
+    console.error(`${publicationStarted ? "promotion failed; the backend may have accepted a partial update" : "not eligible; effect assessment or revalidation failed, nothing published"}: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+  }
 }
 
 /** `lint` = a dry-run dream report. M3 ships the pin re-check; M5 adds the rest. */
-export async function memoryLint(opts: MemoryOptions): Promise<void> {
+export interface MemoryLintOptions extends MemoryOptions { dreamLimits?: Partial<MaintenanceLimits>; dreamScanLimits?: Partial<ScanLimits>; signal?: AbortSignal }
+export async function memoryLint(opts: MemoryLintOptions): Promise<void> {
+  return withMaintenanceSignal(signal => lintWithSignal(opts, signal), opts.signal);
+}
+
+async function lintWithSignal(opts: MemoryLintOptions, signal: AbortSignal): Promise<void> {
   const { wiki } = layout(opts.dir);
   const store = await openStore(opts.dir);
 
@@ -219,6 +328,9 @@ export async function memoryLint(opts: MemoryOptions): Promise<void> {
   // no provider at all: structural-only needs no model, so `lint` must not need a credential
   const result = await runDream({
     wiki: store,
+    signal,
+    limits: opts.dreamLimits ?? {}, scanLimits: opts.dreamScanLimits ?? {},
+    onUsage: report => console.error(formatAuxiliaryUsage(report)),
     raw: new FileRawStore({ root: opts.dir }),
     structuralOnly: true,
     cwd: process.cwd(),
@@ -231,13 +343,13 @@ export async function memoryLint(opts: MemoryOptions): Promise<void> {
     }));
   } finally {
     // a dry run leaves nothing behind, even if rendering threw
-    await result.workspace.dispose().catch(() => {});
+    await result.workspace.dispose().catch(error => console.error(`dream cleanup failed; inspect ${result.outputRoot} and ${result.workspace.manifestPath}: ${String(error)}`));
   }
   void wiki;
 
   const findings = findingCount(result.report, result.structural);
   if (findings > 0) {
-    console.log(`${findings} finding(s). \`agentrig dream\` writes a corrected wiki you can review.`);
+    console.log(`${findings} finding(s). \`agentrig dream\` writes a reviewable copy; advisory write-quality findings are not automatically repaired.`);
     process.exitCode = 1;
   }
 }
