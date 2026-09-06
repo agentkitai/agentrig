@@ -1338,6 +1338,25 @@ describe("review regressions", () => {
     await expect(c.ask({ tool: "bash", input: {}, class: "exec", cwd: root })).resolves.toBe("allow");
   });
 
+  it("MCP definition consent shows exact delta and never remembers or inherits a standing answer", async () => {
+    const c = makeController([]);
+    const req = { tool: "mcp_definition_change", input: { changes: [{ name: "search", before: { description: "old" }, after: { description: "new" } }] }, class: "exec" as const, cwd: root };
+    const ordinary = c.ask(req);
+    c.answerPermission("allow", true);
+    await ordinary;
+    const definition = { ...req, origin: "mcp-definition-change" };
+    const first = c.ask(definition);
+    expect(c.snapshot().pending?.req).toEqual(definition);
+    expect(text(c)).toContain('"description": "old"');
+    expect(text(c)).toContain('"description": "new"');
+    c.answerPermission("allow", true);
+    expect(await first).toBe("allow");
+    const second = c.ask(definition);
+    expect(c.snapshot().pending?.req).toEqual(definition);
+    c.answerPermission("deny");
+    expect(await second).toBe("deny");
+  });
+
   it("shutdown settles every outstanding request rather than dropping it", async () => {
     const c = makeController([]);
     const pending = c.ask({ tool: "a", input: {}, class: "exec", cwd: root });

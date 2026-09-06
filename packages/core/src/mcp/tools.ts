@@ -4,6 +4,7 @@ import type { AnyTool, Tool, ToolContext, ToolResult } from "../tool.js";
 import { bound } from "../tools/shared.js";
 import type { McpClient } from "./client.js";
 import { renderContent, type McpToolSpec } from "./protocol.js";
+import { FileMcpPins, mcpDefinitionSnapshot, mcpDefinitionChange, type McpDefinitionChange } from "./pins.js";
 
 /**
  * Turns an MCP server's tools into ordinary `Tool`s, which is the whole point: once adapted they
@@ -87,6 +88,8 @@ export interface McpToolOptions {
   spec: McpToolSpec;
   /** Characters of tool output kept; a server returning a megabyte must not blow the context. */
   maxDisplayChars?: number;
+  /** Trusted host gate; cannot be supplied by server annotations. */
+  beforeExecute?: (ctx: ToolContext) => Promise<void>;
 }
 
 export function mcpTool(opts: McpToolOptions): AnyTool {
@@ -103,6 +106,8 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
     jsonSchema: normalizeSchema(opts.spec.inputSchema),
     permission: MCP_PERMISSION,
     execute: async (input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
+      await opts.beforeExecute?.(ctx);
+      ctx.signal.throwIfAborted();
       const result = await opts.client.callTool(opts.spec.name, input, ctx.signal);
       const rendered = renderContent(result.content);
       const bounded = bound(rendered, maxDisplay);
@@ -124,6 +129,10 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
 export interface ConnectOptions {
   servers: McpClient[];
   onError?: (server: string, err: Error) => void;
+  /** CLI always supplies persistent pins; SDK hosts may explicitly manage their own trust. */
+  pins?: FileMcpPins;
+  onDefinitionChange?: (change: McpDefinitionChange, ctx: ToolContext) => Promise<boolean>;
+  onDefinitionNotice?: (message: string) => void;
 }
 
 /**
@@ -140,7 +149,39 @@ export async function connectServers(opts: ConnectOptions): Promise<{ tools: Any
   for (const client of opts.servers) {
     try {
       await client.start();
-      for (const spec of await client.listTools()) tools.push(mcpTool({ client, spec }));
+      const specs = await client.listTools();
+      const snapshot = mcpDefinitionSnapshot(specs);
+      const pins = opts.pins;
+      if (pins !== undefined) {
+        const baseline = await pins.read(client.name);
+        if (baseline === undefined) {
+          await pins.compareAndSet(client.name, undefined, snapshot);
+          opts.onDefinitionNotice?.(`MCP ${JSON.stringify(client.name)}: pinned first-use tool definitions (trust on first use; not a safety assessment)`);
+        } else if (baseline !== snapshot) {
+          const delta = mcpDefinitionChange(client.name, baseline, snapshot);
+          opts.onDefinitionNotice?.(`MCP ${JSON.stringify(client.name)}: definitions changed for ${delta.changes.map((c) => JSON.stringify(c.name)).join(", ")}; explicit definition consent required before execution`);
+        }
+      }
+      const beforeExecute = pins === undefined ? undefined : async (ctx: ToolContext): Promise<void> => {
+        ctx.signal.throwIfAborted();
+        const fresh = mcpDefinitionSnapshot(await client.listTools(ctx.signal));
+        if (fresh !== snapshot) throw new Error("MCP definitions changed since model tool advertisement; reconnect before executing");
+        const baseline = await pins.read(client.name);
+        if (baseline === undefined) throw new Error("MCP baseline disappeared; refusing to reset trust during execution");
+        if (baseline !== snapshot) {
+          const change = mcpDefinitionChange(client.name, baseline, snapshot);
+          if (await opts.onDefinitionChange?.(change, ctx) !== true) {
+            throw new Error(`MCP ${JSON.stringify(client.name)}: changed tool definitions not approved; execution refused`);
+          }
+          ctx.signal.throwIfAborted();
+          if (mcpDefinitionSnapshot(await client.listTools(ctx.signal)) !== snapshot) {
+            throw new Error("MCP definitions changed during consent; reconnect before executing");
+          }
+          await pins.compareAndSet(client.name, baseline, snapshot);
+        }
+        ctx.signal.throwIfAborted();
+      };
+      for (const spec of specs) tools.push(mcpTool({ client, spec, ...(beforeExecute === undefined ? {} : { beforeExecute }) }));
       connected.push(client);
     } catch (err) {
       opts.onError?.(client.name, err instanceof Error ? err : new Error(String(err)));

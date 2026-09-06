@@ -336,6 +336,7 @@ export function positiveNumber(flag: string, value: string): number {
 async function askInteractively(req: PermissionRequest): Promise<Exclude<Decision, "ask">> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
+    if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
     const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);
