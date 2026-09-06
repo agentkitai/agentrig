@@ -1,7 +1,8 @@
 import type { Readable, Writable } from "node:stream";
 import type { AnyMessage, JsonRpcId, Stream } from "@agentclientprotocol/sdk";
+import { acpPreflight } from "./acp-preflight.js";
 
-export const ACP_LIMITS = { frameBytes: 1_048_576, outputBytes: 4_194_304, requests: 32, permissions: 8, sessions: 8 } as const;
+export const ACP_LIMITS = { frameBytes: 1_048_576, outputBytes: 4_194_304, responseBytes: 131_072, requests: 16, permissions: 8, sessions: 8 } as const;
 export const ACP_SESSION_REFUSAL = "Session refused; check trusted configuration, cwd and existing MCP pins using the CLI";
 const idKey = (id: JsonRpcId): string => JSON.stringify(id);
 const validId = (value: unknown): value is JsonRpcId => value === null ||
@@ -9,10 +10,11 @@ const validId = (value: unknown): value is JsonRpcId => value === null ||
 
 /** Bounded ACP framing, not a second RPC dialect. The SDK owns method/schema handling. */
 export function acpTransport(input: Readable, output: Writable) {
-  let ended = false; let buffered = Buffer.alloc(0); let queuedBytes = 0;
+  let ended = false; let buffered = Buffer.alloc(0); let queuedBytes = 0; let reservedBytes = 0;
   let readableControl: ReadableStreamDefaultController<AnyMessage>;
   let writableControl: WritableStreamDefaultController;
   const inbound = new Set<string>();
+  const responses = new Map<string, () => void>();
   const outbound = new Map<string, JsonRpcId>();
   let finish!: () => void;
   const closed = new Promise<void>(resolve => { finish = resolve; });
@@ -22,10 +24,17 @@ export function acpTransport(input: Readable, output: Writable) {
     ended = true;
     const error = new Error("ACP transport closed");
     readableControl?.error(error); writableControl?.error(error);
-    inbound.clear(); outbound.clear();
+    inbound.clear(); outbound.clear(); responses.clear(); reservedBytes = 0;
     input.destroy(); output.destroy(); finish();
   }
   input.on("error", close); output.on("error", close);
+  function reserve(bytes: number): () => void {
+    if (ended || !Number.isSafeInteger(bytes) || bytes < 0 || reservedBytes + bytes > ACP_LIMITS.outputBytes) {
+      close(); throw new Error("ACP output capacity exceeded");
+    }
+    reservedBytes += bytes; let released = false;
+    return () => { if (!released) { released = true; if (!ended) reservedBytes -= bytes; } };
+  }
   function decode(line: Buffer): AnyMessage {
     let parsed: unknown;
     try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(line)); }
@@ -39,6 +48,14 @@ export function acpTransport(input: Readable, output: Writable) {
         const key = idKey(value.id as JsonRpcId);
         if (inbound.has(key) || inbound.size >= ACP_LIMITS.requests) throw new Error("ACP request capacity exceeded");
         inbound.add(key);
+        responses.set(key, reserve(ACP_LIMITS.responseBytes));
+        if (!acpPreflight(value.method, value.params)) return { jsonrpc: "2.0", id: value.id as JsonRpcId, method: "_agentrig/refused", params: {} };
+      } else if (value.method === "$/cancel_request") {
+        const params = value.params as { requestId?: unknown } | undefined;
+        if (params === undefined || !validId(params.requestId)) throw new Error("invalid cancellation");
+        value.params = { requestId: params.requestId };
+      } else if (value.method !== "session/cancel" || !acpPreflight(value.method, value.params)) {
+        throw new Error("unsupported ACP notification");
       }
     } else {
       if (!("id" in value) || (("result" in value) === ("error" in value))) throw new Error("invalid ACP response");
@@ -103,7 +120,9 @@ export function acpTransport(input: Readable, output: Writable) {
           output.once("close", failed);
           output.write(data, error => { cleanup(); if (error) reject(error); else resolve(); });
         });
-        if (!("method" in message) && "id" in message) inbound.delete(idKey(message.id));
+        if (!("method" in message) && "id" in message) {
+          const key = idKey(message.id); inbound.delete(key); responses.get(key)?.(); responses.delete(key);
+        }
       } catch (error) { close(); throw error; }
       finally { queuedBytes -= size; }
     },
@@ -119,5 +138,5 @@ export function acpTransport(input: Readable, output: Writable) {
     },
   });
   const stream: Stream = { readable, writable };
-  return { stream, closed, close, get queuedBytes() { return queuedBytes; } };
+  return { stream, closed, close, reserve, get reservedBytes() { return reservedBytes; }, get queuedBytes() { return queuedBytes; } };
 }

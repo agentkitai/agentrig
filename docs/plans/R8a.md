@@ -43,14 +43,27 @@ Synthetic approval tool updates explicitly describe approval, not successful too
 execution. Actual tool IDs are prefixed by ACP prompt number to avoid collisions
 across resumed internal runs. Kind `other` avoids inferring effects from names.
 
-The SDK's request cancellation is cooperative: it sends a cancel notification but
-waits for the peer response. ACP locally settles the approval as denied on abort,
-joins its update, and ignores late answers. Unanswered SDK replies remain counted
-against the eight-request cap until answered or the connection closes. No abandoned
-destructive filesystem call is involved in that local permission wait.
+ACP locally settles approval as denied on abort, joins its update, and ignores late
+answers. It does not send the optional SDK JSON-RPC request-cancel notification:
+the unanswered SDK reply remains counted against the eight-request cap and retains
+its byte reservation until answered or the connection closes. This avoids an
+unaccounted SDK-generated outbound notification. No abandoned destructive
+filesystem call is involved in that local permission wait.
 
-Transport frames and output queues count bytes. Output accounting happens when
-the SDK enqueues a write, including writes behind blocked stdout. Finite input
+Transport frames and output queues count bytes. A shared 4 MiB ledger reserves
+notification bytes before SDK enqueue, 128 KiB per inbound response (16 maximum)
+until actual write, and 128 KiB per permission until reply/connection close. Own
+results cap at 130,000 bytes plus bounded envelope; errors are fixed/bounded.
+Malformed/unknown requests become a constant refusal method before SDK dispatch.
+Preflight uses the same public SDK `schema/schema.json` with exact Ajv 8.20.0
+draft-2020-12 validation, offline local references only, no fetched schemas and no
+serialized validator errors. Extension schemas are shared with actual handlers.
+The SDK still validates/distributes requests; no private import or protocol fork.
+Its documented ConnectionBuilder/RequestResponder are not package exports in this
+release, so the review fix retains public fluent APIs plus this bounded preflight.
+The earlier WritableStream-only counter missed the SDK's own serialized queue;
+the real blocked-SDK regression now exercises the shared pre-enqueue ledger.
+Finite input
 frames/Node chunks and generated schemas bound parsing; this is not a hard RSS/CPU
 quota for trusted JavaScript. Connection failure aborts controllers and waits for
 in-flight creation, observers and MCP cleanup. Existing runtime orphan/uncooperative
@@ -61,6 +74,9 @@ the actual built policy and refuses a non-allow result. Index cap 256 KiB; query
 scan caps 512 entries, depth 8, 256 KiB/file, 2 MiB total; no remote Lore lookup or
 maintenance writes. Returned lines are bounded. Raw event subscription is opt-in
 and explicitly unredacted, separate from R9a's redacted export.
+Events above 256 KiB emit an explicit omission notice with original type/seq/byte
+size instead of disconnecting; this subscription is not a lossless copy. Immutable
+logs and normal tool-result updates remain unchanged.
 
 ## Verification in progress
 
@@ -94,3 +110,26 @@ Final pre-review combined-main validation: build, typecheck and full suite passe
 with the actual local Docker worker/checker fixtures enabled: **2,718 passed plus
 two existing skips /160 files**, four workers, 44.25s. Client script syntax and
 `git diff --check` passed. No live provider calls were used for validation.
+
+## Single review and scoped fixes
+
+[Original findings](R8a-review.md) are retained verbatim. Requested 24 turns;
+CLI reported 56. Reviewer ran 19 focused tests plus typecheck; its two SDK shell
+probes were denied, and it did not execute the oversized-event reproduction.
+Author controls separately established both material findings:
+
+- An initial fixture put large text only in the tool's opaque output, so it failed
+  the missing-notice assertion without reproducing disconnect. Correcting it to
+  actual full display overflow reproduced `ERR_STREAM_PREMATURE_CLOSE`; after the
+  bounded notice fix the same actual tool/ACP turn completes with normal updates.
+- Ninety 70,000-byte controller deltas through the official SDK behind corked
+  stdout failed the 1.5s closed-state assertion before pre-SDK accounting; the same
+  case now closes and joins. This is an actual runtime/control assertion with a
+  bounded asynchronous wait, not a direct WritableStream-only capacity claim.
+- Actual valid, unknown-method and malformed-schema responses remain reserved
+  while stdout is blocked and release after write callbacks, not handler return.
+  A seventeenth stalled request closes. Cancelled permission reservations persist
+  until a late reply; an eventual allow cannot execute effects or lower bytes below
+  zero. Existing unanswered-permission cancellation remains tested.
+
+Optional polish is at ROADMAP's end; no second general review was requested.

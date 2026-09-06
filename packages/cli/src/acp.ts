@@ -52,7 +52,7 @@ export async function startAcp(command: Command, flags: AcpFlags, dependencies: 
   const home = dependencies.config?.home ?? homedir();
   const transport = acpTransport(dependencies.input ?? process.stdin, dependencies.output ?? process.stdout);
   const notice = () => console.error("ACP integration notice: inspect the operator CLI for configuration details.");
-  const server = serveAcp(transport.stream, { closeTransport: transport.close,
+  const server = serveAcp(transport.stream, { closeTransport: transport.close, reserveOutput: transport.reserve,
     createSession: async (request, observe) => {
       const [launchBoundary, sessionBoundary] = await Promise.all([resolveProjectBoundary(launchCwd, home), resolveProjectBoundary(request.cwd, home)]);
       const defaults = { ...flags, trust: flags.trust === true && launchBoundary.projectRoot === sessionBoundary.projectRoot };

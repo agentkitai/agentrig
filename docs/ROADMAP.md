@@ -1228,3 +1228,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R10c polish: an explicit inspect/reclaim command for named retained isolated worktrees,
   with ownership/quiescence checks and no force cleanup. Current bounded retention and
   manual operator cleanup are deliberate; candidate readiness remains point-in-time only.
+- R8a polish: clarify the narrow completion/cancel race and first-prompt cancellation
+  continuation behavior; reduce duplicate frame serialization; consider notification-count
+  tuning under the byte cap and add a focused advisory-count trace rendering assertion.
+  Byte accounting and oversized-event handling were material fixes in R8a, not deferred.

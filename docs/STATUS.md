@@ -39,8 +39,11 @@ matching preserve host/sandbox boundaries; existing unchanged pins only, no ACP
 consent persistence. Bounded queues, cancellation, raw opt-in events and local
 read-only memory/supervisor extensions are exercised with controlled fixtures.
 Actual spawned CLI + local fake provider completes deny/allow over OS pipes.
-Build/typecheck and focused groups pass; full suite, negative mutations and the
-single independent review are next. Integrated R9b/R7c through `b2390ce`.
+Pre-review build/typecheck/full passed 2,718 plus two skips with local Docker
+fixtures. Four negative mutations were caught/restored. The single independent
+review found oversized raw-event disconnect and SDK-hidden queue accounting;
+both have actual fail-before/pass-after controls and bounded fixes. Final combined
+gates remain pending. Integrated R9b/R7c through `b2390ce`.
 R10c is fully done via PR #181, post-main CI `34044235154`;
 [final receipt](https://github.com/agentkitai/agentrig/pull/181#issuecomment-5560486475).
 

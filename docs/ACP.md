@@ -47,13 +47,24 @@ Versioned extensions are advertised under `_meta.agentrig`:
 | `_agentrig/memory` | optional `query` | Bounded local configured-wiki list/search; configured read denies still win |
 
 Raw events are **sensitive, unredacted session data**, not a public export. There is
+no lossless-stream promise: events above 256 KiB become explicit omission notices
+with the original event type, sequence and serialized byte size; immutable logs are
+unchanged. Normal tool/content updates still accompany these notices. There is
 no arbitrary command/maintenance RPC or client-selected memory path. Normal logs
 and notices use stderr; trusted host extensions must also keep stdout protocol-only.
 
-Limits: eight sessions per connection, one prompt each, 32 inbound requests, eight
-outstanding permission replies, 1 MiB frames, 4 MiB queued output, 256 queued
+Limits: eight sessions per connection, one prompt each, 16 inbound requests, eight
+outstanding permission replies, 1 MiB frames, 4 MiB reserved output, 256 queued
 notifications, 32 prompt blocks, 256 KiB text and 256 KiB advisory data. Overflow
-closes the connection and denies asks, never silently drops a live update. Reconnect
+closes the connection and denies asks, never silently drops a live update. Each
+inbound response reserves 128 KiB until its actual write; each outgoing approval
+reserves 128 KiB until its reply/connection close. Notifications reserve actual
+serialized bytes before SDK enqueue and release after physical write. All share
+the same 4 MiB budget, so concurrent stalled traffic may reach it before count caps.
+Individual extension results above 130,000 bytes refuse rather than exceed their
+response slot. Invalid/unknown method requests get a fixed non-reflective refusal.
+Unanswered approvals remain counted after local cancellation; late approval cannot
+authorize work. Reconnect
 to create sessions after the session cap. The v1 prompt response follows controller
 settlement and update flush; cancellation uses existing runtime joining guarantees,
 not a claim that arbitrary uncooperative host code/remote work has physically stopped.
