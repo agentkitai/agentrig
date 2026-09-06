@@ -55,7 +55,8 @@ export class EvaluationBudget {
         budget.calls.push(call);
         let stopped = false, failed = false;
         try {
-          for await (const event of provider.stream(request, AbortSignal.any([signal, budget.controller.signal]))) {
+          for await (const event of provider.stream({ ...request, maxTokens: Math.min(request.maxTokens, budget.maxTokens - budget.tokens) },
+            AbortSignal.any([signal, budget.controller.signal]))) {
             if (event.type === "retry") call.retried = true;
             if (event.type === "usage") call.usage = event.reported === false ? null : event.usage;
             if (event.type === "stop") { stopped = true; failed ||= event.reason === "error"; }

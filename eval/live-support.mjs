@@ -1,5 +1,5 @@
 // Trusted evaluator helpers. No credentials or network access in task workers.
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { readdir, readFile, lstat } from 'node:fs/promises';
 import { join, isAbsolute } from 'node:path';
@@ -38,12 +38,22 @@ function ownedCommand(program, args, options) {
   return new Promise(resolve => {
     if (signal?.aborted) return resolve({ code: null, infrastructure: true, stdout: '', stderr: '', error: 'cancelled' });
     let interrupted = false;
-    const child = execFile(program, args, { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
-      ...rest, detached: process.platform !== 'win32', windowsHide: true }, (error, stdout, stderr) => {
+    // execFile does not forward detached to spawn; use the actual spawn group option.
+    const child = spawn(program, args, { ...rest, detached: process.platform !== 'win32',
+      windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdout = [], stderr = []; let bytes = 0, spawnError = null;
+    const capture = chunks => data => {
+      bytes += data.length;
+      if (bytes > 4 * 1024 * 1024) stop();
+      else chunks.push(data);
+    };
+    child.stdout.on('data', capture(stdout)); child.stderr.on('data', capture(stderr));
+    child.on('error', error => { spawnError = error; });
+    child.on('close', (code, childSignal) => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      resolve({ code: error ? typeof error.code === 'number' ? error.code : null : 0,
-        infrastructure: interrupted || (!!error && (typeof error.code !== 'number' || error.signal != null)),
-        stdout, stderr, error: interrupted ? 'cancelled or timed out' : error?.message ?? null });
+      resolve({ code, infrastructure: interrupted || spawnError !== null || childSignal !== null,
+        stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8'),
+        error: interrupted ? 'cancelled, timed out or output exceeded limit' : spawnError?.message ?? null });
     });
     const stop = () => {
       interrupted = true;

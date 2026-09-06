@@ -510,27 +510,37 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .requiredOption("--fixtures <file>", "bounded version-1 session/task/source/baseline map and local image IDs")
     .requiredOption("--output <new-directory>", "exclusive retained evaluation evidence directory (created only with --execute)")
     .option("--execute", "run isolated tasks and advisory grading; may spend provider tokens")
+    .option("--trust", "explicitly trust project configuration for this invocation")
     .option("--batch-tokens <n>", "required reported-token scheduling cap for execution, not a hard billing cap")
     .option("--batch-minutes <n>", "required total execution wall-time limit")
     .addHelpText("after", "\nPreview makes no provider calls. Execution requires Linux Docker and pre-existing image IDs; never pulls images or installs dependencies. Shipped worker supports X tasks; A tasks require a matching offline dependency image. Independent checks decide outcomes; M6 grades are advisory. See docs/plans/R9b.md.\nExample: agentrig eval SESSION --against candidate --fixtures fixtures.json --output ./new-evaluation\nAdd --execute --batch-tokens 100000 --batch-minutes 10 only after reviewing the preview.")
     .action(async (ids: string[], _opts: unknown, cmd: Command) => {
       try {
       const opts = cmd.optsWithGlobals() as { against: string; fixtures: string; output: string; execute?: boolean;
-        batchTokens?: string; batchMinutes?: string; profile?: string };
+        batchTokens?: string; batchMinutes?: string; profile?: string; trust?: boolean };
       if (opts.profile !== undefined && opts.profile !== opts.against) throw new Error("--profile and --against must select the same evaluation profile");
-      const profile = await loadRunConfig(cmd, {
+      const defaults = {
         provider: "anthropic" as const, model: DEFAULT_ANTHROPIC_MODEL, profile: opts.against,
+        trust: opts.trust === true,
         skillDiscovery: false, extensionDiscovery: false, generatedSkills: false, packages: false,
         subagents: false, repoMap: false, checkpoints: false, supervise: false,
-      }, dependencies.config);
+      };
+      // This command intentionally has no provider/harness override flags. Tell the shared
+      // resolver these values are defaults; an absent Commander source otherwise means an
+      // explicit value in legacy entry points and would overwrite the selected profile.
+      for (const [key, value] of Object.entries(defaults))
+        if (cmd.getOptionValueSource(key) === undefined) cmd.setOptionValueWithSource(key, value, "default");
+      const profile = await loadRunConfig(cmd, defaults, dependencies.config);
       const result = await withMaintenanceSignal(signal => evaluateSessions({
         sessions: ids, against: opts.against, fixtures: opts.fixtures, output: opts.output,
-        profile: { ...profile, provider: profile.provider ?? "anthropic", model: profile.model ?? DEFAULT_ANTHROPIC_MODEL },
+        profile: { ...profile, provider: profile.provider ?? "anthropic", model: profile.model ?? DEFAULT_ANTHROPIC_MODEL,
+          ...(profile.memory === undefined ? {} : { memory: resolve(dependencies.config?.cwd ?? process.cwd(), profile.memory) }) },
         ...(opts.execute === undefined ? {} : { execute: opts.execute }),
         ...(opts.batchTokens === undefined ? {} : { batchTokens: Number(opts.batchTokens) }),
         ...(opts.batchMinutes === undefined ? {} : { batchMinutes: Number(opts.batchMinutes) }), signal,
       }, dependencies.evaluation), undefined, "evaluation");
       console.log(JSON.stringify(result, null, 2));
+      if (opts.execute === true && result.results.some(row => row.type === "eval.result" && (row.outcome === "FAIL" || row.outcome === "BLOCKED"))) process.exitCode = 1;
       } catch (error) {
         // Configuration, file and provider errors may include sensitive input. Only expose a
         // bounded setting-name diagnostic; never forward arbitrary exception messages here.

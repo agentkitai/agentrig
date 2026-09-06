@@ -69,7 +69,7 @@ const supported = new Set<keyof ConfigValues>([
   "maxUsd", "priceIn", "priceOut", "priceCacheRead", "priceCacheWrite", "maxTokensPerTurn",
 ]);
 // Produced by the trusted config resolver, not accepted as settings by its strict file schema.
-const resolverMetadata = new Set(["profile", "packageSkillIndex", "extensionCwd", "trustedProjectRoot",
+const resolverMetadata = new Set(["profile", "trust", "packageSkillIndex", "extensionCwd", "trustedProjectRoot",
   "modelExplicit", "maxTokensPerTurnExplicit", "providerOverride"]);
 
 /** A deliberately small supported profile, not a silently modified full-harness replay. */

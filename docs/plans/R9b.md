@@ -64,6 +64,9 @@ Pricing is optional, but all four explicit input/output/cache rates are required
 when supplied. Flat rates cannot price distinct main/supervisor model identities.
 `maxUsd` requires this complete pricing and gates combined reported usage, not
 unobservable external costs. Missing external-cost evidence stays unknown in E2.
+Provider-specific limitations still apply: the experimental ChatGPT adapter cannot
+send a response-token cap and warns when that setting is explicit. Shared guards
+remain accounting/scheduling controls, not provider-enforced billing limits.
 
 A memory-enabled row must additionally supply `memory: {"path": "./corpus",
 "sha256": "<64 hex digits>"}` matching the profile's selected memory directory.
@@ -106,7 +109,38 @@ production unsupported/unavailable-platform refusal; this is not isolation proof
 on those platforms. No test calls a live provider. Offline source fixture provenance
 is in [is-number-pinned.md](../../eval/fixtures/is-number-pinned.md).
 
-## Gates
+## Validation before review
 
-Pending: expanded controls, named negative mutations, full checks, one bounded
-independent Claude review, updated-main PR and exact-head all-platform CI.
+Own build/typecheck and four-worker full suite passed: **2,648 tests plus two existing
+skips, 151 files, 42.86 seconds**, including the actual Linux container discriminator.
+Explicitly built existing Dockerfile targets locally; captured image IDs:
+
+- Worker: `sha256:f111ef59dce766519eb2ac455b554b01793aff0e9cd1d68d29b6d314d7db52e9`.
+- Checker: `sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5`.
+
+The correct profile passed and deliberately broken profile failed through actual
+network-disabled containers and the independent checker. Portable controls run
+actual trusted E1/checker subprocesses. The local OpenAI SSE adapter/CLI test exposed
+and fixed a real resolver integration bug: unregistered CLI defaults were being
+treated as explicit overrides of the selected profile. Eval now identifies those
+values as defaults, preserving both enabled profile options and unsupported-field
+refusals. No live provider calls occurred.
+
+Named negative controls detected and restored before review:
+
+- **UnknownUsageGateRemoved**: bypassing the shared incomplete-usage guard made the
+  guard regression fail; restored.
+- **MemoryDigestGateRemoved**: bypassing the frozen-corpus hash check accepted the
+  deliberately wrong digest and failed the actual snapshot control; restored.
+- **BaselineIdentityGateRemoved**: bypassing task/main-session binding accepted a
+  differently named session mapping to the original baseline; the control failed;
+  restored. The final discriminator requests the mismatched mapped ID so another
+  missing-map check cannot mask this mutation.
+- **OwnedTreeWithoutRealGroup** (author-discovered regression): the first actual
+  descendant-cancellation test exceeded its unchanged 15-second bound because
+  `execFile` does not forward `detached`. Using `spawn` with a real owned process
+  group made that same control pass in 49 ms. No timeout or assertion was weakened.
+
+Pending: final combined checks after the review, exactly one bounded independent
+Claude review, updated-main PR and exact-head all-platform CI. These numbers are
+author validation, not attributed to the independent reviewer.

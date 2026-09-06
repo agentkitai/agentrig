@@ -1,27 +1,43 @@
 # Status
 
-Active row: **R10b bounded parallel scheduling**, from green R10a main `391514b`.
-R9a and R7a are merged (PRs #175/#176); their gate receipts are recorded below. [R10b contract](plans/R10b.md).
+Active row: **R9b explicit session evaluation**, from green R9a main `a99f3ec`,
+integrating repaired main and R10b `9294681`. R9a, R7a and R10b are done
+(PRs #175/#176/#177; repair #178 restored R7a's failed post-main gate).
 
-Merged repair #178; post-main gate pending: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
+Done repair #178; repaired-main post-merge CI green: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
 main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
 Post-main `34039249249` then failed the unchanged A1 outer five-second test timeout
 on Windows (6,261 ms); Linux/macOS passed. The separate test-only repair preserves
 all seeded-regression assertions and subprocess bounds. A controlled delayed
 fixture failed before and passed after the explicit outer bound, then the delay
 was removed. [Evidence and contract](plans/evalset-fixture-bound.md). No blind rerun;
-R7b remains paused until the repaired-main gate is green.
+The repaired-main gate subsequently passed; R7b is no longer blocked by this repair.
 Repair build/typecheck/full passes 2,597 plus two skips across 149 files (four
 workers, 39 seconds). The single bounded review approved and independently passed
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
-Exact-head three-platform CI and the repaired-main post-merge gate are next.
+Exact-head and repaired-main three-platform gates passed. Final receipts:
+[repair #178](https://github.com/agentkitai/agentrig/pull/178#issuecomment-5560043282),
+[R7a #176](https://github.com/agentkitai/agentrig/pull/176#issuecomment-5560043445).
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI failed an evaluation-fixture timeout; separate test repair gates continuation; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-merge CI green); R7a is done (PR #176, repaired-main post-merge CI green through PR #178); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R10b implemented — delivery gates pending
+### R9b implemented — validation/review/PR gates pending
+
+Explicit mapped E1 tasks, supported config profiles, pinned local worker/checker images,
+default no-provider preview, opt-in execution and shared main/advisory accounting.
+E2/R14d independent outcomes remain authoritative; M6 cannot close human gates.
+The shipped worker supports X tasks; A tasks require a matching offline dependency image.
+Historical sessions are identities/baselines, never replayed authorization. Separate
+coordinator receipts preserve original logs. [Contract and limitations](plans/R9b.md).
+
+R9a is fully done: [PR #175 final receipt](https://github.com/agentkitai/agentrig/pull/175#issuecomment-5559857591).
+No live evaluation or benefit claim is part of this row. Expanded fixture controls,
+full validation and exactly one bounded independent review precede PR readiness.
+
+### R10b done — PR #177; post-merge CI green
 
 Opt-in bounded declared read/write concurrency with final-input admission, FIFO barriers,
 serialized approval/audit and joined pipeline settlement. Sequential remains default;
@@ -38,7 +54,7 @@ Combined build/typecheck, 56 focused and full 2,626 plus two skips / 150 files p
 (four workers, 38s). Repair post-main CI 34040182760 and the new exact-head CI gate delivery.
 [Contract](plans/R10b.md).
 
-### R7a merged — PR #176; post-merge fixture gate failed
+### R7a done — PR #176; post-merge gate restored by repair #178
 
 Main `bf65aec` is integrated; CI 34039249249 failed the unchanged A1 real-copy fixture's
 five-second outer bound. A separate test-only repair gates continuation; no initial-green

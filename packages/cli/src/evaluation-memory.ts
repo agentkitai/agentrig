@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, opendir, realpath, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 /** Bounded immutable snapshot. Links/special files are refused, never followed into the host. */
@@ -11,8 +11,12 @@ export async function evaluationMemory(root: string, expected: string, destinati
   let total = 0, entries = 0;
   async function visit(directory: string, prefix: string, depth: number): Promise<void> {
     if (depth > 16) throw new Error("evaluation memory depth limit exceeded");
-    for (const name of (await readdir(directory)).sort()) {
+    const names: string[] = [];
+    for await (const entry of await opendir(directory)) {
       if (++entries > 1000) throw new Error("evaluation memory entry limit exceeded");
+      names.push(entry.name);
+    }
+    for (const name of names.sort()) {
       const file = join(directory, name), relative = `${prefix}${name}`;
       const stat = await lstat(file);
       if (stat.isDirectory()) { await visit(file, `${relative}/`, depth + 1); continue; }

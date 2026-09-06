@@ -93,11 +93,13 @@ export async function evaluateSessions(options: SessionEvaluationOptions, depend
     for (const [ordinal, row] of rows.entries()) {
       const directory = join(output, `${String(ordinal + 1).padStart(2, "0")}-${row.task}`);
       await mkdir(directory);
-      let attemptId = randomUUID();
+      let attemptId: string = randomUUID();
+      let phase = "scheduling";
       const before = ledger.tokens, beforeCalls = ledger.calls.length;
       try {
         ledger.guard();
         const task = await transport.task(row.task);
+        phase = "workspace preparation";
         const receipt = await prepareEvaluationWorkspace(transport, row.task, row.source,
           join(output, `${String(ordinal + 1).padStart(2, "0")}-${row.task}-workspace`), ledger.controller.signal);
         attemptId = receipt.runId;
@@ -105,8 +107,10 @@ export async function evaluateSessions(options: SessionEvaluationOptions, depend
         const memory = row.memory === undefined ? undefined : { directory: join(directory, "memory"), sha256: row.memory.sha256 };
         if (row.memory !== undefined) await evaluationMemory(row.memory.path, row.memory.sha256, memory!.directory);
         ledger.guard();
+        phase = "provider construction";
         const makeProvider = dependencies.provider ?? buildRoleProvider;
         const main = await makeProvider(providerOptions, "main"), supervisor = await makeProvider(providerOptions, "supervisor");
+        phase = "session, checks or reporting";
         const attempt = await runEvaluationAttempt({ directory, receipt, task, transport, ledger,
           profile: options.profile, main, supervisor, evaluatorRevision: revision.stdout.trim(),
           workerImage: map.workerImage, checkerImage: map.checkerImage,
@@ -131,6 +135,7 @@ export async function evaluateSessions(options: SessionEvaluationOptions, depend
           baselineOutcome: row.report.outcome, reportedTokens: ledger.tokens - before,
           usageComplete: ledger.calls.slice(beforeCalls).every(call => call.complete), totalCostUsd: null, advisoryPass: null });
         await saveEvaluationArtifact(join(directory, "blocked.json"), { ...result,
+          phase,
           reason: "Preparation, execution, cancellation or accounting gate failed; inspect retained local artifacts.",
           runIdMeaning: "Actual E1 receipt ID if prepared; otherwise a coordinator-owned unstarted attempt ID." });
         await appendFile(join(output, "evaluation.jsonl"), `${JSON.stringify(result)}\n`);
