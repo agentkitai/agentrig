@@ -6,7 +6,7 @@ import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
 import { exportSession } from "./session-export.js";
 import { undoSession } from "@agentkitai/agentrig-core";
-import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions } from "./run.js";
+import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions, type RunSummary } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
@@ -15,6 +15,7 @@ import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 import { ScheduleStore } from "./schedule.js";
+import { ScheduleReports } from "./schedule-report.js";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -357,27 +358,47 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       for (const [key, value] of Object.entries(RUN_NUMERIC_DEFAULTS)) cmd.setOptionValueWithSource(key, value, "default");
       const resolved = await configured({ ...RUN_NUMERIC_DEFAULTS, ...opts }, cmd, false);
       if (resolved === undefined) return;
+      const runOptions = resolved as unknown as RunOptions;
+      const reports = new ScheduleReports(store.projectRoot);
       await withMaintenanceSignal(async signal => {
         let failed = false;
         await store.tick(date, async (entry, minute) => {
           signal.throwIfAborted();
           process.exitCode = 0;
+          let result: RunSummary | void = undefined;
+          let outcome: RunSummary["reason"] = "error";
+          let launchError: unknown;
           try {
-            const result = await executeRun(entry.task, {
+            result = await executeRun(entry.task, {
               ...resolved, root: join(store.projectRoot, ".agentrig", "raw", "sessions"),
               maxTurns: String(entry.flags.maxTurns), maxTokens: String(entry.flags.maxTokens),
               maxMinutes: String(entry.flags.maxMinutes),
+              ...(entry.heartbeat === undefined && runOptions.memory !== undefined
+                ? { ingestOnEnd: runOptions.ingestOnEndExplicit === true ? runOptions.ingestOnEnd !== false : true } : {}),
               ...(entry.heartbeat === undefined ? {} : { heartbeat: entry.heartbeat }),
               headless: true, scheduled: { entryId: entry.id, minute, ...(entry.heartbeat === undefined ? {} : { source: "heartbeat" as const }) }, signal,
             } as RunOptions);
-            const outcome = result?.reason ?? (Number(process.exitCode) === 0 ? "done" : "error");
-            failed ||= outcome !== "done";
-            if (entry.heartbeat === undefined || outcome !== "done") console.error(JSON.stringify({ schedule: entry.id, minute, outcome, ...(result === undefined ? {} : { sessionId: result.id }) }));
+            outcome = result?.reason ?? (Number(process.exitCode) === 0 ? "done" : "error");
           } catch (error) {
-            failed = true;
-            console.error(JSON.stringify({ schedule: entry.id, minute, outcome: "error", claimRetained: true }));
-            if (signal.aborted) throw error;
+            launchError = error;
+            outcome = signal.aborted ? "aborted" : "error";
           }
+          const maintenanceFailed = result?.maintenanceFailed === true;
+          failed ||= outcome !== "done" || maintenanceFailed;
+          if (entry.heartbeat === undefined || outcome !== "done" || maintenanceFailed) {
+            console.error(JSON.stringify({ schedule: entry.id, source: entry.heartbeat === undefined ? "schedule" : "heartbeat", minute, outcome,
+              ...(result === undefined ? { claimRetained: true } : { sessionId: result.id }), ...(maintenanceFailed ? { maintenanceFailed } : {}) }));
+            try {
+              await reports.append({ ts: Date.now(), minute, entry: entry.id, source: entry.heartbeat === undefined ? "schedule" : "heartbeat",
+                sessionId: result?.id ?? null, outcome, maintenanceFailed, accounting: result?.scheduledAccounting ?? null });
+            } catch (error) {
+              failed = true;
+              console.error(`scheduled outcome receipt unavailable; claim retained, failure history may be incomplete; do not retry execution: ${error instanceof Error ? error.message : String(error)}`);
+              try { await reports.markUncertain(); }
+              catch { console.error("scheduled uncertainty marker could not be persisted; stderr/exit status are the only failure record; inspect raw logs, do not retry execution"); }
+            }
+          }
+          if (signal.aborted && launchError !== undefined) throw launchError;
           signal.throwIfAborted();
         }, signal, Number((resolved as { heartbeatMaxTurns?: string }).heartbeatMaxTurns ?? "5"));
         process.exitCode = failed ? 1 : 0;

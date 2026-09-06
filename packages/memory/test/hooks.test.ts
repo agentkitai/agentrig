@@ -50,6 +50,17 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+it.each(["missing", "aborted", "failed"])("settles the trusted ingestion observer once and isolates its failure (%s)", async mode => {
+  const settled = vi.fn(() => { throw new Error("observer is diagnostic only"); });
+  const hook = ingestOnSessionEnd({ dir, provider: exploding, onSettled: settled });
+  if (mode !== "missing") await writeLog("settlement");
+  const context = ctx("settlement");
+  if (mode === "aborted") context.signal = AbortSignal.abort();
+  await expect(hook.handler(context)).resolves.toEqual({ action: "continue" });
+  expect(settled).toHaveBeenCalledTimes(1);
+  if (mode !== "failed") expect(settled).toHaveBeenCalledWith(undefined);
+});
+
 async function writeLog(id: string): Promise<void> {
   await writeFile(
     join(dir, "raw", "sessions", `${id}.jsonl`),

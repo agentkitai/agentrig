@@ -24,6 +24,7 @@ import {
 } from "../run.js";
 import { parseBudget } from "../agent-builder.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
+import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
 
 export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
 
@@ -152,11 +153,24 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   process.on("SIGINT", onSigint);
 
   controller.print("agentrig — type a task, or /help for commands", "system");
+  const reports = opts.trustedProjectRoot === undefined ? undefined : new ScheduleReports(opts.trustedProjectRoot);
+  let notice: FailureNotice | undefined;
+  if (reports !== undefined) {
+    try { notice = await reports.notice(); if (notice.text !== null) controller.print(notice.text, "error"); }
+    catch (error) { controller.print(`scheduled failure history unavailable: ${error instanceof Error ? error.message : String(error)}`, "error"); }
+  }
+  let acknowledge: Promise<void> | undefined;
+  const onMounted = (): void => {
+    if (reports === undefined || notice === undefined || notice.text === null || acknowledge !== undefined) return;
+    acknowledge = reports.acknowledge(notice.through).catch(error => {
+      controller.print(`scheduled failure notice not acknowledged: ${error instanceof Error ? error.message : String(error)}`, "error");
+    });
+  };
   try {
     await withBracketedPaste(process.stdout, async () => {
       // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
       // to useInput, so the abort handler in the view could never run.
-      const { unmount, waitUntilExit } = render(<App controller={controller} />, {
+      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} />, {
         exitOnCtrlC: false,
       });
       // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this
@@ -165,6 +179,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       await waitUntilExit();
     });
   } finally {
+    await acknowledge;
     // The UI is gone but the session may still be running, or running its session_end hooks
     // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second
     // abort that skips the hooks rather than Node's default handler killing the process mid-hook

@@ -1,8 +1,10 @@
 # Status
 
-Active row: **R7b bounded advisory heartbeat**, from updated green main `9294681`.
+Active row: **R7c bounded scheduled receipts and failure visibility**, from green main `f3a1ec8`.
 R10b PR #177 post-main CI `34040691166` passed all three platforms; R9b proceeds independently.
-[Heartbeat contract](plans/R7b.md).
+[Reporting contract](plans/R7c.md). R7b PR #179 passed exact CI `34041871904`
+and post-main CI `34042336391` on all three platforms.
+[Final delivery receipt](https://github.com/agentkitai/agentrig/pull/179#issuecomment-5560275859).
 
 Done repair #178; repaired-main gate green: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
 main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
@@ -19,18 +21,29 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is in progress; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is in progress; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R7b in progress — bounded heartbeat fallback
+### R7c in progress — bounded receipts, existing ingestion, actual startup banner
+
+Ordinary cron launches receive structured local receipts and the existing configured-memory
+ingestion lifecycle, respecting explicit opt-out. Successful heartbeat stays quiet; failure-only
+operational accounting reaches the next trusted TUI. Bounded retention, displayed-cutoff ack
+and a persistent uncertainty marker preserve concurrent failures without retrying model work.
+Main and auxiliary usage stay separate; unknown/child coverage is partial, not free.
+Build/typecheck and pre-review full 2,652 plus two skips /153 files pass; 123 focused
+and five detected/restored mutations pass. One review approved; its count-wording finding
+was fixed with a failing-before/passing-after control. Latest-main/CI delivery gates remain.
+
+### R7b done — PR #179, exact-head and post-main CI green
 
 Existing lock, claims and trusted execute opt-in are reused. Empty checklists have an empty
 actual tool registry; builder suppression covers explicit host extensions and maintenance.
 Actual local-adapter/storage and four named fail/restored controls pass. Build/typecheck/full:
 2,634 passed plus two skips / 151 files; one bounded review approved and independently passed
-28 focused tests plus typecheck. Exact-head and post-main gates remain pending.
+28 focused tests plus typecheck. Exact-head and post-main gates passed all three platforms.
 
 ### R10b done — PR #177, post-main CI green
 

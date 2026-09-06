@@ -355,6 +355,8 @@ export async function loadRunConfig(
   ];
   return {
     ...resolved,
+    // Runtime option-source metadata: a shared default false is not a scheduled ingest opt-out.
+    ingestOnEndExplicit: cli.ingestOnEnd !== undefined || configHas("ingestOnEnd"),
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
     skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],

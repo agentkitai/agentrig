@@ -21,6 +21,7 @@ import {
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
+import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
 import {
   dreamOnSessionEnd,
   FileMemoryStore,
@@ -54,6 +55,8 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  /** Runtime config resolution provenance, not a project-config field. */
+  ingestOnEndExplicit?: boolean;
   scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
   signal?: AbortSignal;
   root: string;
@@ -367,7 +370,9 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   }
 }
 
-export async function runCommand(task: string, opts: RunOptions): Promise<SessionSummary | void> {
+export interface RunSummary extends SessionSummary { scheduledAccounting?: ScheduledAccounting; maintenanceFailed?: boolean }
+
+export async function runCommand(task: string, opts: RunOptions): Promise<RunSummary | void> {
   if (opts.heartbeat !== undefined) opts = { ...heartbeatBuildOptions(opts), supervise: false, supervisorReview: false, supervisorAbortRestores: false };
   opts.signal?.throwIfAborted();
   let dreamEverySessions: number;
@@ -400,11 +405,14 @@ export async function runCommand(task: string, opts: RunOptions): Promise<Sessio
   const interactive = opts.headless !== true && process.stdin.isTTY === true;
 
   let built;
+  let maintenanceFailed = false;
+  const scheduledUsage = opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true);
   try {
     built = await buildAgent(opts, {
       ...(interactive ? { onAsk: askInteractively } : {}),
-      onHookError: (m) => console.error(m),
+      onHookError: (m) => { maintenanceFailed = true; console.error(m); },
       onHookDone: (m) => console.error(m),
+      ...(scheduledUsage === undefined ? {} : { onIngestUsage: (report, final) => scheduledUsage.ingest(report, final) }),
       onNotice: (m) => console.error(m),
     });
   } catch (err) {
@@ -462,6 +470,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<Sessio
     const assistant = new AssistantText();
     const auxiliary = new AuxiliaryText();
     for await (const e of session.events) {
+      scheduledUsage?.observe(e);
       const unfinished = auxiliary.push(e);
       if (opts.json !== true) for (const line of unfinished) console.error(line);
       if (opts.json === true) {
@@ -495,7 +504,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<Sessio
       );
     }
     process.exitCode = summary.reason === "done" ? 0 : 1;
-    return summary;
+    return scheduledUsage === undefined ? summary : { ...summary,
+      maintenanceFailed: maintenanceFailed || scheduledUsage.failed,
+      scheduledAccounting: scheduledUsage.finish(summary.usage, budget.pricing, maintenanceFailed, provider.capabilities.cacheReadDiscount, provider.capabilities.cacheWriteMultiplier),
+    };
   } finally {
     process.removeListener("SIGINT", onSigint);
     opts.signal?.removeEventListener("abort", abortFromSignal);

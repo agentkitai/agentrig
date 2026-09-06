@@ -763,6 +763,15 @@ extensions, skills/packages, MCP, subagents, maintenance, checkpoints and superv
 when explicitly configured. Log, derived cache and claim are allowed operational metadata;
 no task/wiki/report artifacts for empty/no-action runs. See [R7b](plans/R7b.md).
 
+R7c adds bounded operational scheduled receipts and next-trusted-startup failure notices.
+Ordinary cron launches reuse configured ingestion once (explicit false wins); its trusted
+runtime source directory follows the actual SessionStore, including custom memory roots.
+Heartbeat success stays quiet and maintenance-free; failures may write operational failure
+accounting, not task/wiki artifacts. Acknowledgement follows actual Ink mount and covers only
+the displayed snapshot. Missing receipts leave a fixed uncertainty marker, never silently
+cleared or used to retry execution. Main/auxiliary usage and unknown cost remain distinct.
+See [R7c](plans/R7c.md) for retention, accounting and cooperative crash/recovery limits.
+
 - `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
 - `agentrig run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
 - `agentrig dream [--review|--auto] [--scope project|global] [--since <n>]`

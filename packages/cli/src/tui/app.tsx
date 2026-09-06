@@ -29,12 +29,16 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
   error: "red",
 };
 
-export function App({ controller }: { controller: TuiController }): JSX.Element {
+export function App({ controller, onMounted }: { controller: TuiController; onMounted?: () => void }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   const [clock, setClock] = useState(Date.now());
+  // Startup notices are already in the initial controller snapshot. Never acknowledge them
+  // before this actual React/Ink mount (a timer or queued controller line is not readiness).
+  const mounted = useRef(false);
+  useEffect(() => { if (!mounted.current) { mounted.current = true; onMounted?.(); } }, [onMounted]);
   const deferredState = useRef<TuiState | null>(null);
   /**
    * The authoritative buffer. Two reasons it is not the `input` state variable:
