@@ -22,6 +22,7 @@ import {
   subagentTool,
   type Agent,
   type AnyTool,
+  type AuxiliaryReport,
   type Budget,
   type Hook,
   type ModelProvider,
@@ -330,6 +331,8 @@ export interface AgentExtras {
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
   onHookDone?: (message: string) => void;
+  /** Runtime reporting only; not installed from project config or model content. */
+  onIngestUsage?: (report: AuxiliaryReport | undefined, final: boolean) => void;
   /** Provider-retry notices ("overloaded — retrying in 2s"); silence is what made retries look like hangs. */
   onNotice?: (message: string) => void;
 }
@@ -536,6 +539,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,
+        sessionDir: opts.root,
         provider: providers.memory,
         ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
         ...(opts.ingestSpanChars === undefined ? {} : { maxSpanChars: Number(opts.ingestSpanChars) }),
@@ -543,6 +547,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         onError: (err) => extras.onHookError?.(`memory ingest failed (session still succeeded): ${err.message}`),
         onBackendError: (op, err) => extras.onHookError?.(`memory ingest: lore ${op} failed (continuing): ${err.message}`),
         onDone: (summary) => extras.onHookDone?.(`memory: ${summary}`),
+        onUsage: report => extras.onIngestUsage?.(report, false),
+        onSettled: report => extras.onIngestUsage?.(report, true),
       }),
     );
   }
