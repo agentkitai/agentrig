@@ -77,3 +77,15 @@ trust uses its canonical path (`/var` aliases `/private/var` on macOS). The fixt
 its temporary root before constructing the persisted trust record, matching existing trust
 fixtures; production trust checks and the assertion remain intact. No blind CI rerun and no
 new broad review. The assertion now prints the actual doctor report on failure.
+
+The same old head's Windows job also failed only that doctor assertion; the other 27 package
+cases passed, including real npm pack (11 seconds). A filesystem-alias regression now proves
+locally that noncanonical persisted keys are ignored and canonical keys expose the verified
+package without importing code. Canonicalization is the diagnosis for the CI failures; the
+Windows-specific cause remains an inference until updated CI confirms it. No timeout changes
+or skipped assertions. Main `3d45d9f` (R10d PR #171) is integrated before the next head, retaining
+explicit provider probing and the ordinary offline doctor path.
+
+Combined final build/typecheck, 91 package/doctor/provider focused cases and the full suite
+pass after integration: 2,520 tests plus two skips across 144 files (four workers, 34 seconds).
+This includes 29 package controls, without replacing either platform's failing doctor assertion.

@@ -29,6 +29,12 @@ Final updated-main build/typecheck/full suite after the fix passes 2,502 tests p
 across 142 files (four workers, 34 seconds). The PR proceeds to exact-head all-platform CI;
 the root coordinates merge only after those checks and the preceding main gate are green.
 
+Initial PR #170/head `29dcabf` CI 34033531560 found a new doctor fixture assertion failure on
+macOS and Windows (not timeouts). Canonical temporary-root trust keys plus a real filesystem-alias
+control fix the fixture; assertions remain strong. R10d main `3d45d9f` is integrated. Combined
+build/typecheck, 91 focused package/doctor/provider cases and full 2,520 + two skips/144 files
+pass (34 seconds). Fresh exact-head CI is required; initial failures remain in the contract receipt.
+
 ### R10d implemented — delivery gates pending
 
 Explicit doctor --probe runs bounded potentially billable empirical samples; normal doctor
