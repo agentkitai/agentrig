@@ -1199,7 +1199,7 @@ describe("provider choice on the spawn tool", () => {
   it("has no provider field at all when the caller supplies no choices", () => {
     const tool = subagentTool(noop);
     const shape = (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape;
-    expect(Object.keys(shape).sort()).toEqual(["label", "task"]);
+    expect(Object.keys(shape).sort()).toEqual(["agent", "label", "task"]); // R15h optional role is parsed even when unavailable, never stripped into a generic spawn.
   });
 
   it("offers exactly the configured names, optional, and rejects an unknown one", () => {
