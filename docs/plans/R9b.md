@@ -164,3 +164,27 @@ rows. Combined build/typecheck and full suite with the same real Linux fixture i
 passed **2,660 tests plus two existing skips / 152 files, 40.71 seconds**. The earlier
 PR head's Linux/macOS and targeted Windows evaluation controls passed; they do not
 replace the newly integrated exact-head three-platform gate. No new broad review.
+
+Integrated-head CI `34042521286` passed Linux/macOS and the new Windows evaluation
+controls, but two unchanged package fixtures exceeded their explicit 30-second
+bounds: actual npm packing and the 1,000-file/two-install aggregate-cap scan. The
+npm timeout was followed by cleanup EBUSY while its subprocess was still active.
+The previous head's all-green CI `34042223949` measured those Windows cases at
+5.896s and 8.989s respectively. Unchanged local focused controls passed 29/29 with
+two workers (4.02s total) and one worker (4.95s total); these do not prove the cause
+of the Windows slowdown.
+
+The bounded test/CI response serializes only that Windows two-file step, makes
+actual npm packing explicitly offline with its update notifier disabled, and
+reuses the reviewed owned-process-tree helper with a 15s subprocess bound inside
+the unchanged 30s fixture. It joins process close before cleanup and rejects any
+interrupted/nonzero result before inspecting the archive. All 29 package cases,
+1,000 input files, real packing, integrity/import-canary assertions, production
+caps, and outer test deadlines remain unchanged. This reduces resource/network
+variables and addresses the cleanup race; contention is suspected, not proven.
+No second general review or separate roadmap milestone was added.
+
+After this fixture adjustment, the focused package/evaluation controls passed
+51 tests with the conditional Docker case skipped; final build/typecheck and full
+suite with actual Linux Docker images enabled passed **2,660 plus two existing
+skips / 152 files, 41.38s**. Fresh exact-head platform CI is still required.

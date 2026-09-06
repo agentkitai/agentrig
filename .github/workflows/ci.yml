@@ -124,7 +124,8 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/net-permission.test.ts packages/cli/test/net-permission.test.ts
       - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts
-      - run: pnpm exec vitest run packages/cli/test/packages.test.ts packages/cli/test/packages-runtime.test.ts
+      # Keep the 1,000-file/two-install cap fixture separate from actual npm packing.
+      - run: pnpm exec vitest run packages/cli/test/packages.test.ts packages/cli/test/packages-runtime.test.ts --maxWorkers=1
       - run: pnpm exec vitest run packages/core/test/provider-conformance.test.ts packages/cli/test/provider-probe.test.ts
       - run: pnpm exec vitest run packages/cli/test/session-export.test.ts
       - run: pnpm exec vitest run packages/core/test/turn-strategy.test.ts packages/core/test/h6-trace.test.ts packages/core/test/token-continuation.test.ts packages/core/test/parallel-strategy.test.ts
