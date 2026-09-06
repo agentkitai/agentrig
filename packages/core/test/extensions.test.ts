@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,7 +20,7 @@ const load = (paths: string[] | ExtensionCandidate[], timeoutMs?: number) => loa
   onNotice: message => notices.push(message), ...(timeoutMs === undefined ? {} : { timeoutMs }),
 });
 
-it("actual module registers all three surfaces, freezes minimal context and seals late registration", async () => {
+it("actual module freezes minimal context and seals late registration", async () => {
   const root = await temp();
   const path = await extensionFixture(root, "context", `export let context;
 export function activate(ctx) { context=ctx; ctx.registerCommand({name:"test",summary:"test",run(){}}); }`);
@@ -31,6 +32,17 @@ export function activate(ctx) { context=ctx; ctx.registerCommand({name:"test",su
   for (const value of [module.context, module.context.session, module.context.session.provider, module.context.hooks]) expect(Object.isFrozen(value)).toBe(true);
   expect(() => module.context.registerCommand({ name: "late", summary: "late", run() {} })).toThrow(/sealed/);
   expect(notices.some(line => line.includes("ambient Node host code"))).toBe(true);
+});
+
+it("ambient-host warning is delivered before actual import executes", async () => {
+  const root = await temp(); const sentinel = join(root, "imported");
+  const path = await extensionFixture(root, "notice", `import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(sentinel)},'yes');export function activate(){}`);
+  const seen: boolean[] = [];
+  const result = await loadExtensions({ candidates: [{ path, precedence: 0 }], session,
+    builtinToolNames: new Set(), reservedCommandNames: new Set(),
+    onNotice: message => { if (message.includes("ambient Node host code")) seen.push(existsSync(sentinel)); },
+  });
+  expect(result.failed).toEqual([]); expect(seen).toEqual([false]); expect(existsSync(sentinel)).toBe(true);
 });
 
 it.each(["missing", "unknown", "mismatch", "version", "malformed"])("%s sidecar refuses before import sentinel executes", async mode => {
