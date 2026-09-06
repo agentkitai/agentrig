@@ -928,10 +928,9 @@ describe("a subagent cannot run away", () => {
     expect(childEvents.some((e) => stillRunning(e) && /500ms after abort \(tool hang\)/.test((e as { message: string }).message))).toBe(true);
   });
 
-  it("a child spawned after the abort already landed is aborted at once (#86)", async () => {
-    // an abort between the loop's top-of-turn check and the tool call (here: inside pre_tool)
-    // reaches the subagent tool with its signal already aborted, and a listener added to an
-    // already-aborted signal never fires — the child ran its whole budget with nobody to stop it
+  it("an abort inside pre_tool prevents child dispatch at the permission boundary (#86)", async () => {
+    // R13c's asynchronous permission boundary now refuses dispatch before a child can exist.
+    // The direct-tool regression below retains coverage of the already-aborted child path.
     let sessionRef: { control: { abort(): void } } | undefined;
     const provider = new ScriptedProvider([
       spawn("long job"),
@@ -959,15 +958,21 @@ describe("a subagent cannot run away", () => {
     const summary = await session.done;
 
     expect(summary.reason).toBe("aborted");
-    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string } | undefined;
+    expect(events.some(e => e.type === "subagent.spawn")).toBe(false);
+    expect(events.some(e => e.type === "tool.call")).toBe(false);
+  });
+
+  it("direct subagent execution with an already-aborted signal still aborts its child (#86)", async () => {
+    const provider = new ScriptedProvider(Array.from({ length: 5 }, () => [
+      { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } }, usage(1, 1), stop("tool_use"),
+    ]));
+    const { tool, ctx, controller, emitted } = bareTool(provider, { slow: true });
+    controller.abort(); await tool.execute({ task: "long job" }, ctx);
+    const spawned = emitted.find(e => e.type === "subagent.spawn") as { id: string } | undefined;
     expect(spawned).toBeDefined();
-    const childEvents: HarnessEvent[] = [];
-    for await (const e of new SessionStore({ root }).read(spawned!.id)) childEvents.push(e);
-    const end = childEvents.at(-1) as { type: string; reason?: string };
-    expect(end.type).toBe("session.end");
-    expect(end.reason).toBe("aborted");
-    // it did not get to run its budget of five slow turns
-    expect(childEvents.filter((e) => e.type === "tool.call").length).toBeLessThanOrEqual(1);
+    const events = await new SessionStore({ root }).readAll(spawned!.id);
+    expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "aborted" });
+    expect(events.filter(e => e.type === "tool.call").length).toBeLessThanOrEqual(1);
   });
 
   it("records the child's end in the parent's log even when the parent is the one aborting", async () => {

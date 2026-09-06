@@ -13,6 +13,7 @@ import { type CompactionStrategy, summarizeOlderTurns, compactWithProvenance } f
 import { SessionStore, assertSessionId } from "./session-store.js";
 import { runHooks, type AttributedHookResult, type Hook, type HookPoint } from "./hooks.js";
 import { contextPrincipals, USER_CONTEXT, PLATFORM_CONTEXT, ADVISORY_CONTEXT } from "./context-principals.js";
+import { externalExpansion, readExpansionRestriction } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
@@ -268,6 +269,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   let cwd = opts.cwd ?? process.cwd();
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook"; context?: InstructionContext }> = [];
   const principals = contextPrincipals(config.hooks ?? []);
+  const expansion = externalExpansion(parent !== undefined && resume === undefined ? readExpansionRestriction(opts) ?? true : true);
+  if (parent === undefined) expansion.user(task);
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
@@ -483,6 +486,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const extra = [...(rewrittenIndex < 0 ? [] : [{ text: h.patches[rewrittenIndex] as string, context: h.patchContexts?.[rewrittenIndex] ?? ADVISORY_CONTEXT }]),
           ...h.injects.map((text, index) => ({ text, context: h.injectContexts?.[index] ?? ADVISORY_CONTEXT }))];
         for (const { text, context } of extra) {
+          expansion.unknown();
           const message: Message = { role: "user", content: [{ type: "text", text, context }] };
           messages.push(message);
           await emit({ type: "message.append", message });
@@ -580,6 +584,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
 
         for (const s of pendingSteers.splice(0)) {
+          if (s.source === "user") expansion.user(s.message); else expansion.unknown();
           const context = principals.effective(s.context ?? (s.source === "user" ? USER_CONTEXT
             : { principal: s.source === "supervisor" ? "supervisor" : "hook:anonymous:steer", authority: "advisory" }));
           await emit({ type: "steer", source: s.source, message: s.message, context });
@@ -644,6 +649,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             if (patch !== null && typeof patch === "object" && "system" in patch && typeof patch.system === "string") {
               const previous = req.system;
               req.system = patch.system;
+              if (previous !== patch.system) expansion.unknown();
               if (patch.system === previous) {
                 // Preserve the original bill of materials exactly.
               } else if (patch.system.startsWith(`${previous}\n\n`)) {
@@ -683,6 +689,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
 
         await flushDelegations();
+        expansion.beginRequest();
         req.messages = principals.messages(req.messages);
         requestSystemBlocks = requestSystemBlocks.map(block => {
           const context = principals.effective(block.context ?? (block.authority === "instruction" ? PLATFORM_CONTEXT : ADVISORY_CONTEXT));
@@ -885,6 +892,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         if (results.length > 0) {
           const resultMessage: Message = { role: "user", content: results };
+          expansion.input(results);
           messages.push(resultMessage);
           await emit({ type: "message.append", message: resultMessage });
         }
@@ -914,6 +922,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             const changed = compacted !== messages;
             if (changed) {
               messages = compacted;
+              expansion.input(compacted.flatMap(message => message.content));
               await emit({ type: "context.compact", before, after, messages });
             }
             if (changed && after < before * 0.9) {
@@ -1003,6 +1012,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
     function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
       return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit,
+        expansion,
         ...(grantSessionId === undefined ? {} : { grantSessionId }),
         emitFromTool, hook, signal: abortController.signal, endSignal: endController.signal,
         raceAbort, now, isEnded: lifecycle.isEnded });

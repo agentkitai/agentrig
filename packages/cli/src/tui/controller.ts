@@ -342,7 +342,7 @@ export class TuiController {
       // all, which is worse than not having one.
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
-      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
       if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
       const revision = this.permissionGrants.revision;
       const standing = sandboxEscalation ? "ask" : this.permissionGrants.decide(req);
@@ -353,6 +353,10 @@ export class TuiController {
       const entry: PendingPermission = {
         req,
         resolve: (d, remember, scope) => {
+          if (req.origin === "external-input-expansion" && remember === true) {
+            this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
+            return;
+          }
           if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
               if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");

@@ -29,7 +29,7 @@ const inside = (root: string, path: string): boolean => {
   const rel = relative(root, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel));
 };
-const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
 /** Pure scope check shared by runtime enforcement and approval previews. This does not grant
  * authority or check live subject/duration; callers must validate/install records separately. */
@@ -141,10 +141,13 @@ export class PermissionGrantRegistry {
     const promise = (this.draining ?? Promise.resolve()).then(work); this.draining = promise;
     try { await promise; } finally { if (this.draining === promise) this.draining = undefined; }
   }
-  decide(req: PermissionRequest, auditRequired = false): "allow" | "deny" | "ask" {
+  decide(req: PermissionRequest, auditRequired = false, denialsOnly = false): "allow" | "deny" | "ask" {
     if (separateConsent(req)) return "ask";
     if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return "deny";
     for (const grant of this.grants.values()) {
+      // A fresh-consent boundary cannot override a later matching denial with an earlier allow.
+      // Ordinary authorization preserves its existing first-match ordering.
+      if (denialsOnly && grant.decision !== "deny") continue;
       if (grant.subject !== this.subject || grant.duration.id !== (grant.duration.kind === "session" ? this.sessionId : this.taskId)) continue;
       if (!permissionGrantCoversRequest(grant, req)) continue;
       return grant.decision;

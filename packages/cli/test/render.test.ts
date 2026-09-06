@@ -10,6 +10,14 @@ it("renders a real budgeted truncation continuation distinctly from provider ret
   expect(HarnessEvent.safeParse({ ...event, attempt: 3 }).success).toBe(false);
 });
 
+it("renders the distinct external expansion audit with its original child attribution", () => {
+  const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1, type: "permission.expansion",
+    id: "call", name: "bash", surface: "exec", decision: "deny", sourceOrigin: "child:actual" });
+  expect(renderEvent(event)).toContain("deny first exec: bash");
+  expect(renderEvent(event)).toContain("child:actual");
+  expect(renderChatEvent(event)).toBeNull(); // the interactive consent prompt explains the boundary
+});
+
 it("makes instruction delegation and revocation visible without implying tool permission", () => {
   for (const action of ["delegated", "revoked"]) {
     const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,

@@ -73,11 +73,32 @@ it.each(["ordinary", "protocol"])("%s keys retain y/a/n/d and reject scoped sepa
     h.controller.permissionGrants.clear(); const answer = h.controller.ask(req); send(key);
     expect(await answer).toBe(decision); expect(h.controller.permissionGrants.list()).toHaveLength(standing ? 1 : 0);
   }
-  for (const origin of ["sandbox-escalation", "mcp-definition-change"]) {
+  for (const origin of ["sandbox-escalation", "mcp-definition-change", "external-input-expansion"]) {
     h.controller.permissionGrants.clear(); const answer = h.controller.ask({ ...req, origin }); send("s");
     await vi.waitFor(() => expect(h.controller.snapshot().lines.some(l => l.text.includes("separate consent"))).toBe(true));
     expect(h.controller.snapshot().pending?.scope).toBeUndefined(); send("n"); expect(await answer).toBe("deny"); expect(h.controller.permissionGrants.list()).toEqual([]);
   }
+});
+
+it.each(["ordinary", "protocol"])("%s external expansion rejects standing keys and grants, requires a fresh answer, and retains child provenance", async mode => {
+  const h = await mount();
+  const req: PermissionRequest = { tool: "exec", class: "exec", input: {}, cwd: h.cwd };
+  h.controller.permissionGrants.beginSession("fixture");
+  h.controller.permissionGrants.remember(req, "allow");
+  const send = (text: string) => h.stdin.send(mode === "protocol" ? `\u001b[201~${text}` : text);
+  const answer = h.controller.ask({ ...req, origin: "external-input-expansion", sourceOrigin: "child:fixture", expansionSurface: "exec" });
+  expect(h.controller.snapshot().pending).not.toBeNull();
+  for (const key of ["a", "d", "s"]) {
+    send(key); await new Promise(resolve => setTimeout(resolve, 50));
+    expect(h.controller.snapshot().pending).not.toBeNull();
+    expect(h.controller.snapshot().pending?.scope).toBeUndefined();
+    expect(h.controller.permissionGrants.list()).toHaveLength(1);
+  }
+  expect(h.controller.snapshot().lines.some(line => line.text.includes("child:fixture") && line.text.includes("Fresh approval"))).toBe(true);
+  send("y"); expect(await answer).toBe("allow");
+  const again = h.controller.ask({ ...req, origin: "external-input-expansion", expansionSurface: "exec" });
+  expect(h.controller.snapshot().pending).not.toBeNull(); send("n"); expect(await again).toBe("deny");
+  expect(h.controller.permissionGrants.list()).toHaveLength(1);
 });
 
 it("framed paste cannot enter or confirm scoped approval, and same-chunk preview+yes cannot grant", async () => {

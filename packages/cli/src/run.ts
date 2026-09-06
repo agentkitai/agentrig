@@ -348,6 +348,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
+    if (req.origin === "external-input-expansion") process.stderr.write(`Fresh approval required: external/unknown input proposes first ${req.expansionSurface ?? req.class} dispatch${req.sourceOrigin === undefined ? "" : ` from ${req.sourceOrigin}`}; existing grants do not apply.\n`);
     if (req.operation !== undefined) process.stderr.write(`shell operation: ${JSON.stringify(req.operation)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
