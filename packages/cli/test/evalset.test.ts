@@ -182,7 +182,7 @@ describe("E1 workspace and outcome mechanics", () => {
     git("add", "--all"); commit();
     result = check();
     expect(result.status).toBe(1); expect(JSON.parse(result.stdout).scope).toBe("FAIL");
-  });
+  }, 30_000); // Four real checker subprocess trees plus Git commits exceed 5s on Windows runners.
 
   it("end-to-end X4 remains BLOCKED until a real human assesses the explanation", async () => {
     const path = await external();

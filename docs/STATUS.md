@@ -5,7 +5,7 @@ post-merge CI 34035704275 on all three platforms. R10d PR #171 and readiness rep
 are fully gated on that combined main; the initial failed R10d run 34033869154 remains
 recorded. [Repair evidence](plans/child-grants-readiness.md), [R10a contract](plans/R10a.md).
 
-Active implementation queue: **R5c local packages are implemented, pending delivery gates; R10a is implemented pending gates; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is merged (PR #172), post-merge CI pending; R10a is implemented pending gates; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -22,7 +22,25 @@ Integrated R5c main `1ae6b77`; build/typecheck/full passes 2,535 plus two skips 
 Single review approved without material findings: 85 seconds, 17/max24 turns, independently
 105 focused tests and typecheck. Original findings retained in the contract; optional polish END.
 
-### R5c implemented — delivery gates pending
+### R14d merged — PR #172; post-merge CI pending
+
+Shared bounded regression/behavior verdicts reuse actual E1 workers and stored E2 reports;
+the same host-attested observations reach M6 through a lazy trusted loader. Same-assumption,
+partial, missing-probe and unknown evidence cannot pass; neither matching checks nor model
+narration establish semantic proof. No new runner, automatic checks or live evaluation spend.
+[Contract](plans/R14d.md). R14c is its prerequisite; extension/provider work is independent.
+Actual correct/broken X2 surfaces keep regression/submitted tests green and discriminate in
+E2 plus attached M6. Removed assumption discount and removed M6 deficit override each failed
+their named negative controls and were restored. The one bounded Claude review returned
+REQUEST_CHANGES for the A4/X4 human-gate integration; the material finding is fixed with actual
+pending/FAIL/PASS and non-waiver regressions, including a detected/restored old-behavior control.
+[Original verdict](plans/R14d-review.md). No second review. Integrated R10d main `3d45d9f`;
+combined build/typecheck/full suite passes 2,497 tests plus two skips across 143 files (four
+workers, 34 seconds). Exact-head PR and post-merge gates remain pending.
+### R5c done — PR #170; post-merge CI green
+
+Main `1ae6b77` passed post-merge CI 34036244589 on all three platforms; final receipt
+PR #170 comment 5559584399. Following implementation notes are history.
 
 Local directory/npm-tarball packages validate strict R5e manifests before create-only staged
 publication. Maintained bounded archive parsing rejects unsafe final paths/types/collisions;
@@ -98,7 +116,8 @@ optional source-summary wording is at the roadmap END. Exact-head CI remains the
 
 ### R14c done — PR #169; post-merge CI green
 
-Main `4d3eb91` passed exact post-merge CI 34032607190 on all three platforms.
+Final head `5ff9f59` passed CI `34032258018`; main `4d3eb91` passed all three post-merge jobs
+in `34032607190`. [Final receipt](https://github.com/agentkitai/agentrig/pull/169#issuecomment-5559190491).
 Following notes are implementation history.
 
 M6 and read-only `sessions show --evidence` share a bounded claim/latest-candidate report.
@@ -125,7 +144,7 @@ Final combined build/typecheck/full suite passes 2,442 tests plus two skips acro
 
 ### R11b done — PR #168; post-merge CI green
 
-Main `4f61b65` passed exact post-merge CI 34032134303 on all three platforms.
+Main `4f61b65` passed all three jobs in post-merge CI `34032134303`.
 Following notes are implementation history.
 
 Built-in GET-only web_fetch declares net and external provenance. Strict credential-free HTTP(S),

@@ -17,3 +17,4 @@ export * from "./reviewer.js";
 export * from "./grader.js";
 export * from "./supervisor.js";
 export * from "./auxiliary.js";
+export * from "./verification-lanes.js";
