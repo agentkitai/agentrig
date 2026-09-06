@@ -352,7 +352,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
       const store = await scheduleStore();
       const date = (dependencies.scheduleNow ?? (() => new Date()))();
-      if (opts.execute !== true) { console.log(JSON.stringify({ preview: true, due: await store.tick(date) })); return; }
+      if (opts.execute !== true) { console.log(JSON.stringify({ preview: true, due: await store.tick(date, undefined, undefined, 5) })); return; }
       const trust = await resolveProjectTrust(store.projectRoot, { home: dependencies.config?.home ?? homedir(), interactive: false, ...(opts.trust === undefined ? {} : { explicitTrust: opts.trust }) });
       if (!trust.trusted) throw new Error("scheduled execution requires trusted canonical project; use --trust explicitly");
       // These are shared defaults, not typed CLI overrides: preserve config precedence.
@@ -369,18 +369,19 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
               ...resolved, root: join(store.projectRoot, ".agentrig", "raw", "sessions"),
               maxTurns: String(entry.flags.maxTurns), maxTokens: String(entry.flags.maxTokens),
               maxMinutes: String(entry.flags.maxMinutes),
-              headless: true, scheduled: { entryId: entry.id, minute }, signal,
+              ...(entry.heartbeat === undefined ? {} : { heartbeat: entry.heartbeat }),
+              headless: true, scheduled: { entryId: entry.id, minute, ...(entry.heartbeat === undefined ? {} : { source: "heartbeat" as const }) }, signal,
             } as RunOptions);
             const outcome = result?.reason ?? (Number(process.exitCode) === 0 ? "done" : "error");
             failed ||= outcome !== "done";
-            console.error(JSON.stringify({ schedule: entry.id, minute, outcome, ...(result === undefined ? {} : { sessionId: result.id }) }));
+            if (entry.heartbeat === undefined || outcome !== "done") console.error(JSON.stringify({ schedule: entry.id, minute, outcome, ...(result === undefined ? {} : { sessionId: result.id }) }));
           } catch (error) {
             failed = true;
             console.error(JSON.stringify({ schedule: entry.id, minute, outcome: "error", claimRetained: true }));
             if (signal.aborted) throw error;
           }
           signal.throwIfAborted();
-        }, signal);
+        }, signal, Number((resolved as { heartbeatMaxTurns?: string }).heartbeatMaxTurns ?? "5"));
         process.exitCode = failed ? 1 : 0;
       }, undefined, "schedule tick");
     });

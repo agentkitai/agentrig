@@ -124,6 +124,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Runtime-only heartbeat profile; never accepted from project config fields. */
+  heartbeat?: "empty" | "checklist";
   extension?: string[];
   /** Build cwd supplied by CLI config resolution, not provider credentials or session state. */
   extensionCwd?: string;
@@ -414,7 +416,21 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 }
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
+export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
+  if (opts.heartbeat === undefined) return opts;
+  const safe = { ...opts };
+  // Heartbeat uses the built-in shell default, not a custom configured shell profile.
+  delete safe.memory; delete safe.mcpConfig; delete safe.shell;
+  const main = opts.providerOverride === true ? "default" : opts.roles?.main ?? "default";
+  return Object.assign(safe, { extension: [], extensionDiscovery: false, skills: [], skillDiscovery: false,
+    generatedSkills: false, packages: false, subagents: false, checkpoints: false,
+    ingestOnEnd: false, dreamOnEnd: false, repoMap: false,
+    roles: { main, supervisor: main, memory: main, subagents: main },
+    ...(opts.heartbeat === "empty" ? { maxTurns: "1" } : {}), maxTokens: "10000", maxMinutes: "5" });
+}
+
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  opts = heartbeatBuildOptions(opts);
   const installed = opts.packages === false || opts.trustedProjectRoot === undefined
     ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);
   for (const error of installed.errors) (extras.onNotice ?? console.error)(`package discovery: ${error}`);
@@ -507,7 +523,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           ],
   });
 
-  const hooks: Hook[] = [...(extras.extraHooks ?? [])];
+  const hooks: Hook[] = opts.heartbeat === undefined ? [...(extras.extraHooks ?? [])] : [];
   if (opts.checkpoints === true) hooks.push(new Checkpointer());
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend({ tolerate: false, onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
@@ -571,7 +587,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const shell = opts.shell === undefined ? undefined : assertShellExists(opts.shell);
   const builtins = (): AnyTool[] => builtinTools(shell === undefined ? {} : { shell });
 
-  const tools: AnyTool[] = [...builtins(), ...memoryToolset, ...mcpTools];
+  const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
     tools.push(

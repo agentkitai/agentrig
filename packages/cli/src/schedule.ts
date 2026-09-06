@@ -50,10 +50,12 @@ export const ScheduleEntrySchema = z.object({
   lastClaimedMinute: z.number().int().nonnegative().safe().optional(),
 }).strict();
 export type ScheduleEntry = z.output<typeof ScheduleEntrySchema>;
-const TableSchema = z.object({ version: z.literal(1), entries: z.array(ScheduleEntrySchema).max(100) }).strict()
+const TableSchema = z.object({ version: z.literal(1), entries: z.array(ScheduleEntrySchema).max(100), lastHeartbeatMinute: z.number().int().nonnegative().safe().optional() }).strict()
   .refine(table => new Set(table.entries.map(entry => entry.id)).size === table.entries.length, "duplicate schedule IDs");
 type Table = z.output<typeof TableSchema>;
 const BYTE_CAP = 256 * 1024;
+export interface Heartbeat { task: string; empty: boolean }
+export type ScheduleLaunch = ScheduleEntry & { heartbeat?: "empty" | "checklist" };
 
 /** Cooperative command lock, not protection against external path replacement races. */
 export class ScheduleStore {
@@ -96,6 +98,29 @@ export class ScheduleStore {
     } finally { await handle.close(); }
   }
 
+  async heartbeat(): Promise<Heartbeat | null> {
+    await this.paths(false);
+    const path = join(this.projectRoot, "HEARTBEAT.md");
+    try {
+      const stat = await lstat(path);
+      if (!stat.isFile() || stat.isSymbolicLink() || await realpath(path) !== path) throw new Error("unsafe HEARTBEAT.md");
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+    const file = await open(path, "r");
+    try {
+      const bytes = Buffer.alloc(4097); let length = 0;
+      while (length < bytes.length) {
+        const result = await file.read(bytes, length, bytes.length - length, length);
+        if (result.bytesRead === 0) break;
+        length += result.bytesRead;
+      }
+      if (length > 4096) throw new Error("HEARTBEAT.md exceeds 4096 bytes");
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, length));
+      const empty = text.trim() === "";
+      return { empty, task: empty ? "HEARTBEAT.md is empty. Nothing applies; stop after this one tool-free turn."
+        : `Work through this advisory HEARTBEAT.md checklist; stop when nothing applies. Do not invent work or produce a report when nothing applies.\n\n${text}` };
+    } finally { await file.close(); }
+  }
+
   private async write(table: Table): Promise<void> {
     const bytes = JSON.stringify(TableSchema.parse(table), null, 2) + "\n";
     if (Buffer.byteLength(bytes) > BYTE_CAP) throw new Error("schedule table exceeds 256 KiB");
@@ -133,11 +158,12 @@ export class ScheduleStore {
     });
   }
 
-  async tick(date: Date, execute?: (entry: ScheduleEntry, minute: number) => Promise<void>, signal?: AbortSignal): Promise<string[]> {
+  async tick(date: Date, execute?: (entry: ScheduleLaunch, minute: number) => Promise<void>, signal?: AbortSignal, heartbeatTurns?: number): Promise<string[]> {
     const minute = Math.floor(date.getTime() / 60_000);
     if (!Number.isSafeInteger(minute) || minute < 0) throw new Error("invalid scheduler clock");
     const work = async (): Promise<string[]> => {
       const table = await this.read();
+      if (heartbeatTurns !== undefined && (!Number.isInteger(heartbeatTurns) || heartbeatTurns < 1 || heartbeatTurns > 50)) throw new Error("heartbeat turns must be 1–50");
       const due = table.entries.filter(entry => (entry.lastClaimedMinute ?? -1) < minute && cronDue(entry.cron, date));
       if (due.length > 10) throw new Error("more than 10 schedules due; no entries launched");
       for (const entry of due) {
@@ -146,6 +172,20 @@ export class ScheduleStore {
         entry.lastClaimedMinute = minute;
         await this.write(table);
         await execute(structuredClone(entry), minute);
+      }
+      if (heartbeatTurns !== undefined && !table.entries.some(entry => cronDue(entry.cron, date)) && (table.lastHeartbeatMinute ?? -1) < minute) {
+        signal?.throwIfAborted();
+        const heartbeat = await this.heartbeat();
+        if (heartbeat !== null) {
+          if (execute !== undefined) {
+            table.lastHeartbeatMinute = minute;
+            await this.write(table);
+            await execute({ id: "heartbeat", cron: "* * * * *", task: heartbeat.task,
+              flags: ScheduleFlagsSchema.parse({ maxTurns: heartbeat.empty ? 1 : heartbeatTurns }),
+              heartbeat: heartbeat.empty ? "empty" : "checklist" }, minute);
+          }
+          return ["heartbeat"];
+        }
       }
       return due.map(entry => entry.id);
     };

@@ -189,6 +189,7 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("run.scheduled"),
+    source: z.literal("heartbeat").optional(),
     entryId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u),
     minute: z.number().int().nonnegative().safe(),
   }),

@@ -69,7 +69,7 @@ export function renderEvent(e: HarnessEvent): string {
       return `${p} ${e.provider}/${e.model} cwd=${e.cwd}${e.parent === undefined ? "" : ` parent=${e.parent}`} task=${JSON.stringify(e.task)}`;
     case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
-    case "run.scheduled": return `${p} schedule=${e.entryId} UTC-minute=${e.minute} (advisory task)`;
+    case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "eval.result": return `${p} ${JSON.stringify(e.task)} ${e.outcome} (baseline ${e.baselineOutcome}) profile=${JSON.stringify(e.profile)} reportedTokens=${e.reportedTokens} usage=${e.usageComplete ? "complete" : "unknown"} advisory=${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"}`;
     case "turn.start":
