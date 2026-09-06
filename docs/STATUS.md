@@ -46,6 +46,10 @@ diagnostics, thinking blocks, remote MCP, on-demand review, CI mode, output sche
 spend ledger, mid-session model switch, TUI `@file`/image input, and an orchestration decision
 row), and an amendment making R8a speak the Agent Client Protocol instead of a bespoke NDJSON
 protocol. Section 5 orders these after the existing continuation; H7 may interrupt it.
+A follow-up read of `packages/cli/src/tui` added R16, eight TUI polish rows (Markdown and diff
+rendering, tool-call summaries, prompt history and completion, notifications, a richer status
+line, in-TUI compact/clear/doctor/diff, themes and keybindings) inside the Static-scrollback
+model; the alternate-screen renunciation stands. Section 5 also now marks R12b and R13d done.
 
 Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 updated against main
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b

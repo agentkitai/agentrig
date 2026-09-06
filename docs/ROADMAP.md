@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; R5a is implemented with closing delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5a is implemented with closing delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -20,6 +20,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Implemented; closing gates | R13c: external-input permission restrictions | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Committed | R5 remainder, R7–R11, R12c–R12d, R13c and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
+| Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
 measurement work from R9/R14 forward; H5 pulls R6f forward. All remaining milestone rows are
@@ -800,6 +801,44 @@ beside ACP (R8a), no role marketplace (R15h roles are local files under R5e vali
 
 ---
 
+### R16 — TUI polish within the Static-scrollback model *(fourth pass)*
+
+*Evidence: a read of `packages/cli/src/tui` against Claude Code, Codex CLI, OpenCode and Gemini
+CLI. The TUI is a thin Ink layer over `TuiController`: one colour per line tone, a one-row status
+line, a prompt. Replies are plain text, edits show no diff, tool calls are grey event lines, the
+prompt has no history or completion, and nothing notifies the user when a long run needs them.
+The Static scrollback plus constant-height live frame was chosen after five PRs in one day
+fighting Ink's render cliff (renunciation 2's history); every row below is line-oriented and fits
+that model. None of them needs the alternate screen.*
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R16a | Markdown rendering: assistant replies pass through a Markdown-to-ANSI renderer before they reach `Static` — headings, emphasis, lists, tables, fenced code with syntax highlighting for the common languages; the streaming viewport shows raw text and the final reply is re-rendered once. No wrapping decision moves out of `viewport.ts` | cli |
+| R16b | Transcript diffs: a completed `edit_file` / `write_file` result renders as a bounded coloured unified diff (added/removed lines, context, per-file cap with an elision line), computed from the tool's before/after in the event, never re-read from disk. The same renderer serves the permission prompt for write-class asks beside R12b's effect lines | cli |
+| R16c | Tool-call summaries: each tool call renders as one line (tool, key argument, elapsed, outcome glyph) with reads collapsed into "read N files" runs; `/verbose` expands to the current raw event lines. Errors and denials never collapse | cli |
+| R16d | Prompt history and completion: up/down recall earlier prompts (persisted per project in `.agentrig/history`, bounded, excluded from memory ingest); `/` completes slash commands and skill names; shift-enter or a trailing `\` inserts a newline for multi-line composition | cli |
+| R16e | Notifications: a terminal bell and, where available, a desktop notification on permission ask, supervisor escalation, `ask_user` (R15a) and session end while the terminal is unfocused or after a configurable idle; off by config, never on in headless `run` | cli |
+| R16f | Status line: cost so far (from R15i's accounting when present, else token estimate), permission posture (`ask` / grants:N / yolo), sandbox mode, supervisor ladder level, queued-prompt count; still one truncated row, most useful segments first | cli |
+| R16g | In-TUI commands that exist only on the CLI today: `/compact` (force compaction now, with the manifest delta printed), `/clear` (new session, same config), `/doctor`, `/diff` (working tree vs the R4 checkpoint or HEAD) | cli |
+| R16h | Theme and keybindings: named light/dark themes selected by config or `NO_COLOR`; the five tone colours and the prompt/status colours come from the theme; a small keybinding table in config for the permission keys, history and abort. No runtime theme editor | cli |
+
+Acceptance: R16a — a fixture reply with a fenced block, a table and a list renders to a golden
+ANSI frame at 80 and 120 columns; the frame height stays constant (the `viewport.ts` property
+the existing frame test holds). R16b — an edit fixture renders the expected diff; a 5,000-line
+edit renders the cap plus an elision line. R16c — a five-read fixture collapses to one line and
+`/verbose` restores five. R16d — history survives restart and never appears in a wiki page after
+ingest. R16e — the bell byte is emitted on ask in the fake-TTY test and absent under headless
+`run`. R16f — the status line names the active grant count and changes when a grant is revoked.
+R16g — `/compact` produces a `compaction` event and the manifest reports the reduction. R16h —
+`NO_COLOR` yields a frame with no SGR sequences. Mutation: removing the elision cap fails the
+large-diff test; removing the headless guard fails the bell test.
+
+Renunciation: **no alternate screen, no panes, no mouse.** The Static scrollback and the
+constant-height live frame are the contract; anything needing a full-screen redraw belongs in the
+R8d web client or an ACP editor (R8a), not in Ink.
+
+---
+
 ## 4. What AgentRig deliberately does not copy
 
 Written down so future sessions don't "helpfully" build them (pi's lesson: renunciations are a
@@ -875,8 +914,8 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 |---|---|---|
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
-| 2 | R12e (done) → R12a (done) → R12b (closing gates) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
-| 3 | R13a/R13b (done) → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
+| 2 | R12e (done) → R12a (done) → R12b (done) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
+| 3 | R13a/R13b/R13d (done) → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
@@ -890,6 +929,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 13 | R15d → R15e → R15f → R15g | Interop and headless shapes; R15d follows R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h → R15i → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
 | 15 | R15l | Decision recorded after R10c; no build until then. |
+| 16 | R16a → R16b → R16c → R16d → R16e → R16f → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
