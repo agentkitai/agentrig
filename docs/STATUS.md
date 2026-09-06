@@ -1,11 +1,28 @@
 # Status
 
-Active implementation queue: **R6c generated-skill loading is implemented, pending delivery gates; R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R6g catalogue guidance is implemented, pending delivery gates; R13d is active independently. R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R6c implemented — PR #151 delivery gates pending
+### R6g implemented — delivery gates pending
+
+Optional bounded trigger strings reach the compact catalogue through strict parsing and
+sanitization. A worked first-call example names an actually listed skill; the entire catalogue
+stays within 8 KiB. Default routing and effort guidance preserve required verification,
+configured limits and approvals. Generated emission, edit protection and opt-in defaults are
+unchanged. [Contract](plans/R6g.md).
+
+Dependency-order rationale: R6g starts from R6c main `09157ae` after all-platform post-merge
+CI 34022647578 passed. It is independent of concurrent R13d provenance transport work; existing
+prompt source/authority seams remain intact. Named ambiguity-gate and catalogue-byte-cap
+mutations failed their intended controls and were restored. Full validation, one bounded
+independent review and exact-head PR/post-merge CI remain delivery gates.
+
+### R6c done — PR #151; post-merge CI green
+
+Final head `9c4951d` passed all three PR platforms and merged as `09157ae`.
+Post-merge CI 34022647578 passed all three platforms.
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
 roots through the existing trust/discovery boundary. Negative overrides and manual-root
@@ -22,7 +39,7 @@ seams and all previous done labels. Build/typecheck and 2,167 tests plus two ski
 their named controls and are restored. One bounded independent Claude review
 `81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
 independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
-polish is at the roadmap end; exact-head PR and post-merge CI remain delivery gates.
+polish is at the roadmap end; exact-head PR and post-merge CI completed successfully.
 
 ### R6b done — PR #149; post-merge CI green
 
