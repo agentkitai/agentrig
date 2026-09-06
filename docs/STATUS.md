@@ -1,6 +1,6 @@
 # Status
 
-Active row: **R15i bounded project spend ledger**, based on all-four-green R15h main `31193d6`.
+Active row: **R15i bounded project spend ledger**, integrated with all-four-green R15g main `74699dac`.
 
 R15f is done: main `887fef8`, CI `34058784223` (three platforms) and scripted
 structure `34058784219` all green. [Final receipt](https://github.com/agentkitai/agentrig/pull/190#issuecomment-5562115783).
@@ -82,7 +82,13 @@ reservation before dispatch, explicit unknown coverage and no midnight recovery
 shortcut. One cached provider wrapper covers session call lanes; historical
 snapshots/auxiliary reports are not charged again. Ledger receipts are operational
 metadata permitted for heartbeat; task/wiki/report prohibitions remain.
-No invoice guarantee or default unattended enablement. Implementation/tests active.
+No invoice guarantee or default unattended enablement. Integrated `74699dac` passes
+build/typecheck, 55 combined focused controls and full digest-pinned Docker:
+2,992 passed, two existing skips /186 files. One independent REQUEST_CHANGES review
+(28 reported turns /24 requested) had its material lock-contention finding fixed;
+author UTC/async-context/cancellation and native-output integration controls also
+failed before and pass after correction. [Original review](plans/R15i-review.md).
+Exact-head four-check CI and root merge/post-main gates remain pending.
 
 ### R15h done — local agent roles, PR #196
 

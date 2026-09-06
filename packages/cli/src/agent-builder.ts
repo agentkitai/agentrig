@@ -59,7 +59,7 @@ import { readFile, realpath, stat, open } from "node:fs/promises";
 import { z } from "zod";
 import { McpClient, RemoteMcpClient, RemoteMcpConfigSchema, McpOAuthProvider, McpCredentialStore,
   FileMcpPins, connectServers, type McpServerConfig, type RemoteMcpConfig, type McpConnection } from "@agentkitai/agentrig-core";
-import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
+import { buildProviders, resolveProviderEntries, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 import { RESERVED_COMMAND_NAMES } from "./tui/commands.js";
@@ -496,18 +496,22 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     throw new Error("--daily-cap requires a trusted project and explicit --price-in/--price-out");
   const spend = opts.trustedProjectRoot === undefined ? undefined : { ledger: new SpendLedger(opts.trustedProjectRoot),
     segment: randomUUID(), ...(capMicros === undefined ? {} : { capMicros }) };
+  const nativeEntry = extras.outputContract?.mode === "native" ? resolveProviderEntries(opts).roleNames.main : undefined;
+  let nativeReady = nativeEntry === undefined;
   const providers = buildProviders(opts, { ...(extras.onNotice === undefined ? {} : { onNotice: extras.onNotice }),
+    ...(nativeEntry === undefined ? {} : { prepare: (provider: ModelProvider, name: string) => {
+      if (name !== nativeEntry) return;
+      if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+      // Actual adapter validation and explicit opt-in precede the non-class accounting wrapper.
+      provider.capabilities.nativeOutputSchema = true; nativeReady = true;
+    } }),
     ...(spend === undefined ? {} : { meter: (provider: ModelProvider) => meterProvider(provider, spend.ledger, {
       segment: spend.segment, ...(pricing === undefined ? {} : { pricing }), ...(capMicros === undefined ? {} : { capMicros }),
       boundedProvider: true, onError: error => extras.onNotice?.(error.message),
       onUnavailable: () => (extras.onNotice ?? console.error)("spend accounting unavailable; uncapped execution continues with unknown coverage"),
     }) }) });
   const provider = providers.main;
-  if (extras.outputContract?.mode === "native") {
-    if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
-    // Explicit host/operator opt-in, not empirical or endpoint-inferred support.
-    provider.capabilities.nativeOutputSchema = true;
-  }
+  if (!nativeReady) throw new Error("Native output requires validation of the actual OpenAI-compatible adapter before decoration");
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];

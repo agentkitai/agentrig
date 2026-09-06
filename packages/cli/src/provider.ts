@@ -37,6 +37,8 @@ export interface ProviderOptions {
 }
 
 export interface ProviderHooks {
+  /** Validate/prepare the actual adapter before any accounting decoration. */
+  prepare?: (provider: ModelProvider, entryName: string) => void;
   /** Trusted construction seam; applied exactly once per cached entry. */
   meter?: (provider: ModelProvider, entry: ProviderEntry) => ModelProvider;
   /** Where retry notices go — the TUI frame or stderr. Silent retries look like hangs. */
@@ -157,6 +159,7 @@ function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, h
   const fingerprint = hooks.probe === true ? undefined : providerProbeFingerprint(entry, hooks.env ?? process.env);
   const report = fingerprint === undefined ? undefined : readProviderProbe(hooks.conformanceCachePath ?? providerProbeCachePath(), fingerprint);
   applyProviderConformance(provider, report);
+  hooks.prepare?.(provider, name);
   return hooks.meter?.(provider, entry) ?? provider;
 }
 

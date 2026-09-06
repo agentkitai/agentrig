@@ -251,7 +251,7 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 | Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
 | User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
 | Headless CI / PR-bot mode (event in, comment out) | Claude Code Action, Codex GitHub integration | `run --json` only; no checkout-and-report shape | R15f |
-| Validated structured final output (`--output-schema`) | Codex | `--json` streams events; the final answer is prose | R15g *(in progress; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
+| Validated structured final output (`--output-schema`) | Codex | `--json` streams events; the final answer is prose | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
 | User-defined agent roles with tool allowlists | Claude Code agent files, Goose recipes | validated local roles narrow runtime dispatch and delegable child grants | R15h *(done, PR #196)* |
 | Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i |
 | Mid-session model / effort switch | every TUI harness | R3.5 routes by role at session start only | R15j |
@@ -1271,3 +1271,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
   subagent turn flags consistently at CLI parsing. Current role spawning fails closed
   when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R15i polish: cache bounded ledger folds to reduce repeated whole-file parsing, without
+  weakening live-prefix integrity checks; improve standalone-provider refusal wording
+  to mention the trusted `dailyCap` config key as well as the CLI flag. No accounting
+  recovery, automatic expiry or billing guarantee is implied.

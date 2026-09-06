@@ -146,7 +146,7 @@ export class SpendLedger {
           await new Promise<void>(resolve => setTimeout(resolve, 20));
         }
       }
-      try { return await work(); } finally { await file.close(); await unlink(lock); }
+      try { signal?.throwIfAborted(); return await work(); } finally { await file.close(); await unlink(lock); }
     } finally { this.waiting--; release(); }
   }
 
@@ -295,6 +295,7 @@ export function meterProvider(provider: ModelProvider, ledger: SpendLedger, opti
       }
       let last: Settlement["usage"] = null; let reported = false; let stopped = false; let uncertain = false; let ended = false;
       try {
+        signal.throwIfAborted();
         for await (const event of provider.stream(request, signal)) {
           if (event.type === "usage") { last = usage.parse(event.usage); reported = event.reported !== false; }
           if (event.type === "retry") uncertain = true;

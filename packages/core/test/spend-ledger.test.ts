@@ -253,6 +253,20 @@ it("admission cancellation during cooperative lock waiting never dispatches or r
   expect(calls).toEqual([]); expect(await readFile(lock, "utf8")).toBe("cooperating-owner"); expect(await ledger.records()).toEqual([]);
 });
 
+it("actual runtime cancellation while waiting for startup accounting remains aborted, not a cap refusal", async () => {
+  const cwd = await root(); await mkdir(join(cwd, ".agentrig")); const lock = join(cwd, ".agentrig/usage.lock");
+  await writeFile(lock, "cooperating-owner"); const ledger = new SpendLedger(cwd); const calls: string[] = [];
+  const provider = meterProvider(fixture(complete, calls), ledger, { segment: "runtime-cancel", pricing, boundedProvider: true, capMicros: 100 });
+  const store = new SessionStore({ root: join(cwd, "logs") });
+  const session = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "", spend: { ledger, capMicros: 100 } }).run("cancel", { cwd });
+  const timer = setTimeout(() => session.control.abort(), 50);
+  const released = new Promise<void>(resolve => setTimeout(() => { void unlink(lock).then(resolve); }, 100));
+  let result;
+  try { result = await session.done; } finally { clearTimeout(timer); await released; }
+  expect(result.reason).toBe("aborted"); expect(calls).toEqual([]);
+  expect((await store.readAll(session.id)).some(e => e.type === "budget.cap")).toBe(false);
+});
+
 it("a still-live prior-day reservation cannot create a midnight bypass", async () => {
   let now = Date.parse("2026-09-07T23:59:59Z"); const ledger = new SpendLedger(await root(), () => now);
   const call = await ledger.admit({ segment: "held", provider: "fixture", model: "fixture", reserve: 20,

@@ -524,7 +524,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       }
       if (config.spend?.capMicros !== undefined) {
         try { await config.spend.ledger.check(config.spend.capMicros, abortController.signal); }
-        catch (error) { const capError = error instanceof SpendCapError ? error : new SpendCapError("unavailable"); await spend?.onCap?.(capError); throw capError; }
+        catch (error) {
+          if (abortController.signal.aborted) throw error;
+          const capError = error instanceof SpendCapError ? error : new SpendCapError("unavailable"); await spend?.onCap?.(capError); throw capError;
+        }
       }
       for (const extension of config.extensions?.loaded ?? []) {
         const status = extensionStartup(extension);
@@ -1088,7 +1091,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         await saveSnapshot();
       }
     } catch (err) {
-      reason = err instanceof SpendCapError ? "budget" : "error";
+      reason = abortController.signal.aborted ? "aborted" : err instanceof SpendCapError ? "budget" : "error";
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
@@ -1152,7 +1155,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           await config.spend.ledger.end(spend.segment, id);
         } catch {
           const capped = config.spend.capMicros !== undefined;
-          if (capped) reason = "error";
+          if (capped && reason !== "aborted") reason = "error";
           await emit({ type: "error", message: "spend ledger finalization failed; accounting uncertain and no durable completion receipt", fatal: capped }).catch(() => {});
         }
       }

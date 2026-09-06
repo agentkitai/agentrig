@@ -74,17 +74,18 @@ it("CLI injected-provider uncapped behavior survives with unknown coverage; a ca
   expect(calls).toBe(1);
 });
 
-it("actual scheduler consumes one allowance then refuses further model dispatch with failure receipt", async () => {
+it.each(["config", "flag"])("actual scheduler consumes one allowance then refuses further model dispatch with failure receipt (%s)", async source => {
   const f = await fixture();
   await writeFile(join(f.cwd, ".agentrig/config.json"), JSON.stringify({ provider: "openai", model: "fixture", contextWindow: 10,
-    priceIn: 1, priceOut: 1, maxTokensPerTurn: 10, dailyCap: 0.000020, repoMap: false, packages: false,
+    priceIn: 1, priceOut: 1, maxTokensPerTurn: 10, ...(source === "config" ? { dailyCap: 0.000020 } : {}), repoMap: false, packages: false,
     extensionDiscovery: false, skillDiscovery: false, ingestOnEnd: false, dreamOnEnd: false }));
   const fetch = vi.fn(async () => new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "done" }, finish_reason: "stop" }],
     usage: { prompt_tokens: 10, completion_tokens: 10 } })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } }));
   vi.stubGlobal("fetch", fetch);
   const schedules = new ScheduleStore(f.cwd);
   for (const id of ["first", "second"]) await schedules.add({ id, cron: "* * * * *", task: "advisory test", flags: { maxTurns: 1 } });
-  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(["schedule", "tick", "--execute", "--trust",
+    ...(source === "flag" ? ["--daily-cap", "0.000020"] : [])], { from: "user" });
   expect(fetch).toHaveBeenCalledTimes(1); expect(process.exitCode).toBe(1);
   const receipts = (await readFile(join(f.cwd, ".agentrig/schedule.log"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
   expect(receipts.map(r => r.outcome)).toEqual(["done", "budget"]);
@@ -107,4 +108,36 @@ it("actual controller /cost renders the completed current run and performs no ne
   const text = JSON.stringify(controller.snapshot().lines);
   expect(text).toContain("Current run segment"); expect(text).toContain("$0.000020"); expect(text).toContain("Not an invoice");
   expect(calls).toBe(1); await controller.submit("/quit");
+});
+
+it.each([20, 40])("native output validates the real adapter before metering and charges repair admission (cap=%i)", async cap => {
+  const f = await fixture(); const requests: any[] = [];
+  await writeFile(join(f.cwd, "schema.json"), JSON.stringify({ type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false }));
+  const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)));
+    const content = requests.length === 1 ? "invalid" : '{"ok":true}';
+    return new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10 } })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
+  }); vi.stubGlobal("fetch", fetch);
+  await buildProgram({ config: { cwd: f.cwd, home: f.home } }).parseAsync(["run", "produce object", "--trust", "--provider", "openai", "--model", "fixture",
+    "--daily-cap", String(cap / 1_000_000), "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--max-turns", "2",
+    "--output-schema", join(f.cwd, "schema.json"), "--output-mode", "native"], { from: "user" });
+  expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(cap === 40 ? 0 : 1);
+  expect(fetch).toHaveBeenCalledTimes(cap === 40 ? 2 : 1);
+  expect(requests.every(r => r.response_format?.type === "json_schema")).toBe(true);
+  expect(await new SpendLedger(f.cwd).report("2000-01-01")).toMatchObject({ estimatedMicros: cap, calls: cap / 20 });
+});
+
+it("actual named provider construction meters each cached or lazy entry exactly once", async () => {
+  const f = await fixture(); const ledger = new SpendLedger(f.cwd);
+  const fetch = vi.fn(async () => new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "done" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 10, completion_tokens: 10 } })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } }));
+  vi.stubGlobal("fetch", fetch);
+  const meter = vi.fn((provider: Parameters<typeof meterProvider>[0]) => meterProvider(provider, ledger,
+    { segment: "construction", pricing: { inputUsdPerMTok: 1, outputUsdPerMTok: 1 }, boundedProvider: true, capMicros: 100 }));
+  const set = providers.buildProviders({ provider: "openai", model: "fixture", modelExplicit: true, contextWindow: 10, dailyCap: "0.000100",
+    providers: { lazy: { provider: "openai", model: "other", contextWindow: 10 } } }, { meter });
+  expect(set.main).toBe(set.supervisor); expect(set.get("default")).toBe(set.main); expect(meter).toHaveBeenCalledTimes(1);
+  const lazy = set.get("lazy"); expect(set.get("lazy")).toBe(lazy); expect(meter).toHaveBeenCalledTimes(2);
+  for (const provider of [set.main, lazy]) for await (const _ of provider.stream({ system: "", messages: [], tools: [], maxTokens: 10 }, new AbortController().signal)) { /* consume */ }
+  expect(fetch).toHaveBeenCalledTimes(2); expect(await ledger.report("2000-01-01")).toMatchObject({ calls: 2, estimatedMicros: 40 });
 });
