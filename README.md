@@ -133,6 +133,11 @@ The additive `net` permission defaults to ask and is distinct from legacy `netwo
 explicit `--sandbox-network` / config `sandboxNetwork: true`. Conversely that policy flag grants
 no tool permission. A separately approved one-time sandbox escape executes outside the sandbox;
 mode `none` provides no OS isolation. See [R11a's boundaries](docs/plans/R11a.md).
+The built-in `web_fetch` uses that class for GET-only HTTP(S): no redirects, credentials or
+custom headers; text/plain and text/html only, 1 MiB decoded body, 20,000 returned characters,
+10-second deadline. HTML is lexical text extraction, not browser rendering. It is trusted host
+network I/O, not OS-contained JavaScript or SSRF protection; internal destinations are not filtered.
+See [R11b](docs/plans/R11b.md) for output/provenance and cancellation limits.
 Process stdout/stderr and exit codes do not authenticate sandbox denials. Docker/Seatbelt
 command failures stay ordinary tool failures, even if they print “Read-only file system”;
 only independently established broker/policy/launcher refusals trigger sandbox-denial consent.

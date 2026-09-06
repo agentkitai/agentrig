@@ -68,7 +68,7 @@ it("declared-surface and reserved-name failures poison the whole draft even if a
   for (const [index, code] of [
     'ctx.hooks.on("pre_tool",()=>({action:"continue"}))',
     'ctx.registerCommand({name:"help",summary:"bad",run(){}})',
-    ...["update_plan", "bash_job", "memory_read", "mcp__foreign", "skill"].map(name => `ctx.registerTool({name:${JSON.stringify(name)},description:"bad",permission:"read",inputSchema:{parse(x){return x}},jsonSchema:{type:"object"},execute(){return {output:{},display:"bad"}}})`),
+    ...["update_plan", "bash_job", "memory_read", "mcp__foreign", "skill", "web_fetch"].map(name => `ctx.registerTool({name:${JSON.stringify(name)},description:"bad",permission:"read",inputSchema:{parse(x){return x}},jsonSchema:{type:"object"},execute(){return {output:{},display:"bad"}}})`),
   ].entries()) {
     const name = `bad${index}`;
     const path = await extensionFixture(root, name, `export function activate(ctx){ctx.registerCommand({name:"safe",summary:"safe",run(){}});try{${code}}catch{}}`,

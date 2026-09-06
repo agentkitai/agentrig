@@ -7,6 +7,7 @@ import { grepTool } from "./grep.js";
 import { updatePlanTool } from "./update-plan.js";
 import { readFileTool } from "./read-file.js";
 import { writeFileTool } from "./write-file.js";
+import { webFetchTool } from "./web-fetch.js";
 
 export { bashTool, type BashToolOptions } from "./bash.js";
 export { bashJobTool, JobRegistry, type BashJobOutput } from "./background-jobs.js";
@@ -30,6 +31,7 @@ export {
   READ_OUTPUT_TOOL,
 } from "./read-output.js";
 export { writeFileTool } from "./write-file.js";
+export { webFetchTool, type WebFetchOutput } from "./web-fetch.js";
 export { safeSliceEnd } from "./shared.js";
 export { updatePlanTool } from "./update-plan.js";
 export { subagentTool, SUBAGENT_TOOL, type SubagentOptions } from "./subagent.js";
@@ -37,7 +39,7 @@ export * from "./skills.js";
 
 /**
  * The built-ins: bash (with background jobs via bash_job), read_file, edit_file, write_file,
- * glob, grep, and update_plan. `update_plan` is what makes the supervisor's `drift` detector and
+ * glob, grep, update_plan and the separately permissioned web_fetch. `update_plan` is what makes the supervisor's `drift` detector and
  * `force_replan` rung reachable — both were specified against `plan.updated`, which nothing
  * emitted until M6.
  */
@@ -54,6 +56,7 @@ export function builtinTools(opts: BuiltinToolOptions = {}): AnyTool[] {
     globTool(),
     grepTool(),
     updatePlanTool(),
+    webFetchTool(),
   ];
 }
 
