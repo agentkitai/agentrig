@@ -1,9 +1,25 @@
 # Status
 
-Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b is done with green post-merge CI. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R6c generated-skill loading is implemented, pending delivery gates; R13b is merged, pending post-merge CI. R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R6c implemented — delivery gates pending
+
+Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
+roots through the existing trust/discovery boundary. Negative overrides and manual-root
+precedence remain intact. Validated manifest metadata labels actual successful model loads
+with optional `skill.used.generated: true`; ordinary events stay unchanged, and denied/missing
+loads never count. Labels grant no permission, approval or benefit. [Contract](plans/R6c.md).
+
+Dependency-order rationale: R6b PR #149 and main `7c680c4` passed all-platform post-merge CI
+34021388430 before this new worktree began. R6c closes the opt-in mechanical learning loop;
+R6g trigger work and live benefit comparisons are separate. Existing TUI slash invocation
+does not acquire new usage telemetry. Integrated main `97e18bf` preserves the R13b provenance
+seams and all previous done labels. Build/typecheck and 2,167 tests plus two skips pass across
+111 files; 15 focused tests pass. Default-on discovery and dropped event-marker mutations fail
+their named controls and are restored. Independent review and exact-head CI remain pending.
 
 ### R6b done — PR #149; post-merge CI green
 
