@@ -16,8 +16,9 @@ export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<{ denied?: string; patches: unknown[]; injects: string[] }>;
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "onAsk" | "sandbox" | "store">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "sandbox" | "store">;
   id: string;
+  grantSessionId?: string;
   cwd: string;
   turns: number;
   toolsByName: ReadonlyMap<string, AnyTool>;
@@ -241,16 +242,25 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     ...(config.origin === undefined ? {} : { origin: config.origin }),
   };
   await emit({ type: "permission.request", req: permReq });
+  if (isEnded() || signal.aborted) return resultBlock("aborted before permission authorization", true);
+  await config.permissionGrants?.flush(emit);
   let decision = await config.permissions.decide(permReq);
+  if (decision === "ask" && config.permissionGrants !== undefined) {
+    decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq) : "deny";
+  }
   await emit({ type: "permission.decision", d: decision });
   if (decision === "ask") {
     decision = config.onAsk ? await config.onAsk(permReq) : "deny";
+    if (isEnded() || signal.aborted) return resultBlock("aborted while awaiting permission", true);
+    await config.permissionGrants?.flush(emit);
+    if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
     await emit({ type: "permission.decision", d: decision });
   }
   if (decision === "deny") {
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });
     return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
   }
+  if (isEnded() || signal.aborted) return resultBlock("aborted before tool execution", true);
 
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
   const toolEffect = checkpointers.length === 0 ? "read-only" : typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace");
