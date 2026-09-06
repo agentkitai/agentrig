@@ -20,6 +20,7 @@ import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 import { evaluatePermissionPolicy } from "./permissions.js";
 import { bindPermissionView } from "./child-permissions.js";
 import type { PermissionDecisionSource } from "./permission-attribution.js";
+import type { PipelineSchedule } from "./parallel-runtime.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -35,6 +36,7 @@ function displayContext(result: AttributedHookResult): InstructionContext | unde
 }
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
+  schedule?: PipelineSchedule;
   expansion?: ReturnType<typeof externalExpansion>;
   config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
@@ -167,6 +169,13 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
 }
 
 export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+  await context.schedule?.prepare();
+  const onAsk = context.config.onAsk;
+  if (onAsk !== undefined && context.schedule !== undefined) {
+    const schedule = context.schedule;
+    context = { ...context, config: { ...context.config, onAsk: (request, askContext) =>
+      schedule.ask(() => Promise.resolve(onAsk(request, askContext))) } };
+  }
   try { return await executeToolInner(tu, context); }
   catch (error) {
     if (!(error instanceof ExtensionHandlerError)) throw error;
@@ -270,6 +279,10 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
   const declaredPaths = tool.paths?.(input);
   const operation = tool.operation?.(input);
+  const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
+  const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
+    ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
+  await context.schedule?.admit({ cwd, permission: permClass, effects: declaredEffect, paths: declaredPaths });
   const permReq: PermissionRequest = {
     tool: tu.name,
     input,
@@ -346,8 +359,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   }
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before tool execution", true);
 
-  const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
-  const toolEffect = checkpointers.length === 0 ? "read-only" : typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace");
+  const toolEffect = checkpointers.length === 0 ? "read-only" : (declaredEffect ?? "workspace");
   if (checkpointers.length > 0) {
     const checkpoint = await hook("pre_tool", {
       sessionId: id, cwd, turn: turns, tool: { name: tu.name, input }, permission: permClass,
@@ -365,6 +377,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     }
   }
   if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
+  context.schedule?.authorized();
   const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input),
     ...(inputContext === undefined ? {} : { context: inputContext }) });
   const ctx: ToolContext = {

@@ -1,4 +1,5 @@
 import type { ContentBlock } from "./messages.js";
+import { parallelRuntime } from "./parallel-runtime.js";
 
 export interface TurnToolCall { id: string; name: string; input: unknown }
 export interface TurnStrategyContext {
@@ -28,3 +29,14 @@ export const sequential: TurnStrategy = Object.freeze({
     return { results, interrupted: false };
   },
 });
+
+/** Opt-in bounded scheduling. Unknown effects are ordered exclusive barriers, never name heuristics. */
+export function parallel(options: { maxConcurrency?: number } = {}): TurnStrategy {
+  const limit = options.maxConcurrency ?? 4;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 16) throw new Error("maxConcurrency must be an integer from 1 to 16");
+  return Object.freeze({ execute(calls: readonly TurnToolCall[], context: TurnStrategyContext) {
+    const runtime = parallelRuntime(context);
+    // A custom wrapper without the internal runtime bridge cannot safely infer tool hazards.
+    return runtime === undefined ? sequential.execute(calls, context) : runtime(calls, limit);
+  } });
+}
