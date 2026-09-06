@@ -551,11 +551,18 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const packageRoots = opts.skillDiscovery === false || baseRoots.length === 0 ? []
     : installed.packages.flatMap(pkg => pkg.skills).filter(path => !baseRoots.some(root => resolve(root) === resolve(path)));
   const skillRoots = [...baseRoots.slice(0, insertion), ...packageRoots, ...baseRoots.slice(insertion)];
+  // Resolve every priority before the loader deduplicates aliases. Otherwise a removed
+  // explicit/project alias shifts home onto the package group's priority and rejects its winner.
+  const rootPrecedence = new Map<string, number>();
+  for (const [index, path] of skillRoots.entries()) {
+    const key = resolve(path);
+    if (!rootPrecedence.has(key)) rootPrecedence.set(key, packageRoots.includes(path) ? insertion : index);
+  }
   const skills = skillRoots.length === 0
     ? []
     : await discoverSkills({
         roots: skillRoots,
-        rootPrecedence: new Map(packageRoots.map(path => [resolve(path), insertion])),
+        rootPrecedence,
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
 

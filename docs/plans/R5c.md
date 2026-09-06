@@ -57,3 +57,16 @@ Named negative mutations were detected and restored: removing archive type refus
 all five link/device cases; bypassing installed-record comparison loaded the edited skill and
 failed the preservation/integrity test; stripping scripts before manifest validation incorrectly
 published the booby-trapped unit and failed the script refusal test. No mutations remain.
+
+The single independent [review](R5c-review.md) approved and independently passed build,
+typecheck and all 2,500 tests plus two skips (34 seconds, 24/max24 turns, 244 seconds).
+Its optional root-alias note was treated as material to our precedence contract: an actual
+CLI/config/builder alias fixture first failed because package/home became equal priority.
+The builder now maps all resolved roots explicitly before deduplication; relative/absolute
+alias controls pass and project definitions still win. No second broad review was run.
+Nested skill filename casing and more prominent hardlink-source guidance remain optional END
+follow-ups; source hardlinks are deliberately refused, including pnpm-linked files.
+
+Final updated-main build/typecheck/full suite after the alias fix passes 2,502 tests plus two
+skips across 142 files (four workers, 34 seconds); all 28 focused package cases are included.
+Exact-head all-platform PR CI remains a delivery gate, followed by root merge and main CI.

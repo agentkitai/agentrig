@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { type ModelProvider } from "@agentkitai/agentrig-core";
@@ -107,3 +107,17 @@ it("accepts actual npm pack --ignore-scripts output with identical selected cont
   expect((await inspectPackages(f.cwd)).errors).toEqual([]);
   await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
 }, 30_000);
+
+it.each(["relative", "absolute"])("keeps package skills before home after an explicit alias (%s) is deduplicated", async kind => {
+  const f = await fixture(); await addPackage({ projectRoot: f.cwd, source: f.source });
+  await mkdir(join(f.cwd, ".agentrig", "skills"), { recursive: true });
+  await mkdir(join(f.home, ".agentrig", "skills"), { recursive: true });
+  await writeFile(join(f.home, ".agentrig", "skills", "guide.md"), "Home fallback");
+  const notices: string[] = [];
+  const alias = kind === "relative" ? relative(process.cwd(), join(f.cwd, ".agentrig", "skills")) : `${join(f.cwd, ".agentrig")}/./skills`;
+  const built = await build(f, ["--trust", "--skills", alias], notices);
+  expect(built.skills.find(skill => skill.name === "guide")?.body).toBe("Package guide");
+  expect(notices.some(message => message.includes("equal precedence"))).toBe(false);
+  await writeFile(join(f.cwd, ".agentrig", "skills", "guide.md"), "Project wins");
+  expect((await build(f, ["--trust", "--skills", alias])).skills.find(skill => skill.name === "guide")?.body).toBe("Project wins");
+});

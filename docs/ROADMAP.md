@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14c evidence grading/reporting is implemented, pending delivery gates; R11b is merged (PR #168), post-merge CI pending; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c local packages are implemented, pending delivery gates; R14c is done with green post-merge CI (PR #169); R11b is done with green post-merge CI (PR #168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -672,7 +672,7 @@ permission and sandbox layers something to grip.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R11a *(done, [PR #166](https://github.com/agentkitai/agentrig/pull/166))* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
-| R11b *(implemented; delivery gates pending)* | Built-in `web_fetch`: strict GET-only credential-free HTTP(S), no redirects, decoded byte/time/text caps, lexical HTML-to-text, explicit net permission and external provenance. Real local HTTP and CLI composition tests. No search/SSRF isolation claim. See [contract](plans/R11b.md). | core, cli |
+| R11b *(done, [PR #168](https://github.com/agentkitai/agentrig/pull/168))* | Built-in `web_fetch`: strict GET-only credential-free HTTP(S), no redirects, decoded byte/time/text caps, lexical HTML-to-text, explicit net permission and external provenance. Real local HTTP and CLI composition tests. No search/SSRF isolation claim. See [contract](plans/R11b.md). | core, cli |
 
 Acceptance: fetch is refused under default rules until allowed (both interactively and via
 `--allow net`); the sandbox's no-network default blocks it even under `--yolo` unless net is
@@ -740,7 +740,7 @@ the rows below extend the product interface in the committed dependency order.*
 |---|---|---|
 | R14a *(done, [PR #162](https://github.com/agentkitai/agentrig/pull/162))* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
 | R14b *(done, [PR #165](https://github.com/agentkitai/agentrig/pull/165))* | Bounded supervisor per-item attempt ledger associates exact command-exit declarations with internal foreground outcome receipts, never output prose or tool names. Latest failing/unknown attempts stay visible; unsupported checks and semantic acceptance remain unverified. Replay and bounded incompleteness are explicit. See [contract](plans/R14b.md). | core + supervisor |
-| R14c *(implemented; closing delivery gates)* | M6 claims-vs-evidence row and read-only `sessions show --evidence <id>` share bounded candidate reports. Declared unfinished/missing/failing/unknown checks and omissions can force false, never true; legacy/dropped distinctions and current-run attach scope is explicit. See [contract](plans/R14c.md). | supervisor + cli |
+| R14c *(done, [PR #169](https://github.com/agentkitai/agentrig/pull/169))* | M6 claims-vs-evidence row and read-only `sessions show --evidence <id>` share bounded candidate reports. Declared unfinished/missing/failing/unknown checks and omissions can force false, never true; legacy/dropped distinctions and current-run attach scope is explicit. See [contract](plans/R14c.md). | supervisor + cli |
 | R14d | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
 
 Acceptance: a fixture session claiming success with a failing final test run grades measurably
@@ -923,10 +923,10 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
-| 4 | R14a (done) → R14b (done) → R14c (closing gates) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 4 | R14a (done) → R14b (done) → R14c (done) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
-| 6 | R5a (done) → R5b (done) → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
-| 7 | R11a (done) → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
+| 6 | R5a (done) → R5b (done) → R5c (closing gates) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
+| 7 | R11a (done) → R11b (done) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
@@ -1177,3 +1177,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   observer so one corrupt event does not disable later useful observations. Keep incomplete views
   fail-closed. Historical plan seeding for resumed attached runs is separate future work: current
   reports explicitly exclude prior history, while the CLI reads the full named physical log.
+- R5c polish: align nested skill filename casing with the loader's exact `SKILL.md` convention;
+  make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
+  The review's root-alias precedence defect was fixed in R5c, not deferred here.
