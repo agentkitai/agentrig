@@ -5,7 +5,7 @@ import { activeSandboxPolicy, sandboxSpawnInvocation, throwIfSandboxDenied } fro
 import { SandboxDeniedError } from "../sandbox.js";
 
 /** Resolve existing aliases, including a dangling final symlink and missing parent directories. */
-async function writeTarget(path: string, depth = 0): Promise<string> {
+export async function writeTarget(path: string, depth = 0): Promise<string> {
   if (depth > 128) throw new Error("file-write target has too many unresolved path components or symlinks");
   try { return await realpath(path); }
   catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }

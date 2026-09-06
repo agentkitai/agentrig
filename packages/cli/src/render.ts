@@ -89,6 +89,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "permission.request":
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}${e.req.operation === undefined ? "" : ` operation=${JSON.stringify(e.req.operation)}`}`;
     case "permission.decision": return `${p} ${e.d}`;
+    case "permission.expansion": return `${p} ${e.decision} first ${e.surface}: ${e.name}${e.sourceOrigin === undefined ? "" : ` from ${e.sourceOrigin}`}`;
     case "permission.granted": return `${p} ${e.grant.id} ${e.grant.decision} ${e.grant.operation.tool} ${JSON.stringify(e.grant.resource)} ${e.grant.duration.kind}=${e.grant.duration.id}`;
     case "permission.revoked": return `${p} ${e.grantId} ${e.reason}`;
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
@@ -221,6 +222,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "model.retry":
     case "permission.request":
     case "permission.decision":
+    case "permission.expansion":
     case "permission.granted":
     case "permission.revoked":
     case "context.compact":

@@ -11,6 +11,7 @@ import { outsideSandbox } from "./sandbox-providers.js";
 import { contentHash } from "./session-store.js";
 import { mergePatches, type AttributedHookResult, type Hook, type HookPoint, type runHooks } from "./hooks.js";
 import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
+import { expansionSurface, type externalExpansion } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
@@ -29,6 +30,7 @@ function displayContext(result: AttributedHookResult): InstructionContext | unde
 }
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
+  expansion?: ReturnType<typeof externalExpansion>;
   config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   grantSessionId?: string;
@@ -234,6 +236,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
         // This API shallow-merges inputs, not whole-input instruction replacement. Retained
         // model fields must not borrow delegation, and a no-op has no actual contribution.
         if (!isDeepStrictEqual(input, merged.data)) {
+          context.expansion?.hookInput();
           const source = combinedContext(h.patches.map((_patch, index) => h.patchContexts?.[index] ?? ADVISORY_CONTEXT));
           inputContext = { principal: source.principal, authority: "advisory" };
         }
@@ -264,20 +267,37 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     // the model — an ask that can name its own origin can lie about it.
     ...(config.origin === undefined ? {} : { origin: config.origin }),
   };
+  const surface = context.expansion === undefined ? undefined
+    : await raceAbort(expansionSurface(permReq, signal), "permission surface classification");
+  const freshExpansion = context.expansion?.needs(surface) === true;
+  if (freshExpansion) {
+    permReq.origin = "external-input-expansion";
+    permReq.expansionSurface = surface;
+    if (config.origin !== undefined) permReq.sourceOrigin = config.origin;
+  }
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
   let decision = await config.permissions.decide(permReq);
+  if (freshExpansion && decision !== "deny") decision = "ask";
   await config.permissionGrants?.flush(emit);
-  if (decision === "ask" && config.permissionGrants !== undefined) {
+  if (decision === "ask" && config.permissionGrants !== undefined && !freshExpansion) {
     decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq, true) : "deny";
   }
   await emit({ type: "permission.decision", d: decision });
   if (decision === "ask") {
-    decision = config.onAsk ? await config.onAsk(permReq) : "deny";
+    decision = config.onAsk === undefined ? "deny" : freshExpansion
+      ? await raceAbort(Promise.resolve(config.onAsk(permReq)), "fresh external-input approval").catch(() => "deny" as const)
+      : await config.onAsk(permReq);
+    if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
     if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
     if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
     await emit({ type: "permission.decision", d: decision });
+  }
+  if (freshExpansion) {
+    await emit({ type: "permission.expansion", id: tu.id, name: tu.name, surface: surface!,
+      decision: decision === "allow" ? "allow" : "deny",
+      ...(config.origin === undefined ? {} : { sourceOrigin: config.origin }) });
   }
   if (decision === "deny") {
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });
@@ -324,7 +344,11 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       finishTrust = await raceAbort(prepareResultTrust(tool, input, cwd, config.trustedProjectRoot), "tool provenance");
       signal.throwIfAborted();
     }
-    const command = () => tool.execute(input, ctx);
+    const command = () => {
+      signal.throwIfAborted();
+      context.expansion?.dispatched(surface);
+      return tool.execute(input, ctx);
+    };
     // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
     // and selecting `none` still traverses the provider seam so providers own mode semantics.
     const prepared = config.sandbox !== undefined && config.sandbox.mode !== "none" && tool.sandbox !== "compatible"

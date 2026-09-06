@@ -29,7 +29,7 @@ const inside = (root: string, path: string): boolean => {
   const rel = relative(root, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel));
 };
-const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
 /** Live explicit host/user authority, never reconstructed from events. Paths are lexical scopes,
  * not symlink or OS containment. One registry is one shared authorization group until R12d. */

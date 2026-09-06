@@ -66,6 +66,9 @@ export const PermissionRequest = z.object({
    * different decision from answering it for yourself. Absent means the session itself.
    */
   origin: z.string().optional(),
+  /** Runtime child provenance retained when a separate-consent origin replaces origin. */
+  sourceOrigin: z.string().optional(),
+  expansionSurface: z.enum(["exec", "network", "write-outside-cwd"]).optional(),
 });
 export type PermissionRequest = z.infer<typeof PermissionRequest>;
 
@@ -84,7 +87,7 @@ export type PlanItem = z.infer<typeof PlanItem>;
 
 /** Emitted by the supervisor package; core only knows the shape. */
 export const Signal = z.object({
-  type: z.enum(["loop", "stall", "error_burst", "drift", "budget", "test_regression"]),
+  type: z.enum(["loop", "stall", "error_burst", "drift", "budget", "test_regression", "injection"]),
   confidence: z.number().min(0).max(1),
   evidence: z.array(z.string()),
   window: z.tuple([z.number().int(), z.number().int()]), // [fromSeq, toSeq]
@@ -291,6 +294,9 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
+  z.object({ type: z.literal("permission.expansion"), id: z.string(), name: z.string(),
+    surface: z.enum(["exec", "network", "write-outside-cwd"]), decision: z.enum(["allow", "deny"]),
+    sourceOrigin: z.string().optional() }),
   ...PermissionGrantEventSchema.options,
   z.object({
     type: z.literal("context.compact"),

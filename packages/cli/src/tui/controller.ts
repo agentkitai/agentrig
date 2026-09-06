@@ -336,7 +336,8 @@ export class TuiController {
       // all, which is worse than not having one.
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
-      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
+      if (req.origin === "external-input-expansion") this.print(`Fresh approval required: external/unknown input proposes first ${req.expansionSurface ?? req.class} dispatch${req.sourceOrigin === undefined ? "" : ` from ${req.sourceOrigin}`}. Standing grants do not apply.`, "system");
       if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
       if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
       if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
