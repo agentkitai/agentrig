@@ -45,7 +45,9 @@ Ordinary trusted user-authored SDK composition is supported, with bounded fan-ou
 independently specified verification and serial separately authorized application.
 No workflow engine/DSL/loader, automatic merge, runnable recipe or new build row.
 [Decision and evidence](plans/R15l.md). Documentation links/source consistency and
-one substantive Claude review precede the usual exact-head/post-main gates.
+one substantive Claude review are complete: APPROVE, no material findings,
+28 reported turns against requested 16. Original findings preserved; exact-head
+and post-main gates remain pending. No new runtime-test execution claimed.
 
 ### R15f done — PR #190; all four post-main checks green
 

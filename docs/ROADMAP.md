@@ -797,7 +797,7 @@ planner mode or a fusion service.*
 | R15i | Spend ledger: per-project `.agentrig/usage.jsonl` appended at session end (session id, model, tokens, cached, cost estimate); `/cost` and `agentrig usage --since`; config `daily-cap` refuses to start a session over cap and stops an R7 unattended run before the cap, with a `budget.cap` event | core + cli |
 | R15j | `/model <role-or-entry>` and `/effort <level>`: mid-session switch of the active provider entry within the configured R3.5 routing table; emits `provider.switched`; the context manifest records which turns ran under which entry | cli + core |
 | R15k | TUI input: `@path` completion inserting a read-class file reference, and image paste/`@image.png` producing an image `ContentBlock`; both go through the R13b source seam for provenance | cli |
-| R15l *(decision recorded; review/PR gates pending; [decision](plans/R15l.md))* | **Thin trusted SDK composition is supported; no new runtime.** Users may compose bounded R10 fan-out, independently specified verification and serial separately authorized application. No packaged workflow engine/DSL/loader, automatic merge or retry policy. R10c proves cooperative isolation/order and guarded candidate handoff, not task quality or exactly-once integration. Renunciation 8 remains. | docs |
+| R15l *(decision recorded, one review approved; PR gates pending; [decision](plans/R15l.md))* | **Thin trusted SDK composition is supported; no new runtime.** Users may compose bounded R10 fan-out, independently specified verification and serial separately authorized application. No packaged workflow engine/DSL/loader, automatic merge or retry policy. R10c proves cooperative isolation/order and guarded candidate handoff, not task quality or exactly-once integration. Renunciation 8 remains. | docs |
 
 Acceptance: R15a — the fake provider asks, the controller queue answers, the turn resumes; the
 headless default fails closed. R15b — an edit that introduces a type error returns the error in
@@ -809,6 +809,8 @@ R5d consent. R15e/f/g — golden-output tests against the fake provider; the CI 
 `bash` cannot run it even when the parent could (through a real spawn). R15i — a cap of one
 session refuses the second start. R15j — the manifest shows the switch turn. R15k — `@` on a
 path yields a `project`-labelled block; an image paste yields an `image` block with `user` trust.
+R15l — the decision, supported boundary and evidence are recorded consistently in
+its plan, ROADMAP, PLAN and STATUS; no new runtime is required.
 
 Renunciation, restated for this band: no LSP daemon or language index (R15b is a bounded checker
 call), no hosted CI runner (R15f is a documented action, nothing served), no second RPC protocol
@@ -1263,3 +1265,5 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15l optional documentation: a runnable, trusted SDK composition example with
   user-specified verification and serial authorized application; no loader, engine
   or automatic merge. The decision does not depend on this example.
+- Historical plan polish: reconcile R10c's old "delivery gates pending" header with
+  its completed PR #181 receipt without erasing the original failure/fix history.
