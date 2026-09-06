@@ -73,6 +73,10 @@ builds a new root, not an actor reconstructed from historical receipts.
 21 reported /24 requested turns, 84 reviewer-run focused tests. Frozen build/typecheck
 and Docker full pass 2,872 plus two existing skips /177 files. Integration with R8c
 retains role discovery and child telemetry together; final delivery gates remain.
+PR #196 first head `ecc4482` passed CI34061166635 and structure34061166651,
+all four green. Final R15c integration retains reasoning/role dispatch and privacy:
+build/typecheck, 63 focused tests and full Docker 2,934 plus two skips /182 files
+pass. Final exact-head and post-main gates remain, not another review round.
 
 ### R8c done — PR #192; all four post-main checks green
 
