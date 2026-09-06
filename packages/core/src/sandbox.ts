@@ -37,6 +37,8 @@ export interface SandboxProvider {
 /**
  * An OS boundary denied an action, runtime policy forbids it, or a required enforcing execution
  * path is unavailable. Ordinary tool failures must not be mislabeled as sandbox denials.
+ * Child-controlled process output, exit codes and path plausibility are not independently
+ * observed denials; built-in Docker/Seatbelt process failures remain ordinary failures.
  */
 export class SandboxDeniedError extends Error {
   override readonly name = "SandboxDeniedError";

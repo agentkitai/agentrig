@@ -205,7 +205,8 @@ export class JobRegistry {
   /**
    * What the job wrote, bounded to its first RETAINED_HEAD_CHARS plus its last
    * RETAINED_TAIL_CHARS, regardless of what polls already drained. Returns undefined once a
-   * denial from this job has been reported.
+   * caller has marked this job's diagnostic claim as reported.
+   * @deprecated Diagnostic compatibility only; no runtime denial authority.
    */
   classifiable(id: string): string | undefined {
     const record = this.jobs.get(id);
@@ -213,7 +214,7 @@ export class JobRegistry {
     return `${record.head}\n${record.tail}`;
   }
 
-  /** Marks the job's denial as surfaced so a later poll does not raise it again. */
+  /** @deprecated Marks a legacy diagnostic claim only; runtime polling never calls this. */
   markDenialReported(id: string): void {
     const record = this.jobs.get(id);
     if (record !== undefined) record.denialReported = true;

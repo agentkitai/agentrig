@@ -1,9 +1,32 @@
 # Status
 
-Active implementation queue: **R14a acceptance declarations are implemented, pending delivery gates; H7a continuation repair is merged (PR #161), pending its post-merge gate. R12c (PR #158), R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **H7b sandbox-denial evidence repair is in implementation; R14a acceptance declarations are implemented, pending delivery gates; H7a continuation repair is done with green post-merge CI (PR #161). R12c (PR #158), R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### H7b implemented — delivery gates pending
+
+The correctness-repair lane continues after H7a PR #161/main `668f7f1`, whose exact
+post-merge CI 34028225992 passed all three platforms. H7b removes unauthenticated process
+output as denial authority in foreground bash, background polling and sandboxed file-write
+helpers. Ordinary failed outcomes remain visible. Trusted broker/policy/launcher refusals
+retain the existing explicit sandbox-escalation path; profiles and containment are unchanged.
+Exported legacy diagnostics are marked deprecated; `throwIfSandboxDenied` is a compatibility
+no-op, not an authentication mechanism. [Contract](plans/H7b.md).
+
+Integrated R14a main `fc8327e` without production conflicts, preserving acceptance declarations
+and first-request prompt guidance. Thirteen actual-runtime fixtures exercise controlled Node
+subprocesses through both providers, including real agent foreground/background/helper paths,
+printed stdout/stderr/network/outside-path claims, and genuine broker/launcher positive controls.
+They are not live OS-isolation tests; existing profiles/wrapper tests remain separate. Twenty-seven
+existing sandbox cases pass with diagnostic compatibility and updated ordinary-exit expectations.
+Foreground and background inference-restoration mutants each produced forbidden denial events
+and failed their named controls; both were restored. Full checks and one bounded independent
+review precede final exact-head PR CI. No extra milestone or live model evaluation spend.
+
+Updated-main build/typecheck and the full suite pass: 2,355 tests plus two skips across
+128 files with four workers (33 seconds). Independent review is pending.
 
 ### R14a implemented — validation and delivery gates pending
 
@@ -87,7 +110,10 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### H7a implemented — delivery gates pending
+### H7a done — PR #161; post-merge CI green
+
+Final PR head `7353256` passed all three platforms in CI 34027933833; merged main `668f7f1`
+passed exact post-merge CI 34028225992. Historical intermediate gate/diagnostic notes follow.
 
 The committed correctness-repair lane interrupts R5b after R5a delivery: H7a then H7b,
 without expanding into provider-cap configuration or reasoning UI. A fresh worktree starts

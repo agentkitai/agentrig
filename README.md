@@ -128,6 +128,10 @@ CLI/config precedence, session receipts and child non-inheritance. Failed activa
 no partial surfaces; runtime cross-surface disabling is the separate R5b roadmap item.
 
 Sandbox modes constrain supported tool effects, not arbitrary JavaScript in the harness process.
+Process stdout/stderr and exit codes do not authenticate sandbox denials. Docker/Seatbelt
+command failures stay ordinary tool failures, even if they print “Read-only file system”;
+only independently established broker/policy/launcher refusals trigger sandbox-denial consent.
+See [H7b](docs/plans/H7b.md) for this conservative evidence boundary.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
 tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
 `--yolo`; headless runs deny that escalation. Host hooks, including `--ingest-on-end` and

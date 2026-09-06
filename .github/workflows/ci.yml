@@ -103,3 +103,4 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/permission-attribution.test.ts packages/cli/test/grant-inspection.test.ts
       - run: pnpm exec vitest run packages/core/test/external-expansion.test.ts packages/supervisor/test/injection.test.ts packages/cli/test/external-expansion.test.ts
       - run: pnpm exec vitest run packages/core/test/acceptance-plan.test.ts packages/cli/test/acceptance-plan.test.ts
+      - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
