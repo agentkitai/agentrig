@@ -77,6 +77,10 @@ PR #196 first head `ecc4482` passed CI34061166635 and structure34061166651,
 all four green. Final R15c integration retains reasoning/role dispatch and privacy:
 build/typecheck, 63 focused tests and full Docker 2,934 plus two skips /182 files
 pass. Final exact-head and post-main gates remain, not another review round.
+Integrated head `55bd0c6` then failed macOS's pre-spawn 80ms fixture race and Windows
+temporary-directory EBUSY cleanup. Both original failures remain recorded. Bounded
+test-only phase/cleanup repairs retain assertions and production limits; build/typecheck
+and full Docker now pass 2,936 plus two skips /182 files. Fresh all-four CI is required.
 
 ### R8c done — PR #192; all four post-main checks green
 
