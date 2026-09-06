@@ -927,6 +927,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
+| Repair (in progress) | A1/A2 real-copy fixture scheduling bound | R7a post-main CI `34039249249` exceeded the unchanged five-second A1 test bound, without an assertion failure. Explicit per-fixture allowance only; all seeded regressions/subprocess guards retained. [Contract](plans/evalset-fixture-bound.md). |
 | Repair (done, PR #173) | Child-grants test readiness | Initial R10d post-merge failures retained; exact subscribed prompt/frame readiness and bounded diagnostics restore green main063cac6 in CI34035704275. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
