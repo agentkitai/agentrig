@@ -58,6 +58,20 @@ it("actual ask-class tool exits nonzero, writes report, and cannot dispatch eith
   const report = await readFile(join(root, "report.md"), "utf8"); expect(report).toContain("Outcome: permission-refused"); expect(report).toContain("Unresolved asks: 1");
   for (const index of [0, 1]) await expect(readFile(join(root, `sentinel-${index}`))).rejects.toMatchObject({ code: "ENOENT" });
 }, 30_000);
+it("actual remote MCP startup ask aborts unattended CI before HTTP or provider work", async () => {
+  const root = await fixture(); let requests = 0;
+  const server = createServer((_req, res) => { requests++; res.writeHead(500).end(); });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("listener missing");
+  try {
+    await writeFile(join(root, "mcp.json"), JSON.stringify({ mcpServers: { remote: { url: `http://127.0.0.1:${address.port}/mcp` } } }));
+    const result = await actual(root, ["--task-file", "task.txt", "--report", "startup.md", "--mcp-config", "mcp.json"], { content: "must not call" });
+    expect(result.code).toBe(1); expect(result.bodies).toHaveLength(0); expect(requests).toBe(0);
+    const report = await readFile(join(root, "startup.md"), "utf8");
+    expect(report).toContain("Outcome: permission-refused"); expect(report).toContain("Unresolved asks: 1");
+    expect(result.stdout + result.stderr).not.toContain("127.0.0.1");
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+}, 30_000);
 it.each(["fail", "first-option"])("actual CI question policy %s stops unavailable answers or unauthorized follow-up effects", async policy => {
   const root = await fixture();
   const question = { index: 0, id: "question", type: "function", function: { name: "ask_user", arguments: JSON.stringify({ prompt: "question-canary", options: ["answer-canary", "Other"] }) } };

@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { McpCredentialStore } from "@agentkitai/agentrig-core";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -60,6 +61,26 @@ async function run(item: BuiltAgent) {
   return events;
 }
 describe("R5d actual CLI assembly and MCP transport", () => {
+  it("isolates malformed remote credentials after authorization and preserves the working stdio server", async () => {
+    const config = JSON.parse(await readFile(join(root, "mcp.json"), "utf8"));
+    const endpoint = "http://127.0.0.1:1/mcp";
+    config.mcpServers.bad = { url: endpoint, oauth: { issuers: ["http://127.0.0.1:1/issuer"], clientId: "public" } };
+    await writeFile(join(root, "mcp.json"), JSON.stringify(config));
+    const credentialRoot = join(root, "credentials"); await mkdir(credentialRoot);
+    const store = new McpCredentialStore(credentialRoot, endpoint);
+    const secret = "INVALID-SECRET-CREDENTIAL-BYTES"; await writeFile(store.path, secret);
+    const reads = vi.spyOn(McpCredentialStore.prototype, "read"); const errors: string[] = [];
+    const options = { root: join(root, "sessions"), mcpConfig: join(root, "mcp.json"), provider: "anthropic", model: "fixture",
+      maxTurns: "2", maxTokensPerTurn: "128", repoMap: false };
+    const extras = { mcpPinRoot: join(root, "pins"), mcpCredentialRoot: credentialRoot, onHookError: (text: string) => { errors.push(text); } };
+    const denied = await buildAgent(options, extras); built.push(denied);
+    expect(denied.mcp).toHaveLength(1); expect(reads).not.toHaveBeenCalled();
+    const allowed = await buildAgent({ ...options, yolo: true }, extras); built.push(allowed);
+    expect(allowed.mcp).toHaveLength(1); expect(reads).toHaveBeenCalledOnce();
+    await run(allowed); expect(await readFile(join(root, "calls.txt"), "utf8")).toBe("called\n");
+    expect(errors.join("\n")).toContain("bad unavailable"); expect(errors.join("\n")).not.toContain(secret);
+    expect(await readFile(store.path, "utf8")).toBe(secret);
+  });
   it("ACP existing-pin mode refuses first use and changes without writing consent or treating allow-once as definition approval", async () => {
     const ask = vi.fn(async () => "allow" as const);
     expect((await assemble(ask, true)).mcp).toHaveLength(0);

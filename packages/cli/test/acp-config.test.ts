@@ -26,6 +26,10 @@ it("matches exact trusted stdio config and refuses changed command/args/env/dupl
   }
   expect(() => matchAcpMcp({ ...request, mcpServers: [server, server] }, trusted)).toThrow();
   expect(() => matchAcpMcp({ ...request, mcpServers: [{ type: "http", name: "fixture", url: "http://127.0.0.1", headers: [] }] }, trusted)).toThrow();
+  // R15d remote configuration does not silently expand the ACP transport's approved scope.
+  const remote = [{ name: "fixture", url: "https://remote.test/mcp" }];
+  expect(() => matchAcpMcp(request, remote)).toThrow("not trusted");
+  expect(() => matchAcpMcp({ ...request, mcpServers: [{ type: "http", name: "fixture", url: remote[0]!.url, headers: [] }] }, remote)).toThrow("refused");
 });
 
 it("actual program resolves each client cwd separately; --trust cannot authorize another project or initialize a provider early", async () => {
