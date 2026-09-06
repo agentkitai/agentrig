@@ -111,6 +111,7 @@ const ConfigValuesSchema = z
     dreamOnEnd: z.boolean().optional(),
     dreamEverySessions: positiveSetting.optional(),
     dreamEveryHours: positiveSetting.optional(),
+    heartbeatMaxTurns: integerSetting.refine(value => Number(value) <= 50, "must be at most 50").optional(),
     dreamStructuralOnly: z.boolean().optional(),
     dreamScanLimits: ScanLimitsSchema.partial().optional(),
     dreamLimits: DreamLimitsSchema.optional(),
