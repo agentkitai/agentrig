@@ -51,7 +51,38 @@ Final updated-main build/typecheck and full suite pass: 2,208 tests plus two exi
 114 files, with four local workers (29 seconds). Source head `a595fb9` includes both reviewed-path
 fixes; PR exact-head three-platform CI and post-merge main CI are the remaining delivery gates.
 
+### R6g merged — PR #153; post-merge gate pending
+
+Merged as `714732d` after all three exact-head PR CI platforms passed. Post-merge main CI remains
+pending; the implementation details and review receipt below are preserved.
+
+Optional bounded trigger strings reach the compact catalogue through strict parsing and
+sanitization. A worked first-call example names an actually listed skill; the entire catalogue
+stays within 8 KiB. Default routing and effort guidance preserve required verification,
+configured limits and approvals. Generated emission, edit protection and opt-in defaults are
+unchanged. [Contract](plans/R6g.md).
+
+Dependency-order rationale: R6g starts from R6c main `09157ae` after all-platform post-merge
+CI 34022647578 passed. It is independent of concurrent R13d provenance transport work; existing
+prompt source/authority seams remain intact. Named ambiguity-gate and catalogue-byte-cap
+mutations failed their intended controls and were restored. Full validation, one bounded
+independent review and exact-head PR/post-merge CI remain delivery gates.
+
+Integrated main `35f37ba` without production conflicts, preserving R12a grants and all done
+markers. Build/typecheck and the full suite pass: 2,196 tests plus two skips across 114 files,
+with four workers to avoid shared-container contention. One independent Claude review
+`21a600fa-7f06-4d6c-a0ba-20803e760e03` approved source head `f3f07a7`, no material findings.
+Its 20-turn bound ended before a verdict (164 seconds); one authorized tools-disabled final
+summary turn used only gathered evidence (29 seconds). Reviewer build/typecheck passed; its
+initial full run had 23 failures/timeouts across 10 unchanged files. Isolated reruns passed,
+as did 117 related tests. Resource contention is suspected, not proven. There is no independent
+single full-suite pass claim. The four-worker full pass above is our own validation. Optional
+polish is at the roadmap end; exact-head three-platform CI remains authoritative.
+
 ### R6c done — PR #151; post-merge CI green
+
+Final head `9c4951d` passed all three PR platforms and merged as `09157ae`.
+Post-merge CI 34022647578 passed all three platforms.
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
 roots through the existing trust/discovery boundary. Negative overrides and manual-root
@@ -68,8 +99,7 @@ seams and all previous done labels. Build/typecheck and 2,167 tests plus two ski
 their named controls and are restored. One bounded independent Claude review
 `81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
 independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
-polish is at the roadmap end. PR #151 merged as `09157ae`; exact post-merge CI
-34022647578 passed all three platforms.
+polish is at the roadmap end; exact-head PR and post-merge CI completed successfully.
 
 ### R6b done — PR #149; post-merge CI green
 
@@ -112,7 +142,8 @@ an agreed spend budget, but do not block implementation. ROADMAP §5 contains th
 
 ### R12a done — PR #152; post-merge CI green
 
-Merged as `35f37ba` after three-platform PR CI; exact post-merge CI 34023253550 is all green.
+PR #152 merged as `35f37ba` after all three PR platforms passed. Exact post-merge CI
+34023253550 passed all three platforms. Remaining gate wording below is historical.
 
 Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
 path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for
