@@ -72,4 +72,5 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/maintenance-runtime.test.ts
       - run: pnpm exec vitest run packages/cli/test/evalset.test.ts
       - run: pnpm exec vitest run packages/cli/test/evaluation.test.ts packages/core/test/auxiliary-usage.test.ts packages/cli/test/render.test.ts
+      - run: pnpm exec vitest run packages/cli/test/live-evaluation.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'
