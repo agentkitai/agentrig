@@ -5,6 +5,29 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R13d implemented — closing PR records delivery gates
+
+Runtime context principals distinguish source trust, instruction authority and tool permissions.
+All accepted hook injection/modification surfaces use collision-safe registered identities;
+user steers are user/instruction, supervisor/hook contributions and platform-assembled replan
+reminders default advisory. Optional recursive metadata survives canonical events, storage,
+resume, unified provider requests and conservative compaction. Vendor fields/prose cannot
+mint authority; vendor wire formats remain unchanged. [Contract](plans/R13d.md).
+
+Trusted SDK config/control can explicitly delegate instruction authority to unique named hooks.
+Visible bounded `context.delegation` receipts do not grant tool permissions. Revocation downgrades
+retained content on the next request; replay and regrant cannot revive an old receipt. Historical
+events remain immutable. SDK JavaScript is not sandboxed, and metadata does not enforce model
+obedience; R13c permission restrictions remain a separate committed row.
+
+Dependency-order rationale: R13a/R13b are delivered, including R13b main `97e18bf` all-platform
+post-merge CI 34021998986. R13d's instruction-source registry is independent of parallel R12a
+tool-dispatch grants and R6c/R6g generated-skill work. Integrated R6c main `09157ae` preserves its
+schema/config/render changes. Ten new actual-runtime/schema/provider tests pass; revocation
+bypass, hook-as-user and custom-compactor authority-laundering mutations fail and are restored.
+Full integrated validation, one bounded independent review and exact-head/post-merge CI remain
+delivery gates. No new submilestones or live evaluation spend.
+
 ### R6c implemented — PR #151 delivery gates pending
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
