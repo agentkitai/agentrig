@@ -1,11 +1,52 @@
 # Status
 
-Active implementation queue: **R14a acceptance declarations are implemented, pending delivery gates; H7a continuation repair is merged (PR #161), pending its post-merge gate. R12c (PR #158), R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14a is merged (PR #162), pending post-merge CI; H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R14a implemented — validation and delivery gates pending
+### R12d implemented — pending delivery gates
+
+Live child views share bounded records/audit/counters but match only own or delegable ancestor
+grants. Root/sibling authorization never consumes child-owned records. Views and runtime context
+bindings are sealed to the creating task; old children cannot consume a later task's grants.
+Child standing/scoped approvals pass through the exact view in the actual TUI, including preview,
+confirmation and ownership diagnostics. Root inspection/revocation can see child records, which
+expire at root task end. Explicit shared base policy and separate consent boundaries remain
+unchanged. [Contract and host-code limits](plans/R12d.md).
+
+Actual Ink ordinary/protocol spawn→child→grandchild tests refuse nondelegable root authority,
+confirm child-owned scope, count inherited uses and refuse sibling/root reuse. Runtime revocation,
+same-session/new-session expiry, bounded retention and copied/stale context controls are included.
+Initial full suite passed 2,330 tests plus two skips across 126 files; additional boundary tests
+followed. Main `9eb28cd` is integrated, preserving committed R16 scope. One bounded review,
+restored mutations, final combined checks and exact-head CI gate delivery.
+
+Updated-main build/typecheck/full checks pass 2,334 tests plus two skips across 126 files
+(four workers, 31 seconds). Removing delegable filtering and forcing the TUI asker to root
+authority both failed actual spawn controls and were restored; 30 focused cases pass. Base
+`9eb28cd` passed all three post-merge platforms in CI 34027657968. Review and PR CI follow.
+
+One Claude review (`3f3727cc-edbb-4d19-8b1f-9d1d235abd77`, 223 seconds, max24 requested /
+31 turns reported) found the production `startTui` wrapper dropping child context. Fixed with
+direct forwarding; actual startup/builder/spawn controls fail before and pass after. The reviewer
+independently passed 40 tests. [Verbatim finding and resolution](plans/R12d-review.md); no second
+general review. Final integration/full checks/CI follow; optional notes remain at ROADMAP's end.
+
+H7a main `668f7f1` is integrated; its post-merge CI 34028225992 is all green. Continuation/source
+safeguards and committed R16 scope are retained. Combined build/typecheck and the full suite
+pass 2,354 tests plus two skips across 128 files (four workers, 31 seconds), including actual
+startup denial/standing controls, failed expiry-audit recovery and bounded descendant depth.
+Final exact-head PR CI follows; R12c/H7a done markers include verified merge receipts.
+
+R14a PR #162 main `fc8327e` is integrated, preserving acceptance declarations, unverified plan
+rendering and both CI selections. Build/typecheck/full combined checks pass 2,359 tests plus
+two skips across 130 files (four workers, 31 seconds). R14a post-merge and this updated exact-head
+CI remain merge gates; no additional general review for mechanical integration.
+
+### R14a merged — PR #162; post-merge CI pending
+
+Merge `fc8327e` follows green exact-head CI. The gate notes below are implementation history.
 
 PlanItem and update_plan share an optional nonblank acceptance declaration capped at 1024
 characters. The first request of each run with the tool asks for an observable check per item,
@@ -87,7 +128,10 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### H7a implemented — delivery gates pending
+### H7a done — PR #161; post-merge CI green
+
+Merge `668f7f1` passed all three post-merge platforms in CI 34028225992. Following gate notes
+are historical; R12d integrates this continuation/source guard without another general review.
 
 The committed correctness-repair lane interrupts R5b after R5a delivery: H7a then H7b,
 without expanding into provider-cap configuration or reasoning UI. A fresh worktree starts
@@ -128,8 +172,8 @@ That diagnostic success is not the final-head gate after this main integration.
 
 ### R12c done — PR #158; post-merge CI green
 
-PR #158 merged as `06f5b4b`; post-merge CI 34027192976 passed all three platforms.
-The implementation notes below retain historical intermediate gate states.
+Merge `06f5b4b` passed all three post-merge jobs in CI 34027192976; head `1921f00` passed
+all three in CI 34026828848. Following delivery notes are implementation history.
 
 Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
 `/permissions revoke <exact-id>` changes the next decision without cancelling running tools.

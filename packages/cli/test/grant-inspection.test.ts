@@ -22,7 +22,7 @@ it("lists exact live scope/duration, age and matched counts, and only revokes an
   await c.submit("/permissions"); const text = c.snapshot().lines.at(-1)!.text;
   expect(text).toContain(grant.id); expect(text).toContain("age=12s matched-decisions=0");
   expect(text).toContain('"resource":{"kind":"path-prefix"'); expect(text).toContain('"duration":{"kind":"session","id":"session"}');
-  expect(text).toContain("not executions"); expect(text).toContain("Child sharing");
+  expect(text).toContain("not executions"); expect(text).toContain("only delegable ancestor grants");
   await c.submit(`/permissions revoke ${grant.id.slice(0, 8)}`); expect(r.list()).toHaveLength(1);
   await c.submit("/permissions reset extra"); expect(r.list()).toHaveLength(1); expect(c.snapshot().lines.at(-1)?.text).toContain("usage:");
   await c.submit(`/permissions revoke ${grant.id}`); expect(r.inspect()).toEqual([]); expect(c.snapshot().lines.at(-1)?.text).toContain("revoked grant");

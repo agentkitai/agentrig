@@ -309,7 +309,7 @@ export interface AgentExtras {
   permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
   mcpPinRoot?: string;
-  onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
+  onAsk?: import("@agentkitai/agentrig-core").AgentConfig["onAsk"];
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
   onHookDone?: (message: string) => void;
@@ -375,7 +375,8 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       permissions: w.permissionPolicy,
       ...(w.extras.permissionGrants === undefined ? {} : { permissionGrants: w.extras.permissionGrants }),
       ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
-      // The same policy object, and the same asker. A child that could do MORE than its parent
+      // Explicit base policy stays shared; the actual subagent derives a filtered live grant
+      // view and forwards it as same-call context to this asker. A child that could do MORE than its parent
       // is a permission bypass; a child that can do LESS is the failure this originally had —
       // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
       // file, was never prompted about it, and could not say why. `origin` is set on the config

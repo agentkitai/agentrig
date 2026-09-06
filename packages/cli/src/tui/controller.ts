@@ -4,6 +4,7 @@ import type {
   EventOf,
   HarnessEvent,
   PermissionRequest,
+  PermissionAskContext,
   PlanItem,
   Session,
   Signal,
@@ -39,6 +40,7 @@ export interface TuiLine {
 
 export interface PendingPermission {
   req: PermissionRequest;
+  permissionGrants?: PermissionGrantRegistry;
   scope?: { kind: ScopeKind; text: string; preview: boolean; error?: string };
   /** `remember` applies the answer to every later request for the same tool this session. */
   resolve: (d: Exclude<Decision, "ask">, remember: boolean, scope?: { kind: ScopeKind; text: string }) => void;
@@ -335,23 +337,25 @@ export class TuiController {
   }
 
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
-  readonly ask = (req: PermissionRequest): Promise<Exclude<Decision, "ask">> =>
+  readonly ask = (req: PermissionRequest, context?: PermissionAskContext): Promise<Exclude<Decision, "ask">> =>
     new Promise((resolve) => {
+      const registry = context === undefined ? this.permissionGrants : context.permissionGrants;
       // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
       // every single write in a twenty-file task is how a permission prompt stops being read at
       // all, which is worse than not having one.
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
-      if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
-      const revision = this.permissionGrants.revision;
-      const standing = sandboxEscalation ? "ask" : this.permissionGrants.decide(req);
+      if (registry !== undefined && registry.context.sessionId === undefined) registry.beginSession("interactive-prompt");
+      const revision = registry?.revision;
+      const standing = sandboxEscalation ? "ask" : registry?.decide(req) ?? "ask";
       if (standing !== "ask") {
         resolve(standing);
         return;
       }
       const entry: PendingPermission = {
         req,
+        ...(registry === undefined ? {} : { permissionGrants: registry }),
         resolve: (d, remember, scope) => {
           if (req.origin === "external-input-expansion" && remember === true) {
             this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
@@ -359,18 +363,19 @@ export class TuiController {
           }
           if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
-              if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");
-              if (scope === undefined) this.permissionGrants.remember(req, d);
+              if (registry === undefined) throw new Error("no runtime grant registry; use a one-time answer");
+              if (!registry.active || revision !== registry.revision) throw new Error("permission context changed while the prompt was open");
+              if (scope === undefined) registry.remember(req, d);
               else {
                 if (d !== "allow") throw new Error("scoped approval must be an explicit allow");
-                this.permissionGrants.grant(proposedPermissionGrant(req, scope.kind, scope.text, this.permissionGrants));
+                registry.grant(proposedPermissionGrant(req, scope.kind, scope.text, registry));
               }
             } catch (error) {
               this.print(`standing permission refused: ${String(error)}`, "error");
               resolve("deny"); this.advanceQueue(); return;
             }
             this.print(
-              `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} for the rest of this session (/permissions to review)`,
+              `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} ${registry?.isChildView ? "for this child within the current parent run" : "for the rest of this session"} (/permissions to review)`,
               d === "allow" ? "system" : "error",
             );
           } else {
@@ -420,6 +425,7 @@ export class TuiController {
     const pending = this.state.pending;
     if (pending === null) return;
     try {
+      if (pending.permissionGrants === undefined) throw new Error("no runtime grant registry; use a one-time answer");
       const draft = initialPermissionScope(pending.req);
       if (Buffer.byteLength(draft.text) > MAX_SCOPE_TEXT) throw new Error("initial scope exceeds 24 KiB");
       this.set({ pending: { ...pending, scope: { ...draft, preview: false } } });
@@ -440,9 +446,10 @@ export class TuiController {
     const pending = this.state.pending;
     if (pending?.scope === undefined) return;
     try {
-      const spec = proposedPermissionGrant(pending.req, pending.scope.kind, pending.scope.text, this.permissionGrants);
+      if (pending.permissionGrants === undefined || !pending.permissionGrants.active) throw new Error("permission grant context unavailable or expired");
+      const spec = proposedPermissionGrant(pending.req, pending.scope.kind, pending.scope.text, pending.permissionGrants);
       this.print(`Exact proposed future grant (NOT installed): ${JSON.stringify(spec)}`, "system");
-      this.print("Covers the current request. Path prefixes include descendants; argv prefixes permit trailing arguments. Cwd is exact. Session-only, shared with children; not OS containment or an effect guarantee. Confirm separately with y.", "system");
+      this.print(`Covers the current request. Path prefixes include descendants; argv prefixes permit trailing arguments. Cwd is exact. ${pending.permissionGrants.isChildView ? "Child-owned, expires with current parent run" : "Session-only"}; descendants inherit only delegable grants. Not OS containment or an effect guarantee. Confirm separately with y.`, "system");
       this.set({ pending: { ...pending, scope: { kind: pending.scope.kind, text: pending.scope.text, preview: true } } });
     } catch (error) {
       this.set({ pending: { ...pending, scope: { ...pending.scope, preview: false, error: `scope refused: ${String(error).slice(0, 1000)}` } } });
@@ -521,7 +528,7 @@ export class TuiController {
     const lines = grants.map(({ grant, matchedDecisions, countSaturated, auditBlocked }) =>
       `  ${grant.decision === "allow" ? "allow" : "deny "} ${JSON.stringify(grant.operation.tool)} id=${grant.id} age=${Math.max(0, Math.floor((now - grant.createdAt) / 1000))}s matched-decisions=${countSaturated ? ">=" : ""}${matchedDecisions}${auditBlocked ? " [audit blocked]" : ""}\n` +
       `    scope=${JSON.stringify({ operation: grant.operation, resource: grant.resource, constraints: grant.constraints, duration: grant.duration, subject: grant.subject, delegable: grant.delegable })}`);
-    return [...lines, "Counts are matched allow/deny decisions, not executions; previews do not count. Child sharing remains in effect.", "/permissions revoke <exact-id> revokes one; /permissions reset clears these. Already-running tools are not cancelled."].join("\n");
+    return [...lines, "Counts are matched allow/deny decisions, not executions; previews do not count. Children inherit only delegable ancestor grants; child-owned records expire with their parent run.", "/permissions revoke <exact-id> revokes one; /permissions reset clears these. Already-running tools are not cancelled."].join("\n");
   }
 
   private resetGrants(reason: string): number | undefined {

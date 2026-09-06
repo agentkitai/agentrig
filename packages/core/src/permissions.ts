@@ -1,11 +1,16 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Decision, PermissionClass, PermissionRequest } from "./events.js";
+import type { PermissionGrantRegistry } from "./permission-grants.js";
 import { CommandPrefixSchema, ShellOperationSchema } from "./shell-operation.js";
 import { PermissionPolicyReceiptSchema, type PermissionPolicyReceipt, type PermissionDecisionSource } from "./permission-attribution.js";
 
 export interface PermissionPolicy {
   decide(req: PermissionRequest, report?: (receipt: PermissionPolicyReceipt) => void): Promise<Decision>;
 }
+
+/** Trusted same-call context, not serialized permission metadata. Absence of a registry is
+ * explicit when this context exists; an asker must not fall back to a broader root registry. */
+export interface PermissionAskContext { readonly permissionGrants?: PermissionGrantRegistry }
 
 /** Evaluate exactly once. Optional diagnostics cannot change the policy's actual decision.
  * A custom policy may ignore the callback. Malformed, multiple, mismatched or late receipts
