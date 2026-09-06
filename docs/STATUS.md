@@ -7,6 +7,8 @@ REQUEST_CHANGES (24 requested/20 reported turns); nested-block separation fixed 
 three fail-before/pass-after controls. [Original review](plans/R16a-review.md).
 Post-fix build/typecheck and Docker full pass: **2,928 passed, two existing skips
 /181 files, 59.63s**. Exact integrated-head and post-main CI gates remain.
+After green R15h main `31193d6` integration: build/typecheck and Docker full pass
+**2,951 tests plus two skips /183 files, 60.96s**. Fresh integrated CI is required.
 
 R15c is done (PR #193): main `749ff265b031f19040307b60b44097e825f1c2f9`
 passed all four post-main checks, CI `34061897223` and structure `34061897204`.
