@@ -5,6 +5,37 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R13c implemented — validation and delivery gates pending
+
+The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
+write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
+a restriction through continuations, summaries and resume; only actual fresh user input clears it.
+No roles, hook delegation, old receipts or prose manufacture that input. Fresh consent bypasses
+allow grants, never applicable denials; grants/approval/preparation alone do not count as dispatch.
+The separate consent origin retains child provenance and cannot become a standing/scoped grant.
+The default supervisor emits a bounded, explicitly heuristic injection signal over external
+canonical content. [Contract and honest limits](plans/R13c.md).
+
+Dependency order: delivered R13a/R13b/R13d provide source/assembly/principal seams. R12b's current
+request coverage and exact scope preview are retained; R12c attribution is an additive independent
+row, not a reason to defer this guard. Actual runtime/storage/provider, built-in summary laundering,
+canonical new-file/symlink, two-path Ink consent and supervisor attachment tests are included.
+Recognized tool-output is neutral, never sufficient to clear restriction; clean-parent children
+inherit live restriction through an internal object-identity seam, not generated brief text.
+These restore ordinary headless edit→test and clean child workflows while external pairs deny.
+One bounded Claude review (`0225d5ce-58ab-4bbf-be2a-3709deccfeab`, 16-turn cap) produced three
+original findings, all addressed: tool-output usability, child inheritance and non-advisory
+heuristic escalation. [Verbatim findings and resolutions](plans/R13c-review.md). No second review.
+Fresh-bypass, summary-source-drop, overlapping-deny and child-laundering mutations failed their
+named controls and were restored; full-capability injection escalation failed before its fix.
+Current main `7f01c4c` is integrated, preserving R5a extensions and fourth-pass H7/R15/ACP scope.
+Build/typecheck and all 2,292 tests plus two skips across 122 files pass (four workers, 30 seconds).
+Exact-head three-platform CI and post-merge CI remain delivery gates; this is not marked done yet.
+
+R13d PR #154 is done: final head `d327bdf` passed CI 34023974105; merged main `2ad720f` passed
+all three post-merge jobs in CI 34024190216. R12b PR #155 is done: main `326acdb` passed all
+three post-merge jobs in CI 34024734696. These receipts supersede their earlier pending notes below.
+
 ### Fourth pass: roadmap extended past the committed continuation
 
 After R6 closed, a source-level audit compared AgentRig against the harnesses in daily use

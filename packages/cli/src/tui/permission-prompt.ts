@@ -8,7 +8,7 @@ export type ScopeKind = "path" | "argv";
 const AbsolutePath = z.string().min(1).max(4096).refine(s => !/[\u0000-\u001f\u007f]/.test(s) && isAbsolute(s));
 const PathDraft = z.object({ pathPrefix: AbsolutePath }).strict();
 const ArgvDraft = z.object({ commandPrefix: CommandPrefixSchema, cwd: AbsolutePath }).strict();
-export const separatePermissionConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+export const separatePermissionConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
 /** Summarize trusted declarations, never claim to have inferred program effects from text/names. */
 export function permissionEffectLines(req: PermissionRequest): string[] {
@@ -35,6 +35,7 @@ export function permissionEffectLines(req: PermissionRequest): string[] {
     ? `Literal argv: ${JSON.stringify(parsed.data.argv)}${parsed.data.background ? " (background; no narrow shell grant)" : ""}`
     : `Shell scope unavailable: ${JSON.stringify(parsed.data.reason)}`);
   lines.push("Names, model prose and MCP read-only hints do not establish effects or authority.");
+  if (req.origin === "external-input-expansion") lines.push(`Fresh approval required: external/unknown input proposes first ${req.expansionSurface ?? req.class} dispatch${req.sourceOrigin === undefined ? "" : ` from ${JSON.stringify(req.sourceOrigin)}`}. Standing grants do not apply.`);
   if (!separatePermissionConsent(req)) lines.push(`Standing a/d covers ALL future ${JSON.stringify(req.tool)} requests in this live session, any resource/class/cwd. Children currently share that group. Explicit base rules still apply.`);
   return lines;
 }
