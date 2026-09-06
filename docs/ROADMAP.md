@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14a is implemented with closing delivery gates. R12c (PR #158), R5a (PR #157), R13c (PR #159), R13d (PR #154), R12b (PR #155), R6g (PR #153) and R12a (PR #152) are done with green post-merge CI. R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14a is implemented with closing delivery gates; H7a is merged with its post-merge gate pending. R12c (PR #158), R5a (PR #157), R13c (PR #159), R13d (PR #154), R12b (PR #155), R6g (PR #153) and R12a (PR #152) are done with green post-merge CI. R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -755,7 +755,7 @@ order under its existing rule.
 
 | Row | Deliverable | Package |
 |---|---|---|
-| H7a | Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
+| H7a *(implemented; delivery gates pending)* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
 | H7b | Issue #95: a forged or host-caused "read-only file system" line under `workspace-write` does not classify as a sandbox denial unless the policy corroborates it (kernel-observed denial where the provider exposes one; otherwise the line is inert) | core |
 
 Acceptance: a fake-provider session that truncates twice finishes the task with two
@@ -1144,3 +1144,11 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   has a plan, and a quieter compact summary for entirely undeclared legacy plans; neither should
   hide unverified checks. A small shared core acceptance-text formatter could remove duplication
   between tool output and CLI rendering without adding evidence inference or a completion gate.
+- H7a polish: optionally distinguish a persisted staged continuation nudge from an attempted
+  retry when a later gate refuses; the `turn.continued` event already records attempts only.
+  Consider pairing the pre-existing pre-model veto's `turn.start` with `turn.end` separately;
+  H7a preserves its existing done outcome and does not change that lifecycle contract.
+- Windows fixture timing follow-up: investigate the R13c paired real edit→test fixture's
+  one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
+  Preserve assertions and coverage; prefer controlled workers or independently scoped paired
+  setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.

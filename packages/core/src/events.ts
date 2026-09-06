@@ -208,6 +208,8 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("session.end"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
   z.object({ type: z.literal("turn.start"), n: z.number().int() }),
+  z.object({ type: z.literal("turn.continued"), n: z.number().int().positive(), from: z.number().int().positive(),
+    attempt: z.number().int().min(1).max(2), maxAttempts: z.literal(2), reason: z.literal("max_tokens") }),
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),

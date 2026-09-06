@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("renders a real budgeted truncation continuation distinctly from provider retries", () => {
+  const event = HarnessEvent.parse({ type: "turn.continued", seq: 2, sessionId: "s", ts: 1,
+    n: 3, from: 2, attempt: 2, maxAttempts: 2, reason: "max_tokens" });
+  expect(renderEvent(event)).toContain("n=3 from=2 attempt=2/2 reason=max_tokens");
+  expect(renderChatEvent(event)).toBe("↻ Response truncated; continuing (2/2, turn 3)");
+  expect(HarnessEvent.safeParse({ ...event, attempt: 3 }).success).toBe(false);
+});
+
 it("renders the distinct external expansion audit with its original child attribution", () => {
   const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1, type: "permission.expansion",
     id: "call", name: "bash", surface: "exec", decision: "deny", sourceOrigin: "child:actual" });
