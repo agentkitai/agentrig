@@ -108,3 +108,4 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/command-outcome.test.ts packages/supervisor/test/plan-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/net-permission.test.ts packages/cli/test/net-permission.test.ts
+      - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts

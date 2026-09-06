@@ -45,7 +45,7 @@ export interface ExtensionCandidate { path: string; precedence: number }
 
 /** Host-code warning, not an isolation claim or a permission grant. Emitted BEFORE import. */
 export const EXTENSION_HOST_WARNING = "Trusted extension executes as ambient Node host code: it can access credentials, env, files and network, block or terminate this process. Manifests, permissions and timeouts do not sandbox it.";
-const RESERVED_TOOLS = new Set(["bash", "bash_job", "read_file", "write_file", "edit_file", "glob", "grep",
+const RESERVED_TOOLS = new Set(["bash", "bash_job", "read_file", "write_file", "edit_file", "glob", "grep", "web_fetch",
   "skill", "subagent", "update_plan", "read_output"]);
 const Name = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 const CommandShape = z.object({ name: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), args: z.string().max(128).optional(),
