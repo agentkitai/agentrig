@@ -21,6 +21,11 @@ failed tool execution still counts its authorization, while previews/base rules 
 H6 snapshots add only source/correlation fields, preserving existing trace order and content.
 Build/typecheck/full tests, restored mutations, one bounded review and current-head CI gate delivery.
 
+Initial build/typecheck/full four-worker suite passes 2,271 tests plus two skips across 119 files.
+Double-evaluation and preview-counting mutants were detected/restored; 28 focused cases pass.
+Committed main `fba5d50` is integrated, preserving PR #115 topic guidance/tests; only this assigned
+worktree is edited. Integrated checks and one bounded review precede exact-head CI.
+
 ### R12b done — PR #155; post-merge CI green
 
 Merge `326acdb` passed all three post-merge platforms in CI 34024734696; prior PR head
