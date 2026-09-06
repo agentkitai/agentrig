@@ -1,24 +1,40 @@
 # Status
 
-Active implementation queue: **implemented through R6e; closing PR records delivery gates.** R6d, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13f, R5e and R5d in independent worktrees.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R6e implementation complete — closing PR carries delivery receipts
+### Committed continuation and parallel delivery
+
+User direction on 2026-09-06: roadmap items are part of AgentRig's vision, not candidates awaiting
+new demand justification. Continue in impact/dependency order. Independent items may run in
+parallel in separate Git worktrees, each on a fresh branch from updated main and each ending in
+its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establishes fail-closed
+manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
+requires consent for changes. These are independent first items.
+
+Each exact head needs appropriate tests, one bounded independent review with material findings
+addressed, and green three-platform CI. Integrate current main before merging; serialize merges
+and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, with no recursive
+submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
+an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
+
+### R6e complete (PR #140)
+
+Final head `77a8814`, merge `2a3aee8`, PR CI 34013775380 and post-merge CI 34014007805 passed all
+three platforms. One approving independent review, 1,968 local passes plus two skips, and two
+detected/restored mutations. Following notes record the implementation checks, not pending gates.
 
 Fresh branch from updated main `762aa0c`; [contract](plans/R6e.md). Add bounded, fail-closed
 effect assessment beside runtime evidence eligibility. Preserve offline previews and explicit
 publication confirmation; no keyword-only safety claim or automatic rewrite. Build/typecheck and
 the full Node22 suite pass 1,968 tests plus two skips (95 files). One bounded independent review
 approved and independently passed the same full suite. Effect-denial and artifact-binding
-mutations were detected and restored. Delivery requires green exact-head and post-merge CI;
-the closing PR records those receipts. No later backlog item is activated.
-
-After those gates, the active implementation queue is exhausted. R6f was delivered by H5;
-R6a–R6c still require useful memory evidence (E3 remained inconclusive) and a separately scoped
-comparison. Other backlog activation requires a named user need. No new live evaluation budget
-or conditional feature is inferred from completing R6e; small nice-to-haves remain at ROADMAP's end.
+mutations were detected and restored. PR #140 records the final delivery receipts. R6f was
+delivered by H5 and is not repeated. The user-authorized continuation above supersedes the
+previous conditional stop after R6e; generated skills still need separate benefit measurement
+before becoming a default, not before being implemented.
 
 ### R6d complete (PR #139)
 
