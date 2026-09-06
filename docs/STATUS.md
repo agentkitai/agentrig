@@ -2,6 +2,11 @@
 
 Active: **R15c persisted reasoning blocks**, alongside separately owned R15h/R15f/R8c
 worktrees. [Contract](plans/R15c.md); runtime, review and integrated CI gates apply.
+R15c implementation and the single review's compaction fix pass 56 focused tests
+and full Docker validation (2,873 passed, two skips, 177 files) on `ff6758c`.
+Original review: REQUEST_CHANGES, requested 24/reported 27 turns; three compaction
+controls reproduce on reviewed code and pass after correction. Author pre-auth
+refusal control also fails before/passes after. Exact PR/post-main gates remain.
 R15a #188 and child abort-hook fixture repair #191 are done: repaired main `3174475`
 passed Linux/macOS/Windows CI `34056045886` and structure `34056045804` without reruns.
 [Repair receipt](https://github.com/agentkitai/agentrig/pull/191#issuecomment-5561792580);

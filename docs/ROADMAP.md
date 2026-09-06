@@ -246,7 +246,7 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 |---|---|---|---|
 | Structured clarifying question from the model (`ask_user`) | Claude Code, Codex, Cline, Goose | free text only; the supervisor talks to the model, the model has no channel back | R15a *(done, PR #188 + repair #191; all four repaired-main checks green; [contract](plans/R15a.md))* |
 | Post-edit diagnostics in the tool result | OpenCode, Claude Code LSP tool, Serena | `edit_file` returns nothing about whether the file still parses or typechecks | R15b |
-| Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | Persisted reasoning replay, safe display/export and compaction implemented; review fixes and integrated gates pending | R15c *(in progress; [contract](plans/R15c.md))* |
+| Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | Persisted replay, safe display/export and compaction implemented; material review fix verified; exact-head/post-main gates pending | R15c *(in progress; [contract](plans/R15c.md))* |
 | Editor integration over a standard protocol (ACP) | Zed, Gemini CLI, Goose, OpenCode | none; R8a planned a bespoke NDJSON protocol | R8a (amended) |
 | Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
 | User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
