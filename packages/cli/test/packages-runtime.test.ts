@@ -97,20 +97,21 @@ it("equal package names fail closed across packages while project roots win befo
 it("accepts actual npm pack --ignore-scripts output with identical selected content", async () => {
   const f = await fixture();
   // Join the owned npm process tree before fixture cleanup, including on timeout.
-  // Leave room inside the unchanged 30s fixture for Windows taskkill and cleanup.
+  // Leave room inside the 60s real-process fixture for Windows taskkill and cleanup.
   const run = evaluationTransport().command;
-  const options = { cwd: f.source, timeout: 15_000, ownedTree: true };
+  const options = { cwd: f.source, timeout: 45_000, ownedTree: true };
+  const startedAt = Date.now();
   const result = process.platform === "win32"
     ? await run("cmd.exe", ["/d", "/s", "/c", "npm pack --ignore-scripts --offline --no-update-notifier --json --pack-destination .."], options)
     : await run("npm", ["pack", "--ignore-scripts", "--offline", "--no-update-notifier", "--json", "--pack-destination", ".."], options);
-  expect(result.infrastructure).toBe(false);
+  expect(result.infrastructure, `npm pack: ${Date.now() - startedAt}ms; ${process.platform}; Node ${process.version}; code=${result.code}; infrastructure=${result.infrastructure}`).toBe(false);
   expect(result.code).toBe(0);
   const packed = JSON.parse(result.stdout) as Array<{ filename: string }>;
   const installed = await addPackage({ projectRoot: f.cwd, source: join(f.root, packed[0]!.filename) });
   expect(await readFile(join(installed.destination, "skills", "guide.md"))).toEqual(await readFile(join(f.source, "skills", "guide.md")));
   expect((await inspectPackages(f.cwd)).errors).toEqual([]);
   await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
-}, 30_000);
+}, 60_000);
 
 it.each(["relative", "absolute"])("keeps package skills before home after an explicit alias (%s) is deduplicated", async kind => {
   const f = await fixture(); await addPackage({ projectRoot: f.cwd, source: f.source });

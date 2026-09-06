@@ -188,3 +188,20 @@ After this fixture adjustment, the focused package/evaluation controls passed
 51 tests with the conditional Docker case skipped; final build/typecheck and full
 suite with actual Linux Docker images enabled passed **2,660 plus two existing
 skips / 152 files, 41.38s**. Fresh exact-head platform CI is still required.
+
+That next run, `34043686620`, passed Linux/macOS but Windows still timed out the
+owned npm process at 15.134s. Its infrastructure assertion correctly failed before
+using output, and cleanup no longer reported EBUSY. The other 28 package tests
+passed, including the unchanged aggregate-cap case in 8.089s. Serialization is not
+a proven fix for host latency. The final bounded adjustment allows 45s for this
+one real npm process inside a 60s fixture, retaining the owned-tree kill/join and
+all archive/integrity/canary assertions. No global or production limit changes.
+The failure diagnostic includes only elapsed time, platform, Node version, exit
+code and infrastructure flag, not environment values or process output.
+
+Controlled **SlowNpmFixtureBound** diagnostic: a temporary 16s delay before the
+actual npm invocation failed the 15s owned bound (15.010s, infrastructure=true),
+then the identical delayed actual pack/integrity control passed with the 45s bound
+(16.21s). Removed the artificial delay immediately afterward; it is not part of
+the fixture. This demonstrates the deadline/cleanup distinction, not the cause
+of hosted Windows latency. No blind rerun or second general review.
