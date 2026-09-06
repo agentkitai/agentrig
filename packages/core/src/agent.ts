@@ -201,7 +201,7 @@ export interface RunOptions {
   cwd?: string;
   resume?: string;
   /** Trusted host provenance only; scheduled tasks are advisory, never fresh user consent. */
-  scheduled?: { entryId: string; minute: number };
+  scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
   /**
    * A pre-allocated id from `store.create()`, for a caller that must record a session's
    * existence before the session starts writing (the subagent tool logs `subagent.spawn`).
@@ -460,7 +460,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           model: provider.model,
           ...(parent === undefined ? {} : { parent }),
         });
-        if (scheduled !== undefined) await emit({ type: "run.scheduled", entryId: scheduled.entryId, minute: scheduled.minute });
+        if (scheduled !== undefined) await emit({ type: "run.scheduled", entryId: scheduled.entryId, minute: scheduled.minute,
+          ...(scheduled.source === undefined ? {} : { source: scheduled.source }) });
         messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext, ...(scheduled === undefined ? {} : { trust: "project" as const }) }] }];
       }
 
