@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ciRunOptions, readCiTask, runCi } from "../src/ci-run.js";
 import { type RunOptions, type RunSummary } from "../src/run.js";
 import type { ReviewProcess } from "../src/review-process.js";
+import { parseConfigText } from "../src/config.js";
 
 const exec = promisify(execFile), roots: string[] = [];
 afterEach(async () => { process.exitCode = 0; vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
@@ -80,6 +81,8 @@ it("bounds file bytes/depth/selectors and preserves smaller configured limits", 
   expect(() => ciRunOptions({ ...options(root), yolo: true })).toThrow();
   expect(() => ciRunOptions({ ...options(root), json: true })).toThrow();
   expect(() => ciRunOptions({ ...options(root), verbose: true })).toThrow();
+  // These output flags are not file-config fields: do not silently introduce a config bypass.
+  for (const flag of ["json", "verbose"]) expect(() => parseConfigText("fixture", JSON.stringify({ profiles: { ci: { [flag]: true } } }))).toThrow("Unrecognized setting");
   await writeFile(event, " ".repeat(262_145)); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();
   await writeFile(event, JSON.stringify({ issue: { body: { command: "do not coerce" } } })); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();
 });
