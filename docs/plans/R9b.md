@@ -153,8 +153,14 @@ The sole material finding was missing direct renderer coverage for `eval.result`
 Added trace/chat tests for BLOCKED outcomes with null/true/false advisory values and
 invalid negative usage. Optional roadmap annotation and existing preparation-bound
 documentation were corrected; an unrelated pre-existing container was left untouched.
-There is no second review round. Final combined checks and PR/CI gates remain pending.
+There is no second review round. Final combined checks are recorded below; PR/CI gates remain pending.
 
 Final author checks after the review fix: build/typecheck passed; full suite with
 the captured Linux fixture image IDs passed **2,652 tests plus two existing skips,
 151 files, 40.28 seconds**. Exact-head three-platform PR CI remains the delivery gate.
+
+Integrated R7b main `f3a1ec8`, preserving heartbeat default suppression and both docs
+rows. Combined build/typecheck and full suite with the same real Linux fixture images
+passed **2,660 tests plus two existing skips / 152 files, 40.71 seconds**. The earlier
+PR head's Linux/macOS and targeted Windows evaluation controls passed; they do not
+replace the newly integrated exact-head three-platform gate. No new broad review.

@@ -43,6 +43,9 @@ with actual Linux container fixtures enabled. One independent review (238 second
 Its sole material finding, missing direct event-render coverage, is fixed with
 trace/chat null/true/false advisory controls. Named guard mutations were detected
 and restored. [Original review](plans/R9b-review.md). Exact-head CI and root merge remain.
+R7b main `f3a1ec8` is integrated; combined build/typecheck and full suite with actual
+Linux fixture images pass **2,660 + two existing skips / 152 files, 40.71 seconds**.
+R7b's post-main gate is pending; its row is not marked done prematurely.
 
 ### R7b merged — PR #179; post-main gate pending
 
