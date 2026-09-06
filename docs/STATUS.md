@@ -14,8 +14,10 @@ change or live validation spend. [Contract](plans/R10d.md). Actual local HTTP SS
 builder tests plus fake core samples exercise bounds, usage, matching and offline behavior.
 Capability-application removal and unconditional-probe mutants each failed their real-path
 control and were restored. Integrated R14c main `4d3eb91`; config-free evidence display preserved.
-Build/typecheck/full 2,490 plus two skips across142 files passed before the final named-role test.
-One bounded review and final exact-head gates follow.
+Final build/typecheck/full 2,491 plus two skips across 142 files passed (four workers, 33 seconds).
+One bounded Claude review approved without material findings (178 seconds, 23/max24 turns),
+independently running 17 focused tests and typecheck. Verbatim result is in the contract;
+optional source-summary wording is at the roadmap END. Exact-head CI remains the final gate.
 
 ### R14c done — PR #169; post-merge CI green
 

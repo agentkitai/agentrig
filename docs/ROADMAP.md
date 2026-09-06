@@ -1169,6 +1169,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
   HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
   and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
+- R10d polish: distinguish a present but all-unknown report in the top-level capability evidence
+  source summary. Per-dimension sources already label unknown fallback unverified-configured;
+  consumers should use those rather than treating report presence as verified support.
 - R5b defensive API follow-up: validate unsupported async/thenable implementations of the
   synchronously typed tool descriptor/probe/schema callbacks, including rejected promises and
   malformed return shapes. Current isolation covers synchronous callback throws and supported
