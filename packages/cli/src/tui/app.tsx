@@ -94,7 +94,7 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   useRawInput((raw, char, key) => {
     // Use the synchronous controller state, not a React render from before this stdin batch.
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
-    const previewAtInput = controller.snapshot().pending?.scope?.preview === true;
+    const previewAtInput = controller.snapshot().pending?.scope;
     const permissionAction = (action: OrdinaryInputAction): void => {
       const pending = controller.snapshot().pending;
       if (pending === null) return;
@@ -102,7 +102,7 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
       if (pending.scope !== undefined) {
         if (action.type === "escape") controller.cancelPermissionScope();
         else if (pending.scope.preview) {
-          if (action.type === "append" && /^(y|Y)$/.test(action.text) && previewAtInput) controller.confirmPermissionScope();
+          if (action.type === "append" && /^(y|Y)$/.test(action.text) && pending.scope === previewAtInput) controller.confirmPermissionScope();
           else if (action.type === "append" && /^(e|E)$/.test(action.text)) controller.editPermissionScope(pending.scope.text);
           else if (action.type === "append" && /^(n|N)$/.test(action.text)) controller.cancelPermissionScope();
         } else if (action.type === "enter") controller.previewPermissionScope();

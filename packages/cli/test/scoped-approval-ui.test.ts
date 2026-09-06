@@ -116,3 +116,18 @@ it("a rejected path scope never dispatches the current real file write; confirme
   expect(await readFile(join(h.cwd, "sub/b"), "utf8")).toBe("sub/b");
   await expect(readFile(join(h.cwd, "outside"), "utf8")).rejects.toThrow();
 });
+
+it("a previous preview cannot authorize a changed preview from the same protocol chunk", async () => {
+  const h = await mount(); const answer = h.controller.ask({ tool: "write_file", class: "write", input: {}, cwd: h.cwd, paths: ["sub/a"] });
+  h.stdin.send("s"); await vi.waitFor(() => expect(h.controller.snapshot().pending?.scope).toBeDefined());
+  h.stdin.send("\r"); await vi.waitFor(() => expect(h.controller.snapshot().pending?.scope?.preview).toBe(true));
+  const previous = h.controller.snapshot().pending!.scope!.text;
+  const changed = JSON.stringify({ pathPrefix: join(h.cwd, "sub") });
+  h.stdin.send(`\u001b[201~e${"\u007f".repeat(previous.length)}${changed}\ry`);
+  await new Promise(r => setTimeout(r, 100));
+  expect(h.controller.permissionGrants.list()).toEqual([]);
+  expect(h.controller.snapshot().pending?.scope?.text).toBe(changed);
+  expect(h.controller.snapshot().pending?.scope?.preview).toBe(true);
+  h.stdin.send("y"); expect(await answer).toBe("allow");
+  expect(h.controller.permissionGrants.list()[0]?.resource).toEqual({ kind: "path-prefix", path: join(h.cwd, "sub") });
+});
