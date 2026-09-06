@@ -6,6 +6,7 @@ import { EventPayload, SupervisorRecord } from "./events.js";
 import { ContentTrustSchema, type ContentBlock, type ContentTrust, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
+import type { PermissionGrantRegistry } from "./permission-grants.js";
 import type { AnyTool } from "./tool.js";
 import type { SandboxConfig } from "./sandbox.js";
 import { type CompactionStrategy, summarizeOlderTurns, compactWithProvenance } from "./compaction.js";
@@ -106,6 +107,8 @@ export interface AgentConfig {
    * The TUI (M7) plugs an interactive prompt in here.
    */
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
+  /** Explicit live authority only; event replay never installs grants. Shared with children until R12d. */
+  permissionGrants?: PermissionGrantRegistry;
   /**
    * M7: who this session is, when a human answering its permission prompts is not watching it —
    * a subagent sets `"subagent"`. It rides on every `permission.request` this session emits, so
@@ -243,12 +246,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
   const parent = opts.parent === undefined ? undefined : assertSessionId(opts.parent);
   const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
+  const grantSessionId = parent === undefined ? id : config.permissionGrants?.context.sessionId;
   // A fresh run owns its log for its lifetime. Two runs appending to one id would restart `seq`
   // and leave a log that cannot be read back at all — which a caller-supplied `id` makes possible
   // for a fresh session, where the resume path's advisory file lock does not apply.
   const releaseClaim = resume === undefined ? store.claim(id) : null;
   let cwd = opts.cwd ?? process.cwd();
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook" }> = [];
+  let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
   const hasPlanTool = config.tools.some((t) => t.name === PLAN_TOOL);
@@ -414,6 +419,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         });
         messages = [{ role: "user", content: [{ type: "text", text: task }] }];
       }
+
+      if (parent === undefined) grantTaskId = config.permissionGrants?.beginRun(id);
+      await config.permissionGrants?.flush(emit);
 
       // user_prompt: a hook may refuse the task outright, rewrite it, or append to it
       {
@@ -892,12 +900,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }).catch(() => {});
       }
 
+      try {
+        if (grantTaskId !== undefined) config.permissionGrants?.endRun(grantTaskId);
+        await config.permissionGrants?.flush(emit);
+      } catch (error) {
+        reason = "error";
+        await emit({ type: "error", message: `permission audit failed: ${String(error)}`, fatal: true }).catch(() => {});
+      }
       await lifecycle.finish(reason, releaseLock, releaseClaim);
     }
     return { id, reason, turns, usage: totals };
 
     function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
       return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit,
+        ...(grantSessionId === undefined ? {} : { grantSessionId }),
         emitFromTool, hook, signal: abortController.signal, endSignal: endController.signal,
         raceAbort, now, isEnded: lifecycle.isEnded });
     }

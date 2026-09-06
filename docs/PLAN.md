@@ -113,6 +113,14 @@ type Decision = 'allow' | 'deny' | 'ask';
 interface PermissionPolicy { decide(req: PermissionRequest): Promise<Decision> }
 ```
 
+R12e adds explicit literal argv-prefix rules over trusted post-hook operation descriptors.
+R12a adds optional live `AgentConfig.permissionGrants`: validated operation/resource/constraint/
+duration records answer only base-policy `ask`, with grant/revocation events audited before
+dispatch. Session/task lifecycle is enforced in the runtime; persisted events never restore
+authority. TUI standing answers use the same registry and revoke at conversation boundaries.
+See [R12a](plans/R12a.md) for advisory lexical scopes, shared-child compatibility pending R12d,
+and bounded pending audit behavior. Explicit blanket permissions retain their authority.
+
 v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
 `cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so
 file tools are confined to the project by default (bash declares no paths and cannot be confined
