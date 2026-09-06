@@ -24,6 +24,7 @@
     "demo": "tsx src/demo.ts"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
     "@agentkitai/agentrig-core": "workspace:*",
     "@agentkitai/agentrig-memory": "workspace:*",
     "@agentkitai/agentrig-supervisor": "workspace:*",

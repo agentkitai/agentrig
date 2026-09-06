@@ -66,9 +66,9 @@ export function renderEvent(e: HarnessEvent): string {
   const p = `${String(e.seq).padStart(4)} ${t} ${e.type.padEnd(22)}`;
   switch (e.type) {
     case "session.start":
-      return `${p} ${e.provider}/${e.model} cwd=${e.cwd}${e.parent === undefined ? "" : ` parent=${e.parent}`} task=${JSON.stringify(e.task)}`;
+      return `${p} ${e.provider}/${e.model} cwd=${e.cwd}${e.parent === undefined ? "" : ` parent=${e.parent}`} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
-    case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
+    case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "turn.start":

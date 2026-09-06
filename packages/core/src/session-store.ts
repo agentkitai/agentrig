@@ -5,7 +5,7 @@ import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { z } from "zod";
 import { type EventPayload, type HarnessEvent, Usage, parseEvent, serializeEvent } from "./events.js";
-import { MessageSchema, type ContentBlock, type Message } from "./messages.js";
+import { advisoryPromptBlocks, MessageSchema, type ContentBlock, type Message } from "./messages.js";
 
 export interface SessionRef {
   id: string;
@@ -565,10 +565,12 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
 
     switch (event.type) {
       case "session.start":
-        pushUserText(event.task, event.context);
+        if (event.task !== "" || !event.advisoryContext?.length) pushUserText(event.task, event.context);
+        if (event.advisoryContext?.length) messages.push({ role: "user", content: advisoryPromptBlocks(event.advisoryContext) });
         break;
       case "session.resume":
         if (event.task !== "") pushUserText(event.task, event.context);
+        if (event.advisoryContext?.length) messages.push({ role: "user", content: advisoryPromptBlocks(event.advisoryContext) });
         break;
       case "steer":
         pushUserText(event.message, event.context);
