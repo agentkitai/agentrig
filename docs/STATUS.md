@@ -29,6 +29,11 @@ independently repeated build/typecheck/full 2,260 + two skips across 119 files. 
 process ran 247 seconds: max24 was requested; the CLI reported 29 turns. No restart or second
 review. Optional notes are at the roadmap end; final exact-head CI remains pending.
 
+After external PR #115 advanced main to `fba5d50`, mechanical integration retained its topic
+skill guidance and regression assertion. Build/typecheck and the full 2,260 + two skips across
+119 files pass again with four workers. No new review or production scope expansion; the
+updated exact-head CI supersedes the earlier PR-head checks.
+
 ### R12b done — PR #155; post-merge CI green
 
 Exact post-merge main `326acdb` passed all three platforms in CI 34024734696. Following gate
