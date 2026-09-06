@@ -32,6 +32,10 @@ R7a main `bf65aec` is integrated; scheduled outside writes remain fresh-consent 
 with blanket permission allow and parallel scheduling. Final build/typecheck/full pass
 2,625 plus two skips / 150 files (four workers, 37 seconds); exact-head CI follows.
 Main's separate evaluation-fixture repair must pass post-merge CI before feature delivery.
+Repair #178/main `90301f8` is now integrated. The final conservative missing-name allowlist
+and real `new~1` fail-before/pass-after control are included; no second broad review.
+Combined build/typecheck, 56 focused and full 2,626 plus two skips / 150 files pass
+(four workers, 38s). Repair post-main CI 34040182760 and the new exact-head CI gate delivery.
 [Contract](plans/R10b.md).
 
 ### R7a merged — PR #176; post-merge fixture gate failed

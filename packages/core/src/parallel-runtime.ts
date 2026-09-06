@@ -51,7 +51,7 @@ async function classify(metadata: SchedulingMetadata): Promise<Hazard | undefine
       const name = basename(absolute);
       // No inode exists yet. Do not pretend lowercase is universal Windows name resolution.
       // Conservative on every platform: spelling aliases, streams and device names serialize.
-      if (!/^[\x20-\x7e]+$/.test(name) || /[<>:"|?*]|[. ]$/.test(name) ||
+      if (!/^[A-Za-z0-9 _.\-]+$/.test(name) || /[. ]$/.test(name) ||
         /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) return undefined;
       // Missing parents may be created recursively; that effect is deliberately exclusive.
       try { targets.push({ path: pathKey(resolve(await realpath(dirname(absolute)), basename(absolute))) }); }

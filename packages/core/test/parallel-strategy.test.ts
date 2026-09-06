@@ -85,7 +85,7 @@ it.each([
   } finally { f.gates.forEach(gate => gate.release()); await f.finished; }
 });
 
-it.each(["new.", "new ", "σ", "new:stream"])("keeps ambiguous missing filename %s exclusive", async path => {
+it.each(["new.", "new ", "σ", "new:stream", "new~1"])("keeps ambiguous missing filename %s exclusive", async path => {
   const f = await fixture([call("a", "one"), call(path, "two", "write")]);
   try { await f.entered[0]!.promise; await f.described[1]!.promise; f.gates[1]!.release();
     await new Promise<void>(resolve => setTimeout(resolve, 100)); f.gates[0]!.release(); await f.finished;
