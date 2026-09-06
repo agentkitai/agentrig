@@ -19,6 +19,8 @@ export interface SessionEvaluationOptions {
 export interface SessionEvaluationDependencies {
   transport?: EvaluationTransport;
   provider?: (options: ProviderOptions, role: "main" | "supervisor") => Promise<ModelProvider>;
+  /** Trusted evaluator provenance only; not a CLI/profile/model option or authorization. */
+  evidenceLane?: "live" | "scripted";
 }
 
 function evaluationPricing(values: ConfigValues): Pricing | undefined {
@@ -34,6 +36,8 @@ function evaluationPricing(values: ConfigValues): Pricing | undefined {
 }
 
 export async function evaluateSessions(options: SessionEvaluationOptions, dependencies: SessionEvaluationDependencies = {}) {
+  const evidenceLane = dependencies.evidenceLane ?? "live";
+  if (evidenceLane !== "live" && evidenceLane !== "scripted") throw new Error("invalid evaluation evidence lane");
   if (options.signal?.aborted) throw new Error("evaluation cancelled");
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(options.against)) throw new Error("invalid evaluation profile name");
   if (!options.sessions.length || options.sessions.length > 16 || new Set(options.sessions).size !== options.sessions.length)
@@ -66,7 +70,7 @@ export async function evaluateSessions(options: SessionEvaluationOptions, depend
       await evaluationMemory(row.memory.path, row.memory.sha256);
     }
   }
-  const preview = { version: 1, profile: options.against, execute: options.execute === true,
+  const preview = { version: 1, profile: options.against, execute: options.execute === true, evidenceLane,
     workerImage: map.workerImage, checkerImage: map.checkerImage,
     tasks: rows.map(row => ({ sourceSessionId: row.sessionId, task: row.task, baselineOutcome: row.report.outcome,
       startingRevision: row.report.startingRevision, prerequisites: row.task.startsWith("A")
@@ -112,7 +116,7 @@ export async function evaluateSessions(options: SessionEvaluationOptions, depend
         const main = await makeProvider(providerOptions, "main"), supervisor = await makeProvider(providerOptions, "supervisor");
         phase = "session, checks or reporting";
         const attempt = await runEvaluationAttempt({ directory, receipt, task, transport, ledger,
-          profile: options.profile, main, supervisor, evaluatorRevision: revision.stdout.trim(),
+          profile: options.profile, main, supervisor, evaluatorRevision: revision.stdout.trim(), evidenceLane,
           workerImage: map.workerImage, checkerImage: map.checkerImage,
           budget: { maxTurns: Number(options.profile.maxTurns ?? 24),
             maxTokens: Math.min(Number(options.profile.maxTokens ?? options.batchTokens), options.batchTokens - ledger.tokens),
