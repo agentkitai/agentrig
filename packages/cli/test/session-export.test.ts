@@ -106,6 +106,25 @@ it("redacts prefixed structured credentials and truncated private keys", () => {
   expect(output).not.toContain("structured-canary"); expect(output).not.toContain("command-canary"); expect(output).not.toContain("truncated-canary");
 });
 
+it("redacts adversarial long tokens within the original five-second subprocess bound", async () => {
+  const moduleUrl = new URL("../dist/session-export.js", import.meta.url).href;
+  const code = `import {redactExportMessages} from ${JSON.stringify(moduleUrl)};
+    for (const text of ["a".repeat(50000), "a-".repeat(25000), "eyJaaaaaa-".repeat(5000)]) {
+      const result=redactExportMessages([{role:"user",content:[{type:"text",text}]}]);
+      if(result.messages[0].content[0].text!==text) throw Error("plain text changed");
+    } console.log("ok");`;
+  const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", code], { timeout: 5000 });
+  expect(result.stdout.trim()).toBe("ok");
+}, 15_000);
+
+it("bounded scanning retains signed/unsigned JWT and nested command assignment coverage", () => {
+  const signed = "eyJabcdefghi.payloadabcdefgh.signatureabcdefgh";
+  const unsigned = "eyJabcdefghi.payloadabcdefgh.";
+  const source: Message[] = [{ role: "user", content: [{ type: "text", text: `${signed}. ${unsigned} {"command":"tool --token nested-canary"} api_key='quoted canary'` }] }];
+  const output = JSON.stringify(redactExportMessages(source));
+  for (const secret of [signed, unsigned, "nested-canary", "quoted canary"]) expect(output).not.toContain(secret);
+});
+
 it.each(formats)("%s refuses opaque images unless omission is explicit, including nested images", async format => {
   const { store } = await fixture([{ role: "user", content: [{ type: "tool_result", toolUseId: "x", content: [{ type: "image", mediaType: "private-media-canary", data: "base64-secret-canary" }] }] }]);
   await expect(exportSession(store, "s", { format })).rejects.toThrow(/--omit-opaque/);

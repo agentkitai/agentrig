@@ -5,7 +5,7 @@ post-merge CI 34035704275 on all three platforms. R10d PR #171 and readiness rep
 are fully gated on that combined main; the initial failed R10d run 34033869154 remains
 recorded. [Repair evidence](plans/child-grants-readiness.md), [R10a contract](plans/R10a.md).
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is implemented pending gates; R10a is merged (PR #174), post-merge CI pending; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is implemented pending gates; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -22,7 +22,22 @@ R9a follows delivered R5c #170 and is independent of the concurrently delivered 
 existing E machinery is reused, not replaced. Full tests, named mutations and one bounded
 independent review precede exact-head CI and the root-coordinated merge.
 
-### R10a merged — PR #174; post-merge CI pending
+Integrated build/typecheck/full passes 2,575 + two skips / 148 files (four workers, 37 seconds).
+The single independent [review](plans/R9a-review.md) approved and independently passed the same
+full suite plus 33 focused cases and real CLI probes (235 seconds, 17/max24 turns). Four guard
+mutants were detected/restored. Separately, an author-run adversarial long-word subprocess hit
+its five-second bound; a new regression reproduced it before bounded forward scanning replaced
+the quadratic patterns. This is a material post-review fix, not a finding the reviewer detected.
+No second review. Final fixed-head validation and exact-head CI follow.
+Final fixed-head build/typecheck/full now passes **2,577 + two skips / 148 files** (four workers,
+36 seconds), including 35 export controls and the unchanged five-second subprocess regression.
+PR and post-main CI remain delivery gates; R9a is not marked done early.
+
+### R10a done — PR #174; post-merge CI green
+
+Main `391514b` passed all three jobs in CI `34037504297`.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/174#issuecomment-5559723561).
+Following implementation checks are historical.
 
 Trusted SDK turnStrategy injection schedules the unchanged tool pipeline; sequential stays
 default. Pinned pre-extraction full bytes cover normal/between-call-abort/final-call-abort/

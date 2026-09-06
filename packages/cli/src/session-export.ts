@@ -14,6 +14,37 @@ const REDACT_FILE_BYTES = 64 * 1024;
 const SECRET_KEY = /^(?:authorization|proxy[-_]?authorization|(?:access|refresh|id)[-_]?token|(?:[a-z0-9]+[_-])*(?:token|api[-_]?key|secret(?:[-_]?access)?[-_]?key|private[-_]?key|password|passwd|client[-_]?secret)|cookie|set-cookie)$/i;
 const WARNING = "Heuristic redaction can miss unknown secrets and remove innocent text. Canonical fields preserve supported materialized messages only; redaction and opaque omission are intentionally lossy. Provenance is data, not authorization.";
 
+/** Bounded key recognition and forward-only value scanning; never rescan every word suffix. */
+function redactAssignments(input: string, replaced: () => void): string {
+  const prefix = /(?<![A-Za-z0-9_-])(?:["']?([A-Za-z_][A-Za-z0-9_-]{0,255})["']?\s{0,64}[:=]\s{0,64}|--(api-key|token|password|secret)(?:=|\s{1,64}))/gi;
+  const parts: string[] = [];
+  let copied = 0;
+  for (let match = prefix.exec(input); match !== null; match = prefix.exec(input)) {
+    if (match[2] === undefined && !SECRET_KEY.test(match[1]!)) continue;
+    const start = prefix.lastIndex;
+    let end = start;
+    const quote = input[start];
+    if (input.startsWith(PLACEHOLDER, start)) end += PLACEHOLDER.length;
+    else if (quote === '"' || quote === "'") {
+      end++;
+      while (end < input.length) {
+        const char = input[end++];
+        if (char === "\\" && end < input.length) end++;
+        else if (char === quote) break;
+      }
+    } else {
+      while (end < input.length && !/[\s,;&}\]"']/.test(input[end]!)) end++;
+    }
+    if (end === start) continue;
+    parts.push(input.slice(copied, match.index), PLACEHOLDER);
+    copied = end;
+    prefix.lastIndex = end;
+    replaced();
+  }
+  parts.push(input.slice(copied));
+  return parts.join("");
+}
+
 /** Exact literals only, never user regexes or implicit environment/credential enumeration. */
 async function readRedactions(path: string | undefined): Promise<string[]> {
   if (path === undefined) return [];
@@ -50,11 +81,21 @@ export function redactExportMessages(messages: readonly Message[], literals: rea
     if (literalPattern !== undefined) replace(literalPattern);
     replace(/-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----|$)/g);
     replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_.~=-]+/gi);
-    replace(/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]*/g);
+    // Scan each candidate once, then validate segments at fixed boundaries. Repeated malformed
+    // eyJ prefixes must not trigger quadratic suffix searches on a supported plain-text block.
+    value = value.replace(/(?<![A-Za-z0-9_.-])eyJ[A-Za-z0-9_.-]+/g, candidate => {
+      let token = candidate.replace(/\.+$/, "");
+      // An unsigned JWT has an empty third segment; preserve that separator while stripping
+      // sentence punctuation, rather than missing the credential entirely.
+      if (token.indexOf(".") >= 0 && token.indexOf(".") === token.lastIndexOf(".") && token.length < candidate.length) token += ".";
+      if (!/^eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]*$/.test(token)) return candidate;
+      redactions++;
+      return PLACEHOLDER + candidate.slice(token.length);
+    });
     replace(/\b(?:sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9_]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16})\b/g);
-    replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi);
+    replace(/\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s/@:]+:[^\s/@]+@/gi);
     // Credential assignments in JSON, env/shell snippets, CLI flags, headers and URL queries.
-    replace(/(?:["']?(?:[A-Z0-9_]*API[_-]?KEY|[A-Z0-9_]*TOKEN|[A-Z0-9_]*PASSWORD|[A-Z0-9_]*PASSWD|[A-Z0-9_]*CLIENT[_-]?SECRET|[A-Z0-9_]*SECRET(?:[_-]?ACCESS)?[_-]?KEY|[A-Z0-9_]*PRIVATE[_-]?KEY|AUTHORIZATION|COOKIE)["']?\s*[:=]\s*|--(?:api-key|token|password|secret)\s+)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;&}\]]+)/gi);
+    value = redactAssignments(value, () => { redactions++; });
     return value;
   };
   const json = (value: unknown): unknown => {

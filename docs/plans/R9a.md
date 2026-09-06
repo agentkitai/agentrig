@@ -3,7 +3,8 @@
 R9a implements the committed export row after R5c #170 passed exact-head CI 34035857727
 and post-merge main `1ae6b77` CI 34036244589 on Linux, macOS and Windows. Export is independent
 of R10 concurrency and reuses existing event/message machinery; it does not create an evaluator.
-Current R14d main `326aa4a` is integrated. No providers, configuration, credentials, tools or
+R14d main `326aa4a` and R10a main `391514b` are integrated, both post-merge gates green.
+No providers, configuration, credentials, tools or
 live evaluations are invoked. R9b/R9c remain separate rows.
 
 ## CLI and supported content
@@ -57,9 +58,13 @@ there is deliberately no new public import command.
 
 The canonical list is cloned and scrubbed before any readable or hidden/canonical copy is
 formatted. Every arbitrary text field, tool input value/key and nested result is covered.
-Known credential-key values are replaced wholesale; patterns recognize Bearer/Basic, common
+Known structured credential-key values are replaced wholesale; patterns recognize Bearer/Basic, common
 token prefixes/JWTs, PEM private keys, credential assignments/flags and URL userinfo. Explicit
-literal matches use escaped strings. Colliding redacted object keys refuse rather than lose
+literal matches use escaped strings. Free-text assignment scanning recognizes keys up to 256
+ASCII identifier characters and whitespace gaps up to 64 characters, with forward-only value
+scanning. URL userinfo recognition bounds scheme names to 32 characters. JWT candidates are
+scanned once and then validated at segment boundaries; malformed repeated prefixes do not
+cause suffix rescanning. Colliding redacted object keys refuse rather than lose
 data silently. Fixed role/type/trust enums remain structural. No original secret, position,
 excerpt or secret digest appears in metadata.
 
@@ -102,3 +107,22 @@ refusal (all three image controls fail), omitted fork ancestry (all three actual
 fail), and removed cumulative byte guards (the byte-cap control fails). Exactly one bounded
 independent review and final integrated full checks precede PR delivery. Exact-head three-platform
 and subsequent main CI remain gates; root serializes merge.
+
+The final integrated pre-review build/typecheck/full passed 2,575 + two skips / 148 files
+(four workers, 36.57 seconds). The one independent review approved at clean stable `5897aea`
+against main `391514b`: 235 seconds, 17/max24 turns, independently build/typecheck, 33 focused
+tests, full 2,575 + two skips / 148 files and real CLI positive/refusal probes. Its original
+verbatim [verdict](R9a-review.md) remains unchanged. Optional notes are at ROADMAP END.
+
+Separately, the author found that an unbroken 50,000-character plain word hit an actual
+five-second subprocess deadline (exit 124). The new regression failed at that unchanged
+deadline before the fix. Bounded boundary-aware key recognition, forward-only value scanning,
+single-pass JWT candidates and bounded URL schemes replace repeated suffix searches; the
+same deadline now passes, including hyphenated and malformed-JWT long tokens, with no text
+changes. Signed/unsigned JWT and nested command credential controls preserve coverage.
+This was not discovered by the independent review; no second review is claimed or planned.
+
+Final fixed-head build/typecheck/full suite passes **2,577 tests + two skips / 148 files**
+(four workers, 36.15 seconds); the exporter has 35 controls. The actual five-second subprocess
+regression now passes without raising its deadline. Exact-head PR CI and post-merge CI remain
+pending delivery gates; no live evaluation was run.

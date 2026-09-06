@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is implemented pending gates; R10a is merged (PR #174), post-merge CI pending; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is implemented pending gates; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -10,7 +10,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Priority | Work | Exit condition |
 |---|---|---|
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
-| Implemented; closing gates | R10a sequential strategy | Existing H6 and pre-extraction full-byte baselines unchanged; trusted SDK scheduling only |
+| Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
@@ -27,7 +27,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done — PR #165 | R14b: candidate evidence association | Canonical foreground observations, bounded replay and post-merge CI green |
 | Done — PR #166 | R11a: net permission boundary | Explicit sandbox network policy; post-merge CI green |
 | Done (#169) | R14c: evidence grading and reports | Exact-head and post-merge three-platform CI green |
-| Done — PR #172 | R14d: two verification lanes | Reuse E1/E2 observations; one review and exact-head CI |
+| Done — PR #172 | R14d: two verification lanes | Exact-head and post-merge three-platform CI green; reuse E1/E2 observations |
 | Done — PR #170 | R5c: local packages | Exact-head CI 34035857727 and post-main `1ae6b77` CI 34036244589 all three platforms green |
 | Implemented; closing gates | R9a: bounded redacted exports | Supported canonical round trips, safe refusal/redaction; one review and exact-head CI |
 | Committed | R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
@@ -661,7 +661,7 @@ pool already reserves at spawn time specifically because this was coming).*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R10a *(implemented; delivery gates pending)* | Trusted SDK `TurnStrategy` schedules existing tool pipeline; `sequential` default preserves full pre-extraction log/request/snapshot bytes and abort boundaries. No concurrency or model-selected code. See [contract](plans/R10a.md). | core |
+| R10a *(done, PR #174)* | Trusted SDK `TurnStrategy` schedules existing tool pipeline; `sequential` default preserves full pre-extraction log/request/snapshot bytes and abort boundaries. No concurrency or model-selected code. See [contract](plans/R10a.md). | core |
 | R10b | `parallel` strategy: independent tool calls (no shared declared paths, no exec-class ordering hazard) run concurrently with a bounded pool; events stay strictly ordered by `seq` (results are serialized into the log in completion order — the log's total order is the contract, not wall-clock interleaving); permission asks serialize (one prompt at a time — the TUI queue already exists) | core |
 | R10c | Parallel subagents ride the same strategy (the spawn-time pool reservation was built for this); *(second pass; Cline's pattern, Codex's warning)* a parallel subagent that holds write-class tools gets its own git worktree, and its patch is integrated by the parent as a diff — two writers never share a checkout; supervisor detectors audited for order-sensitivity (loop/stall assume turn-relative counts — verify and pin with tests) | core + supervisor |
 | R10d *(done, [PR #171](https://github.com/agentkitai/agentrig/pull/171); main gate restored by #173)* | Explicit bounded `doctor --probe` observes exact tool roundtrip, simultaneous calls, prompted-schema JSON and cache reporting. Native strictness remains unknown. Validated configuration-bound local cache actually informs advertised flags; missing evidence is labelled unverified fallback. See [contract](plans/R10d.md). | cli + core |
@@ -936,7 +936,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b (done) → R5c (done, PR #170) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
-| 8 | R10d (done, PR #171 + repair #173) → R10a (closing gates) → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
+| 8 | R10d (done, PR #171 + repair #173) → R10a (done, PR #174) → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
@@ -1202,3 +1202,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R10a polish: reuse the exported call type in the coordinator and consider passing a defensive
   call-array copy to trusted custom strategies. No truncated calls reach that seam; readonly
   typing is not claimed as runtime containment of trusted host JavaScript.
+- R9a polish: make redaction-induced label overflow a more specific safe diagnostic, and count
+  logical redacted values rather than pattern matches when a credential matches multiple rules.
+  The long-token scanning defect was fixed within R9a; it is not deferred here.
