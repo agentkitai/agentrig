@@ -891,6 +891,14 @@ classification and effect review share the existing --dream-limits ceiling, with
 increase. Three calls cover consolidation + classification + effects (four with global
 promotion). A structural/unassessed candidate is not approval; no skill files are emitted.
 
+Explicit skill emission is separate: agentrig dream --emit-skills --structural-only previews
+exact files and a review digest. After human review, rerun with --emit-skills --apply <digest>
+--dream-limits '{"maxCalls":3}' (without --structural-only/--review/--auto). Fresh evidence and
+effect checks are mandatory. Files go under the selected memory directory's skills/generated;
+they are not activated. Human edits or metadata locked: "true" protect existing files. Generated
+metadata values are quoted strings, not bare booleans. Never edit immutable raw history to
+manufacture evidence or treat a saved candidate report as approval.
+
 ## Pins
 
 \`pins.json\` holds human corrections that must survive regeneration. A pin stores the *claim*,

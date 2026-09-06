@@ -1,6 +1,6 @@
 import { rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { AuxiliaryReport } from "@agentkitai/agentrig-core";
 import type { Attempt, DreamInput, DreamReport, DreamResult, Dreamer } from "../types.js";
@@ -20,6 +20,7 @@ import { assessPromotionEvidence, selectForPromotion, sessionEvidence, type Prom
 import { reviewPromotionEffects, type PromotionGuardrailIndex } from "./guardrails.js";
 import { loadPromotionEvidence } from "./evidence.js";
 import { detectProcedureCandidates, refineProcedureCandidates, type ProcedureDetection } from "./procedures.js";
+import { prepareProcedureSkills, type SkillEmissionOptions, type SkillEmissionReport } from "./skills.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
@@ -58,6 +59,8 @@ export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions 
   structuralOnly?: boolean;
   /** Opt-in report-only procedure detection/refinement; uses the existing shared call ceiling. */
   procedureCandidates?: boolean;
+  /** Explicit review-only opt-in. Applying requires a fresh exact proposal digest. Never activates. */
+  emitSkills?: SkillEmissionOptions;
   onPhase?: (phase: string) => void;
   /** Advisory warnings, including consolidation failure and skipped pin persistence; not fatal. */
   onError?: (err: Error) => void;
@@ -65,6 +68,7 @@ export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions 
 
 /** The report plus the structural findings, which `DreamReport` has no field for on its own. */
 export interface FullDreamResult extends DreamResult {
+  skillEmission?: SkillEmissionReport;
   autoApply?: { status: "applied"; backup: string } | { status: "refused"; reason: string };
   /** Set when the model-backed pass failed; the structural findings are still complete. */
   consolidationError?: string;
@@ -123,6 +127,9 @@ export async function markDreamed(wikiRoot: string, at: number, opts: MemoryLock
  * be the *result*, not a plan to produce one.
  */
 export async function runDream(opts: DreamOptions): Promise<FullDreamResult> {
+  if (opts.emitSkills?.apply !== undefined && (opts.autoApply === true || opts.structuralOnly === true)) {
+    throw new Error("skill apply cannot combine with wiki auto-apply or structural-only mode");
+  }
   DreamLimitsSchema.parse(opts.limits ?? {});
   const run = new MaintenanceRun("dream", { ...DEFAULT_DREAM_LIMITS, ...opts.limits }, opts.signal);
   const warning = (error: Error): void => {
@@ -306,7 +313,17 @@ async function dreamInto(
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
   let procedures: ProcedureDetection | undefined;
-  if (opts.procedureCandidates === true) {
+  let skillEmission: SkillEmissionReport | undefined;
+  if (opts.emitSkills !== undefined) {
+    phase("skill-emission");
+    const prepared = await prepareProcedureSkills(finalPages, opts.raw, opts.emitSkills, run, {
+      scanLimits: scan.limits, dream: `${logDate}/${randomUUID()}`, lockTimeoutMs: opts.lockTimeoutMs ?? 5000,
+      memoryRoot: dirname(opts.wiki.root),
+      ...(opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote }),
+      ...(modelEnabled && consolidationError === undefined ? { provider: opts.provider! } : {}),
+    });
+    procedures = prepared.procedures; skillEmission = prepared.emission;
+  } else if (opts.procedureCandidates === true) {
     phase("skill-candidates");
     const candidates = detectProcedureCandidates(finalPages, { ...promotionOptions, signal: run.signal });
     procedures = modelEnabled && consolidationError === undefined
@@ -358,6 +375,7 @@ async function dreamInto(
 
   return {
     outputRoot: workspace.outputRoot,
+    ...(skillEmission === undefined ? {} : { skillEmission }),
     report,
     ...(consolidationError === undefined ? {} : { consolidationError }),
     applied,

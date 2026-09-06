@@ -86,6 +86,7 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/content-trust.test.ts
       - run: pnpm exec vitest run packages/core/test/provenance-assembly.test.ts
       - run: pnpm exec vitest run packages/memory/test/procedures.test.ts packages/cli/test/procedure-candidates.test.ts
+      - run: pnpm exec vitest run packages/memory/test/skill-emission.test.ts packages/cli/test/skill-emission.test.ts
       - run: pnpm exec vitest run packages/memory/test/windows-memory-replace.test.ts
       # Repeat the original real-process regression after its full-suite execution above.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts -t 'conserves shared facts'
