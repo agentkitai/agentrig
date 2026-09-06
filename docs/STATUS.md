@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14a is merged (PR #162), pending post-merge CI; H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -39,10 +39,41 @@ pass 2,354 tests plus two skips across 128 files (four workers, 31 seconds), inc
 startup denial/standing controls, failed expiry-audit recovery and bounded descendant depth.
 Final exact-head PR CI follows; R12c/H7a done markers include verified merge receipts.
 
+### R14a merged — PR #162; post-merge CI pending
+
+Merge `fc8327e` follows green exact-head CI. The gate notes below are implementation history.
+
+PlanItem and update_plan share an optional nonblank acceptance declaration capped at 1024
+characters. The first request of each run with the tool asks for an observable check per item,
+preserving custom and hook prompt text. It is a runtime platform instruction, never new user
+consent, an extra provider call or a mandatory planning/completion gate. Validated tool events,
+storage, resume, supervisor plan state and CLI/TUI displays retain checks and explicitly mark
+declared or missing legacy checks unverified. [Contract](plans/R14a.md). R14b evidence matching
+and R14c grading remain separate; no check text is executed or asserted to have passed.
+
+Dependency order: R13 provenance/guard foundations are delivered. This declaration-only row is
+independent of concurrent R12c grant inspection and H7a continuation repair; its small request
+assembly insertion does not alter either authority or continuation control flow. Actual provider,
+tool/schema, storage/resume, R13c no-fresh-consent and /plan tests pass. Full checks, restored
+mutations, one bounded review and exact-head/post-merge CI remain delivery gates.
+
+One bounded Claude review `db1b8fba-284f-4557-b725-d367bc4845a8` returned APPROVE with no material
+findings and independently passed 408 tests (15 files). It completed in 147 seconds; the requested
+ceiling was 16 turns and the receipt reports 18 including terminal handling. Field-drop and
+first-directive removal mutations failed the actual-runtime controls and were restored. Optional
+polish is at the roadmap end. Current main `06f5b4b` (R12c) is integrated with its source attribution,
+grant counts and documentation preserved. Build/typecheck and the full four-worker suite pass
+2,326 tests plus two skips across 126 files (31 seconds). Exact-head and post-merge CI remain gates.
+
+Integrated H7a main `668f7f1` after prior PR head `7e5301f` passed all three jobs in
+CI `34027941553`. First-request acceptance assembly and actual-provider-boundary continuation
+remain intact. The combined 86 focused cases and build/typecheck/full 2,342 tests plus two skips
+across 127 files pass. Fresh exact-head CI and H7a's post-merge gate remain pending.
+
 ### R13c done — PR #159; post-merge CI green
 
-PR #159 merged as `78e8e19`; exact post-merge CI 34026441186 passed on all three platforms.
-The implementation narrative below retains its historical intermediate validation state.
+Final head `71b58c7` passed all three PR jobs in CI 34026155677; merged main `78e8e19` passed
+all three post-merge jobs in CI 34026441186. Earlier gate wording below is implementation history.
 
 The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
 write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches

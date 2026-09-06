@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is implemented with closing delivery gates; R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14a is merged (PR #162), pending post-merge CI; H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is implemented with closing delivery gates; R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -20,7 +20,9 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Implemented; closing gates | R12d: child grant views | Live delegable ancestry, task seals, per-subject TUI approvals and root/sibling isolation |
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
-| Committed | R5 remainder, R7–R11, R12c–R12d, R13c and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
+| Merged; post-merge CI pending | R14a: acceptance declarations (PR #162) | Observable declarations remain unverified, not proof |
+| Committed | R5b/R5c, R7–R11, R12d and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
 
@@ -733,7 +735,7 @@ the rows below extend the product interface in the committed dependency order.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R14a | Acceptance contract at task start: the first turn asks the model to emit `update_plan` with an `accept` field per item (schema-added to `PlanItem`): the observable check that would prove the item done ("`pnpm test` exits 0", "the endpoint returns 401 without a token"). Free-text, but structured enough to grep | core |
+| R14a *(implemented; closing delivery gates)* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
 | R14b | Evidence collection: tool results that match a plan item's check (test runs, command exits, diffs) are tagged to it in supervisor state — the attempts ledger grows an evidence side | supervisor |
 | R14c | The M6 grader gains a claims-vs-evidence rubric row: a session ending with unfulfilled `accept` fields grades lower and says which; `sessions show --evidence <id>` prints the claim→evidence table for a finished run | supervisor + cli |
 | R14d | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
@@ -917,8 +919,8 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
-| 3 | R13a/R13b/R13d/R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
-| 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
+| 4 | R14a (closing gates) → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
@@ -1142,6 +1144,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R12d polish: explain explicitly when parent runtime has no grant registry and a configured
   child registry is consequently ignored; shared revision invalidation also conservatively
   cancels a sibling's open standing/scope prompt after a revocation. Preserve scoped inheritance.
+- R14a polish: consider less repetitive first-request wording when a resumed conversation already
+  has a plan, and a quieter compact summary for entirely undeclared legacy plans; neither should
+  hide unverified checks. A small shared core acceptance-text formatter could remove duplication
+  between tool output and CLI rendering without adding evidence inference or a completion gate.
 - H7a polish: optionally distinguish a persisted staged continuation nudge from an attempted
   retry when a later gate refuses; the `turn.continued` event already records attempts only.
   Consider pairing the pre-existing pre-model veto's `turn.start` with `turn.end` separately;

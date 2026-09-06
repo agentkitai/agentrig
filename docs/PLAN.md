@@ -168,6 +168,12 @@ type HarnessEvent =
 
 `inputHash` on `tool.call` and `contentHash` on `file.changed` exist specifically so loop/stall detectors are cheap string comparisons.
 
+R14a adds optional `PlanItem.accept`: a nonblank observable acceptance declaration of at most
+1024 characters, shared by the event and update_plan tool schemas. The first actual model request
+of each run (including resume) with that tool asks for a check per item, without replacing custom
+prompts or manufacturing fresh user consent. Tool/session/plan displays retain declarations and mark missing or declared checks
+unverified. Status done is not proof; evidence association/grading remain R14b/R14c. See [R14a](plans/R14a.md).
+
 ### 2.6 Agent + session
 
 ```ts
