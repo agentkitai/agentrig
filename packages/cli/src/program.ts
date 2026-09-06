@@ -4,6 +4,7 @@ import { CommandPrefixSchema, SessionStore, sanitizeLine } from "@agentkitai/age
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
+import { exportSession } from "./session-export.js";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
@@ -445,6 +446,18 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   const sessions = program.command("sessions").description("Inspect session event logs");
+
+  sessions.command("export <id>")
+    .description("Export finished materialized messages with heuristic redaction (unknown secrets may remain); no config/providers")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .option("--format <format>", "jsonl, sharegpt or md; versioned canonical fields preserve supported content", "jsonl")
+    .option("--redact-file <path>", "JSON array of exact secret strings (64 KiB maximum); no raw bypass")
+    .option("--omit-opaque", "explicitly lossy image omission; otherwise opaque content is refused; unknown types always refuse")
+    .action(async (id: string, opts: { root: string; format: string; redactFile?: string; omitOpaque?: boolean }) => {
+      // Do not use configured(): exports must never read credentials or invoke providers.
+      const output = await exportSession(new SessionStore({ root: opts.root }), id, opts);
+      process.stdout.write(output);
+    });
 
   sessions.command("undo <id>")
     .description("Restore an owned checkpoint; stop external writers first; preserves index/history and retains originals")
