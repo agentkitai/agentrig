@@ -1,9 +1,31 @@
 # Status
 
-Active row: **R8c optional OTLP telemetry**, implementation and verification in progress. R15a is done (PR #188 + repair #191); R15d is done (PR #189); R15f is done (PR #190); R15e is done (PR #186).
-R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
-R10b PR #177 post-main CI `34040691166` passed all three platforms.
-R15b PR #185 is done: main `74c5073`, CI `34048869709` and structure `34048869702` green.
+Active: **R15c persisted reasoning blocks**, alongside separately owned R15h/R15g/R8d
+worktrees. R15f #190 and R8c #192 are done with all four post-main checks green.
+[Contract](plans/R15c.md); runtime, review and integrated CI gates apply.
+R15c implementation and the single review's compaction fix pass 56 focused tests
+and full Docker validation (2,873 passed, two skips, 177 files) on `ff6758c`.
+Original review: REQUEST_CHANGES, requested 24/reported 27 turns; three compaction
+controls reproduce on reviewed code and pass after correction. Author pre-auth
+refusal control also fails before/passes after. Exact PR/post-main gates remain.
+Integrated green main `b3bb06a` with R15f/R8c: install/build/typecheck, 59 focused
+controls and full Docker **2,913 passed, two skips, 180 files, 59.52s** pass.
+Actual CI CLI signed-thinking replay excludes all reasoning from report/telemetry
+while preserving canonical logs. New exact-head and post-main CI remain pending.
+R15a #188 and child abort-hook fixture repair #191 are done: repaired main `3174475`
+passed Linux/macOS/Windows CI `34056045886` and structure `34056045804` without reruns.
+[Repair receipt](https://github.com/agentkitai/agentrig/pull/191#issuecomment-5561792580);
+[R15a completion](https://github.com/agentkitai/agentrig/pull/188#issuecomment-5561792722).
+The original macOS failure stays recorded; production cancellation was unchanged.
+R15d #189 is done on main `8da49d4`: all four post-main checks passed in
+CI34057526815 and structure34057526836.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/189#issuecomment-5561947394).
+R15e #186 is done with all four post-main checks green. R15b PR185 is done; all four exact post-main checks are green. R8a PR184 is
+done; all four exact post-main checks are green. R9c PR183 is done: all four post-main
+checks passed, [final receipt](https://github.com/agentkitai/agentrig/pull/183#issuecomment-5560847346).
+R7c #182 is done: exact CI34045100748 and post-main CI34045706663 all three green.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/182#issuecomment-5560657382).
+R10b PR #177 post-main CI `34040691166` passed all three platforms; R9b proceeds independently.
 [Reporting contract](plans/R7c.md). R7b PR #179 passed exact CI `34041871904`
 and post-main CI `34042336391` on all three platforms.
 [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/179#issuecomment-5560275859).
@@ -27,12 +49,17 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c optional telemetry is in progress; R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is integrating PR #193; R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R8c in progress — optional bounded telemetry
+### R8c done — PR #192; all four post-main checks green
+
+Main `b3bb06a` passed CI `34060311037` and structure `34060311027`.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/192#issuecomment-5562272806).
+The implementation checkpoints below retain the earlier evidence and pending gates
+as history; final exact-head and post-main gates are now closed.
 
 [Contract](plans/R8c.md) and [operator guide](OTEL.md). Explicit CLI-only endpoint,
 fixed content-free metadata, shared exporter/child capacity and sandbox-network

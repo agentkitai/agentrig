@@ -49,6 +49,16 @@ interface Message { role: 'user' | 'assistant'; content: ContentBlock[] }
 
 ### 2.2 Provider adapter
 
+R15c adds bounded `thinking` blocks with disclosed text and adapter-owned opaque
+replay/signature/identity. Completed blocks are persisted in canonical messages;
+the Responses provider no longer depends on a process-local replay cache. Cross-
+format/unsupported Chat Completions histories explicitly refuse before fetch.
+TUI verbosity reveals disclosed text only; export and textual ingest omit thinking
+with an explicit receipt, while raw logs/ACP raw-event opt-in remain sensitive.
+Compaction omits older-round thinking before summarization in the same operation,
+preserving retained recent tool pairs and their signed reasoning verbatim after
+the new advisory summary. See [R15c](plans/R15c.md) for bounds and cache limits.
+
 ```ts
 interface ModelRequest {
   system: string;

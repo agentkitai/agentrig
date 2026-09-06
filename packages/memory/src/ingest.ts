@@ -169,6 +169,8 @@ function transcriptEvidence(events: unknown[]): { text: string; omissions: Evide
               if (includeResult) lines.push(header);
               for (const [i, child] of block.content.entries()) renderBlock(child, `${field}.content[${i}]`, "model.tool-result", includeResult);
             } else omit(eventIndex, `${field}.content`, "unsupported tool-result content is not inspected");
+          } else if (block.type === "thinking") {
+            omit(eventIndex, field, "thinking replay and disclosed text are not inspected by textual ingest");
           } else if (block.type === "image") {
             omit(eventIndex, field, "image content is not inspected by textual ingest");
           } else omit(eventIndex, field, "unsupported message content is not inspected");

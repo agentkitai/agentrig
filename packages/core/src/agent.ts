@@ -4,7 +4,7 @@ import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { EventPayload, SupervisorRecord } from "./events.js";
-import { AdvisoryPromptContextSchema, advisoryPromptBlocks, ContentTrustSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
+import { AdvisoryPromptContextSchema, advisoryPromptBlocks, ContentTrustSchema, ThinkingBlockSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { PermissionGrantRegistry } from "./permission-grants.js";
@@ -664,6 +664,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // Assistant content is assembled in stream order so the history replayed to the
         // model matches what it actually said (text and tool_use blocks can interleave).
         const assistantContent: ContentBlock[] = [];
+        let thinkingBytes = 0;
+        let thinkingCount = 0;
         let text = "";
         let textTrust: ContentTrust | undefined;
         const flushText = () => {
@@ -778,6 +780,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
+              case "thinking": {
+                const parsed = ThinkingBlockSchema.safeParse(ev.block);
+                if (!parsed.success) throw new Error("invalid reasoning block");
+                thinkingBytes += Buffer.byteLength(JSON.stringify(parsed.data));
+                if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
+                flushText();
+                // No response prose can supply user provenance or instruction authority.
+                assistantContent.push({ ...parsed.data, trust: "generated", context: ADVISORY_CONTEXT });
+                break;
+              }
               case "text_delta": {
                 const trust = ContentTrustSchema.optional().parse(ev.trust);
                 if (trust !== textTrust) flushText();
