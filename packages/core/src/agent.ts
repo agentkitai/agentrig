@@ -651,8 +651,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             },
           ];
         }
-        if (output !== undefined) requestSystemBlocks.push({ content: `Return your final answer as one complete JSON value matching this schema. No Markdown or prose outside JSON. Schema: ${JSON.stringify(output.schema)}`,
-          source: "system_prompt", origin: "output-schema", authority: "data", context: ADVISORY_CONTEXT, reason: "operator-selected final output shape, not execution authority" });
+        if (output !== undefined) requestSystemBlocks = [...requestSystemBlocks, { content: `Return your final answer as one complete JSON value matching this schema. No Markdown or prose outside JSON. Schema: ${JSON.stringify(output.schema)}`,
+          source: "system_prompt", origin: "output-schema", authority: "data", context: ADVISORY_CONTEXT, reason: "operator-selected final output shape, not execution authority" }];
         const requestSystem = renderSystemBlocks(requestSystemBlocks);
         const eviction = evictToolResults(messages, config.toolResultEviction);
         if (eviction.count > 0) {

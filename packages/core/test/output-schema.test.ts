@@ -89,3 +89,11 @@ it("ordinary tool dispatch and H7a continuations remain available before final r
   expect(f.effects()).toBe(1); expect(f.requests).toHaveLength(3);
   expect((await f.store.readAll(session.id)).filter(e => e.type === "turn.continued")).toHaveLength(1);
 });
+it("no-repo-map repeated tool turns and repair each contain exactly one schema instruction", async () => {
+  const calls: ModelEvent[][] = [1, 2, 3].map(n => [{ type: "tool_use", id: `effect-${n}`, name: "effect", input: {} }, { type: "stop", reason: "tool_use" }]);
+  const f = await fixture([...calls, text("invalid"), text('{"ok":true}')]);
+  const session = f.agent.run("perform the task then answer", { cwd: f.root });
+  expect((await session.done).reason).toBe("done"); expect(f.requests).toHaveLength(5); expect(f.effects()).toBe(3);
+  expect(f.requests.map(req => req.system.split("Return your final answer as one complete JSON value").length - 1)).toEqual([1, 1, 1, 1, 1]);
+  expect(f.requests[4]!.messages.flatMap(m => m.content).filter(b => b.type === "text" && b.text.includes("Platform output repair"))).toHaveLength(1);
+});

@@ -23,7 +23,8 @@ permission, task acceptance, or independently verified test evidence.
 ## Bounds and supported vocabulary
 
 The stable regular, non-symlink UTF-8 file must be at most 32 KiB, depth 12, and
-512 JSON value nodes. Duplicate object keys (including escaped equivalents) and
+512 JSON value nodes. Depth counts edges from the root value (root depth zero).
+Duplicate object keys (including escaped equivalents) and
 malformed JSON refuse before provider/startup work. Only these JSON-Schema 2020-12
 keywords are supported: `type`, `properties`, `required`, `additionalProperties`,
 `items`, `enum`, `const`, `minimum`, `maximum`, `exclusiveMinimum`,
@@ -74,7 +75,8 @@ Truncated repair responses cannot trigger further continuation turns.
 The repair nudge is platform/advisory context, not fresh user consent. Existing
 tool behavior and truncation continuations before final validation are unchanged.
 Cancellation, refusal, exhausted budget, or still-invalid output exits nonzero.
-Resume requires supplying the schema flag again; historical validation is not
+Resume requires supplying the schema flag again and permits one new repair for
+that explicit attempt; historical validation is not
 authority. The constraint is not inherited by child agents or loaded from config.
 
 `run --ci --task-file task.txt --report report.md --output-schema result.schema.json`
@@ -82,3 +84,7 @@ uses the same validation. The bounded inert CI report includes validation status
 an invalid outcome cannot authorize a PR comment. Raw logs are not rewritten or
 redacted by this feature. Existing explicit export/report redaction limitations
 continue to apply.
+
+The OpenAI-compatible parser now also retains streaming refusal text and its
+refusal stop in ordinary unconstrained runs; it does not silently discard that
+server response. Constrained runs additionally exit nonzero for refusal.
