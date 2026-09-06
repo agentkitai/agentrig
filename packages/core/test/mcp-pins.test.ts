@@ -18,9 +18,9 @@ function server(initial: McpToolSpec[]) {
 }
 const context = () => ({ cwd: root, sessionId: "test", signal: new AbortController().signal, emit() {} });
 
-it.each(["resource", "template", "prompt", "capabilities", "endpoint"])("R15d %s changes require independent consent and an uncached post-consent check", async kind => {
+it.each(["resource", "template", "prompt", "capabilities", "endpoint", "annotations", "outputSchema", "parameter-header"])("R15d %s changes require independent consent and an uncached post-consent check", async kind => {
   const pins = new FileMcpPins(root, "config");
-  const catalog: McpCatalog = { tools: original, resources: [{ name: "doc", uri: "opaque:doc", description: "old" }],
+  const catalog: McpCatalog = { tools: structuredClone(original), resources: [{ name: "doc", uri: "opaque:doc", description: "old" }],
     templates: [{ name: "item", uriTemplate: "opaque:{id}", description: "old" }], prompts: [{ name: "review", description: "old" }] };
   const identity = { endpoint: "https://fixture.test/mcp", capabilities: { resources: {}, tools: {}, prompts: {} } };
   const baseline = mcpCatalogSnapshot(catalog, identity);
@@ -30,6 +30,9 @@ it.each(["resource", "template", "prompt", "capabilities", "endpoint"])("R15d %s
   if (kind === "prompt") catalog.prompts[0]!.description = "new";
   if (kind === "capabilities") identity.capabilities.resources = { subscribe: true };
   if (kind === "endpoint") identity.endpoint = "https://fixture.test/other";
+  if (kind === "annotations") Object.assign(catalog.tools[0]!, { annotations: { readOnlyHint: true } });
+  if (kind === "outputSchema") Object.assign(catalog.tools[0]!, { outputSchema: { type: "object", required: ["result"] } });
+  if (kind === "parameter-header") catalog.tools[0]!.inputSchema = { type: "object", properties: { region: { type: "string", "x-mcp-header": "Region" } } };
   const read = vi.fn(async () => ({ contents: [{ uri: "opaque:doc", text: "external" }] }));
   const list = vi.fn(async () => structuredClone(catalog));
   const client: McpConnection = { name: "remote", remote: true, identity, start: async () => {}, close: async () => {},

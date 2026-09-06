@@ -1,7 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { z } from "zod";
 import { McpCatalog, McpPromptArguments, McpPromptSpec, McpResourceSpec, McpResourceTemplateSpec,
-  McpToolSpec, ToolsCallResult, type McpConnection } from "./protocol.js";
+  McpToolSpec, RemoteMcpToolSpec, ToolsCallResult, type McpConnection } from "./protocol.js";
 import { McpHttpBoundary, RemoteMcpConfigSchema, type RemoteMcpConfig } from "./http.js";
 import type { McpOAuthProvider } from "./auth.js";
 
@@ -24,6 +24,7 @@ export class RemoteMcpClient implements McpConnection {
   private readonly http: McpHttpBoundary;
   private readonly transport: StreamableHTTPClientTransport;
   private started = false;
+  private listedTools: McpToolSpec[] = [];
   constructor(readonly config: RemoteMcpConfig, private readonly opts: RemoteMcpOptions = {}) {
     RemoteMcpConfigSchema.parse(config); this.name = config.name;
     this.http = new McpHttpBoundary(config, opts.fetch);
@@ -81,19 +82,28 @@ export class RemoteMcpClient implements McpConnection {
   async catalog(signal?: AbortSignal): Promise<McpCatalog> {
     return this.owned("catalogue", async s => {
       const caps = this.client.getServerCapabilities() ?? {};
-      const tools = caps.tools ? await this.pages("tools/list", "tools", McpToolSpec, s) : [];
+      const tools = caps.tools ? await this.pages("tools/list", "tools", RemoteMcpToolSpec, s) : [];
+      if (this.client.getProtocolEra() === "modern") for (const tool of tools) validateHeaderAnnotations(tool.inputSchema);
       const resources = caps.resources ? await this.pages("resources/list", "resources", McpResourceSpec, s) : [];
       const templates = caps.resources ? await this.pages("resources/templates/list", "resourceTemplates", McpResourceTemplateSpec, s) : [];
       const prompts = caps.prompts ? await this.pages("prompts/list", "prompts", McpPromptSpec, s) : [];
       const result = McpCatalog.parse({ tools, resources, templates, prompts });
       if (tools.length + resources.length + templates.length + prompts.length > 256 || Buffer.byteLength(JSON.stringify(result)) > 1_048_576)
         throw new Error("MCP combined catalog exceeds bound");
+      this.listedTools = structuredClone(result.tools);
       return result;
     }, signal);
   }
   async listTools(signal?: AbortSignal): Promise<McpToolSpec[]> { return (await this.catalog(signal)).tools; }
-  async callTool(name: string, args: unknown, signal?: AbortSignal): Promise<ToolsCallResult> {
-    return this.owned("tool call", async s => ToolsCallResult.parse(await this.client.request({ method: "tools/call", params: { name, arguments: args as Record<string, unknown> } }, { signal: s, timeout: 30_000 })), signal);
+  async callTool(name: string, args: unknown, signal?: AbortSignal, definition?: McpToolSpec): Promise<ToolsCallResult> {
+    const spec = RemoteMcpToolSpec.parse(definition ?? this.listedTools.find(tool => tool.name === name));
+    if (spec.name !== name) throw new Error("MCP tool definition mismatch");
+    if (this.client.getProtocolEra() === "modern") validateHeaderAnnotations(spec.inputSchema);
+    // An explicit pinned definition enables SDK parameter-header mirroring without its cache
+    // lookup or HeaderMismatch re-list/retry, which would bypass our independent pin gate.
+    type SdkTool = NonNullable<NonNullable<Parameters<Client["callTool"]>[1]>["toolDefinition"]>;
+    return this.owned("tool call", async s => ToolsCallResult.parse(await this.client.callTool({ name, arguments: args as Record<string, unknown> },
+      { signal: s, timeout: 30_000, toolDefinition: spec as SdkTool })), signal);
   }
   async readResource(uri: string, signal?: AbortSignal): Promise<{ contents: unknown[] }> {
     return this.owned("resource read", async s => z.object({ contents: z.array(z.unknown()).max(256) }).parse(
@@ -109,4 +119,30 @@ export class RemoteMcpClient implements McpConnection {
       if (this.transport.sessionId) await this.http.operation(() => this.transport.terminateSession(), undefined, 2000).catch(() => {});
     } finally { await this.client.close().catch(() => {}); await this.http.close(); }
   }
+}
+
+/** Small schema admission check for SEP-2243; actual header encoding/mirroring is SDK-owned.
+ * Reject the entire malformed catalogue rather than accidentally executing an unpinned subset.
+ */
+function validateHeaderAnnotations(schema: unknown): void {
+  const names = new Set<string>(); let nodes = 0;
+  const walk = (node: unknown, reachable: boolean, parameter: boolean, depth: number): void => {
+    if (node === null || typeof node !== "object") return;
+    if (++nodes > 4096 || depth > 32) throw new Error("MCP tool schema traversal bound");
+    if (Array.isArray(node)) { for (const value of node) walk(value, false, false, depth + 1); return; }
+    const object = node as Record<string, unknown>;
+    if (Object.hasOwn(object, "x-mcp-header")) {
+      const header = object["x-mcp-header"];
+      if (!reachable || !parameter || !["string", "boolean", "integer"].includes(String(object.type)) ||
+        typeof header !== "string" || header.length > 128 || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(header) ||
+        names.has(header.toLowerCase()) || Object.hasOwn(object, "$ref")) throw new Error("MCP invalid parameter-header annotation");
+      names.add(header.toLowerCase());
+    }
+    for (const [key, value] of Object.entries(object)) {
+      if (key === "properties" && reachable && value !== null && typeof value === "object" && !Array.isArray(value)) {
+        for (const child of Object.values(value)) walk(child, true, true, depth + 1);
+      } else walk(value, false, false, depth + 1);
+    }
+  };
+  walk(schema, true, false, 0);
 }

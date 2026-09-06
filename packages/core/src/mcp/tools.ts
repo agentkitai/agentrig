@@ -111,7 +111,8 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
     execute: async (input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       await opts.beforeExecute?.(ctx);
       ctx.signal.throwIfAborted();
-      const result = await opts.client.callTool(opts.spec.name, input, ctx.signal);
+      const result = opts.client.remote ? await opts.client.callTool(opts.spec.name, input, ctx.signal, opts.spec)
+        : await opts.client.callTool(opts.spec.name, input, ctx.signal);
       const rendered = renderContent(result.content);
       const bounded = bound(rendered, maxDisplay);
       return {

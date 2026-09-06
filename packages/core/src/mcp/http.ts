@@ -6,7 +6,7 @@ export const McpHttpUrl = z.string().min(1).max(4096).refine(value => {
   try {
     const u = new URL(value);
     return !/[\u0000-\u0020\u007f]/.test(value) && !u.username && !u.password && !u.hash && !u.search &&
-      (u.protocol === "https:" || (u.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(u.hostname)));
+      (u.protocol === "https:" || (u.protocol === "http:" && /^http:\/\/(?:127\.0\.0\.1|\[::1\])(?::[0-9]+)?(?:\/|$)/i.test(value)));
   } catch { return false; }
 }, "MCP requires HTTPS or literal-loopback HTTP without credentials, query or fragment");
 
@@ -16,7 +16,7 @@ export const RemoteMcpConfigSchema = z.object({
     issuers: z.array(McpHttpUrl).min(1).max(4),
     clientId: z.string().min(1).max(1024).optional(),
     clientMetadataUrl: McpHttpUrl.refine(v => new URL(v).protocol === "https:").optional(),
-    endpointOrigins: z.array(McpHttpUrl).max(4).optional(),
+    endpointOrigins: z.array(McpHttpUrl.refine(v => new URL(v).pathname === "/", "expected an origin, not an endpoint path")).max(4).optional(),
   }).strict().optional(),
 }).strict();
 export type RemoteMcpConfig = z.infer<typeof RemoteMcpConfigSchema>;

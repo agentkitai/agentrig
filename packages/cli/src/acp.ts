@@ -3,7 +3,7 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
-import type { McpServerConfig, Session } from "@agentkitai/agentrig-core";
+import type { McpServerConfig, RemoteMcpConfig, Session } from "@agentkitai/agentrig-core";
 import type { NewSessionRequest } from "@agentclientprotocol/sdk";
 import { unionRetrieve } from "@agentkitai/agentrig-memory";
 import { supervise } from "@agentkitai/agentrig-supervisor";
@@ -26,7 +26,7 @@ function normalizedEnv(env: Record<string, string>): string {
   return JSON.stringify(Object.entries(env).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
 }
 /** Exact transport configuration matching, never command/name heuristics or new host authority. */
-export function matchAcpMcp(request: NewSessionRequest, trusted: McpServerConfig[]): McpServerConfig[] {
+export function matchAcpMcp(request: NewSessionRequest, trusted: Array<McpServerConfig | RemoteMcpConfig>): McpServerConfig[] {
   if (request.mcpServers.length > 8) throw new Error("too many MCP servers");
   const names = new Set<string>();
   return request.mcpServers.map(server => {
@@ -34,7 +34,7 @@ export function matchAcpMcp(request: NewSessionRequest, trusted: McpServerConfig
       server.name.length > 128 || server.args.length > 128 || server.env.length > 128) throw new Error("MCP transport configuration refused");
     names.add(server.name);
     const configured = trusted.find(candidate => candidate.name === server.name);
-    if (configured === undefined) throw new Error("MCP transport configuration is not trusted");
+    if (configured === undefined || !("command" in configured)) throw new Error("MCP transport configuration is not trusted");
     const env: Record<string, string> = {};
     for (const item of server.env) {
       if (Object.hasOwn(env, item.name) || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(item.name) || item.value.length > 16_384) throw new Error("MCP environment refused");

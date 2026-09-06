@@ -24,7 +24,7 @@ export async function mcpLoginCommand(name: string, opts: McpLoginOptions, signa
   const notice = deps.notice ?? console.error;
   const policy = buildPermissionPolicy(opts);
   const request: PermissionRequest = { tool: `mcp_login_${name}`, class: "net", cwd: process.cwd(),
-    input: { endpoint: config.url, issuers: config.oauth.issuers, operation: "operator OAuth discovery, registration and token exchange" } };
+    input: { endpoint: config.url, issuers: config.oauth.issuers, endpointOrigins: config.oauth.endpointOrigins ?? [], operation: "operator OAuth discovery, registration and token exchange" } };
   await loginMcp(config, new McpCredentialStore(join(deps.home ?? homedir(), ".agentrig", "mcp-auth"), new URL(config.url).href), {
     signal,
     authorize: async () => {

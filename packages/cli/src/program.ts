@@ -131,6 +131,7 @@ export interface ProgramDependencies {
   config?: LoadRunConfigOptions;
   doctor?: DoctorOptions;
   evaluation?: SessionEvaluationDependencies;
+  mcpLogin?: typeof mcpLoginCommand;
   review?: ReviewDependencies;
   acp?: AcpDependencies;
 }
@@ -169,7 +170,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     // working, but never silently: an ignored flag the user typed deserves a note (the same
     // contract bash's background timeoutMs settled on).
     const profile = (actionCommand.optsWithGlobals() as { profile?: string }).profile;
-    if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name())) {
+    if (profile !== undefined && !PROFILE_AWARE.has(actionCommand.name()) && !(actionCommand.name() === "login" && actionCommand.parent?.name() === "mcp")) {
       console.error(`note: --profile is ignored by \`${actionCommand.name()}\` — it does not read config profiles`);
     }
   });
@@ -473,7 +474,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .action(async (server: string, opts: McpLoginOptions & { profile?: string }, cmd: Command) => {
       const resolved = await configured(opts, cmd, !opts.headless && !!process.stdin.isTTY);
       if (!resolved) return;
-      await withMaintenanceSignal(signal => mcpLoginCommand(server, resolved, signal), undefined, "MCP login");
+      await withMaintenanceSignal(signal => (dependencies.mcpLogin ?? mcpLoginCommand)(server, resolved, signal), undefined, "MCP login");
     });
 
   const memory = program.command("memory").description("Inspect and maintain the LLM Wiki memory");

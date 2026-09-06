@@ -47,20 +47,26 @@ export const McpToolSpec = z.object({
   inputSchema: z.record(z.unknown()).optional(),
 });
 export type McpToolSpec = z.infer<typeof McpToolSpec>;
+/** Remote pins retain all advertised metadata, including SDK header and output-schema fields. */
+export const RemoteMcpToolSpec = McpToolSpec.extend({ inputSchema: z.object({ type: z.literal("object") }).passthrough() }).passthrough();
 
 export const McpResourceSpec = z.object({
   uri: z.string().min(1).max(4096), name: z.string().min(1).max(256),
   description: z.string().max(8192).optional(), mimeType: z.string().max(256).optional(),
-});
+}).passthrough();
 export type McpResourceSpec = z.infer<typeof McpResourceSpec>;
 export const McpResourceTemplateSpec = z.object({
   uriTemplate: z.string().min(1).max(4096), name: z.string().min(1).max(256),
   description: z.string().max(8192).optional(), mimeType: z.string().max(256).optional(),
-});
+}).passthrough();
 export const McpPromptSpec = z.object({
   name: z.string().min(1).max(256), description: z.string().max(8192).optional(),
   arguments: z.array(z.object({ name: z.string().min(1).max(128),
-    description: z.string().max(2048).optional(), required: z.boolean().optional() })).max(32).optional(),
+    description: z.string().max(2048).optional(), required: z.boolean().optional() }).passthrough()).max(32).optional(),
+}).passthrough().superRefine((prompt, ctx) => {
+  const names = (prompt.arguments ?? []).map(arg => arg.name);
+  if (new Set(names).size !== names.length || names.some(name => /[\u0000-\u001f\u007f]/.test(name)))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "MCP prompt argument names must be unique and control-free" });
 });
 export type McpPromptSpec = z.infer<typeof McpPromptSpec>;
 export const McpPromptArguments = z.record(z.string().max(4096)).superRefine((value, ctx) => {
@@ -68,7 +74,7 @@ export const McpPromptArguments = z.record(z.string().max(4096)).superRefine((va
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "MCP prompt arguments exceed bound" });
 });
 export const McpCatalog = z.object({
-  tools: z.array(McpToolSpec), resources: z.array(McpResourceSpec),
+  tools: z.array(McpToolSpec.passthrough()), resources: z.array(McpResourceSpec),
   templates: z.array(McpResourceTemplateSpec), prompts: z.array(McpPromptSpec),
 });
 export type McpCatalog = z.infer<typeof McpCatalog>;
@@ -81,7 +87,7 @@ export interface McpConnection {
   start(): Promise<void>;
   listTools(signal?: AbortSignal): Promise<McpToolSpec[]>;
   catalog?(signal?: AbortSignal): Promise<McpCatalog>;
-  callTool(name: string, args: unknown, signal?: AbortSignal): Promise<ToolsCallResult>;
+  callTool(name: string, args: unknown, signal?: AbortSignal, definition?: McpToolSpec): Promise<ToolsCallResult>;
   readResource?(uri: string, signal?: AbortSignal): Promise<{ contents: unknown[] }>;
   getPrompt?(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<{ messages: unknown[] }>;
   close(): Promise<void>;

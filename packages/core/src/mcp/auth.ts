@@ -11,6 +11,7 @@ import { McpHttpBoundary, McpHttpUrl, type RemoteMcpConfig } from "./http.js";
 const ClientInfo = z.object({ client_id: z.string().min(1).max(4096), issuer: z.string().min(1).max(4096) }).passthrough();
 const Tokens = z.object({ access_token: z.string().min(1).max(16_384), token_type: z.string().min(1),
   refresh_token: z.string().max(16_384).optional(), expires_in: z.number().nonnegative().optional(),
+  scope: z.string().max(16_384).optional(),
   issuer: z.string().min(1).max(4096) }).passthrough();
 const RecordSchema = z.object({ version: z.literal(1), endpoint: z.string(), issuer: z.string(),
   redirectUri: z.string().url().max(4096),
@@ -130,6 +131,12 @@ export class McpOAuthProvider implements OAuthClientProvider {
       throw new Error("MCP token issuer binding refused");
     const client = await this.clientInformation(ctx);
     if (!client) throw new Error("MCP missing client binding");
+    if (!this.interactive) {
+      const previous = new Set((this.record?.tokens.scope ?? "").split(/\s+/).filter(Boolean));
+      if (tokens.scope?.split(/\s+/).filter(Boolean).some(scope => !previous.has(scope)))
+        throw new Error("MCP scope expansion requires explicit login");
+      if (tokens.scope === undefined && this.record?.tokens.scope !== undefined) tokens = { ...tokens, scope: this.record.tokens.scope };
+    }
     const next = RecordSchema.parse({ version: 1, endpoint: this.store.endpoint, issuer: ctx.issuer,
       client, tokens, redirectUri: this.redirectUrl, savedAt: Date.now(), discovery: this.discovery });
     await this.store.write(next); this.record = next;

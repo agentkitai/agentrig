@@ -516,7 +516,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
             throw new Error("MCP trusted host fetch requires explicit sandbox network policy");
           const req = { tool: `mcp_connect_${c.name}`, class: "net" as const, cwd: process.cwd(),
-            input: { endpoint: c.url, operation: "MCP discovery and catalog (not tool execution)" } };
+            input: { endpoint: c.url, issuers: c.oauth?.issuers ?? [], endpointOrigins: c.oauth?.endpointOrigins ?? [], operation: "MCP discovery and catalog (not tool execution)" } };
           extras.onNotice?.(`MCP startup network endpoint: ${c.url}; OAuth issuers: ${JSON.stringify(c.oauth?.issuers ?? [])}`);
           const base = await startupPolicy.decide(req);
           const decision = base === "ask" ? await extras.onStartupAsk?.(req) ?? "deny" : base;
