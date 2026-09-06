@@ -72,6 +72,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Current build's extension receipts, not replayed authorization or repeated activation. */
+  extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
   provider: ModelProvider;
   tools: AnyTool[];
   permissions: PermissionPolicy;
@@ -420,6 +422,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         messages = [{ role: "user", content: [{ type: "text", text: task }] }];
       }
 
+      for (const extension of config.extensions?.loaded ?? []) {
+        await emit({ type: "extension.loaded", name: extension.name, path: extension.path, surfaces: extension.surfaces });
+      }
+      for (const extension of config.extensions?.failed ?? []) await emit({ type: "extension.error", ...extension });
       if (parent === undefined) grantTaskId = config.permissionGrants?.beginRun(id);
       await config.permissionGrants?.flush(emit);
 

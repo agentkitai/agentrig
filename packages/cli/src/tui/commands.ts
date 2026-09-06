@@ -231,7 +231,8 @@ function editDistance(a: string, b: string, limit: number): number {
 }
 
 /** Rendered by `/help`, and on an unknown command so the answer is always in reach. */
-export function helpText(): string {
+export function helpText(extra: readonly { name: string; args?: string; summary: string }[] = []): string {
   const width = Math.max(...COMMANDS.map((c) => `/${c.name} ${c.args ?? ""}`.trim().length));
-  return COMMANDS.map((c) => `  ${`/${c.name} ${c.args ?? ""}`.trim().padEnd(width)}  ${c.summary}`).join("\n");
+  const builtins = COMMANDS.map((c) => `  ${`/${c.name} ${c.args ?? ""}`.trim().padEnd(width)}  ${c.summary}`).join("\n");
+  return builtins + (extra.length ? "\n\nextensions:\n" + extra.map(c => `  /${c.name} ${c.args ?? ""} — ${c.summary}`).join("\n") : "");
 }

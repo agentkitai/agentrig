@@ -8,6 +8,7 @@ import type {
   Session,
   Signal,
   Skill,
+  ExtensionCommand,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
@@ -278,6 +279,8 @@ export class TuiController {
   setSkills(skills: Skill[]): void {
     this.skills = skills;
   }
+  private extensionCommands: Array<ExtensionCommand & { extension: string }> = [];
+  setCommands(commands: Array<ExtensionCommand & { extension: string }>): void { this.extensionCommands = commands; }
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
@@ -529,7 +532,7 @@ export class TuiController {
         }
         return false;
       case "help":
-        this.print(helpText(), "system");
+        this.print(helpText(this.extensionCommands), "system");
         return true;
       case "abort":
         this.abort();
@@ -618,6 +621,13 @@ export class TuiController {
         return true;
       }
       case "skill": {
+        const extension = this.extensionCommands.find(command => command.name === cmd.name.toLowerCase());
+        if (extension !== undefined) {
+          if (this.state.status === "running") { this.print("a turn is already running — /abort first", "error"); return true; }
+          try { await extension.run(cmd.args, Object.freeze({ print: (text: string) => this.print(String(text), "system") })); }
+          catch (error) { this.print(`extension ${extension.extension}: ${String(error)}`, "error"); }
+          return true;
+        }
         const skill = this.skills.find((s) => s.name.toLowerCase() === cmd.name.toLowerCase());
         if (skill === undefined) {
           // same treatment as a typo'd built-in, because from the user's seat it is one.
@@ -627,7 +637,7 @@ export class TuiController {
             ...this.skills.map((s) => s.name).filter((n) => !/\s/.test(n)),
           ]);
           this.print(
-            `unknown command /${cmd.name}${suggestion === null ? "" : ` — did you mean /${suggestion}?`}\n${helpText()}`,
+            `unknown command /${cmd.name}${suggestion === null ? "" : ` — did you mean /${suggestion}?`}\n${helpText(this.extensionCommands)}`,
             "error",
           );
           return true;
@@ -696,7 +706,7 @@ export class TuiController {
         return true;
       }
       case "unknown":
-        this.print(`unknown command ${cmd.name === "" ? "/" : `/${cmd.name}`}\n${helpText()}`, "error");
+        this.print(`unknown command ${cmd.name === "" ? "/" : `/${cmd.name}`}\n${helpText(this.extensionCommands)}`, "error");
         return true;
       case "task":
         this.print(cmd.text, "you");

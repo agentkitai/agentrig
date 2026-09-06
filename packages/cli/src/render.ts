@@ -97,6 +97,8 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
+    case "extension.loaded": return `${p} ${e.name} hooks=${e.surfaces.hooks.join(",")} tools=${e.surfaces.tools.join(",")} commands=${e.surfaces.commands.join(",")}`;
+    case "extension.error": return `${p} ${e.name} ${e.phase}: ${e.message}`;
     case "skill.used": return `${p} ${e.name} by=${e.invokedBy}${e.generated === true ? " generated=true" : ""}`;
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
@@ -230,6 +232,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "checkpoint.restored":
     case "memory.note":
     case "skill.used":
+    case "extension.loaded":
+    case "extension.error":
     // The adjacent failed tool.result carries the model-facing sandbox error. R2c will add the
     // distinct interactive escalation rendering; do not print this bookkeeping event twice now.
     case "sandbox.denied":
