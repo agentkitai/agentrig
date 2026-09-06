@@ -246,6 +246,12 @@ authorization/prompts and joined pipelines. Unknown effects, hooks/checkpointers
 background writers remain conservative exclusive cases. Sequential stays default; scheduling
 is cooperative, not OS isolation. See [R10b](plans/R10b.md) for path and cancellation limits.
 
+R10c adds trusted opt-in `subagentTool({ isolation: "worktree", ... })` on the same
+strategy. Children get checked raw-baseline worktrees and return retained diff candidates;
+the parent applies them only through separately authorized tools. Grants are not remapped,
+enforcing parent sandboxes refuse host Git preparation, and cwd isolation is cooperative.
+See [R10c](plans/R10c.md) for dirty/untracked coverage, retention caps and handoff limits.
+
 ### 2.7 Hooks
 
 ```ts

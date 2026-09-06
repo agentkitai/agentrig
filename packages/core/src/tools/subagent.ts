@@ -5,6 +5,8 @@ import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 import { currentSandboxPolicy, SandboxDeniedError } from "../sandbox.js";
 import { inheritExpansionRestriction } from "../external-expansion.js";
 import { childPermissionView } from "../child-permissions.js";
+import { markIsolatedTool, isolatedContext } from "../isolated-runtime.js";
+import { prepareSubagentWorktree } from "../subagent-worktree.js";
 
 /**
  * A subagent tool. `subagent.spawn` / `subagent.end` have been in the event schema since M0 and
@@ -81,6 +83,8 @@ function inputSchema(choices: SubagentProviderChoices | undefined): z.ZodTypeAny
 }
 
 export interface SubagentOptions {
+  /** Opt-in cooperative Git worktree isolation and retained patch handoff. No automatic apply. */
+  isolation?: "worktree";
   /**
    * Builds the child's config from the parent's. Injected rather than derived so the caller
    * decides what a child inherits — the harness must not guess that a child should get, say,
@@ -175,7 +179,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
     isError: true,
   });
 
-  return {
+  const tool: AnyTool = {
     name: SUBAGENT_TOOL,
     sandbox: "compatible",
     description:
@@ -186,7 +190,9 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       "of this wiring and this session cannot see it. Use it both to keep bulk work out of this " +
       "conversation (a broad search, reading many files for one answer) and to delegate a whole " +
       "job to an isolated worker (implement something, review something). The subagent sees none " +
-      "of this conversation, so the task must stand alone.",
+      "of this conversation, so the task must stand alone." + (opts.isolation === "worktree"
+        ? " This worker uses a separate Git worktree and returns a retained patch candidate; inspect and apply it separately with authorized parent tools. No automatic parent edits."
+        : ""),
     inputSchema: inputSchema(opts.providerChoices),
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
@@ -219,10 +225,14 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         }
       }
 
+      const parentPolicy = currentSandboxPolicy();
+      if (opts.isolation === "worktree" && parentPolicy !== undefined) {
+        // Not SandboxDeniedError: no implicit escape retry for host Git metadata preparation.
+        throw new Error("isolated worktree preparation is unavailable inside an enforcing parent sandbox; common Git metadata is not exposed");
+      }
       const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
       const config = opts.childConfig(choice);
       const permissionGrants = childPermissionView(ctx, config.permissionGrants);
-      const parentPolicy = currentSandboxPolicy();
       if (parentPolicy !== undefined && (
         config.sandbox === undefined || config.sandbox.mode === "none" ||
         (parentPolicy.mode === "read-only" && config.sandbox.mode !== "read-only") ||
@@ -280,128 +290,155 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         p.usd += reservedUsd;
         p.live += 1;
       }
-      ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
-
-      // the child's own log names its parent, so a spawn record elsewhere can be checked against it
-      const runOptions = { cwd: ctx.cwd, id, parent: ctx.sessionId };
-      inheritExpansionRestriction(ctx, runOptions);
-      const session = child.run(input.task, runOptions);
-
-      let ended = false;
-      const end = (reason: "done" | "aborted" | "error" | "budget"): void => {
-        if (ended) return;
-        ended = true;
-        ctx.emit({ type: "subagent.end", id: session.id, reason });
-      };
-
-      // the parent's abort must reach the child, or aborting a session would leave its children
-      // running and billing. `subagent.end` is emitted HERE rather than after the loop: by the
-      // time the loop unwinds the parent is ending, and events from a finished session are
-      // dropped — which is how a spawn came to be logged with no matching end.
-      let cut: ReturnType<typeof setTimeout> | undefined;
-      const onAbort = (): void => {
-        session.control.abort();
-        end("aborted");
-        // The child's session_end hooks (#88) are cut with a second abort before the parent
-        // stops waiting at its own grace (#86): a child still ingesting after that would be
-        // exactly the orphan the parent's note reports. The parent's deadline is two child
-        // graces from its own finally. The child may first spend one whole grace waiting for a
-        // tool that ignores the abort; its hooks then get half a grace; the last quarter covers
-        // the child's own session.end write and the parent's stream drain. Armed at the child's
-        // grace, a child mid-tool at abort ran no end hooks at all.
-        cut = setTimeout(() => session.control.abort(), childGrace + Math.floor(childGrace / 2));
-        void session.done.then(() => clearTimeout(cut), () => clearTimeout(cut));
-      };
-      // the parent's SECOND abort — stop waiting for end hooks — reaches the child's end hooks too
-      const onEndAbort = (): void => session.control.abort();
-      ctx.signal.addEventListener("abort", onAbort, { once: true });
-      ctx.endSignal?.addEventListener("abort", onEndAbort, { once: true });
-      if (ctx.endSignal?.aborted === true) onEndAbort();
-      // A listener added to an already-aborted signal never fires. The parent can abort between
-      // its top-of-loop check and this call (a pre_tool hook, a permission prompt), and a child
-      // spawned into that window would otherwise run its full budget with nobody able to stop it.
-      if (ctx.signal.aborted) onAbort();
-
-      /**
-       * Reconciles the reservation with what the child actually spent, once. Called with the
-       * child's usage on the normal path and with none if it threw, where the reservation stands.
-       */
-      let settled = false;
-      const settle = (usage?: Usage): void => {
-        if (settled) return;
-        settled = true;
-        const spentTokens = usage === undefined ? reservedTokens : usageTokens(usage);
-        const spentUsd =
-          usage === undefined || pricing === undefined
-            ? reservedUsd
-            : usageUsd(
-                usage,
-                pricing,
-                config.provider.capabilities.cacheReadDiscount,
-                config.provider.capabilities.cacheWriteMultiplier,
-              );
-        for (const p of chain) {
-          p.tokens += spentTokens - reservedTokens;
-          p.usd += spentUsd - reservedUsd;
-          p.live -= 1;
-        }
-      };
-
-      /** The last turn that actually said something. */
-      let answer = "";
-      /** Whether that turn was the child's last: a preamble is not a conclusion. */
-      let answerIsFinal = false;
-      /** The turn in progress. */
-      let current = "";
+      let reservationReleased = false;
+      let spawned = false;
+      let childEnded = false;
+      let worktree: Awaited<ReturnType<typeof prepareSubagentWorktree>> | undefined;
       try {
-        for await (const e of session.events) {
-          // the child's transcript stays in the child's log: forwarding it would defeat the
-          // context isolation that is the entire reason to spawn one
-          if (e.type === "turn.start") current = "";
-          else if (e.type === "model.delta") current += e.text;
-          // `turn.end` is emitted even when a turn is aborted or errors mid-tool, so every turn
-          // that produced text is seen here — there is no trailing buffer left to promote
-          else if (e.type === "turn.end") {
-            // A child that states its conclusion and THEN makes one more tool call is normal, and
-            // no system prompt prevents it — so the last turn that HAD text is the answer. But an
-            // opening remark is also text, so when it was not the final turn, say so rather than
-            // passing a preamble off as a conclusion.
-            if (current.trim() !== "") {
-              answer = current;
-              answerIsFinal = true;
-            } else if (answer !== "") {
-              answerIsFinal = false;
+        if (opts.isolation === "worktree") {
+          const binding = isolatedContext(ctx);
+          if (binding === undefined) throw new Error("isolated subagent requires the live tool execution context");
+          worktree = await prepareSubagentWorktree(ctx, [...binding.excludes, config.store.root]);
+          ctx.signal.throwIfAborted();
+          binding.ready();
+        }
+        ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
+        spawned = true;
+
+        // the child's own log names its parent, so a spawn record elsewhere can be checked against it
+        const runOptions = { cwd: worktree?.cwd ?? ctx.cwd, id, parent: ctx.sessionId };
+        inheritExpansionRestriction(ctx, runOptions);
+        const session = child.run(input.task, runOptions);
+
+        let ended = false;
+        const end = (reason: "done" | "aborted" | "error" | "budget"): void => {
+          if (ended) return;
+          ended = true;
+          childEnded = true;
+          ctx.emit({ type: "subagent.end", id: session.id, reason });
+        };
+
+        // the parent's abort must reach the child, or aborting a session would leave its children
+        // running and billing. `subagent.end` is emitted HERE rather than after the loop: by the
+        // time the loop unwinds the parent is ending, and events from a finished session are
+        // dropped — which is how a spawn came to be logged with no matching end.
+        let cut: ReturnType<typeof setTimeout> | undefined;
+        const onAbort = (): void => {
+          session.control.abort();
+          end("aborted");
+          // The child's session_end hooks (#88) are cut with a second abort before the parent
+          // stops waiting at its own grace (#86): a child still ingesting after that would be
+          // exactly the orphan the parent's note reports. The parent's deadline is two child
+          // graces from its own finally. The child may first spend one whole grace waiting for a
+          // tool that ignores the abort; its hooks then get half a grace; the last quarter covers
+          // the child's own session.end write and the parent's stream drain. Armed at the child's
+          // grace, a child mid-tool at abort ran no end hooks at all.
+          cut = setTimeout(() => session.control.abort(), childGrace + Math.floor(childGrace / 2));
+          void session.done.then(() => clearTimeout(cut), () => clearTimeout(cut));
+        };
+        // the parent's SECOND abort — stop waiting for end hooks — reaches the child's end hooks too
+        const onEndAbort = (): void => session.control.abort();
+        ctx.signal.addEventListener("abort", onAbort, { once: true });
+        ctx.endSignal?.addEventListener("abort", onEndAbort, { once: true });
+        if (ctx.endSignal?.aborted === true) onEndAbort();
+        // A listener added to an already-aborted signal never fires. The parent can abort between
+        // its top-of-loop check and this call (a pre_tool hook, a permission prompt), and a child
+        // spawned into that window would otherwise run its full budget with nobody able to stop it.
+        if (ctx.signal.aborted) onAbort();
+
+        /**
+         * Reconciles the reservation with what the child actually spent, once. Called with the
+         * child's usage on the normal path and with none if it threw, where the reservation stands.
+         */
+        let settled = false;
+        const settle = (usage?: Usage): void => {
+          if (settled) return;
+          settled = true;
+          const spentTokens = usage === undefined ? reservedTokens : usageTokens(usage);
+          const spentUsd =
+            usage === undefined || pricing === undefined
+              ? reservedUsd
+              : usageUsd(
+                  usage,
+                  pricing,
+                  config.provider.capabilities.cacheReadDiscount,
+                  config.provider.capabilities.cacheWriteMultiplier,
+                );
+          for (const p of chain) {
+            p.tokens += spentTokens - reservedTokens;
+            p.usd += spentUsd - reservedUsd;
+            p.live -= 1;
+          }
+          reservationReleased = true;
+        };
+
+        /** The last turn that actually said something. */
+        let answer = "";
+        /** Whether that turn was the child's last: a preamble is not a conclusion. */
+        let answerIsFinal = false;
+        /** The turn in progress. */
+        let current = "";
+        try {
+          for await (const e of session.events) {
+            // the child's transcript stays in the child's log: forwarding it would defeat the
+            // context isolation that is the entire reason to spawn one
+            if (e.type === "turn.start") current = "";
+            else if (e.type === "model.delta") current += e.text;
+            // `turn.end` is emitted even when a turn is aborted or errors mid-tool, so every turn
+            // that produced text is seen here — there is no trailing buffer left to promote
+            else if (e.type === "turn.end") {
+              // A child that states its conclusion and THEN makes one more tool call is normal, and
+              // no system prompt prevents it — so the last turn that HAD text is the answer. But an
+              // opening remark is also text, so when it was not the final turn, say so rather than
+              // passing a preamble off as a conclusion.
+              if (current.trim() !== "") {
+                answer = current;
+                answerIsFinal = true;
+              } else if (answer !== "") {
+                answerIsFinal = false;
+              }
             }
           }
-        }
-        const summary = await session.done;
-        settle(summary.usage);
-        end(summary.reason);
+          const summary = await session.done;
+          settle(summary.usage);
+          end(summary.reason);
 
-        const text = answer.trim();
-        const answerText =
-          answerIsFinal || text === ""
-            ? text
-            : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
-        const sessionLine = `subagent session ${session.id}`;
-        if (summary.reason !== "done") {
+          const text = answer.trim();
+          const answerText =
+            answerIsFinal || text === ""
+              ? text
+              : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
+          const sessionLine = `subagent session ${session.id}`;
+          if (summary.reason !== "done") {
+            return {
+              output: summary,
+              display: `${sessionLine}\nsubagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}${worktree ? `\nWorktree retained without an integration candidate: ${worktree.artifact}` : ""}`,
+              isError: true,
+            };
+          }
+          if (worktree && childTools.some(tool => tool.hasBackgroundWork?.())) throw new Error("child has background work; no integration candidate can be captured");
+          const candidate = await worktree?.finish(session.id);
           return {
-            output: summary,
-            display: `${sessionLine}\nsubagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}`,
-            isError: true,
+            output: candidate === undefined ? summary : { summary, candidate },
+            display: `${sessionLine}\n${answerText === "" ? "(the subagent finished without a final message)" : answerText}${candidate ? `\nRetained patch candidate (not applied): ${candidate.patchPath}\nManifest: ${worktree!.artifact}/candidate.json\nInspect and recheck before separately authorized parent application.` : ""}`,
           };
+        } finally {
+          // a throw anywhere above must still release the reservation, or one failed spawn would
+          // leave a pool permanently `live` (never evictable) and permanently charged
+          settle();
+          ctx.signal.removeEventListener("abort", onAbort);
+          ctx.endSignal?.removeEventListener("abort", onEndAbort);
         }
-        return {
-          output: summary,
-          display: `${sessionLine}\n${answerText === "" ? "(the subagent finished without a final message)" : answerText}`,
-        };
+      } catch (error) {
+        if (worktree) throw new Error(`${error instanceof Error ? error.message : String(error)}; worktree retained at ${worktree.artifact}`, { cause: error });
+        throw error;
       } finally {
-        // a throw anywhere above must still release the reservation, or one failed spawn would
-        // leave a pool permanently `live` (never evictable) and permanently charged
-        settle();
-        ctx.signal.removeEventListener("abort", onAbort);
-        ctx.endSignal?.removeEventListener("abort", onEndAbort);
+        // Covers preparation and synchronous child.run throws before the streaming finally.
+        // Unknown spend remains reserved; never strand a live pool or refund unobserved work.
+        if (!reservationReleased) for (const p of chain) p.live -= 1;
+        if (spawned && !childEnded) ctx.emit({ type: "subagent.end", id, reason: ctx.signal.aborted ? "aborted" : "error" });
       }
     },
   } as AnyTool;
+  return opts.isolation === "worktree" ? markIsolatedTool(tool) : tool;
 }

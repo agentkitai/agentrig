@@ -86,6 +86,49 @@ const changed = (path: string, contentHash: string) =>
   ev({ type: "file.changed", path, op: "edit", contentHash });
 const turnEnd = () => ev({ type: "turn.end", n: 1 });
 
+it.each([false, true])("parallel child completion order keeps call-relative loop/stall accounting (reverse=%s)", reverse => {
+  const state = initialState();
+  const loop = loopDetector({ repeats: 3 }); const stall = stallDetector({ turns: 2 });
+  const signals: Signal[] = [];
+  const accept = (payload: EventPayload) => {
+    const event = ev(payload); reduce(state, event);
+    for (const detector of [loop, stall]) { const found = detector.observe(event, state); if (found) signals.push(found); }
+    return event;
+  };
+  for (let turn = 1; turn <= 3; turn++) {
+    accept({ type: "turn.start", n: turn });
+    const calls = [0, 1].map(n => accept({ type: "tool.call", id: `${turn}-${n}`, name: "subagent", input: { task: "same task" }, inputHash: "same-task" }));
+    for (const call of reverse ? [...calls].reverse() : calls) {
+      if (call.type !== "tool.call") throw Error("call fixture");
+      accept({ type: "subagent.spawn", id: `session-${call.id}`, task: "same task" });
+      accept({ type: "subagent.end", id: `session-${call.id}`, reason: "done" });
+      accept({ type: "tool.result", id: call.id, toolCallSeq: call.seq, permission: "exec", ok: true, display: "retained candidate", durationMs: 0 });
+    }
+    accept({ type: "turn.end", n: turn });
+  }
+  expect(state.toolCalls).toBe(6); expect(state.toolErrors).toBe(0); expect(state.turns).toBe(3);
+  expect(state.filesChanged).toBe(0); // Child candidates are not parent file-change evidence.
+  expect(signals.filter(signal => signal.type === "loop")).toHaveLength(2);
+  expect(signals.filter(signal => signal.type === "stall")).toHaveLength(1);
+});
+
+it.each([false, true])("failed concurrent child results withdraw their own variation credit (reverse=%s)", reverse => {
+  const events: HarnessEvent[] = [];
+  for (let turn = 1; turn <= 3; turn++) {
+    events.push(ev({ type: "turn.start", n: turn }));
+    const calls = ["alpha", "beta"].map(task => ev({ type: "tool.call", id: `${turn}-${task}`, name: "subagent", input: { task }, inputHash: task }));
+    events.push(...calls);
+    for (const call of reverse ? [...calls].reverse() : calls) {
+      if (call.type !== "tool.call") throw Error("call fixture");
+      events.push(ev({ type: "tool.result", id: call.id, toolCallSeq: call.seq, permission: "exec", ok: false, display: "candidate refused", durationMs: 0 }));
+    }
+    events.push(ev({ type: "turn.end", n: turn }));
+  }
+  const outcome = feed(stallDetector({ turns: 2 }), events);
+  expect(outcome.state.toolErrors).toBe(6); expect(outcome.signals).toHaveLength(1);
+  expect(outcome.signals[0]!.type).toBe("stall");
+});
+
 describe("loop detector", () => {
   it("fires on the same tool input hash repeating k times", () => {
     const { signals } = feed(loopDetector({ repeats: 3 }), [call("bash", "h1"), call("bash", "h1"), call("bash", "h1")]);
