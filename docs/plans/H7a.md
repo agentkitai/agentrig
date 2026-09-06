@@ -43,3 +43,17 @@ Responses SSE parsers feed the loop, and outbound projections preserve repaired 
 Rendering/schema tests and the continuation suite run on Windows as well as full Unix CI.
 Named negative controls, complete build/typecheck/tests and one bounded independent review
 gate delivery. No live evaluation spending or task-benefit claims.
+
+## Independent review receipt
+
+Single Claude session `fb321df8-52c6-45dc-a950-6d1bd57c05fb` reviewed `2ffc821` against
+main `78e8e19`: APPROVE, no material findings. Requested max24, reported 19 turns,
+167 seconds, no restart or subagents. Independently passed build/typecheck and the full
+2,308 tests plus two skips across 123 files. The two non-blocking notes, verbatim:
+
+> When a continuation is staged but the next iteration's budget gate refuses it, the platform nudge remains in the persisted transcript with no matching `turn.continued`. The contract allows saved repairs without a retry, and it is harmless on resume, but the transcript then contains a nudge for a continuation that never happened.
+
+> The pre-existing pre-model veto path still breaks without a `turn.end` event. The contract explicitly retains that behavior, so it is out of scope here.
+
+Both are documented behavior; optional polish is recorded at the roadmap end. No production
+changes followed the review and no second general review was run.

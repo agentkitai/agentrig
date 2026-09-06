@@ -1094,3 +1094,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   instead of whole-startup refusal for oversized discovery, and canonical explicit-path dedupe
   to suppress benign alias shadow notices. Any child extension inheritance must retain paired
   hooks, ownership and failure state; R5a deliberately inherits none of the extension surfaces.
+- H7a polish: optionally distinguish a persisted staged continuation nudge from an attempted
+  retry when a later gate refuses; the `turn.continued` event already records attempts only.
+  Consider pairing the pre-existing pre-model veto's `turn.start` with `turn.end` separately;
+  H7a preserves its existing done outcome and does not change that lifecycle contract.

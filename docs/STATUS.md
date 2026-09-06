@@ -72,7 +72,12 @@ Updated-main build/typecheck pass; the full suite passes 2,308 tests plus two sk
 cover actual adapters, persistence, budgets and the R13c pair. Removing truncated-call dispatch
 suppression made the named non-execution control run the incomplete call; treating the nudge
 as fresh user input made the external-input pair execute forbidden first exec. Both mutations
-were detected and restored before the full pass. Independent review is pending.
+were detected and restored before the full pass. One independent Claude review approved
+`2ffc821` against main `78e8e19`, with no material findings: session
+`fb321df8-52c6-45dc-a950-6d1bd57c05fb`, 167 seconds, 19 reported turns under the requested
+24-turn cap, no restart. It independently ran build/typecheck and the full 2,308 + two skips
+across 123 files. Optional notes are at the roadmap end; no production changes followed review.
+Final exact-head three-platform CI remains the PR gate.
 
 ### R5a done — PR #157; post-merge CI green
 
