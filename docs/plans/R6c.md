@@ -75,4 +75,8 @@ platform CI precede root-controlled merge and the post-merge gate. Closing PR re
 Integrated main `97e18bf`; build/typecheck and full suite pass (2,167 tests plus two skips,
 111 files), including 15 focused cases. Mutating default-off into default-on adds generated
 roots in the named config control; dropping the event marker fails the actual generated
-selection assertion. Both are restored. Independent review and final CI remain pending.
+selection assertion. Both are restored. One bounded Claude review
+`81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved exact head
+`7bc42c852fb269f396a1b2970a573cb6f3e1cefb` with no material findings and independently repeated
+build/typecheck/full tests (90 seconds, 11 reported turns). Optional polish is at ROADMAP's end;
+PR #151 records final exact-head CI, integration and root-controlled merge/post-merge receipts.
