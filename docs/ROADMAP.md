@@ -1000,3 +1000,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R6g polish: normalize fully sanitized-away hints to an absent property; explain beside byte
   accounting that the first admitted entry must fit together with its worked example.
   Neither changes the total cap, selection semantics, emitter ownership or approval policy.
+- Compaction option polish found during R13c fixtures: validate or deliberately support
+  `keepLastMessages: 0`; the current built-in boundary scan assumes a retained last message.
+  Preserve conservative summary ancestry and keep this separate from permission guard delivery.

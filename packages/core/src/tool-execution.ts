@@ -294,7 +294,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   await emit({ type: "permission.decision", d: decision });
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion
-      ? await raceAbort(Promise.resolve(config.onAsk(permReq)), "fresh external-input approval").catch(() => "deny" as const)
+      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq)), "fresh external-input approval").catch(() => "deny" as const)
       : await config.onAsk(permReq);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
     if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);

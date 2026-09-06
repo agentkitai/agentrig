@@ -156,6 +156,16 @@ it.each(["standing", "scoped"])("a live %s deny cannot be overridden by a willin
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
 });
 
+it.each([false, true])("failed fresh approval is audited as denial (async=%s)", async asynchronous => {
+  const f = await fixture([call("document"), call("exec")]);
+  const { events } = await run(f, { onAsk: () => {
+    if (asynchronous) return Promise.reject(new Error("approval unavailable"));
+    throw new Error("approval unavailable");
+  } });
+  expect(f.invoked).toEqual([]);
+  expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
+});
+
 it("round-trips the distinct expansion audit and source-origin fields without changing legacy requests", () => {
   const event = HarnessEvent.parse({ type: "permission.expansion", seq: 1, sessionId: "s", ts: 1, id: "c", name: "exec", surface: "exec", decision: "deny", sourceOrigin: "child" });
   expect(HarnessEvent.parse(JSON.parse(JSON.stringify(event)))).toEqual(event);
