@@ -989,3 +989,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   propagation; add direct TUI/resume option-key assertions alongside resolved-root coverage.
   Clarify or reject empty CLI memory paths deliberately if changing that existing behavior.
   None changes default-off discovery, ordinary event compatibility or permission separation.
+- R6g polish: normalize fully sanitized-away hints to an absent property; explain beside byte
+  accounting that the first admitted entry must fit together with its worked example.
+  Neither changes the total cap, selection semantics, emitter ownership or approval policy.

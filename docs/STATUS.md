@@ -19,6 +19,16 @@ prompt source/authority seams remain intact. Named ambiguity-gate and catalogue-
 mutations failed their intended controls and were restored. Full validation, one bounded
 independent review and exact-head PR/post-merge CI remain delivery gates.
 
+Integrated main `35f37ba` without production conflicts, preserving R12a grants and all done
+markers. Build/typecheck and the full suite pass: 2,196 tests plus two skips across 114 files,
+with four workers to avoid shared-container contention. One independent Claude review
+`21a600fa-7f06-4d6c-a0ba-20803e760e03` approved source head `f3f07a7`, no material findings.
+Its 20-turn bound ended before a verdict (164 seconds); one authorized tools-disabled final
+summary turn used only gathered evidence (29 seconds). The review's default-worker full run
+had 23 timing/cascade failures in 10 unchanged files; all affected files passed isolated,
+and 117 related tests passed. This is not an independent green full-suite claim. Optional
+polish is at the roadmap end; exact-head three-platform CI remains authoritative.
+
 ### R6c done — PR #151; post-merge CI green
 
 Final head `9c4951d` passed all three PR platforms and merged as `09157ae`.
