@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d PR #154 is merged, pending main CI; R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -29,12 +29,14 @@ protocol chunk to edit/re-preview/confirm. Exact prior-preview identity now gate
 the regression failed before the fix and passes after, along with 30 scope/UI cases. Optional
 polish stays at the roadmap end. R13d main `2ad720f` is integrated; combined-head checks and
 exact-head CI follow, without another general review.
+The combined source passes build/typecheck and 2,243 tests plus two skips across 117 files
+(four workers, 30 seconds); exact-head three-platform CI remains mandatory.
 
 R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 34023253550;
 the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
 delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
 
-### R13d implemented — closing PR records delivery gates
+### R13d merged — PR #154; main CI pending
 
 Runtime context principals distinguish source trust, instruction authority and tool permissions.
 All accepted hook injection/modification surfaces use collision-safe registered identities;

@@ -16,7 +16,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R13f, R5e and R5d: trusted progress, manifests and MCP pinning | PRs #143/#142/#144 passed exact-head and post-merge three-platform CI |
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
 | Implemented; closing gates | R12b: semantic scoped approval UI | Honest effect unknowns and bounded scope editing with exact preview/confirmation; independent review and exact-head CI |
-| Active independently | R13d: injected-context principals | Runtime-assigned authority and explicit revocable hook delegation |
+| Merged; main CI pending | R13d: injected-context principals (PR #154) | Runtime-assigned authority and explicit revocable hook delegation |
 | Preparing independently | R13c: external-input permission restrictions | Build on merged principals; fresh approval cannot become standing authority |
 | Committed | R5 remainder, R7–R11, R12b–R12d, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 
