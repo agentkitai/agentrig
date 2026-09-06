@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: R4a; H1–H5 and E1–E3 complete in PRs #118–#134.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: R4b; R4a, H1–H5 and E1–E3 complete in PRs #118–#135.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -898,3 +898,10 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   allowlist without weakening repository isolation; emit a denial on the late-abort path and
   localize throwing effect callbacks. Add direct fail-closed hook-runner branch tests when touching
   that runner. Current failures remain fail-closed; these do not block R4b or add subdivisions.
+- R4b undo polish: improve repeat-undo/already-restored diagnostics, add direct executable-bit,
+  deleted-file and directory/file-collision round-trip cases, and consider batching repeated raw
+  scans for larger workspaces. Covered session-end memory writes deliberately invalidate seals;
+  make that refusal easier to diagnose. No automatic recovery cleanup or force-undo bypass.
+- Evaluation test hygiene: use a monotonic-derived or injected fixture clock for the E2 scripted
+  usage test. One local full R4b run saw Date.now move backwards; its targeted rerun and two full
+  reruns passed. Keep the production negative-wall-time rejection intact.

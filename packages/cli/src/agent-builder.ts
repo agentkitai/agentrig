@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
   assertShellExists,
+  Checkpointer,
   builtinTools,
   createAgent,
   defaultRules,
@@ -125,6 +126,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   yolo?: boolean;
   /** OS execution boundary, independent of permission approvals. Defaults to none. */
   sandbox?: SandboxMode;
+  /** Opt-in raw checkpoints and terminal ownership receipts; requires stopped external writers. */
+  checkpoints?: boolean;
   maxTurns: string;
   maxTokens?: string;
   maxMinutes?: string;
@@ -453,6 +456,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   const hooks: Hook[] = [...(extras.extraHooks ?? [])];
+  if (opts.checkpoints === true) hooks.push(new Checkpointer());
   if (opts.memory !== undefined && opts.ingestOnEnd === true) {
     const backend = openBackend({ tolerate: false, onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
     hooks.push(

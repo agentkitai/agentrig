@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips ownership seals and restoration audit records with bounded Git identifiers",()=>{
+    const seal={seq:2,sessionId:"s",ts:1,type:"checkpoint.sealed",turn:1,ref:"refs/agentrig/s/sealed/1",commit:"a".repeat(40),tree:"b".repeat(40),head:"unborn\nrefs/heads/main",indexHash:"c".repeat(64),repo:"/repo",excludes:["/repo/logs"]};
+    const restored={seq:0,sessionId:"audit",ts:1,type:"checkpoint.restored",targetSession:"s",turn:1,ref:"refs/agentrig/s/1",tree:"b".repeat(40),recovery:"/repo/.git/recovery"};
+    for(const raw of [seal,restored]) {
+      const event=HarnessEvent.parse(raw);expect(parseEvent(serializeEvent(event))).toEqual(event);
+      expect(HarnessEvent.safeParse({...raw,ref:"refs/heads/main"}).success).toBe(false);
+      expect(HarnessEvent.safeParse({...raw,tree:"invalid"}).success).toBe(false);
+    }
+  });
   it("round-trips checkpoint events and requires a namespaced ref", () => {
     const event = HarnessEvent.parse({
       seq: 2,

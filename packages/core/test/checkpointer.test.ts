@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +7,7 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   Checkpointer,
+  undoSession,
   bashTool,
   JobRegistry,
   createAgent,
@@ -115,6 +116,156 @@ const readTool = (): AnyTool => ({
 });
 
 describe("Checkpointer", () => {
+  it("refuses an ignored unowned file colliding with a restoration target",async()=>{
+    await initRepo();await writeFile(join(root,"lost.txt"),"before");await writeFile(join(root,".gitignore"),"\n");
+    const tool:AnyTool={name:"remove",description:"remove",permission:"write",inputSchema:z.object({}),execute:async()=>{await rm(join(root,"lost.txt"));await writeFile(join(root,".gitignore"),"lost.txt\n");return {output:null,display:"done"};}};
+    const session=agent([[call("a",tool.name,{}),stop("tool_use")],[stop("end_turn")]], [tool]).run("remove",{cwd:root,id:"undo_collision"});
+    await collect(session);await session.done;await writeFile(join(root,"lost.txt"),"ignored external data");
+    await expect(undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root})).rejects.toThrow("ignored or unowned path");
+    expect(await readFile(join(root,"lost.txt"),"utf8")).toBe("ignored external data");
+    expect(await readFile(join(root,".gitignore"),"utf8")).toBe("lost.txt\n");
+  });
+
+  it("refuses to undo across a session-created commit without rewriting history",async()=>{
+    await initRepo();
+    const session=agent([[call("a","write",{path:"tracked.txt",content:"committed change"}),stop("tool_use")],[call("b","bash",{command:"git add tracked.txt && git commit -qm change"}),stop("tool_use")],[stop("end_turn")]], [writeTool(),bashTool()]).run("commit",{cwd:root,id:"undo_commit"});
+    await collect(session);await session.done;const head=await git("rev-parse","HEAD");
+    await expect(undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root})).rejects.toThrow("HEAD changed since the checkpoint");
+    expect(await git("rev-parse","HEAD")).toBe(head);
+    expect(await readFile(join(root,"tracked.txt"),"utf8")).toBe("committed change");
+  });
+  it.skipIf(process.platform === "win32")("undo restores symlink target bytes without reading or changing the target",async()=>{
+    await initRepo();
+    await writeFile(join(root,"target.txt"),"target untouched");
+    await symlink("target.txt",join(root,"link"));
+    const tool:AnyTool={name:"replace_link",description:"replace",permission:"write",inputSchema:z.object({}),execute:async()=>{await rm(join(root,"link"));await writeFile(join(root,"link"),"regular replacement");return {output:null,display:"done"};}};
+    const session=agent([[call("a",tool.name,{}),stop("tool_use")],[stop("end_turn")]], [tool]).run("replace",{cwd:root,id:"undo_link"});
+    await collect(session);await session.done;
+    await undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root});
+    expect(await readlink(join(root,"link"))).toBe("target.txt");
+    expect(await readFile(join(root,"target.txt"),"utf8")).toBe("target untouched");
+  });
+
+  it("never certifies an aborted in-flight tool that can still write later",async()=>{
+    await initRepo();let begin!:()=>void;let finish!:()=>void;
+    const begun=new Promise<void>(r=>{begin=r;}); const wait=new Promise<void>(r=>{finish=r;});
+    let finished!:()=>void;const settled=new Promise<void>(r=>{finished=r;});
+    const tool:AnyTool={name:"late",description:"late",permission:"write",inputSchema:z.object({}),execute:async()=>{begin();await wait;await writeFile(join(root,"tracked.txt"),"late write");finished();return {output:null,display:"done"};}};
+    const session=agent([[call("a",tool.name,{}),stop("tool_use")]], [tool]).run("late",{cwd:root,id:"undo_late"});
+    await begun;session.control.abort();const events=await collect(session);await session.done;
+    expect(events.some(e=>e.type==="checkpoint.sealed")).toBe(false);
+    finish();await settled;
+    await expect(undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root})).rejects.toThrow("no verified ownership");
+    expect(await readFile(join(root,"tracked.txt"),"utf8")).toBe("late write");
+  });
+
+  it.skipIf(process.platform === "win32")("retains displaced originals and a manifest on a real partial installation failure",async()=>{
+    await initRepo();await mkdir(join(root,"z"));
+    await writeFile(join(root,"a.txt"),"a before");await writeFile(join(root,"z","file.txt"),"z before");
+    const session=agent([[call("a","write",{path:"a.txt",content:"a owned"}),call("z","write",{path:"z/file.txt",content:"z owned"}),stop("tool_use")],[stop("end_turn")]], [writeTool()]).run("change",{cwd:root,id:"undo_partial"});
+    await collect(session);await session.done;let checks=0;
+    try {
+      await expect(undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root,assertQuiescent:async()=>{if(++checks===3)await chmod(join(root,"z"),0o500);}})).rejects.toThrow("undo partially applied; recovery retained");
+      expect(await readFile(join(root,"a.txt"),"utf8")).toBe("a before");
+      expect(await readFile(join(root,"z","file.txt"),"utf8")).toBe("z owned");
+      const recovery=(await readdir(join(root,".git"))).find(name=>name.startsWith("agentrig-undo-"))!;
+      expect(await readFile(join(root,".git",recovery,"originals","0"),"utf8")).toBe("a owned");
+      expect(await readFile(join(root,".git",recovery,"manifest.json"),"utf8")).toContain("z/file.txt");
+    } finally {await chmod(join(root,"z"),0o700);}
+  });
+  it("undo restores dirty raw bytes from file and shell tools without changing index, HEAD, refs, or session history", async () => {
+    await initRepo();
+    await writeFile(join(root,".gitignore"),"ignored.txt\n");
+    await git("add",".gitignore"); await git("commit","-qm","ignore");
+    await writeFile(join(root,"tracked.txt"),"staged\n"); await git("add","tracked.txt");
+    const before = Buffer.from([0,255,13,10,65]);
+    await writeFile(join(root,"tracked.txt"),before);
+    await writeFile(join(root,"untracked.txt"),"precious\r\n");
+    await writeFile(join(root,"ignored.txt"),"ignored external bytes");
+    const index = await readFile(join(root,".git","index"));
+    const head = await git("rev-parse","HEAD"); const log = await git("log","--format=%H");
+    const session = agent([
+      [call("a","write",{path:"tracked.txt",content:"changed"}),usage,stop("tool_use")],
+      [call("b","bash",{command:"printf shell > untracked.txt; printf new > new.txt"}),usage,stop("tool_use")],
+      [stop("end_turn")],
+    ],[writeTool(),bashTool()]).run("change",{cwd:root,id:"undo_raw"});
+    const events = await collect(session); await session.done;
+    expect(events.filter(e=>e.type==="checkpoint.sealed")).toHaveLength(1);
+    const store = new SessionStore({root:join(root,".agentrig","sessions")});
+    const history = await readFile(store.pathFor(session.id));
+    const refs = await git("for-each-ref","--format=%(refname) %(objectname)","refs/agentrig");
+    const result = await undoSession(store,session.id,{cwd:root,toTurn:1});
+    expect(result.restored).toBe(true);
+    expect(await readFile(join(root,"tracked.txt"))).toEqual(before);
+    expect(await readFile(join(root,"untracked.txt"),"utf8")).toBe("precious\r\n");
+    await expect(readFile(join(root,"new.txt"))).rejects.toThrow();
+    expect(await readFile(join(root,"ignored.txt"),"utf8")).toBe("ignored external bytes");
+    expect(await readFile(join(root,".git","index"))).toEqual(index);
+    expect(await git("rev-parse","HEAD")).toBe(head); expect(await git("log","--format=%H")).toBe(log);
+    expect(await git("for-each-ref","--format=%(refname) %(objectname)","refs/agentrig")).toBe(refs);
+    expect(await readFile(store.pathFor(session.id))).toEqual(history);
+    expect((await store.readAll(result.auditId!)).map(e=>e.type)).toEqual(["session.start","checkpoint.restored","session.end"]);
+    expect(await readFile(join(result.recovery!,"manifest.json"),"utf8")).toContain("undo_raw");
+  });
+
+  it("undo defaults to the latest checkpoint and refuses external dirty-worktree changes", async () => {
+    await initRepo();
+    const session = agent([
+      [call("a","write",{path:"tracked.txt",content:"first"}),stop("tool_use")],
+      [call("b","write",{path:"tracked.txt",content:"second"}),stop("tool_use")],
+      [stop("end_turn")],
+    ],[writeTool()]).run("change",{cwd:root,id:"undo_latest"});
+    await collect(session); await session.done;
+    const store = new SessionStore({root:join(root,".agentrig","sessions")});
+    await writeFile(join(root,"external.txt"),"human change");
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("non-session changes");
+    expect(await readFile(join(root,"tracked.txt"),"utf8")).toBe("second");
+    expect(await readFile(join(root,"external.txt"),"utf8")).toBe("human change");
+    await rm(join(root,"external.txt"));
+    expect((await undoSession(store,session.id,{cwd:root})).turn).toBe(2);
+    expect(await readFile(join(root,"tracked.txt"),"utf8")).toBe("first");
+  });
+
+  it("refuses external index/HEAD changes and held writer leases before undo", async () => {
+    await initRepo();
+    const session = agent([[call("a","write",{path:"tracked.txt",content:"after"}),stop("tool_use")],[stop("end_turn")]], [writeTool()]).run("change",{cwd:root,id:"undo_guard"});
+    await collect(session); await session.done;
+    const store = new SessionStore({root:join(root,".agentrig","sessions")});
+    const index = await readFile(join(root,".git","index"));
+    await git("add","tracked.txt");
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("non-session changes");
+    await writeFile(join(root,".git","index"),index);
+    const lease = join(root,".git","agentrig-checkpoint.lock"); await mkdir(lease);
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("another session");
+    await rm(lease,{recursive:true});
+    const release = await store.acquireLock(session.id);
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("locked");
+    await release();
+    await git("checkout","-qb","other");
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("non-session changes");
+    expect(await readFile(join(root,"tracked.txt"),"utf8")).toBe("after");
+  });
+
+  it("does not seal external changes after the final tool or between mutating calls", async () => {
+    await initRepo();
+    const cp = new Checkpointer(); const stored: CheckpointHookEvent[] = [];
+    const ctx = {point:"pre_tool" as const,sessionId:"external",cwd:root,turn:1,signal:new AbortController().signal,emitCheckpoint:async(e:CheckpointHookEvent)=>{stored.push(e);}};
+    await cp.handler(ctx); await writeFile(join(root,"tracked.txt"),"tool"); await cp.afterTool(ctx);
+    await writeFile(join(root,"tracked.txt"),"external");
+    await expect(cp.seal(ctx)).rejects.toThrow("non-session changes");
+    await expect(cp.handler(ctx)).rejects.toThrow("non-session changes");
+    expect(stored.some(e=>e.type==="checkpoint.sealed")).toBe(false); await cp.endSession(ctx.sessionId);
+  });
+
+  it("rejects missing seals and invalid turns and degrades a non-Git run to a no-op", async () => {
+    const session = agent([[call("a","write",{path:"plain.txt",content:"plain"}),stop("tool_use")],[stop("end_turn")]], [writeTool()]).run("change",{cwd:root,id:"plain_undo"});
+    await collect(session); await session.done;
+    const store = new SessionStore({root:join(root,".agentrig","sessions")});
+    expect((await undoSession(store,session.id,{cwd:root})).restored).toBe(false);
+    await expect(undoSession(store,session.id,{cwd:root,toTurn:0})).rejects.toThrow("positive");
+    const legacy = store.create(); await store.append(legacy,{type:"session.end",reason:"done"});
+    await expect(undoSession(store,legacy,{cwd:root})).rejects.toThrow("no verified ownership");
+  });
   it("captures real foreground shell writes and unknown read-class custom tools conservatively", async () => {
     await initRepo();
     const unknown = { ...writeTool(), permission: "read" as const };

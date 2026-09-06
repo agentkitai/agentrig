@@ -197,8 +197,16 @@ unknown effects and foreground shell calls require capture. Raw worktree trees a
 `refs/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
 `checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
 background-work refusal, coverage exclusions and host quiescence preconditions are specified in
-[R4a](plans/R4a.md). Checkpoints are SDK-only, subject to the existing host-hook sandbox restriction;
-restoration and CLI/TUI controls remain R4b/R4c.
+[R4a](plans/R4a.md). R4b exposes opt-in `--checkpoints` / config `checkpoints: true` in run/TUI,
+subject to the existing host-hook sandbox restriction. It tracks stable post-tool ownership,
+rejects later external edits, and records `checkpoint.sealed` at a quiescent session end.
+`undoSession` powers `sessions undo <id> [--to-turn n]` and idle TUI `/undo [turn]`: require a
+closed latest run, matching seal/current raw tree/HEAD/index, then restore only differing covered
+files. Displaced originals and a manifest remain in a Git-metadata recovery directory;
+`checkpoint.restored` goes to a separate audit log, never rewriting the original conversation.
+Older unsealed runs refuse. TUI starts a fresh conversation after undo; explicit resume does not
+replay tools. See [R4b](plans/R4b.md) for cooperative-writer and partial-failure limits.
+Supervisor restoration remains R4c.
 
 ### 2.8 Context management
 

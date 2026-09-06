@@ -4,6 +4,7 @@ import { SessionStore } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
+import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
@@ -195,6 +196,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "allow every tool call without asking, including outside the working directory; --deny still applies",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
+      .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
         "execution boundary: read-only, workspace-write, or none; enforcing modes refuse host hooks and MCP startup",
@@ -401,6 +403,15 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   const sessions = program.command("sessions").description("Inspect session event logs");
+
+  sessions.command("undo <id>")
+    .description("Restore an owned checkpoint; stop external writers first; preserves index/history and retains originals")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .option("--to-turn <n>", "checkpoint turn (default: latest in the latest run)", sequence)
+    .action(async (id: string, opts: {root:string;toTurn?:number}) => {
+      const result = await undoSession(new SessionStore({root:opts.root}),id,opts.toTurn===undefined?{}:{toTurn:opts.toTurn});
+      console.log(result.message);
+    });
 
   withRunOptions(
     sessions

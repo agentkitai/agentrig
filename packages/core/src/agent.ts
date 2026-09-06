@@ -1107,6 +1107,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       }).catch(() => ({ patches: [], injects: [] }));
 
       for (const checkpointer of (config.hooks ?? []).filter(isCheckpointerHook)) {
+        await checkpointer.seal({
+          point:"session_end",sessionId:id,cwd,turn:turns,signal:AbortSignal.any([endController.signal,AbortSignal.timeout(60_000)]),
+          hasBackgroundWork:()=>[...toolsByName.values()].some(t=>t.hasBackgroundWork?.()),
+          checkpointExcludes:[await realpath(config.store.root)],
+          emitCheckpoint:async event=>{await emit(EventPayload.parse(event));},
+        }).catch((error:unknown)=>emit({type:"error",message:`checkpoint seal failed: ${String(error)}`,fatal:false}));
         await checkpointer.endSession(id).catch((error: unknown) => emit({
           type: "error", message: `checkpoint lease cleanup failed: ${String(error)}`, fatal: false,
         }));
@@ -1239,10 +1245,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       }
 
       const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
+      const toolEffect = checkpointers.length === 0 ? "read-only" : typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace");
       if (checkpointers.length > 0) {
         const checkpoint = await hook("pre_tool", {
           sessionId: id, cwd, turn: turns, tool: { name: tu.name, input }, permission: permClass,
-          toolEffect: typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace"),
+          toolEffect,
           hasBackgroundWork: () => [...toolsByName.values()].some(t => t.hasBackgroundWork?.()),
           checkpointExcludes: [await realpath(config.store.root)],
           emitCheckpoint: async (event) => {
@@ -1476,6 +1483,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           });
         }
         return resultBlock(body, true);
+      } finally {
+        for (const checkpointer of checkpointers) {
+          await checkpointer.afterTool({
+            point:"post_tool",sessionId:id,cwd,turn:turns,toolEffect,
+            signal:AbortSignal.any([abortController.signal,AbortSignal.timeout(60_000)]),
+            hasBackgroundWork:()=>[...toolsByName.values()].some(t=>t.hasBackgroundWork?.()),
+            checkpointExcludes:[await realpath(config.store.root)],
+          }).catch((error:unknown)=>emit({type:"error",message:`checkpoint ownership failed: ${String(error)}`,fatal:false}));
+        }
       }
     }
   })();

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { lstat, mkdir, mkdtemp, open, readlink, realpath, rm, rmdir } from "node:fs/promises";
 import { constants } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
@@ -9,7 +10,10 @@ import { assertSessionId } from "./session-store.js";
 /** Events the built-in checkpointer may append through its deliberately narrow hook seam. */
 export type CheckpointHookEvent =
   | { type: "checkpoint.created"; turn: number; ref: string; commit: string; tree: string }
+  | ({ type: "checkpoint.sealed"; turn: number; ref: string; commit: string; repo: string; excludes: string[] } & CheckpointState)
   | { type: "checkpoint.warning"; message: string };
+
+export interface CheckpointState { tree: string; head: string; indexHash: string }
 
 const CHECKPOINTER = Symbol("agentrig.checkpointer");
 
@@ -18,7 +22,7 @@ interface GitResult {
   stderr: string;
 }
 
-function gitEnvironment(): NodeJS.ProcessEnv {
+export function gitEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   // Repository-selection variables from the parent process must not redirect a checkpoint away
   // from the run cwd or make a healthy repository look absent. The private index is supplied only
@@ -30,7 +34,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
-function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: AbortSignal, input?: Buffer): Promise<GitResult> {
+export function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: AbortSignal, input?: Buffer): Promise<GitResult> {
   return new Promise((resolve, reject) => {
     const child = execFile("git", ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args], {
       cwd,
@@ -102,7 +106,7 @@ async function existingCheckpoint(
   return undefined;
 }
 
-function inside(root: string, path: string): boolean {
+export function inside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`);
 }
@@ -176,6 +180,46 @@ async function readParent(repo: string, env: NodeJS.ProcessEnv, signal: AbortSig
     await git(repo, ["read-tree", "--empty"], env, signal);
     return undefined;
   }
+}
+
+/** Compare both raw covered bytes and Git state; a clean `git status` is not ownership evidence. */
+export async function checkpointState(repo: string, ctx: HookContext): Promise<CheckpointState> {
+  const dir = await mkdtemp(join(tmpdir(), "agentrig-state-"));
+  try {
+    const env = {...gitEnvironment(), GIT_INDEX_FILE: join(dir,"index")};
+    const metadata = async () => {
+      const parent = await readParent(repo, env, ctx.signal);
+      const branch = await git(repo, ["symbolic-ref", "-q", "HEAD"], undefined, ctx.signal).catch(error => {
+        if (error.code === 1) return {stdout:"",stderr:""}; throw error;
+      });
+      const indexPath = resolve(repo, (await git(repo, ["rev-parse", "--git-path", "index"], undefined, ctx.signal)).stdout.trim());
+      const index = await open(indexPath,constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW | constants.O_NONBLOCK)).catch(error => {
+        if (error.code === "ENOENT") return undefined; throw error;
+      });
+      let bytes = Buffer.alloc(0);
+      if (index) try {
+        const stat = await index.stat();
+        if (!stat.isFile() || stat.size > 16*1024*1024) throw new Error("undo ownership requires a regular index of at most 16 MiB");
+        bytes = Buffer.alloc(stat.size+1);
+        let n=0;
+        while(n<bytes.length) { const got=await index.read(bytes,n,bytes.length-n,n); if(!got.bytesRead)break; n+=got.bytesRead; }
+        const after=await index.stat();
+        if(n!==stat.size || after.mtimeMs!==stat.mtimeMs || after.ctimeMs!==stat.ctimeMs) throw new Error("index changed while verifying ownership");
+        bytes=bytes.subarray(0,n);
+      } finally { await index.close(); }
+      return {parent,head:`${parent??"unborn"}\n${branch.stdout.trim()}`,indexHash:createHash("sha256").update(bytes).digest("hex")};
+    };
+    const before = await metadata();
+    const tree = await captureTree(repo,before.parent,env,ctx);
+    if (tree !== await captureTree(repo,before.parent,env,ctx)) throw new Error("worktree changed while verifying ownership");
+    const after = await metadata();
+    if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("Git state changed while verifying ownership");
+    return {tree,head:before.head,indexHash:before.indexHash};
+  } finally { await rm(dir,{recursive:true,force:true}); }
+}
+
+export function sameCheckpointState(a: CheckpointState, b: CheckpointState): boolean {
+  return a.tree === b.tree && a.head === b.head && a.indexHash === b.indexHash;
 }
 
 async function snapshot(ctx: HookContext, checkpointer: Checkpointer): Promise<void> {
@@ -263,6 +307,8 @@ export class Checkpointer implements Hook {
   private readonly attempts = new Map<string, { turn: number; work: Promise<void> }>();
   private readonly leases = new Map<string, { path: string; repo: string; ino: number; dev: number }>();
   private readonly assertQuiescent: ((ctx: HookContext) => Promise<void>) | undefined;
+  private readonly owned = new Map<string, CheckpointState>();
+  private readonly uncertain = new Set<string>();
 
   constructor(options: { timeoutMs?: number; assertQuiescent?: (ctx: HookContext) => Promise<void> } = {}) {
     this.timeoutMs = options.timeoutMs ?? 60_000;
@@ -276,6 +322,8 @@ export class Checkpointer implements Hook {
     await this.attempts.get(sessionId)?.work.catch(() => {});
     this.attempts.delete(sessionId);
     this.warned.delete(sessionId);
+    this.owned.delete(sessionId);
+    this.uncertain.delete(sessionId);
     const lease = this.leases.get(sessionId);
     if (lease !== undefined) {
       const current = await lstat(lease.path);
@@ -326,7 +374,16 @@ export class Checkpointer implements Hook {
     assertSessionId(ctx.sessionId);
     if (!Number.isSafeInteger(ctx.turn) || ctx.turn <= 0) throw new Error("invalid checkpoint turn");
     if (ctx.toolEffect === "read-only") return { action: "continue" };
+    if (this.uncertain.has(ctx.sessionId)) throw new Error("checkpoint ownership uncertain; stop this session before further mutation");
     if (this.leases.has(ctx.sessionId)) await this.guard(ctx);
+    const owned = this.owned.get(ctx.sessionId);
+    if (owned) {
+      const actual = await checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx);
+      if (!sameCheckpointState(owned,actual)) {
+        this.uncertain.add(ctx.sessionId);
+        throw new Error("non-session changes detected; refusing mutation and undo ownership");
+      }
+    }
     let entry = this.attempts.get(ctx.sessionId);
     if (entry?.turn !== ctx.turn) {
       entry = { turn: ctx.turn, work: this.create(ctx) };
@@ -339,6 +396,33 @@ export class Checkpointer implements Hook {
       throw error;
     }
     return { action: "continue" };
+  }
+
+  /** Called only after a mutating invocation settles; abort races cannot certify late writers. */
+  async afterTool(ctx: HookContext): Promise<void> {
+    if (ctx.toolEffect === "read-only" || !this.leases.has(ctx.sessionId)) return;
+    this.uncertain.add(ctx.sessionId);
+    await this.guard(ctx);
+    const state = await checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx);
+    await this.guard(ctx);
+    this.owned.set(ctx.sessionId,state);
+    this.uncertain.delete(ctx.sessionId);
+  }
+
+  /** Persist a stable terminal receipt, never silently adopt edits after the final tool. */
+  async seal(ctx: HookContext): Promise<void> {
+    if (this.uncertain.has(ctx.sessionId)) throw new Error("undo unavailable: checkpoint ownership uncertain");
+    const owned = this.owned.get(ctx.sessionId);
+    const lease = this.leases.get(ctx.sessionId);
+    if (!owned || !lease) return;
+    await this.guard(ctx);
+    const current = await checkpointState(lease.repo,ctx);
+    if (!sameCheckpointState(owned,current)) throw new Error("undo unavailable: non-session changes after the final tool");
+    const ref = `refs/agentrig/${ctx.sessionId}/sealed/${ctx.turn}`;
+    const env = {...gitEnvironment(),GIT_AUTHOR_NAME:"AgentRig",GIT_AUTHOR_EMAIL:"checkpoint@agentrig.invalid",GIT_COMMITTER_NAME:"AgentRig",GIT_COMMITTER_EMAIL:"checkpoint@agentrig.invalid"};
+    const commit = (await git(lease.repo,["commit-tree",owned.tree,"-m",`AgentRig ownership ${ctx.sessionId}`],env,ctx.signal)).stdout.trim();
+    await git(lease.repo,["update-ref","--no-deref",ref,commit,"0".repeat(commit.length)],undefined,ctx.signal);
+    await ctx.emitCheckpoint?.({type:"checkpoint.sealed",turn:ctx.turn,ref,commit,repo:lease.repo,excludes:ctx.checkpointExcludes??[],...owned});
   }
 
   private async create(ctx: HookContext): Promise<void> {

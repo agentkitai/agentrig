@@ -84,6 +84,8 @@ export function renderEvent(e: HarnessEvent): string {
     case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
     case "checkpoint.created": return `${p} turn=${e.turn} ref=${e.ref} commit=${e.commit} tree=${e.tree}`;
     case "checkpoint.warning": return `${p} ${e.message}`;
+    case "checkpoint.sealed": return `${p} turn=${e.turn} tree=${e.tree} ref=${e.ref}`;
+    case "checkpoint.restored": return `${p} session=${e.targetSession} turn=${e.turn} recovery=${e.recovery}`;
     case "permission.request":
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
     case "permission.decision": return `${p} ${e.d}`;
@@ -220,6 +222,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.manifest":
     case "context.repo_map":
     case "checkpoint.created":
+    case "checkpoint.sealed":
+    case "checkpoint.restored":
     case "memory.note":
     case "skill.used":
     // The adjacent failed tool.result carries the model-facing sandbox error. R2c will add the

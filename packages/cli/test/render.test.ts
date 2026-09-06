@@ -48,6 +48,13 @@ describe("formatUsage", () => {
 });
 
 describe("renderEvent", () => {
+  it("renders ownership seals and separate undo audit events",()=>{
+    const seal=HarnessEvent.parse({seq:1,ts:1,sessionId:"s",type:"checkpoint.sealed",turn:1,ref:"refs/agentrig/s/sealed/1",commit:"a".repeat(40),tree:"b".repeat(40),head:"c".repeat(40),indexHash:"d".repeat(64),repo:"/repo",excludes:["/repo/logs"]});
+    expect(renderEvent(seal)).toContain("refs/agentrig/s/sealed/1"); expect(renderChatEvent(seal)).toBeNull();
+    const restored=HarnessEvent.parse({seq:0,ts:1,sessionId:"audit",type:"checkpoint.restored",targetSession:"s",turn:1,ref:"refs/agentrig/s/1",tree:"b".repeat(40),recovery:"/repo/.git/recovery"});
+    expect(renderEvent(restored)).toContain("session=s turn=1 recovery=/repo/.git/recovery");
+    expect(()=>HarnessEvent.parse({...seal,indexHash:"invalid"})).toThrow();
+  });
   it("renders checkpoint refs and warnings", () => {
     const created = HarnessEvent.parse({
       seq: 1,
