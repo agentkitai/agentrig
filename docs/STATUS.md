@@ -14,7 +14,12 @@ narration establish semantic proof. No new runner, automatic checks or live eval
 [Contract](plans/R14d.md). R14c is its prerequisite; extension/provider work is independent.
 Actual correct/broken X2 surfaces keep regression/submitted tests green and discriminate in
 E2 plus attached M6. Removed assumption discount and removed M6 deficit override each failed
-their named negative controls and were restored. One review/full delivery gates remain pending.
+their named negative controls and were restored. The one bounded Claude review returned
+REQUEST_CHANGES for the A4/X4 human-gate integration; the material finding is fixed with actual
+pending/FAIL/PASS and non-waiver regressions, including a detected/restored old-behavior control.
+[Original verdict](plans/R14d-review.md). No second review. Integrated R10d main `3d45d9f`;
+combined build/typecheck/full suite passes 2,497 tests plus two skips across 143 files (four
+workers, 34 seconds). Exact-head PR and post-merge gates remain pending.
 
 ### R10d implemented — delivery gates pending
 
