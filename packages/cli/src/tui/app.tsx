@@ -99,6 +99,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
     // Use the synchronous controller state, not a React render from before this stdin batch.
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
     const previewAtInput = controller.snapshot().pending?.scope;
+    const questionAtInput = controller.snapshot().question;
     const permissionAction = (action: OrdinaryInputAction): void => {
       const pending = controller.snapshot().pending;
       if (pending === null) return;
@@ -144,7 +145,8 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
             buf.set(buf.value.slice(0, -1));
           } else if (action.type === "enter") {
             const line = buf.value;
-            if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
+            if (questionAtInput !== null) buf.set("", () => controller.answerQuestionText(line, questionAtInput));
+            else if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
             else {
               buf.set("", () => {
                 void controller.submit(line).then((keepGoing) => {
@@ -180,6 +182,12 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
       else if (key.escape) permissionAction({ type: "escape" });
       else if (key.backspace || key.delete) permissionAction({ type: "backspace" });
       else if (char !== "" && !key.ctrl && !key.meta) permissionAction({ type: "append", text: char });
+      return;
+    }
+
+    if (questionAtInput !== null && key.return) {
+      const answer = buf.value;
+      buf.set("", () => controller.answerQuestionText(answer, questionAtInput));
       return;
     }
 
@@ -279,6 +287,12 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
               : "y = allow once, a = allow all session, s = scope, n / esc = deny, d = deny all session"}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>}
+        </Box>
+      ) : state.question !== null ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text color="yellow">{fitToRows(`Question: ${state.question.request.prompt}\n${state.question.request.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}`, columns, Math.max(2, Math.min(7, rows - 3)))}</Text>
+          <Text>{fitToRows(`answer: ${input}`, columns, 2)}</Text>
+          <Text dimColor>{fitToRows(`Enter a number or free text; clarification is not permission.${state.queuedQuestions ? ` ${state.queuedQuestions} more waiting.` : ""}`, columns, 2)}</Text>
         </Box>
       ) : state.escalation !== null ? (
         <Box marginTop={1} flexDirection="column">

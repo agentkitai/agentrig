@@ -1,5 +1,8 @@
 # ACP editor integration
 
+Structured clarification is an opt-in versioned extension; see [questions](QUESTIONS.md).
+It is separate from tool permission requests and never creates approval authority.
+
 `agentrig acp` serves **stable Agent Client Protocol v1** over UTF-8 newline-framed
 JSON-RPC on stdin/stdout. Build first (`pnpm build`). Point an ACP editor at
 `node /absolute/path/packages/cli/dist/index.js acp` and normal provider/budget flags.
