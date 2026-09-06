@@ -1,4 +1,4 @@
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, Server as HttpServer } from "node:http";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,6 +34,24 @@ it("requires bearer AND exact Origin/Host before creating ACP; fixed assets cont
     expect(duplicate).toBe(403); expect(runs).toBe(0);
   } finally { await server.close(); }
 });
+it("canonical default-port Host/Origin works without accepting explicit noncanonical port spelling", async () => {
+  // Inject only the advertised bound port; real HTTP/WS still use an unprivileged
+  // listener, so the port-80 browser normalization contract is portable in CI.
+  const original = HttpServer.prototype.address; let port = 0;
+  const spy = vi.spyOn(HttpServer.prototype,"address").mockImplementation(function(this: HttpServer) {
+    const address = original.call(this); if (address && typeof address !== "string") { port = address.port; return {...address,port:80}; } return address;
+  });
+  const server = await serveWeb({host:"127.0.0.1",port:0,run:async input => { for await (const _ of input) { /* owned lifetime */ } }});
+  spy.mockRestore();
+  const actual = `http://127.0.0.1:${port}`;
+  const get = (host:string) => new Promise<number>(resolve => { const req = httpRequest(actual,{headers:{host}},res=>{res.resume();resolve(res.statusCode!);}); req.end(); });
+  try {
+    expect(await get("127.0.0.1")).toBe(200); expect(server.url).toBe("http://127.0.0.1");
+    expect(await get("127.0.0.1:80")).toBe(403);
+    const socket = new WebSocket(actual.replace("http:","ws:")+"/acp",[WEB_PROTOCOL,`bearer.${server.token}`],{origin:server.url,headers:{host:"127.0.0.1"}});
+    await once(socket,"open"); expect(socket.protocol).toBe(WEB_PROTOCOL); const closed=once(socket,"close"); socket.close(); await closed;
+  } finally { spy.mockRestore(); await server.close(); }
+});
 it("holds the exclusive connection slot through runtime join after overflow/close", async () => {
   let release!: () => void; const held = new Promise<void>(r => { release = r; }); let runs = 0;
   const server = await serveWeb({host:"127.0.0.1",port:0,run:async () => { runs++; await held; }});
@@ -42,6 +60,31 @@ it("holds the exclusive connection slot through runtime join after overflow/clos
     const closed = once(client.socket, "close");
     client.socket.send("x".repeat(600000)); client.socket.send("y".repeat(600000)); await closed;
     expect(runs).toBe(1); expect(await refused(server, {origin:server.url})).toBe(403);
+  } finally { release(); await server.close(); }
+});
+it("authenticated actual ACP remains usable after seven seconds idle beyond HTTP deadlines", async () => {
+  const f = await runtimeFixture(async function* () { yield {type:"text_delta",text:"Still connected"}; yield {type:"stop",reason:"end_turn"}; });
+  const c = await connect(f.server);
+  try {
+    await c.request("initialize",{protocolVersion:1,clientCapabilities:{}});
+    const sessionId = (await c.request("session/new",{cwd:f.root,mcpServers:[]})).result.sessionId;
+    // Real Node HTTP/socket timers, not a fake clock that would miss upgraded parser behavior.
+    await new Promise<void>(resolve => setTimeout(resolve,7000));
+    expect(c.socket.readyState).toBe(WebSocket.OPEN);
+    const response = await c.request("session/prompt",{sessionId,prompt:[{type:"text",text:"Reply after idle"}]});
+    expect(response.result.stopReason).toBe("end_turn"); expect(JSON.stringify(c.messages)).toContain("Still connected");
+  } finally { await c.close(); await f.close(); }
+}, 15000);
+it("tiny-frame count limit refuses at 1025 messages independently of byte capacity", async () => {
+  let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  const server = await serveWeb({host:"127.0.0.1",port:0,run:async () => { await held; }});
+  try {
+    const c = await connect(server);
+    const observed = new Promise<string>(resolve => { c.socket.once("close",()=>resolve("closed")); c.socket.once("pong",()=>resolve("pong")); });
+    for (let n = 0; n < 1025; n++) c.socket.send("{}");
+    // The ping follows every frame on the same connection; a pong proves the receiver
+    // processed the whole flood without closing, avoiding a timing-only negative oracle.
+    c.socket.ping(); expect(await observed).toBe("closed");
   } finally { release(); await server.close(); }
 });
 it.each(["binary", "newline", "oversize"])("refuses %s frames and joins the connection", async mode => {

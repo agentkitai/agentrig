@@ -1261,3 +1261,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   controller and core deadlines. No permission or provenance widening.
 - Child abort-hook fixture polish: name the lifecycle orphan timers beside the
   200/400 ms phase-gate interception so future equal-delay timers prompt review.
+- R8d polish: use a friendlier fixed CLI bind-validation message; explicitly refuse
+  future unsupported permission kinds in the page if the server gains them; protect
+  `end(chunk)` if the current ACP write/destroy-only bridge is ever generalized.
+  Idle-lifetime coverage, canonical default-port authority and tiny-frame count
+  discrimination were handled within R8d, not deferred. Joined uncooperative host
+  work may retain the closing slot; repeated Ctrl-C is not forced termination.

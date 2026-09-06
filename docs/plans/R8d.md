@@ -17,10 +17,11 @@ persisted or placed in session logs, telemetry, URL, cookies or browser storage.
 
 Only fixed compiled HTML/JS/CSS assets are served, through exact GET/HEAD paths.
 No path decoding/traversal, queries, arbitrary cwd assets, mutable HTTP API or CORS.
-Assets contain no token, project path/config or session content. Require one exact Host
-`127.0.0.1:<bound port>` on all requests; duplicate/missing/alternative Host refuses.
+Assets contain no token, project path/config or session content. Require one exact
+canonical HTTP Host (`127.0.0.1:<bound port>`, except default port 80 is omitted) on
+all requests; duplicate/missing/alternative Host refuses.
 Forwarded headers cannot supply authority. Upgrade only `/acp` with one exact Origin
-`http://127.0.0.1:<bound port>`; absent, null and cross-origin values refuse.
+canonical HTTP origin; absent, null and cross-origin values refuse.
 
 Before creating ACP streams/controllers, require the fixed `agentrig-acp-v1` and
 `bearer.<base64url secret>` offered subprotocols. Compare a fixed-length secret in
@@ -137,3 +138,45 @@ corrected without runtime widening. No live providers or remote collectors were 
 Pre-review build/typecheck and Docker-required full suite pass **2,908 tests plus
 two existing skips, 179 files, four workers**. The explicit real Chromium lane also
 passes its one smoke test. Independent review and exact-head all-four CI follow.
+
+## Independent review and bounded closure
+
+One frozen review of `9bd018c` against `b3bb06a` returned **APPROVE WITH FIXES**;
+24 turns requested, **37 reported**, session `a11514ce-4195-4b2b-9e6d-bf169c508be8`.
+The reported list-price estimate was USD 3.0642035, not a subscription billing claim.
+[Original final response, verbatim](R8d-review.md). It independently passed 15 Node
+tests, one real Chromium smoke and four-package typecheck; it did not run build/full
+Docker. Three standalone/version probes were denied, not executed:
+
+```text
+node -e "console.log(require('/home/amit/agentrig/.claude/worktrees/r8d-web-client/node_modules/ws/package.json').version)" 2>/dev/null; ls node_modules/.pnpm | grep -i -E '^(ws@|playwright@)'
+node -p "require('./node_modules/ws/package.json').version"
+pnpm exec tsx -e "import('/home/amit/agentrig/.claude/worktrees/r8d-web-client/packages/cli/src/web.ts').then(m => console.log('loaded', typeof m.serveWeb, m.WEB_LIMITS))"
+```
+
+- F1 was an untested assumption, not a confirmed idle disconnect. The new actual
+  authenticated ACP test idles seven seconds with real Node timers, then completes
+  a prompt. Removing our timeout clear **survived**: public ws 8.21.3 itself clears
+  the timeout at websocket.js:247. A separate mutation reattaching a five-second
+  timeout after upgrade fails CLOSED(3) versus OPEN(1). Restored behavior passes;
+  this does not claim our redundant clear fixes a preexisting bug.
+- F2 is an author-confirmed default-port interoperability defect. A real HTTP/WS
+  fixture injects only the advertised port 80 while binding an ordinary ephemeral
+  port (no privileged CI bind). Canonical browser Host initially failed 403 versus
+  200. Deriving canonical HTTP authority fixes it; exact Host/Origin matching remains,
+  and explicit noncanonical `:80` spelling still refuses. These are author tests,
+  not reviewer reproductions.
+- F4 now has a 1025-small-frame control independent of byte capacity. A following
+  ping is an ordered receive barrier. Removing the count cap fails `pong` versus
+  `closed`; restored behavior passes without a timeout-only oracle.
+- F3 CLI wording and hypothetical F5 future permission kinds/F6 `end(chunk)` use
+  are optional follow-ups at the literal roadmap end. The current server offers
+  only once choices and ACP writes/destroys this adapter, never `end(chunk)`.
+  F7 uncooperative-host/second-interrupt behavior is the existing explicit joined
+  ownership limitation, not a new forced-cancellation promise.
+
+No second general review or library edits. All named mutations are restored.
+
+Post-fix build and typecheck pass. Full Docker-required validation passes 2,911
+tests plus two existing skips across 179 files (four workers, 61.36 seconds);
+the separate real Chromium smoke passes. These are author-run checks.

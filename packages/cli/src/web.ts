@@ -66,7 +66,7 @@ export async function serveWeb(options: { host: string; port: number; run(input:
   });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(options.port, options.host, () => { server.off("error", reject); resolve(); }); });
   const address = server.address(); if (address === null || typeof address === "string") throw new Error("Web listener unavailable");
-  authority = `127.0.0.1:${address.port}`;
+  authority = new URL(`http://127.0.0.1:${address.port}`).host;
   let stopping: Promise<void> | undefined;
   const close = () => stopping ??= (async () => {
     closing = true; const owner = active; owner?.close();

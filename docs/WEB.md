@@ -27,7 +27,9 @@ WebSocket subprotocol, never a URL, cookie, browser storage or selected response
 protocol. The password field clears on connect; reconnect requires another paste.
 Only the fixed `agentrig-acp-v1` protocol is selected. Exact Host and Origin checks
 reject cross-site browser upgrades, including missing/null origins. No mutable HTTP
-API or ambient cookies exist. Nonbrowser clients can spoof Origin, so Origin alone
+API is exposed. Host/Origin use the canonical HTTP authority: default port 80 is
+omitted, all other bound ports are explicit; alternate spellings still refuse. No
+ambient cookies exist. Nonbrowser clients can spoof Origin, so Origin alone
 is never authentication. Possessing the token authorizes a local client connection,
 not project trust, tool permission or a claim that model prose is human consent.
 
