@@ -5,6 +5,7 @@ import {
   BracketedPasteDecoder,
   InputBuffer,
   ordinaryInputActions,
+  type OrdinaryInputAction,
 } from "./input-buffer.js";
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
@@ -91,6 +92,30 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
   }, [buf, paste, state.activity]);
 
   useRawInput((raw, char, key) => {
+    // Use the synchronous controller state, not a React render from before this stdin batch.
+    // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
+    const previewAtInput = controller.snapshot().pending?.scope;
+    const permissionAction = (action: OrdinaryInputAction): void => {
+      const pending = controller.snapshot().pending;
+      if (pending === null) return;
+      buf.touch(); // coalesce scope edits and controller redraws at the input quiet point
+      if (pending.scope !== undefined) {
+        if (action.type === "escape") controller.cancelPermissionScope();
+        else if (pending.scope.preview) {
+          if (action.type === "append" && /^(y|Y)$/.test(action.text) && pending.scope === previewAtInput) controller.confirmPermissionScope();
+          else if (action.type === "append" && /^(e|E)$/.test(action.text)) controller.editPermissionScope(pending.scope.text);
+          else if (action.type === "append" && /^(n|N)$/.test(action.text)) controller.cancelPermissionScope();
+        } else if (action.type === "enter") controller.previewPermissionScope();
+        else if (action.type === "backspace") controller.editPermissionScope(pending.scope.text.slice(0, -1));
+        else if (action.type === "append") controller.editPermissionScope(pending.scope.text + action.text);
+        return;
+      }
+      if (action.type === "append" && /^(s|S)$/.test(action.text)) controller.startPermissionScope();
+      else if (action.type === "append" && /^(y|Y)$/.test(action.text)) controller.answerPermission("allow");
+      else if (action.type === "append" && /^(a|A)$/.test(action.text)) controller.answerPermission("allow", true);
+      else if (action.type === "append" && /^(d|D)$/.test(action.text)) controller.answerPermission("deny", true);
+      else if (action.type === "escape" || (action.type === "append" && /^(n|N)$/.test(action.text))) controller.answerPermission("deny");
+    };
     const decoded = paste.feed(raw);
     if (decoded.protocol) {
       // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
@@ -109,19 +134,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
           if (action.type === "interrupt") {
             if (state.status === "running") controller.abort();
             else exit();
-          } else if (state.pending !== null) {
-            if (action.type === "append" && (action.text === "y" || action.text === "Y")) {
-              controller.answerPermission("allow");
-            } else if (action.type === "append" && (action.text === "a" || action.text === "A")) {
-              controller.answerPermission("allow", true);
-            } else if (action.type === "append" && (action.text === "d" || action.text === "D")) {
-              controller.answerPermission("deny", true);
-            } else if (
-              action.type === "escape" ||
-              (action.type === "append" && (action.text === "n" || action.text === "N"))
-            ) {
-              controller.answerPermission("deny");
-            }
+          } else if (controller.snapshot().pending !== null) {
+            permissionAction(action);
           } else if (action.type === "backspace") {
             buf.set(buf.value.slice(0, -1));
           } else if (action.type === "enter") {
@@ -157,13 +171,11 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
     }
 
     // a permission prompt takes the keyboard: answering it is the only useful thing to do
-    if (state.pending !== null) {
-      if (char === "y" || char === "Y") controller.answerPermission("allow");
-      // `a` answers this request AND every later one for the same tool: a task that writes twenty
-      // files should be approved once, not twenty times
-      else if (char === "a" || char === "A") controller.answerPermission("allow", true);
-      else if (char === "d" || char === "D") controller.answerPermission("deny", true);
-      else if (char === "n" || char === "N" || key.escape) controller.answerPermission("deny");
+    if (controller.snapshot().pending !== null) {
+      if (key.return) permissionAction({ type: "enter" });
+      else if (key.escape) permissionAction({ type: "escape" });
+      else if (key.backspace || key.delete) permissionAction({ type: "backspace" });
+      else if (char !== "" && !key.ctrl && !key.meta) permissionAction({ type: "append", text: char });
       return;
     }
 
@@ -244,22 +256,25 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
               <>blocked by sandbox — run outside it?</>
             ) : (
               <>
-                allow {state.pending.req.tool} [{state.pending.req.class}]
-                {state.pending.req.paths === undefined ? "" : ` on ${state.pending.req.paths.join(", ")}`}
-                {state.pending.req.origin === undefined ? "" : ` (asked by ${state.pending.req.origin})`}?
+                {fitToRows(`allow ${JSON.stringify(state.pending.req.tool)} [${state.pending.req.class}]? Declared effects and unknowns above.`, columns, 2)}
               </>
             )}
           </Text>
-          <Text dimColor>
+          {state.pending.scope !== undefined ? <>
+            <Text>{fitToRows(state.pending.scope.preview
+              ? "Exact future scope printed above. y = confirm grant, e = edit, n / esc = cancel scope"
+              : `Edit ${state.pending.scope.kind === "path" ? "absolute pathPrefix" : "literal commandPrefix + absolute cwd"} JSON; enter = preview, esc = cancel scope`, columns, 2)}</Text>
+            <Text>{fitToRows(state.pending.scope.error ?? state.pending.scope.text, columns, rows)}</Text>
+          </> : <Text dimColor>
             {state.pending.req.origin === "sandbox-escalation"
               ? "y = run outside once, n / esc = deny"
               : state.pending.req.origin === "mcp-definition-change"
               ? "y = approve these exact definitions, n / esc = deny (no standing grant)"
               : state.pending.req.origin === "external-input-expansion"
               ? "y = approve this first-use expansion once, n / esc = deny (no standing grant)"
-              : `y = allow once, a = allow ${state.pending.req.tool} all session, n / esc = deny, d = deny all session`}
+              : "y = allow once, a = allow all session, s = scope, n / esc = deny, d = deny all session"}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
-          </Text>
+          </Text>}
         </Box>
       ) : state.escalation !== null ? (
         <Box marginTop={1} flexDirection="column">

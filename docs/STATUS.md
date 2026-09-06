@@ -1,11 +1,42 @@
 # Status
 
-Active implementation queue: **R13d context principals are implemented, pending delivery gates; R12b and R6g continue independently. R12a, R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d PR #154 is merged, pending main CI; R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R13d implemented — closing PR records delivery gates
+### R12b implemented — pending delivery gates
+
+The TUI explains declared paths/class/argv separately from unknown effects and network access.
+Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
+the shared pure matcher must cover the current request before any grant is installed. Exact
+future scope is printed before separate confirmation. Both ordinary and protocol-adjacent input
+paths retain y/a/n/d behavior; framed paste and separate sandbox/MCP-change consent cannot mint
+scoped authority. R12a audit/lifecycle and explicit base decisions remain intact. [Contract](plans/R12b.md).
+
+Real Ink/CLI/runtime tests exercise inert shell commands, file writes, compatible reuse,
+outside-scope refusal, no dispatch for a mismatched initial scope, and persisted audit ordering.
+R12c inspection/reasons and R12d inheritance remain separate. Integrated R6g main `714732d`,
+preserving catalogue/routing/effort guidance and all previous done markers. Build/typecheck/full
+suite, restored mutations, one bounded review and exact-head CI remain delivery gates.
+
+Integrated build/typecheck and full four-worker suite pass: 2,224 tests plus two skips across
+116 files; focused scope/core-grant tests pass 45 cases. Missing-path coverage and before-preview
+confirmation mutations failed the named controls and were restored. One bounded Claude review
+`3c9c00d0-9e6c-4765-86e3-752b2e5ba17d` independently passed 216 tests (12 turns). Its one
+material stale-preview finding was reproduced in actual Ink: an old preview allowed a single
+protocol chunk to edit/re-preview/confirm. Exact prior-preview identity now gates confirmation;
+the regression failed before the fix and passes after, along with 30 scope/UI cases. Optional
+polish stays at the roadmap end. R13d main `2ad720f` is integrated; combined-head checks and
+exact-head CI follow, without another general review.
+The combined source passes build/typecheck and 2,243 tests plus two skips across 117 files
+(four workers, 30 seconds); exact-head three-platform CI remains mandatory.
+
+R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 34023253550;
+the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
+delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
+
+### R13d merged — PR #154; main CI pending
 
 Runtime context principals distinguish source trust, instruction authority and tool permissions.
 All accepted hook injection/modification surfaces use collision-safe registered identities;
@@ -56,10 +87,10 @@ feature test sets. Build/typecheck and all 2,213 tests plus two skips across 115
 (four workers, 29 seconds). No second review for this mechanical integration; fresh exact-head
 CI supersedes the earlier pre-integration run.
 
-### R6g merged — PR #153; post-merge gate pending
+### R6g done — PR #153; post-merge CI green
 
-Merged as `714732d` after all three exact-head PR CI platforms passed. Post-merge main CI remains
-pending; the implementation details and review receipt below are preserved.
+Merge `714732d` passed all three post-merge platforms in CI 34023837383 after green PR #153.
+The following validation notes are implementation history, not outstanding delivery gates.
 
 Optional bounded trigger strings reach the compact catalogue through strict parsing and
 sanitization. A worked first-call example names an actually listed skill; the entire catalogue

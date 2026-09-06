@@ -289,7 +289,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       ? await raceAbort(Promise.resolve(config.onAsk(permReq)), "fresh external-input approval").catch(() => "deny" as const)
       : await config.onAsk(permReq);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
-    if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
+    if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
     if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
     await emit({ type: "permission.decision", d: decision });

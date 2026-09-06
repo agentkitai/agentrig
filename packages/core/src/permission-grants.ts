@@ -31,6 +31,25 @@ const inside = (root: string, path: string): boolean => {
 };
 const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
+/** Pure scope check shared by runtime enforcement and approval previews. This does not grant
+ * authority or check live subject/duration; callers must validate/install records separately. */
+export function permissionGrantCoversRequest(grant: PermissionGrantSpec, req: PermissionRequest): boolean {
+  if (separateConsent(req)) return false;
+  if (grant.operation.tool !== req.tool || (grant.operation.class !== undefined && grant.operation.class !== req.class)) return false;
+  if (grant.operation.commandPrefix !== undefined) {
+    const parsed = ShellOperationSchema.safeParse(req.operation);
+    if (!parsed.success || parsed.data.status !== "parsed" || parsed.data.background) return false;
+    if (!grant.operation.commandPrefix.every((word, index) => parsed.data.status === "parsed" && parsed.data.argv[index] === word)) return false;
+  }
+  if (grant.constraints.cwd !== undefined && resolve(req.cwd) !== resolve(grant.constraints.cwd)) return false;
+  if (grant.resource !== "*") {
+    if (req.paths === undefined || req.paths.length === 0 || req.paths.length > 128) return false;
+    const root = resolve(req.cwd, grant.resource.path);
+    if (!req.paths.every(path => Path.safeParse(path).success && inside(root, resolve(req.cwd, path)))) return false;
+  }
+  return true;
+}
+
 /** Live explicit host/user authority, never reconstructed from events. Paths are lexical scopes,
  * not symlink or OS containment. One registry is one shared authorization group until R12d. */
 export class PermissionGrantRegistry {
@@ -127,19 +146,7 @@ export class PermissionGrantRegistry {
     if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return "deny";
     for (const grant of this.grants.values()) {
       if (grant.subject !== this.subject || grant.duration.id !== (grant.duration.kind === "session" ? this.sessionId : this.taskId)) continue;
-      if (grant.operation.tool !== req.tool || (grant.operation.class !== undefined && grant.operation.class !== req.class)) continue;
-      if (grant.operation.commandPrefix !== undefined) {
-        const parsed = ShellOperationSchema.safeParse(req.operation);
-        if (!parsed.success || parsed.data.status !== "parsed" || parsed.data.background) continue;
-        const argv = parsed.data.argv;
-        if (!grant.operation.commandPrefix.every((word, index) => argv[index] === word)) continue;
-      }
-      if (grant.constraints.cwd !== undefined && resolve(req.cwd) !== resolve(grant.constraints.cwd)) continue;
-      if (grant.resource !== "*") {
-        if (req.paths === undefined || req.paths.length === 0 || req.paths.length > 128) continue;
-        const root = resolve(req.cwd, grant.resource.path);
-        if (!req.paths.every(path => Path.safeParse(path).success && inside(root, resolve(req.cwd, path)))) continue;
-      }
+      if (!permissionGrantCoversRequest(grant, req)) continue;
       return grant.decision;
     }
     return "ask";
