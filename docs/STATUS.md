@@ -21,6 +21,9 @@ Integrated R5c main `1ae6b77`; build/typecheck/full passes 2,535 plus two skips 
 (four workers, 37 seconds). One bounded independent review and exact-head CI follow.
 Single review approved without material findings: 85 seconds, 17/max24 turns, independently
 105 focused tests and typecheck. Original findings retained in the contract; optional polish END.
+First head passed all-three CI 34036629566; integrated R14d main `326aa4a` afterward.
+Combined build/typecheck, 105 focused and full 2,542 plus two skips across 147 files pass
+(four workers, 37 seconds); pre-extraction snapshots unchanged. Fresh exact-head CI follows.
 
 ### R14d merged — PR #172; post-merge CI pending
 
