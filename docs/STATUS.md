@@ -51,6 +51,11 @@ Final updated-main build/typecheck and full suite pass: 2,208 tests plus two exi
 114 files, with four local workers (29 seconds). Source head `a595fb9` includes both reviewed-path
 fixes; PR exact-head three-platform CI and post-merge main CI are the remaining delivery gates.
 
+PR #154 then integrated R6g main `714732d`, retaining catalogue/default-prompt guidance and both
+feature test sets. Build/typecheck and all 2,213 tests plus two skips across 115 files pass
+(four workers, 29 seconds). No second review for this mechanical integration; fresh exact-head
+CI supersedes the earlier pre-integration run.
+
 ### R6g merged — PR #153; post-merge gate pending
 
 Merged as `714732d` after all three exact-head PR CI platforms passed. Post-merge main CI remains
