@@ -1,6 +1,8 @@
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { platform } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import { PAGE_DIR, pagePath, parsePage, reservationPlaceholder, serializePage } from "./page.js";
 import { bm25Search } from "./search.js";
 import { withMemoryLock, type MemoryLockOptions } from "./lock.js";
@@ -381,8 +383,24 @@ export class FileMemoryStore implements MemoryStore {
     const tmp = `${full}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       await writeFile(tmp, contents, "utf8");
-      signal?.throwIfAborted();
-      await rename(tmp, full);
+      let retryDeadline: number | undefined;
+      let lastError: unknown;
+      for (;;) {
+        signal?.throwIfAborted();
+        // Retry only Windows access/busy failures, under the existing writer lock. Never
+        // remove the destination or rewrite the temporary file to make replacement succeed.
+        if (retryDeadline !== undefined && performance.now() >= retryDeadline) throw lastError;
+        try { await rename(tmp, full); break; }
+        catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (platform() !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(code ?? "")) throw error;
+          retryDeadline ??= performance.now() + 250;
+          lastError = error;
+          const remaining = retryDeadline - performance.now();
+          if (remaining <= 0) throw error;
+          await delay(Math.min(20, remaining), undefined, signal === undefined ? {} : { signal });
+        }
+      }
     } catch (err) {
       await rm(tmp, { force: true }).catch(() => {});
       throw err;
