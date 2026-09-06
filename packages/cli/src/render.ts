@@ -87,7 +87,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "checkpoint.sealed": return `${p} turn=${e.turn} tree=${e.tree} ref=${e.ref}`;
     case "checkpoint.restored": return `${p} session=${e.targetSession} turn=${e.turn} recovery=${e.recovery}`;
     case "permission.request":
-      return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}`;
+      return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}${e.req.operation === undefined ? "" : ` operation=${JSON.stringify(e.req.operation)}`}`;
     case "permission.decision": return `${p} ${e.d}`;
     case "context.compact": return `${p} ${e.before} -> ${e.after}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;

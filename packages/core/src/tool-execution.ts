@@ -227,12 +227,14 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
 
   const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
   const declaredPaths = tool.paths?.(input);
+  const operation = tool.operation?.(input);
   const permReq: PermissionRequest = {
     tool: tu.name,
     input,
     class: permClass,
     cwd,
     ...(declaredPaths === undefined ? {} : { paths: declaredPaths }),
+    ...(operation === undefined ? {} : { operation }),
     // whose session this is, when it is not the one a human is watching. Set on the config by
     // whoever built the session (the subagent tool's `childConfig`), never by a tool or by
     // the model — an ask that can name its own origin can lie about it.

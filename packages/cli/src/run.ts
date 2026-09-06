@@ -58,6 +58,7 @@ export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   profile?: string;
   system?: string;
   allow?: string[];
+  allowCommand?: string[][];
   driftScope?: string[];
   deny?: string[];
   maxTurns: string;
@@ -138,13 +139,16 @@ export function skipsPermissions(opts: { dangerouslySkipPermissions?: boolean; y
  */
 export function buildPermissionPolicy(opts: {
   allow?: string[];
+  allowCommand?: string[][];
   deny?: string[];
   dangerouslySkipPermissions?: boolean;
   yolo?: boolean;
   extra?: PermissionRule[];
 }): RulePolicy {
   return new RulePolicy(
-    [...toRules(opts.deny, "deny"), ...toRules(opts.allow, "allow"), ...(opts.extra ?? []), ...defaultRules],
+    [...toRules(opts.deny, "deny"),
+      ...(opts.allowCommand ?? []).map(commandPrefix => ({ tool: "bash", class: "exec" as const, commandPrefix, decision: "allow" as const })),
+      ...toRules(opts.allow, "allow"), ...(opts.extra ?? []), ...defaultRules],
     skipsPermissions(opts) ? "allow" : "ask",
   );
 }
@@ -337,6 +341,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
+    if (req.operation !== undefined) process.stderr.write(`shell operation: ${JSON.stringify(req.operation)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
     const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);

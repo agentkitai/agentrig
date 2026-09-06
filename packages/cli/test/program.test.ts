@@ -51,6 +51,16 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("carries explicit argv-prefix permissions for run, TUI and resume", async () => {
+    for (const argv of [["run", "task"], ["tui"], ["sessions", "resume", "s"]]) {
+      expect((await stub(buildProgram()).run([...argv, "--allow-command", '["git","status"]']))?.opts.allowCommand).toEqual([["git", "status"]]);
+    }
+    for (const value of ["git status", "[]", '[""]', '["git",42]']) {
+      const command = buildProgram().commands.find(cmd => cmd.name() === "run")!;
+      command.exitOverride().configureOutput({ writeErr: () => {} });
+      expect(() => command.parseOptions(["--allow-command", value])).toThrow("invalid command argv prefix");
+    }
+  });
   it("carries checkpoint opt-in and the explicit undo target", async()=>{
     for (const argv of [["run","task","--checkpoints"],["--checkpoints"],["sessions","resume","s","--checkpoints"]]) {
       expect((await stub(buildProgram()).run(argv))?.opts.checkpoints).toBe(true);

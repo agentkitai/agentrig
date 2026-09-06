@@ -334,6 +334,7 @@ export class TuiController {
       // auto-approve it, and an escalation answer must never become permission for later calls.
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
       if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
+      if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
       const standing = sandboxEscalation ? undefined : this.standing.get(req.tool);
       if (standing !== undefined) {
         resolve(standing);
