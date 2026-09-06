@@ -90,11 +90,11 @@ export async function startAcp(command: Command, flags: AcpFlags, dependencies: 
           onHookError: notice, onHookDone: notice, onNotice: notice });
         if (built.mcp.length !== matched.length) throw new Error("MCP server unavailable or definitions need operator approval");
         controller.attach(built.agent);
-      } catch (error) { await controller.shutdown(); await Promise.allSettled((built?.mcp ?? []).map(client => client.close())); throw error; }
+      } catch (error) { await controller.shutdown(); await Promise.allSettled((built?.mcp ?? []).map(client => client.close())); await built?.closeTelemetry?.(); throw error; }
       const assembled = built;
       const abort = new AbortController(); let closed = false;
       return { controller,
-        async close() { if (closed) return; closed = true; abort.abort(); await controller.shutdown(); await Promise.allSettled(assembled.mcp.map(client => client.close())); },
+        async close() { if (closed) return; closed = true; abort.abort(); await controller.shutdown(); await Promise.allSettled(assembled.mcp.map(client => client.close())); await assembled.closeTelemetry?.(); },
         ...(assembled.memoryStore === undefined ? {} : { memory: async (query: string) => {
           if (closed) throw new Error("session closed");
           if (await assembled.permissions?.decide({ tool: "memory_search", class: "read", input: { query }, cwd: request.cwd }) !== "allow") throw new Error("memory read denied by configured policy");

@@ -763,6 +763,11 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R8c adds explicit `--otel-endpoint` observation over the event stream, with fixed
+metadata-only OTLP/HTTP JSON spans, shared bounded process capacity and joined
+shutdown. It never grants model authority or changes immutable event ordering;
+enforcing no-network sandboxes refuse export. See [OTLP traces](OTEL.md).
+
 R8b adds `mcp-serve`: four bounded tools over official modern/legacy stdio MCP,
 reusing the controller and trusted launch configuration. Client tasks remain
 advisory; no execution consent is inferred. Read tools use configured stores and

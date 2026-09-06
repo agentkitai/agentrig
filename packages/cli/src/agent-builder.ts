@@ -55,6 +55,7 @@ import { buildProviders, type ProviderOptions, type ProviderSet } from "./provid
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 import { RESERVED_COMMAND_NAMES } from "./tui/commands.js";
+import { acquireOtel, validateOtel } from "./otel.js";
 
 function promptBlocks(options: {
   system: string;
@@ -125,6 +126,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Explicit CLI activation only; never loaded from config or environment. */
+  otelEndpoint?: string;
   /** Runtime-only heartbeat profile; never accepted from project config fields. */
   heartbeat?: "empty" | "checklist";
   extension?: string[];
@@ -260,6 +263,7 @@ export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
 }
 
 export interface BuiltAgent {
+  closeTelemetry?(): Promise<void>;
   /** Same actual policy used by the runtime; read-only operator surfaces must not bypass denies. */
   permissions?: PermissionPolicy;
   agent: Agent;
@@ -439,6 +443,7 @@ export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
 }
 
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  validateOtel(opts);
   opts = heartbeatBuildOptions(opts);
   const installed = opts.packages === false || opts.trustedProjectRoot === undefined
     ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);
@@ -601,12 +606,14 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const builtins = (): AnyTool[] => builtinTools({ ...(shell === undefined ? {} : { shell }),
     ...(opts.diagnostics === undefined ? {} : { diagnostics: opts.diagnostics }) });
 
+  let telemetry: ReturnType<typeof acquireOtel>;
+  const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
     tools.push(
       subagentTool(
-        subagentOptions({
+        (() => { const options = subagentOptions({
           opts,
           extras,
           budget,
@@ -617,7 +624,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           skills,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
-        }),
+        }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession }) }; })(),
       ),
     );
   }
@@ -634,6 +641,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
     extensions,
     provider,
     tools,
@@ -659,6 +667,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
+  return { agent, ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

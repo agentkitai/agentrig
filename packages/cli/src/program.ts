@@ -223,6 +223,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
       .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")
+      .option("--otel-endpoint <url>", "explicit OTLP/HTTP JSON traces URL; exports minimized timing/status metadata")
       .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
