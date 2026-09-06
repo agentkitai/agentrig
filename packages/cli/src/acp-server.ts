@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { agent, RequestError, type AgentConnection, type NewSessionRequest, type SessionUpdate, type Stream } from "@agentclientprotocol/sdk";
+import { agent, RequestError, type AgentConnection, type NewSessionRequest, type RequestPermissionRequest, type SessionUpdate, type Stream } from "@agentclientprotocol/sdk";
 import type { Session, SessionSummary } from "@agentkitai/agentrig-core";
 import { TuiController, type PendingPermission } from "./tui/controller.js";
 import { permissionEffectLines } from "./tui/permission-prompt.js";
@@ -101,12 +101,12 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
       try {
         await update(sessionId, { sessionUpdate: "tool_call", toolCallId, title: `Approval: ${pending.req.tool}`, kind: "other", status: "pending",
           content: [{ type: "content", content: { type: "text", text } }] });
-        const request = acpResult({ sessionId,
+        const request: RequestPermissionRequest = acpResult({ sessionId,
           toolCall: { toolCallId, title: `Approval: ${pending.req.tool}`, kind: "other" as const, status: "pending" as const,
             content: [{ type: "content" as const, content: { type: "text" as const, text } }] },
           options: [{ optionId: "allow", name: "Allow once", kind: "allow_once" as const }, { optionId: "deny", name: "Deny once", kind: "reject_once" as const }] });
         const release = options.reserveOutput(ACP_LIMITS.responseBytes);
-        const response = await untilAbort(connection.client.request("session/request_permission", request).finally(release), signal);
+        const response = await untilAbort(connection.client.request<"session/request_permission">("session/request_permission", request).finally(release), signal);
         if (!signal.aborted && !closing && entry.runtime?.controller.snapshot().pending === pending &&
           response.outcome.outcome === "selected" && response.outcome.optionId === "allow") decision = "allow";
       } catch { /* cancelled/malformed/disconnected permission is denied */ }

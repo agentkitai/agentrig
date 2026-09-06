@@ -133,3 +133,20 @@ Author controls separately established both material findings:
   zero. Existing unanswered-permission cancellation remains tested.
 
 Optional polish is at ROADMAP's end; no second general review was requested.
+
+## Combined-main final local gates
+
+Integrated R9c main `3b7564a`, retaining evaluator option-source compatibility,
+all CI groups and both workflow gates. R9c post-main CI `34047589688` and
+structure workflow `34047589697` passed. Frozen install, build/typecheck and full
+suite passed: **2,733 tests plus two existing skips /161 files**, four workers,
+58.44s, with existing pinned local Docker worker/checker images enabled. A final
+compile caught lost generic inference on the extracted permission request; the
+explicit official request type/method generic fixed it before these passing gates.
+
+Actual `eval/nightly.mjs` on those local images also passed: correct X1 PASS,
+broken X1 FAIL, human-pending X4 BLOCKED, 60 retained entries /85,455 bytes, no
+missing artifacts. This is scripted mechanics evidence, not live model quality.
+Receipt: `/tmp/agentrig-r8a-structure.0P9xv9/run/summary.json`; evaluator revision
+records merge `c3d23fd` with the subsequent type-only permission fix in the tested
+worktree. Exact final-head CI and scripted-structure gates remain required.
