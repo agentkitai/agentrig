@@ -88,6 +88,7 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/subagent.test.ts -t 'keeps what an aborted child said'
       - run: pnpm exec vitest run packages/memory/test/procedures.test.ts packages/cli/test/procedure-candidates.test.ts
       - run: pnpm exec vitest run packages/memory/test/skill-emission.test.ts packages/cli/test/skill-emission.test.ts
+      - run: pnpm exec vitest run packages/core/test/generated-skills.test.ts packages/cli/test/generated-skills-config.test.ts packages/cli/test/generated-skills-runtime.test.ts
       - run: pnpm exec vitest run packages/memory/test/windows-memory-replace.test.ts
       # Repeat the original real-process regression after its full-suite execution above.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts -t 'conserves shared facts'
