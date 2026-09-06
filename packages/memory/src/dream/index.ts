@@ -1,4 +1,5 @@
 export * from "./lint.js";
+export * from "./write-quality.js";
 export * from "./copy.js";
 export * from "./phases.js";
 export * from "./promote.js";

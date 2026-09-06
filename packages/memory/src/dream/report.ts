@@ -102,6 +102,8 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
       ),
       ...section("Reserved but never filled", s.unfilled.map((u) => `- ${u}`)),
       ...section("Facts with no source", s.unsourced.map((u) => `- ${u.page}: ${u.line}`)),
+      ...section("Write quality (advisory; semantic truth not assessed)", (s.writeQuality ?? []).map(f =>
+        `- [${f.kind}] ${f.page}: ${JSON.stringify(f.line)}${f.relatedPage === undefined ? "" : ` → ${f.relatedPage}`}\n  ${f.reason}`)),
     );
   }
 
@@ -140,6 +142,7 @@ export function findingCount(report: DreamReport, structural?: StructuralFinding
     structural.staleFileRefs.length +
     structural.relativeDates.length +
     structural.unfilled.length +
-    structural.unsourced.length
+    structural.unsourced.length +
+    (structural.writeQuality?.length ?? 0)
   );
 }

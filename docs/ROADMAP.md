@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: H6; R4a–R4c, H1–H5 and E1–E3 complete in PRs #118–#137.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: R6d; R4a–R4c, H1–H6 and E1–E3 complete in PRs #118–#138.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -10,7 +10,8 @@ evidence. This revision changes planned work, not the implementation status of c
 |---|---|---|
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
-| Now | H6: focused core extraction | Extraction preserves behavior |
+| Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
+| Now | R6d → R6e: memory write-quality and promotion guardrails | Advisory quality checks; reject harmful promotion effects |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
 
@@ -912,3 +913,6 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - H6 polish: document the normalized abort-grace parameter at the lifecycle signature and add
   a pointer from the shared replan state to its synchronous clearing callback. Keep internal
   execution dependencies explicit; shrinking the context object is optional, not a new milestone.
+- R6d polish: make legacy source-summary duplication on regrowth easier to inspect without
+  relabeling old observations; reduce advisory missing-tag noise for nested hand-written bullets.
+  Preserve historical originals and heuristic disclaimers. Neither blocks R6e.
