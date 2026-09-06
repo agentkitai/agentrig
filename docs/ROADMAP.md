@@ -927,7 +927,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
-| Done — repair PR #178 | A1/A2 real-copy fixture scheduling bound | R7a post-main CI `34039249249` exceeded the unchanged five-second A1 test bound, without an assertion failure. Explicit per-fixture allowance only; all seeded regressions/subprocess guards retained. [Contract](plans/evalset-fixture-bound.md). |
+| Repair (done, PR #178) | A1/A2 real-copy fixture scheduling bound | R7a post-main CI `34039249249` exceeded the unchanged five-second A1 test bound, without an assertion failure. Explicit per-fixture allowance only; all seeded regressions/subprocess guards retained. Repaired main `90301f8`, post-CI 34040182760 all three green. [Contract](plans/evalset-fixture-bound.md). |
 | Repair (done, PR #173) | Child-grants test readiness | Initial R10d post-merge failures retained; exact subscribed prompt/frame readiness and bounded diagnostics restore green main063cac6 in CI34035704275. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
@@ -937,7 +937,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b (done) → R5c (done, PR #170) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
-| 8 | R10d (done, PR #171 + repair #173) → R10a (done, PR #174) → R10b (done, PR #177) → R10c (implementation/review gates) | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
+| 8 | R10d (done, PR #171 + repair #173) → R10a (done, PR #174) → R10b (done, PR #177) → R10c (merged, PR #181; post-main pending) | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a (done, PR #175) → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a (done, PR #176 + repair #178) → R7b (done, PR #179) → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |

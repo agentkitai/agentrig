@@ -205,3 +205,9 @@ then the identical delayed actual pack/integrity control passed with the 45s bou
 (16.21s). Removed the artificial delay immediately afterward; it is not part of
 the fixture. This demonstrates the deadline/cleanup distinction, not the cause
 of hosted Windows latency. No blind rerun or second general review.
+
+Integrated R10c main `7b6cb6a`, retaining its isolated worktree/runtime controls and
+explicit newline-policy fixture repair. Combined build/typecheck and full suite
+with actual Linux Docker fixtures pass **2,682 plus two existing skips / 153 files,
+41.64s** after removal of the temporary delay. R10c is merged with its post-main
+gate pending at this receipt; R9b still requires fresh exact-head CI.

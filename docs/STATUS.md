@@ -46,6 +46,12 @@ and restored. [Original review](plans/R9b-review.md). Exact-head CI and root mer
 R7b main `f3a1ec8` is integrated; combined build/typecheck and full suite with actual
 Linux fixture images pass **2,660 + two existing skips / 152 files, 40.71 seconds**.
 R7b's post-main gate is now green; its done receipt is preserved below.
+R10c main `7b6cb6a` is integrated. Two Windows package-fixture timeout receipts and
+the narrow owned-npm timing repair are retained in [R9b's contract](plans/R9b.md).
+The controlled delayed actual pack fails at the former bound and passes at the
+new fixture-only bound; artificial delay removed. Combined build/typecheck/full
+with actual Linux Docker passes **2,682 + two existing skips / 153 files, 41.64s**.
+Fresh exact-head CI remains pending; no second broad review.
 
 ### R10c merged — PR #181; post-main gate pending
 
