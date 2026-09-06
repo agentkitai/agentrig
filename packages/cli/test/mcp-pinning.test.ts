@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,10 +35,10 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
 });
-async function assemble(onAsk?: (req: PermissionRequest) => Promise<"allow" | "deny">) {
+async function assemble(onAsk?: (req: PermissionRequest) => Promise<"allow" | "deny">, existingPinsOnly = false) {
   const result = await buildAgent({ root: join(root, "sessions"), mcpConfig: join(root, "mcp.json"), provider: "anthropic", model: "fixture",
     maxTurns: "2", maxTokensPerTurn: "128", repoMap: false, yolo: true },
-  { mcpPinRoot: join(root, "pins"), ...(onAsk === undefined ? {} : { onAsk }) });
+  { mcpPinRoot: join(root, "pins"), mcpExistingPinsOnly: existingPinsOnly, ...(onAsk === undefined ? {} : { onAsk }) });
   built.push(result);
   return result;
 }
@@ -60,6 +60,22 @@ async function run(item: BuiltAgent) {
   return events;
 }
 describe("R5d actual CLI assembly and MCP transport", () => {
+  it("ACP existing-pin mode refuses first use and changes without writing consent or treating allow-once as definition approval", async () => {
+    const ask = vi.fn(async () => "allow" as const);
+    expect((await assemble(ask, true)).mcp).toHaveLength(0);
+    await expect(readdir(join(root, "pins"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(root, "calls.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    await assemble(); // explicit operator CLI first-use baseline
+    const pinned = await assemble(ask, true); expect(pinned.mcp).toHaveLength(1);
+    await run(pinned); expect(await readFile(join(root, "calls.txt"), "utf8")).toBe("called\n");
+    await change();
+    expect((await assemble(ask, true)).mcp).toHaveLength(0);
+    expect(ask).not.toHaveBeenCalled();
+    const ordinary = await assemble();
+    const events = await run(ordinary);
+    expect(events.some(event => event.type === "tool.result" && !event.ok && event.display.includes("not approved"))).toBe(true);
+    expect(await readFile(join(root, "calls.txt"), "utf8")).toBe("called\n");
+  });
   it("YOLO cannot approve changed definitions unattended, while initial pinned calls still work", async () => {
     const initial = await assemble();
     await run(initial);

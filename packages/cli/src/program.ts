@@ -13,6 +13,7 @@ import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, ru
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
+import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";
@@ -130,6 +131,7 @@ export interface ProgramDependencies {
   doctor?: DoctorOptions;
   evaluation?: SessionEvaluationDependencies;
   review?: ReviewDependencies;
+  acp?: AcpDependencies;
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
@@ -160,7 +162,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -357,6 +359,14 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         }), undefined, "diff review");
         console.log(renderReview(result).join("\n"));
       } catch (error) { console.error(reviewFailure(error)); process.exitCode = 1; }
+    });
+
+  withRunOptions(program.command("acp").description("Serve stable Agent Client Protocol v1 over stdio"), HEADLESS_MAX_TURNS)
+    .action(async (flags: AcpFlags, cmd: Command) => {
+      const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      await startAcp(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
+        ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.acp,
+      });
     });
 
   const schedule = program.command("schedule").description("Manage literal UTC tasks; tick previews unless --execute is explicit");
