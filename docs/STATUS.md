@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5d; R13f implemented in PR #143 with closing delivery gates; R5e merged in PR #142.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **Windows memory atomic-replacement repair before the next merge; R5d awaits this repair, while R6a proceeds independently. R13f and R5e are merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -39,10 +39,33 @@ findings, independently passing 692 core tests and all-package typecheck. Schema
 stream-assembly-drop mutations fail named persistence/resume controls and are restored. Actual
 vendor text/tool-call provenance spoofing is inert, and a user-labeled call still obeys denial.
 Crash-only raw-delta reconstruction remains unlabeled; no unrecorded provenance is invented.
-Final local build/typecheck/full suite pass 2,028 tests plus two existing skips (98 files);
+After integrating Windows repair main `3c857d0`, local build/typecheck/full suite pass
+2,039 tests plus two existing skips (99 files);
 66 focused trust/hooks/eviction/H6 trace tests pass with unchanged golden traces.
 
-### R13f implemented — PR #143 records closing delivery gates
+### Windows memory atomic replacement — CI-blocking repair
+
+R5d combined-head CI 34016959860 failed the existing Windows two-process ingest conservation
+fixture with `EPERM` renaming a temporary index over `index.md`. This is not evidence of a known
+external actor or a proven transient. A separate bounded repair now retries only Windows
+EPERM/EACCES/EBUSY under the existing writer lock: same temporary file, 250 ms monotonic window,
+at most 20 ms between attempts, signal-aware waits and no destination deletion or force fallback.
+Other errors fail immediately; exhaustion preserves the previous target and existing cleanup.
+See [repair contract](plans/windows-memory-replace.md). Deterministic actual-store regressions,
+the real Windows process fixture, one independent review and exact-head/post-merge CI gate its
+own PR before R5d integrates it. R6a is independent after delivered memory/manifest prerequisites.
+
+Build/typecheck and the full local suite pass 2,024 tests plus two skips (98 files). One bounded
+Claude review `29dd2b60-97d3-4862-aa2e-759c20a5a954` approves with no material findings; it
+independently passes 11 repair tests, 581 memory tests plus two skips and typecheck. Disabling
+eligible retries fails all three error-code controls; removing the per-attempt abort check fails
+the late-attempt control. Both mutations are restored. Windows CI retains the original fixture
+and repeats its conservation case, alongside the deterministic repair tests. Final exact-head
+and post-merge CI receipts belong to the repair PR; R5d's earlier independent review is unchanged.
+
+### R13f merged — PR #143 records closing delivery gates
+
+Merge `1a20f4e` passed post-merge main CI 34016868500 on all three platforms.
 
 Core stamps unique runtime call provenance; only matching successful write-class results in the
 same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
