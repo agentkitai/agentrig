@@ -229,6 +229,9 @@ export const EventPayload = z.discriminatedUnion("type", [
     ok: z.boolean(),
     display: z.string(),
     durationMs: z.number().int(),
+    /** Resolved by core after validation/permission, never supplied by tool output. */
+    permission: PermissionClass.optional(),
+    toolCallSeq: z.number().int().nonnegative().optional(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
     /** The tool stopped collecting or did not supply its full text; even an output artifact
@@ -258,7 +261,9 @@ export const EventPayload = z.discriminatedUnion("type", [
     mode: SandboxMode,
     reason: z.string(),
   }),
-  z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string() }),
+  z.object({ type: z.literal("file.changed"), path: z.string(), op: z.enum(["create", "edit", "delete"]), contentHash: z.string(),
+    /** Core-stamped emitting call; legacy/unattributed claims prove no progress. */
+    toolCallSeq: z.number().int().nonnegative().optional() }),
   z.object({
     type: z.literal("checkpoint.created"),
     turn: z.number().int().positive(),

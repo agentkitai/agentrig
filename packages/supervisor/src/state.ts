@@ -24,7 +24,13 @@ export interface SupervisorState {
   plan: PlanItem[];
   /** Set once the session has ended — attach() stops applying interventions past this point. */
   ended: boolean;
+  /** Current event's write-result-backed claims. Empty for uncorroborated/legacy claims. */
+  corroboratedChanges?: Array<Extract<HarnessEvent, { type: "file.changed" }>>;
+  cwd?: string;
 }
+
+type PendingChange = Extract<HarnessEvent, { type: "file.changed" }>;
+const pendingWrites = new WeakMap<SupervisorState, Map<number, { id: string; changes: PendingChange[] }>>();
 
 export interface StateOptions {
   /** How many events to retain in `recent`. Bounded so a long session cannot grow without limit. */
@@ -62,6 +68,10 @@ export function initialState(): SupervisorState {
 
 /** Folds one event into the state, in place. Must run before the detectors see that event. */
 export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateOptions = {}): void {
+  state.corroboratedChanges = [];
+  let pending = pendingWrites.get(state);
+  if (pending === undefined) { pending = new Map(); pendingWrites.set(state, pending); }
+  if (["turn.start", "turn.end", "session.start", "session.resume", "session.end"].includes(event.type)) pending.clear();
   const window = opts.windowSize ?? DEFAULT_WINDOW;
   state.recent.push(event);
   if (state.recent.length > window) state.recent.splice(0, state.recent.length - window);
@@ -70,12 +80,14 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
   switch (event.type) {
     case "session.start":
       state.startedAt = event.ts;
+      state.cwd = event.cwd;
       break;
     case "session.resume":
       // A resumed session restarts the wall clock, but its hard turn budget is cumulative. Seeding
       // this before the first model request lets a near-cap resume receive guidance before it spends
       // its final turn. `turns` is optional for compatibility with old event logs.
       state.startedAt = event.ts;
+      state.cwd = event.cwd;
       state.turns = event.turns ?? state.turns;
       break;
     case "session.end":
@@ -89,12 +101,25 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
       break;
     case "tool.call":
       state.toolCalls += 1;
+      pending.set(event.seq, { id: event.id, changes: [] });
+      while (pending.size > 400) pending.delete(pending.keys().next().value!);
       break;
     case "tool.result":
       if (!event.ok) state.toolErrors += 1;
+      if (event.toolCallSeq !== undefined) {
+        const call = pending.get(event.toolCallSeq);
+        pending.delete(event.toolCallSeq);
+        if (call?.id === event.id && event.ok && event.permission === "write") {
+          state.corroboratedChanges = call.changes;
+          state.filesChanged += call.changes.length;
+        }
+      }
       break;
     case "file.changed":
-      state.filesChanged += 1;
+      if (event.toolCallSeq !== undefined) {
+        const call = pending.get(event.toolCallSeq);
+        if (call !== undefined && call.changes.length < 400) call.changes.push(event);
+      }
       break;
     case "model.response":
       state.usage.input += event.usage.input;

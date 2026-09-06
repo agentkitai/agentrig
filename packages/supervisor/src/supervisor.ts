@@ -217,6 +217,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       const signals = [];
       for (const d of opts.detectors) {
         try {
+          if (d.prepare !== undefined) await d.prepare(event, state, lifetime.signal);
+          if (detached || lifetime.signal.aborted) return;
           const s = d.observe(event, state);
           if (s !== null) signals.push(s);
         } catch (err) {

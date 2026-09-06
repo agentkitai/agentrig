@@ -109,6 +109,13 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
   return {
     id: "loop",
     observe(event: HarnessEvent, state: SupervisorState) {
+      if (event.type === "tool.result") {
+        const detected = (state.corroboratedChanges ?? []).flatMap(change => {
+          const found = this.observe(change, state); return found === null ? [] : [found];
+        });
+        if (detected.length > 0) return signal("loop", Math.max(...detected.map(s => s.confidence)),
+          detected.flatMap(s => s.evidence), [Math.min(...detected.map(s => s.window[0])), event.seq]);
+      }
       if (event.type === "tool.call") {
         const input = typeof event.input === "object" && event.input !== null && !Array.isArray(event.input)
           ? event.input as Record<string, unknown>
@@ -189,6 +196,7 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
       }
 
       if (event.type === "file.changed") {
+        if (!state.corroboratedChanges?.includes(event)) return null;
         const seen = history.get(event.path) ?? [];
         // a revert is landing on a content this file already had *and differs from what it
         // holds now*. Rewriting the same content is a no-op write; only going back to an older
