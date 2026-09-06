@@ -23,6 +23,7 @@ import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import { withMaintenanceSignal } from "./maintenance.js";
 import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
+import { questionPolicy } from "./question-policy.js";
 import {
   dreamOnSessionEnd,
   FileMemoryStore,
@@ -56,6 +57,7 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  answerPolicy?: string;
   /** Runtime config resolution provenance, not a project-config field. */
   ingestOnEndExplicit?: boolean;
   scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
@@ -409,8 +411,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   let maintenanceFailed = false;
   const scheduledUsage = opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true);
   try {
+    const onQuestion = await questionPolicy(opts.answerPolicy);
     built = await withMaintenanceSignal(signal => buildAgent(opts, {
       signal,
+      onQuestion,
       ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
       onHookError: (m) => { maintenanceFailed = true; console.error(m); },
       onHookDone: (m) => console.error(m),

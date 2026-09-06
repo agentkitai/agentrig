@@ -95,6 +95,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       onStartupAsk: req => process.stdin.isTTY ? askInteractively(req, signal) : Promise.resolve("deny"),
       permissionGrants: controller.permissionGrants,
       onAsk: controller.ask,
+      onQuestion: controller.askQuestion,
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
       // in the frame, not on stderr: stderr is overwritten by the next render, and an invisible

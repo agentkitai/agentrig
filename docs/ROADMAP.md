@@ -244,7 +244,7 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 
 | Capability *(fourth pass)* | Strongest reference | AgentRig today | Milestone |
 |---|---|---|---|
-| Structured clarifying question from the model (`ask_user`) | Claude Code, Codex, Cline, Goose | free text only; the supervisor talks to the model, the model has no channel back | R15a |
+| Structured clarifying question from the model (`ask_user`) | Claude Code, Codex, Cline, Goose | free text only; the supervisor talks to the model, the model has no channel back | R15a *(merged PR #188; post-main gate under repair; [contract](plans/R15a.md))* |
 | Post-edit diagnostics in the tool result | OpenCode, Claude Code LSP tool, Serena | `edit_file` returns nothing about whether the file still parses or typechecks | R15b |
 | Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | `ContentBlock` has text/tool_use/tool_result/image; returned reasoning is dropped | R15c |
 | Editor integration over a standard protocol (ACP) | Zed, Gemini CLI, Goose, OpenCode | none; R8a planned a bespoke NDJSON protocol | R8a (amended) |
@@ -786,8 +786,8 @@ planner mode or a fusion service.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R15a | `ask_user` tool: the model poses one structured question (prompt, 2–4 options, free-text allowed) and the turn suspends until answered — through the TUI queue interactively, through R8a/ACP when embedded, and in headless `run` through a `--answer-policy` (`fail` default, `first-option`, `file:<path>`). Emits `question.asked` / `question.answered`. The supervisor may answer on the model's behalf only through an explicit policy step, never by default | core + cli |
-| R15b *(done, PR #185; [contract](plans/R15b.md))* | Post-edit diagnostics: after a successful `edit_file` / `write_file`, run the project's configured checker for that file's language (from `.agentrig/config`: e.g. `tsc --noEmit -p`, `ruff`, `go vet`), bounded by time and output bytes, and append the errors for the touched file to the tool result as `diagnostics` (schema-added). No LSP server, no daemon, no cross-file index — renunciation 7 holds; this is observation quality, the SWE-agent lesson | core |
+| R15a *(merged PR #188; post-main gate under repair; [contract](plans/R15a.md))* | `ask_user` tool: the model poses one structured question (prompt, 2–4 options, free-text allowed) and the turn suspends until answered — through the TUI queue interactively, through R8a/ACP when embedded, and in headless `run` through a `--answer-policy` (`fail` default, `first-option`, `file:<path>`). Emits `question.asked` / `question.answered`. The supervisor may answer on the model's behalf only through an explicit policy step, never by default | core + cli |
+| R15b *(done — [PR #185](https://github.com/agentkitai/agentrig/pull/185); [contract](plans/R15b.md))* | Post-edit diagnostics: after a successful `edit_file` / `write_file`, run the project's configured checker for that file's language (from `.agentrig/config`: e.g. `tsc --noEmit -p`, `ruff`, `go vet`), bounded by time and output bytes, and append the errors for the touched file to the tool result as `diagnostics` (schema-added). No LSP server, no daemon, no cross-file index — renunciation 7 holds; this is observation quality, the SWE-agent lesson | core |
 | R15c | Reasoning blocks: `ContentBlock` gains a `thinking` variant (schema-added, with provider-opaque `signature`/`id`); adapters round-trip it so interleaved reasoning and prompt caching are not silently lost; the TUI renders it collapsed under `/verbose`; compaction and export treat it as evictable first. Measure cache-hit delta on the E1 fixtures before and after | core + cli |
 | R15d *(in progress; [contract](plans/R15d.md))* | Remote MCP: Streamable HTTP transport beside stdio; OAuth 2.1 authorization-code flow reusing the R1 loopback login seam; `resources/*` and `prompts/*` surfaced as read-class tools and skills; R5d pinning applies to all three lists. Servers declared with a URL are `net`-class (R11a) for permission purposes | core + cli |
 | R15e *(done — [PR #186](https://github.com/agentkitai/agentrig/pull/186); [contract](plans/R15e.md))* | `agentrig review [--base <ref>] [--pr <n>]` and idle TUI `/review`: the M6 reviewer provides bounded advisory file:line findings over captured text hunks. Explicit `--comment` uses authorized `gh`; no tests, edits or automatic posting. Tracked-only default, unsupported/binary/oversized patches and configured Git filters refuse; no second review engine | cli + supervisor |
@@ -927,6 +927,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
+| Repair (active) | Child abort-hook regression gate | R15a #188 post-main macOS CI `34054434385` failed an existing real-I/O timing assumption. Controlled persistence reproduces it; deterministic lifecycle phases preserve production deadlines and all orphan/hook assertions. [Contract](plans/child-abort-hook-gate.md). Gates all subsequent merges. |
 | Repair (done, PR #178) | A1/A2 real-copy fixture scheduling bound | R7a post-main CI `34039249249` exceeded the unchanged five-second A1 test bound, without an assertion failure. Explicit per-fixture allowance only; all seeded regressions/subprocess guards retained. Repaired main `90301f8`, post-CI 34040182760 all three green. [Contract](plans/evalset-fixture-bound.md). |
 | Repair (done, PR #173) | Child-grants test readiness | Initial R10d post-merge failures retained; exact subscribed prompt/frame readiness and bounded diagnostics restore green main063cac6 in CI34035704275. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
@@ -1246,3 +1247,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   R8b, not deferred; the incomplete independent review remains explicitly recorded.
 - R15e polish: distinguish safe fixed refusal categories for malformed flags and policy
   denials without echoing raw Git, provider, path or credential-bearing error content.
+- R15a polish: clarify slash-command and numeric-literal input while questions are
+  pending; optional terminal questions for non-headless `run`; assert checklist
+  heartbeat suppression explicitly; unify timeout outcome attribution between the
+  controller and core deadlines. No permission or provenance widening.
+- Child abort-hook fixture polish: name the lifecycle orphan timers beside the
+  200/400 ms phase-gate interception so future equal-delay timers prompt review.

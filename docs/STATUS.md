@@ -52,7 +52,20 @@ remain. [Contract and limits](plans/R15d.md).
 
 Root verified main `eead687` with CI34051436203 and scripted structure34051436058.
 [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/186#issuecomment-5561285218).
-### R8b done — PR #187; all four post-main checks green — bounded MCP server
+### R15a merged — PR #188; post-main gate repair active
+
+[Contract](plans/R15a.md), [operator guide](QUESTIONS.md). Private runtime question
+events, bounded separate TUI/ACP queues and explicit headless answer policies are
+implemented. Actual CLI/ACP subprocesses and mounted keyboard input pass targeted
+checks. Automated answers remain advisory; no answer mints execution authority.
+Four negative mutations were detected and restored. Build/typecheck and actual-Docker
+full suite pass 2,808 plus two skips /168 files. The single independent review approved
+and passed 151 focused/adjacent tests; [verbatim review](plans/R15a-review.md).
+Initial head `13abf48` and integrated `51765bb` passed all four checks. Main
+`59c21c7` then failed macOS as recorded above; the separate repair restores the
+gate without relabelling the failed run. No second R15a general review.
+
+### R8b done — bounded MCP server, PR #187
 
 [Contract](plans/R8b.md): four tools over exact official SDK 2.0.0 modern/legacy
 stdio, fixed trusted configuration, actual controller and advisory client tasks.
@@ -83,8 +96,9 @@ Final ACP-integrated build/typecheck pass; unchanged-snapshot full suite passes
 2,780 plus two existing skips /165 files with actual Linux containers (48.81s).
 The initial scoped-copy cancellation regression was fixed, not dismissed as timing;
 its detected/restored negative control and full review findings are retained in the plan.
-Exact-head and post-main checks passed. Main `eead687`: CI `34051436203` and
-scripted-structure `34051436058` all green, independently verified by root.
+Exact-head and post-main checks passed on all three platforms and scripted structure.
+Post-main CI `34051436203` and structure `34051436058` cover exact main `eead687`;
+[final receipt](https://github.com/agentkitai/agentrig/pull/186#issuecomment-5561285218).
 
 ### R8a done — PR #184; all four post-main checks green
 

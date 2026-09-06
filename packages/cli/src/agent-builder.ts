@@ -339,6 +339,7 @@ export interface AgentExtras {
   signal?: AbortSignal;
   /** Trusted host user-state override, never model/project credential material. */
   mcpCredentialRoot?: string;
+  onQuestion?: import("@agentkitai/agentrig-core").QuestionHandler;
   permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
   mcpPinRoot?: string;
@@ -426,6 +427,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
       repoMap: w.opts.repoMap === false ? false : {},
       ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
+      ...(w.extras.onQuestion === undefined ? {} : { onQuestion: w.extras.onQuestion }),
       systemPrompt: (ctx: { cwd: string }) => promptBlocks({
         system: [
           "You are a subagent. You have been given one self-contained task and none of the",
@@ -646,6 +648,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   // neither the flag nor the file
   const shell = opts.shell === undefined ? undefined : assertShellExists(opts.shell);
   const builtins = (): AnyTool[] => builtinTools({ ...(shell === undefined ? {} : { shell }),
+    ...(opts.heartbeat === undefined ? {} : { questions: false }),
     ...(opts.diagnostics === undefined ? {} : { diagnostics: opts.diagnostics }) });
 
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
@@ -704,6 +707,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(pricing === undefined ? {} : { pricing }),
     maxTokensPerTurn,
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
+    ...(extras.onQuestion === undefined ? {} : { onQuestion: extras.onQuestion }),
   });
 
   return { agent, permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };

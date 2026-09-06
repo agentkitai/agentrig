@@ -77,6 +77,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Explicit clarification handler, never a permission grant or implicit supervisor policy. */
+  onQuestion?: import("./questions.js").QuestionHandler;
   /** Current build's extension receipts, not replayed authorization or repeated activation. */
   extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
   /** Trusted host opt-in for this run only; unambiguous explicit hook ids, never tool grants. */
@@ -287,6 +289,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
+  const questionState: import("./question-runtime.js").QuestionState = {};
   const hasPlanTool = config.tools.some((t) => t.name === PLAN_TOOL);
 
   const lifecycle = createSessionLifecycle(store, id, abortGraceOf(config), (payload) => {
@@ -934,6 +937,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           messages.push(resultMessage);
           await emit({ type: "message.append", message: resultMessage });
         }
+        if (questionState.failed !== undefined) {
+          reason = "error";
+          await emit({ type: "error", message: questionState.failed, fatal: true });
+          await emit({ type: "turn.end", n: turns });
+          break loop;
+        }
 
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
@@ -1050,7 +1059,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     return { id, reason, turns, usage: totals };
 
     function runTool(tu: { id: string; name: string; input: unknown }, schedule?: PipelineSchedule): Promise<ContentBlock> {
-      return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit,
+      return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, questionState,
         ...(schedule === undefined ? {} : { schedule }),
         expansion,
         ...(grantSessionId === undefined ? {} : { grantSessionId }),

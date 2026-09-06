@@ -29,8 +29,9 @@ afterEach(async () => {
 });
 
 describe("builtinTools", () => {
-  it("registers the six v1 tools plus update_plan, bash_job and web_fetch", () => {
+  it("registers the six v1 tools plus update_plan, bash_job, web_fetch and ask_user", () => {
     expect(builtinTools().map((t) => t.name).sort()).toEqual([
+      "ask_user",
       "bash",
       "bash_job",
       "edit_file",
