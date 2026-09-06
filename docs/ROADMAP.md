@@ -793,6 +793,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
+| Repair | Windows memory atomic replacement | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair before the next merge; preserve locks, old-target safety and all Windows tests. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f (implemented, closing gates); R5e (merged); R5d (active) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e → R12a → R12b → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a → R13b → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
@@ -942,3 +943,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   release failed-call pending entries earlier than the turn boundary; reuse drift read buffers if
   allocation churn is measured. Consider historical deletion witnesses separately: present absence
   is not proof of a prior file. Preserve legacy no-credit behavior and bounded, fail-closed checks.
+- Windows memory replacement polish: document the mockable OS platform probe if refactoring;
+  reconsider the 250 ms retry window only with measured failure evidence. Any future tuning must
+  retain deterministic bound tests, cancellation and atomic old-target preservation, without
+  attributing access refusals to an unobserved actor.
