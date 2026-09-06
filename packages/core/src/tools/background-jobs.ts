@@ -24,6 +24,9 @@ import { bound } from "./shared.js";
 const MAX_UNREAD_BYTES = 512 * 1024;
 
 interface JobSpawnOptions {
+  /** Trusted bounded foreground consumers may request a smaller buffer and stop on overflow. */
+  maxUnreadBytes?: number;
+  killOnOverflow?: boolean;
   command: string;
   args?: readonly string[];
   shellPath?: string;
@@ -83,6 +86,8 @@ export class JobRegistry {
   private nextId = 1;
 
   start(opts: JobSpawnOptions): { id: string; pid: number | undefined } {
+    const maxUnreadBytes = opts.maxUnreadBytes ?? MAX_UNREAD_BYTES;
+    if (!Number.isInteger(maxUnreadBytes) || maxUnreadBytes < 4096 || maxUnreadBytes > MAX_UNREAD_BYTES) throw new Error("invalid process output bound");
     const id = `job-${this.nextId++}`;
     const child = opts.args === undefined
       ? spawn(opts.command, {
@@ -143,17 +148,18 @@ export class JobRegistry {
       if (record.head.length < RETAINED_HEAD_CHARS) record.head = (record.head + text).slice(0, RETAINED_HEAD_CHARS);
       record.unread += text;
       const beforeBytes = Buffer.byteLength(record.unread, "utf8");
-      if (beforeBytes > MAX_UNREAD_BYTES) {
+      if (beforeBytes > maxUnreadBytes) {
         // Drop the oldest unread output, but never silently — the count reaches the next status.
         // Counted and cut in BYTES via Buffer: string.slice counts UTF-16 units, which kept up
         // to 4x the cap for multibyte output and re-counted the standing overshoot as "newly
         // dropped" on every chunk. The boundary walk keeps a split multibyte char out of the
         // front of what remains.
-        const buf = Buffer.from(record.unread, "utf8").subarray(-MAX_UNREAD_BYTES);
+        const buf = Buffer.from(record.unread, "utf8").subarray(-maxUnreadBytes);
         let start = 0;
         while (start < buf.length && (buf[start]! & 0xc0) === 0x80) start += 1;
         record.unread = buf.subarray(start).toString("utf8");
         record.droppedBytes += beforeBytes - Buffer.byteLength(record.unread, "utf8");
+        if (opts.killOnOverflow) killGroup();
       }
     };
     child.stdout.on("data", append);

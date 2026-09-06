@@ -5,6 +5,7 @@ import type { Tool, ToolResult } from "../tool.js";
 import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
 import { writeToolFile } from "./sandbox-write.js";
+import { diagnosticBuiltin, stampChanged } from "../diagnostics.js";
 
 const EditFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -18,7 +19,7 @@ const EditFileInput = z.object({
 type EditFileInput = z.infer<typeof EditFileInput>;
 
 export function editFileTool(): Tool<EditFileInput, { path: string; replacements: number }> {
-  return {
+  return diagnosticBuiltin({
     name: "edit_file",
     sandbox: "compatible",
     description:
@@ -73,12 +74,14 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
       await writeToolFile(path, next, ctx.signal);
       ctx.emit({ type: "file.changed", path: rel, op: "edit", contentHash: contentHash(next) });
       const replacements = input.replaceAll ? count : 1;
-      return {
+      const result = {
         output: { path: rel, replacements },
         display: `edited ${rel} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
       };
+      await stampChanged(result, ctx, path, next);
+      return result;
     },
-  };
+  });
 }
 
 function occurrences(haystack: string, needle: string): number {
