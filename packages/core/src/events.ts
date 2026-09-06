@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DiagnosticsSchema, InternalToolSchema } from "./diagnostics-types.js";
 import { MessageSchema, InstructionContextSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
 import { ShellOperationSchema } from "./shell-operation.js";
@@ -256,9 +257,11 @@ export const EventPayload = z.discriminatedUnion("type", [
     delayMs: z.number().int().nonnegative(),
     reason: z.string(),
   }),
-  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string(), context: InstructionContextSchema.optional() }),
+  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string(), context: InstructionContextSchema.optional(), internal: InternalToolSchema.optional() }),
   z.object({
     type: z.literal("tool.result"),
+    internal: InternalToolSchema.optional(),
+    diagnostics: DiagnosticsSchema.optional(),
     id: z.string(),
     ok: z.boolean(),
     display: z.string(),
@@ -283,6 +286,7 @@ export const EventPayload = z.discriminatedUnion("type", [
    */
   z.object({
     type: z.literal("tool.result.patched"),
+    internal: InternalToolSchema.optional(),
     id: z.string(),
     by: z.string(),
     display: z.string(),

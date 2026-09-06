@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
-import { CommandPrefixSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
@@ -88,6 +88,7 @@ const ConfigValuesSchema = z
     sandbox: z.enum(["read-only", "workspace-write", "none"]).optional(),
     sandboxNetwork: z.boolean().optional(),
     checkpoints: z.boolean().optional(),
+    diagnostics: DiagnosticsConfigSchema.optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),
