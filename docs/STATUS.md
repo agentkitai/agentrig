@@ -47,6 +47,10 @@ One overlapping local full run timed out the untouched E1 exact-upstream fixture
 Final validation uses four local workers to avoid shared-container contention, without changing
 test cases, assertions or timeouts. Remote exact-head CI remains mandatory.
 
+Final updated-main build/typecheck and full suite pass: 2,208 tests plus two existing skips across
+114 files, with four local workers (29 seconds). Source head `a595fb9` includes both reviewed-path
+fixes; PR exact-head three-platform CI and post-merge main CI are the remaining delivery gates.
+
 ### R6c done — PR #151; post-merge CI green
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
