@@ -111,7 +111,7 @@ it("refuses wrong format, forged display text, nested/user reasoning and overflo
   expect(bodies).toEqual([]);
 });
 
-it("completed old reasoning evicts first without summarization or mutation; active tool chain remains byte-identical", async () => {
+it("completed old reasoning is omitted before summarization; retained tool chain remains byte-identical", async () => {
   const block = thinkingFromItem("openai-responses", item);
   const chain: Message[] = [{ role: "assistant", content: [block, { type: "tool_use", id: "c", name: "read", input: {} }] },
     { role: "user", content: [{ type: "tool_result", toolUseId: "c", content: "ok" }] }];
@@ -121,7 +121,7 @@ it("completed old reasoning evicts first without summarization or mutation; acti
     async *stream(): AsyncIterable<ModelEvent> { calls++; yield { type: "text_delta", text: "summary" }; } };
   const strategy = summarizeOlderTurns({ keepLastMessages: 1 });
   const compacted = await strategy.compact(messages, fake);
-  expect(calls).toBe(0); expect(compacted.slice(2)).toEqual(messages.slice(2));
+  expect(calls).toBe(1); expect(compacted.slice(-2)).toEqual(chain);
   expect(compacted[1]!.content.some(b => b.type === "thinking")).toBe(false);
   expect(JSON.stringify(messages)).toBe(original);
   const again = await strategy.compact(compacted, fake);
@@ -182,4 +182,51 @@ it("refuses crossed Anthropic signature boundaries and missing signatures", asyn
     { type: "content_block_delta", index: 1, delta: { type: "signature_delta", signature: "wrong-block" } }];
   await expect(collect(parseAnthropicSse((async function* () { yield sse(events); })()))).rejects.toThrow("invalid thinking delta");
   expect(() => thinkingFromItem("anthropic", { type: "thinking", thinking: "", signature: "" })).toThrow("reasoning replay");
+});
+
+it.each([false, true])("review regression: thinking compaction makes one-call progress, multi-user=%s", async multiUser => {
+  const block = thinkingFromItem("openai-responses", item);
+  const turns: Message[] = Array.from({ length: 8 }, (_, n): Message[] => [
+    { role: "assistant", content: [block, { type: "tool_use", id: `t${n}`, name: "read", input: {} }] },
+    { role: "user", content: [{ type: "tool_result", toolUseId: `t${n}`, content: "large tool result ".repeat(500) }] },
+  ]).flat();
+  const messages = [user("task"), ...(multiUser ? [{ role: "assistant" as const, content: [block] }, user("continue")] : []), ...turns];
+  const before = JSON.stringify(messages); let calls = 0;
+  const p: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 1000 },
+    async *stream(request) { calls++; expect(JSON.stringify(request)).not.toContain("OPAQUE_SECRET");
+      expect(JSON.stringify(request)).not.toContain("disclosed summary"); yield { type: "text_delta", text: "SUMMARY" }; } };
+  const result = await summarizeOlderTurns({ keepLastMessages: 4 }).compact(messages, p);
+  expect(calls).toBe(1);
+  expect(result[0]).toEqual(messages[0]);
+  expect(result.slice(-4)).toEqual(turns.slice(-4));
+  expect(JSON.stringify(result).length).toBeLessThan(before.length * 0.9);
+  expect(JSON.stringify(messages)).toBe(before);
+});
+
+it("review regression: actual single-task reasoning runtime continues compacting across tool rounds", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agentrig-thinking-compact-")); roots.push(cwd);
+  const store = new SessionStore({ root: join(cwd, "logs") }); let turns = 0, summaries = 0;
+  const block = thinkingFromItem("openai-responses", item);
+  const p: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 2200 },
+    async *stream(request) {
+      if (request.system.startsWith("You compress")) {
+        summaries++; expect(JSON.stringify(request)).not.toContain("OPAQUE_SECRET");
+        yield { type: "text_delta", text: "Concise completed work summary." };
+        yield { type: "usage", usage: { input: 30, output: 8 } }; yield { type: "stop", reason: "end_turn" }; return;
+      }
+      yield { type: "thinking", block };
+      if (++turns <= 10) { yield { type: "tool_use", id: `t${turns}`, name: "read_fixture", input: {} }; yield { type: "stop", reason: "tool_use" }; }
+      else { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; }
+      yield { type: "usage", usage: { input: Math.ceil(JSON.stringify(request).length / 4), output: 20 } };
+    } };
+  const session = createAgent({ provider: p, store, systemPrompt: "fixture", repoMap: false,
+    compaction: summarizeOlderTurns({ keepLastMessages: 2 }), budget: { maxTurns: 12 },
+    permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+    tools: [{ name: "read_fixture", description: "fixture", permission: "read", effects: "read-only", paths: () => [], inputSchema: z.object({}),
+      async execute() { return { output: "ok", display: "tool result ".repeat(500) }; } }] }).run("one task", { cwd });
+  const drained = collect(session.events); const outcome = await session.done; const events = await drained;
+  expect(outcome.reason).toBe("done");
+  expect(summaries, JSON.stringify(events.filter(e => e.type === "error" || e.type === "model.request"))).toBeGreaterThan(2);
+  expect(events.filter(e => e.type === "context.compact").length).toBeGreaterThan(2);
+  expect(events.filter(e => e.type === "error").some(e => e.message.includes("could not reduce"))).toBe(false);
 });

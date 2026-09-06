@@ -246,7 +246,7 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 |---|---|---|---|
 | Structured clarifying question from the model (`ask_user`) | Claude Code, Codex, Cline, Goose | free text only; the supervisor talks to the model, the model has no channel back | R15a *(done, PR #188 + repair #191; all four repaired-main checks green; [contract](plans/R15a.md))* |
 | Post-edit diagnostics in the tool result | OpenCode, Claude Code LSP tool, Serena | `edit_file` returns nothing about whether the file still parses or typechecks | R15b |
-| Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | `ContentBlock` has text/tool_use/tool_result/image; returned reasoning is dropped | R15c |
+| Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | Persisted reasoning replay, safe display/export and compaction implemented; review fixes and integrated gates pending | R15c *(in progress; [contract](plans/R15c.md))* |
 | Editor integration over a standard protocol (ACP) | Zed, Gemini CLI, Goose, OpenCode | none; R8a planned a bespoke NDJSON protocol | R8a (amended) |
 | Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
 | User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
@@ -1257,3 +1257,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   comparison; local controlled acknowledgements do not measure provider savings.
   Additional Responses non-reasoning annotations/assistant-item metadata fidelity
   is separate from this row's exact reasoning-item replay contract.
+- R15c optional compatibility: explicit Anthropic thinking configuration and a
+  budget-approved live replay check; no automatic thinking/model setting is enabled
+  by preserving returned blocks, and disabled-thinking replay behavior is unverified.

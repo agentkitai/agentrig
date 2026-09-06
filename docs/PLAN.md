@@ -55,8 +55,9 @@ the Responses provider no longer depends on a process-local replay cache. Cross-
 format/unsupported Chat Completions histories explicitly refuse before fetch.
 TUI verbosity reveals disclosed text only; export and textual ingest omit thinking
 with an explicit receipt, while raw logs/ACP raw-event opt-in remain sensitive.
-Compaction removes older completed-group thinking before summarization, preserving
-the active signed tool chain. See [R15c](plans/R15c.md) for bounds and cache limits.
+Compaction omits older-round thinking before summarization in the same operation,
+preserving retained recent tool pairs and their signed reasoning verbatim after
+the new advisory summary. See [R15c](plans/R15c.md) for bounds and cache limits.
 
 ```ts
 interface ModelRequest {
