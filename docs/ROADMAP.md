@@ -9,7 +9,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Active repair | Child-grants test readiness | Repeated PR #171 post-merge Windows failure; exact subscribed predicates and green main before R10a |
+| Done — PR #173 | Child-grants test readiness | Main `063cac6` passed all three jobs in CI `34035704275`, closing PR #171's repair gate |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
@@ -921,7 +921,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
-| Repair (active) | Child-grants test readiness | PR #171 post-merge Windows CI 34033869154 repeated two prompt-readiness failures on the single diagnostic rerun. Exact subscribed predicates, bounded waits and run-settlement diagnostics; production authority unchanged. Separate repair and green main gate R10a. [Contract](plans/child-grants-readiness.md). |
+| Repair (done, PR #173) | Child-grants test readiness | Main `063cac6` passed CI `34035704275` on all platforms after the repeated PR #171 post-merge Windows readiness failure. Exact subscribed predicates, bounded waits and settlement diagnostics; production authority unchanged. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
@@ -930,7 +930,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b (done) → R5c (closing gates) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
-| 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
+| 8 | R10d (done, PR #171/#173) → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
