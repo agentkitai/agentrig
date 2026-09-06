@@ -259,6 +259,15 @@ the parent applies them only through separately authorized tools. Grants are not
 enforcing parent sandboxes refuse host Git preparation, and cwd isolation is cooperative.
 See [R10c](plans/R10c.md) for dirty/untracked coverage, retention caps and handoff limits.
 
+R15l records the orchestration boundary: ordinary trusted user-authored SDK scripts
+may compose these existing seams, bounded fan-out, independently specified checks
+and serial separately authorized candidate application. They remain host programs,
+not sandboxed model/config code; normal agent actions must use the runtime's
+permission pipeline, never bypass it by calling tool callbacks directly. No workflow
+engine/DSL/loader, automatic merge, exactly-once guarantee or new build row follows.
+Failed, incomplete or stale evidence stops integration and retains artifacts; even
+passing checks are evidence only for what they actually test. See [decision](plans/R15l.md).
+
 ### 2.7 Hooks
 
 ```ts
