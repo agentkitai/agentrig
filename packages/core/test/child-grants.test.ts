@@ -65,3 +65,17 @@ it("derives from exact runtime identity, never copied/stale context or configure
   const empty = {}; bindPermissionView(empty, undefined); expect(childPermissionView(empty, root)).toBeUndefined();
   root.endRun(task); root.beginRun("s"); expect(() => childPermissionView(ctx, root)).toThrow("context expired");
 });
+it("failed expiry audit reservation still seals old views and retains changes for explicit recovery", async () => {
+  const root = new PermissionGrantRegistry({ maxPending: 2 }); const task = root.beginRun("s"); const child = root.childView();
+  record(child); await flush(root); record(child, { operation: { tool: "other" } });
+  expect(() => root.endRun(task)).toThrow("audit queue is full");
+  expect(child.active).toBe(false); expect(child.authorize(req)).toMatchObject({ viewExpired: true });
+  root.beginRun("s"); expect(root.childView().authorize(req)).toMatchObject({ auditBlocked: true });
+  expect(root.inspect()).toEqual([]); expect(root.list()).toHaveLength(2); // Still retained for audited recovery, never live.
+  await flush(root); expect(root.clear()).toBe(2); await flush(root); expect(root.decide(req)).toBe("ask");
+});
+it("bounds descendant ancestry independently of the cumulative view cap", () => {
+  const root = new PermissionGrantRegistry({ maxViews: 100 }); root.beginRun("s"); let view = root;
+  for (let i = 0; i < 64; i++) view = view.childView();
+  expect(() => view.childView()).toThrow("limit"); expect(root.childView().active).toBe(true);
+});

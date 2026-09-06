@@ -33,6 +33,12 @@ direct forwarding; actual startup/builder/spawn controls fail before and pass af
 independently passed 40 tests. [Verbatim finding and resolution](plans/R12d-review.md); no second
 general review. Final integration/full checks/CI follow; optional notes remain at ROADMAP's end.
 
+H7a main `668f7f1` is integrated; its post-merge CI 34028225992 is all green. Continuation/source
+safeguards and committed R16 scope are retained. Combined build/typecheck and the full suite
+pass 2,354 tests plus two skips across 128 files (four workers, 31 seconds), including actual
+startup denial/standing controls, failed expiry-audit recovery and bounded descendant depth.
+Final exact-head PR CI follows; R12c/H7a done markers include verified merge receipts.
+
 ### R13c done — PR #159; post-merge CI green
 
 PR #159 merged as `78e8e19`; exact post-merge CI 34026441186 passed on all three platforms.
