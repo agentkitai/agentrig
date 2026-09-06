@@ -22,7 +22,7 @@ describe("bounded reviewer diff mode", () => {
   it("never calls a model for empty or oversized/unsupported/incomplete input", async () => {
     const fake = provider(JSON.stringify(answer)); const reviewer = new TrajectoryReviewer({ provider: fake.model });
     expect((await reviewer.reviewDiff({ patch: "", identity: "fixture" })).findings).toEqual([]);
-    for (const bad of ["x".repeat(16_385), patch.replace("+return 2;\n", ""), patch.replace("+++ b/a.ts", "+++ b/../a.ts"), "diff --git a/a b/a\nold mode 100644\nnew mode 100755\n", "diff --git a/a b/a\nBinary files a/a and b/a differ\n"])
+    for (const bad of ["x".repeat(16_385), patch.replace("100644", "160000"), patch.replace("+return 2;\n", ""), patch.replace("+++ b/a.ts", "+++ b/../a.ts"), "diff --git a/a b/a\nold mode 100644\nnew mode 100755\n", "diff --git a/a b/a\nBinary files a/a and b/a differ\n"])
       await expect(reviewer.reviewDiff({ patch: bad, identity: "fixture" })).rejects.toThrow();
     expect(fake.calls).toHaveLength(0);
   });
@@ -35,5 +35,17 @@ describe("bounded reviewer diff mode", () => {
       expect(fake.calls).toHaveLength(1);
     }
     expect(() => validateDiffReview(answer, [])).toThrow("outside captured");
+  });
+  it("uses smaller response/time bounds and closes an uncooperative provider with unknown usage", async () => {
+    let entered!: () => void; const started = new Promise<void>(resolve => { entered = resolve; });
+    let usage: AuxiliaryReport | undefined;
+    const fake = provider("{}"); fake.model.stream = async function* () { entered(); await new Promise(() => {}); };
+    const running = new TrajectoryReviewer({ provider: fake.model, onUsage: report => { usage = report; } })
+      .reviewDiff({ patch, identity: "fixture" }, { limits: { callTimeoutMs: 30, timeoutMs: 100 } });
+    const refused = expect(running).rejects.toThrow("timed out"); await started; await refused;
+    expect(usage?.calls[0]?.usageComplete).toBe(false); expect(usage?.calls[0]?.outcome).toBe("timeout");
+    const bounded = provider(JSON.stringify(answer));
+    await new TrajectoryReviewer({ provider: bounded.model, maxTokens: 16 }).reviewDiff({ patch, identity: "fixture" });
+    expect(bounded.calls[0]?.maxTokens).toBe(16);
   });
 });

@@ -70,6 +70,7 @@ export function diffLocations(patch: string): DiffLocation[] {
     }
     if (line.startsWith("--- ")) { oldPath = path(line.slice(4), "a/"); continue; }
     if (line.startsWith("+++ ")) { newPath = path(line.slice(4), "b/"); continue; }
+    if (/^index .* 160000$/.test(line)) throw new Error("review refuses submodule changes");
     if (/^(index [a-f0-9]+\.\.[a-f0-9]+(?: \d+)?|new file mode \d+|deleted file mode \d+)$/.test(line)) continue;
     if (line === "\\ No newline at end of file") continue;
     throw new Error("review refuses binary, renamed or unsupported patch content");

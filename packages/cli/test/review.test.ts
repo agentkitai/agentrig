@@ -51,6 +51,7 @@ describe("R15e actual diff review", () => {
   });
   it("reviews actual tracked Git text, excludes untracked files and leaves repo untouched", async () => {
     const { root, git } = await repo(); await writeFile(join(root, "a.ts"), "return 2;\n"); await writeFile(join(root, "untracked.secret"), "untracked-canary");
+    await git(["config", "branch.feature/review.remote", "origin"]);
     const before = await git(["status", "--porcelain"]); const model = fake();
     const result = await reviewChanges(root, defaults, signal(), { provider: () => model.provider });
     expect(renderReview(result).join("\n")).toContain("a.ts:1 (new, medium)"); expect(result.identity).toContain("sha256:");
@@ -76,12 +77,21 @@ describe("R15e actual diff review", () => {
   });
   it("disables repository-controlled external diff/textconv and rejects pre-cancelled work", async () => {
     const { root, git } = await repo(); await writeFile(join(root, "a.ts"), "return 2;\n");
+    const canary = join(root, "hook-executed"); const script = join(root, "hook.cjs");
+    await writeFile(script, `require('fs').writeFileSync(${JSON.stringify(canary)},'executed');process.stdin.pipe(process.stdout);`);
+    await git(["config", "core.fsmonitor", `node ${JSON.stringify(script)}`]);
     await git(["config", "diff.external", "definitely-not-an-executable-review-canary"]);
     await git(["config", "diff.fixture.textconv", "definitely-not-an-executable-review-canary"]);
     await writeFile(join(root, ".gitattributes"), "a.ts diff=fixture\n");
     const model = fake(); expect((await reviewChanges(root, defaults, signal(), { provider: () => model.provider })).review.findings).toHaveLength(1);
+    await expect(readFile(canary)).rejects.toThrow();
     const aborted = new AbortController(); aborted.abort(); const factory = vi.fn(() => model.provider);
     await expect(reviewChanges(root, defaults, aborted.signal, { provider: factory })).rejects.toThrow(); expect(factory).not.toHaveBeenCalled();
+    await git(["config", "filter.fixture.clean", `node ${JSON.stringify(script)}`]);
+    await writeFile(join(root, ".gitattributes"), "a.ts filter=fixture\n");
+    await expect(reviewChanges(root, defaults, signal(), { provider: factory })).rejects.toThrow("filter configuration");
+    expect(factory).not.toHaveBeenCalled();
+    await expect(readFile(canary)).rejects.toThrow();
   });
   it("actual bounded Git helper refuses overflow and joins owned descendant cancellation", async () => {
     const { root } = await repo();

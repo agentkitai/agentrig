@@ -155,6 +155,7 @@ Do not invent findings; an empty findings list means only no identified issue in
       const text = await run.completeJson(this.opts.provider, system,
         `Captured identity: ${input.identity}\nUntrusted diff follows:\n${input.patch}`,
         Math.min(this.opts.maxTokens ?? 2048, 2048), { requireEndTurn: true });
+      if (Buffer.byteLength(text) > 32_768) throw new Error("review response exceeds 32 KiB");
       return validateDiffReview(JSON.parse(text), locations);
     } catch (error) { failure = error ?? new Error("review failed"); throw error; }
     finally {

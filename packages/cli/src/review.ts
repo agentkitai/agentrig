@@ -107,9 +107,16 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       verify = async () => { if (JSON.stringify(await metadata()) !== JSON.stringify(first)) throw new Error("PR changed during review; result refused"); };
       await verify();
     } else {
+      // Worktree-to-index conversion can invoke clean/process filters even with textconv
+      // and external diff disabled. Refuse configured filters before asking Git for a diff.
+      const configNames = await git(["config", "--includes", "--null", "--name-only", "--list"]);
+      if (!configNames.endsWith("\0") || configNames.split("\0").slice(0, -1).some(name => !/^[A-Za-z][A-Za-z0-9-]*\.[^\x00-\x1f\x7f]{1,1000}$/.test(name)))
+        throw new ReviewRefusal("read-only review refuses unsupported Git configuration names; no diff or provider was run");
+      if (configNames.split("\0").some(name => /^filter\./i.test(name)))
+        throw new ReviewRefusal("read-only review refuses Git clean/process filter configuration; use a repository without configured filters. No diff filter or provider was run.");
       const head = await revision("HEAD");
       const base = options.base === undefined ? head : await revision(options.base);
-      const capture = () => git(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base, ...(options.base === undefined ? [] : [head]), "--"]);
+      const capture = () => git(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base, ...(options.base === undefined ? [] : [head]), "--"]);
       patch = await capture();
       identity = `${base}..${options.base === undefined ? "tracked-worktree" : head} HEAD:${head} sha256:${digest(patch)}`;
       coverage = options.base === undefined ? "Tracked HEAD-to-worktree text changes only; untracked files excluded. No tests run." : "Resolved base-to-HEAD text changes only; worktree/untracked changes excluded. No tests run.";
