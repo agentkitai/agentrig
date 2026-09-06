@@ -12,7 +12,8 @@ import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";
-import { resolveProjectTrust } from "./trust.js";
+import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
+import { ScheduleStore } from "./schedule.js";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
@@ -117,6 +118,7 @@ function sequence(value: string): number {
 }
 
 export interface ProgramDependencies {
+  scheduleNow?: () => Date;
   run?: typeof runCommand;
   tui?: typeof startTui;
   config?: LoadRunConfigOptions;
@@ -151,7 +153,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -323,6 +325,47 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await executeRun(task, resolved);
+    });
+
+  const schedule = program.command("schedule").description("Manage literal UTC tasks; tick previews unless --execute is explicit");
+  async function scheduleStore(): Promise<ScheduleStore> {
+    const boundary = await resolveProjectBoundary(dependencies.config?.cwd ?? process.cwd(), dependencies.config?.home ?? homedir());
+    return new ScheduleStore(boundary.projectRoot);
+  }
+  schedule.command("ls").action(async () => console.log(JSON.stringify(await (await scheduleStore()).read(), null, 2)));
+  schedule.command("add <id> <cron> <task>")
+    .option("--max-turns <n>", "turn budget 1–50", "5")
+    .option("--max-tokens <n>", "requested token budget 1–100000", "10000")
+    .option("--max-minutes <n>", "runtime minute budget 1–30", "5")
+    .action(async (id: string, cron: string, task: string, flags: { maxTurns: string; maxTokens: string; maxMinutes: string }) => {
+      await (await scheduleStore()).add({ id, cron, task, flags: { maxTurns: Number(flags.maxTurns), maxTokens: Number(flags.maxTokens), maxMinutes: Number(flags.maxMinutes) } });
+      console.log(`added schedule ${id}`);
+    });
+  schedule.command("rm <id>").action(async (id: string) => { await (await scheduleStore()).remove(id); console.log(`removed schedule ${id}`); });
+  withProviderOptions(schedule.command("tick"))
+    .option("--execute", "explicitly execute due tasks; default is model-free preview")
+    .option("--trust", "trust canonical project for this tick only")
+    .option("--json", "render executed session events as JSONL")
+    .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
+      const store = await scheduleStore();
+      const date = (dependencies.scheduleNow ?? (() => new Date()))();
+      if (opts.execute !== true) { console.log(JSON.stringify({ preview: true, due: await store.tick(date) })); return; }
+      const trust = await resolveProjectTrust(store.projectRoot, { home: dependencies.config?.home ?? homedir(), interactive: false, ...(opts.trust === undefined ? {} : { explicitTrust: opts.trust }) });
+      if (!trust.trusted) throw new Error("scheduled execution requires trusted canonical project; use --trust explicitly");
+      const resolved = await configured(opts, cmd, false);
+      if (resolved === undefined) return;
+      await withMaintenanceSignal(async signal => {
+        await store.tick(date, async (entry, minute) => {
+          signal.throwIfAborted();
+          await executeRun(entry.task, {
+            ...resolved, root: `${store.projectRoot}/.agentrig/raw/sessions`,
+            maxTurns: String(entry.flags.maxTurns), maxTokens: String(entry.flags.maxTokens),
+            maxMinutes: String(entry.flags.maxMinutes), maxTokensPerTurn: "4096",
+            headless: true, scheduled: { entryId: entry.id, minute }, signal,
+          } as RunOptions);
+          if (process.exitCode !== undefined && process.exitCode !== 0) throw new Error(`scheduled run ${entry.id} failed; occurrence remains claimed`);
+        }, signal);
+      }, undefined, "schedule tick");
     });
 
   function collect(value: string, prev: string[] = []): string[] {

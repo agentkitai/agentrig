@@ -1,16 +1,30 @@
 # Status
 
-Active row: **R10a sequential strategy extraction**, after repaired main `063cac6` passed
-post-merge CI 34035704275 on all three platforms. R10d PR #171 and readiness repair #173
-are fully gated on that combined main; the initial failed R10d run 34033869154 remains
-recorded. [Repair evidence](plans/child-grants-readiness.md), [R10a contract](plans/R10a.md).
+Active independent row: **R7a explicit scheduler ticks**. R10a PR #174 is done on main
+`391514b` with all-three post-merge CI `34037504297`
+([receipt](https://github.com/agentkitai/agentrig/pull/174#issuecomment-5559723561)).
+R14d PR #172 is done on main `326aa4a`, post-CI `34036971032` all green
+([receipt](https://github.com/agentkitai/agentrig/pull/172#issuecomment-5559667531)).
+R5c PR #170 is done on main `1ae6b77`, post-CI `34036244589` all green.
+R7a reuses completed permission/provenance/lifecycle foundations and does not depend on
+parallel R9a export or R10b concurrency. R15i still gates default unattended enablement.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is merged (PR #172), post-merge CI pending; R10a is implemented pending gates; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R10a is done (PR #174, post-merge CI green); R7a is in progress; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R10a implemented — delivery gates pending
+### R7a in progress — explicit scheduler ticks
+
+Plain bounded JSON and five-field UTC cron; preview is model-free, execution is explicit
+and requires canonical project trust. Cooperative claim-before-dispatch serializes ticks;
+scheduled tasks stay advisory and never establish fresh permission consent. No daemon,
+heartbeat, report banner or monetary-cap claim. [Contract](plans/R7a.md).
+Initial build/typecheck and 17 actual CLI/runtime/store controls pass. Full suite passes
+2,559 plus two skips across 148 files, four workers, 38 seconds. Mutation controls and the
+single bounded independent review precede final delivery gates.
+
+### R10a done — PR #174; post-merge CI green
 
 Trusted SDK turnStrategy injection schedules the unchanged tool pipeline; sequential stays
 default. Pinned pre-extraction full bytes cover normal/between-call-abort/final-call-abort/
@@ -25,7 +39,7 @@ First head passed all-three CI 34036629566; integrated R14d main `326aa4a` after
 Combined build/typecheck, 105 focused and full 2,542 plus two skips across 147 files pass
 (four workers, 37 seconds); pre-extraction snapshots unchanged. Fresh exact-head CI follows.
 
-### R14d merged — PR #172; post-merge CI pending
+### R14d done — PR #172; post-merge CI green
 
 Shared bounded regression/behavior verdicts reuse actual E1 workers and stored E2 reports;
 the same host-attested observations reach M6 through a lazy trusted loader. Same-assumption,

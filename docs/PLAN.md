@@ -743,6 +743,12 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R7a adds bounded plain-JSON schedules with five-field UTC cron. `schedule tick` previews
+without provider/config loading; `--execute` requires trusted project consent and preserves
+advisory scheduled provenance through `run.scheduled`, never fresh user permission. Claims
+serialize cooperating ticks, no daemon/catch-up. R15i remains required before unattended
+execution is enabled by default. See [R7a](plans/R7a.md) for bounds and crash/race limits.
+
 - `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
 - `agentrig run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
 - `agentrig dream [--review|--auto] [--scope project|global] [--since <n>]`

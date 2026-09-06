@@ -188,6 +188,11 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("run.scheduled"),
+    entryId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u),
+    minute: z.number().int().nonnegative().safe(),
+  }),
+  z.object({
     type: z.literal("session.start"),
     task: z.string(),
     context: InstructionContextSchema.optional(),
