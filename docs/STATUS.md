@@ -3,6 +3,19 @@
 Active row: **R10b bounded parallel scheduling**, from green R10a main `391514b`.
 R9a and R7a are merged (PRs #175/#176); their gate receipts are recorded below. [R10b contract](plans/R10b.md).
 
+Merged repair #178; post-main gate pending: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
+main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
+Post-main `34039249249` then failed the unchanged A1 outer five-second test timeout
+on Windows (6,261 ms); Linux/macOS passed. The separate test-only repair preserves
+all seeded-regression assertions and subprocess bounds. A controlled delayed
+fixture failed before and passed after the explicit outer bound, then the delay
+was removed. [Evidence and contract](plans/evalset-fixture-bound.md). No blind rerun;
+R7b remains paused until the repaired-main gate is green.
+Repair build/typecheck/full passes 2,597 plus two skips across 149 files (four
+workers, 39 seconds). The single bounded review approved and independently passed
+all 15 evaluation tests plus typecheck; original findings are retained in the plan.
+Exact-head three-platform CI and the repaired-main post-merge gate are next.
+
 Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI failed an evaluation-fixture timeout; separate test repair gates continuation; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
