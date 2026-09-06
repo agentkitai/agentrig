@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ContentBlock, Message } from "../messages.js";
+import { thinkingFromItem, thinkingToItem, validateThinkingHistory } from "./thinking.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
 import { OpenAIChatGPTAuth, type OpenAIChatGPTAuthOptions } from "./openai-chatgpt-auth.js";
@@ -47,9 +48,6 @@ export interface OpenAIChatGPTProviderOptions {
 const CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
 /** Honest self-identification; see the impersonation note above. */
 const DEFAULT_ORIGINATOR = "agentrig";
-/** Cap on cached raw response items (reasoning replay); oldest groups are evicted first. */
-const MAX_CACHED_GROUPS = 64;
-
 type JsonObject = Record<string, unknown>;
 
 /** Ordered raw output items of one response, replayed verbatim on the following request. */
@@ -65,18 +63,21 @@ function reconstructFunctionCall(b: Extract<ContentBlock, { type: "tool_use" }>)
 /**
  * Map unified messages to the Responses API `input[]` items.
  *
- * `rawGroups` lets the provider replay a previous response's items verbatim (reasoning models
- * emit `reasoning` items that must accompany their `function_call` on the next request, and the
- * unified ContentBlock schema has nowhere to hold them). Without a cached group the function
- * call is reconstructed, which is correct for non-reasoning models.
+ * Persisted thinking blocks own reasoning replay. The optional explicit `rawGroups` argument
+ * is retained for legacy SDK callers; the provider itself never constructs a hidden cache.
+ * A message with persisted thinking always wins over a caller-supplied legacy group.
  */
 export function toResponsesInput(messages: Message[], rawGroups?: Map<string, RawItemGroup>): JsonObject[] {
+  validateThinkingHistory(messages, "openai-responses");
   // Provenance stays on unified blocks, independent of cached vendor reasoning items. Never
   // overwrite unified history with this lossy wire projection or treat vendor text as labels.
   const input: JsonObject[] = [];
   const emitted = new Set<string>();
   for (const m of messages) {
     if (m.role === "assistant") {
+      // Persisted reasoning is authoritative. The legacy cache remains only for callers
+      // supplying old tool-only history, never as a second source of reasoning items.
+      const persisted = m.content.some(block => block.type === "thinking");
       // preserve stream order: text and tool calls can interleave
       let pending = "";
       const flush = () => {
@@ -86,13 +87,18 @@ export function toResponsesInput(messages: Message[], rawGroups?: Map<string, Ra
         }
       };
       for (const b of m.content) {
+        if (b.type === "thinking") {
+          flush();
+          input.push(thinkingToItem(b, "openai-responses"));
+          continue;
+        }
         if (b.type === "text") {
           pending += b.text;
           continue;
         }
         if (b.type !== "tool_use") continue;
         flush();
-        const group = rawGroups?.get(b.id);
+        const group = persisted ? undefined : rawGroups?.get(b.id);
         if (group === undefined) {
           input.push(reconstructFunctionCall(b));
         } else if (!emitted.has(group.id)) {
@@ -184,13 +190,15 @@ export async function* parseResponsesSse(
   body: AsyncIterable<Uint8Array | string>,
   opts: ParseResponsesOptions = {},
 ): AsyncIterable<ModelEvent> {
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "";
   let usage: Usage | null = null;
   let sawToolUse = false;
   let sawRefusal = false;
   let stop: StopReason | null = null;
   let stopRaw: string | undefined;
+  let thinkingBytes = 0;
+  let thinkingCount = 0;
 
   const readUsage = (u: JsonObject | undefined): Usage | null => {
     if (!u || typeof u.input_tokens !== "number" || typeof u.output_tokens !== "number") return null;
@@ -216,6 +224,12 @@ export async function* parseResponsesSse(
       case "response.output_item.done": {
         const item = data.item as JsonObject | undefined;
         if (item === undefined) break;
+        if (item.type === "reasoning") {
+          const block = thinkingFromItem("openai-responses", item);
+          thinkingBytes += Buffer.byteLength(JSON.stringify(block));
+          if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
+          yield { type: "thinking", block };
+        }
         opts.onRawItem?.(item);
         if (item.type === "function_call") {
           sawToolUse = true;
@@ -280,7 +294,7 @@ export async function* parseResponsesSse(
     buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     yield* drain();
   }
-  buffer += "\n";
+  buffer += decoder.decode() + "\n";
   yield* drain();
 
   yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
@@ -301,8 +315,6 @@ export class OpenAIChatGPTProvider implements ModelProvider {
   private readonly retry: RetryPolicy;
   private readonly onRetry: ((info: StreamRetryInfo) => void) | undefined;
   private readonly sessionId = randomUUID();
-  /** call_id -> the raw item group of the response that produced it (for reasoning replay). */
-  private readonly rawGroups = new Map<string, RawItemGroup>();
 
   constructor(opts: OpenAIChatGPTProviderOptions) {
     this.model = opts.model;
@@ -343,25 +355,9 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       init: {
         method: "POST",
         headers,
-        body: JSON.stringify(toResponsesRequest(req, this.model, this.rawGroups, this.reasoningEffort)),
+        body: JSON.stringify(toResponsesRequest(req, this.model, undefined, this.reasoningEffort)),
       },
     };
-  }
-
-  /** Record one response's raw items so the next request can replay them verbatim. */
-  private cacheRawItems(items: JsonObject[]): void {
-    const callIds = items
-      .filter((i) => i.type === "function_call")
-      .map((i) => String(i.call_id ?? i.id ?? ""))
-      .filter((id) => id !== "");
-    if (callIds.length === 0) return;
-    const group: RawItemGroup = { id: randomUUID(), items };
-    for (const id of callIds) this.rawGroups.set(id, group);
-    while (this.rawGroups.size > MAX_CACHED_GROUPS) {
-      const oldest = this.rawGroups.keys().next();
-      if (oldest.done === true) break;
-      this.rawGroups.delete(oldest.value);
-    }
   }
 
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
@@ -384,13 +380,9 @@ export class OpenAIChatGPTProvider implements ModelProvider {
       }
       if (!res.body) throw new Error("openai-chatgpt: empty response body");
 
-      // per attempt, so a retried request never caches the failed stream's partial items
-      const items: JsonObject[] = [];
-      try {
-        yield* parseResponsesSse(res.body, { onRawItem: (item) => items.push(item) });
-      } finally {
-        this.cacheRawItems(items);
-      }
+      // Canonical messages are the sole replay source. A hidden cache would resurrect
+      // compacted reasoning and disappear on restart, creating different requests.
+      yield* parseResponsesSse(res.body);
     }.bind(this);
 
     yield* streamWithRetries(openOnce, signal, this.retry, this.onRetry, (info) => ({ type: "retry", ...info }));

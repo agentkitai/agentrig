@@ -1,10 +1,12 @@
 # Status
 
-Active gate repair: **child abort-hook lifecycle fixture**. R15a #188 merged as
-`59c21c7` after all four exact-head checks passed, but post-main CI `34054434385`
-failed macOS on an existing cleanup timing assumption. Linux and scripted structure
-passed. No blind rerun; [controlled reproduction and repair](plans/child-abort-hook-gate.md)
-gate subsequent feature integration/merges. R15a is not yet marked complete.
+Active: **R15c persisted reasoning blocks**, alongside separately owned R15d/R15f/R8c
+worktrees. [Contract](plans/R15c.md); runtime, review and integrated CI gates apply.
+R15a #188 and child abort-hook fixture repair #191 are done: repaired main `3174475`
+passed Linux/macOS/Windows CI `34056045886` and structure `34056045804` without reruns.
+[Repair receipt](https://github.com/agentkitai/agentrig/pull/191#issuecomment-5561792580);
+[R15a completion](https://github.com/agentkitai/agentrig/pull/188#issuecomment-5561792722).
+The original macOS failure stays recorded; production cancellation was unchanged.
 R15e is independent of ACP and reuses delivered M6/permission foundations; it proceeds
 having started while R15a awaited R8a, without claiming partial R15a/R15c delivery. R15b PR185 is done; all four exact post-main checks are green. R8a PR184 is
 done; all four exact post-main checks are green. R9c PR183 is done: all four post-main

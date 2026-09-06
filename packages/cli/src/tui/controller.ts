@@ -1152,6 +1152,11 @@ export class TuiController {
       this.set({ streaming: "" });
     }
 
+    if (e.type === "message.append" && e.message.role === "assistant") {
+      for (const block of e.message.content) if (block.type === "thinking") {
+        this.print(this.state.verbose && block.text !== "" ? `thinking: ${block.text}` : "thinking [collapsed]", "event");
+      }
+    }
     if (this.state.verbose) {
       this.print(renderEvent(e), e.type === "error" ? "error" : "event");
       return;

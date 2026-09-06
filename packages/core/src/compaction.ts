@@ -60,6 +60,8 @@ function blockToTranscript(b: ContentBlock): string {
     }
     case "image":
       return "[image]";
+    case "thinking":
+      return "[thinking omitted]";
   }
 }
 
@@ -81,7 +83,23 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
     shouldCompact: ({ tokens, window }) => tokens > threshold * window,
 
     async compact(messages, provider, signal) {
+      // First shed only completed groups before the latest conversational user input.
+      // The active reasoning/tool chain must remain byte-identical for provider replay.
+      let active = 0;
+      for (let i = 0; i < messages.length; i++) {
+        if (messages[i]!.role === "user" && messages[i]!.content.some(b => b.type !== "tool_result")) active = i;
+      }
+      let removed = false;
+      const withoutOldThinking = messages.map((message, i) => {
+        if (i >= active || !message.content.some(b => b.type === "thinking")) return message;
+        removed = true;
+        const content = message.content.filter(b => b.type !== "thinking");
+        return { ...message, content: content.length ? content : [{ type: "text" as const, text: "[thinking omitted]", trust: "external" as const, context: ADVISORY_CONTEXT }] };
+      });
+      if (removed) return withoutOldThinking;
       let cut = messages.length - keep;
+      // Do not summarize the active signed tool chain, even with a tiny keep setting.
+      if (messages.slice(active).some(m => m.content.some(b => b.type === "thinking"))) cut = Math.min(cut, active);
       // never orphan a tool_result: pull the boundary back until the kept tail doesn't
       // start with results whose tool_use would be summarized away
       while (cut > 1 && messages[cut]!.role === "user" && messages[cut]!.content.some((b) => b.type === "tool_result")) {
