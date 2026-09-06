@@ -112,3 +112,4 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts
       - run: pnpm exec vitest run packages/cli/test/packages.test.ts packages/cli/test/packages-runtime.test.ts
       - run: pnpm exec vitest run packages/core/test/provider-conformance.test.ts packages/cli/test/provider-probe.test.ts
+      - run: pnpm exec vitest run packages/core/test/turn-strategy.test.ts packages/core/test/h6-trace.test.ts packages/core/test/token-continuation.test.ts
