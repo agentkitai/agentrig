@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { z } from "zod";
 import { sanitizeLine, type ModelProvider, type PermissionPolicy, type PermissionRequest, type AuxiliaryReport } from "@agentkitai/agentrig-core";
 import { TrajectoryReviewer, diffLocations, type DiffReviewOutput } from "@agentkitai/agentrig-supervisor";
 import { buildRoleProvider, type ProviderOptions } from "./provider.js";
 import { buildPermissionPolicy } from "./run.js";
 import { reviewProcess, type ReviewProcess } from "./review-process.js";
+import { GitHubPr as Pr, gitHubRequest } from "./github-report.js";
 
 export interface ReviewOptions extends ProviderOptions {
   base?: string; pr?: string; comment?: boolean; sandbox?: string;
@@ -41,8 +41,6 @@ export function reviewArguments(text: string): Pick<ReviewOptions, "base" | "pr"
   return result;
 }
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-const Pr = z.object({ number: z.number().int().positive(), baseRefOid: z.string().regex(/^[a-f0-9]{40}$/),
-  headRefOid: z.string().regex(/^[a-f0-9]{40}$/), url: z.string().regex(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/) }).strict();
 const safe = (text: string) => sanitizeLine(text, 8192).replace(/\r?\n/g, " ");
 export function renderReview(result: ReviewResult): string[] {
   return ["Advisory diff review — not approval or test evidence", `Identity: ${result.identity}`, `Coverage: ${result.coverage}`,
@@ -91,8 +89,9 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       if (decision !== "allow") throw new Error(`review ${cls} permission denied`);
     };
     const invoke = async (program: "git" | "gh", args: string[], maxBytes = 16_384, input?: string) => {
-      if (program === "gh") { await permit("review_gh", "exec", args); await permit("review_gh", "net", args); }
-      else await permit("review_git", "read", args);
+      if (program === "gh") return gitHubRequest(args, { cwd: root, signal, process,
+        authorize: (permission, argv) => permit("review_gh", permission, argv) }, maxBytes, input);
+      await permit("review_git", "read", args);
       const result = await process(program, args, { cwd: root, signal, maxBytes, ...(input === undefined ? {} : { input }) });
       signal.throwIfAborted();
       if (Buffer.byteLength(result) > maxBytes) throw new Error("review capture exceeds byte limit");

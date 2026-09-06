@@ -183,3 +183,12 @@ external and cannot authorize exec, never enters telemetry, and both owned lifet
 close. This is focused integration evidence, not another broad review.
 Combined build/typecheck and Docker-required full suite pass **2,877 tests plus two
 existing skips, 177 files, four workers**. New exact-head CI follows this integration.
+
+Final queued integration includes R15f main `887fef8`, all four post-main checks green
+(CI `34058784223`, structure `34058784219`). The actual built `run --ci` subprocess
+control compares telemetry disabled versus a local collector returning HTTP 500:
+both finish with successful task/report outcomes, process cleanup joins, and collector
+error text/task content never leak across the reporting boundary. No second review.
+Final combined build/typecheck and Docker-required full suite pass **2,893 tests plus
+two existing skips, 178 files, four workers**. All four updated exact-head CI gates
+remain pending before root merge.

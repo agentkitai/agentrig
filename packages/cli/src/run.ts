@@ -17,10 +17,11 @@ import {
   type Pricing,
   type Session,
   type SessionSummary,
+  type HarnessEvent,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
-import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
+import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions, type AgentExtras } from "./agent-builder.js";
 import { withMaintenanceSignal } from "./maintenance.js";
 import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
 import { questionPolicy } from "./question-policy.js";
@@ -375,7 +376,18 @@ export async function askInteractively(req: PermissionRequest, signal?: AbortSig
 
 export interface RunSummary extends SessionSummary { scheduledAccounting?: ScheduledAccounting; maintenanceFailed?: boolean }
 
-export async function runCommand(task: string, opts: RunOptions): Promise<RunSummary | void> {
+/** Trusted embedding callbacks, never accepted from project configuration or task input. */
+export interface RunCommandDependencies {
+  advisoryContext?: readonly string[];
+  onAsk?: AgentExtras["onAsk"];
+  observe?: (event: HarnessEvent) => void;
+  accounting?: ScheduledUsage;
+  quiet?: boolean;
+}
+
+export async function runCommand(task: string, opts: RunOptions, dependencies: RunCommandDependencies = {}): Promise<RunSummary | void> {
+  const printError = dependencies.quiet === true ? (..._values: unknown[]) => {} : console.error;
+  const printOutput = dependencies.quiet === true ? (..._values: unknown[]) => {} : console.log;
   if (opts.heartbeat !== undefined) opts = { ...heartbeatBuildOptions(opts), supervise: false, supervisorReview: false, supervisorAbortRestores: false };
   opts.signal?.throwIfAborted();
   let dreamEverySessions: number;
@@ -389,7 +401,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
     dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
     dreamEveryHours = positiveNumber("--dream-every-hours", opts.dreamEveryHours);
   } catch (err) {
-    console.error((err as Error).message);
+    printError((err as Error).message);
     process.exitCode = 1;
     return;
   }
@@ -397,32 +409,33 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   void dreamEveryHours;
 
   if (opts.memory === undefined && (opts.ingestOnEnd === true || opts.dreamOnEnd === true)) {
-    console.error("--ingest-on-end/--dream-on-end need --memory; no session_end hook was registered");
+    printError("--ingest-on-end/--dream-on-end need --memory; no session_end hook was registered");
   }
 
   // said before the agent starts, not after: the point of the warning is to be readable while
   // there is still time to stop
   const warning = permissionWarning(opts, process.cwd());
-  if (warning !== null) console.error(warning);
+  if (warning !== null) printError(warning);
 
   const interactive = opts.headless !== true && process.stdin.isTTY === true;
 
   let built;
   let maintenanceFailed = false;
-  const scheduledUsage = opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true);
+  const scheduledUsage = dependencies.accounting ?? (opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true));
   try {
     const onQuestion = await questionPolicy(opts.answerPolicy);
     built = await withMaintenanceSignal(signal => buildAgent(opts, {
       signal,
       onQuestion,
       ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
-      onHookError: (m) => { maintenanceFailed = true; console.error(m); },
-      onHookDone: (m) => console.error(m),
+      ...(dependencies.onAsk === undefined ? {} : { onAsk: dependencies.onAsk, onStartupAsk: dependencies.onAsk }),
+      onHookError: (m) => { maintenanceFailed = true; printError(m); },
+      onHookDone: (m) => printError(m),
       ...(scheduledUsage === undefined ? {} : { onIngestUsage: (report, final) => scheduledUsage.ingest(report, final) }),
-      onNotice: (m) => console.error(m),
+      onNotice: (m) => printError(m),
     }), opts.signal, "agent startup");
   } catch (err) {
-    console.error((err as Error).message);
+    printError((err as Error).message);
     process.exitCode = 1;
     return;
   }
@@ -433,7 +446,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   // on resume, omit cwd so the snapshot's cwd wins
   const session: Session = agent.run(
     task,
-    opts.resume === undefined ? { cwd: process.cwd(), ...(opts.scheduled === undefined ? {} : { scheduled: opts.scheduled }) } : { resume: opts.resume },
+    { ...(opts.resume === undefined ? { cwd: process.cwd(), ...(opts.scheduled === undefined ? {} : { scheduled: opts.scheduled }) } : { resume: opts.resume }),
+      ...(dependencies.advisoryContext === undefined ? {} : { advisoryContext: dependencies.advisoryContext }) },
   );
 
   // PLAN §4.4: an out-of-band observer over the same event stream.
@@ -451,13 +465,13 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
             provider,
             reviewProvider: providers.supervisor,
             restoreCheckpoint: checkpointRestorer(opts.root),
-            onRestore: result => console.error(`supervisor abort-restore: ${result.message}`),
+            onRestore: result => printError(`supervisor abort-restore: ${result.message}`),
             soft: supervisorSoft,
             turnsRemaining: supervisorTurnsRemaining,
             ...(interactive
-              ? { onEscalate: (question: string) => console.error(`supervisor escalation: ${question}`) }
+              ? { onEscalate: (question: string) => printError(`supervisor escalation: ${question}`) }
               : {}),
-            onError: (where, err) => console.error(`supervisor ${where}: ${err.message}`),
+            onError: (where, err) => printError(`supervisor ${where}: ${err.message}`),
           }),
         );
 
@@ -465,7 +479,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   const onSigint = (): void => {
     sigints += 1;
     const notice = abortNotice(sigints, "ctrl-C");
-    if (notice !== null) console.error(notice);
+    if (notice !== null) printError(notice);
     session.control.abort();
   };
   if (opts.signal === undefined) process.on("SIGINT", onSigint);
@@ -477,12 +491,14 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
     const auxiliary = new AuxiliaryText();
     for await (const e of session.events) {
       scheduledUsage?.observe(e);
+      dependencies.observe?.(e);
+      if (dependencies.quiet === true) continue;
       const unfinished = auxiliary.push(e);
-      if (opts.json !== true) for (const line of unfinished) console.error(line);
+      if (opts.json !== true) for (const line of unfinished) printError(line);
       if (opts.json === true) {
-        console.log(JSON.stringify(e));
+        printOutput(JSON.stringify(e));
         // machine consumers read stdout; humans tailing stderr still deserve fatal errors
-        if (e.type === "error" && e.fatal) console.error(`fatal: ${e.message}`);
+        if (e.type === "error" && e.fatal) printError(`fatal: ${e.message}`);
         continue;
       }
       if (opts.heartbeat !== undefined && opts.verbose !== true) continue;
@@ -490,21 +506,21 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
       // this the answer was never printed at all: the deltas were skipped and nothing else
       // carries the text.
       const reply = assistant.push(e);
-      if (reply !== null) console.log(reply);
+      if (reply !== null) printOutput(reply);
       if (e.type === "model.delta") continue;
 
       if (opts.verbose === true) {
-        console.log(renderEvent(e));
+        printOutput(renderEvent(e));
         continue;
       }
       // a person asked a question; `turn.start` and `model.request` are not an answer
       const line = renderChatEvent(e);
-      if (line !== null) console.log(line);
+      if (line !== null) printOutput(line);
     }
     const summary = await session.done;
-    if (summary.error !== undefined) console.error(summary.error);
+    if (summary.error !== undefined) printError(summary.error);
     if (opts.json !== true && opts.heartbeat === undefined) {
-      console.log(
+      printOutput(
         `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +
           `${formatUsage(summary.usage)} tokens`,
       );
