@@ -105,3 +105,4 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/child-grants.test.ts packages/core/test/permission-grants.test.ts packages/cli/test/child-grants-ui.test.ts packages/cli/test/child-grants-startup.test.ts
       - run: pnpm exec vitest run packages/core/test/acceptance-plan.test.ts packages/cli/test/acceptance-plan.test.ts
       - run: pnpm exec vitest run packages/core/test/command-outcome.test.ts packages/supervisor/test/plan-evidence.test.ts
+      - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts

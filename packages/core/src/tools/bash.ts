@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
 import { bound } from "./shared.js";
 import type { JobRegistry } from "./background-jobs.js";
-import { sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
+import { sandboxSpawnInvocation } from "../sandbox-providers.js";
 import { describeShellOperation } from "../shell-operation.js";
 import { stampCommandOutcome } from "../command-outcome.js";
 
@@ -195,7 +195,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       });
 
       const aborted = ctx.signal.aborted;
-      if (!timedOut && !aborted && exitCode !== 0) throwIfSandboxDenied(stderr);
+      // Child-controlled output/exit status cannot authenticate a sandbox denial.
       const output: BashOutput = { exitCode, stdout, stderr, timedOut };
       const parts = [stdout];
       if (stderr) parts.push(`[stderr]\n${stderr}`);

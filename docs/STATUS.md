@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R14b candidate evidence association is implemented, pending delivery gates; R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14b candidate evidence association is implemented, pending delivery gates; H7b is merged (PR #164), pending post-merge CI; R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -20,10 +20,41 @@ control and were restored. One bounded Claude review `70f4a79a-df31-4cdd-90fe-9c
 approved with no material findings (138 seconds, 13 turns), independently passing 18 focused
 tests. Optional notes stay at the roadmap end; current main `2df8c25` is integrated.
 
-### R12d done — PR #163
+### H7b implemented — delivery gates pending
 
-Merged main `2df8c25` passed all three post-merge jobs in CI `34029019887`; historical
-checkpoints below remain implementation records.
+The correctness-repair lane continues after H7a PR #161/main `668f7f1`, whose exact
+post-merge CI 34028225992 passed all three platforms. H7b removes unauthenticated process
+output as denial authority in foreground bash, background polling and sandboxed file-write
+helpers. Ordinary failed outcomes remain visible. Trusted broker/policy/launcher refusals
+retain the existing explicit sandbox-escalation path; profiles and containment are unchanged.
+Exported legacy diagnostics are marked deprecated; `throwIfSandboxDenied` is a compatibility
+no-op, not an authentication mechanism. [Contract](plans/H7b.md).
+
+Integrated R14a main `fc8327e` without production conflicts, preserving acceptance declarations
+and first-request prompt guidance. Thirteen actual-runtime fixtures exercise controlled Node
+subprocesses through both providers, including real agent foreground/background/helper paths,
+printed stdout/stderr/network/outside-path claims, and genuine broker/launcher positive controls.
+They are not live OS-isolation tests; existing profiles/wrapper tests remain separate. Twenty-seven
+existing sandbox cases pass with diagnostic compatibility and updated ordinary-exit expectations.
+Foreground and background inference-restoration mutants each produced forbidden denial events
+and failed their named controls; both were restored. Full checks and one bounded independent
+review precede final exact-head PR CI. No extra milestone or live model evaluation spend.
+
+Updated-main build/typecheck and the full suite pass: 2,355 tests plus two skips across
+128 files with four workers (33 seconds). One bounded independent Claude review approved
+`0decbae` against `fc8327e`, with no material production findings: session
+`d4eb4783-9639-4a7f-ba42-1468541d1876`, 143 seconds, 22 reported turns under requested max24,
+no restart. It independently ran build/typecheck/full 2,355 + two skips across 128 files.
+Four stale documentation/comment notes were reconciled without runtime changes; verbatim
+findings are in the [contract receipt](plans/H7b.md). Integrated R12d main `2df8c25`, preserving
+child views/context and all documentation/CI additions; no second general review.
+Combined build/typecheck and all 2,372 tests plus two skips across 131 files pass
+(four workers, 31 seconds). R12d exact post-merge CI 34029019887 is green on all platforms.
+
+### R12d done — PR #163; post-merge CI green
+
+Merged main `2df8c25` passed exact post-merge CI 34029019887 on all three platforms.
+The following gate notes are implementation history.
 
 Live child views share bounded records/audit/counters but match only own or delegable ancestor
 grants. Root/sibling authorization never consumes child-owned records. Views and runtime context
@@ -151,8 +182,8 @@ for merge; fourteen worktrees and local branches for merged rows removed. Worktr
 
 ### H7a done — PR #161; post-merge CI green
 
-Merge `668f7f1` passed all three post-merge platforms in CI 34028225992. Following gate notes
-are historical; R12d integrates this continuation/source guard without another general review.
+Final PR head `7353256` passed all three platforms in CI 34027933833; merged main `668f7f1`
+passed exact post-merge CI 34028225992. Historical intermediate gate/diagnostic notes follow.
 
 The committed correctness-repair lane interrupts R5b after R5a delivery: H7a then H7b,
 without expanding into provider-cap configuration or reasoning UI. A fresh worktree starts

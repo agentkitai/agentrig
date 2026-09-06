@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14b candidate evidence association is implemented, pending delivery gates; R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done with green post-merge CI (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14b candidate evidence association is implemented, pending delivery gates; H7b is merged (PR #164), pending post-merge CI; R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done with green post-merge CI (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -457,12 +457,12 @@ escalate-retry is a prompt-fatigue machine).
 Renunciation, recorded now: **no Landlock in R2.** Landlock needs a native addon or a helper
 binary; `docker` covers Linux correctness first. Landlock is R2-follow-up if dogfooding demands.
 
-Future investigation, recorded but not scheduled: **kernel-observed denials** (#95). Both
-providers still learn that the boundary refused a write by reading the child's stderr, which
-the child controls; #107 corroborates such a line against the policy, so a line naming only
-paths inside a writable workspace is dropped, but a forged line naming an outside path still
-classifies, because for that path the boundary really would refuse. The fix is a signal the
-provider observes rather than one the child prints. Two candidates, to be prototyped before
+Future investigation, recorded but not scheduled: **kernel-observed denials**. H7b (#95)
+removes the former stderr-based classification from both providers. #107's path-plausibility
+checks could not authenticate a child's claim; even genuine but unobserved process refusals
+now remain ordinary failed outcomes, with no inferred denial/escalation. Legacy helpers are
+diagnostic compatibility only. A future signal must be independently observed rather than
+printed by the child. The following historical candidates require validation before
 either becomes a row: (1) **macOS, cheap** — seatbelt writes every violation to the unified
 log as `Sandbox: proc(pid) deny(1) file-write-* /path`, which the child cannot write to;
 the provider would run `log stream` filtered by the child's pid for the duration of the
@@ -472,8 +472,8 @@ container's cgroup, reporting `{pid, syscall, path, errno}` for EROFS/EACCES/EPE
 CAP_BPF + CAP_PERFMON or root on the host, a privileged sidecar in the VM under Docker
 Desktop, and a CO-RE build step or a `bpftrace` shell-out, since Node has no mature libbpf
 binding. The payoff is larger than #95: the same probe is a ground-truth feed of file writes,
-network connects and execs for the supervisor's detectors. Whichever lands, stderr becomes at
-most a hint and the corroboration walk from #107 can go. Not a renunciation — a cost the
+network connects and execs for the supervisor's detectors. Any future design must establish
+its observation and attribution guarantees; stderr already confers no authority. Not a renunciation — a cost the
 sandbox story has not yet earned.
 
 ### R3 — Session trees: fork, search, replay
@@ -757,7 +757,7 @@ order under its existing rule.
 | Row | Deliverable | Package |
 |---|---|---|
 | H7a *(done, [PR #161](https://github.com/agentkitai/agentrig/pull/161))* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
-| H7b | Issue #95: a forged or host-caused "read-only file system" line under `workspace-write` does not classify as a sandbox denial unless the policy corroborates it (kernel-observed denial where the provider exposes one; otherwise the line is inert) | core |
+| H7b *(implemented; delivery gates pending)* | [Process-output evidence boundary](plans/H7b.md). Issue #95: process stdout/stderr, exit status and path plausibility confer no denial authority across foreground, background and file-helper paths. Docker/Seatbelt expose no independent process-denial observation, so these failures stay ordinary; trusted broker/policy/launcher refusals retain explicit escalation | core |
 
 Acceptance: a fake-provider session that truncates twice finishes the task with two
 `turn.continued` events; the forged-line fixture produces no escalation and no denial event.
@@ -928,7 +928,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
-| Repair | H7a → H7b | Open correctness defects (#116, #95); may interrupt any row above under the existing defect rule. |
+| Repair | H7a (done) → H7b | Open correctness defects (#116, #95); may interrupt any row above under the existing defect rule. |
 | 12 | R15a → R15b → R15c | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
 | 13 | R15d → R15e → R15f → R15g | Interop and headless shapes; R15d follows R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h → R15i → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
