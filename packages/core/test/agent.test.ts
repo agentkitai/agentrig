@@ -1234,8 +1234,8 @@ describe("compaction in the loop", () => {
       {
         role: "user",
         content: [
-          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact" },
-          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact" },
+          { type: "tool_result", toolUseId: "t1", content: "echo: first result with enough text to compact", trust: "tool-output" },
+          { type: "tool_result", toolUseId: "t2", content: "echo: second result with enough text to compact", trust: "tool-output" },
         ],
       },
     ]);
@@ -1438,7 +1438,7 @@ describe("tool-result eviction in the loop", () => {
     expect(compactedPayload).toBe(payloads["large-a.ts"]);
     expect(provider.requests[1]!.messages).toEqual([
       { role: "user", content: [{ type: "text", text: "compact then send" }] },
-      { role: "user", content: [{ type: "text", text: "[compacted fixture history]" }] },
+      { role: "user", content: [{ type: "text", text: "[compacted fixture history]", trust: "external" }] },
     ]);
     expect(events.some((event) => event.type === "context.compact")).toBe(true);
     expect(events.some((event) => event.type === "context.evicted")).toBe(false);

@@ -1,9 +1,29 @@
 # Status
 
-Active implementation queue: **R12e implemented, pending delivery gates; R6b active independently and R13b preparing its contract. R5d, R5e, R13f, R6a and R13a are merged (PRs #144, #142, #143, #146 and #147).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b is done with green post-merge CI. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R6b done — PR #149; post-merge CI green
+
+Final head `d02ee57` passed all three PR platforms and merged as `7c680c4`.
+Post-merge CI 34021388430 passed all three platforms.
+
+Explicit opt-in skill previews bind human confirmation to an exact artifact digest. Fresh
+runtime evidence, classification and effect receipts are mandatory at apply; saved reports
+cannot authorize emission. Versioned string metadata round-trips through the real loader;
+generated files are not activated. Edited/locked/foreign destinations are preserved. [Contract](plans/R6b.md).
+
+Dependency-order rationale: R6b follows merged R6a/R5e and completed H4/R6e safety foundations,
+independently of R13/R12 permission and provenance work. It does not implement R6c activation.
+Build/typecheck, focused tests, full suite, named mutation controls, one independent review and
+exact-head PR/post-merge CI are the delivery gates; final receipts belong to the closing PR.
+
+Updated-main build/typecheck and full suite pass: 2,134 tests plus two skips across 107 files.
+One bounded independent Claude review `e1112e28-ebef-4ea5-9c7b-0498f06d2f5e` approved head
+`959cc97` with no material findings and independently repeated those checks. Named digest and
+ownership bypass mutations fail the intended tests and are restored. No second general review.
 
 ### Committed continuation and parallel delivery
 
@@ -25,7 +45,42 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R12e implemented — pending closing delivery gates
+### R13b implemented — closing PR records delivery gates
+
+Trusted registered source metadata assigns actual MCP/external results `external`; file readers
+require canonical approved-root containment before and after execution for `project`. Unknown,
+failed or changed identity checks and hook-altered results remain external. Generic tool output
+has unknown ancestry, and immutable overflow recovery is explicitly external. No name/prose
+heuristics, permissions, principals or web-fetch implementation. [Contract](plans/R13b.md).
+
+Built-in summaries join their precise source slice recursively, including repeated/nested
+summaries. Missing/generated/tool-output ancestry is conservatively external. Custom compaction
+receives detached messages: only exact structural copies recover original labels, ambiguous
+duplicates join conservatively and changed output inherits all-input ancestry, never its claimed
+labels. Legacy no-op compaction and aborted-child lifecycle behavior are retained.
+
+Runtime MCP/file/symlink/overflow controls and resumed summary-laundering discrimination pass.
+H6 trace changes are limited to new metadata and its derived request hashes/token estimates.
+Full validation, restored negative controls, one independent review and exact-head/post-merge
+three-platform CI remain closing delivery gates; optional refinements belong at ROADMAP's end.
+
+One bounded Claude review `44f6ca76-9abe-4f58-baf1-e055d241fa4a` independently passed 119 tests
+and typecheck, finding one material post-tool cancellation regression. A failing runtime test
+reproduced duplicate result events; the fix degrades provenance without re-emission. All 18 new
+tests pass. MCP source removal, summary upgrade and custom-retention bypass mutations failed
+and were restored. Integrated R6b main `7c680c4`: build/typecheck and full suite pass 2,152 tests
+plus two existing skips across 108 files. No second general review for mechanical integration.
+
+Integrated-head CI 34021454352 exposed a macOS partial-child-output fixture race: its 25 ms
+timer could abort before any text was emitted. Delaying initial turn persistence reproduced
+the exact failure. The fixture now waits for actual first-tool entry with a bounded timeout,
+then aborts; delayed startup and the exact partial-output assertion remain. Suppressing retained
+child text still fails the assertion (mutation restored). Production code is unchanged; full
+build/typecheck and 2,152 tests plus two skips pass, including 62 focused lifecycle/provenance cases.
+
+### R12e done — PR #148 records delivery gates
+
+Merge `6cf3865` passed three-platform post-merge CI 34019474635.
 
 Explicit `--allow-command '["git","status"]'` / config argv prefixes now match a bounded
 literal POSIX operation descriptor derived by trusted built-in bash after validated pre-tool
@@ -39,11 +94,14 @@ Integrated main `76ac082` includes R6a and R13a; build/typecheck pass and the fu
 before hook modifications both fail named negative controls; both mutations are restored.
 Bounded Claude review `fb4da610-4af1-43fa-b597-98c52b1e2c0f` approves the code and independently
 passes typecheck plus 136 tests. Evidence wording and committing docs resolve its two delivery
-findings. Exact-head three-platform CI and post-merge CI remain closing gates.
+findings. Exact-head three-platform CI passed; main `6cf3865` passed post-merge CI 34019474635.
 R5d's merged `008c2ba` passed post-merge CI 34018010003; Windows repair `3c857d0` passed
 post-merge CI 34017665328. R13a main `76ac082` passed post-merge CI 34018763831 on all platforms.
 
-### R13a implemented — PR #147 records delivery gates
+### R13a done — PR #147 records delivery gates
+
+Final head `deef3ab` passed three-platform CI 34018447400 and merged as `76ac082`.
+Exact post-merge CI 34018763831 passed Linux, macOS and Windows.
 
 Optional block-level provenance now round-trips recursively through unified messages, canonical
 events/snapshots, fork materialization, actual provider requests and resumed turns. Custom-provider
@@ -68,10 +126,10 @@ After integrating R6a main `42cef62`, local build/typecheck/full suite pass
 Previous head `a93406a` passed three-platform CI 34018081611; the integrated head requires
 its own checks before merge. PR #147 records exact-head and post-merge receipts.
 
-### R6a merged — PR #146 records delivery gates
+### R6a done — PR #146 records delivery gates
 
 Final head `fe12d9a` merged as `42cef62` after green PR CI. Post-merge CI 34018319273
-is pending at this integration checkpoint; no post-merge success is claimed here.
+passed on all three platforms.
 
 R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
 (R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
@@ -110,7 +168,7 @@ the late-attempt control. Both mutations are restored. Windows CI retains the or
 and repeats its conservation case, alongside the deterministic repair tests. Final exact-head
 and post-merge CI receipts belong to the repair PR; R5d's earlier independent review is unchanged.
 
-### R13f merged — PR #143 records closing delivery gates
+### R13f done — PR #143 records closing delivery gates
 
 Final head `01127b7` passed three-platform CI 34016646499 and merged as `1a20f4e`.
 That merge passed post-merge main CI 34016868500 on all three platforms.
@@ -132,10 +190,10 @@ three-platform CI passed as recorded above; post-merge main CI gates the next me
 records the closing receipts.
 Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
 
-### R5e merged — PR #142 records delivery gates
+### R5e done — PR #142 records delivery gates
 
 Final head `aafaa5b`, PR CI 34016292275 passed all three platforms and merged as `26e78ec`.
-Post-merge main CI gates the next merge; the closing PR records its result.
+Post-merge main CI 34016511315 passed all three platforms; R5e delivery is complete.
 
 Strict versioned skill/extension/package schemas now reject unknown fields before use. The
 existing skill loader rejects malformed frontmatter and equal-precedence names, including late
@@ -150,7 +208,7 @@ the old blocklist. Strict-schema and equal-precedence negative mutations also fa
 restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
 post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
 
-### R5d merged — PR #144 records delivery gates
+### R5d done — PR #144 records delivery gates
 
 Merge `008c2ba` passed three-platform post-merge CI 34018010003.
 

@@ -58,6 +58,9 @@ export function parseSkill(text: string, path: string): Skill {
   const file = basename(path).replace(/\.md$/i, "");
   const fallbackName = file.toLowerCase() === "skill" ? basename(resolve(path, "..")) : file;
   const { fields: fm, body } = parseSkillFrontmatter(text);
+  if (fm.metadata !== undefined && (basename(path) !== "SKILL.md" || fm.name !== fallbackName)) {
+    throw new Error("generated skill name must match its parent directory and filename must be SKILL.md");
+  }
 
   // sanitized HERE rather than at injection time so the catalogue, the tool's lookup map and
   // the shadowing check all agree on what a skill is called
