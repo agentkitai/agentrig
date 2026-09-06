@@ -121,4 +121,13 @@ injected transport, not a claim of hostile-process containment.
 
 Author final pre-review checks on integrated main: build/typecheck pass; full suite
 with both actual Linux container fixtures enabled passes **2,710 tests plus two
-existing skips / 156 files, 47.86s**. One bounded independent review follows.
+existing skips / 156 files, 47.86s**.
+
+The single independent review approved snapshot `de678e2` with no material findings.
+It independently passed typecheck, 33 R9b/nightly tests with actual containers,
+52 structural tests, the actual credential-environment-unset wrapper, and a real
+SIGTERM partial-summary control. It did not run build or the full suite. Requested
+max24 turns, CLI reported27 in351.175s; one process, no restart. See the complete
+[verbatim review](R9c-review.md). Optional refinements are at the roadmap's end.
+Exact-head GitHub workflow/platform gates remain pending; local execution is not
+a claim that the new scheduled workflow has already run on hosted CI.

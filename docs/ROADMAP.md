@@ -1228,3 +1228,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R10c polish: an explicit inspect/reclaim command for named retained isolated worktrees,
   with ownership/quiescence checks and no force cleanup. Current bounded retention and
   manual operator cleanup are deliberate; candidate readiness remains point-in-time only.
+- R9c polish: persist each RUNNING phase transition so a hard-killed wrapper's partial
+  summary names the latest phase; terminal summaries are already accurate. Pin the broken
+  control's regression-failure reason in addition to its required overall FAIL outcome.

@@ -30,7 +30,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
-### R9c implemented — scripted mechanics; review and delivery gates pending
+### R9c implemented — scripted mechanics; reviewed, delivery gates pending
 
 Explicit nightly/manual/PR/main workflow over existing E1/E2/R9b, with R13e controls.
 Actual isolated X1 correct/broken and X4 human-pending fixtures produce PASS/FAIL/BLOCKED;
@@ -38,6 +38,13 @@ all eight E1 definitions also run through their existing structural tests. This 
 live model evidence or default all-eight isolated execution. Selected bounded artifacts
 and partial failure/cancellation summaries are retained; ordinary eval stays live-labelled.
 [Contract and limits](plans/R9c.md). No provider spend or E3 result changes.
+
+Author build/typecheck and full actual-container suite pass: 2,710 tests plus two
+existing skips /156 files. One independent review approved with no material findings;
+independent typecheck, 33 runtime tests, 52 structural tests, actual wrapper and SIGTERM
+checks passed (no independent build/full-suite claim). Requested24/report27 turns,
+351.175s, no restart; [verbatim receipt](plans/R9c-review.md). Hosted exact-head CI,
+including the new actual nightly-wrapper job, remains required before root merge.
 
 ### R7c done — PR #182; post-main CI green
 
