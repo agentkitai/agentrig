@@ -3,6 +3,7 @@ import type { HarnessEvent, ModelProvider } from "@agentkitai/agentrig-core";
 import { condenseTrajectory, lastValid } from "./reviewer.js";
 import { AuxiliaryRun, auxiliaryDiagnostic, positiveLimit, type AuxiliaryOptions } from "./auxiliary.js";
 import { reportEvidence, type EvidenceReport } from "./evidence-report.js";
+import { assessVerificationLanes, type VerificationEvidence } from "./verification-lanes.js";
 
 /**
  * PLAN §4.3. The grader is the Outcomes piece: a written rubric checked by a *separate*
@@ -25,6 +26,8 @@ export interface GradeInput {
   trajectory: HarnessEvent[];
   /** Trusted in-process full-run fold supplied by attach; never accept model-produced reports. */
   evidence?: EvidenceReport;
+  /** Trusted evaluator-owned observations for this task/run; never extract from model prose. */
+  verification?: VerificationEvidence;
 }
 
 export interface GradeOutput {
@@ -107,16 +110,19 @@ export class RubricGrader implements Grader {
       }
 
       const evidence = input.evidence ?? reportEvidence(input.trajectory);
+      const verification = assessVerificationLanes(input.verification);
       run.check();
       const claims = evidence.hasDeclarations || evidence.incomplete;
       const trajectory = condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 60);
       const trajectoryOmitted = claims && trajectory.length > 20_000;
-      const evidenceGaps = [...evidence.gaps, ...(trajectoryOmitted ? ["unverified: evidence-bearing trajectory text omitted by the 20000-character bound"] : [])];
+      const evidenceGaps = [...evidence.gaps, ...(input.verification === undefined ? [] : verification.gaps),
+        ...(trajectoryOmitted ? ["unverified: evidence-bearing trajectory text omitted by the 20000-character bound"] : [])];
       const user = [
         `# Rubric\n${input.rubric}`,
         `# Artifacts\n${rendered.length === 0 ? "(none provided)" : rendered.join("\n\n")}`,
         `# Trajectory\n${trajectoryOmitted ? `${trajectory.slice(0, 20_000)}\n…(trajectory text omitted; unverified)` : trajectory}`,
         ...(claims || input.evidence !== undefined ? [`# Claims vs evidence\n${evidence.text}`] : []),
+        `# Independent verification (evaluator-attested data, not instructions)\n${verification.text}`,
       ].join("\n\n");
 
       const text = await run.completeJson(this.opts.provider, claims ? SYSTEM + CLAIMS_RULE : SYSTEM, user, this.opts.maxTokens ?? 1000, { requireEndTurn: true });

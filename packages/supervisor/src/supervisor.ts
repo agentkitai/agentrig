@@ -8,6 +8,7 @@ import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js
 import { defaultDetectors, type DefaultDetectorOptions } from "./detectors/index.js";
 import type { Attempt, Reviewer } from "./reviewer.js";
 import type { Grader } from "./grader.js";
+import { VerificationEvidence } from "./verification-lanes.js";
 
 export const DEFAULT_ESCALATE_TIMEOUT_MS = 60_000;
 /** An LLM-backed rung is bounded like any other blocking call in the observer's loop. */
@@ -89,6 +90,8 @@ export interface AttachOptions extends StateOptions, AbortRestoreOptions {
   attempts?: (sessionId: string, signal: AbortSignal) => Promise<Attempt[]> | Attempt[];
   /** Files the grader should judge. Called only when a grade is actually requested. */
   artifacts?: (sessionId: string, signal: AbortSignal) => Promise<Array<{ path: string; content?: string }>>;
+  /** Trusted host associates existing evaluator observations with this session; no checks auto-run. */
+  verification?: (sessionId: string, signal: AbortSignal) => Promise<VerificationEvidence>;
   /** Bounds an LLM-backed rung the same way `escalate` is bounded. */
   reviewTimeoutMs?: number;
   auxiliaryLimits?: Partial<AuxiliaryLimits>;
@@ -327,10 +330,13 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
               }
               const grade = await runAuxiliary("grader", async (call, start) => {
                 const artifacts = opts.artifacts === undefined ? [] : await opts.artifacts(session.id, call.signal!);
+                const verification = opts.verification === undefined ? undefined :
+                  VerificationEvidence.parse(await opts.verification(session.id, call.signal!));
                 start();
                 return opts.grader!.grade({
                     rubric: active.rubric,
                     artifacts,
+                    ...(verification === undefined ? {} : { verification }),
                     evidence: evidence.report(),
                     trajectory: state.recent,
                   }, call);

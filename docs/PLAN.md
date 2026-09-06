@@ -190,6 +190,13 @@ explicit without new legacy requirements. Attach supplies a bounded frozen curre
 not just recent history; resumed/fork runs name their starting sequence and prior history is not
 assessed. CLI separately reads finished physical logs without models/config. See [R14c](plans/R14c.md).
 
+R14d adds shared evaluator-attested regression/behavior lane reports over the existing E1 checks
+and E2 reports. Actual surface observations and negative probes remain separate from pinned
+regression and submitted tests. Partial/unknown/same-assumption evidence blocks, failures remain
+failures, and pre-run exclusions remain SKIP. Optional trusted M6 evidence can lower but never
+force a passing grade; no checks execute automatically. See [R14d](plans/R14d.md) for provenance
+and cooperative evaluator limits; labels/digests are not proof of independence.
+
 ### 2.6 Agent + session
 
 ```ts

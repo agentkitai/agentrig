@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFile, realpath, lstat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -25,6 +26,7 @@ const git = (cwd, args) => command(cwd, 'git', args);
 export const infrastructureFailure = (error) => ['ENOENT', 'EACCES', 'ETIMEDOUT', 'ENOBUFS'].includes(error?.code)
   || error?.signal != null;
 const INFRASTRUCTURE_MARKER = 'AGENTRIG_EVAL_INFRASTRUCTURE:';
+const WORKER_COMPLETE = 'AGENTRIG_EVAL_ASSERTIONS_COMPLETED';
 const leafImport = (root, path) => import(pathToFileURL(join(root, path)).href);
 const fm = { type: 'entity', slug: 'fixture', aliases: [], sources: ['doc:fixture'], updated: '2026-09-05', confidence: 'high' };
 const page = (slug, body) => ({ path: `entities/${slug}.md`, frontmatter: { ...fm, slug }, body, updatedAt: 0 });
@@ -143,6 +145,12 @@ export async function check(receiptPath) {
   assert.equal(git(root, ['rev-parse', `${receipt.baseline}^{commit}`]).trim(), receipt.baseline);
   const result = { task: receipt.id, runId: receipt.runId, outcome: 'FAIL', behavior: 'BLOCKED', regression: 'BLOCKED', submittedTests: 'BLOCKED',
     scope: 'PASS', manual: receipt.id === 'A4' || receipt.id === 'X4' ? 'PENDING' : 'NOT_REQUIRED', evidence: [] };
+  // These attestations are produced by this evaluator, not copied from task output. The hash
+  // identifies inspected checker bytes; it does not authenticate their correctness/independence.
+  result.verification = { task: receipt.id, runId: receipt.runId,
+    evaluator: { id: 'agentrig-evalset-v1', sourceSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex') },
+    regression: { verdict: 'BLOCKED', complete: false, basis: 'pinned-regression', references: [`eval/check.mjs:regression:${receipt.id}`] },
+    behavior: { verdict: 'BLOCKED', complete: false, basis: 'surface', references: [`eval/check.mjs:behavior:${receipt.id}`] } };
   // Compare against the external baseline receipt, not HEAD (an agent may commit its work).
   const changed = git(root, ['diff', '--no-renames', '--name-only', '-z', receipt.baseline, '--']).split('\0').filter(Boolean);
   const added = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0').filter(Boolean);
@@ -170,9 +178,28 @@ export async function check(receiptPath) {
   for (const kind of ['behavior', 'regression']) {
     try {
       const output = command(root, process.execPath, [fileURLToPath(import.meta.url), '--worker', kind, receipt.id, root]);
+      // Cooperative completion check: an early exit(0) did not finish the oracle. This marker
+      // is NOT authentication against arbitrary JavaScript forging evaluator stdout.
+      if (!output.trimEnd().endsWith(WORKER_COMPLETE)) {
+        result[kind] = 'BLOCKED'; result.evidence.push(`${kind}: evaluator completion was not observed`); continue;
+      }
       result[kind] = 'PASS'; result.evidence.push(`${kind}: ${output.trim()}`);
+      result.verification[kind].verdict = 'PASS';
+      result.verification[kind].complete = true;
+      result.verification[kind].observation = kind === 'regression'
+        ? 'Pinned regression worker completed its assertions.' : `Actual ${receipt.id} task surface completed evaluator-owned assertions.`;
+      if (kind === 'behavior') {
+        const probes = { A1: 'Quoted/comma/whitespace aliases round-trip through parse and serialize.',
+          A2: 'Stopword-only query returns no hits; duplicate retrieval paths coalesce.',
+          A3: 'Empty/non-link text produces no links; reverse module dependency is rejected.',
+          X1: 'Whitespace, nonfinite values and nonprimitive coercions are rejected.',
+          X2: 'Numeric strings and boxed numbers are rejected by the strict surface.',
+          X3: 'Whitespace/nonprimitive values are classified other rather than number.' };
+        if (probes[receipt.id]) result.verification.behavior.negativeProbe = probes[receipt.id];
+      }
     } catch (error) {
       result[kind] = infrastructureFailure(error) || (error.status === 2 && String(error.stderr).includes(INFRASTRUCTURE_MARKER)) ? 'BLOCKED' : 'FAIL';
+      result.verification[kind].verdict = result[kind];
       result.evidence.push(`${kind}: ${error.stderr || error.message}`);
     }
   }
@@ -188,7 +215,7 @@ export async function check(receiptPath) {
     } catch (error) { result.submittedTests = infrastructureFailure(error) ? 'BLOCKED' : 'FAIL'; result.evidence.push(`submitted tests: ${error.stderr || error.message}`); }
   }
   const lanes = [result.behavior, result.regression, result.submittedTests];
-  result.outcome = lanes.includes('BLOCKED') ? 'BLOCKED' : lanes.includes('FAIL') ? 'FAIL'
+  result.outcome = lanes.includes('FAIL') ? 'FAIL' : lanes.includes('BLOCKED') ? 'BLOCKED'
     : result.manual === 'PENDING' ? 'BLOCKED' : 'PASS';
   if (result.manual === 'PENDING') result.evidence.push('Independent human must assess answer.md against EVALSET rubric; record signed verdict separately.');
   return result;
@@ -201,6 +228,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       taskFor(id);
       if (!['behavior', 'regression'].includes(kind)) throw new Error('unknown worker');
       console.log(await (kind === 'behavior' ? behavior : regression)(id, root) ?? 'independent assertions passed');
+      console.log(WORKER_COMPLETE);
     } else {
       if (process.argv.length !== 3) throw new Error('usage: node eval/check.mjs EXTERNAL_RECEIPT');
       const result = await check(process.argv[2]);
