@@ -23,6 +23,7 @@ import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
 import { createSessionLifecycle, abortGraceOf } from "./session-lifecycle.js";
 import { executeTool, createToolEmitterFactory, PLAN_TOOL, type ReplanState } from "./tool-execution.js";
 import { sequential, type TurnStrategy } from "./turn-strategy.js";
+import { bindParallelRuntime, executeParallel, type PipelineSchedule } from "./parallel-runtime.js";
 import {
   buildContextManifest,
   renderSystemBlocks,
@@ -906,7 +907,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
 
         // Truncated model calls never reach any strategy, including trusted custom strategies.
         const { results, interrupted } = stop === "max_tokens" ? { results: [], interrupted: false }
-          : await (config.turnStrategy ?? sequential).execute(toolUses, { signal: abortController.signal, runTool });
+          : await (config.turnStrategy ?? sequential).execute(toolUses,
+            bindParallelRuntime({ signal: abortController.signal, runTool }, (calls, limit) =>
+              executeParallel(calls, abortController.signal, limit, runTool,
+                () => (config.hooks?.length ?? 0) > 0 || [...toolsByName.values()].some(tool => tool.hasBackgroundWork?.() === true))));
         if (interrupted) {
           reason = "aborted";
           await emit({ type: "turn.end", n: turns });
@@ -1033,8 +1037,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     }
     return { id, reason, turns, usage: totals };
 
-    function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
+    function runTool(tu: { id: string; name: string; input: unknown }, schedule?: PipelineSchedule): Promise<ContentBlock> {
       return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit,
+        ...(schedule === undefined ? {} : { schedule }),
         expansion,
         ...(grantSessionId === undefined ? {} : { grantSessionId }),
         emitFromTool, hook, signal: abortController.signal, endSignal: endController.signal,
