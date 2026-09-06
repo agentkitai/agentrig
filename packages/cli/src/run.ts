@@ -25,6 +25,8 @@ import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions,
 import { withMaintenanceSignal } from "./maintenance.js";
 import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
 import { questionPolicy } from "./question-policy.js";
+import { readOutputContract } from "./output-schema.js";
+import { resolveProviderEntries } from "./provider.js";
 import {
   dreamOnSessionEnd,
   FileMemoryStore,
@@ -58,6 +60,8 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  outputSchema?: string;
+  outputMode?: "prompted" | "native";
   answerPolicy?: string;
   /** Runtime config resolution provenance, not a project-config field. */
   ingestOnEndExplicit?: boolean;
@@ -423,9 +427,17 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   let maintenanceFailed = false;
   const scheduledUsage = dependencies.accounting ?? (opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true));
   try {
+    if (opts.outputMode !== undefined && opts.outputSchema === undefined) throw new Error("--output-mode requires --output-schema");
+    if (opts.outputMode !== undefined && opts.outputMode !== "prompted" && opts.outputMode !== "native") throw new Error("--output-mode must be prompted or native");
+    if (opts.outputMode === "native") {
+      const resolved = resolveProviderEntries(opts);
+      if (resolved.entries[resolved.roleNames.main]?.provider !== "openai") throw new Error("Native output currently requires the OpenAI-compatible adapter; use prompted mode for other adapters");
+    }
+    const outputContract = opts.outputSchema === undefined ? undefined : await readOutputContract(opts.outputSchema, opts.outputMode ?? "prompted");
     const onQuestion = await questionPolicy(opts.answerPolicy);
     built = await withMaintenanceSignal(signal => buildAgent(opts, {
       signal,
+      ...(outputContract === undefined ? {} : { outputContract }),
       onQuestion,
       ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
       ...(dependencies.onAsk === undefined ? {} : { onAsk: dependencies.onAsk, onStartupAsk: dependencies.onAsk }),

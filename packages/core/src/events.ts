@@ -189,6 +189,8 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
 
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("output.validated"), digest: z.string().regex(/^[a-f0-9]{64}$/), mode: z.enum(["prompted", "native"]),
+    attempt: z.enum(["initial", "repair"]), valid: z.boolean(), category: z.enum(["valid", "json", "schema", "bound", "tool", "stop"]) }),
   z.object({ type: z.literal("question.asked"), id: z.string().uuid(), toolUseId: z.string(), question: QuestionSchema }),
   z.object({ type: z.literal("question.answered"), id: z.string().uuid(), toolUseId: z.string(),
     outcome: z.enum(["answered", "unavailable", "timeout", "cancelled"]), reply: QuestionReplySchema.optional() }),

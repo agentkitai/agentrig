@@ -347,6 +347,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--comment", "explicit CI PR comment; needs exec+net, matching identity and complete accounting")
     .addHelpText("after", "\nCI requires exactly one task/event file and an explicit report path and/or complete PR comment target. CI ceilings: 20 turns, 5 minutes, 50000 main tokens; smaller configured limits win. Auxiliary/child/remote usage is not a hard total billing cap. Effective YOLO, resume and positional CI tasks refuse. Reports redact heuristically, not perfectly; unknown secrets may remain.\n")
     .option("--answer-policy <policy>", "required questions: fail (default), first-option, or file:<path>; automated answers are not human approval")
+    .option("--output-schema <path>", "validate final JSON against a strict bounded local schema file (32 KiB; no refs/regex); at most one budgeted tool-free repair")
+    .option("--output-mode <mode>", "prompted (default) or native (explicit OpenAI-compatible opt-in, not verified server support); local validation always applies")
     .action(async (task: string | undefined, opts: RunOptions & CiFlags, cmd: Command) => {
       const flags: CiFlags = { ci: opts.ci, taskFile: opts.taskFile, eventFile: opts.eventFile, eventField: opts.eventField,
         report: opts.report, pr: opts.pr, repo: opts.repo, comment: opts.comment };
