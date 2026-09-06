@@ -3,6 +3,38 @@ import { z } from "zod";
 /** Inert routing text, never executable matching or permission policy. */
 const TriggerHint = z.string().min(1).max(1024);
 
+export const AgentRoleName = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
+export const AgentRoleToolNames = z.array(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)).max(64)
+  .refine(names => new Set(names).size === names.length, "duplicate role tool");
+/** A separate R5e dialect: these security fields are NOT accepted by skill manifests. */
+export const AgentRoleFrontmatterV1 = z.object({
+  schema: z.literal("1").optional(),
+  tools: AgentRoleToolNames,
+  "model-role": z.enum(["main", "supervisor", "memory", "subagents"]).default("subagents"),
+  delegable: z.boolean().default(false),
+  "max-turns": z.number().int().min(1).max(1000).optional(),
+}).strict();
+
+export function parseAgentRoleFrontmatter(text: string): { fields: z.infer<typeof AgentRoleFrontmatterV1>; body: string } {
+  if (Buffer.byteLength(text) > 65_536) throw new Error("agent role file exceeds bound");
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  if (lines[0]?.trim() !== "---") throw new Error("agent role requires frontmatter");
+  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  if (end < 0 || end > 64 || Buffer.byteLength(lines.slice(0, end + 1).join("\n")) > 8192) throw new Error("agent role frontmatter exceeds bound or is incomplete");
+  const fields: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const line of lines.slice(1, end)) {
+    if (line.trim() === "" || line.startsWith("#")) continue;
+    const match = /^([a-z][a-z-]*):[ \t]*(.*)$/.exec(line);
+    if (!match || Object.hasOwn(fields, match[1]!)) throw new Error("invalid or duplicate agent role field");
+    const key = match[1]!, value = match[2]!.trim();
+    if (key === "tools" || key === "delegable" || key === "max-turns") fields[key] = JSON.parse(value);
+    else fields[key] = value.startsWith('"') ? JSON.parse(value) : value;
+  }
+  const body = lines.slice(end + 1).join("\n");
+  if (body.trim() === "" || Buffer.byteLength(body) > 32_768) throw new Error("agent role body is empty or exceeds bound");
+  return { fields: AgentRoleFrontmatterV1.parse(fields), body };
+}
+
 /** Explicit R6b metadata dialect; string values also conform to Agent Skills metadata. */
 export const GeneratedSkillMetadataV1 = z.object({
   "agentrig-schema": z.literal("1"),

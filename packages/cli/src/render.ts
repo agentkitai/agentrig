@@ -71,6 +71,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
+    case "output.validated": return `${p} ${e.mode} ${e.attempt} valid=${e.valid} category=${e.category} schema=${e.digest}`;
     case "question.asked": return `${p} ${e.id} ${JSON.stringify(e.question.prompt)} options=${JSON.stringify(e.question.options)}`;
     case "question.answered": return `${p} ${e.id} ${e.outcome}${e.reply === undefined ? "" : ` source=${e.reply.source} ${JSON.stringify(e.reply.answer)}`}`;
     case "eval.result": return `${p} ${JSON.stringify(e.task)} ${e.outcome} (baseline ${e.baselineOutcome}) profile=${JSON.stringify(e.profile)} reportedTokens=${e.reportedTokens} usage=${e.usageComplete ? "complete" : "unknown"} advisory=${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"}`;
@@ -121,7 +122,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "extension.loaded": return `${p} ${e.name}${e.disabled === true ? " (disabled; not reactivated)" : ""} hooks=${e.surfaces.hooks.join(",")} tools=${e.surfaces.tools.join(",")} commands=${e.surfaces.commands.join(",")}`;
     case "extension.error": return `${p} ${e.name} ${e.phase}${e.surface === undefined ? "" : `/${e.surface}`}${e.disabled === true ? " (disabled)" : ""}: ${e.message}`;
     case "skill.used": return `${p} ${e.name} by=${e.invokedBy}${e.generated === true ? " generated=true" : ""}`;
-    case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
+    case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}${e.role === undefined ? "" : ` role=${e.role.name} maxTurns=${e.role.maxTurns} tools=${e.role.tools.join(",")}`}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
     case "context.delegation": return `${p} ${e.action} principal=${JSON.stringify(e.principal)} receipt=${e.delegation}`;
@@ -198,6 +199,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "output.validated": return `Output ${e.valid ? "valid" : "invalid"} (${e.mode}, ${e.attempt}, ${e.category})`;
     case "question.asked": return `Question: ${e.question.prompt}`;
     case "question.answered": return `Question ${e.outcome}${e.reply === undefined ? "" : ` (${e.reply.source}): ${"text" in e.reply.answer ? oneLine(e.reply.answer.text) : `option ${e.reply.answer.option + 1}`}`}`;
     case "eval.result": return `Evaluation ${e.task}: ${e.outcome} (baseline ${e.baselineOutcome}; advisory ${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"})`;
@@ -223,7 +225,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `▸ plan ${done}/${e.items.length}${current === undefined ? "" : `: ${oneLine(current.text, 80)}`} · acceptance ${declared}/${e.items.length} declared, unverified`;
     }
     case "subagent.spawn":
-      return `⤷ subagent: ${oneLine(e.task, 80)}`;
+      return `⤷ subagent${e.role === undefined ? "" : ` [${e.role.name}]`}: ${oneLine(e.task, 80)}`;
     case "subagent.end":
       return e.reason === "done" ? null : `⤶ subagent ${e.reason ?? "ended"}`;
     case "steer":

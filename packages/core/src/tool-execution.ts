@@ -43,7 +43,7 @@ interface ToolExecutionContext {
   questionState?: QuestionState;
   schedule?: PipelineSchedule;
   expansion?: ReturnType<typeof externalExpansion>;
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "toolAllowlist" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   grantSessionId?: string;
   cwd: string;
@@ -203,6 +203,10 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       : { type: "tool_result", toolUseId: tu.id, content, trust, ...(context === undefined ? {} : { context }) };
 
   const tool = toolsByName.get(tu.name);
+  if (config.toolAllowlist !== undefined && !config.toolAllowlist.includes(tu.name)) {
+    await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+    return resultBlock("blocked by agent role tool allowlist", true);
+  }
   if (context.questionState?.failed !== undefined) {
     await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
     await emit({ type: "tool.result", id: tu.id, ok: false, display: "Blocked after unanswered required question", durationMs: 0 });

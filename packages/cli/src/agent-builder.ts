@@ -5,6 +5,7 @@ import {
   assertShellExists,
   Checkpointer,
   builtinTools,
+  OpenAICompatibleProvider,
   createAgent,
   defaultRules,
   DockerSandboxProvider,
@@ -20,6 +21,8 @@ import {
   skillsInjection,
   skillTool,
   subagentTool,
+  discoverAgentRoles,
+  type AgentRole,
   type Agent,
   type AnyTool,
   type AuxiliaryReport,
@@ -340,6 +343,7 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  outputContract?: import("@agentkitai/agentrig-core").OutputContract;
   signal?: AbortSignal;
   /** Trusted host user-state override, never model/project credential material. */
   mcpCredentialRoot?: string;
@@ -364,6 +368,7 @@ export interface AgentExtras {
 
 
 export interface SubagentWiring {
+  agentRoles?: readonly AgentRole[];
   opts: AgentBuildOptions;
   extras: AgentExtras;
   budget: Budget;
@@ -400,6 +405,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
   return {
     createAgent,
+    ...(w.agentRoles === undefined ? {} : { roles: w.agentRoles, modelRoles: { ...w.providers.roleNames } }),
     maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
     childBudget,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
@@ -482,6 +488,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
   const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
   const provider = providers.main;
+  if (extras.outputContract?.mode === "native") {
+    if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+    // Explicit host/operator opt-in, not empirical or endpoint-inferred support.
+    provider.capabilities.nativeOutputSchema = true;
+  }
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];
@@ -661,9 +672,12 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
+    const agentRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
+      error => extras.onHookError?.(error.message));
     tools.push(
       subagentTool(
         (() => { const options = subagentOptions({
+          agentRoles,
           opts,
           extras,
           budget,
@@ -691,6 +705,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    ...(extras.outputContract === undefined ? {} : { outputContract: extras.outputContract }),
     ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
     extensions,
     provider,
