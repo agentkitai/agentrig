@@ -24,6 +24,7 @@ export interface DreamOptions extends ProviderOptions {
   global?: string;
   since?: string;
   structuralOnly?: boolean;
+  skillCandidates?: boolean;
   modelExplicit?: boolean;
   lockTimeout?: string;
   dreamScanLimits?: Partial<ScanLimits>;
@@ -101,6 +102,7 @@ async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise
     ...(provider === undefined ? {} : { provider }),
     cwd: process.cwd(),
     ...(opts.structuralOnly === true ? { structuralOnly: true } : {}),
+    ...(opts.skillCandidates === true ? { procedureCandidates: true } : {}),
     ...(sinceCap === undefined ? {} : { maxSessions: sinceCap }),
     onPhase: (p) => console.error(`… ${p}`),
     onError: error => console.error(`dream warning: ${error.message}`),

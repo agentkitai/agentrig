@@ -24,6 +24,22 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
+### R6a implemented — closing PR records delivery gates
+
+R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
+(R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
+permission-grant/provenance interfaces, so it can run in parallel; R6b/R6c remain dependent.
+Opt-in dream/CLI detection carries H4 witnesses for every step, scope and limitation. Structural
+mode is zero-call; bounded classification may reject but never rewrite candidates, then R6e
+effect review is required for the distinct reviewed status. Existing model caps are unchanged.
+No skills emitted, no permission change, no live evaluation or benefit claim. See [R6a](plans/R6a.md).
+Closing PR records validation/review and exact-head/post-merge three-platform CI receipts.
+
+One bounded independent Claude review `b71374d1-cfb4-45f2-b9aa-f219fa707721` approved, independently
+passing build/typecheck, 2,013 tests plus two skips and 20 focused cases before integration.
+Strict-classification and adverse-effect bypass mutations failed and were restored. Current
+main is integrated before final validation; optional refinements remain at the roadmap end.
+
 ### Windows memory atomic replacement — merged in PR #145
 
 Final head `0abdfc7` passed three-platform CI 34017429109 and merged as `3c857d0`.
