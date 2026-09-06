@@ -2,7 +2,10 @@
 
 Read `docs/PLAN.md` before doing anything. It is the spec: package interfaces, the event schema,
 the memory design, the supervisor design, and the milestone order. `docs/STATUS.md` says which
-milestone is current. Work on the current milestone only; do not pull later milestones forward.
+milestone is current. ROADMAP §5 is the authoritative continuation order. Work on the assigned
+row only; independent rows may run in parallel in separate Git worktrees when authorized. Each
+row gets its own PR, updated against current main with green exact-head CI before merge; serialize
+merges and verify green post-merge CI before the next merge. Do not pull dependent work forward.
 
 ## Commands
 

@@ -376,7 +376,7 @@ and fresh page/evidence validation before backend publication. `--guardrail-limi
 limits. A full dream with an eligible global candidate uses at most one additional batch call;
 its default total call ceiling is two, sharing accounting and cancellation. Structural-only
 dream remains zero-call and reports unassessed candidates as refused. [R6e](plans/R6e.md) records
-the exact contract and limits. No generated skills or conditional backlog is activated by it.
+the exact contract and limits. Generated skills are a later row in ROADMAP §5's committed queue.
 
 ```ts
 interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number; version?: string }
