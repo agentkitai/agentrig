@@ -46,7 +46,14 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
   const store = new SessionStore({ root: cwd }); const registry = new PermissionGrantRegistry();
   const c = new TuiController({ cwd, permissionGrants: registry, agent: { run() { throw Error("not attached"); } } as never });
   const stdin = new Stdin(); const writes: string[] = [];
-  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) { writes.push(text); return true; } });
+  let holdFrames = false; const heldFrames: string[] = [];
+  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) {
+    (holdFrames ? heldFrames : writes).push(text); stdout.emit("frame"); return true;
+  } });
+  const frames = { snapshot: () => c.snapshot(), subscribe(listener: (state: ReturnType<TuiController["snapshot"]>) => void) {
+    const changed = () => listener(c.snapshot()); stdout.on("frame", changed); changed();
+    return () => { stdout.off("frame", changed); };
+  } };
   const instance = render(createElement(App, { controller: c }), { stdin: stdin as never, stdout: stdout as never, patchConsole: false, exitOnCtrlC: false });
   const send = (text: string) => stdin.send(mode === "protocol" ? `\u001b[201~${text}` : text);
   const executed: string[] = []; let children = 0;
@@ -70,8 +77,18 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
     expect(child.isChildView).toBe(true); expect(child.subject).not.toBe(registry.subject);
     expect(executed).toEqual([]); // Root nondelegable allow did not reappear through controller.ask.
     send("s"); await waitForTuiState(c, running, "child scope editor", state => state.pending?.scope !== undefined);
+    holdFrames = true; // Controlled output delay: controller state is not a rendered frame.
     send("\r"); await waitForTuiState(c, running, "child scope preview", state => state.pending?.scope?.preview === true);
     expect(c.snapshot().lines.some(line => line.text.includes('"subject":'+JSON.stringify(child.subject)))).toBe(true);
+    expect(writes.join("")).not.toContain("Child-owned");
+    await waitForTuiState(frames, running, "Ink child scope preview frame", () => heldFrames.join("").includes("Child-owned"));
+    expect(heldFrames.join("")).toContain("Child-owned");
+    let visible = false;
+    const rendered = waitForTuiState(frames, running, "visible child scope preview", () => writes.join("").includes("Child-owned"))
+      .then(() => { visible = true; });
+    await Promise.resolve(); expect(visible).toBe(false);
+    holdFrames = false; writes.push(...heldFrames.splice(0)); stdout.emit("frame");
+    await rendered; expect(visible).toBe(true);
     send("y");
     // Child's second call and its own grandchild inherit the explicitly confirmed child record.
     await waitForTuiState(c, running, "sibling probe approval", state => state.pending?.req.tool === "probe" &&

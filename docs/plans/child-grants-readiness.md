@@ -82,3 +82,23 @@ Verbatim reviewer result follows (mutation reproduction was author-run, not revi
 > - `docs/STATUS.md:7` still describes R10d as "implemented, pending delivery gates" while the new heading says it merged as PR #171. One line should be updated for consistency.
 >
 > Scope stayed bounded to the two test files, the helper and its tests, one CI line and docs. No production code touched.
+
+## First repair CI: additional rendered-frame readiness
+
+PR #173 first head `eac6e8b` CI 34035057038 passed Linux but failed macOS's protocol
+UI case: all controller/authority/audit checks passed, while the final captured output
+had not yet rendered `Child-owned`. Controller subscription completion does not flush
+Ink's throttled rendering. This is a test-observation boundary exposed by faster waits,
+not a permission failure. The initial failed receipt is retained, not rerun away.
+
+The same repair now waits for an actual stdout frame containing the preview before
+sending confirmation. Both input modes buffer preview frames deliberately: controller
+preview is ready while captured output lacks the label; actual Ink eventually produces
+the buffered label, and releasing the buffer resolves the output wait. The existing
+final visible-text assertion remains unchanged. Both frame waits use the same four-second
+bound and premature-run diagnostic. No production changes or second broad review.
+
+Negative control: removing only the actual Ink frame wait fails both input modes with
+empty buffered output instead of `Child-owned`; restored, all three UI tests pass.
+After the frame correction, build/typecheck and full 2,497 tests plus two skips across
+143 files pass again (four workers, 34 seconds). A new exact-head CI run follows.

@@ -22,6 +22,9 @@ Local build/typecheck/full passes 2,497 plus two skips across 143 files (four wo
 One bounded Claude review approved without material findings (88 seconds, 8/max24 turns),
 independently passing 40 focused tests and typecheck. Original findings are in the repair plan;
 optional test refinements are at the roadmap END. Exact-head three-platform CI is next.
+First PR #173 CI 34035057038 exposed a macOS rendered-output race after controller readiness.
+Actual Ink frame readiness now gates confirmation, with a buffered-frame control and both-mode
+fail-first mutation; visible-text and authorization assertions remain unchanged. No second review.
 
 ### R10d merged — PR #171; post-merge Windows gate pending repair
 
