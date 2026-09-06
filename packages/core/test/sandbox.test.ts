@@ -117,7 +117,7 @@ describe("R2b sandbox providers", () => {
     }
   });
 
-  it("turns a provider-shaped bash denial into SandboxDeniedError", async () => {
+  it("keeps provider-shaped printed bash denial as an ordinary failed exit", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-deny-")));
     try {
       const wrapper = join(root, "denying-docker");
@@ -133,7 +133,7 @@ describe("R2b sandbox providers", () => {
         }),
         { mode: "workspace-write", cwd: root },
       );
-      await expect(command()).rejects.toBeInstanceOf(SandboxDeniedError);
+      await expect(command()).resolves.toMatchObject({ output: { exitCode: 1 } });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -164,7 +164,7 @@ describe("R2b sandbox providers", () => {
     }
   });
 
-  it("a network denial counts only under a policy that denies network, and names its provenance", async () => {
+  it("printed network denial is an ordinary failure under both network policies", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-net-")));
     try {
       const wrapper = join(root, "docker");
@@ -184,19 +184,16 @@ describe("R2b sandbox providers", () => {
       // network granted: the sandbox could not have produced this, so it is the command's problem
       const granted = await run({ mode: "workspace-write", cwd: root, network: true });
       expect(granted.output.exitCode).toBe(1);
-      // network denied (the default): a boundary denial, with the words attributed to the command
-      await expect(run({ mode: "workspace-write", cwd: root })).rejects.toMatchObject({
-        name: "SandboxDeniedError",
-        message: expect.stringMatching(/^reported by the command's own stderr \(unauthenticated\): wget: network is unreachable/u),
-      });
+      // Even a plausible active policy does not authenticate the printed line.
+      await expect(run({ mode: "workspace-write", cwd: root })).resolves.toMatchObject({ output: { exitCode: 1 }, isError: true });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it("a background job's denial survives an intermediate poll and is reported once", async () => {
-    // bash_job hands each poll only what is new; a denial printed early and drained by a status
-    // call must still classify the exit
+  it("a background job's printed denial stays ordinary output across intermediate polls", async () => {
+    // bash_job hands each poll only what is new. Draining a claim early must not make a
+    // later nonzero exit acquire authority from retained text.
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg-")));
     const registry = new JobRegistry();
     try {
@@ -222,9 +219,9 @@ describe("R2b sandbox providers", () => {
       const early = await status();
       expect(early.output.running).toBe(true);
       expect(early.output.output).toContain("Read-only file system");
-      // the exit poll sees no new output — and must still classify the denial
-      await expect(status(2_000)).rejects.toBeInstanceOf(SandboxDeniedError);
-      // once: a later poll of the same exited job reports plainly
+      // The exit poll sees no new output and reports only the ordinary failed exit.
+      await expect(status(2_000)).resolves.toMatchObject({ output: { exitCode: 1 } });
+      // A later poll reports the same ordinary exit without inventing another event.
       const after = await status();
       expect(after.output.running).toBe(false);
       expect(after.output.exitCode).toBe(1);
@@ -234,9 +231,9 @@ describe("R2b sandbox providers", () => {
     }
   });
 
-  it("the poll that reports a denial leaves its own drain for the next poll", async () => {
-    // classification runs before read(): output that arrived since the previous poll must not be
-    // consumed by the throw and then reported as "(no new output)"
+  it("the exit poll drains remaining output even when earlier text claimed denial", async () => {
+    // Output arriving since the previous poll must be returned normally, not intercepted
+    // by a denial-shaped text classifier.
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg2-")));
     const registry = new JobRegistry();
     try {
@@ -258,16 +255,17 @@ describe("R2b sandbox providers", () => {
         )();
       await new Promise((r) => setTimeout(r, 120));
       await status(); // drains the early denial line while the job runs
-      await expect(status(2_000)).rejects.toBeInstanceOf(SandboxDeniedError);
-      const after = await status();
-      expect(after.output.output).toContain("FINAL-STDOUT-LINE");
+      const exited = await status(2_000);
+      expect(exited.output.exitCode).toBe(1);
+      expect(exited.output.output).toContain("FINAL-STDOUT-LINE");
+      expect((await status()).output.output).toBe("");
     } finally {
       registry.disposeAll();
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it("a denial buried under a long log is still classified from the retained head", async () => {
+  it("a printed denial buried under a long log cannot turn a failed job into a denial", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-docker-bg3-")));
     const registry = new JobRegistry();
     try {
@@ -290,7 +288,7 @@ describe("R2b sandbox providers", () => {
       const id = /started background job (job-\d+)/u.exec(started.display)![1]!;
       await expect(
         provider.prepare(() => bashJobTool(registry).execute({ id, action: "status", waitMs: 3_000 }, ctx), policy)(),
-      ).rejects.toBeInstanceOf(SandboxDeniedError);
+      ).resolves.toMatchObject({ output: { exitCode: 1 } });
     } finally {
       registry.disposeAll();
       await rm(root, { recursive: true, force: true });
@@ -316,14 +314,14 @@ describe("R2b sandbox providers", () => {
         )();
       const granted = await run({ mode: "workspace-write", cwd: root, network: true });
       expect(granted.output.exitCode).toBe(1);
-      await expect(run({ mode: "workspace-write", cwd: root })).rejects.toBeInstanceOf(SandboxDeniedError);
+      await expect(run({ mode: "workspace-write", cwd: root })).resolves.toMatchObject({ output: { exitCode: 1 } });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 });
 
-describe("a denial is corroborated against the policy before it counts (#95)", () => {
+describe("legacy diagnostic plausibility helpers are not runtime denial evidence (#95)", () => {
   it("deniedPaths reads every path a line names: quoted first, then bare tokens, relative ones as written", () => {
     expect(deniedPaths("touch: cannot touch '/etc/x': Read-only file system")).toEqual(["/etc/x"]);
     expect(deniedPaths('mkdir: cannot create directory "/opt/a b": Read-only file system')).toEqual(["/opt/a b"]);
@@ -669,51 +667,49 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
     const result = await dockerRun("touch: cannot touch 'CWD/notes.md': Read-only file system", "workspace-write");
     expect(result.output.exitCode).toBe(1);
     expect(result.isError).toBe(true);
-    // a relative path is not corroborated (the command may have cd'd first), so the pattern alone
-    // decides and it stays a denial — corroboration narrows, never widens
+    // Relative paths, outside paths and network-looking text are equally unauthenticated.
     await expect(dockerRun("touch: cannot touch 'sub/notes.md': Read-only file system", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
     await expect(dockerRun("touch: cannot touch 'notes.md': Read-only file system", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
-    // a line with $ and backticks reaches the classifier verbatim
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
+    // A line with $ and backticks remains verbatim child output.
     await expect(dockerRun("sh: cannot create /etc/$HOME/`id`: Read-only file system", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
-    // a network denial naming an inside path is not a write denial: the path check never touches it
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
+    // A network-looking message remains a claim regardless of its path.
     await expect(dockerRun("CWD/bin/fetch: network is unreachable", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
   });
 
-  it("corroboration touches the filesystem for at most fifty distinct matching lines; past that it judges by string", async () => {
+  it("repeated inside and outside denial-shaped lines all remain ordinary process failures", async () => {
     const inside = "touch: cannot touch 'CWD/a': Read-only file system";
     const outside = "touch: cannot touch '/etc/x': Read-only file system";
-    // a genuine denial after chatty inside lines is still classified, however late
+    // Outside-looking claims after chatty inside lines are still just process output.
     const late = [...Array.from({ length: 250 }, () => inside), outside].join("\n");
-    await expect(dockerRun(late, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
-    // forty inside-only lines: every one corroborated and dropped — an ordinary failure
+    await expect(dockerRun(late, "workspace-write")).resolves.toMatchObject({ output: { exitCode: 1 } });
+    // Forty inside-only lines: an ordinary failure.
     const forty = Array.from({ length: 40 }, () => inside).join("\n");
     expect((await dockerRun(forty, "workspace-write")).output.exitCode).toBe(1);
-    // sixty DISTINCT forged inside lines: past the budget they are judged by string alone and
-    // still dropped — repetition does not buy a prompt
+    // Sixty distinct forged lines: repetition does not buy a prompt.
     const sixty = Array.from({ length: 60 }, (_, i) => `touch: cannot touch 'CWD/a${i}': Read-only file system`).join("\n");
     expect((await dockerRun(sixty, "workspace-write")).output.exitCode).toBe(1);
     // the same line sixty times is one line
     const same = Array.from({ length: 60 }, () => inside).join("\n");
     expect((await dockerRun(same, "workspace-write")).output.exitCode).toBe(1);
-    // and a genuine outside denial after sixty distinct inside ones is still classified
-    await expect(dockerRun(`${sixty}\n${outside}`, "workspace-write")).rejects.toBeInstanceOf(SandboxDeniedError);
+    // Nor does an outside-looking claim after sixty distinct inside ones.
+    await expect(dockerRun(`${sixty}\n${outside}`, "workspace-write")).resolves.toMatchObject({ output: { exitCode: 1 } });
   });
 
-  it("docker: the same line about a path outside the workspace, or under read-only, is still a denial", async () => {
+  it("docker: outside, read-only and pathless printed lines are not observed denials", async () => {
     await expect(dockerRun("touch: cannot touch '/etc/notes.md': Read-only file system", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
     await expect(dockerRun("touch: cannot touch 'CWD/notes.md': Read-only file system", "read-only"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
-    // and a line naming no path keeps today's classification
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
+    // A pathless line has no additional authority either.
     await expect(dockerRun("touch: Read-only file system", "workspace-write"))
-      .rejects.toBeInstanceOf(SandboxDeniedError);
+      .resolves.toMatchObject({ output: { exitCode: 1 } });
   });
 
-  it("seatbelt: a file-write denial inside the workspace the profile allows is dropped; outside it counts", async () => {
+  it("seatbelt: inside, outside, network and process denial-shaped lines stay ordinary failures", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-seatbelt-path-")));
     try {
       const run = async (line: string) => {
@@ -734,15 +730,14 @@ describe("a denial is corroborated against the policy before it counts (#95)", (
       };
       const inside = await run("sandbox-exec: deny(1) file-write-create CWD/x");
       expect(inside.output.exitCode).toBe(1);
-      await expect(run("sandbox-exec: deny(1) file-write-create /etc/x")).rejects.toBeInstanceOf(SandboxDeniedError);
-      // a non-write denial is untouched by the path check, even one naming an inside path
-      await expect(run("sandbox-exec: deny(1) network-outbound")).rejects.toBeInstanceOf(SandboxDeniedError);
-      await expect(run("sandbox-exec: deny(1) process-exec CWD/bin/x")).rejects.toBeInstanceOf(SandboxDeniedError);
-      // the word `deny` alone is not a seatbelt denial: the `sandbox…deny` shape is required
+      await expect(run("sandbox-exec: deny(1) file-write-create /etc/x")).resolves.toMatchObject({ output: { exitCode: 1 } });
+      // Non-write-shaped claims are equally untrusted.
+      await expect(run("sandbox-exec: deny(1) network-outbound")).resolves.toMatchObject({ output: { exitCode: 1 } });
+      await expect(run("sandbox-exec: deny(1) process-exec CWD/bin/x")).resolves.toMatchObject({ output: { exitCode: 1 } });
+      // Neither bare deny nor a backend-shaped prefix authenticates the speaker.
       const bareDeny = await run("error: permission deny for the config file");
       expect(bareDeny.output.exitCode).toBe(1);
-      // a line of eight thousand `sandbox:` with no `deny` is matched by the cheap literal first,
-      // never by the backtracking `.*` from every `sandbox`
+      // Large text stays an ordinary bounded process result; no classifier scans it.
       const t0 = Date.now();
       const chatter = await run("sandbox: ".repeat(8_000));
       expect(chatter.output.exitCode).toBe(1);

@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
-import { throwIfSandboxDenied } from "../sandbox-providers.js";
 import { bound } from "./shared.js";
 
 /**
@@ -347,21 +346,7 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
       }
 
       const running = !record.exited;
-      if (!running && record.exitCode !== 0) {
-        // classify from the retained head+tail, not from this poll's drain: the denial may have
-        // been printed early and handed to an earlier status call. Classified BEFORE draining, so
-        // a throw here leaves this poll's unread output for the next status call instead of
-        // consuming it on the way out.
-        const retained = registry.classifiable(input.id);
-        if (retained !== undefined) {
-          try {
-            throwIfSandboxDenied(retained);
-          } catch (err) {
-            registry.markDenialReported(input.id);
-            throw err;
-          }
-        }
-      }
+      // Retained or newly drained output is still the child's claim, never a denial receipt.
       const drained = registry.read(input.id)!;
       const output: BashJobOutput = {
         id: input.id,
