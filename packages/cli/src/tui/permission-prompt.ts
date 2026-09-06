@@ -15,7 +15,7 @@ export function permissionEffectLines(req: PermissionRequest): string[] {
   const lines = [`Declared permission: ${JSON.stringify(req.class)} for ${JSON.stringify(req.tool)}.`,
     req.class === "write" ? "Declared paths may change; undeclared effects are not established." :
     req.class === "exec" ? "Exec may change files and reach the network; effects are not established by argv." :
-    req.class === "network" ? "Network access requested; destinations and other effects are not established." :
+    req.class === "network" || req.class === "net" ? "Network access requested; destinations and other effects are not established." :
     "Read access declared; this is not proof of read-only behavior or absence of network access.",
     `cwd: ${JSON.stringify(req.cwd)}`];
   if (req.paths === undefined || req.paths.length === 0) lines.push("Declared paths: none; path effects unknown (not an empty effect set).");

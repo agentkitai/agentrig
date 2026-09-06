@@ -53,6 +53,7 @@ export function externalExpansion(initiallyRestricted = true) {
 
 /** Declared-path classification, not effect attestation. Unknown is outside for this guard. */
 export async function expansionSurface(req: PermissionRequest, signal: AbortSignal): Promise<ExpansionSurface | undefined> {
+  if (req.class === "net") return "network";
   if (req.class === "exec" || req.class === "network") return req.class;
   if (req.class !== "write") return undefined;
   const paths = req.paths;

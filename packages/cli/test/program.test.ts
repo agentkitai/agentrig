@@ -102,6 +102,13 @@ describe("argv parsing", () => {
     expect((await run(["--sandbox", "read-only"]))?.opts.sandbox).toBe("read-only");
     expect((await run(["sessions", "resume", "s1", "--sandbox", "none"]))?.opts.sandbox).toBe("none");
   });
+  it("carries explicit sandbox network policy independently of permission flags", async () => {
+    for (const prefix of [["run", "x"], [], ["sessions", "resume", "s1"]]) {
+      const opts = (await stub(buildProgram()).run([...prefix, "--sandbox-network", "--allow", "net"]))!.opts;
+      expect(opts.sandboxNetwork).toBe(true); expect(opts.allow).toEqual(["net"]);
+      expect((await stub(buildProgram()).run([...prefix, "--yolo"]))!.opts.sandboxNetwork).toBeUndefined();
+    }
+  });
 
   it("carries the skip-permissions flags on every entry point that runs an agent", async () => {
     const { run } = stub(buildProgram());

@@ -204,6 +204,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "allow every tool call without asking, including outside the working directory; --deny still applies",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
+      .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")
       .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
