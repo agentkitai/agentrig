@@ -327,6 +327,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     HEADLESS_MAX_TURNS,
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
+    .option("--answer-policy <policy>", "required questions: fail (default), first-option, or file:<path>; automated answers are not human approval")
     .action(async (task: string, opts: RunOptions, cmd: Command) => {
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { agent, RequestError, type AgentConnection, type NewSessionRequest, type RequestPermissionRequest, type SessionUpdate, type Stream } from "@agentclientprotocol/sdk";
-import type { Session, SessionSummary } from "@agentkitai/agentrig-core";
-import { TuiController, type PendingPermission } from "./tui/controller.js";
+import { QuestionReplySchema, type Session, type SessionSummary } from "@agentkitai/agentrig-core";
+import { z } from "zod";
+import { TuiController, type PendingPermission, type PendingQuestion } from "./tui/controller.js";
 import { permissionEffectLines } from "./tui/permission-prompt.js";
 import { ACP_LIMITS, ACP_SESSION_REFUSAL } from "./acp-transport.js";
 import { AcpSessionParams, AcpEventsParams, AcpMemoryParams, acpResult } from "./acp-preflight.js";
@@ -46,9 +47,11 @@ async function untilAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> 
 /** Stable ACP v1 mapping over the same headless controller, not a second agent loop. */
 export function serveAcp(stream: Stream, options: AcpServerOptions) {
   let initialized = false; let closing = false; let connection: AgentConnection;
+  let clientQuestions = false;
   const sessions = new Map<string, Entry>();
   const outstanding = new Set<Promise<void>>();
   const asks = new WeakSet<PendingPermission>();
+  const questions = new WeakSet<PendingQuestion>();
   function fail(): void { options.closeTransport(); connection?.close(); }
   function send(method: string, params: unknown): Promise<void> {
     if (closing || outstanding.size >= 256) { fail(); return Promise.reject(new Error("ACP output unavailable")); }
@@ -124,12 +127,35 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
     entry.permissionTasks.add(task);
     void task.then(() => entry.permissionTasks.delete(task), () => { entry.permissionTasks.delete(task); fail(); });
   }
+  function question(sessionId: string, entry: Entry, pending: PendingQuestion): void {
+    if (questions.has(pending)) return; questions.add(pending);
+    if (!clientQuestions) { pending.resolve(null); return; }
+    const task = (async () => {
+      try {
+        const params = acpResult({ version: 1, sessionId, question: pending.request });
+        const release = options.reserveOutput(ACP_LIMITS.responseBytes);
+        // A locally cancelled question still owns the SDK reply slot until reply/close.
+        const request = connection.client.request("_agentrig/question", params).finally(release);
+        const response = await untilAbort(request, pending.signal);
+        const parsed = z.object({ id: z.string().uuid(), reply: QuestionReplySchema }).strict().parse(response);
+        if (!closing && !entry.controller.signal.aborted && parsed.id === pending.request.id &&
+          entry.runtime?.controller.snapshot().question === pending) pending.resolve(parsed.reply);
+      } catch { /* No answer, malformed reply, cancellation and unsupported client all fail closed. */ }
+      finally {
+        if (entry.runtime?.controller.snapshot().question === pending) pending.resolve(null);
+      }
+    })();
+    entry.permissionTasks.add(task);
+    void task.then(() => entry.permissionTasks.delete(task), () => { entry.permissionTasks.delete(task); fail(); });
+  }
   const app = agent()
-    .onRequest("initialize", () => {
+    .onRequest("initialize", ({ params }) => {
       if (initialized) throw RequestError.invalidRequest();
       initialized = true;
+      const capability = params._meta?.agentrig;
+      clientQuestions = capability !== null && typeof capability === "object" && "questions" in capability && capability.questions === 1;
       return acpResult({ protocolVersion: 1, agentCapabilities: {}, agentInfo: { name: "agentrig", version: "0.1.0" },
-        authMethods: [], _meta: { agentrig: { version: 1, extensions: ["state", "events", "supervisor", "memory"], rawEventsSensitive: true } } });
+        authMethods: [], _meta: { agentrig: { version: 1, extensions: ["state", "events", "supervisor", "memory", "questions"], questions: 1, rawEventsSensitive: true } } });
     })
     .onRequest("session/new", async ({ params }) => {
       if (!initialized || closing || sessions.size >= ACP_LIMITS.sessions) throw RequestError.invalidRequest();
@@ -146,7 +172,10 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
         });
         entry.runtime = await entry.creating;
         if (closing) { await entry.runtime.close(); throw RequestError.invalidRequest(); }
-        entry.unsubscribe = entry.runtime.controller.subscribe(state => { if (state.pending !== null) permission(id, entry, state.pending); });
+        entry.unsubscribe = entry.runtime.controller.subscribe(state => {
+          if (state.pending !== null) permission(id, entry, state.pending);
+          if (state.question !== null) question(id, entry, state.question);
+        });
         return acpResult({ sessionId: id });
       } catch { sessions.delete(id); throw new RequestError(-32000, ACP_SESSION_REFUSAL); }
     })
@@ -186,7 +215,7 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
     .onRequest("_agentrig/state", AcpSessionParams, ({ params }) => {
       const entry = current(params.sessionId); const state = entry.runtime.controller.snapshot();
       return acpResult({ version: 1, sessionId: params.sessionId, status: state.status, turns: state.turns, model: state.model,
-        running: entry.busy, pendingPermission: state.pending !== null, plan: state.plan });
+        running: entry.busy, pendingPermission: state.pending !== null, pendingQuestion: state.question?.request.id ?? null, plan: state.plan });
     })
     .onRequest("_agentrig/events", AcpEventsParams, ({ params }) => {
       const entry = current(params.sessionId); entry.raw = params.enabled;

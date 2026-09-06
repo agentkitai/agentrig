@@ -33,6 +33,12 @@ import {
  * lives here where a test can drive it without a screen.
  */
 
+export interface PendingQuestion {
+  signal: AbortSignal;
+  request: import("@agentkitai/agentrig-core").QuestionRequest;
+  resolve(answer: import("@agentkitai/agentrig-core").QuestionReply | null): void;
+}
+
 export interface TuiLine {
   key: number;
   text: string;
@@ -79,6 +85,8 @@ export interface TuiState {
   queued: number;
   /** A supervisor question accepts free-form input independently of permission yes/no prompts. */
   escalation: PendingEscalation | null;
+  question: PendingQuestion | null;
+  queuedQuestions: number;
   /** Latest plan the agent recorded, for `/plan`. */
   plan: PlanItem[];
   /** Latest prompt bill of materials, for `/context`. */
@@ -187,6 +195,8 @@ export class TuiController {
     pending: null,
     queued: 0,
     escalation: null,
+    question: null,
+    queuedQuestions: 0,
     plan: [],
     manifest: null,
     signals: [],
@@ -215,6 +225,7 @@ export class TuiController {
   private aborted: Session | null = null;
   /** Requests waiting behind the one on screen. */
   private readonly queue: PendingPermission[] = [];
+  private readonly questions: PendingQuestion[] = [];
   private running: Promise<void> | null = null;
   private agent: Agent;
   private nextKey = 0;
@@ -515,6 +526,44 @@ export class TuiController {
     });
   }
 
+  /** A distinct clarification queue: answering it never steers or grants permission. */
+  readonly askQuestion: import("@agentkitai/agentrig-core").QuestionHandler = (request, signal) => {
+    if (this.closed || this.closing || signal.aborted || this.questions.length >= 8) return Promise.resolve(null);
+    return new Promise(resolve => {
+      let settled = false;
+      const entry: PendingQuestion = { request: structuredClone(request), signal, resolve: answer => {
+        if (settled) return;
+        settled = true; clearTimeout(timer); signal.removeEventListener("abort", cancel);
+        const index = this.questions.indexOf(entry);
+        if (index >= 0) this.questions.splice(index, 1);
+        this.set({ question: this.questions[0] ?? null, queuedQuestions: Math.max(0, this.questions.length - 1) });
+        resolve(answer);
+      } };
+      const cancel = () => entry.resolve(null);
+      const timer = setTimeout(cancel, 120_000); timer.unref?.();
+      signal.addEventListener("abort", cancel, { once: true });
+      this.questions.push(entry);
+      this.set({ question: this.questions[0] ?? null, queuedQuestions: this.questions.length - 1 });
+      if (signal.aborted) cancel();
+    });
+  };
+
+  answerQuestion(answer: import("@agentkitai/agentrig-core").QuestionChoice, expected = this.state.question): void {
+    if (this.state.pending !== null || expected === null || this.state.question !== expected) return;
+    // The runtime independently validates every answer; UI validation keeps a typo editable.
+    if ("option" in answer ? !Number.isInteger(answer.option) || answer.option < 0 || answer.option >= expected.request.options.length
+      : answer.text.trim().length === 0 || answer.text.length > 4096) {
+      this.print("Choose a listed number or enter nonblank text (at most 4096 characters).", "error"); return;
+    }
+    expected.resolve({ source: "human", answer });
+  }
+
+  answerQuestionText(text: string, expected = this.state.question): void {
+    this.answerQuestion(/^[1-4]$/.test(text.trim()) ? { option: Number(text.trim()) - 1 } : { text }, expected);
+  }
+
+  private closeQuestions(): void { for (const entry of [...this.questions]) entry.resolve(null); }
+
   answerEscalation(answer: string): void {
     this.state.escalation?.resolve(answer);
   }
@@ -546,6 +595,7 @@ export class TuiController {
   }
 
   abort(): void {
+    this.closeQuestions();
     if (this.dreamAbort !== undefined) {
       this.dreamAbort.abort(); this.print("cancelling dream…", "error");
       if (this.session === null) return;
@@ -582,6 +632,7 @@ export class TuiController {
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
     this.state.escalation?.resolve(null, "closed");
+    this.closeQuestions();
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
     await this.undoing?.catch(() => {});
@@ -967,6 +1018,7 @@ export class TuiController {
       // loop or supervisor waiting on a promise that can never resolve
       this.denyAllPending();
       this.state.escalation?.resolve(null, "closed");
+      this.closeQuestions();
       this.set({ status: "idle", activity: null });
     }
   }

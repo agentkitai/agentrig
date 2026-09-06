@@ -10,6 +10,7 @@ import { writeFileTool } from "./write-file.js";
 import { configureDiagnostics } from "../diagnostics.js";
 import type { DiagnosticsConfig } from "../diagnostics-types.js";
 import { webFetchTool } from "./web-fetch.js";
+import { askUserTool } from "../question-runtime.js";
 
 export { bashTool, type BashToolOptions } from "./bash.js";
 export { bashJobTool, JobRegistry, type BashJobOutput } from "./background-jobs.js";
@@ -61,10 +62,13 @@ export function builtinTools(opts: BuiltinToolOptions = {}): AnyTool[] {
     webFetchTool(),
   ];
   configureDiagnostics(tools, opts.diagnostics);
+  if (opts.questions !== false) tools.push(askUserTool());
   return tools;
 }
 
 export interface BuiltinToolOptions {
+  /** Unattended heartbeat explicitly disables clarification requests. */
+  questions?: boolean;
   diagnostics?: DiagnosticsConfig;
   /** Which shell `bash` runs commands in. Defaults per platform; see `resolveShell`. */
   shell?: string;

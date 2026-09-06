@@ -1,4 +1,6 @@
 export * from "./events.js";
+export * from "./questions.js";
+export { askUserTool } from "./question-runtime.js";
 export * from "./diagnostics-types.js";
 export * from "./messages.js";
 export * from "./manifests.js";

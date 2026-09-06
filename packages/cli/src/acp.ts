@@ -87,6 +87,7 @@ export async function startAcp(command: Command, flags: AcpFlags, dependencies: 
       try {
         built = await (dependencies.build ?? buildAgent)(opts, { permissionGrants: controller.permissionGrants,
           onAsk: opts.headless ? async () => "deny" : controller.ask, mcpServers: matched, mcpExistingPinsOnly: true,
+          onQuestion: controller.askQuestion,
           onHookError: notice, onHookDone: notice, onNotice: notice });
         if (built.mcp.length !== matched.length) throw new Error("MCP server unavailable or definitions need operator approval");
         controller.attach(built.agent);
