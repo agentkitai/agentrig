@@ -47,6 +47,11 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 
 ## Commands
 
+- `agentrig run --ci --task-file task.txt --report report.md` — explicit bounded
+  non-interactive task-file/event mode; unresolved asks fail closed and reports
+  never overwrite existing files. Optional PR comments require an explicit target
+  and exec/net authorization. [CI mode and Actions example](docs/CI-MODE.md).
+
 - `agentrig review [--base main | --pr 12] [--comment]` — one bounded advisory
   supervisor-role diff review; `/review` does the same while the TUI is idle.
   Default includes tracked HEAD-to-worktree text changes only (not untracked files).
@@ -66,6 +71,9 @@ for the scripted client, existing-pin MCP requirements and transport limits.
 `agentrig mcp-serve` exposes four bounded tools to modern and legacy stdio MCP
 clients under configured permissions. Client tasks remain advisory, never human
 approval. See [MCP serving](docs/MCP-SERVE.md) for limits and sensitive-data handling.
+
+Optional `--otel-endpoint <url>` exports bounded metadata-only OTLP/HTTP JSON traces.
+It is off unless explicitly requested; see [telemetry privacy and limits](docs/OTEL.md).
 
 - `agentrig` — start the interactive TUI.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.

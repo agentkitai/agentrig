@@ -216,5 +216,6 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       process.removeListener("SIGINT", onSigint);
     }
     for (const server of built.mcp) await server.close().catch(() => {});
+    await built.closeTelemetry?.();
   }
 }

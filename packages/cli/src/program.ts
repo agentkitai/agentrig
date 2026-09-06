@@ -7,6 +7,7 @@ import { forkSession, replaySession, searchSessions, showSessionEvidence } from 
 import { exportSession } from "./session-export.js";
 import { evaluateSessions, type SessionEvaluationDependencies } from "./session-evaluation.js";
 import { reviewChanges, renderReview, reviewFailure, type ReviewOptions, type ReviewDependencies } from "./review.js";
+import { runCi, type CiDependencies, type CiFlags } from "./ci-run.js";
 import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions, type RunSummary } from "./run.js";
@@ -134,6 +135,7 @@ export interface ProgramDependencies {
   evaluation?: SessionEvaluationDependencies;
   mcpLogin?: typeof mcpLoginCommand;
   review?: ReviewDependencies;
+  ci?: CiDependencies;
   acp?: AcpDependencies;
   mcpServe?: McpServeDependencies;
 }
@@ -225,6 +227,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
       .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")
+      .option("--otel-endpoint <url>", "explicit OTLP/HTTP JSON traces URL; exports minimized timing/status metadata")
       .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
@@ -330,15 +333,33 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   }
 
   withRunOptions(
-    program.command("run <task>").description("Run the agent on a task, non-interactively"),
+    program.command("run [task]").description("Run the agent on a task, non-interactively"),
     HEADLESS_MAX_TURNS,
   )
     .option("--resume <id>", "continue an existing session from its snapshot")
+    .option("--ci", "bounded CI mode: explicit file input, headless asks fail closed, never YOLO")
+    .option("--task-file <path>", "CI task text, at most 16 KiB")
+    .option("--event-file <path>", "CI JSON event, at most 256 KiB; no implicit environment lookup")
+    .option("--event-field <selector>", "CI selector: issue.body, comment.body or pull_request.body")
+    .option("--report <path>", "create-only CI Markdown report under an existing parent")
+    .option("--pr <number>", "explicit CI comment target; requires --repo and --comment")
+    .option("--repo <owner/repo>", "literal CI GitHub repository, never inferred from payload")
+    .option("--comment", "explicit CI PR comment; needs exec+net, matching identity and complete accounting")
+    .addHelpText("after", "\nCI requires exactly one task/event file and an explicit report path and/or complete PR comment target. CI ceilings: 20 turns, 5 minutes, 50000 main tokens; smaller configured limits win. Auxiliary/child/remote usage is not a hard total billing cap. Effective YOLO, resume and positional CI tasks refuse. Reports redact heuristically, not perfectly; unknown secrets may remain.\n")
     .option("--answer-policy <policy>", "required questions: fail (default), first-option, or file:<path>; automated answers are not human approval")
-    .action(async (task: string, opts: RunOptions, cmd: Command) => {
+    .action(async (task: string | undefined, opts: RunOptions & CiFlags, cmd: Command) => {
+      const flags: CiFlags = { ci: opts.ci, taskFile: opts.taskFile, eventFile: opts.eventFile, eventField: opts.eventField,
+        report: opts.report, pr: opts.pr, repo: opts.repo, comment: opts.comment };
+      if (opts.ci === true ? task !== undefined : task === undefined || Object.entries(flags).some(([key, value]) => key !== "ci" && value !== undefined)) {
+        console.error("run requires a positional task, or --ci with explicit file input/output flags; do not mix the two modes"); process.exitCode = 1; return;
+      }
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);
-      if (resolved !== undefined) await executeRun(task, resolved);
+      if (resolved === undefined) return;
+      if (opts.ci === true) {
+        try { await withMaintenanceSignal(signal => runCi(flags, resolved, signal, { run: executeRun, ...dependencies.ci }), undefined, "CI run"); }
+        catch { console.error("CI run refused or failed; no validated completion report"); process.exitCode = 1; }
+      } else await executeRun(task!, resolved);
     });
 
   withProviderOptions(program.command("review").description("One bounded advisory diff review; costs supervisor-role tokens, never runs tests"))
