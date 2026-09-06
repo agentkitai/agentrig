@@ -3,7 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { CommandPrefixSchema, SessionStore } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
-import { forkSession, replaySession, searchSessions } from "./sessions.js";
+import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
@@ -491,8 +491,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .command("show <id>")
     .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
     .option("--json", "raw JSONL instead of a timeline")
-    .action(async (id: string, opts: { root: string; json?: boolean }) => {
+    .option("--evidence", "claim-to-evidence view for a finished local session (no model call)")
+    .action(async (id: string, opts: { root: string; json?: boolean; evidence?: boolean }) => {
+      if (opts.evidence && opts.json) throw new Error("--evidence and --json are mutually exclusive");
       const store = new SessionStore({ root: opts.root });
+      if (opts.evidence) { console.log(await showSessionEvidence(store, id)); return; }
       for await (const e of store.read(id)) {
         console.log(opts.json ? JSON.stringify(e) : renderEvent(e));
       }

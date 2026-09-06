@@ -1,6 +1,27 @@
 import { SessionStore, type ChildNode, type SessionTree, type SessionTreeNode } from "@agentkitai/agentrig-core";
 import { bm25Search, type WikiPage } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
+import { stat } from "node:fs/promises";
+import { evidenceReportCollector, MAX_EVIDENCE_EVENTS } from "@agentkitai/agentrig-supervisor";
+
+/** No model/config access and no writes: inspect only the named, closed physical log. */
+export async function showSessionEvidence(store: SessionStore, id: string): Promise<string> {
+  const path = store.pathFor(id);
+  const before = await stat(path);
+  if (before.size > 32 * 1024 * 1024) throw new Error("evidence log exceeds the 32 MiB read bound; no complete report available");
+  const collector = evidenceReportCollector();
+  let count = 0;
+  for await (const event of store.read(id)) {
+    if (++count > MAX_EVIDENCE_EVENTS) throw new Error("evidence log exceeds the event bound; no complete report available");
+    if (event.sessionId !== id) throw new Error("evidence log contains a different session identity");
+    collector.observe(event);
+  }
+  const after = await stat(path);
+  if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error("session log changed while reading evidence; retry after it finishes");
+  const report = collector.report();
+  if (!report.finished) throw new Error("evidence requires a finished, ordered session log ending with session.end");
+  return report.text;
+}
 
 export interface SessionSearchHit {
   id: string;
