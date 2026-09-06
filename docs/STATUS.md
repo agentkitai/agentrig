@@ -51,6 +51,10 @@ Create-only Markdown and explicit authorized/pinned PR comments share R15e's hel
 Initial build/typecheck/full passes 2,790 plus two skips /166 files with actual
 Linux containers. Three negative mutations were detected/restored; final integrated
 checks and one bounded independent review remain. No live model/comment spending.
+Integrated green R8b main: frozen install/build/typecheck pass and unchanged-source
+full suite passes 2,805 plus two skips /169 files (55.07s, actual Linux containers).
+A mistyped local checker-image digest caused two prior infrastructure controls to
+fail; the corrected run, not that invocation, supplies the container evidence.
 
 ### R8b done — PR #187; all four post-main checks green
 
