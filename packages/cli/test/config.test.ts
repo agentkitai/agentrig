@@ -18,6 +18,17 @@ import type { TuiOptions } from "../src/tui/start.tsx";
 
 const dirs: string[] = [];
 
+it("tracks scheduled ingestion opt-out sources without mistaking a shared default false for consent", async () => {
+  const { cwd, home } = await fixture();
+  const cmd = new Command().option("--ingest-on-end").option("--no-ingest-on-end");
+  cmd.setOptionValueWithSource("ingestOnEnd", false, "default");
+  expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false })).toMatchObject({ ingestOnEnd: false, ingestOnEndExplicit: false });
+  await configAt(home, { ingestOnEnd: false });
+  expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false })).toMatchObject({ ingestOnEnd: false, ingestOnEndExplicit: true });
+  cmd.parseOptions(["--ingest-on-end"]);
+  expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false })).toMatchObject({ ingestOnEnd: true, ingestOnEndExplicit: true });
+});
+
 it("resolves configurable dream scan limits for standalone, run and TUI entry points", async () => {
   const { cwd, home } = await fixture();
   await configAt(home, { dreamScanLimits: { maxEntries: 20000 }, dreamLimits: { timeoutMs: 20000 } });

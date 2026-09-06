@@ -38,6 +38,11 @@ they are not task artifacts. Nonempty applicability is model judgment, not seman
 verification. No R7c schedule log/banner/ingestion, daemon or R15i ledger; unattended
 execution remains opt-in.
 
+R7c extension: successful heartbeat keeps that quiet profile. Failed/budget/aborted heartbeat
+may persist bounded operational failure accounting and an uncertainty marker for next-start
+visibility, never task/wiki artifacts or automatic maintenance. Acknowledging a banner does
+not restore permissions, replay a run or silently clear missing-receipt uncertainty.
+
 ## Evidence gates
 
 Actual CLI→runCommand→local adapter/storage tests cover empty one-turn behavior,
