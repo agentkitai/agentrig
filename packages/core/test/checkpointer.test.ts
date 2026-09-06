@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   Checkpointer,
   undoSession,
@@ -22,6 +22,9 @@ import {
 } from "@agentkitai/agentrig-core";
 
 const execFile = promisify(execFileCallback);
+
+// Multiple real Git scans exceed Vitest's 5s default on Windows; production deadlines are unchanged.
+vi.setConfig({ testTimeout: 30_000 });
 
 class FakeProvider implements ModelProvider {
   readonly id = "fake";

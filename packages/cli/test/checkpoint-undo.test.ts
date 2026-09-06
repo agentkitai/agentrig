@@ -10,6 +10,8 @@ import { parseConfigText } from "../src/config.ts";
 import { TuiController } from "../src/tui/controller.ts";
 
 const execFile = promisify(exec);
+// These exercise a complete agent run and real Git restore, including a built CLI subprocess.
+vi.setConfig({ testTimeout: 30_000 });
 const cli = resolve("packages/cli/dist/index.js");
 let root: string;
 beforeEach(async()=>{

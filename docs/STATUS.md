@@ -15,6 +15,10 @@ not pulled forward. Build/typecheck and full explicit Node22 suite pass 1,917 pl
 passing build/typecheck, 125 targeted cases and the full suite. Dirty-guard mutation fails its
 named test and is reverted. Optional polish is at ROADMAP's end; exact-head/post-merge CI pending.
 
+Initial head `365d206` passed Linux/macOS CI; Windows exceeded the 5-second Vitest default in
+three multi-step Git cases. Raised only checkpoint integration fixture budgets to 30 seconds;
+all assertions and production deadlines are unchanged. Final-head CI must pass before merge.
+
 ### R4a complete (PR #135)
 
 Final head `cc037e7`, merge `45dac7f`, exact-head CI 34008045638 and post-merge main CI

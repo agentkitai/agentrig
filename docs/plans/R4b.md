@@ -55,3 +55,8 @@ and refuses external dirty-worktree changes` by permitting a partial restore ins
 required pre-mutation refusal. The mutation was reverted and the affected suite rerun.
 One earlier full run hit E2's Date.now-based negative-wall-time fixture flake; its targeted rerun
 and two subsequent full runs passed, without changing production checks or the original test.
+
+Initial PR CI 34009484658 passed Linux/macOS; Windows hit Vitest's default 5-second timeout
+in three multi-step Git cases (then teardown encountered still-running children). The core and
+CLI checkpoint integration files now have a 30-second fixture budget. No tests/assertions are
+skipped and no production deadline changes. This is a CI fixture repair, not another review round.
