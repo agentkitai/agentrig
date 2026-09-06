@@ -194,3 +194,17 @@ so inspect before sharing and supply known literals as a JSON string array with 
 Images refuse unless `--omit-opaque` explicitly requests lossy placeholders; unknown future
 content always refuses. Redaction and omission are irreversible; raw logs are not scrubbed.
 See [R9a](docs/plans/R9a.md) for formats, bounds and the data-only provenance boundary.
+
+Evaluate explicitly mapped session baselines against a supported profile (preview
+by default, no historic tool replay):
+
+```sh
+agentrig eval SESSION --against candidate --fixtures fixtures.json --output ./new-evaluation
+# After inspecting the preview, opt in to provider use and explicit scheduling limits:
+agentrig eval SESSION --against candidate --fixtures fixtures.json --output ./new-evaluation --execute --batch-tokens 100000 --batch-minutes 10
+```
+
+Execution requires Linux Docker and already-local pinned images. The shipped worker
+supports X tasks; A tasks require a matching offline dependency image. Independent
+checks determine outcomes; M6 grading is advisory. See the [fixture/profile contract](docs/plans/R9b.md)
+for supported options, human gates, accounting and isolation limitations.
