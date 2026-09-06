@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Committed vision; R12b is implemented with closing delivery gates; R6g PR #153 is merged pending main CI; R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Committed vision; R12b is implemented with closing delivery gates; R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -17,7 +17,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
 | Implemented; closing gates | R12b: semantic scoped approval UI | Honest effect unknowns and bounded scope editing with exact preview/confirmation; independent review and exact-head CI |
 | Active independently | R13d: injected-context principals | Runtime-assigned authority and explicit revocable hook delegation |
-| Committed | R5 remainder, R6g, R7–R11, R12b–R12d, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Committed | R5 remainder, R7–R11, R12b–R12d, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
 measurement work from R9/R14 forward; H5 pulls R6f forward. All remaining milestone rows are
@@ -547,7 +547,7 @@ comparison against memory without generated skills must establish the additional
 | R6d *(done, [PR #139](https://github.com/agentkitai/agentrig/pull/139))* | Write-quality lint pack *(third pass; the claude.ai capture's calibration rules, made structural)*: ingest tags each wiki claim with provenance — `stated` (user/task input), `observed` (tool evidence), `inferred` (model conclusion) — and the dream lints for: inference written as fact, per-session status noise (the horizon test — still true and worth reading a month out?), restated-not-new lines (already filed means already remembered), single-observation claims phrased as generalizations, and facts appended to the open page instead of their subject's page | memory |
 | R6e *(done, [PR #140](https://github.com/agentkitai/agentrig/pull/140))* | Guardrail deny-class *(third pass)*: the promotion gate refuses — judged by **effect, not wording** — any candidate lesson that would make future sessions less honest or less careful: skip or weaken verification, stop questioning claims, suppress failures, bypass review, treat a workaround as policy. The refusal is reported in the dream report, and never softened into a milder rewrite the sessions never actually earned | memory |
 | R6f *(done, [PR #122](https://github.com/agentkitai/agentrig/pull/122), H5a)* | Memory tools hardened *(third pass)*: write ops take an `if_version` token from the last read — a stale write is rejected WITH the current content returned, so the recovery path lives in the tool description, not just the error; page front-matter gains `aliases` (durable names only) so recall resolves "the auth thing" to an existing page instead of minting a duplicate; tool descriptions carry the retrieval discipline — an index line is a hint to open the page, never grounds to claim absence unread | memory + core (tool descriptions) |
-| R6g *(implemented; delivery gates pending)* | Bounded inert trigger hints in legacy and generated metadata, a real listed-skill first-call example within the total 8 KiB catalogue cap, and advisory available-tool routing/effort guidance preserving permissions, verification and configured limits. No default activation or benefit claim. See [contract](plans/R6g.md) | core + cli |
+| R6g *(done, [PR #153](https://github.com/agentkitai/agentrig/pull/153))* | Bounded inert trigger hints in legacy and generated metadata, a real listed-skill first-call example within the total 8 KiB catalogue cap, and advisory available-tool routing/effort guidance preserving permissions, verification and configured limits. No default activation or benefit claim. See [contract](plans/R6g.md) | core + cli |
 
 Acceptance: a fixture pair of session logs with a repeated three-step procedure yields exactly one
 skill candidate; a single-session procedure yields none (the gate test, most important in the
@@ -800,7 +800,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 2 | R12e (done) → R12a (done) → R12b (closing gates) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
-| 5 | R6a/R6b/R6c (done) → R6g (merged; main CI pending) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
+| 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |

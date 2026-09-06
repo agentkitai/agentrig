@@ -69,6 +69,14 @@ describe("validated scoped proposals", () => {
 });
 
 describe("controller scope lifecycle", () => {
+  it("displays queued request effects only when that request becomes active", async () => {
+    const c = controller(); const first = c.ask(request({ tool: "first" })); const second = c.ask(request({ tool: "second" }));
+    expect(c.snapshot().lines.some(l => l.text.includes('for "first"'))).toBe(true);
+    expect(c.snapshot().lines.some(l => l.text.includes('for "second"'))).toBe(false);
+    c.answerPermission("deny"); expect(await first).toBe("deny");
+    expect(c.snapshot().lines.some(l => l.text.includes('for "second"'))).toBe(true);
+    c.answerPermission("deny"); expect(await second).toBe("deny");
+  });
   it("requires preview then explicit confirmation and checks again at installation", async () => {
     const c = controller(); const answer = c.ask(request()); c.startPermissionScope();
     c.confirmPermissionScope(); expect(c.permissionGrants.list()).toEqual([]);

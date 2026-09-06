@@ -51,6 +51,8 @@ it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").ea
   await vi.waitFor(() => expect(h.controller.snapshot().pending?.scope?.text).toBe(text));
   send("\r"); await vi.waitFor(() => expect(h.controller.snapshot().pending?.scope?.preview).toBe(true));
   await vi.waitFor(() => expect(h.writes.join("")).toContain("NOT installed"));
+  expect(h.controller.snapshot().lines.some(l => l.text.includes('"commandPrefix":["printf","%s"]') && l.text.includes(`"cwd":${JSON.stringify(h.cwd)}`) && l.text.includes('"resource":"*"'))).toBe(true);
+  expect(h.writes.join("")).toContain('"commandPrefix":["printf","%s"]');
   expect(h.controller.permissionGrants.list()).toEqual([]); expect(asks).toBe(1);
   send("y"); await vi.waitFor(() => expect(asks).toBe(2));
   expect(h.controller.permissionGrants.list()[0]?.operation.commandPrefix).toEqual(["printf", "%s"]);

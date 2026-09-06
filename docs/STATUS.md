@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g PR #153 is merged, pending post-merge CI; R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -20,11 +20,19 @@ R12c inspection/reasons and R12d inheritance remain separate. Integrated R6g mai
 preserving catalogue/routing/effort guidance and all previous done markers. Build/typecheck/full
 suite, restored mutations, one bounded review and exact-head CI remain delivery gates.
 
+Integrated build/typecheck and full four-worker suite pass: 2,224 tests plus two skips across
+116 files; focused scope/core-grant tests pass 45 cases. Missing-path coverage and before-preview
+confirmation mutations failed the named controls and were restored. One bounded Claude review
+is running; exact-head three-platform CI follows material findings, if any.
+
 R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 34023253550;
 the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
 delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
 
-### R6g implemented — delivery gates pending
+### R6g done — PR #153; post-merge CI green
+
+Merge `714732d` passed all three post-merge platforms in CI 34023837383 after green PR #153.
+The following validation notes are implementation history, not outstanding delivery gates.
 
 Optional bounded trigger strings reach the compact catalogue through strict parsing and
 sanitization. A worked first-call example names an actually listed skill; the entire catalogue
