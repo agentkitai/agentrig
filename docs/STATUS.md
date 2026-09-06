@@ -47,6 +47,11 @@ additions and all prior done markers; combined checks and exact-head CI follow.
 Combined build/typecheck/full checks pass: 2,271 tests plus two skips across 119 files, four
 workers (30 seconds). Base `c62009b` passed all three post-merge jobs in CI 34025571103.
 
+R5a PR #157 main `7f01c4c` is integrated, retaining extension startup/controller/command
+wiring and both Windows test selections. Combined build/typecheck/full suite passes 2,288
+tests plus two skips across 121 files (four workers, 30 seconds). No new general review for
+mechanical integration; updated exact-head CI and R5a post-merge CI remain delivery gates.
+
 ### R5a merged — PR #157; post-merge CI pending
 
 Merge `7f01c4c` follows green exact-head CI. The implementation notes below are history.
