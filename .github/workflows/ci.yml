@@ -91,6 +91,7 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/generated-skills.test.ts packages/cli/test/generated-skills-config.test.ts packages/cli/test/generated-skills-runtime.test.ts
       - run: pnpm exec vitest run packages/core/test/skill-guidance.test.ts
       - run: pnpm exec vitest run packages/core/test/extensions.test.ts packages/cli/test/extensions-runtime.test.ts
+      - run: pnpm exec vitest run packages/core/test/extension-failure.test.ts
       - run: pnpm exec vitest run packages/memory/test/windows-memory-replace.test.ts
       # Repeat the original real-process regression after its full-suite execution above.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts -t 'conserves shared facts'

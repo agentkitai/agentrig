@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.ts";
@@ -117,4 +118,31 @@ it("registered extension hooks stay advisory and child agents inherit neither to
   const child = requests.find(r => !r.tools.some(t => t.name === "hello_tool"))!;
   expect(child).toBeDefined(); expect(child.system).not.toContain("extension hint");
   expect(child.systemContexts?.some(c => c.principal.startsWith("hook:ext:"))).not.toBe(true);
+});
+
+it("idle TUI command failure disables shared handlers and audits only the next active run", async () => {
+  const f = await fixture();
+  const path = await extensionFixture(f.root, "failing", `export let calls=0;
+export function activate(ctx){ctx.registerCommand({name:"failing",summary:"fail once",run(){calls++;throw new Error("idle command failure")}});
+ctx.hooks.on("pre_model",()=>{calls++;return {action:"continue"}})}`);
+  const built = await build(f, ["--extension", path]);
+  const controller = new TuiController({ cwd: f.cwd, agent: built.agent }); controller.setCommands(built.commands ?? []);
+  const store = new SessionStore({ root: join(f.root, "logs") });
+  await controller.submit("first run");
+  const id = controller.snapshot().sessionId!; const before = await store.readAll(id);
+  expect(before.at(-1)?.type).toBe("session.end");
+  await controller.submit("/failing"); await controller.submit("/failing");
+  expect(await store.readAll(id)).toEqual(before);
+  const visible = controller.snapshot().lines.map(line => line.text).join("\n");
+  expect(visible).toContain("idle command failure"); expect(visible).toContain("disabled until a new agent build");
+  await controller.submit("next run");
+  const after = await store.readAll(controller.snapshot().sessionId!);
+  const failures = after.filter(e => e.type === "extension.error");
+  expect(failures).toHaveLength(1); expect(failures[0]).toMatchObject({ phase: "command", surface: "failing", disabled: true });
+  expect(renderEvent(failures[0]!)).toContain("(disabled)");
+  const loaded = after.filter(e => e.type === "extension.loaded").at(-1)!;
+  expect(loaded).toMatchObject({ disabled: true }); expect(renderEvent(loaded)).toContain("not reactivated");
+  expect(after.at(-1)?.type).toBe("session.end");
+  const module = await import(pathToFileURL(path).href); expect(module.calls).toBe(2);
+  await controller.shutdown();
 });

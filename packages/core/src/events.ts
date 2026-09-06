@@ -355,11 +355,13 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("extension.loaded"),
     name: z.string(), path: z.string(),
+    disabled: z.literal(true).optional(),
     surfaces: z.object({ hooks: z.array(z.string()), tools: z.array(z.string()), commands: z.array(z.string()) }),
   }),
   z.object({
     type: z.literal("extension.error"),
-    name: z.string(), path: z.string(), phase: z.enum(["manifest", "import", "activate"]), message: z.string(),
+    name: z.string(), path: z.string(), phase: z.enum(["manifest", "import", "activate", "hook", "tool", "command"]), message: z.string(),
+    surface: z.string().optional(), disabled: z.literal(true).optional(),
   }),
   z.object({
     type: z.literal("skill.used"),

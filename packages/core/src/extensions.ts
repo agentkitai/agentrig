@@ -7,6 +7,7 @@ import { ExtensionManifestV1, resolveManifestNames, validateExtensionSurfaces } 
 import { DEFAULT_HOOK_TIMEOUT_MS, HookPoint, type Hook } from "./hooks.js";
 import { sanitizeLine } from "./tools/skills.js";
 import type { AnyTool, ToolContext } from "./tool.js";
+import { createExtensionOwner, extensionCallback, extensionDisabled, extensionHandler, ownExtension } from "./extension-runtime.js";
 
 export interface ExtensionCommand {
   name: string;
@@ -112,6 +113,7 @@ export async function loadExtensions(options: {
     } catch (error) { fail(candidate, "manifest", error); }
   }
   for (const candidate of validated) {
+    const owner = createExtensionOwner(candidate, options.onNotice);
     let phase: FailedExtension["phase"] = "import";
     let sealed = false; let draftError: unknown; let draftFailed = false;
     const hooks: Hook[] = []; const tools: AnyTool[] = []; const commands: ExtensionCommand[] = [];
@@ -130,8 +132,9 @@ export async function loadExtensions(options: {
         guard("hooks", () => {
           HookPoint.parse(point); if (typeof handler !== "function") throw new Error("hook handler must be a function");
           const limit = z.number().int().positive().parse(opts?.timeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS);
-          hooks.push(Object.freeze({ point, handler, id: `ext:${candidate.name}:${point}:${hooks.length}`,
-            timeoutMs: Math.min(limit, DEFAULT_HOOK_TIMEOUT_MS) }));
+          const registered: Hook = { point, handler: ctx => extensionDisabled(registered) ? { action: "continue" } : handler(ctx),
+            id: `ext:${candidate.name}:${point}:${hooks.length}`, timeoutMs: Math.min(limit, DEFAULT_HOOK_TIMEOUT_MS) };
+          hooks.push(ownExtension(Object.freeze(registered), owner));
         });
       } }),
       registerTool(tool: AnyTool) { guard("tools", () => {
@@ -146,12 +149,31 @@ export async function loadExtensions(options: {
         z.record(z.unknown()).parse(schema); JSON.stringify(schema);
         const execute = tool.execute;
         // JS authors may return synchronously; the core lifecycle requires a real Promise.
-        tools.push(Object.freeze({ ...tool, execute: async (input: unknown, ctx: ToolContext) => execute.call(tool, input, ctx) }));
+        const registered: AnyTool = { ...tool,
+          execute: (input: unknown, ctx: ToolContext) => extensionHandler(owner, "tool", `${tool.name}.execute`, () => execute.call(tool, input, ctx), ctx.signal) };
+        for (const key of ["permission", "paths", "effects", "operation"] as const) {
+          const callback = tool[key];
+          if (typeof callback === "function") Object.assign(registered, {
+            [key]: extensionCallback(owner, `${tool.name}.${key}`, callback.bind(tool)),
+          });
+        }
+        if (tool.hasBackgroundWork !== undefined) registered.hasBackgroundWork = extensionCallback(owner,
+          `${tool.name}.hasBackgroundWork`, tool.hasBackgroundWork.bind(tool), () => true);
+        if (tool.resultSource !== undefined && typeof tool.resultSource !== "string") registered.resultSource = {
+          file: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.file.bind(tool.resultSource)),
+        };
+        // Normal zod validation failures remain data, not a thrown extension fault.
+        registered.inputSchema = new Proxy(tool.inputSchema, { get(target, key, receiver) {
+          const value = Reflect.get(target, key, receiver);
+          if (key !== "safeParse" || typeof value !== "function") return value;
+          return extensionCallback(owner, `${tool.name}.inputSchema`, value.bind(target));
+        } });
+        tools.push(ownExtension(Object.freeze(registered), owner));
       }); },
       registerCommand(command: ExtensionCommand) { guard("commands", () => {
         const parsed = CommandShape.parse(command);
         if (commandNames.has(parsed.name) || commands.some(c => c.name === parsed.name)) throw new Error(`reserved/duplicate command ${parsed.name}`);
-        commands.push(Object.freeze({ name: parsed.name, run: parsed.run, summary: sanitizeLine(parsed.summary, 200),
+        commands.push(Object.freeze({ name: parsed.name, run: (args: string, io: Parameters<ExtensionCommand["run"]>[1]) => extensionHandler(owner, "command", parsed.name, () => parsed.run(args, io)), summary: sanitizeLine(parsed.summary, 200),
           ...(parsed.args === undefined ? {} : { args: sanitizeLine(parsed.args, 80) }) }));
       }); },
       log(message: string) { options.onNotice(`extension ${candidate.name}: ${sanitizeLine(String(message), 1024)}`); },
@@ -173,8 +195,8 @@ export async function loadExtensions(options: {
       if (draftFailed) throw draftError;
       for (const tool of tools) toolNames.add(tool.name.toLowerCase());
       for (const command of commands) commandNames.add(command.name);
-      result.loaded.push({ name: candidate.name, path: candidate.path, hooks, tools, commands,
-        surfaces: { hooks: hooks.map(h => h.point), tools: tools.map(t => t.name), commands: commands.map(c => c.name) } });
+      result.loaded.push(ownExtension({ name: candidate.name, path: candidate.path, hooks, tools, commands,
+        surfaces: { hooks: hooks.map(h => h.point), tools: tools.map(t => t.name), commands: commands.map(c => c.name) } }, owner));
     } catch (error) { fail(candidate, phase, error); }
     finally { sealed = true; if (timer !== undefined) clearTimeout(timer); }
   }
