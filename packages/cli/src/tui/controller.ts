@@ -506,12 +506,15 @@ export class TuiController {
 
   /** What has a standing answer, and how to take it back. */
   private describeStanding(): string {
-    const grants = this.permissionGrants.list();
+    const grants = this.permissionGrants.inspect();
     if (grants.length === 0) {
       return "nothing has a standing answer — every request is asked. `a` at a prompt makes one standing.";
     }
-    const lines = grants.map(grant => `  ${grant.decision === "allow" ? "allow" : "deny "} ${grant.operation.tool}`);
-    return [...lines, "/permissions reset clears these"].join("\n");
+    const now = Date.now();
+    const lines = grants.map(({ grant, matchedDecisions, countSaturated, auditBlocked }) =>
+      `  ${grant.decision === "allow" ? "allow" : "deny "} ${JSON.stringify(grant.operation.tool)} id=${grant.id} age=${Math.max(0, Math.floor((now - grant.createdAt) / 1000))}s matched-decisions=${countSaturated ? ">=" : ""}${matchedDecisions}${auditBlocked ? " [audit blocked]" : ""}\n` +
+      `    scope=${JSON.stringify({ operation: grant.operation, resource: grant.resource, constraints: grant.constraints, duration: grant.duration, subject: grant.subject, delegable: grant.delegable })}`);
+    return [...lines, "Counts are matched allow/deny decisions, not executions; previews do not count. Child sharing remains in effect.", "/permissions revoke <exact-id> revokes one; /permissions reset clears these. Already-running tools are not cancelled."].join("\n");
   }
 
   private resetGrants(reason: string): number | undefined {
@@ -643,7 +646,13 @@ export class TuiController {
         }
         return true;
       case "permissions":
-        if (cmd.reset) {
+        if (cmd.invalid) this.print("usage: /permissions [reset | revoke <exact-id>]", "error");
+        else if (cmd.revoke !== undefined) {
+          try {
+            const revoked = this.permissionGrants.revoke(cmd.revoke, "explicit-revoke");
+            this.print(revoked ? `revoked grant ${cmd.revoke}; applies to the next permission decision, not already-running tools` : `no live grant with exact id ${JSON.stringify(cmd.revoke)}`, revoked ? "system" : "error");
+          } catch (error) { this.print(`permission revocation failed: ${String(error)}`, "error"); }
+        } else if (cmd.reset) {
           const had = this.resetGrants("explicit-reset");
           if (had === undefined) return true;
           this.print(had === 0 ? "nothing to reset" : `cleared ${had} standing answer(s)`, "system");

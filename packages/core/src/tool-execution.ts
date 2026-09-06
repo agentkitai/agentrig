@@ -14,6 +14,8 @@ import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
+import { evaluatePermissionPolicy } from "./permissions.js";
+import type { PermissionDecisionSource } from "./permission-attribution.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -266,18 +268,30 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   };
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
-  let decision = await config.permissions.decide(permReq);
+  const evaluated = await evaluatePermissionPolicy(config.permissions, permReq);
+  let decision = evaluated.decision;
+  let decisionSource: PermissionDecisionSource = evaluated.source;
   await config.permissionGrants?.flush(emit);
   if (decision === "ask" && config.permissionGrants !== undefined) {
-    decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq, true) : "deny";
+    if (config.permissionGrants.context.sessionId !== context.grantSessionId) {
+      decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-session-changed" };
+    } else {
+      const authorization = config.permissionGrants.authorize(permReq);
+      decision = authorization.decision;
+      if (authorization.grantId !== undefined) decisionSource = { kind: "grant", grantId: authorization.grantId };
+      else if (authorization.auditBlocked) decisionSource = { kind: "boundary", reason: "grant-audit-blocked" };
+    }
   }
-  await emit({ type: "permission.decision", d: decision });
+  await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
   if (decision === "ask") {
     decision = config.onAsk ? await config.onAsk(permReq) : "deny";
+    decisionSource = config.onAsk ? { kind: "approval-handler" } : { kind: "unattended" };
     if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
-    if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
-    await emit({ type: "permission.decision", d: decision });
+    if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) {
+      decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-session-changed" };
+    }
+    await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
   }
   if (decision === "deny") {
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });

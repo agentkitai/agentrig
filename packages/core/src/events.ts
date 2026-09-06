@@ -4,6 +4,7 @@ import { SandboxMode } from "./sandbox.js";
 import { ShellOperationSchema } from "./shell-operation.js";
 import { PermissionClass, Decision } from "./permission-types.js";
 import { PermissionGrantEventSchema } from "./permission-grants.js";
+import { PermissionDecisionSourceSchema } from "./permission-attribution.js";
 export { PermissionClass, Decision } from "./permission-types.js";
 
 /**
@@ -290,7 +291,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     tree:z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),recovery:z.string().min(1),
   }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
-  z.object({ type: z.literal("permission.decision"), d: Decision }),
+  z.object({ type: z.literal("permission.decision"), d: Decision,
+    toolUseId: z.string().optional(), tool: z.string().optional(), source: PermissionDecisionSourceSchema.optional() }),
   ...PermissionGrantEventSchema.options,
   z.object({
     type: z.literal("context.compact"),

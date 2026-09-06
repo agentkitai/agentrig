@@ -19,6 +19,7 @@ export const PermissionGrantSchema = z.object({
 }).strict();
 export type PermissionGrant = z.infer<typeof PermissionGrantSchema>;
 export type PermissionGrantSpec = Omit<PermissionGrant, "id" | "createdAt">;
+export interface GrantAuthorization { decision: "allow" | "deny" | "ask"; grantId?: string; auditBlocked?: boolean }
 export const PermissionGrantEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("permission.granted"), grant: PermissionGrantSchema }),
   z.object({ type: z.literal("permission.revoked"), grantId: Name, subject: Name, reason: Name }),
@@ -55,6 +56,7 @@ export function permissionGrantCoversRequest(grant: PermissionGrantSpec, req: Pe
 export class PermissionGrantRegistry {
   readonly subject = randomUUID();
   private readonly grants = new Map<string, PermissionGrant>();
+  private readonly matchedDecisions = new Map<string, number>();
   private readonly pending: PermissionGrantEvent[] = [];
   private draining: Promise<void> | undefined;
   private sessionId: string | undefined;
@@ -74,6 +76,16 @@ export class PermissionGrantRegistry {
     return { subject: this.subject, ...(this.sessionId === undefined ? {} : { sessionId: this.sessionId }), ...(this.taskId === undefined ? {} : { taskId: this.taskId }) };
   }
   list(): PermissionGrant[] { return structuredClone([...this.grants.values()]); }
+  /** Live records only. Pure inspection never counts as an authorization decision. */
+  inspect(): Array<{ grant: PermissionGrant; matchedDecisions: number; countSaturated: boolean; auditBlocked: boolean }> {
+    return this.list().filter(grant => this.live(grant)).map(grant => {
+      const matchedDecisions = this.matchedDecisions.get(grant.id) ?? 0;
+      return { grant, matchedDecisions, countSaturated: matchedDecisions === Number.MAX_SAFE_INTEGER, auditBlocked: this.auditBlocked };
+    });
+  }
+  private live(grant: PermissionGrant): boolean {
+    return grant.subject === this.subject && grant.duration.id === (grant.duration.kind === "session" ? this.sessionId : this.taskId);
+  }
   private reserve(count: number): void {
     if (this.pending.length + count > (this.limits.maxPending ?? 1024)) {
       this.auditBlocked = true;
@@ -105,7 +117,7 @@ export class PermissionGrantRegistry {
     if (grant.subject !== this.subject || grant.duration.id !== (grant.duration.kind === "session" ? this.sessionId : this.taskId)) throw new Error("grant does not belong to the current live subject/duration");
     if (this.grants.size >= (this.limits.maxGrants ?? 256)) throw new Error("permission grant registry is full");
     this.reserve(1);
-    this.grants.set(grant.id, grant); this.pending.push({ type: "permission.granted", grant: structuredClone(grant) });
+    this.grants.set(grant.id, grant); this.matchedDecisions.set(grant.id, 0); this.pending.push({ type: "permission.granted", grant: structuredClone(grant) });
     return structuredClone(grant);
   }
   remember(req: PermissionRequest, decision: "allow" | "deny"): PermissionGrant {
@@ -118,7 +130,7 @@ export class PermissionGrantRegistry {
     Name.parse(reason);
     const grant = this.grants.get(id); if (grant === undefined) return false;
     this.reserve(1);
-    this.grants.delete(id); this.version++; this.pending.push({ type: "permission.revoked", grantId: id, subject: grant.subject, reason });
+    this.grants.delete(id); this.matchedDecisions.delete(id); this.version++; this.pending.push({ type: "permission.revoked", grantId: id, subject: grant.subject, reason });
     return true;
   }
   clear(reason = "explicit-reset"): number {
@@ -142,13 +154,25 @@ export class PermissionGrantRegistry {
     try { await promise; } finally { if (this.draining === promise) this.draining = undefined; }
   }
   decide(req: PermissionRequest, auditRequired = false): "allow" | "deny" | "ask" {
-    if (separateConsent(req)) return "ask";
-    if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return "deny";
+    return this.match(req, auditRequired).decision;
+  }
+  /** Count matched allow/deny decisions, not executions. The core calls this once only when
+   * base policy asks; inspection, proposals and TUI peeks keep using pure decide()/scope match. */
+  authorize(req: PermissionRequest, auditRequired = true, countMode: "all" | "deny-only" = "all"): GrantAuthorization {
+    const result = this.match(req, auditRequired);
+    // A separate fresh-consent gate may honor an existing deny while overriding any allow.
+    // Count only the decision actually consumed; never count its inspected allow as authority.
+    if (result.grantId !== undefined && (countMode === "all" || result.decision === "deny")) this.matchedDecisions.set(result.grantId, Math.min(Number.MAX_SAFE_INTEGER, (this.matchedDecisions.get(result.grantId) ?? 0) + 1));
+    return result;
+  }
+  private match(req: PermissionRequest, auditRequired: boolean): GrantAuthorization {
+    if (separateConsent(req)) return { decision: "ask" };
+    if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return { decision: "deny", auditBlocked: true };
     for (const grant of this.grants.values()) {
-      if (grant.subject !== this.subject || grant.duration.id !== (grant.duration.kind === "session" ? this.sessionId : this.taskId)) continue;
+      if (!this.live(grant)) continue;
       if (!permissionGrantCoversRequest(grant, req)) continue;
-      return grant.decision;
+      return { decision: grant.decision, grantId: grant.id };
     }
-    return "ask";
+    return { decision: "ask" };
   }
 }

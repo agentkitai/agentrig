@@ -1,11 +1,30 @@
 # Status
 
-Active implementation queue: **R12b scoped approval UI is implemented, pending delivery gates; R6g is done with green post-merge CI (PR #153); R13d PR #154 is merged, pending main CI; R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R12b implemented — pending delivery gates
+### R12c implemented — pending delivery gates
+
+Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
+`/permissions revoke <exact-id>` changes the next decision without cancelling running tools.
+Optional same-call policy receipts preserve custom/subclass compatibility and identify actual
+rules/fallbacks without re-evaluation. Runtime grant matching counts consumed allow/deny
+decisions, never previews; denial-only consumption supports separately gated fresh consent.
+Correlated optional event sources drive visible rule/grant/handler/unknown explanations.
+Malformed/mismatched/multiple/late reports cannot manufacture attribution. [Contract](plans/R12c.md).
+
+Actual Ink/CLI/inert-shell tests inspect a counted grant, revoke its exact ID and observe the
+next request ask/deny. First prompted call is handler-decided, subsequent match counts once;
+failed tool execution still counts its authorization, while previews/base rules do not.
+H6 snapshots add only source/correlation fields, preserving existing trace order and content.
+Build/typecheck/full tests, restored mutations, one bounded review and current-head CI gate delivery.
+
+### R12b done — PR #155; post-merge CI green
+
+Merge `326acdb` passed all three post-merge platforms in CI 34024734696; prior PR head
+`eaae698` passed all three in CI 34024445722. Following pending notes are implementation history.
 
 The TUI explains declared paths/class/argv separately from unknown effects and network access.
 Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
@@ -36,7 +55,10 @@ R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 340
 the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
 delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
 
-### R13d merged — PR #154; main CI pending
+### R13d done — PR #154; post-merge CI green
+
+Merge `2ad720f` passed all three post-merge platforms in CI 34024190216 after green PR #154.
+Following validation notes are implementation history, not outstanding gates.
 
 Runtime context principals distinguish source trust, instruction authority and tool permissions.
 All accepted hook injection/modification surfaces use collision-safe registered identities;
