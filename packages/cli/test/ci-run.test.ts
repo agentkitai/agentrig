@@ -113,10 +113,11 @@ it("actual configured YOLO and unsafe source/output links refuse before provider
   const output = await actual(root, ["--task-file", "task.txt", "--report", "output-link"], { content: "must not call" });
   expect(output.code).toBe(1); expect(output.bodies).toHaveLength(0); expect(await readFile(join(root, "task.txt"), "utf8")).toBe("Inspect the task safely.");
 }, 30_000);
-it("the documented dedicated profile is usable and its smaller configured caps reach the actual CLI", async () => {
+it.each(["LF", "CRLF"])("the documented dedicated profile (%s) is usable and its smaller configured caps reach the actual CLI", async newline => {
   const root = await fixture(); await mkdir(join(root, ".agentrig"));
-  const guide = await readFile(new URL("../../../docs/CI-MODE.md", import.meta.url), "utf8");
-  const config = guide.match(/```json\n([\s\S]*?)\n```/)?.[1]; expect(config).toBeDefined();
+  const source = await readFile(new URL("../../../docs/CI-MODE.md", import.meta.url), "utf8");
+  const guide = source.replace(/\r\n/g, "\n").replace(/\n/g, newline === "CRLF" ? "\r\n" : "\n");
+  const config = guide.match(/```json\r?\n([\s\S]*?)\r?\n```/)?.[1]; expect(config).toBeDefined();
   await writeFile(join(root, ".agentrig", "config.json"), config!);
   const result = await actual(root, ["--trust", "--profile", "ci", "--task-file", "task.txt", "--report", "profile.md"], { content: "profile handled" });
   expect(result.code, result.stderr).toBe(0); expect(result.bodies).toHaveLength(1);
