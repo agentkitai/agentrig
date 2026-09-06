@@ -13,6 +13,9 @@ import {
   RulePolicy,
   SessionStore,
   discoverSkills,
+  discoverExtensions,
+  loadExtensions,
+  type ExtensionCommand,
   skillsInjection,
   skillTool,
   subagentTool,
@@ -49,6 +52,7 @@ import { McpClient, FileMcpPins, connectServers, type McpServerConfig } from "@a
 import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
+import { RESERVED_COMMAND_NAMES } from "./tui/commands.js";
 
 function promptBlocks(options: {
   system: string;
@@ -116,6 +120,10 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  extension?: string[];
+  /** Build cwd supplied by CLI config resolution, not provider credentials or session state. */
+  extensionCwd?: string;
+  extensionDiscovery?: boolean;
   root: string;
   memory?: string;
   system?: string;
@@ -246,6 +254,7 @@ export interface BuiltAgent {
   tools: AnyTool[];
   /** The discovered skill catalogue, so the TUI can serve /skills and /<skill-name> (issue #62). */
   skills: Skill[];
+  commands?: Array<ExtensionCommand & { extension: string }>;
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
   /** Connected MCP servers, so the caller can shut them down when the session ends. */
@@ -395,6 +404,13 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  const extensionCandidates = [
+    ...(opts.extension ?? []).map(path => ({ path, precedence: 0 })),
+    ...(opts.extensionDiscovery !== false && opts.trustedProjectRoot !== undefined ? await discoverExtensions(opts.trustedProjectRoot) : []),
+  ];
+  if (extensionCandidates.length > 0 && opts.sandbox !== undefined && opts.sandbox !== "none") {
+    throw new Error("extensions execute ambient host code outside the sandbox; remove extensions or explicitly select --sandbox none (YOLO does not override this)");
+  }
   if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.mcpConfig !== undefined) {
     throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
   }
@@ -548,7 +564,19 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     );
   }
 
+  const extensions = await loadExtensions({ candidates: extensionCandidates,
+    session: { cwd: opts.extensionCwd ?? process.cwd(), provider: { id: provider.id, model: provider.model } },
+    builtinToolNames: new Set(tools.map(tool => tool.name)), reservedCommandNames: RESERVED_COMMAND_NAMES,
+    onNotice: extras.onNotice ?? (message => console.error(message)),
+  });
+  hooks.push(...extensions.loaded.flatMap(extension => extension.hooks));
+  tools.push(...extensions.loaded.flatMap(extension => extension.tools));
+  const commands = extensions.loaded.flatMap(extension => extension.commands.map(command => ({ ...command, extension: extension.name })));
+  for (const command of commands) if (skills.some(skill => skill.name.toLowerCase() === command.name)) {
+    (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
+  }
   const agent = createAgent({
+    extensions,
     provider,
     tools,
     ...(opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: opts.trustedProjectRoot }),
@@ -573,6 +601,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, providers, tools, skills, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

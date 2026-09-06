@@ -103,6 +103,30 @@ These flags are available on both `run` and the interactive TUI (and on `session
 
 ## Development
 
+### Trusted extensions
+
+`--extension ./hello.mjs` activates a local ES module with a mandatory `hello.json` sidecar.
+Trusted projects also load `.agentrig/extensions/*.mjs`; `--no-extension-discovery` disables
+that discovery. **This is ambient host code with access to credentials, environment and files,
+not sandboxed code.** Startup prints this warning before import and refuses extensions unless
+the sandbox is `none`, independently of YOLO. No home discovery or automatic package download.
+
+```json
+{"name":"hello","version":"1","apiVersion":1,"surfaces":["commands"]}
+```
+
+```js
+// hello.mjs — /hello World in the TUI prints a greeting
+export function activate(ctx) {
+  ctx.registerCommand({ name: "hello", summary: "Say hello",
+    run(args, io) { io.print(`Hello ${args}`); } });
+}
+```
+
+The [R5a contract](docs/plans/R5a.md) covers hooks/tools, manifest limits, atomic activation,
+CLI/config precedence, session receipts and child non-inheritance. Failed activation publishes
+no partial surfaces; runtime cross-surface disabling is the separate R5b roadmap item.
+
 Sandbox modes constrain supported tool effects, not arbitrary JavaScript in the harness process.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
 tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
