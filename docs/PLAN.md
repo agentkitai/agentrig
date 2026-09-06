@@ -174,6 +174,12 @@ of each run (including resume) with that tool asks for a check per item, without
 prompts or manufacturing fresh user consent. Tool/session/plan displays retain declarations and mark missing or declared checks
 unverified. Status done is not proof; evidence association/grading remain R14b/R14c. See [R14a](plans/R14a.md).
 
+R14b adds internal foreground command outcome receipts to canonical tool results and a bounded
+`SupervisorState.planEvidence` attempt view. Exact `<command> exits <integer>` declarations can
+associate same-call observed exits; unsupported checks, missing receipts and incomplete attempts
+remain unknown. Candidate observations never prove semantic acceptance. Latest failure/unknown
+must not be hidden by an earlier matching exit. See [R14b](plans/R14b.md); grading remains R14c.
+
 ### 2.6 Agent + session
 
 ```ts

@@ -1,11 +1,23 @@
 # Status
 
-Active implementation queue: **R14a is merged (PR #162), pending post-merge CI; H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14b candidate evidence association is implemented, pending delivery gates; R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R12d implemented — pending delivery gates
+### R14b implemented — delivery gates pending
+
+Exact command-exit declarations associate with immutable internal foreground execution receipts
+in a bounded supervisor attempt ledger. Later failure/unknown never borrows earlier success;
+unsupported declarations and semantic acceptance remain unverified. Actual attach/store/replay,
+resume, hook replacement, background/timeout and spoof/copy discrimination are covered.
+[Contract](plans/R14b.md). This follows delivered R14a, independent of H7b's sandbox classifier
+repair and completed R12d child grant views; it does not add grading or automatic check execution.
+
+### R12d done — PR #163
+
+Merged main `2df8c25` passed all three post-merge jobs in CI `34029019887`; historical
+checkpoints below remain implementation records.
 
 Live child views share bounded records/audit/counters but match only own or delegable ancestor
 grants. Root/sibling authorization never consumes child-owned records. Views and runtime context
@@ -44,7 +56,10 @@ rendering and both CI selections. Build/typecheck/full combined checks pass 2,35
 two skips across 130 files (four workers, 31 seconds). R14a post-merge and this updated exact-head
 CI remain merge gates; no additional general review for mechanical integration.
 
-### R14a merged — PR #162; post-merge CI pending
+### R14a done — PR #162
+
+Final head `7f1efb6` passed CI `34028325527`; merged main `fc8327e` passed all three jobs
+in post-merge CI `34028652558`. [Final receipt](https://github.com/agentkitai/agentrig/pull/162#issuecomment-5558767896).
 
 Merge `fc8327e` follows green exact-head CI. The gate notes below are implementation history.
 
