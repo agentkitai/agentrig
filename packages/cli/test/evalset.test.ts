@@ -91,7 +91,9 @@ describe("E1 independent outcome checks", () => {
     expect(source.split(before)).toHaveLength(2);
     await writeFile(file, source.replace(before, id === "A1" ? "xs.map(String)" : 'return [...out.values()].filter((h) => h.via !== "index").sort'));
     failed(worker(id, path));
-  });
+    // Includes a real dist/dependency copy plus two bounded worker processes, not a
+    // five-second product latency contract (Windows main CI34039249249 took 6.261s).
+  }, 30_000);
 
   it("A3 requires a real extraction and compatible identities, not just passing old tests", async () => {
     failed(worker("A3", root));

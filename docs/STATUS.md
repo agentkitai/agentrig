@@ -1,5 +1,14 @@
 # Status
 
+Active repair: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
+main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
+Post-main `34039249249` then failed the unchanged A1 outer five-second test timeout
+on Windows (6,261 ms); Linux/macOS passed. The separate test-only repair preserves
+all seeded-regression assertions and subprocess bounds. A controlled delayed
+fixture failed before and passed after the explicit outer bound, then the delay
+was removed. [Evidence and contract](plans/evalset-fixture-bound.md). No blind rerun;
+R7b remains paused until the repaired-main gate is green.
+
 Active independent row: **R7a explicit scheduler ticks**. R10a PR #174 is done on main
 `391514b` with all-three post-merge CI `34037504297`
 ([receipt](https://github.com/agentkitai/agentrig/pull/174#issuecomment-5559723561)).
