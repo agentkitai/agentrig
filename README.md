@@ -47,6 +47,11 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 
 ## Commands
 
+- `agentrig run --ci --task-file task.txt --report report.md` — explicit bounded
+  non-interactive task-file/event mode; unresolved asks fail closed and reports
+  never overwrite existing files. Optional PR comments require an explicit target
+  and exec/net authorization. [CI mode and Actions example](docs/CI-MODE.md).
+
 - `agentrig review [--base main | --pr 12] [--comment]` — one bounded advisory
   supervisor-role diff review; `/review` does the same while the TUI is idle.
   Default includes tracked HEAD-to-worktree text changes only (not untracked files).

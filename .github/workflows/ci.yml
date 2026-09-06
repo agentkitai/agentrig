@@ -128,6 +128,7 @@ jobs:
       # Real local HTTP/OAuth, exact catalogue consent, advisory prompt and ACP refusal controls.
       - run: pnpm exec vitest run packages/core/test/mcp-remote.test.ts packages/core/test/mcp-oauth.test.ts packages/cli/test/mcp-remote-runtime.test.ts packages/cli/test/mcp-login.test.ts packages/cli/test/acp-config.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/diff-review.test.ts packages/cli/test/review.test.ts packages/cli/test/tui-visible.test.ts
+      - run: pnpm exec vitest run packages/cli/test/ci-run.test.ts
       - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/net-permission.test.ts packages/cli/test/net-permission.test.ts
       - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts
