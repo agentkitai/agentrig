@@ -1,6 +1,9 @@
 # Status
 
-Active repair: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
+Active row: **R10b bounded parallel scheduling**, from green R10a main `391514b`.
+R9a and R7a are merged (PRs #175/#176); their gate receipts are recorded below. [R10b contract](plans/R10b.md).
+
+Merged repair #178; post-main gate pending: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
 main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
 Post-main `34039249249` then failed the unchanged A1 outer five-second test timeout
 on Windows (6,261 ms); Linux/macOS passed. The separate test-only repair preserves
@@ -13,21 +16,33 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Exact-head three-platform CI and the repaired-main post-merge gate are next.
 
-Active independent row: **R7a explicit scheduler ticks**. R10a PR #174 is done on main
-`391514b` with all-three post-merge CI `34037504297`
-([receipt](https://github.com/agentkitai/agentrig/pull/174#issuecomment-5559723561)).
-R14d PR #172 is done on main `326aa4a`, post-CI `34036971032` all green
-([receipt](https://github.com/agentkitai/agentrig/pull/172#issuecomment-5559667531)).
-R5c PR #170 is done on main `1ae6b77`, post-CI `34036244589` all green.
-R7a reuses completed permission/provenance/lifecycle foundations and does not depend on
-parallel R9a export or R10b concurrency. R15i still gates default unattended enablement.
-
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is merged (PR #175), post-merge CI pending; R7a is in progress; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI failed an evaluation-fixture timeout; separate test repair gates continuation; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R7a implemented — delivery gates pending
+### R10b implemented — delivery gates pending
+
+Opt-in bounded declared read/write concurrency with final-input admission, FIFO barriers,
+serialized approval/audit and joined pipeline settlement. Sequential remains default;
+unknown effects, hooks/checkpoints and background writers are conservative exclusive cases.
+One bounded review approved; author-found directory/name/queued-prompt fixes each have
+fail-before/pass-after runtime controls. Original verdict and accurate attribution are retained.
+R7a main `bf65aec` is integrated; scheduled outside writes remain fresh-consent gated even
+with blanket permission allow and parallel scheduling. Final build/typecheck/full pass
+2,625 plus two skips / 150 files (four workers, 37 seconds); exact-head CI follows.
+Main's separate evaluation-fixture repair must pass post-merge CI before feature delivery.
+Repair #178/main `90301f8` is now integrated. The final conservative missing-name allowlist
+and real `new~1` fail-before/pass-after control are included; no second broad review.
+Combined build/typecheck, 56 focused and full 2,626 plus two skips / 150 files pass
+(four workers, 38s). Repair post-main CI 34040182760 and the new exact-head CI gate delivery.
+[Contract](plans/R10b.md).
+
+### R7a merged — PR #176; post-merge fixture gate failed
+
+Main `bf65aec` is integrated; CI 34039249249 failed the unchanged A1 real-copy fixture's
+five-second outer bound. A separate test-only repair gates continuation; no initial-green
+claim. Following implementation notes are history.
 
 Plain bounded JSON and five-field UTC cron; preview is model-free, execution is explicit
 and requires canonical project trust. Cooperative claim-before-dispatch serializes ticks;
@@ -44,7 +59,9 @@ tests and done markers. Combined build/typecheck/full passes 2,597 plus two skip
 149 files (four workers, 36 seconds). Exact-head PR CI and post-merge gates remain pending;
 R9a's own post-main gate is not yet claimed green. No second broad review for integration.
 
-### R9a implemented — delivery gates pending
+### R9a done — PR #175; post-merge CI green
+
+Main `a99f3ec` passed all three platforms in CI 34038597415. Following notes are history.
 
 Local `sessions export` reuses the real fork/compaction message fold through bounded, stable,
 finished physical logs. JSONL, ShareGPT and Markdown retain versioned canonical supported-content

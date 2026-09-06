@@ -240,6 +240,12 @@ exported `sequential` remains the default. The loop retains continuation/compact
 handling, never passes truncated calls to a strategy, and preserves existing abort boundaries.
 No arbitrary strategy loading or concurrency is enabled. See [R10a](plans/R10a.md).
 
+R10b adds opt-in trusted SDK `parallel({ maxConcurrency })`: bounded declared read/write
+hazard leases after final input validation, FIFO conflicts/exclusive barriers, serialized
+authorization/prompts and joined pipelines. Unknown effects, hooks/checkpointers and active
+background writers remain conservative exclusive cases. Sequential stays default; scheduling
+is cooperative, not OS isolation. See [R10b](plans/R10b.md) for path and cancellation limits.
+
 ### 2.7 Hooks
 
 ```ts
