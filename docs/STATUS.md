@@ -56,7 +56,9 @@ Main's separate evaluation-fixture repair must pass post-merge CI before feature
 Repair #178/main `90301f8` is now integrated. The final conservative missing-name allowlist
 and real `new~1` fail-before/pass-after control are included; no second broad review.
 Combined build/typecheck, 56 focused and full 2,626 plus two skips / 150 files pass
-(four workers, 38s). Repair post-main CI 34040182760 and the new exact-head CI gate delivery.
+(four workers, 38s). Repair post-main CI 34040182760 and the new exact-head CI gated delivery.
+Subsequently, exact head `3d25e88` passed CI34040321452 and merged main `9294681`
+passed all three platforms in CI34040691166. [Final R10b receipt](https://github.com/agentkitai/agentrig/pull/177#issuecomment-5560095038).
 [Contract](plans/R10b.md).
 
 ### R7a done — PR #176; post-merge gate restored by repair #178
