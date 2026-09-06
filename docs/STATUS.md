@@ -5,7 +5,28 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
-### R12b implemented — pending delivery gates
+### R13c implemented — validation and delivery gates pending
+
+The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
+write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
+a restriction through continuations, summaries and resume; only actual fresh user input clears it.
+No roles, hook delegation, old receipts or prose manufacture that input. Fresh consent bypasses
+allow grants, never applicable denials; grants/approval/preparation alone do not count as dispatch.
+The separate consent origin retains child provenance and cannot become a standing/scoped grant.
+The default supervisor emits a bounded, explicitly heuristic injection signal over external
+canonical content. [Contract and honest limits](plans/R13c.md).
+
+Dependency order: delivered R13a/R13b/R13d provide source/assembly/principal seams. R12b's current
+request coverage and exact scope preview are retained; R12c attribution is an additive independent
+row, not a reason to defer this guard. Actual runtime/storage/provider, built-in summary laundering,
+canonical new-file/symlink, two-path Ink consent and supervisor attachment tests are included.
+Full checks, named restored negative controls, one bounded review and exact-head CI remain gates.
+
+R13d PR #154 is done: final head `d327bdf` passed CI 34023974105; merged main `2ad720f` passed
+all three post-merge jobs in CI 34024190216. R12b PR #155 is done: main `326acdb` passed all
+three post-merge jobs in CI 34024734696. These receipts supersede their earlier pending notes below.
+
+### R12b done — PR #155; post-merge CI green
 
 The TUI explains declared paths/class/argv separately from unknown effects and network access.
 Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
@@ -36,7 +57,7 @@ R12a PR #152 is done: merge `35f37ba` passed all three post-merge jobs in CI 340
 the prior PR head `4d4620b` passed all three in CI 34022988940. This closes its prior pending
 delivery notes below; permission records and limits remain documented in [R12a](plans/R12a.md).
 
-### R13d merged — PR #154; main CI pending
+### R13d done — PR #154; post-merge CI green
 
 Runtime context principals distinguish source trust, instruction authority and tool permissions.
 All accepted hook injection/modification surfaces use collision-safe registered identities;

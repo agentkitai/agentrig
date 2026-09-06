@@ -267,9 +267,16 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     // the model — an ask that can name its own origin can lie about it.
     ...(config.origin === undefined ? {} : { origin: config.origin }),
   };
-  const surface = context.expansion === undefined ? undefined
-    : await raceAbort(expansionSurface(permReq, signal), "permission surface classification");
+  let surface: Awaited<ReturnType<typeof expansionSurface>>;
+  try {
+    surface = context.expansion === undefined ? undefined
+      : await raceAbort(expansionSurface(permReq, signal), "permission surface classification");
+  } catch (error) {
+    if (signal.aborted || isEnded()) return resultBlock("aborted during permission surface classification", true);
+    throw error;
+  }
   const freshExpansion = context.expansion?.needs(surface) === true;
+  const originalPermissionRequest = { ...permReq };
   if (freshExpansion) {
     permReq.origin = "external-input-expansion";
     permReq.expansionSurface = surface;
@@ -277,12 +284,13 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   }
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
-  let decision = await config.permissions.decide(permReq);
-  if (freshExpansion && decision !== "deny") decision = "ask";
+  let decision = await config.permissions.decide(originalPermissionRequest);
   await config.permissionGrants?.flush(emit);
-  if (decision === "ask" && config.permissionGrants !== undefined && !freshExpansion) {
-    decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq, true) : "deny";
+  if ((decision === "ask" || freshExpansion) && decision !== "deny" && config.permissionGrants !== undefined) {
+    const standing = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(originalPermissionRequest, true) : "deny";
+    if (standing === "deny" || decision === "ask") decision = standing;
   }
+  if (freshExpansion && decision !== "deny") decision = "ask";
   await emit({ type: "permission.decision", d: decision });
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion

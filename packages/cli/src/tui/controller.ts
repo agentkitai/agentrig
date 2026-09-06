@@ -350,6 +350,10 @@ export class TuiController {
       const entry: PendingPermission = {
         req,
         resolve: (d, remember, scope) => {
+          if (req.origin === "external-input-expansion" && remember === true) {
+            this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
+            return;
+          }
           if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
               if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");

@@ -23,7 +23,7 @@ export interface DefaultDetectorOptions {
   drift?: DriftOptions;
 }
 
-/** The six v1 detectors from PLAN §4.1, all heuristic and all free — no model call anywhere. */
+/** Runtime heuristic detectors, including external instruction-shape signals; no model calls. */
 export function defaultDetectors(opts: DefaultDetectorOptions = {}): Detector[] {
   return [
     loopDetector(opts.loop ?? {}),

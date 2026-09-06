@@ -126,12 +126,13 @@ describe("core grant enforcement and audit", () => {
     const before = (await store.readPrefix(session.id)).events; await new Promise<void>(resolve => setImmediate(resolve));
     expect(executed).toEqual([]); expect((await store.readPrefix(session.id)).events).toEqual(before);
   });
-  it("preserves explicitly shared child authority, with delegable still metadata until R12d", async () => {
+  it("requires fresh approval for a child's first exec despite explicitly shared grants", async () => {
     const store = await fixture(); const r = new PermissionGrantRegistry(); const id = store.create(); r.beginSession(id);
     r.grant(spec(r, { delegable: false })); const executed: string[] = [];
     const permissions = new RulePolicy([{ tool: "subagent", decision: "allow" }]);
     const subagent = subagentTool({ createAgent, childConfig: () => ({ provider: new Provider(["git status"]), tools: [tool(executed)],
-      permissions, permissionGrants: r, store, systemPrompt: "child", origin: "subagent" }) });
+      permissions, permissionGrants: r, store, systemPrompt: "child", origin: "subagent",
+      onAsk: async req => { expect(req.origin).toBe("external-input-expansion"); expect(req.sourceOrigin).toBe("subagent"); return "allow"; } }) });
     let turn = 0;
     const provider: ModelProvider = { id: "fake", model: "fake", capabilities: new Provider([]).capabilities,
       async *stream(): AsyncIterable<ModelEvent> {
