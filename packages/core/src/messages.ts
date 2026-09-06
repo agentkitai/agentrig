@@ -27,11 +27,23 @@ export const InstructionContextSchema = z.object({
 });
 export type InstructionContext = z.infer<typeof InstructionContextSchema>;
 
+/** Adapter-owned replay envelope. Core never interprets or displays opaque bytes. */
+export const ThinkingBlockSchema = z.object({
+  type: z.literal("thinking"),
+  format: z.enum(["anthropic", "openai-responses"]),
+  text: z.string().max(65_536),
+  signature: z.string().max(262_144).optional(),
+  id: z.string().max(256).optional(),
+  replay: z.string().max(262_144),
+}).refine(b => Buffer.byteLength(JSON.stringify(b)) <= 524_288, "thinking block exceeds 512 KiB");
+export type ThinkingBlock = z.infer<typeof ThinkingBlockSchema>;
+
 export type ContentBlock = { trust?: ContentTrust; context?: InstructionContext } & (
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "tool_result"; toolUseId: string; content: string | ContentBlock[]; isError?: boolean; diagnostics?: Diagnostics }
-  | { type: "image"; mediaType: string; data: string });
+  | { type: "image"; mediaType: string; data: string }
+  | ThinkingBlock);
 
 export interface Message {
   role: "user" | "assistant";
@@ -43,6 +55,7 @@ export interface Message {
 export const ContentBlockSchema: z.ZodType<ContentBlock> = z.lazy(
   () =>
     z.union([
+      ThinkingBlockSchema.and(z.object({ trust: ContentTrustSchema.optional(), context: InstructionContextSchema.optional() })),
       z.object({ type: z.literal("text"), text: z.string(), trust: ContentTrustSchema.optional(), context: InstructionContextSchema.optional() }),
       z.object({ type: z.literal("tool_use"), id: z.string(), name: z.string(), input: z.unknown(), trust: ContentTrustSchema.optional(), context: InstructionContextSchema.optional() }),
       z.object({

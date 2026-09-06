@@ -9,10 +9,15 @@ it("real Chromium submits ACP, explicitly approves, answers a question, renders 
   const f = await runtimeFixture(async function* (_request, signal) {
     if (++turn === 1) { yield {type:"tool_use",id:"write",name:"write_file",input:{path:"browser-file",content:"explicitly approved"}}; yield {type:"stop",reason:"tool_use"}; }
     else if (turn === 2) { yield {type:"tool_use",id:"question",name:"ask_user",input:{prompt:"Pick a direction",options:["North","South"]}}; yield {type:"stop",reason:"tool_use"}; }
-    else if (turn === 3) { yield {type:"text_delta",text:canary}; yield {type:"stop",reason:"end_turn"}; }
+    else if (turn === 3) {
+      yield {type:"thinking",block:{type:"thinking",format:"anthropic",text:"PRIVATE_REASONING_CANARY",signature:"OPAQUE_SIGNATURE_CANARY",replay:JSON.stringify({type:"thinking",thinking:"PRIVATE_REASONING_CANARY",signature:"OPAQUE_SIGNATURE_CANARY"})}};
+      yield {type:"text_delta",text:canary}; yield {type:"stop",reason:"end_turn"};
+    }
     else { yield {type:"text_delta",text:"Waiting for cancellation"}; await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener("abort",()=>resolve(),{once:true}); }); yield {type:"stop",reason:"end_turn"}; }
   });
   const browser = await chromium.launch({headless:true}); const page = await browser.newPage(); const requests: string[] = []; const errors: string[] = [];
+  const frames: string[] = [];
+  page.on("websocket", socket => socket.on("framereceived", frame => frames.push(String(frame.payload))));
   page.on("request", req => requests.push(req.url())); page.on("pageerror", error => errors.push(error.message));
   try {
     await page.goto(f.server.url); await page.locator("#token").fill(f.server.token); await page.locator("#connect").click();
@@ -26,6 +31,8 @@ it("real Chromium submits ACP, explicitly approves, answers a question, renders 
     await expect.poll(()=>page.locator("#status").textContent()).toBe("Finished: end_turn");
     expect(await readFile(join(f.root,"browser-file"),"utf8")).toBe("explicitly approved");
     expect(await page.locator("#transcript").textContent()).toContain(canary);
+    expect(frames.join("\n")).not.toContain("PRIVATE_REASONING_CANARY");
+    expect(frames.join("\n")).not.toContain("OPAQUE_SIGNATURE_CANARY");
     expect(await page.locator("#transcript img, #transcript script, #transcript a").count()).toBe(0);
     expect(await page.evaluate(()=> (globalThis as {webCanary?:number}).webCanary)).toBeUndefined();
     expect(requests.every(url => url.startsWith(f.server.url))).toBe(true); expect(errors).toEqual([]);
