@@ -24,6 +24,7 @@ export function globTool(): Tool<GlobInput, string[]> {
       "Find files matching a glob pattern, sorted. node_modules and .git are skipped.",
     inputSchema: GlobInput,
     permission: "read",
+    effects: "read-only",
     paths: (input) => [input.path ?? "."],
     async execute(input, ctx): Promise<ToolResult<string[]>> {
       const cwd = resolveIn(ctx.cwd, input.path ?? ".");

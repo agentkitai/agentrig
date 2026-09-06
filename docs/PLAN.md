@@ -92,6 +92,8 @@ interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;            // JSON Schema derived for ToolSpec
   permission: PermissionClass | ((input: I) => PermissionClass);
+  effects?: 'read-only' | 'workspace' | 'background' | ((input: I) => 'read-only' | 'workspace' | 'background');
+  hasBackgroundWork?(): boolean;       // trusted integration's live unfinished-writer probe
   paths?(input: I): string[];           // declared touched paths; enables cwd-confined policy rules
   execute(input: I, ctx: ToolContext): Promise<ToolResult<O>>;
 }
@@ -187,6 +189,16 @@ hook system and a footgun: a handler that **throws** is reported and skipped, a 
 before it is applied. A hook is third-party code, so its patch is a proposal rather than an
 instruction. Each point declares which actions it accepts — `session_end` takes only `continue`,
 because the session is already over — and the first `deny` stops the chain.
+
+R4a adds opt-in `hooks: [new Checkpointer()]` for pre-mutation Git snapshots. This built-in
+safety hook runs separately after final permission approval and fails closed on errors/timeouts.
+Permission classes do not establish tool effects: only trusted `read-only` declarations skip it;
+unknown effects and foreground shell calls require capture. Raw worktree trees are retained under
+`refs/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
+`checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
+background-work refusal, coverage exclusions and host quiescence preconditions are specified in
+[R4a](plans/R4a.md). Checkpoints are SDK-only, subject to the existing host-hook sandbox restriction;
+restoration and CLI/TUI controls remain R4b/R4c.
 
 ### 2.8 Context management
 

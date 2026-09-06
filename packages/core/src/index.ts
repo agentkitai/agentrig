@@ -8,6 +8,7 @@ export * from "./permissions.js";
 export * from "./sandbox.js";
 export * from "./sandbox-providers.js";
 export * from "./hooks.js";
+export * from "./checkpointer.js";
 export * from "./agent.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";

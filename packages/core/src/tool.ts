@@ -38,6 +38,11 @@ export interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;
   permission: PermissionClass | ((input: I) => PermissionClass);
+  /** Trusted SDK effect declaration, not a permission or model/MCP annotation. Omission is
+   * potentially mutating. Only read-only calls can skip an opt-in checkpoint. */
+  effects?: "read-only" | "workspace" | "background" | ((input: I) => "read-only" | "workspace" | "background");
+  /** Trusted registry probe; unfinished work makes checkpoint ownership uncertain. */
+  hasBackgroundWork?(): boolean;
   /**
    * Trusted SDK registration only: the implementation has no unrestricted host effects and
    * routes mutations/processes through the active sandbox. Never infer this from tool names,

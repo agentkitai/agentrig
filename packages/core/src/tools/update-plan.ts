@@ -36,6 +36,7 @@ export function updatePlanTool(): AnyTool {
     // planning touches nothing on disk and reads nothing sensitive; gating it behind a
     // permission prompt would make the safest possible call the most annoying one
     permission: "read",
+    effects: "read-only",
     execute: async (input: z.infer<typeof Input>, ctx) => {
       ctx.emit({ type: "plan.updated", items: input.items });
       const rendered = input.items.map((i) => `  [${i.status}] ${i.text}`).join("\n");

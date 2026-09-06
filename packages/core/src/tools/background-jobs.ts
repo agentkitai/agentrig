@@ -276,6 +276,8 @@ export interface BashJobOutput {
 export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOutput> {
   return {
     name: "bash_job",
+    effects: "read-only", // registry status/termination does not itself edit the workspace
+    hasBackgroundWork: () => registry.ids().some(id => registry.get(id)?.exited === false),
     sandbox: "compatible",
     description:
       "Manage a background job started by `bash` with background: true. " +
