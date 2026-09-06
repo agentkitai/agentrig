@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
 import { CommandPrefixSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
@@ -120,6 +120,8 @@ const ConfigValuesSchema = z
     skills: stringList.optional(),
     /** Auto-load conventional `.agentrig/skills` directories (trusted project + home). Default on. */
     skillDiscovery: z.boolean().optional(),
+    /** Include selected-memory and safe-home generated roots. Default off; no benefit claim. */
+    generatedSkills: z.boolean().optional(),
     shell: z.string().min(1).optional(),
     repoMap: z.boolean().optional(),
   })
@@ -336,11 +338,21 @@ export async function loadRunConfig(
         ...(trust.trusted ? [join(trust.projectRoot, ".agentrig", "skills")] : []),
         ...(boundary.userStateSafe ? [join(home, ".agentrig", "skills")] : []),
       ];
+  // Generated skill discovery is a separate opt-in, not a permission/evidence receipt. Keep
+  // explicit and ordinary roots first so enabling it cannot displace existing manual skills.
+  // An explicitly selected memory directory follows the same cwd-relative rule as --memory;
+  // the default belongs to the trusted project root even when invoked from a nested cwd.
+  const selectedMemory = typeof resolved.memory === "string" && (cli.memory !== undefined || configHas("memory"))
+    ? resolve(cwd, resolved.memory) : join(trust.projectRoot, ".agentrig");
+  const generatedSkills = resolved.generatedSkills !== true || resolved.skillDiscovery === false ? [] : [
+    ...(trust.trusted ? [join(selectedMemory, "skills", "generated")] : []),
+    ...(boundary.userStateSafe ? [join(home, ".agentrig", "skills", "generated")] : []),
+  ];
   return {
     ...resolved,
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
-    skills: [...new Set([...explicitSkills, ...discoveredSkills])],
+    skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),

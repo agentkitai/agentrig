@@ -1,9 +1,28 @@
 # Status
 
-Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b is done with green post-merge CI. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R6c generated-skill loading is implemented, pending delivery gates; R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R6c implemented — PR #151 delivery gates pending
+
+Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
+roots through the existing trust/discovery boundary. Negative overrides and manual-root
+precedence remain intact. Validated manifest metadata labels actual successful model loads
+with optional `skill.used.generated: true`; ordinary events stay unchanged, and denied/missing
+loads never count. Labels grant no permission, approval or benefit. [Contract](plans/R6c.md).
+
+Dependency-order rationale: R6b PR #149 and main `7c680c4` passed all-platform post-merge CI
+34021388430 before this new worktree began. R6c closes the opt-in mechanical learning loop;
+R6g trigger work and live benefit comparisons are separate. Existing TUI slash invocation
+does not acquire new usage telemetry. Integrated main `97e18bf` preserves the R13b provenance
+seams and all previous done labels. Build/typecheck and 2,167 tests plus two skips pass across
+111 files; 15 focused tests pass. Default-on discovery and dropped event-marker mutations fail
+their named controls and are restored. One bounded independent Claude review
+`81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
+independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
+polish is at the roadmap end; exact-head PR and post-merge CI remain delivery gates.
 
 ### R6b done — PR #149; post-merge CI green
 
@@ -45,7 +64,10 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R13b implemented — closing PR records delivery gates
+### R13b done — PR #150; post-merge CI green
+
+Main `97e18bfd8ba24d63740e09943ce1d83e1d7e122f` passed exact post-merge CI 34021998986
+on Linux, macOS and Windows after root merged the all-platform-green PR #150.
 
 Trusted registered source metadata assigns actual MCP/external results `external`; file readers
 require canonical approved-root containment before and after execution for `project`. Unknown,

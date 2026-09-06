@@ -43,6 +43,8 @@ export function sanitizeLine(value: string, max: number): string {
 }
 
 export interface Skill {
+  /** Validated manifest provenance label, not a runtime evidence/approval receipt. */
+  generated?: true;
   /** Directory name, or filename without `.md` — what the model asks for by. */
   name: string;
   /** One line, shown in the system prompt. This is what the model chooses on. */
@@ -72,6 +74,7 @@ export function parseSkill(text: string, path: string): Skill {
     description: sanitizeLine(fm.description ?? firstLine(body) ?? "(no description)", MAX_DESCRIPTION),
     path,
     body: body.trim(),
+    ...(fm.metadata?.["agentrig-generated"] === "true" ? { generated: true as const } : {}),
   };
 }
 
@@ -192,7 +195,8 @@ export function skillTool(skills: Skill[]): AnyTool {
       }
       // the activation record R9 measures against — only successful loads, so a typo'd lookup
       // does not count as a skill "being used"
-      ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model" });
+      ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model",
+        ...(skill.generated === true ? { generated: true } : {}) });
       return { output: { name: skill.name, path: skill.path }, display: skill.body };
     },
   } as AnyTool;
