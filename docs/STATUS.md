@@ -24,7 +24,35 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R6a implemented — closing PR records delivery gates
+### R13a implemented — PR #147 records delivery gates
+
+Optional block-level provenance now round-trips recursively through unified messages, canonical
+events/snapshots, fork materialization, actual provider requests and resumed turns. Custom-provider
+labels are validated and text segments retain their boundaries; vendor JSON/prose cannot supply
+those labels. Wire projections add no unsupported fields. Observing hooks cannot mutate nested
+labels and outbound eviction does not flatten labeled children. [Contract](plans/R13a.md).
+
+Parallel-order rationale: R13a carries metadata only and is independent of pending R12e/grant
+work and R6a wiki procedures. No authority or permission is inferred; R13b assembly/compaction,
+R13d principals and R13c enforcement remain later rows. This is not a claim those policies exist.
+Build/typecheck/full tests, one bounded independent review, restored negative controls and exact
+PR/post-merge three-platform CI are the delivery gates; closing receipts belong to the PR.
+
+One bounded Claude review `128bce32-4807-4eb8-9eef-75511eb6c868` approved with no material
+findings, independently passing 692 core tests and all-package typecheck. Schema-drop and
+stream-assembly-drop mutations fail named persistence/resume controls and are restored. Actual
+vendor text/tool-call provenance spoofing is inert, and a user-labeled call still obeys denial.
+Crash-only raw-delta reconstruction remains unlabeled; no unrecorded provenance is invented.
+After integrating R6a main `42cef62`, local build/typecheck/full suite pass
+2,072 tests plus two existing skips (103 files);
+66 focused trust/hooks/eviction/H6 trace tests pass with unchanged golden traces.
+Previous head `a93406a` passed three-platform CI 34018081611; the integrated head requires
+its own checks before merge. PR #147 records exact-head and post-merge receipts.
+
+### R6a merged — PR #146 records delivery gates
+
+Final head `fe12d9a` merged as `42cef62` after green PR CI. Post-merge CI 34018319273
+is pending at this integration checkpoint; no post-merge success is claimed here.
 
 R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
 (R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
@@ -43,8 +71,7 @@ main is integrated before final validation; optional refinements remain at the r
 ### Windows memory atomic replacement — merged in PR #145
 
 Final head `0abdfc7` passed three-platform CI 34017429109 and merged as `3c857d0`.
-Post-merge main CI is pending at this integration checkpoint and must pass before R5d merges;
-PR #145 records its final result.
+Post-merge main CI 34017665328 passed on all three platforms; PR #145 records final receipts.
 
 R5d combined-head CI 34016959860 failed the existing Windows two-process ingest conservation
 fixture with `EPERM` renaming a temporary index over `index.md`. This is not evidence of a known
@@ -104,7 +131,9 @@ the old blocklist. Strict-schema and equal-precedence negative mutations also fa
 restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
 post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
 
-### R5d implemented — PR #144 records delivery gates
+### R5d merged — PR #144 records delivery gates
+
+Merge `008c2ba` passed three-platform post-merge CI 34018010003.
 
 CLI run/TUI now persist MCP tool-definition baselines in trusted user state, scoped by canonical
 config path and server name. First use is explicitly trust-on-first-use, not a safety assessment.

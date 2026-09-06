@@ -70,6 +70,8 @@ export function toOpenAIRequest(
 
 /** One unified message can fan out: tool_result blocks become individual `tool` role messages. */
 function toOpenAIMessages(m: Message): JsonObject[] {
+  // Trust metadata stays in unified history; this explicit projection does not mutate it or
+  // invent a vendor trust field. Response JSON/prose likewise cannot supply trusted labels.
   const out: JsonObject[] = [];
   if (m.role === "assistant") {
     const text = m.content

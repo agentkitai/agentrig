@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CheckpointHookEvent } from "./checkpointer.js";
 import type { PermissionClass } from "./events.js";
-import type { Message } from "./messages.js";
+import type { ContentBlock, Message } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import type { SessionSummary } from "./agent.js";
 
@@ -109,7 +109,9 @@ function isolate(ctx: Omit<HookContext, "point">): Omit<HookContext, "point"> {
 }
 
 function cloneMessages(messages: readonly Message[]): Message[] {
-  return messages.map((m) => ({ ...m, content: m.content.map((c) => ({ ...c })) }));
+  const cloneBlock = (block: ContentBlock): ContentBlock => block.type === "tool_result" && Array.isArray(block.content)
+    ? { ...block, content: block.content.map(cloneBlock) } : { ...block };
+  return messages.map((m) => ({ ...m, content: m.content.map(cloneBlock) }));
 }
 
 /** `structuredClone` throws on functions and class instances; a tool input that cannot be cloned
