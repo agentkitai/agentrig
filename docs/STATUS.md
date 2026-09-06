@@ -20,6 +20,10 @@ Both named mutants failed their controls and were restored. One independent Clau
 approved with no material findings (154 seconds, 17/max24 turns), independently exercising
 seven related files and typecheck. Verbatim findings are in the contract; optional polish is
 at the roadmap END. H7b post-CI 34029756772 is now green on all three platforms.
+Integrated R14b #165/main `6f25a17`; commandOutcome/evidence and both CI additions preserved.
+Combined build/typecheck/full 2,411 tests plus two skips across 135 files pass (four workers,
+32 seconds). Mechanical docs reconciliation only; no second review. R14b post-CI 34030230354
+and R11a exact-head CI remain pending at this checkpoint.
 
 ### R14b implemented — delivery gates pending
 
