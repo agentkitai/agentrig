@@ -1268,3 +1268,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
+- R16a polish: heading-level visual cues and restoring the surrounding assistant
+  tone after inline SGR resets (coordinate with R16h themes). Consider a bounded way
+  to inspect oversized replies beyond the literal display prefix; original logs
+  remain complete and this does not remove the rendering resource bounds.

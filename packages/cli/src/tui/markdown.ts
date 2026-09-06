@@ -58,6 +58,7 @@ export function renderMarkdown(source: string, columns: number, color = process.
       ? tokens(value.tokens, depth + 1, [...styles, ...extra]) : paint(value.text ?? "", [...styles, ...extra]);
     switch (token.type) {
       case "space": return "";
+      case "checkbox": return ""; // The owning list item supplies its task marker.
       case "paragraph": return children(token as Tokens.Paragraph) + checked("\n\n");
       case "text": return children(token as Tokens.Text);
       case "escape": return paint((token as Tokens.Escape).text, styles);
@@ -80,7 +81,9 @@ export function renderMarkdown(source: string, columns: number, color = process.
         return list.items.map((item, index) => {
           enter(depth + 1);
           const label = item.task ? (item.checked ? "[x] " : "[ ] ") : list.ordered ? `${Number(list.start) + index}. ` : "• ";
-          return tokens(item.tokens, depth + 2, styles).trimEnd().split("\n").map((line, i) => checked(i ? "  " : label) + line).join("\n");
+          // Tight items begin with block text, not a paragraph with a trailing newline.
+          const blocks = item.tokens.map(block => tokens([block], depth + 2, styles).trimEnd()).filter(Boolean);
+          return blocks.join("\n").split("\n").map((line, i) => checked(i ? "  " : label) + line).join("\n");
         }).join("\n") + checked("\n\n");
       }
       case "code": {

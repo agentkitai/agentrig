@@ -57,9 +57,18 @@ it("preserves Unicode, nested emphasis and blockquote/list structure", () => {
   expect(plain(out)).toContain("│ bold inside");
   expect(plain(out)).toContain("1. first\n2. second");
   expect(plain(out)).toContain("你好 👋 café");
-  expect(plain(out)).toContain("[x] done");
+  expect(plain(out).split("\n").at(-1)).toBe("[x] done");
+  expect(renderMarkdown("- [ ] pending\n- [x] done", 80, false)).toBe("[ ] pending\n[x] done");
   const table = markdownTable(["字", "value"], [["你好你好你好", "ok"]], 20);
   for (const line of table.split("\n").filter(line => !line.startsWith("["))) expect(measureRows(line, 20)).toBe(1);
+});
+
+it.each([
+  ["list", "- item\n  - nested\n    - deep\n- second", "• item\n  • nested\n    • deep\n• second"],
+  ["fence", "- item\n  ```text\n  body\n  ```", "• item\n  ┌─ text\n  body\n  └─"],
+  ["quote", "- item\n  > quote", "• item\n  │ quote"],
+])("nested list blocks stay on separate indented lines: %s", (_kind, input, expected) => {
+  expect(renderMarkdown(input!, 80, false)).toBe(expected);
 });
 
 it("unknown fences remain literal and common fences highlight without changing code text", () => {
