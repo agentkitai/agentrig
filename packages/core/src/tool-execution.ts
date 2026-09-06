@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { extensionDisabled, ExtensionHandlerError, flushExtensionFailures } from "./extension-runtime.js";
 import { takeCommandOutcome } from "./command-outcome.js";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentConfig } from "./agent.js";
@@ -166,6 +167,15 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
 }
 
 export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+  try { return await executeToolInner(tu, context); }
+  catch (error) {
+    if (!(error instanceof ExtensionHandlerError)) throw error;
+    await context.emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+    await context.emit({ type: "tool.result", id: tu.id, ok: false, display: error.message, durationMs: 0 });
+    return { type: "tool_result", toolUseId: tu.id, content: error.message, isError: true, trust: "tool-output" };
+  } finally { await flushExtensionFailures(); }
+}
+async function executeToolInner(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
   const { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, emitFromTool, hook, signal, endSignal, raceAbort, now, isEnded } = context;
   const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external", context?: InstructionContext): ContentBlock =>
     isError
@@ -173,6 +183,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       : { type: "tool_result", toolUseId: tu.id, content, trust, ...(context === undefined ? {} : { context }) };
 
   const tool = toolsByName.get(tu.name);
+  if (tool !== undefined && extensionDisabled(tool)) throw new ExtensionHandlerError(`extension tool ${tool.name} is disabled until a new agent build`);
   if (!tool) {
     await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
     await emit({ type: "tool.result", id: tu.id, ok: false, display: `unknown tool: ${tu.name}`, durationMs: 0 });

@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
@@ -322,10 +323,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       { ...ctx, signal },
     );
     await flushDelegations();
+    await flushExtensionFailures();
     return { ...result, patchContexts, injectContexts };
   };
 
-  const done = (async (): Promise<SessionSummary> => {
+  const done = withExtensionRun({ signal: abortController.signal, emit, isEnded: lifecycle.isEnded }, async (): Promise<SessionSummary> => {
     const totals: Usage = { input: 0, output: 0 };
     let turns = 0;
     let turnsThisRun = 0;
@@ -454,7 +456,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       }
 
       for (const extension of config.extensions?.loaded ?? []) {
-        await emit({ type: "extension.loaded", name: extension.name, path: extension.path, surfaces: extension.surfaces });
+        const status = extensionStartup(extension);
+        await emit({ type: "extension.loaded", name: extension.name, path: extension.path, surfaces: extension.surfaces,
+          ...(status.disabled === undefined ? {} : { disabled: true }) });
+        if (status.pending !== undefined) await emit({ type: "extension.error", ...status.pending });
       }
       for (const extension of config.extensions?.failed ?? []) await emit({ type: "extension.error", ...extension });
       if (parent === undefined) grantTaskId = config.permissionGrants?.beginRun(id);
@@ -1016,6 +1021,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         reason = "error";
         await emit({ type: "error", message: `permission audit failed: ${String(error)}`, fatal: true }).catch(() => {});
       }
+      await flushExtensionFailures();
       await lifecycle.finish(reason, releaseLock, releaseClaim);
     }
     return { id, reason, turns, usage: totals };
@@ -1027,7 +1033,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         emitFromTool, hook, signal: abortController.signal, endSignal: endController.signal,
         raceAbort, now, isEnded: lifecycle.isEnded });
     }
-  })();
+  });
 
   return {
     id,
