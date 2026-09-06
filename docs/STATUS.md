@@ -1,9 +1,9 @@
 # Status
 
 Active row: **R10b bounded parallel scheduling**, from green R10a main `391514b`.
-R9a and R7a proceed independently in separate worktrees. [R10b contract](plans/R10b.md).
+R9a and R7a are merged (PRs #175/#176); their gate receipts are recorded below. [R10b contract](plans/R10b.md).
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is implemented pending gates; R9a is merged (PR #175), post-merge CI pending; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI pending; R9a is merged (PR #175), post-merge CI pending; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -15,6 +15,23 @@ serialized approval/audit and joined pipeline settlement. Sequential remains def
 unknown effects, hooks/checkpoints and background writers are conservative exclusive cases.
 Actual file runtime tests pass; one review/full/negative controls/CI follow.
 [Contract](plans/R10b.md).
+
+### R7a implemented — delivery gates pending
+
+Plain bounded JSON and five-field UTC cron; preview is model-free, execution is explicit
+and requires canonical project trust. Cooperative claim-before-dispatch serializes ticks;
+scheduled tasks stay advisory and never establish fresh permission consent. No daemon,
+heartbeat, report banner or monetary-cap claim. [Contract](plans/R7a.md).
+Initial build/typecheck/full passes 2,559 plus two skips across 148 files, four workers,
+38 seconds. Three guard-removal mutants failed and were restored. The single bounded
+[review](plans/R7a-review.md) returned REQUEST_CHANGES; its commands were denied, so no
+independent test run is claimed. Missing executable defaults and loss of later due entries
+after an earlier budget end reproduced through real CLI/runCommand/local adapter fixtures.
+Shared defaults with proper config precedence and per-entry outcome aggregation fix both;
+20 focused controls now pass. Integrated R9a main `a99f3ec`, retaining both CLI surfaces,
+tests and done markers. Combined build/typecheck/full passes 2,597 plus two skips across
+149 files (four workers, 36 seconds). Exact-head PR CI and post-merge gates remain pending;
+R9a's own post-main gate is not yet claimed green. No second broad review for integration.
 
 ### R9a implemented — delivery gates pending
 
