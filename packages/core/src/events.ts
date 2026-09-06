@@ -189,6 +189,8 @@ export const TOOL_EMIT_SOURCES: ReadonlyMap<string, string> = new Map([
 
 /** The payload an emitter produces. The store stamps seq/sessionId/ts. */
 export const EventPayload = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("output.validated"), digest: z.string().regex(/^[a-f0-9]{64}$/), mode: z.enum(["prompted", "native"]),
+    attempt: z.enum(["initial", "repair"]), valid: z.boolean(), category: z.enum(["valid", "json", "schema", "bound", "tool", "stop"]) }),
   z.object({ type: z.literal("question.asked"), id: z.string().uuid(), toolUseId: z.string(), question: QuestionSchema }),
   z.object({ type: z.literal("question.answered"), id: z.string().uuid(), toolUseId: z.string(),
     outcome: z.enum(["answered", "unavailable", "timeout", "cancelled"]), reply: QuestionReplySchema.optional() }),
@@ -410,7 +412,10 @@ export const EventPayload = z.discriminatedUnion("type", [
     /** Selected skill's validated manifest label; never proof of generation, approval or benefit. */
     generated: z.literal(true).optional(),
   }),
-  z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
+  z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string(),
+    role: z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/), hash: z.string().regex(/^[a-f0-9]{64}$/),
+      tools: z.array(z.string().max(128)).max(64), modelRole: z.enum(["main", "supervisor", "memory", "subagents"]),
+      delegable: z.boolean(), maxTurns: z.number().int().positive() }).strict().optional() }),
   z.object({
     type: z.literal("subagent.end"),
     id: z.string(),

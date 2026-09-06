@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { AnthropicProvider, OpenAIChatGPTProvider, OpenAIChatGPTAuth, createAgent, RulePolicy,
-  SessionStore, MessageSchema, ThinkingBlockSchema, parseAnthropicSse, parseResponsesSse,
+  SessionStore, subagentTool, MessageSchema, ThinkingBlockSchema, parseAnthropicSse, parseResponsesSse,
   toAnthropicRequest, toResponsesRequest, toOpenAIRequest, summarizeOlderTurns,
   type Message, type ModelProvider, type ModelRequest, type ModelEvent, type ThinkingBlock } from "@agentkitai/agentrig-core";
 import { thinkingFromItem } from "../src/providers/thinking.js";
@@ -49,6 +49,31 @@ function provider(format: ThinkingBlock["format"], bodies: Record<string, unknow
   return new OpenAIChatGPTProvider({ model: "fixture", fetchFn,
     auth: new OpenAIChatGPTAuth({ store: { async read() { return { accessToken, refreshToken: "fixture" }; }, async write() {} } }) });
 }
+
+it.each(["anthropic", "openai-responses"] as const)("%s role-restricted child retains exact reasoning without executing its excluded tool", async format => {
+  const cwd = await mkdtemp(join(tmpdir(), "agentrig-role-thinking-")); roots.push(cwd);
+  const store = new SessionStore({ root: join(cwd, "logs") }), bodies: Record<string, unknown>[] = [];
+  let effects = 0, parentTurn = 0;
+  const spawn = subagentTool({ createAgent, roles: [{ name: "restricted", tools: [], "model-role": "subagents", delegable: false,
+    body: "ROLE_BODY", origin: "fixture:role", hash: "1".repeat(64) }],
+    childConfig: () => ({ provider: provider(format, bodies), store, repoMap: false, systemPrompt: "child",
+      permissions: new RulePolicy([], "allow"), tools: [{ name: "read_fixture", description: "excluded", permission: "read", inputSchema: z.object({}),
+        async execute() { effects++; return { output: "effect", display: "effect" }; } }] }) });
+  const parentProvider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
+    async *stream() { if (parentTurn++ === 0) { yield { type: "tool_use", id: "spawn", name: "subagent", input: { task: "inspect", agent: "restricted" } }; yield { type: "stop", reason: "tool_use" }; }
+      else yield { type: "stop", reason: "end_turn" }; } };
+  const session = createAgent({ provider: parentProvider, store, repoMap: false, systemPrompt: "parent", tools: [spawn], permissions: new RulePolicy([], "allow") }).run("delegate", { cwd });
+  const events = await collect(session.events); await session.done;
+  const started = events.find(e => e.type === "subagent.spawn"); if (started?.type !== "subagent.spawn") throw Error("missing child");
+  expect(effects).toBe(0); expect(bodies).toHaveLength(2);
+  const replay = format === "anthropic" ? (bodies[1]!.messages as Message[]).flatMap(m => m.content).filter(b => b.type === "thinking")
+    : (bodies[1]!.input as { type: string }[]).filter(b => b.type === "reasoning");
+  expect(replay).toEqual([format === "anthropic" ? anthropic : item]);
+  const childEvents = await store.readAll(started.id);
+  expect(childEvents).toContainEqual(expect.objectContaining({ type: "tool.denied", name: "read_fixture" }));
+  expect((await store.materializeMessages(started.id)).flatMap(m => m.content).filter(b => b.type === "thinking")).toHaveLength(2);
+  expect(JSON.stringify(events.filter(e => e.type === "tool.result"))).not.toContain("OPAQUE_SECRET");
+});
 
 it.each(["anthropic", "openai-responses"] as const)("%s actual SSE tool session, snapshot, fresh-provider resume and fork retain exact reasoning", async format => {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-thinking-")); roots.push(cwd);
