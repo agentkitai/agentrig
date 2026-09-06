@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
@@ -1070,4 +1071,3 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     done,
   };
 }
-import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";

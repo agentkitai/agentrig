@@ -35,6 +35,8 @@ function fail(owner: Owner, phase: Failure["phase"], surface: string, error: unk
     message: sanitizeLine(String(error), 1024), disabled: true };
   // A late callback remains attached to its original run, never another concurrent/resumed run.
   if (run !== undefined) {
+    // Late faults retain their original run binding: notice only once it has ended, never
+    // append after terminal or silently move the failure into a different run's idle receipt.
     if (!run.isEnded()) run.pending.push(failure);
   } else owner.idle = failure;
   try { owner.notice(`extension ${owner.name} disabled (${surface}): ${failure.message}`); }

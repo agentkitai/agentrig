@@ -12,7 +12,8 @@ spans registered hooks, tools, synchronous descriptors/probes and slash commands
 and existing hook timeouts disable future handlers; expected errors, invalid model input and
 user cancellation do not. Runtime-bound receipts stay with the failing run; idle command errors
 print immediately and queue one next-start receipt without appending after a terminal event.
-Disabled startup receipts do not imply reactivation. Background-probe failure stays conservative.
+Disabled startup receipts do not imply reactivation. Background-probe failure stays conservative;
+checkpointed workspace mutations then remain blocked until a new agent build.
 The API still exposes no provider, credentials or audit emitter; ambient Node effects, blocking,
 termination and already-running work are not isolated. No child inheritance or new deadlines.
 [Contract and limits](plans/R5b.md).
@@ -25,6 +26,12 @@ Removing the disabled transition caused a second handler dispatch; moving active
 the idle queue lost the failing run's audit. Both named mutations failed and were restored.
 One bounded independent review and final exact-head three-platform CI remain delivery gates.
 No live evaluation spend or benefit claims.
+
+One independent Claude review approved `49cef16` against `6f25a17` with no material findings:
+session `865bb096-2ab8-4342-9710-91f55433f68b`, 225 seconds, 20 turns/requested max24.
+It independently passed build/typecheck and all 2,407 tests plus two skips across 134 files.
+Three optional import/comment/documentation notes were reconciled without runtime expansion;
+their wording is recorded verbatim in the contract. No second general review.
 
 ### R14b done — PR #165; post-merge CI green
 
