@@ -10,7 +10,7 @@ export function bindParallelRuntime(context: TurnStrategyContext, run: (calls: r
 }
 export function parallelRuntime(context: TurnStrategyContext) { return runtimes.get(context); }
 
-export interface SchedulingMetadata { cwd: string; permission: string; effects: string | undefined; paths: string[] | undefined }
+export interface SchedulingMetadata { cwd: string; permission: string; effects: string | undefined; paths: string[] | undefined; isolated?: boolean }
 export interface PipelineSchedule {
   prepare(): Promise<void>;
   admit(metadata: SchedulingMetadata): Promise<void>;
@@ -27,9 +27,10 @@ function mutex() {
   };
 }
 interface Target { path: string; inode?: string }
-interface Hazard { write: boolean; targets: Target[] }
+interface Hazard { write: boolean; targets: Target[]; isolated?: boolean }
 const pathKey = (path: string) => path.normalize("NFC").toLowerCase();
 async function classify(metadata: SchedulingMetadata): Promise<Hazard | undefined> {
+  if (metadata.isolated) return { write: true, targets: [], isolated: true };
   const write = metadata.permission === "write" && metadata.effects === "workspace";
   if (!write && !(metadata.permission === "read" && metadata.effects === "read-only")) return undefined;
   if (!Array.isArray(metadata.paths) || metadata.paths.length === 0 || metadata.paths.length > 64) return undefined;
@@ -62,6 +63,7 @@ async function classify(metadata: SchedulingMetadata): Promise<Hazard | undefine
 }
 function conflict(a: Hazard | undefined, b: Hazard | undefined) {
   if (a === undefined || b === undefined) return true;
+  if (a.isolated || b.isolated) return !(a.isolated && b.isolated);
   if (!a.write && !b.write) return false;
   return a.targets.some(x => b.targets.some(y => x.path === y.path ||
     x.path.startsWith(y.path.endsWith(sep) ? y.path : y.path + sep) ||

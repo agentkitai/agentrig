@@ -1,10 +1,11 @@
 # Status
 
-Active row: **R7b bounded advisory heartbeat**, from updated green main `9294681`.
-R10b PR #177 post-main CI `34040691166` passed all three platforms; R9b proceeds independently.
-[Heartbeat contract](plans/R7b.md).
+Active row: **R10c isolated parallel subagents**, from green R10b main `9294681`.
+R10b is done: PR #177, final CI 34040321452 and post-main CI 34040691166 all green.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/177#issuecomment-5560095038).
+R7b PR #179 is done; post-main CI 34042336391 passed all three platforms. R9b proceeds independently.
 
-Done repair #178; repaired-main gate green: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
+Completed repair #178: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
 main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
 Post-main `34039249249` then failed the unchanged A1 outer five-second test timeout
 on Windows (6,261 ms); Linux/macOS passed. The separate test-only repair preserves
@@ -19,20 +20,46 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is in progress; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, post-main CI green); R10c is implemented pending final gates; R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R7b in progress — bounded heartbeat fallback
+### R10c implemented — final delivery gates pending
+
+Opt-in actual factory-object isolated cohorts on the existing parallel strategy, checked
+dirty/untracked raw baselines, retained bounded binary diff candidates and no automatic apply.
+Parent permission denial prevents preparation/application; exact file/cwd grants are not
+remapped. Enforcing parent sandbox refuses host Git preparation. Cooperative checkout
+separation is not host-code containment. Supervisor loop/stall order controls are pinned.
+Build/typecheck and initial full suite pass 2,644 plus two existing skips / 151 files
+(four workers, 39 seconds). The single review's material aliased-store finding was reproduced
+and fixed; mixed barrier coverage and all negative controls pass. Integrated R7b main
+`f3a1ec8`; combined build/typecheck/full pass 2,656 plus two existing skips / 152 files
+(four workers, 38 seconds). Eighteen isolated runtime tests and four supervisor order
+controls are retained. Exact-head PR CI is next; no second broad review for integration.
+Initial PR #181 CI 34043109668 passed Linux/macOS but failed Windows parent-application
+line endings (CRLF versus LF), after raw child baseline checks passed. The same mismatch
+reproduced locally with explicit `core.autocrlf=true`; the authorized fixture apply now
+explicitly selects `core.autocrlf=false`. Byte-exact assertions and runtime are unchanged.
+New exact-head checks follow; the initial failure is not rewritten as success.
+Corrected fixture build/typecheck/full pass again: 2,656 plus two skips / 152 files,
+four workers, 38 seconds. New exact-head three-platform CI gates the merge.
+[Contract](plans/R10c.md).
+
+### R7b done — PR #179, post-main CI green
 
 Existing lock, claims and trusted execute opt-in are reused. Empty checklists have an empty
 actual tool registry; builder suppression covers explicit host extensions and maintenance.
 Actual local-adapter/storage and four named fail/restored controls pass. Build/typecheck/full:
 2,634 passed plus two skips / 151 files; one bounded review approved and independently passed
-28 focused tests plus typecheck. Exact-head and post-main gates remain pending.
+28 focused tests plus typecheck. PR #179 merged as `f3a1ec852f40c70f21c51507e76797f4dc388d53`;
+post-main CI 34042336391 passed Linux, macOS and Windows. Earlier pending notes are history.
 
-### R10b done — PR #177, post-main CI green
+### R10b done — PR #177
+
+Final head `3d25e882`, CI 34040321452 all three green; merged main `92946819`,
+post-main CI 34040691166 all three green. Following notes preserve intermediate history.
 
 Opt-in bounded declared read/write concurrency with final-input admission, FIFO barriers,
 serialized approval/audit and joined pipeline settlement. Sequential remains default;
@@ -50,7 +77,10 @@ Combined build/typecheck, 56 focused and full 2,626 plus two skips / 150 files p
 R10b main `9294681` post-CI `34040691166` passed all three platforms.
 [Contract](plans/R10b.md).
 
-### R7a merged — PR #176; post-merge fixture gate failed
+### R7a done — PR #176, main gate restored by repair #178
+
+Repair main `90301f8` post-CI 34040182760 passed all three platforms. The initial
+R7a post-main failure below remains part of the delivery record.
 
 Main `bf65aec` is integrated; CI 34039249249 failed the unchanged A1 real-copy fixture's
 five-second outer bound. A separate test-only repair gates continuation; no initial-green
