@@ -19,6 +19,8 @@ actual gated callbacks prove serial ordering. Both altered-order and partial-abo
 fail their baselines and are restored. No concurrency, arbitrary loading or permission changes.
 Integrated R5c main `1ae6b77`; build/typecheck/full passes 2,535 plus two skips across 146 files
 (four workers, 37 seconds). One bounded independent review and exact-head CI follow.
+Single review approved without material findings: 85 seconds, 17/max24 turns, independently
+105 focused tests and typecheck. Original findings retained in the contract; optional polish END.
 
 ### R5c implemented — delivery gates pending
 

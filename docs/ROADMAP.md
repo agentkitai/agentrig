@@ -1189,3 +1189,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - Child-grants test polish: skip diagnostic snapshot work after a readiness wait has settled;
   additionally name child-view identity in the sibling predicate. Existing assertions still
   discriminate root/sibling authority; these are non-blocking test refinements, not new rows.
+- R10a polish: reuse the exported call type in the coordinator and consider passing a defensive
+  call-array copy to trusted custom strategies. No truncated calls reach that seam; readonly
+  typing is not claimed as runtime containment of trusted host JavaScript.

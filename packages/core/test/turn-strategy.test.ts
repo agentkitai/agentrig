@@ -45,7 +45,7 @@ async function scenario(kind: Scenario, overrides: Partial<AgentConfig> = {}) {
   return { log, requests, summary, snapshot, executed };
 }
 
-// Captured before extraction on main063cac6. Full serialized traces, not selected fields.
+// Captured before extraction on main 063cac6. Full serialized traces, not selected fields.
 it.each<Scenario>(["normal", "between-call abort", "last-call abort", "truncated"])("preserves pre-extraction %s bytes", async kind => {
   const result = await scenario(kind);
   expect(JSON.stringify(result)).toMatchSnapshot();
