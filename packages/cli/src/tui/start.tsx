@@ -88,7 +88,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   try {
     built = await buildAgent(opts, {
       permissionGrants: controller.permissionGrants,
-      onAsk: (req) => controller.ask(req),
+      onAsk: controller.ask,
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
       // in the frame, not on stderr: stderr is overwritten by the next render, and an invisible

@@ -16,6 +16,7 @@ import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 import { evaluatePermissionPolicy } from "./permissions.js";
+import { bindPermissionView } from "./child-permissions.js";
 import type { PermissionDecisionSource } from "./permission-attribution.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
@@ -287,6 +288,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
   const evaluated = await evaluatePermissionPolicy(config.permissions, originalPermissionRequest);
+  const askContext = Object.freeze(config.permissionGrants === undefined ? {} : { permissionGrants: config.permissionGrants });
   let decision = evaluated.decision;
   let decisionSource: PermissionDecisionSource = evaluated.source;
   await config.permissionGrants?.flush(emit);
@@ -298,6 +300,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       if (authorization.decision === "deny" || decision === "ask") decision = authorization.decision;
       if (authorization.grantId !== undefined) decisionSource = { kind: "grant", grantId: authorization.grantId };
       else if (authorization.auditBlocked) decisionSource = { kind: "boundary", reason: "grant-audit-blocked" };
+      else if (authorization.viewExpired) decisionSource = { kind: "boundary", reason: "grant-view-expired" };
     }
   }
   if (freshExpansion && decision !== "deny") {
@@ -306,12 +309,15 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion
-      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq)), "fresh external-input approval").catch(() => "deny" as const)
-      : await config.onAsk(permReq);
+      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval").catch(() => "deny" as const)
+      : await config.onAsk(permReq, askContext);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
     decisionSource = config.onAsk ? { kind: "approval-handler" } : { kind: "unattended" };
     if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
+    if (config.permissionGrants?.active === false) {
+      decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-view-expired" };
+    }
     if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) {
       decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-session-changed" };
     }
@@ -371,6 +377,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       signal.throwIfAborted();
       context.expansion?.dispatched(surface);
       bindExpansionRestriction(ctx, context.expansion?.restricted() ?? true);
+      bindPermissionView(ctx, config.permissionGrants);
       return tool.execute(input, ctx);
     };
     // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
@@ -414,7 +421,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       await emit({ type: "permission.decision", d: "ask" });
       const escalationDecision = config.onAsk === undefined
         ? "deny"
-        : await config.onAsk(escalationReq);
+        : await config.onAsk(escalationReq, askContext);
       await emit({ type: "permission.decision", d: escalationDecision });
       if (escalationDecision !== "allow") {
         sandboxRetryDenied = true;

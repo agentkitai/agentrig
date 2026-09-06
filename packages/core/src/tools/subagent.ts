@@ -4,6 +4,7 @@ import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 import { currentSandboxPolicy, SandboxDeniedError } from "../sandbox.js";
 import { inheritExpansionRestriction } from "../external-expansion.js";
+import { childPermissionView } from "../child-permissions.js";
 
 /**
  * A subagent tool. `subagent.spawn` / `subagent.end` have been in the event schema since M0 and
@@ -220,6 +221,7 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
 
       const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
       const config = opts.childConfig(choice);
+      const permissionGrants = childPermissionView(ctx, config.permissionGrants);
       const parentPolicy = currentSandboxPolicy();
       if (parentPolicy !== undefined && (
         config.sandbox === undefined || config.sandbox.mode === "none" ||
@@ -252,8 +254,10 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
           childConfig: (grandchildChoice) => ({ ...opts.childConfig(grandchildChoice), abortGraceMs: childGrace }),
         }));
       }
+      const { permissionGrants: _configuredGrants, ...childConfig } = config;
       const child = opts.createAgent({
-        ...config,
+        ...childConfig,
+        ...(permissionGrants === undefined ? {} : { permissionGrants }),
         abortGraceMs: childGrace,
         tools: childTools,
         // NOT `{...config.budget}`: a child inherits no allowance it was not explicitly given
