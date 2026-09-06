@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R10a is done (PR #174, post-merge CI green); R7a is in progress; R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is merged (PR #175), post-merge CI pending; R7a is in progress; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -10,7 +10,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Priority | Work | Exit condition |
 |---|---|---|
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
-| Done (PR #174) | R10a sequential strategy | Existing H6 and pre-extraction full-byte baselines unchanged; trusted SDK scheduling only |
+| Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
@@ -27,8 +27,10 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done — PR #165 | R14b: candidate evidence association | Canonical foreground observations, bounded replay and post-merge CI green |
 | Done — PR #166 | R11a: net permission boundary | Explicit sandbox network policy; post-merge CI green |
 | Done (#169) | R14c: evidence grading and reports | Exact-head and post-merge three-platform CI green |
-| Done (PR #172) | R14d: two verification lanes | Reuse E1/E2 observations; one review and exact-head CI |
-| Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Done — PR #172 | R14d: two verification lanes | Exact-head and post-merge three-platform CI green; reuse E1/E2 observations |
+| Done — PR #170 | R5c: local packages | Exact-head CI 34035857727 and post-main `1ae6b77` CI 34036244589 all three platforms green |
+| Implemented; closing gates | R9a: bounded redacted exports | Supported canonical round trips, safe refusal/redaction; one review and exact-head CI |
+| Committed | R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
 
@@ -547,7 +549,7 @@ become "write an extension" instead of "grow the loop".*
 |---|---|---|
 | R5a *(done, [PR #157](https://github.com/agentkitai/agentrig/pull/157))* | [Extension API contract](plans/R5a.md): mandatory strict pre-import sidecars, atomic registration, trusted host-code boundary, no child inheritance. Extension API in core: an extension is an ES module exporting `activate(ctx)` where `ctx` exposes the hook surface, `registerTool`, `registerCommand` (slash commands surface in the TUI), and read-only session info; loaded from `.agentrig/extensions/*.mjs` + `--extension <path>`; every activation emits `extension.loaded` (name, path, granted surfaces) | core |
 | R5b *(done, [PR #167](https://github.com/agentkitai/agentrig/pull/167))* | [Per-build failure isolation](plans/R5b.md): a throwing extension is disabled with an `extension.error` event. The API passes no provider or credentials, but in-process extensions remain trusted Node code with ambient access to env/files and can block or terminate the process. Catching exceptions is not security isolation; disclose that boundary before activation | core |
-| R5c *(done, PR #170)* | [Local create-only packages](plans/R5c.md): a directory or npm tarball bundling `extensions/ + skills/ + prompts/`; `agentrig package add <src>` validates the whole unit before copying under `.agentrig/packages/`. No scripts/imports on install, bounded maintained archive parsing, recorded integrity rechecked before trusted discovery. Prompts remain inert; hashes are not authenticity | cli |
+| R5c *(done, [PR #170](https://github.com/agentkitai/agentrig/pull/170))* | [Local create-only packages](plans/R5c.md): a directory or npm tarball bundling `extensions/ + skills/ + prompts/`; `agentrig package add <src>` validates the whole unit before copying under `.agentrig/packages/`. No scripts/imports on install, bounded maintained archive parsing, recorded integrity rechecked before trusted discovery. Prompts remain inert; hashes are not authenticity | cli |
 | R5d *(done, [PR #144](https://github.com/agentkitai/agentrig/pull/144))* | Tool-definition pinning *(second pass; Goose + the NSA MCP guidance)*: persistent first-use baselines retain exact names, schemas and descriptions. Changed lists show exact before/after definitions and hashes and require explicit user consent before execution, independently of allow/YOLO or standing answers. Re-listing rejects changes after model advertisement; bounded locked CAS prevents stale approval replacement. First use is TOFU, not attestation; names, descriptions and server hints never authorize. See [contract](plans/R5d.md) | core + cli |
 | R5e *(done, [PR #142](https://github.com/agentkitai/agentrig/pull/142))* | Fail-closed manifests *(third pass)*: skill, extension, and package front-matter/manifests validate against a versioned schema BEFORE anything loads; a malformed manifest or an unknown security-relevant field rejects the whole unit — never load-the-body-drop-the-fields, which silently widens permissions. Duplicate names across directories stay deterministic (the documented shadowing order); duplicates at equal precedence are an error, never first-wins by directory iteration. Existing skill loader enforced; reusable extension/package validators precede their R5a/R5c consumers. See [contract](plans/R5e.md) | core + cli |
 
@@ -638,12 +640,15 @@ regression suite for the harness itself.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R9a | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document the intentional loss of redacted content | cli |
+| R9a *(implemented; delivery gates pending; [contract](plans/R9a.md))* | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document intentional redaction loss; supported text/tool content round-trips via versioned canonical fields. Opaque images refuse unless explicitly omitted; unknown types fail closed | core + cli |
 | R9b | `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` with this interface | supervisor + cli |
 | R9c | Nightly structure-regression job using the E1 eval-set definition and E2 reports, driven by a scripted provider. This validates mechanics, not task success or model quality; preserve E3's separate live evaluation lane | docs + .github |
 
-Acceptance: secret-free exports round-trip to an identical message list; secret-bearing exports
-round-trip to the deliberately redacted representation. An eval
+Acceptance: supported secret-free exports round-trip to the identical materialized message list
+(after forks/compaction); secret-bearing exports round-trip to the deliberately redacted
+representation. Opaque image content refuses by default; explicit omission is consistently lossy
+in every format. Unknown future content/fields refuse. Canonical extensions are data, not import
+authority; heuristic redaction is not a guarantee that unknown secrets are absent. An eval
 against the same profile scores ≈ the original (self-consistency test with the fake provider); a
 deliberately broken profile scores measurably worse (the discriminating test).
 
@@ -656,7 +661,7 @@ pool already reserves at spawn time specifically because this was coming).*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R10a *(done; PR #174)* | Trusted SDK `TurnStrategy` schedules existing tool pipeline; `sequential` default preserves full pre-extraction log/request/snapshot bytes and abort boundaries. No concurrency or model-selected code. See [contract](plans/R10a.md). | core |
+| R10a *(done, PR #174)* | Trusted SDK `TurnStrategy` schedules existing tool pipeline; `sequential` default preserves full pre-extraction log/request/snapshot bytes and abort boundaries. No concurrency or model-selected code. See [contract](plans/R10a.md). | core |
 | R10b | `parallel` strategy: independent tool calls (no shared declared paths, no exec-class ordering hazard) run concurrently with a bounded pool; events stay strictly ordered by `seq` (results are serialized into the log in completion order — the log's total order is the contract, not wall-clock interleaving); permission asks serialize (one prompt at a time — the TUI queue already exists) | core |
 | R10c | Parallel subagents ride the same strategy (the spawn-time pool reservation was built for this); *(second pass; Cline's pattern, Codex's warning)* a parallel subagent that holds write-class tools gets its own git worktree, and its patch is integrated by the parent as a diff — two writers never share a checkout; supervisor detectors audited for order-sensitivity (loop/stall assume turn-relative counts — verify and pin with tests) | core + supervisor |
 | R10d *(done, [PR #171](https://github.com/agentkitai/agentrig/pull/171); main gate restored by #173)* | Explicit bounded `doctor --probe` observes exact tool roundtrip, simultaneous calls, prompted-schema JSON and cache reporting. Native strictness remains unknown. Validated configuration-bound local cache actually informs advertised flags; missing evidence is labelled unverified fallback. See [contract](plans/R10d.md). | cli + core |
@@ -744,7 +749,7 @@ the rows below extend the product interface in the committed dependency order.*
 | R14a *(done, [PR #162](https://github.com/agentkitai/agentrig/pull/162))* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
 | R14b *(done, [PR #165](https://github.com/agentkitai/agentrig/pull/165))* | Bounded supervisor per-item attempt ledger associates exact command-exit declarations with internal foreground outcome receipts, never output prose or tool names. Latest failing/unknown attempts stay visible; unsupported checks and semantic acceptance remain unverified. Replay and bounded incompleteness are explicit. See [contract](plans/R14b.md). | core + supervisor |
 | R14c *(done, [PR #169](https://github.com/agentkitai/agentrig/pull/169))* | M6 claims-vs-evidence row and read-only `sessions show --evidence <id>` share bounded candidate reports. Declared unfinished/missing/failing/unknown checks and omissions can force false, never true; legacy/dropped distinctions and current-run attach scope is explicit. See [contract](plans/R14c.md). | supervisor + cli |
-| R14d *(done; PR #172; [contract](plans/R14d.md))* | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
+| R14d *(done, PR #172; [contract](plans/R14d.md))* | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
 
 Acceptance: a fixture session claiming success with a failing final test run grades measurably
 below one whose evidence lines up (the discriminating pair, driven by the fake provider); a plan
@@ -1197,6 +1202,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R10a polish: reuse the exported call type in the coordinator and consider passing a defensive
   call-array copy to trusted custom strategies. No truncated calls reach that seam; readonly
   typing is not claimed as runtime containment of trusted host JavaScript.
+- R9a polish: make redaction-induced label overflow a more specific safe diagnostic, and count
+  logical redacted values rather than pattern matches when a credential matches multiple rules.
+  The long-token scanning defect was fixed within R9a; it is not deferred here.
 - R7a polish: explain ignored execution-only preview flags, optionally constrain numeric CLI
   spelling to decimal (current integer bounds also accept `Number` syntax such as `1e1`),
   and consider an explicit scheduled cwd selector. Current cwd follows normal `run`.

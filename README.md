@@ -179,3 +179,18 @@ pnpm demo
 ```
 
 The monorepo packages are `core`, `memory`, `supervisor`, and `cli`.
+
+Export a finished session without loading providers or configuration:
+
+```sh
+agentrig sessions export SESSION --format jsonl > transcript.jsonl
+agentrig sessions export SESSION --format sharegpt --redact-file known-secrets.json
+agentrig sessions export SESSION --format md --omit-opaque > transcript.md
+```
+
+Exports use materialized fork/compaction messages and versioned canonical fields for lossless
+supported-content round trips. Credential redaction is heuristic: unknown secrets may remain,
+so inspect before sharing and supply known literals as a JSON string array with `--redact-file`.
+Images refuse unless `--omit-opaque` explicitly requests lossy placeholders; unknown future
+content always refuses. Redaction and omission are irreversible; raw logs are not scrubbed.
+See [R9a](docs/plans/R9a.md) for formats, bounds and the data-only provenance boundary.

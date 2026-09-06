@@ -4,6 +4,7 @@ export * from "./manifests.js";
 export * from "./provider.js";
 export * from "./tool.js";
 export * from "./session-store.js";
+export * from "./session-export.js";
 export * from "./children.js";
 export * from "./permissions.js";
 export * from "./permission-grants.js";
