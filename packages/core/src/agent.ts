@@ -899,6 +899,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         let stop: StopReason = "end_turn";
         let stopRaw: string | undefined;
         try {
+          abortController.signal.throwIfAborted();
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
               case "text_delta":
@@ -985,6 +986,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           await emit({ type: "message.append", message });
         }
 
+        // A cooperative provider may end its iterator normally on cancellation instead of
+        // throwing. Preserve reported usage above, but never classify that cancellation as done.
+        if (abortController.signal.aborted) {
+          reason = "aborted";
+          await emit({ type: "turn.end", n: turns });
+          break;
+        }
         if (stop === "error") {
           reason = "error";
           await emit({

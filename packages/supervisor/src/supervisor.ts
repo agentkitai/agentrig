@@ -46,7 +46,17 @@ async function withTimeout<T>(work: Promise<T>, ms: number, label: string, signa
   }
 }
 
-export interface AttachOptions extends StateOptions {
+export interface AbortRestoreResult { restored: boolean; message: string }
+
+export interface AbortRestoreOptions {
+  /** Opt-in only. An abort by this observer may restore after the agent fully settles. */
+  abortRestores?: boolean;
+  /** Trusted destructive seam; must honor cancellation and settle before the join can finish. */
+  restoreCheckpoint?: (sessionId: string, signal: AbortSignal) => Promise<AbortRestoreResult>;
+  onRestore?: (result: AbortRestoreResult) => void;
+}
+
+export interface AttachOptions extends StateOptions, AbortRestoreOptions {
   detectors: Detector[];
   policy: Policy;
   /**
@@ -109,6 +119,9 @@ export interface AttachOptions extends StateOptions {
  * `onError` report rather than silence.
  */
 export function attach(session: Session, opts: AttachOptions): Detachable {
+  if (opts.abortRestores === true && opts.restoreCheckpoint === undefined) {
+    throw new Error("abortRestores requires a guarded restoreCheckpoint implementation");
+  }
   positiveLimit("reviewTimeoutMs", opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
   for (const [key, value] of Object.entries(opts.auxiliaryLimits ?? {})) positiveLimit(key, value);
   const state = initialState();
@@ -119,6 +132,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   if (opts.cacheWriteMultiplier !== undefined) stateOpts.cacheWriteMultiplier = opts.cacheWriteMultiplier;
 
   let detached = false;
+  let restoreRequested = false;
   const lifetime = new AbortController();
   const stop = () => lifetime.abort(new DOMException("supervisor detached or session ended", "AbortError"));
   session.control.auxiliarySignal?.addEventListener("abort", stop, { once: true });
@@ -260,6 +274,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
             }
             case "abort":
               session.control.abort();
+              if (opts.abortRestores === true) restoreRequested = true;
               break;
             case "force_replan":
               // real as of M6: the loop refuses every tool except `update_plan` until a fresh
@@ -340,6 +355,19 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
     }
   })().catch((err: unknown) => {
     if (!lifetime.signal.aborted) report("observer", err);
+  }).then(async () => {
+    if (!restoreRequested) return;
+    try {
+      const summary = await session.done;
+      if (summary.reason !== "aborted") {
+        report("abort-restore", new Error(`restore skipped: session ended ${summary.reason}, not aborted`));
+        return;
+      }
+      // The ordinary observer signal is already aborted here. Restoration is a separate,
+      // authorized post-settlement phase, joined even if the caller detaches for cleanup.
+      const result = await opts.restoreCheckpoint!(session.id, AbortSignal.timeout(60_000));
+      auxiliaryDiagnostic(() => opts.onRestore?.(result));
+    } catch (error) { report("abort-restore", error); }
   });
 
   return {
@@ -351,7 +379,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   };
 }
 
-export interface SuperviseOptions extends DefaultDetectorOptions {
+export interface SuperviseOptions extends DefaultDetectorOptions, AbortRestoreOptions {
   ladder?: Omit<LadderOptions, "capabilities">;
   /** Rubric for the `run_grader` rung; without it the rung stays unreachable. */
   rubric?: string;
@@ -411,6 +439,9 @@ export function supervise(session: Session, opts: SuperviseOptions = {}): Detach
     }),
   };
   if (opts.onEscalate !== undefined) attachOpts.onEscalate = opts.onEscalate;
+  if (opts.abortRestores !== undefined) attachOpts.abortRestores = opts.abortRestores;
+  if (opts.restoreCheckpoint !== undefined) attachOpts.restoreCheckpoint = opts.restoreCheckpoint;
+  if (opts.onRestore !== undefined) attachOpts.onRestore = opts.onRestore;
   if (opts.reviewer !== undefined) attachOpts.reviewer = opts.reviewer;
   if (opts.grader !== undefined) attachOpts.grader = opts.grader;
   if (opts.task !== undefined) attachOpts.task = opts.task;

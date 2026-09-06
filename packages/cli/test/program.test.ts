@@ -57,6 +57,11 @@ describe("argv parsing", () => {
     }
     expect((await stub(buildProgram()).run(["sessions","undo","s","--to-turn","2","--root","logs"]))?.opts).toMatchObject({toTurn:2,root:"logs"});
   });
+  it("carries supervisor restore opt-in for headless, TUI and resume",async()=>{
+    for(const argv of [["run","task","--supervisor-abort-restores"],["--supervisor-abort-restores"],["sessions","resume","s","--supervisor-abort-restores"]]) {
+      expect((await stub(buildProgram()).run(argv))?.opts.supervisorAbortRestores).toBe(true);
+    }
+  });
   it.each(["bad", "-1", "1.5", "2147483648"])("rejects invalid dream lock wait %s before work", async lockTimeout => {
     const prior = process.exitCode;
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

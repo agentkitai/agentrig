@@ -8,6 +8,8 @@ import { SessionStore, undoSession, type ModelEvent } from "@agentkitai/agentrig
 import { buildAgent } from "../src/agent-builder.ts";
 import { parseConfigText } from "../src/config.ts";
 import { TuiController } from "../src/tui/controller.ts";
+import { checkpointRestorer, supervisorOptions, validateAbortRestores } from "../src/run.ts";
+import { supervise } from "@agentkitai/agentrig-supervisor";
 
 const execFile = promisify(exec);
 // These exercise a complete agent run and real Git restore, including a built CLI subprocess.
@@ -70,4 +72,30 @@ it("TUI refuses undo during a running session and joins an ongoing undo on shutd
   let closed=false;const closing=controller.shutdown().then(()=>{closed=true;});
   await Promise.resolve();expect(closed).toBe(false);
   finishUndo();await undoing;await closing;expect(closed).toBe(true);
+});
+
+it("shared CLI/TUI supervisor wiring restores after abort and clears automatic resume state",async()=>{
+  const b=await built();const oldStream=b.provider.stream.bind(b.provider);let turn=0;
+  b.provider.stream=async function*(request,signal):AsyncIterable<ModelEvent>{
+    if(turn++===0)yield*oldStream(request,signal);
+    else {await new Promise<void>(resolve=>{if(signal.aborted)resolve();else signal.addEventListener("abort",()=>resolve(),{once:true});});yield {type:"stop",reason:"end_turn"};}
+  };
+  let restored=false;
+  const controller=new TuiController({agent:b.agent,cwd:root,onSession:session=>supervise(session,{
+    ...supervisorOptions({opts:{supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true},task:"fixture",budget:{maxTurns:2},memoryIndex:"",provider:b.provider,soft:0.99,turnsRemaining:1,
+      restoreCheckpoint:checkpointRestorer(join(root,"sessions")),onRestore:result=>{restored=result.restored;if(restored)controller.forgetRestoredConversation();}}),
+    ladder:{ladder:["abort"]},
+  })});
+  await controller.submit("write then abort");
+  expect(restored).toBe(true);expect(controller.state.sessionId).toBeNull();expect(controller.state.status).toBe("idle");
+  expect(await readFile(join(root,"file.txt"),"utf8")).toBe("before\r\n");await controller.shutdown();
+});
+
+it("requires explicit supervisor, abort and checkpoint opt-ins before restoration wiring",()=>{
+  const valid={supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true};
+  expect(parseConfigText("fixture",JSON.stringify(valid))).toMatchObject(valid);
+  expect(()=>validateAbortRestores(valid)).not.toThrow();
+  for(const key of ["supervise","supervisorAbort","checkpoints"])expect(()=>validateAbortRestores({...valid,[key]:false})).toThrow("requires --supervise");
+  expect(()=>validateAbortRestores({...valid,sandbox:"workspace-write"})).toThrow("--sandbox none");
+  expect(()=>validateAbortRestores({})).not.toThrow();
 });

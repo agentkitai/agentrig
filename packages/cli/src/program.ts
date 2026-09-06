@@ -213,6 +213,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
       .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
+      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires --supervise --supervisor-abort --checkpoints and stopped external writers")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8")
       .option(

@@ -5,6 +5,7 @@ import {
   defaultRules,
   RulePolicy,
   SessionStore,
+  undoSession,
   PermissionClass,
   type AnyTool,
   type Budget,
@@ -190,6 +191,9 @@ export function permissionWarning(
 export interface SupervisorFlags {
   supervise?: boolean;
   supervisorAbort?: boolean;
+  supervisorAbortRestores?: boolean;
+  checkpoints?: boolean;
+  sandbox?: "read-only" | "workspace-write" | "none";
   supervisorNoAbort?: boolean;
   supervisorSoft?: string;
   supervisorTurnsRemaining?: string;
@@ -228,6 +232,25 @@ export interface SupervisorWiring {
   turnsRemaining: number;
   onEscalate?: SuperviseOptions["onEscalate"];
   onError?: (where: string, err: Error) => void;
+  restoreCheckpoint?: SuperviseOptions["restoreCheckpoint"];
+  onRestore?: SuperviseOptions["onRestore"];
+}
+
+export function validateAbortRestores(opts: SupervisorFlags): void {
+  if (opts.supervisorAbortRestores !== true) return;
+  if (opts.supervise !== true || opts.supervisorAbort !== true || opts.checkpoints !== true || (opts.sandbox !== undefined && opts.sandbox !== "none")) {
+    throw new Error("--supervisor-abort-restores requires --supervise --supervisor-abort --checkpoints and --sandbox none; stop external writers first");
+  }
+}
+
+/** Shared CLI/TUI adapter; the snapshot cwd also handles resuming from a different current cwd. */
+export function checkpointRestorer(root: string): NonNullable<SuperviseOptions["restoreCheckpoint"]> {
+  return async (sessionId, signal) => {
+    const store = new SessionStore({root});
+    const snapshot = await store.readSnapshot(sessionId);
+    if (!snapshot) throw new Error("restore unavailable: no settled session snapshot");
+    return undoSession(store,sessionId,{cwd:snapshot.cwd,signal});
+  };
 }
 
 /**
@@ -240,6 +263,8 @@ export interface SupervisorWiring {
  */
 export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   const o = w.opts;
+  validateAbortRestores(o);
+  if (o.supervisorAbortRestores === true && w.restoreCheckpoint === undefined) throw new Error("supervisor abort restoration is missing its guarded adapter");
   const reviewProvider = w.reviewProvider ?? w.provider;
   return {
     budget: {
@@ -251,6 +276,9 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
       ...(w.budget.maxMinutes === undefined ? {} : { maxMinutes: w.budget.maxMinutes }),
     },
     capabilities: { abort: o.supervisorAbort === true },
+    abortRestores: o.supervisorAbortRestores === true,
+    ...(w.restoreCheckpoint === undefined ? {} : {restoreCheckpoint:w.restoreCheckpoint}),
+    ...(w.onRestore === undefined ? {} : {onRestore:w.onRestore}),
     drift: {
       scope: o.driftScope ?? [],
       ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),
@@ -323,6 +351,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   let supervisorSoft: number;
   let supervisorTurnsRemaining: number;
   try {
+    validateAbortRestores(opts);
     supervisorSoft = parseSoft(opts.supervisorSoft);
     supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining);
     dreamEverySessions = positiveNumber("--dream-every-sessions", opts.dreamEverySessions);
@@ -383,6 +412,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
             memoryIndex,
             provider,
             reviewProvider: providers.supervisor,
+            restoreCheckpoint: checkpointRestorer(opts.root),
+            onRestore: result => console.error(`supervisor abort-restore: ${result.message}`),
             soft: supervisorSoft,
             turnsRemaining: supervisorTurnsRemaining,
             ...(interactive

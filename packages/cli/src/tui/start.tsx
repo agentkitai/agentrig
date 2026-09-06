@@ -14,6 +14,8 @@ import { undoSession } from "@agentkitai/agentrig-core";
 import { currentGitBranch } from "../git-branch.js";
 import {
   abortNotice,
+  checkpointRestorer,
+  validateAbortRestores,
   parseSoft,
   parseTurnsRemaining,
   permissionWarning,
@@ -39,6 +41,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   let built;
+  validateAbortRestores(opts);
   const budget = parseBudget(opts);
   // Validate before a session starts. Parsing inside onSession would let an invalid threshold run
   // without supervision after the controller caught the attachment error.
@@ -66,6 +69,11 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 memoryIndex: "",
                 provider: built!.provider,
                 reviewProvider: built!.providers.supervisor,
+                restoreCheckpoint: checkpointRestorer(opts.root),
+                onRestore: result => {
+                  controller.print(`supervisor abort-restore: ${result.message}`, "system");
+                  if (result.restored) controller.forgetRestoredConversation();
+                },
                 soft: supervisorSoft,
                 turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),
