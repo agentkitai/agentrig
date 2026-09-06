@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5b failure isolation is implemented, pending delivery gates; R11a is merged (PR #166), pending post-merge CI; R14b is done with green post-merge CI (PR #165); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5b failure isolation is implemented, pending delivery gates; R11a is done with green post-merge CI (PR #166); R14b is done with green post-merge CI (PR #165); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -33,7 +33,15 @@ It independently passed build/typecheck and all 2,407 tests plus two skips acros
 Three optional import/comment/documentation notes were reconciled without runtime expansion;
 their wording is recorded verbatim in the contract. No second general review.
 
-### R11a implemented — delivery gates pending
+Integrated R11a main `cee1ad9`, retaining the additive net validator and no-network gate before
+body/dispatch, plus R14b command-outcome ownership. Combined build/typecheck and full checks
+pass 2,428 tests plus two skips across 136 files (four workers, 32 seconds). R11a exact
+post-merge CI 34030682233 passed all three platforms. Final exact-head PR CI follows.
+
+### R11a done — PR #166; post-merge CI green
+
+Main `cee1ad9` passed exact post-merge CI 34030682233 on all three platforms.
+The following gate notes are implementation history.
 
 Additive `net` defaults ask without repurposing legacy `network`. Runtime denies compatible
 net tools under enforcing no-network policy before body/dispatch bookkeeping. Explicit

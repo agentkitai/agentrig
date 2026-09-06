@@ -59,3 +59,10 @@ Optional findings, verbatim:
 
 All three resolved through import placement and explanatory comments/documentation only.
 No post-review runtime expansion or second general review.
+
+After mechanical integration of R11a main `cee1ad9`, own build/typecheck and full four-worker
+suite pass 2,428 tests plus two skips across 136 files (32 seconds). The integration preserves
+net permission validation and the actual policy gate before dispatch, plus R14b command-outcome
+receipts. Exact prior-main CI 34030682233 is green on all three platforms; final PR CI follows.
+Unsupported async implementations of synchronously typed callbacks are an explicit defensive
+API follow-up at the roadmap end, not a broader host-code-isolation claim.
