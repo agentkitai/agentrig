@@ -129,7 +129,10 @@ R12c adds live grant age/matched-decision counts and exact-ID revocation. Option
 policy receipts identify actual rule/grant decisions without re-evaluation; unknown custom
 attribution stays unknown. Correlated decision events drive chat/trace explanations, never
 restore authority. Preview matches do not count as consumed grants. See [R12c](plans/R12c.md);
-explicit child filtering remains R12d.
+R12d adds task-sealed live child views, filtering ancestor grants by `delegable` without copying
+records/counters. The runtime passes the exact view through subagent creation and the TUI asker;
+child-owned approvals never authorize root or siblings. Explicit base-policy authority stays
+shared and separate. See [R12d](plans/R12d.md) for bounds, expiry and trusted-host limitations.
 
 v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
 `cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so

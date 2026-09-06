@@ -1,0 +1,67 @@
+import { expect, it } from "vitest";
+import { PermissionGrantRegistry, type PermissionGrantSpec, type PermissionRequest } from "@agentkitai/agentrig-core";
+import { bindPermissionView, childPermissionView } from "../src/child-permissions.js";
+const req: PermissionRequest = { tool: "probe", class: "exec", input: {}, cwd: process.cwd() };
+function record(r: PermissionGrantRegistry, patch: Partial<PermissionGrantSpec> = {}) {
+  return r.grant({ subject: r.subject, operation: { tool: "probe" }, resource: "*", constraints: {},
+    duration: { kind: "session", id: r.context.sessionId! }, delegable: true, decision: "allow", ...patch });
+}
+const flush = (r: PermissionGrantRegistry) => r.flush(async () => {});
+it.each([false, true])("filters ancestor allows and denies by delegable=%s; keeps own/sibling/root scopes separate", async delegable => {
+  for (const decision of ["allow", "deny"] as const) {
+    const root = new PermissionGrantRegistry(); root.beginRun("session");
+    const inherited = record(root, { delegable, decision }); const child = root.childView(); const sibling = root.childView(); const grandchild = child.childView();
+    await flush(root);
+    expect(root.decide(req)).toBe(decision);
+    for (const view of [child, sibling, grandchild]) expect(view.decide(req)).toBe(delegable ? decision : "ask");
+    root.revoke(inherited.id); const local = record(child, { delegable: true }); await flush(child);
+    expect(root.inspect().map(x => x.grant.id)).toContain(local.id);
+    expect(root.decide(req)).toBe("ask"); expect(sibling.decide(req)).toBe("ask");
+    expect(child.authorize(req)).toEqual({ decision: "allow", grantId: local.id });
+    expect(grandchild.authorize(req)).toEqual({ decision: "allow", grantId: local.id });
+    expect(root.inspect()[0]!.matchedDecisions).toBe(2);
+    expect(() => sibling.revoke(local.id)).toThrow("own grants");
+    root.revoke(local.id); await flush(root); expect(grandchild.decide(req)).toBe("ask");
+  }
+});
+it("keeps counters/audit shared, previews pure, and fresh deny selection accurate", async () => {
+  const root = new PermissionGrantRegistry(); root.beginRun("s"); const child = root.childView();
+  const allow = record(root); const deny = record(root, { decision: "deny" });
+  expect(child.authorize(req)).toMatchObject({ auditBlocked: true });
+  await expect(child.flush(async () => { throw Error("append unavailable"); })).rejects.toThrow("append unavailable");
+  expect(root.authorize(req)).toMatchObject({ auditBlocked: true }); await flush(root);
+  expect(child.decide(req)).toBe("allow");
+  expect(child.authorize(req, true, "deny-only", true)).toEqual({ decision: "deny", grantId: deny.id });
+  expect(root.inspect().map(x => [x.grant.id, x.matchedDecisions])).toEqual([[allow.id, 0], [deny.id, 1]]);
+  for (const origin of ["sandbox-escalation", "mcp-definition-change", "external-input-expansion"]) {
+    expect(child.decide({ ...req, origin })).toBe("ask"); expect(() => child.remember({ ...req, origin }, "allow")).toThrow("separate consent");
+  }
+});
+it("seals views to the originating task/session and expires child-owned session records", async () => {
+  const root = new PermissionGrantRegistry(); const task = root.beginRun("s"); const child = root.childView();
+  const own = record(child); const inherited = record(root); await flush(root);
+  expect(child.decide(req)).toBe("allow"); root.endRun(task); await flush(root);
+  expect(root.inspect().map(x => x.grant.id)).toEqual([inherited.id]);
+  expect(root.list().some(g => g.id === own.id)).toBe(false);
+  const next = root.beginRun("s"); expect(child.active).toBe(false);
+  expect(child.authorize(req)).toEqual({ decision: "deny", viewExpired: true });
+  expect(child.inspect()).toEqual([]); expect(() => record(child)).toThrow("expired"); expect(() => child.childView()).toThrow("expired");
+  expect(root.childView().decide(req)).toBe("allow"); root.endRun(next); root.beginRun("other"); record(root);
+  expect(child.decide(req)).toBe("deny"); expect(() => child.beginRun("s")).toThrow("root grant lifecycle");
+});
+it("bounds view/subject and grant retention with shared limits, resetting only at root task end", async () => {
+  const root = new PermissionGrantRegistry({ maxViews: 2, maxGrants: 1 }); const task = root.beginRun("s");
+  const child = root.childView(); const grandchild = child.childView();
+  expect(() => root.childView()).toThrow("limit"); expect(() => grandchild.childView()).toThrow("limit");
+  record(child); expect(() => record(root)).toThrow("full"); await flush(root); root.endRun(task); await flush(root);
+  root.beginRun("s"); expect(root.childView().active).toBe(true);
+  expect(() => new PermissionGrantRegistry({ maxViews: 0 })).toThrow("limits");
+});
+it("derives from exact runtime identity, never copied/stale context or configured root fallback", () => {
+  const root = new PermissionGrantRegistry(); const task = root.beginRun("s"); record(root, { delegable: false });
+  const ctx = { origin: "root" }; bindPermissionView(ctx, root);
+  expect(childPermissionView(ctx, root)!.decide(req)).toBe("ask");
+  expect(() => childPermissionView({ ...ctx }, root)).toThrow("unbound");
+  const empty = {}; bindPermissionView(empty, undefined); expect(childPermissionView(empty, root)).toBeUndefined();
+  root.endRun(task); root.beginRun("s"); expect(() => childPermissionView(ctx, root)).toThrow("context expired");
+});

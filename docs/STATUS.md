@@ -1,9 +1,31 @@
 # Status
 
-Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R12d implemented — pending delivery gates
+
+Live child views share bounded records/audit/counters but match only own or delegable ancestor
+grants. Root/sibling authorization never consumes child-owned records. Views and runtime context
+bindings are sealed to the creating task; old children cannot consume a later task's grants.
+Child standing/scoped approvals pass through the exact view in the actual TUI, including preview,
+confirmation and ownership diagnostics. Root inspection/revocation can see child records, which
+expire at root task end. Explicit shared base policy and separate consent boundaries remain
+unchanged. [Contract and host-code limits](plans/R12d.md).
+
+Actual Ink ordinary/protocol spawn→child→grandchild tests refuse nondelegable root authority,
+confirm child-owned scope, count inherited uses and refuse sibling/root reuse. Runtime revocation,
+same-session/new-session expiry, bounded retention and copied/stale context controls are included.
+Initial full suite passed 2,330 tests plus two skips across 126 files; additional boundary tests
+followed. Main `9eb28cd` is integrated, preserving committed R16 scope. One bounded review,
+restored mutations, final combined checks and exact-head CI gate delivery.
+
+Updated-main build/typecheck/full checks pass 2,334 tests plus two skips across 126 files
+(four workers, 31 seconds). Removing delegable filtering and forcing the TUI asker to root
+authority both failed actual spawn controls and were restored; 30 focused cases pass. Base
+`9eb28cd` passed all three post-merge platforms in CI 34027657968. Review and PR CI follow.
 
 ### R13c done — PR #159; post-merge CI green
 
@@ -57,7 +79,10 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### R12c implemented — pending delivery gates
+### R12c done — PR #158; post-merge CI green
+
+Merge `06f5b4b` passed all three post-merge jobs in CI 34027192976; head `1921f00` passed
+all three in CI 34026828848. Following delivery notes are implementation history.
 
 Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
 `/permissions revoke <exact-id>` changes the next decision without cancelling running tools.

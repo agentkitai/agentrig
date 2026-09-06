@@ -112,8 +112,8 @@ export interface AgentConfig {
    * Resolves an `ask` permission decision. Headless default: deny.
    * The TUI (M7) plugs an interactive prompt in here.
    */
-  onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
-  /** Explicit live authority only; event replay never installs grants. Shared with children until R12d. */
+  onAsk?: (req: PermissionRequest, context?: import("./permissions.js").PermissionAskContext) => Promise<Exclude<Decision, "ask">>;
+  /** Explicit live authority only; built-in children receive filtered, task-sealed views. */
   permissionGrants?: PermissionGrantRegistry;
   /**
    * M7: who this session is, when a human answering its permission prompts is not watching it —
