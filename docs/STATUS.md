@@ -5,6 +5,21 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### Fourth pass: roadmap extended past the committed continuation
+
+After R6 closed, a source-level audit compared AgentRig against the harnesses in daily use
+(Claude Code, Codex CLI, Gemini CLI, OpenCode, Goose, Cline, Aider, Zed's ACP). ROADMAP gains
+an H7 repair row for open issues #116 (maxTokens truncation ends the session) and #95 (forged
+read-only line counts as a sandbox denial), an R15 band of twelve rows (ask_user tool, post-edit
+diagnostics, thinking blocks, remote MCP, on-demand review, CI mode, output schema, agent roles,
+spend ledger, mid-session model switch, TUI `@file`/image input, and an orchestration decision
+row), and an amendment making R8a speak the Agent Client Protocol instead of a bespoke NDJSON
+protocol. Section 5 orders these after the existing continuation; H7 may interrupt it.
+
+Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 updated against main
+for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
+(merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
+
 ### R5a implemented — delivery gates pending
 
 Mandatory strict sidecars validate before any selected extension import. Explicit paths and
