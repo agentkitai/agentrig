@@ -21,6 +21,9 @@ function section(title: string, lines: string[]): string[] {
 
 export function renderPromotionProposal(proposal: DreamReport["promoted"][number]): string {
   const lines = [`- ${proposal.from} → global (proposal; human review required; semantic truth not assessed)`];
+  lines.push(proposal.guardrails === undefined ? "  guardrails: not assessed; evidence-only preview, not promotion approval"
+    : `  guardrails: ${proposal.guardrails.status} — ${proposal.guardrails.reason}`);
+  if (proposal.guardrails?.assessor !== undefined) lines.push(`  effect assessor: ${proposal.guardrails.assessor.provider}/${proposal.guardrails.assessor.model} (model judgment, not proof)`);
   if (proposal.advisoryConfidence !== undefined) lines.push(`  page confidence (advisory, not evidence): ${proposal.advisoryConfidence}`);
   if (proposal.claims === undefined) lines.push("  No runtime witness metadata in this legacy proposal.");
   for (const claim of proposal.claims ?? []) {
@@ -107,7 +110,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
     );
   }
 
-  const rejected = opts.promotionRejected ?? [];
+  const rejected = opts.promotionRejected ?? report.guardrailRejected ?? [];
   if (rejected.length > 0) {
     out.push(
       ...section(
@@ -125,6 +128,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
 /** Total issues, not distinct pins: a conflict and skipped persistence are separate findings. */
 export function findingCount(report: DreamReport, structural?: StructuralFindings): number {
   const base =
+    (report.guardrailRejected?.length ?? 0) +
     report.contradictions.length +
     report.superseded.length +
     report.merged.length +

@@ -2,10 +2,25 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SessionStore } from "@agentkitai/agentrig-core";
-import { FileMemoryStore, LoreBackend } from "@agentkitai/agentrig-memory";
+import { SessionStore, type ModelProvider } from "@agentkitai/agentrig-core";
+import { FileMemoryStore, LoreBackend, PROMOTION_EFFECTS } from "@agentkitai/agentrig-memory";
 import { memoryLs, memoryPromote, memoryShow } from "../src/memory.ts";
 import { buildProgram } from "../src/program.ts";
+import { buildRoleProvider } from "../src/provider.js";
+
+vi.mock("../src/provider.js", async original => ({ ...await original<typeof import("../src/provider.js")>(), buildRoleProvider: vi.fn() }));
+function assessor(effect?: typeof PROMOTION_EFFECTS[number], before?: () => Promise<void>): ModelProvider {
+  return { id: "scripted", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100000 },
+    async *stream(request) {
+      await before?.();
+      const input = JSON.parse((request.messages[0]!.content[0] as { text: string }).text);
+      yield { type: "text_delta", text: JSON.stringify({ assessments: input.map((candidate: { candidateIndex: number; claims: { claimIndex: number }[] }) => ({
+        candidateIndex: candidate.candidateIndex, claims: candidate.claims.map(c => ({ claimIndex: c.claimIndex,
+          effects: Object.fromEntries(PROMOTION_EFFECTS.map(name => [name, name === effect ? "weakens" : "preserves"])), reason: "fixture future-effect assessment" })),
+      })) }) };
+      yield { type: "usage", usage: { input: 10, output: 5 } }; yield { type: "stop", reason: "end_turn" };
+    } };
+}
 
 let root: string;
 let wiki: FileMemoryStore;
@@ -27,6 +42,7 @@ beforeEach(async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(LoreBackend.prototype, "promote").mockResolvedValue();
+  vi.mocked(buildRoleProvider).mockReset().mockReturnValue(assessor());
   process.exitCode = 0;
 });
 afterEach(async () => {
@@ -55,6 +71,7 @@ describe("memory promotion publication gate", () => {
     expect(output).toContain("semantic truth not assessed");
     expect(output).toContain("Nothing was published");
     expect(process.exitCode).toBe(0);
+    expect(buildRoleProvider).not.toHaveBeenCalled();
   });
 
   it("publishes only after explicit confirmation, including the parsed --confirm flag", async () => {
@@ -102,5 +119,40 @@ describe("memory promotion publication gate", () => {
     expect(process.exitCode).toBe(1);
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("promotion failed");
     expect(vi.mocked(console.log).mock.calls.flat().join("\n")).not.toContain("promoted concepts");
+  });
+
+  it("confirmation cannot bypass an effect refusal despite independent witnesses", async () => {
+    backend(); vi.mocked(buildRoleProvider).mockReturnValue(assessor("weaken-verification"));
+    const before = (await wiki.read(path))!.body;
+    await memoryPromote(path, { dir: root, confirm: true });
+    expect(LoreBackend.prototype.promote).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("guardrail refusal");
+    expect((await wiki.read(path))!.body).toBe(before);
+  });
+
+  it("refuses a page changed during the model assessment", async () => {
+    backend(); vi.mocked(buildRoleProvider).mockReturnValue(assessor(undefined, async () => {
+      const p = (await wiki.read(path))!; await wiki.write(path, { ...p, body: p.body.replace("[observed]", "[inferred]") });
+    }));
+    await memoryPromote(path, { dir: root, confirm: true });
+    expect(LoreBackend.prototype.promote).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("page changed during effect assessment");
+  });
+
+  it("refuses malformed assessment without suggesting a partial backend write occurred", async () => {
+    backend(); vi.mocked(buildRoleProvider).mockReturnValue({ ...assessor(), async *stream() {
+      yield { type: "text_delta", text: "{}" }; yield { type: "stop", reason: "end_turn" };
+    } });
+    await memoryPromote(path, { dir: root, confirm: true });
+    expect(LoreBackend.prototype.promote).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    const errors = vi.mocked(console.error).mock.calls.flat().join("\n");
+    expect(errors).toContain("nothing published"); expect(errors).not.toContain("backend may have accepted");
+  });
+
+  it("forwards parsed guardrail limits and refuses before model work when input is over cap", async () => {
+    backend();
+    await buildProgram().parseAsync(["node", "agentrig", "memory", "promote", path, "--dir", root, "--confirm", "--guardrail-limits", '{"maxInputChars":10}']);
+    expect(LoreBackend.prototype.promote).not.toHaveBeenCalled(); expect(process.exitCode).toBe(1);
+    expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("input limit");
   });
 });

@@ -43,6 +43,7 @@ import {
   memorySearch,
   memoryShow,
   type MemoryIngestOptions,
+  type MemoryPromoteOptions,
 } from "./memory.js";
 
 /**
@@ -341,9 +342,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   memoryDir(memory.command("search <query...>").description("Index ∪ BM25 search over the wiki"))
     .option("-k, --k <n>", "max results", "8")
     .action(async (query: string[], opts: { dir: string; k?: string }) => memorySearch(query.join(" "), opts));
-  memoryDir(memory.command("promote <path>").description("Review runtime-backed promotion evidence; publish only with --confirm"))
-    .option("--confirm", "publish after reviewing claim-level evidence (eligibility is still required)")
-    .action(async (path: string, opts: { dir: string; confirm?: boolean }) => memoryPromote(path, opts));
+  withProviderOptions(memoryDir(memory.command("promote <path>").description("Preview evidence offline; --confirm also requires a bounded memory-role effect assessment")))
+    .option("--confirm", "request publication after evidence review and model effect assessment; no guard bypass")
+    .option("--guardrail-limits <json>", "promotion effect-assessment lifetime/model limits (JSON object)", parseDreamLimits)
+    .action(async (path: string, opts: MemoryPromoteOptions, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved !== undefined) await memoryPromote(path, { ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
+    });
   memoryDir(memory.command("lint").description("Dry-run dream report — structural only, no model call, no output store"))
     .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object)", parseDreamScanLimits)
     .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
