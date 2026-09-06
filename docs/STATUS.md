@@ -5,10 +5,48 @@ post-merge Windows run 34033869154 failed two existing prompt-readiness assertio
 the original and single diagnostic attempt. No green post-merge claim; R10a waits for this
 separate test-only repair and green main. [Evidence and contract](plans/child-grants-readiness.md).
 
-Active implementation queue: **R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c local packages are implemented, pending delivery gates; R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R5c implemented — delivery gates pending
+
+Local directory/npm-tarball packages validate strict R5e manifests before create-only staged
+publication. Maintained bounded archive parsing rejects unsafe final paths/types/collisions;
+no scripts, imports, registry access or dependency installation occur. Trusted runtime discovery
+rechecks complete-unit content records before existing extension/skill loaders; prompt files
+stay inert. Integrity is change detection, never authenticity or a sandbox. Existing trust,
+explicit roots and negative discovery overrides remain authoritative. [Contract](plans/R5c.md).
+This resumes the extension lane after R5b PR #167/main `fef3f46` post-CI 34031416228 passed
+all three platforms; independent R11b/R14c changes are retained on integration.
+Full gates and exactly one bounded independent review precede delivery.
+
+Own integrated build/typecheck/full suite passed 2,500 tests plus two skips across 142 files
+(37 seconds). Three archive-type/integrity/script guard mutations failed and were restored.
+The one independent [review](plans/R5c-review.md) also passed build/typecheck/full 2,500 + two
+skips (34 seconds), APPROVE, 244 seconds and 24/max24 turns. Its optional alias-priority note
+was treated as a contract defect: a real builder regression failed before explicit resolved
+priority mapping and now passes for relative/absolute aliases while preserving project wins.
+No second review; final updated-head checks and all-platform CI remain pending.
+
+Final updated-main build/typecheck/full suite after the fix passes 2,502 tests plus two skips
+across 142 files (four workers, 34 seconds). The PR proceeds to exact-head all-platform CI;
+the root coordinates merge only after those checks and the preceding main gate are green.
+
+Initial PR #170/head `29dcabf` CI 34033531560 found a new doctor fixture assertion failure on
+macOS and Windows (not timeouts). Canonical temporary-root trust keys plus a real filesystem-alias
+control fix the fixture; assertions remain strong. R10d main `3d45d9f` is integrated. Combined
+build/typecheck, 91 focused package/doctor/provider cases and full 2,520 + two skips/144 files
+pass (34 seconds). Fresh exact-head CI is required; initial failures remain in the contract receipt.
+
+Head `5c105f5` passed all three PR CI jobs in 34034014045 (Windows on the single authorized
+diagnostic rerun after an unchanged X1 timeout). All 29 Windows package controls passed.
+Separate main readiness repair #173 is now integrated as `063cac6`, retaining its shared helper
+and CI group. Combined build/typecheck, 93 focused cases and full 2,526 + two skips/145 files
+pass (four workers, 37 seconds). Fresh PR CI and repaired-main post-merge CI still gate delivery;
+no additional broad review was run for this mechanical integration.
+
 
 ### Child-grants readiness repair — implementation; delivery gates pending
 
