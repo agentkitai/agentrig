@@ -338,6 +338,8 @@ export class OpenAIChatGPTProvider implements ModelProvider {
 
   /** Build the authed request; `force` refreshes the access token first. */
   private async request(req: ModelRequest, force: boolean): Promise<{ url: string; init: RequestInit }> {
+    // Replay refusal must precede credential access and refresh network, not only fetch.
+    validateThinkingHistory(req.messages, "openai-responses");
     const { accessToken, accountId } = await this.auth.getAccessToken(force);
     const headers: Record<string, string> = {
       "content-type": "application/json",

@@ -230,3 +230,16 @@ it("review regression: actual single-task reasoning runtime continues compacting
   expect(events.filter(e => e.type === "context.compact").length).toBeGreaterThan(2);
   expect(events.filter(e => e.type === "error").some(e => e.message.includes("could not reduce"))).toBe(false);
 });
+
+it("incompatible Responses history refuses before credential reads or OAuth refresh", async () => {
+  let reads = 0, refreshes = 0, requests = 0;
+  const jwt = (exp: number) => `a.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.c`;
+  const auth = new OpenAIChatGPTAuth({
+    store: { async read() { reads++; return { accessToken: jwt(1), refreshToken: "fixture" }; }, async write() {} },
+    fetchFn: async () => { refreshes++; return new Response(JSON.stringify({ access_token: jwt(4_000_000_000), refresh_token: "fixture" }), { status: 200 }); },
+  });
+  const p = new OpenAIChatGPTProvider({ model: "fixture", auth, fetchFn: async () => { requests++; throw new Error("unexpected provider fetch"); } });
+  const block = thinkingFromItem("anthropic", anthropic);
+  await expect(collect(p.stream(req([{ role: "assistant", content: [block] }]), new AbortController().signal))).rejects.toThrow("reasoning replay");
+  expect({ reads, refreshes, requests }).toEqual({ reads: 0, refreshes: 0, requests: 0 });
+});
