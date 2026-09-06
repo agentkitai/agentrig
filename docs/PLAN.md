@@ -49,6 +49,16 @@ interface Message { role: 'user' | 'assistant'; content: ContentBlock[] }
 
 ### 2.2 Provider adapter
 
+R15c adds bounded `thinking` blocks with disclosed text and adapter-owned opaque
+replay/signature/identity. Completed blocks are persisted in canonical messages;
+the Responses provider no longer depends on a process-local replay cache. Cross-
+format/unsupported Chat Completions histories explicitly refuse before fetch.
+TUI verbosity reveals disclosed text only; export and textual ingest omit thinking
+with an explicit receipt, while raw logs/ACP raw-event opt-in remain sensitive.
+Compaction omits older-round thinking before summarization in the same operation,
+preserving retained recent tool pairs and their signed reasoning verbatim after
+the new advisory summary. See [R15c](plans/R15c.md) for bounds and cache limits.
+
 ```ts
 interface ModelRequest {
   system: string;
@@ -772,12 +782,15 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R8c adds explicit `--otel-endpoint` observation over the event stream, with fixed
+metadata-only OTLP/HTTP JSON spans, shared bounded process capacity and joined
+shutdown. It never grants model authority or changes immutable event ordering;
+enforcing no-network sandboxes refuse export. See [OTLP traces](OTEL.md).
 R15f adds explicit `run --ci` file/event input as advisory context, configured
 headless policy and actual ask-deny cancellation. Fixed CI ceilings clamp larger
 settings without claiming aggregate billing containment. Create-only Markdown
 reports and optional authorized, identity-checked PR comments never rewrite logs
 or automatically execute event code. See [CI mode](CI-MODE.md) and [R15f](plans/R15f.md).
-
 R15a adds the private-runtime `ask_user` builtin and protected question events.
 TUI and explicitly negotiated ACP clients answer through a bounded clarification
 queue, separate from permissions and supervisor steering. Headless defaults fail;

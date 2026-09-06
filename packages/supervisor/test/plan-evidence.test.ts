@@ -8,7 +8,20 @@ import { createAgent, bashTool, updatePlanTool, RulePolicy, SessionStore, Harnes
 import { attach, initialState, reduce, parseCommandCheck, type PlanEvidenceLedger } from "@agentkitai/agentrig-supervisor";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const processRoots = new Set<string>();
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true,
+  // Only the real background/timeout fixture needs a bounded Windows handle-release grace.
+  ...(processRoots.delete(root) ? { maxRetries: 5, retryDelay: 100 } : {}) }); });
+async function disposeJobs(jobs: { ids(): string[]; get(id: string): { done: Promise<void> } | undefined; disposeAll(): void }): Promise<void> {
+  const done = jobs.ids().map(id => jobs.get(id)!.done);
+  jobs.disposeAll(); // Synchronous kill initiation is not completion of the owned processes.
+  let timer!: ReturnType<typeof setTimeout>;
+  try {
+    await Promise.race([Promise.all(done), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(Error("fixture background cleanup did not finish")), 2_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 const item = { id: "check", text: "verify the change", accept: "node check.cjs exits 0", status: "done" as const };
 const stop: ModelEvent = { type: "stop", reason: "end_turn" };
 const call = (name: string, input: unknown): ModelEvent[] => [
@@ -94,18 +107,29 @@ it("fake bash fields and a copied genuine result cannot mint an outcome receipt"
 it("actual background starts and timed-out foreground runs remain unknown, never successful exits", async () => {
   const f = await fixture([call("update_plan", { items: [item] }),
     call("bash", { command: "node check.cjs", background: true }), [stop]]);
+  processRoots.add(f.root);
   const jobs = new JobRegistry(); f.config.tools[1] = bashTool({ jobs });
   try {
     const background = await run(f);
     expect(background.evidence.items[0]!.attempts.at(-1)?.observation).toBe("unknown");
     expect(background.events.find(e => e.type === "tool.result" && e.display.startsWith("started background job"))).toBeDefined();
     expect(background.events.some(e => e.type === "tool.result" && e.commandOutcome !== undefined)).toBe(false);
-  } finally { jobs.disposeAll(); }
+  } finally { await disposeJobs(jobs); }
   await writeFile(join(f.root, "wait.cjs"), "setInterval(() => {}, 1000)");
   const wait = { ...item, accept: "node wait.cjs exits 0" };
   f.turns.push(call("update_plan", { items: [wait] }), call("bash", { command: "node wait.cjs", timeoutMs: 100 }), [stop]);
   const timed = await run(f);
   expect(timed.evidence.items[0]!.attempts.at(-1)).toMatchObject({ observation: "unknown", outcome: { timedOut: true } });
+});
+
+it("fixture cleanup waits for owned background completion rather than only issuing kill", async () => {
+  let release!: () => void, killed = false, finished = false;
+  const done = new Promise<void>(resolve => { release = resolve; });
+  const cleaning = disposeJobs({ ids: () => ["owned"], get: () => ({ done }), disposeAll: () => { killed = true; } })
+    .then(() => { finished = true; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(killed).toBe(true); expect(finished).toBe(false);
+  release(); await cleaning; expect(finished).toBe(true);
 });
 
 function stream() {
