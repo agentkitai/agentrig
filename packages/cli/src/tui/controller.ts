@@ -344,8 +344,9 @@ export class TuiController {
   }
 
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
-  readonly ask = (req: PermissionRequest, context?: PermissionAskContext): Promise<Exclude<Decision, "ask">> =>
+  readonly ask = (req: PermissionRequest, context?: PermissionAskContext, signal?: AbortSignal): Promise<Exclude<Decision, "ask">> =>
     new Promise((resolve) => {
+      if (signal?.aborted) { resolve("deny"); return; }
       const registry = context === undefined ? this.permissionGrants : context.permissionGrants;
       // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
       // every single write in a twenty-file task is how a permission prompt stops being read at
@@ -360,14 +361,26 @@ export class TuiController {
         resolve(standing);
         return;
       }
+      let settled = false;
+      const cancel = () => entry.resolve("deny", false);
+      const finish = (decision: "allow" | "deny") => {
+        settled = true; signal?.removeEventListener("abort", cancel); resolve(decision);
+        if (this.state.pending === entry) this.advanceQueue();
+        else {
+          const index = this.queue.indexOf(entry);
+          if (index >= 0) { this.queue.splice(index, 1); this.set({ queued: this.queue.length }); }
+        }
+      };
       const entry: PendingPermission = {
         req,
         ...(registry === undefined ? {} : { permissionGrants: registry }),
         resolve: (d, remember, scope) => {
+          if (settled) return;
           if (req.origin === "external-input-expansion" && remember === true) {
             this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
             return;
           }
+          settled = true;
           if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
               if (registry === undefined) throw new Error("no runtime grant registry; use a one-time answer");
@@ -379,7 +392,7 @@ export class TuiController {
               }
             } catch (error) {
               this.print(`standing permission refused: ${String(error)}`, "error");
-              resolve("deny"); this.advanceQueue(); return;
+              finish("deny"); return;
             }
             this.print(
               `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} ${registry?.isChildView ? "for this child within the current parent run" : "for the rest of this session"} (/permissions to review)`,
@@ -388,8 +401,7 @@ export class TuiController {
           } else {
             this.print(`${d === "allow" ? "allowed" : "denied"} ${req.tool}`, d === "allow" ? "system" : "error");
           }
-          resolve(d);
-          this.advanceQueue();
+          finish(d);
         },
       };
       // A single slot silently overwrote the first resolver when two requests overlapped,
@@ -404,6 +416,8 @@ export class TuiController {
         this.queue.push(entry);
         this.set({ queued: this.queue.length });
       }
+      signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) cancel();
     });
 
   private advanceQueue(): void {

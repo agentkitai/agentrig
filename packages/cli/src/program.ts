@@ -344,9 +344,9 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--deny <rule>", "deny a permission class/tool", collect, [])
     .option("--yolo", "allow otherwise unconfigured decisions; explicit deny and sandbox refusal still win")
     .option("--sandbox <mode>", "host git/gh currently requires none", "none")
-    .option("--max-tokens-per-turn <n>", "requested response-token ceiling, at most2048", "2048")
-    .option("--max-minutes <n>", "operation wall-clock ceiling, at most1.5", "1.5")
-    .addHelpText("after", "\nTracked text only: untracked, binary and metadata-only changes are not reviewed. Refuses diffs over16KiB,40files,128hunks rather than silently trimming. Headless ask denies. No tools/tests/edits, automatic posting or correctness guarantee.\nExamples: agentrig review; agentrig review --base main; agentrig review --pr 12 --allow exec --allow net [--comment]\n")
+    .option("--max-tokens-per-turn <n>", "requested response-token ceiling, at most 2048", "2048")
+    .option("--max-minutes <n>", "operation wall-clock ceiling, at most 1.5", "1.5")
+    .addHelpText("after", "\nLocal review requires the repository root. Tracked text only: untracked, binary, submodule and metadata-only changes are not reviewed. Refuses diffs over 16 KiB, 40 files or 128 hunks rather than silently trimming. Configured Git filters and total-session token/USD caps refuse; choose supported time/per-response limits in a review profile. Headless ask denies. No tools/tests/edits, automatic posting or correctness guarantee.\nExamples: agentrig review; agentrig review --base main; agentrig review --pr 12 --allow exec --allow net [--comment]\n")
     .action(async (opts: ReviewOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
       if (resolved === undefined) return;

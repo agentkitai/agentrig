@@ -66,6 +66,20 @@ describe("R15e actual diff review", () => {
     await writeFile(join(root, "a.ts"), "return 3;\n"); const changing = fake(() => writeFile(join(root, "a.ts"), "return 4;\n"));
     await expect(reviewChanges(root, defaults, signal(), { provider: () => changing.provider })).rejects.toThrow("state changed");
   });
+  it("refuses nested cwd rather than declaring a scoped read while capturing parent files", async () => {
+    const { root } = await repo(); const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(root, "nested")); await writeFile(join(root, "a.ts"), "return 2;\n"); const factory = vi.fn(() => fake().provider);
+    await expect(reviewChanges(join(root, "nested"), defaults, signal(), { provider: factory })).rejects.toThrow("repository root");
+    expect(factory).not.toHaveBeenCalled();
+  });
+  it("refuses actual added and deleted gitlinks before any provider call", async () => {
+    const { root, git } = await repo(); const base = (await git(["rev-parse", "HEAD"])).stdout.trim(); const factory = vi.fn(() => fake().provider);
+    await git(["update-index", "--add", "--cacheinfo", `160000,${base},sub`]); await git(["commit", "-qm", "gitlink added"]);
+    await expect(reviewChanges(root, { ...defaults, base }, signal(), { provider: factory })).rejects.toThrow("submodule");
+    const added = (await git(["rev-parse", "HEAD"])).stdout.trim(); await git(["update-index", "--force-remove", "sub"]); await git(["commit", "-qm", "gitlink deleted"]);
+    await expect(reviewChanges(root, { ...defaults, base: added }, signal(), { provider: factory })).rejects.toThrow("submodule");
+    expect(factory).not.toHaveBeenCalled();
+  });
   it("refuses sandbox, invalid args, binary/oversized patches and denied reads before provider construction", async () => {
     const { root } = await repo(); const factory = vi.fn(() => fake().provider);
     expect((await reviewChanges(root, defaults, signal(), { provider: factory })).review.findings).toEqual([]); expect(factory).not.toHaveBeenCalled();
@@ -174,6 +188,36 @@ describe("R15e explicit PR authorization", () => {
 });
 
 describe("R15e controller lifecycle", () => {
+  it("cancels a queued request by identity without answering the active sibling", async () => {
+    const { root } = await repo(); const controller = new TuiController({ cwd: root, agent: { run: () => { throw new Error("no agent"); } } });
+    const first = controller.ask({ tool: "first", class: "exec", cwd: root, input: {} });
+    const abort = new AbortController();
+    const second = controller.ask({ tool: "second", class: "exec", cwd: root, input: {} }, undefined, abort.signal);
+    expect(controller.snapshot().queued).toBe(1); abort.abort(); expect(await second).toBe("deny");
+    expect(controller.snapshot().pending?.req.tool).toBe("first"); expect(controller.snapshot().queued).toBe(0);
+    await controller.shutdown(); expect(await first).toBe("deny");
+  });
+  it("deadline settles only the exact unanswered review prompt; late answers cannot grant or drain another ask", async () => {
+    const { root } = await repo(); const factory = vi.fn(() => fake().provider); const processCall = vi.fn(reviewProcess);
+    const controller = new TuiController({ cwd: root, agent: { run: () => { throw new Error("no agent"); } } });
+    controller.setReview(async (_args, signal) => {
+      try { return renderReview(await reviewChanges(root, { ...defaults, pr: "12", maxMinutes: "0.001" }, signal, {
+        provider: factory, process: processCall, ask: (req, askSignal) => controller.ask(req, { permissionGrants: controller.permissionGrants }, askSignal),
+      })); } catch (error) { return [reviewFailure(error)]; }
+    });
+    let settled = false; const running = controller.submit("/review").then(() => { settled = true; });
+    let unrelated: Promise<unknown> | undefined;
+    try {
+      await vi.waitFor(() => expect(controller.snapshot().pending?.req.tool).toBe("review_gh"), { interval: 1 });
+      const saved = controller.snapshot().pending!;
+      unrelated = controller.ask({ tool: "unrelated", class: "exec", cwd: root, input: {} });
+      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 1000 });
+      expect(controller.snapshot().pending?.req.tool).toBe("unrelated");
+      saved.resolve("allow", true); expect(controller.permissionGrants.inspect()).toHaveLength(0);
+      expect(controller.snapshot().pending?.req.tool).toBe("unrelated");
+      expect(factory).not.toHaveBeenCalled(); expect(processCall).not.toHaveBeenCalled();
+    } finally { controller.abort(); await controller.shutdown(); await running; await unrelated; }
+  });
   it("reserves /review, exposes busy state, blocks other work and joins abort", async () => {
     expect(parseCommand("/review --base HEAD")).toEqual({ kind: "review", args: "--base HEAD" }); expect(RESERVED_COMMAND_NAMES.has("review")).toBe(true);
     expect(reviewArguments("--pr 12 --comment")).toEqual({ pr: "12", comment: true }); expect(() => reviewArguments("--exec x")).toThrow();

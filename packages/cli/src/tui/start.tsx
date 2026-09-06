@@ -132,7 +132,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     try {
       const result = await reviewChanges(process.cwd(), { ...opts, ...reviewArguments(args) }, signal, {
         provider: () => built!.providers.supervisor,
-        ask: req => controller.ask(req, { permissionGrants: controller.permissionGrants }),
+        ask: (req, signal) => controller.ask(req, { permissionGrants: controller.permissionGrants }, signal),
         onUsage: report => controller.print(formatAuxiliaryUsage(report), "system"),
       });
       return renderReview(result);

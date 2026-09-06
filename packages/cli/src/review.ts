@@ -21,7 +21,7 @@ export interface ReviewDependencies {
   process?: ReviewProcess;
   provider?: () => ModelProvider;
   policy?: PermissionPolicy;
-  ask?: (request: PermissionRequest) => Promise<"allow" | "deny">;
+  ask?: (request: PermissionRequest, signal: AbortSignal) => Promise<"allow" | "deny">;
   onUsage?: (report: AuxiliaryReport) => void;
 }
 export interface ReviewResult { identity: string; coverage: string; review: DiffReviewOutput; usage?: AuxiliaryReport; commented: boolean }
@@ -72,11 +72,21 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
   try {
     signal.throwIfAborted();
     const root = await realpath(cwd);
+    const cancellable = async <T>(work: () => Promise<T>): Promise<T> => {
+      signal.throwIfAborted();
+      let cancel!: () => void;
+      const aborted = new Promise<never>((_, reject) => {
+        cancel = () => reject(signal.reason); signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) cancel();
+      });
+      try { return await Promise.race([Promise.resolve().then(work), aborted]); }
+      finally { signal.removeEventListener("abort", cancel); }
+    };
     const permit = async (tool: string, cls: PermissionRequest["class"], args: string[]) => {
       signal.throwIfAborted();
       const request: PermissionRequest = { tool, class: cls, cwd: root, paths: [root], input: { argv: [...args] } };
-      let decision = await policy.decide(request);
-      if (decision === "ask") decision = await dependencies.ask?.(request) ?? "deny";
+      let decision = await cancellable(() => policy.decide(request));
+      if (decision === "ask") decision = await cancellable(async () => await dependencies.ask?.(request, signal) ?? "deny");
       signal.throwIfAborted();
       if (decision !== "allow") throw new Error(`review ${cls} permission denied`);
     };
@@ -107,6 +117,9 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       verify = async () => { if (JSON.stringify(await metadata()) !== JSON.stringify(first)) throw new Error("PR changed during review; result refused"); };
       await verify();
     } else {
+      const top = (await git(["rev-parse", "--show-toplevel"])).trim();
+      if (await realpath(top) !== root)
+        throw new ReviewRefusal("run local review from the canonical repository root; nested cwd cannot authorize parent-file reads");
       // Worktree-to-index conversion can invoke clean/process filters even with textconv
       // and external diff disabled. Refuse configured filters before asking Git for a diff.
       const configNames = await git(["config", "--includes", "--null", "--name-only", "--list"]);
@@ -116,7 +129,7 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
         throw new ReviewRefusal("read-only review refuses Git clean/process filter configuration; use a repository without configured filters. No diff filter or provider was run.");
       const head = await revision("HEAD");
       const base = options.base === undefined ? head : await revision(options.base);
-      const capture = () => git(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base, ...(options.base === undefined ? [] : [head]), "--"]);
+      const capture = () => git(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-relative", "--no-color", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base, ...(options.base === undefined ? [] : [head]), "--"]);
       patch = await capture();
       identity = `${base}..${options.base === undefined ? "tracked-worktree" : head} HEAD:${head} sha256:${digest(patch)}`;
       coverage = options.base === undefined ? "Tracked HEAD-to-worktree text changes only; untracked files excluded. No tests run." : "Resolved base-to-HEAD text changes only; worktree/untracked changes excluded. No tests run.";
