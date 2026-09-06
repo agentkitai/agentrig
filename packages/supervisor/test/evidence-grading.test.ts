@@ -81,6 +81,46 @@ it("actual attach retains declared failure beyond its 400-event trajectory windo
   } finally { release(); session.control.abort(); }
 });
 
+it.each(["legacy", "mismatch"] as const)("resumed actual attach anchors current-run %s without assessing prior declarations", async mode => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-evidence-resume-")); roots.push(root);
+  await writeFile(join(root, "check.cjs"), "process.exit(1)");
+  const call = (name: string, input: unknown): ModelEvent[] => [{ type: "tool_use", id: "same", name, input }, { type: "stop", reason: "tool_use" }];
+  const turns = [call("update_plan", { items: [{ ...item, id: "earlier-history-only" }] }), [{ type: "stop", reason: "end_turn" }] as ModelEvent[]];
+  let release!: () => void; const graded = new Promise<void>(resolve => { release = resolve; });
+  const provider: ModelProvider = { ...model([]), async *stream() {
+    for (const event of turns.shift() ?? []) {
+      yield event;
+      if (event.type === "text_delta" && event.text === "trigger") await graded;
+    }
+  } };
+  const store = new SessionStore({ root: join(root, "logs") });
+  const agent = createAgent({ provider, store, tools: [updatePlanTool(), bashTool()], systemPrompt: "fixture", repoMap: false,
+    permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]) });
+  const prior = agent.run("old task", { cwd: root }); await prior.done;
+  const priorCount = (await store.readAll(prior.id)).length;
+  turns.push(call("update_plan", { items: mode === "legacy" ? [{ id: "old-style", text: "legacy plan", status: "done" }] : [item] }));
+  if (mode === "mismatch") turns.push(call("bash", { command: "node check.cjs" }));
+  turns.push([{ type: "text_delta", text: "trigger" }, { type: "stop", reason: "end_turn" }]);
+  const session = agent.run("verify this run", { resume: prior.id });
+  const gradingProvider = judge(); const optimistic = new RubricGrader({ provider: gradingProvider });
+  let input: GradeInput | undefined; let result: GradeOutput | undefined;
+  const observer = attach(session, { detectors: [{ id: "resume-grade", observe: event => event.type === "model.delta" && event.text === "trigger"
+    ? { type: "stall", confidence: 1, evidence: ["grade"], window: [event.seq, event.seq] } : null }],
+    policy: { decide: signals => signals.length ? [{ type: "run_grader", rubric: "current run" }] : [] },
+    grader: { grade: async (value, options) => { input = value; try { result = await optimistic.grade(value, options); return result; } finally { release(); } } },
+    onError: () => release(),
+  });
+  try {
+    await session.done; await observer.done;
+    expect(input?.evidence?.text).toContain(`current run from event#${priorCount}; prior history not assessed`);
+    expect(input?.evidence?.text).not.toContain("earlier-history-only");
+    expect(JSON.stringify(gradingProvider.requests[0]?.messages)).toContain("prior history not assessed");
+    expect(input?.evidence?.incomplete).toBe(false);
+    if (mode === "legacy") expect(result).toEqual({ pass: true, gaps: [] });
+    else { expect(result?.pass).toBe(false); expect(result?.gaps.join()).toMatch(/tests.*latest exit mismatch/); }
+  } finally { release(); session.control.abort(); }
+});
+
 function trajectory(items: Array<{ id: string; text: string; status: "done" | "pending" | "in_progress" | "dropped"; accept?: string }>, code: number | null = 0) {
   const out: HarnessEvent[] = [];
   const push = (event: EventPayload) => { out.push(HarnessEvent.parse({ ...event, seq: out.length, sessionId: "s", ts: 1 })); };

@@ -116,7 +116,7 @@ export class RubricGrader implements Grader {
         `# Rubric\n${input.rubric}`,
         `# Artifacts\n${rendered.length === 0 ? "(none provided)" : rendered.join("\n\n")}`,
         `# Trajectory\n${trajectoryOmitted ? `${trajectory.slice(0, 20_000)}\n…(trajectory text omitted; unverified)` : trajectory}`,
-        ...(claims ? [`# Claims vs evidence\n${evidence.text}`] : []),
+        ...(claims || input.evidence !== undefined ? [`# Claims vs evidence\n${evidence.text}`] : []),
       ].join("\n\n");
 
       const text = await run.completeJson(this.opts.provider, claims ? SYSTEM + CLAIMS_RULE : SYSTEM, user, this.opts.maxTokens ?? 1000, { requireEndTurn: true });

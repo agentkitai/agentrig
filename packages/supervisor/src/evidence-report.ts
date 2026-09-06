@@ -13,7 +13,7 @@ export interface EvidenceReport {
 }
 
 /** Streaming bounded state, shared by the grader and read-only finished-session report. */
-export function evidenceReportCollector() {
+export function evidenceReportCollector(options: { scope?: "current-run" } = {}) {
   const ledger = initialPlanEvidence();
   let statuses: PlanItem["status"][] = [];
   let hasDeclarations = false;
@@ -23,9 +23,16 @@ export function evidenceReportCollector() {
   let invalidOrder = false;
   let previousSeq = -1;
   let finished = false;
+  let startSeq: number | undefined;
   return {
     observe(event: HarnessEvent): void {
       if (++count > MAX_EVIDENCE_EVENTS) { omittedEvents++; finished = false; return; }
+      if (count === 1) {
+        startSeq = event.seq;
+        // Only attach selects current-run scope. Resume/fork has a legitimate nonzero anchor;
+        // arbitrary direct trajectory prefixes must still be reported as incomplete.
+        if (options.scope === "current-run" && (event.type === "session.start" || event.type === "session.resume")) previousSeq = event.seq - 1;
+      }
       sessionId ??= event.sessionId;
       if (event.sessionId !== sessionId || event.seq !== previousSeq + 1) invalidOrder = true;
       if (event.sessionId !== sessionId || event.seq <= previousSeq) return;
@@ -46,6 +53,8 @@ export function evidenceReportCollector() {
         else omittedGaps++;
       };
       const lines = ["Claims → evidence (candidate observations; semantic acceptance remains unverified)",
+        options.scope === "current-run" ? `Scope: current run from event#${startSeq ?? "unknown"}; prior history not assessed.` :
+          "Scope: supplied physical-session history; fork ancestors are not assessed.",
         "item | plan status | declared check | latest candidate | observation refs"];
       let chars = lines.join("\n").length;
       let omittedRows = 0;

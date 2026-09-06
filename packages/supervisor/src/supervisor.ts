@@ -126,7 +126,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   positiveLimit("reviewTimeoutMs", opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
   for (const [key, value] of Object.entries(opts.auxiliaryLimits ?? {})) positiveLimit(key, value);
   const state = initialState();
-  const evidence = evidenceReportCollector();
+  const evidence = evidenceReportCollector({ scope: "current-run" });
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
   if (opts.pricing !== undefined) stateOpts.pricing = opts.pricing;
