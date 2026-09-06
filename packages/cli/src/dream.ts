@@ -25,6 +25,8 @@ export interface DreamOptions extends ProviderOptions {
   since?: string;
   structuralOnly?: boolean;
   skillCandidates?: boolean;
+  emitSkills?: boolean;
+  apply?: string;
   modelExplicit?: boolean;
   lockTimeout?: string;
   dreamScanLimits?: Partial<ScanLimits>;
@@ -37,6 +39,10 @@ export async function dreamCommand(opts: DreamOptions): Promise<void> {
 }
 
 async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise<void> {
+  if (opts.apply !== undefined && (opts.emitSkills !== true || opts.review === true || opts.auto === true || opts.structuralOnly === true || !/^[a-f0-9]{64}$/.test(opts.apply))) {
+    console.error("--apply <64-character review-digest> requires --emit-skills and cannot combine with --review, --auto or --structural-only");
+    process.exitCode = 1; return;
+  }
   const lockTimeoutMs = opts.lockTimeout === undefined ? 5000 : Number(opts.lockTimeout);
   if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs < 0 || lockTimeoutMs > 2_147_483_647) {
     console.error("--lock-timeout must be an integer from 0 to 2147483647 milliseconds");
@@ -103,6 +109,7 @@ async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise
     cwd: process.cwd(),
     ...(opts.structuralOnly === true ? { structuralOnly: true } : {}),
     ...(opts.skillCandidates === true ? { procedureCandidates: true } : {}),
+    ...(opts.emitSkills === true ? { emitSkills: { root: join(opts.dir, "skills", "generated"), ...(opts.apply === undefined ? {} : { apply: opts.apply }) } } : {}),
     ...(sinceCap === undefined ? {} : { maxSessions: sinceCap }),
     onPhase: (p) => console.error(`… ${p}`),
     onError: error => console.error(`dream warning: ${error.message}`),
@@ -121,6 +128,15 @@ async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise
     }),
   );
   if (backup !== undefined) console.log(`previous wiki kept at ${backup}`);
+  if (result.skillEmission !== undefined) {
+    const emission = result.skillEmission;
+    console.log(`\nskill emission: ${emission.status}${emission.reason === undefined ? "" : ` — ${emission.reason}`}`);
+    for (const item of emission.proposals) console.log(`\n${item.path}\n${item.text}`);
+    console.log(`skill review digest: ${emission.digest}`);
+    for (const path of emission.written) console.log(`written (not activated): ${path}`);
+    for (const item of emission.preserved) console.log(`preserved ${item.path}: ${item.reason}`);
+    if (emission.status === "preview") console.log(`after reviewing every file, rerun with the same options plus --apply ${emission.digest} (remove --review/--structural-only; fresh model/effect checks share --dream-limits)`);
+  }
 
   // in review mode the copy IS the deliverable, so it is kept for inspection; once applied it
   // has been copied into place and the temp copy is redundant
@@ -133,5 +149,5 @@ async function dreamWithSignal(opts: DreamOptions, signal: AbortSignal): Promise
     console.log("keep both together; after review, preview agentrig memory discard-dream <outputRoot>, then confirm its owner UUID (SDK: workspace.dispose())");
   }
 
-  process.exitCode = !applied && (findingCount(result.report, result.structural) > 0 || result.consolidationError !== undefined) ? 1 : 0;
+  process.exitCode = result.skillEmission?.status === "refused" || (!applied && (findingCount(result.report, result.structural) > 0 || result.consolidationError !== undefined)) ? 1 : 0;
 }

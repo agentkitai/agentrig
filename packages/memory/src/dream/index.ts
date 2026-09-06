@@ -9,3 +9,4 @@ export * from "./evidence.js";
 export * from "./dream.js";
 export * from "./report.js";
 export * from "./metadata.js";
+export type { SkillEmissionOptions, SkillEmissionReport, SkillProposal } from "./skills.js";

@@ -5,6 +5,18 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R6b implemented — delivery gates pending
+
+Explicit opt-in skill previews bind human confirmation to an exact artifact digest. Fresh
+runtime evidence, classification and effect receipts are mandatory at apply; saved reports
+cannot authorize emission. Versioned string metadata round-trips through the real loader;
+generated files are not activated. Edited/locked/foreign destinations are preserved. [Contract](plans/R6b.md).
+
+Dependency-order rationale: R6b follows merged R6a/R5e and completed H4/R6e safety foundations,
+independently of R13/R12 permission and provenance work. It does not implement R6c activation.
+Build/typecheck, focused tests, full suite, named mutation controls, one independent review and
+exact-head PR/post-merge CI are the delivery gates; final receipts belong to the closing PR.
+
 ### Committed continuation and parallel delivery
 
 User direction on 2026-09-06: roadmap items are part of AgentRig's vision, not candidates awaiting

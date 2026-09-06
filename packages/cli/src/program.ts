@@ -386,6 +386,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
     .option("--skill-candidates", "report evidence-backed procedures; model refinement/effect checks share --dream-limits (no skill files emitted)")
+    .option("--emit-skills", "preview exact generated SKILL.md files; opt-in only, never activates skills")
+    .option("--apply <review-digest>", "with --emit-skills, confirm the exact preview digest; fresh evidence/effect checks required, never applies wiki changes")
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await dreamCommand({ ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
