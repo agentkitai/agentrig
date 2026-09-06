@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import type { AgentConfig } from "./agent.js";
 import type { HarnessEvent, PermissionRequest } from "./events.js";
 import { EventPayload, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events.js";
@@ -230,8 +231,13 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     if (h.patches.length > 0) {
       const merged = tool.inputSchema.safeParse(mergePatches(input, h.patches));
       if (merged.success) {
+        // This API shallow-merges inputs, not whole-input instruction replacement. Retained
+        // model fields must not borrow delegation, and a no-op has no actual contribution.
+        if (!isDeepStrictEqual(input, merged.data)) {
+          const source = combinedContext(h.patches.map((_patch, index) => h.patchContexts?.[index] ?? ADVISORY_CONTEXT));
+          inputContext = { principal: source.principal, authority: "advisory" };
+        }
         input = merged.data;
-        inputContext = combinedContext(h.patches.map((_patch, index) => h.patchContexts?.[index] ?? ADVISORY_CONTEXT));
       }
       else {
         await emit({

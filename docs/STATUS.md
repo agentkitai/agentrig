@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R12a live grant records are implemented, pending delivery gates; R13d is active independently. R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13d context principals are implemented, pending delivery gates; R12b and R6g continue independently. R12a, R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -35,6 +35,12 @@ material inject-only post-tool authority laundering issue: retained tool text bo
 hook note's authority. Success/error-path tests reproduced both failures; joining retained display
 as advisory fixes both, while full hook replacements retain explicit delegation. All 12 focused
 tests pass; optional review notes are at the roadmap end. No second general review.
+
+The analogous pre-tool shallow-merge path is conservative: actual changed inputs keep registered
+mutator identity but remain advisory/no receipt; no-op and ignored patches add no attribution.
+Partial/no-op/ignored regressions all failed before this bounded fix, then passed. Fifteen focused
+tests now pass. H6's inject-only result principal/hash expectations reflect the reviewed mixed
+display downgrade; actual tool text and lifecycle order remain unchanged.
 
 One overlapping local full run timed out the untouched E1 exact-upstream fixture at its existing
 5-second limit; its isolated diagnostic passes in 559 ms and the reviewer's full run passes.
@@ -100,7 +106,9 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R12a implemented — pending closing delivery gates
+### R12a done — PR #152; post-merge CI green
+
+Merged as `35f37ba` after three-platform PR CI; exact post-merge CI 34023253550 is all green.
 
 Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
 path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for
@@ -118,7 +126,7 @@ All-path, post-answer-audit and session-transition-revocation mutations were det
 One bounded Claude review `8a03542b-c6e2-4b1b-886a-42012a286ad7` approved with no material
 findings, independently repeating 151 focused tests and typecheck. R6c main `09157ae` is now
 integrated; build/typecheck and 2,191 tests plus two skips across 113 files pass.
-Exact-head three-platform CI remains a gate. Optional polish
+Exact-head and post-merge three-platform CI have passed. Optional polish
 stays at the roadmap end. The bounded roadmap cleanup adds missing done
 markers for R4a–R4c (PRs #135–#137), R6d/R6e (#139/#140) and R6f (H5a, #122), using the
 explicit merge/CI receipts below; unfinished rows retain their scope.

@@ -210,6 +210,19 @@ it("instruction delegation does not allow a denied tool", async () => {
   expect(executed).toBe(false); expect((await f.store.readAll(session.id)).some(e => e.type === "tool.denied")).toBe(true);
 });
 
+it.each(["partial", "no-op", "ignored"])("delegated shallow pre_tool patches cannot upgrade retained model input (%s)", async mode => {
+  const f = await fixture(); const p = scripted([[{ ...call, input: { text: "original", untouched: "model instruction" } } as ModelEvent, toolStop], [stop]]);
+  const session = createAgent({ ...config(f.store, p.provider, [
+    { point: "pre_tool", id: "patch", handler: () => ({ action: "modify", patch: mode === "partial" ? { text: "changed" } : mode === "no-op" ? {} : "ignored" }) },
+  ]), hookInstructionDelegations: ["patch"], tools: [{ ...echo, inputSchema: z.object({ text: z.string(), untouched: z.string() }) }] })
+    .run("task", { cwd: f.cwd });
+  await session.done;
+  const dispatched = (await f.store.readAll(session.id)).find(e => e.type === "tool.call");
+  expect(dispatched).toMatchObject({ input: { text: mode === "partial" ? "changed" : "original", untouched: "model instruction" } });
+  if (dispatched?.type !== "tool.call") throw new Error("missing call");
+  expect(dispatched.context).toEqual(mode === "partial" ? { principal: "hook:patch", authority: "advisory" } : undefined);
+});
+
 it("custom and built-in compaction cannot mint instruction authority; nested eviction retains context", async () => {
   const source: Message[] = [{ role: "user", content: [{ type: "text", text: "task", context: user }] },
     { role: "user", content: [{ type: "text", text: "note", context: { principal: "hook:notes", authority: "advisory" } }] },
