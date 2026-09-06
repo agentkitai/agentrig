@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Committed vision; R12c is implemented with closing delivery gates; R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; R12c is implemented with closing delivery gates; R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -18,7 +18,8 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Implemented; closing gates | R12c: live grant inspection | Exact scope/age/counts, revocation and same-call decision attribution; review and exact-head CI |
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Active independently | R13c: external-input permission restrictions | Build on merged principals; fresh approval cannot become standing authority |
-| Committed | R5 remainder, R7–R11, R12b–R12d, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Committed | R5 remainder, R7–R11, R12c–R12d, R13c and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
 measurement work from R9/R14 forward; H5 pulls R6f forward. All remaining milestone rows are
@@ -223,6 +224,26 @@ what matters):
 | Capability grants (scoped, expiring, revocable, explained) | the gap all approval UIs share | allow/deny/ask + standing answers | R12 |
 | Instruction-vs-data provenance / trust labels | prompt-injection literature | all context is one trust level | R13 |
 | Acceptance contracts + claim–evidence verification | OpenHands QA, Codex reviewer | M6 judges the trajectory, not evidence | R14 |
+
+New rows from the fourth pass (2026-09-06, a source-level audit of AgentRig against the harnesses
+in daily use — Claude Code, Codex CLI, Gemini CLI, OpenCode, Goose, Cline, Aider, Zed's Agent Client
+Protocol — after R6 closed; each row was checked against `packages/*/src`, not against the docs):
+
+| Capability *(fourth pass)* | Strongest reference | AgentRig today | Milestone |
+|---|---|---|---|
+| Structured clarifying question from the model (`ask_user`) | Claude Code, Codex, Cline, Goose | free text only; the supervisor talks to the model, the model has no channel back | R15a |
+| Post-edit diagnostics in the tool result | OpenCode, Claude Code LSP tool, Serena | `edit_file` returns nothing about whether the file still parses or typechecks | R15b |
+| Reasoning/thinking blocks preserved across turns | Anthropic interleaved thinking, OpenAI reasoning items | `ContentBlock` has text/tool_use/tool_result/image; returned reasoning is dropped | R15c |
+| Editor integration over a standard protocol (ACP) | Zed, Gemini CLI, Goose, OpenCode | none; R8a planned a bespoke NDJSON protocol | R8a (amended) |
+| Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
+| User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
+| Headless CI / PR-bot mode (event in, comment out) | Claude Code Action, Codex GitHub integration | `run --json` only; no checkout-and-report shape | R15f |
+| Validated structured final output (`--output-schema`) | Codex | `--json` streams events; the final answer is prose | R15g |
+| User-defined agent roles with tool allowlists | Claude Code agent files, Goose recipes | one generic subagent; R12d supplies the enforcement half | R15h |
+| Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i |
+| Mid-session model / effort switch | every TUI harness | R3.5 routes by role at session start only | R15j |
+| Image input and `@file` mentions in the TUI | Cline, Cursor, Claude Code | image `ContentBlock` exists in the schema; nothing puts one in | R15k |
+| Deterministic multi-agent orchestration script | Claude Code Workflow, AutoGen | R10c will give parallel subagents; no user-authored fan-out/verify/merge | R15l (decision row) |
 
 Carried follow-ups that ride along where they fit: **F3 Windows CI** (R2 forces it — the sandbox
 seam needs a per-platform no-op), **OTEL sink** (R8, same seam as RPC), **bracketed paste** (R1,
@@ -581,7 +602,7 @@ it to transports.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R8a | `agentrig rpc`: newline-delimited JSON over stdio — requests (`submit`, `answerPermission`, `abort`, `state`) and the event stream out; the protocol is zod-schema'd and versioned; one page of docs with an example client | cli |
+| R8a *(amended, fourth pass)* | `agentrig acp`: speak the Agent Client Protocol (ACP, JSON-RPC over stdio, the editor↔agent standard Zed, Gemini CLI, Goose and OpenCode already implement) instead of a bespoke NDJSON protocol — session/new, prompt, permission requests and streamed content map onto the existing `TuiController`; AgentRig-specific requests (`state`, event stream, supervisor/memory) ride as documented extension methods; the mapping is zod-schema'd and versioned; one page of docs and a scripted client. Renunciation: no second bespoke protocol beside ACP | cli |
 | R8b | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
 | R8c | OTEL sink (carried follow-up): an optional event-stream subscriber mapping `HarnessEvent`s to OTLP spans (session→trace, turn→span, tool→child span), behind `--otel-endpoint`; no dependency added when unused | core (subscriber) + cli |
 | R8d | Reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Define and test client authentication and Origin/Host validation before exposing it; loopback binding alone is not the authorization contract. Refuse non-loopback binding | cli |
@@ -685,7 +706,7 @@ tracks trust through everything else.*
 | R13a *(done, [PR #147](https://github.com/agentkitai/agentrig/pull/147))* | `ContentBlock` gains optional recursive `trust` metadata: `user` / `project` / `external` / `tool-output` / `generated`. Validated custom-provider labels survive segmented assistant messages, storage and resume; vendor projections retain unified metadata without unsupported wire fields. Labels confer no authority. R13b assembly/compaction and R13d/R13c policies remain separate. See [contract](plans/R13a.md) | core |
 | R13b *(done, [PR #150](https://github.com/agentkitai/agentrig/pull/150))* | Trusted registered source assembly: actual MCP/external results are `external`; canonical trusted-root file reads are `project`, unknown/outside/failed provenance external. Recursive conservative joins retain external ancestry through repeated and custom summaries; exact unchanged copies preserve recorded labels. Future `web_fetch` uses the source seam, not a premature network implementation. No permission/principal changes. See [contract](plans/R13b.md) | core |
 | R13c | One enforced policy to start, not a framework: a turn whose only new input is `external` content cannot *expand* its permission surface — no first use of exec/net/write-outside-cwd may be triggered by it without a fresh interactive approval, whatever grants exist. The supervisor gains an `injection` detector flagging instruction-shaped external content ("ignore previous instructions", tool-invocation syntax in fetched text) as a signal | core + supervisor |
-| R13d *(implemented; closing PR records delivery gates)* | Optional recursive context principals distinguish source trust from instruction authority. Actual hook mutation surfaces, steers and reminders receive runtime identities; hooks default advisory. Unique registered hooks can receive explicit, visible, bounded and revocable trusted-host delegation. Revocation downgrades retained next-request content; old receipts never revive on resume/regrant. No prose/vendor fields or tool grants confer instruction authority, and metadata does not enforce model obedience. See [contract](plans/R13d.md) | core |
+| R13d *(done, [PR #154](https://github.com/agentkitai/agentrig/pull/154))* | Optional recursive context principals distinguish source trust from instruction authority. Actual hook mutation surfaces, steers and reminders receive runtime identities; hooks default advisory. Unique registered hooks can receive explicit, visible, bounded and revocable trusted-host delegation. Revocation downgrades retained next-request content; old receipts never revive on resume/regrant. No prose/vendor fields or tool grants confer instruction authority, and metadata does not enforce model obedience. See [contract](plans/R13d.md) | core |
 | R13e *(done)* | Injection fixture suite *(third pass)*: network-free adversarial fixtures in the normal test run and R9c's nightly — fake system/reminder tags inside tool results, hook output claiming the user approved an action, a memory page claiming permissions were granted previously, a compaction summary rewording external data as a directive, a subagent brief carrying poisoned parent context. Each fixture asserts the specific non-behavior: no grant created, no trust upgraded, no permission surface expanded, no audit event suppressed | core + supervisor |
 | R13f *(done, [PR #143](https://github.com/agentkitai/agentrig/pull/143))* | Corroborated progress signals *(issue #72, the residual of #67)*: the loop and stall detectors trust a `file.changed` only when the same turn carries a completed **write-class** `tool.result` from the emitting tool — a read-class tool's file-change claim is inert for progress accounting (it stays in the log; it just proves nothing). Core-stamped call sequences prevent reused provider IDs from borrowing receipts. Drift additionally checks bounded current-worktree existence and content hash before scope classification. An actual injected session now trips stall/loop exactly as a silent one does. Legacy claims and deletion without a prior-state witness remain unknown. See [contract](plans/R13f.md) | core + supervisor |
 
@@ -720,6 +741,62 @@ item with no matching evidence is listed as `unverified`, never silently passed.
 **no automatic re-run of the base revision to reproduce bugs first** (the second pass's full
 recipe) — that is a workflow the USER can ask for once R4's checkpoints exist; hard-wiring it
 would make every small task pay a reproduction tax.
+
+---
+
+### H7 — Correctness defects found after H6 *(fourth pass)*
+
+Two open issues are defects in current guarantees, not features, and may interrupt the section 5
+order under its existing rule.
+
+| Row | Deliverable | Package |
+|---|---|---|
+| H7a | Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
+| H7b | Issue #95: a forged or host-caused "read-only file system" line under `workspace-write` does not classify as a sandbox denial unless the policy corroborates it (kernel-observed denial where the provider exposes one; otherwise the line is inert) | core |
+
+Acceptance: a fake-provider session that truncates twice finishes the task with two
+`turn.continued` events; the forged-line fixture produces no escalation and no denial event.
+Mutation: removing the corroboration check fails the forged-line test.
+
+### R15 — Post-plan gaps against the harnesses in daily use *(fourth pass)*
+
+*Evidence: with R6 closed and the committed continuation under way, a source-level audit
+(2026-09-06) compared AgentRig against Claude Code, Codex CLI, Gemini CLI, OpenCode, Goose,
+Cline, Aider and Zed's Agent Client Protocol. The three research passes were about architecture;
+this one is about what users reach for every day and what the ecosystem has standardised since
+the second pass. The ordering inside R15 is impact on task outcome first, interop second,
+convenience last. Renunciations 1–12 still bind: nothing here is a gateway, a marketplace, a
+planner mode or a fusion service.*
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R15a | `ask_user` tool: the model poses one structured question (prompt, 2–4 options, free-text allowed) and the turn suspends until answered — through the TUI queue interactively, through R8a/ACP when embedded, and in headless `run` through a `--answer-policy` (`fail` default, `first-option`, `file:<path>`). Emits `question.asked` / `question.answered`. The supervisor may answer on the model's behalf only through an explicit policy step, never by default | core + cli |
+| R15b | Post-edit diagnostics: after a successful `edit_file` / `write_file`, run the project's configured checker for that file's language (from `.agentrig/config`: e.g. `tsc --noEmit -p`, `ruff`, `go vet`), bounded by time and output bytes, and append the errors for the touched file to the tool result as `diagnostics` (schema-added). No LSP server, no daemon, no cross-file index — renunciation 7 holds; this is observation quality, the SWE-agent lesson | core |
+| R15c | Reasoning blocks: `ContentBlock` gains a `thinking` variant (schema-added, with provider-opaque `signature`/`id`); adapters round-trip it so interleaved reasoning and prompt caching are not silently lost; the TUI renders it collapsed under `/verbose`; compaction and export treat it as evictable first. Measure cache-hit delta on the E1 fixtures before and after | core + cli |
+| R15d | Remote MCP: Streamable HTTP transport beside stdio; OAuth 2.1 authorization-code flow reusing the R1 loopback login seam; `resources/*` and `prompts/*` surfaced as read-class tools and skills; R5d pinning applies to all three lists. Servers declared with a URL are `net`-class (R11a) for permission purposes | core + cli |
+| R15e | `agentrig review [--base <ref>] [--pr <n>]` and TUI `/review`: run the M6 reviewer over a diff on demand and print findings with file:line; `--comment` posts them through `gh`. Reuses the supervisor reviewer; no second review engine | cli + supervisor |
+| R15f | CI / bot mode: `agentrig run --ci` reads the task from an event payload or file, runs with a non-interactive permission posture from config (never yolo by default), refuses `ask` by failing closed, and writes a Markdown report to a path or a PR comment. One documented GitHub Actions example, no hosted component (renunciation 1) | cli |
+| R15g | `run --output-schema <json-schema>`: the final assistant message is validated against the schema (provider structured output where supported, else a validating retry bounded by one extra turn); non-conforming output exits non-zero with the raw text preserved in the log | core + cli |
+| R15h | Agent role definitions: `.agentrig/agents/<name>.md` (front-matter validated by the R5e schema: `tools`, `model-role`, `delegable`, `max-turns`, body = system prompt). The subagent tool accepts `agent: <name>`; the child's grants are the R12d delegable view intersected with the role's allowlist. Roles never widen the parent's authority | core |
+| R15i | Spend ledger: per-project `.agentrig/usage.jsonl` appended at session end (session id, model, tokens, cached, cost estimate); `/cost` and `agentrig usage --since`; config `daily-cap` refuses to start a session over cap and stops an R7 unattended run before the cap, with a `budget.cap` event | core + cli |
+| R15j | `/model <role-or-entry>` and `/effort <level>`: mid-session switch of the active provider entry within the configured R3.5 routing table; emits `provider.switched`; the context manifest records which turns ran under which entry | cli + core |
+| R15k | TUI input: `@path` completion inserting a read-class file reference, and image paste/`@image.png` producing an image `ContentBlock`; both go through the R13b source seam for provenance | cli |
+| R15l | **Decision row, not a build row:** whether a user-authored orchestration script (fan out subagents, verify each, merge) is a thin layer over R10's strategy seam or stays renounced with workflow engines (renunciation 8). Decide after R10c ships with real parallel evidence; record the decision here either way | docs |
+
+Acceptance: R15a — the fake provider asks, the controller queue answers, the turn resumes; the
+headless default fails closed. R15b — an edit that introduces a type error returns the error in
+`diagnostics`; removing the checker call fails that test (mutation). R15c — a two-turn fixture
+with a thinking block round-trips byte-identical through each adapter's request builder. R15d —
+an HTTP fixture server serves tools, resources and prompts; changing a resource list re-triggers
+R5d consent. R15e/f/g — golden-output tests against the fake provider; the CI mode fixture with an
+`ask`-class tool exits non-zero and writes the report. R15h — a role whose allowlist excludes
+`bash` cannot run it even when the parent could (through a real spawn). R15i — a cap of one
+session refuses the second start. R15j — the manifest shows the switch turn. R15k — `@` on a
+path yields a `project`-labelled block; an image paste yields an `image` block with `user` trust.
+
+Renunciation, restated for this band: no LSP daemon or language index (R15b is a bounded checker
+call), no hosted CI runner (R15f is a documented action, nothing served), no second RPC protocol
+beside ACP (R8a), no role marketplace (R15h roles are local files under R5e validation).
 
 ---
 
@@ -807,7 +884,12 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
-| 11 | R8a → R8b → R8c → R8d | Reusable control transport, MCP serving, telemetry, then an authenticated local web client. |
+| 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
+| Repair | H7a → H7b | Open correctness defects (#116, #95); may interrupt any row above under the existing defect rule. |
+| 12 | R15a → R15b → R15c | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
+| 13 | R15d → R15e → R15f → R15g | Interop and headless shapes; R15d follows R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
+| 14 | R15h → R15i → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
+| 15 | R15l | Decision recorded after R10c; no build until then. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
@@ -1000,3 +1082,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R6g polish: normalize fully sanitized-away hints to an absent property; explain beside byte
   accounting that the first admitted entry must fit together with its worked example.
   Neither changes the total cap, selection semantics, emitter ownership or approval policy.
+- R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
+  consider suppressing duplicate handler-source lines where the TUI already printed the answer.
+  Preserve visible rule/grant reasons, honest handler attribution and independent consent.
