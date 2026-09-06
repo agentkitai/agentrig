@@ -22,6 +22,7 @@ export type TuiCommand =
   | { kind: "skills" }
   /** `/fork [seq]` — `at` is the raw argument; the controller validates it and names the fix. */
   | { kind: "fork"; at: string }
+  | { kind: "undo"; at: string }
   | { kind: "tree" }
   | { kind: "children" }
   /**
@@ -51,6 +52,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "fork", args: "[seq]", summary: "branch this conversation into a new session; this one is left untouched" },
+  { name: "undo", args: "[turn]", summary: "restore an owned checkpoint while idle; stop external writers first" },
   { name: "tree", summary: "show this session's ancestry and forks" },
   { name: "children", summary: "live status of this session's subagents, read from their own logs" },
   { name: "new", summary: "forget this conversation and start a new session" },
@@ -117,6 +119,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "skills" };
     case "fork":
       return { kind: "fork", at: args };
+    case "undo":
+      return { kind: "undo", at: args };
     case "tree":
       return { kind: "tree" };
     case "children":
@@ -148,6 +152,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "permissions",
   "skills",
   "fork",
+  "undo",
   "tree",
   "children",
 ]);

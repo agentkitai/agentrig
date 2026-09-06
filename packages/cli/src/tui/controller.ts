@@ -134,6 +134,7 @@ export interface TuiControllerOptions {
    * exception — it writes a new log, never the current one.
    */
   onFork?: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+  onUndo?: (id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>;
   onTree?: (id: string) => Promise<string[]>;
   /**
    * `/children` (R3d): given what this session's log recorded at spawn and end, returns the
@@ -216,6 +217,7 @@ export class TuiController {
     this.memory = opts.onMemory;
     this.dream = opts.onDream;
     this.fork = opts.onFork;
+    this.undo = opts.onUndo;
     this.tree = opts.onTree;
     this.children = opts.onChildren;
     this.spawned = opts.onSpawned;
@@ -249,11 +251,13 @@ export class TuiController {
 
   setSessions(fns: {
     fork: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
+    undo?: (id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>;
     tree: (id: string) => Promise<string[]>;
     children?: (children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>;
     spawned?: (id: string) => Promise<TuiChild[]>;
   }): void {
     this.fork = fns.fork;
+    if (fns.undo !== undefined) this.undo = fns.undo;
     this.tree = fns.tree;
     if (fns.children !== undefined) this.children = fns.children;
     if (fns.spawned !== undefined) this.spawned = fns.spawned;
@@ -272,6 +276,8 @@ export class TuiController {
   private closing = false;
   private closed = false;
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
+  private undo: ((id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>) | undefined;
+  private undoing: Promise<void> | undefined;
   private tree: ((id: string) => Promise<string[]>) | undefined;
   private children: ((children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>) | undefined;
   private spawned: ((id: string) => Promise<TuiChild[]>) | undefined;
@@ -471,12 +477,14 @@ export class TuiController {
     this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
+    await this.undoing?.catch(() => {});
     this.closed = true;
   }
 
   /** Handles one submitted line. Returns false when the app should exit. */
   async submit(line: string): Promise<boolean> {
     if (this.closing) return false;
+    if (this.undoing) { this.print("undo is running; wait for it to finish", "error"); return true; }
     const cmd = parseCommand(line);
     if (cmd === null) return true;
     if (cmd.kind !== "task") this.print(line, "you");
@@ -616,6 +624,26 @@ export class TuiController {
       case "fork":
         await this.forkConversation(cmd.at);
         return true;
+      case "undo": {
+        if (this.state.status === "running" || this.dreaming) { this.print("work is running — stop it before /undo", "error"); return true; }
+        const id = this.state.sessionId;
+        if (!id || !this.undo) { this.print("no session with undo available", "error"); return true; }
+        const turn = cmd.at === "" ? undefined : /^[1-9][0-9]*$/.test(cmd.at) ? Number(cmd.at) : NaN;
+        if (turn !== undefined && !Number.isSafeInteger(turn)) { this.print("usage: /undo [positive turn]", "error"); return true; }
+        this.undoing = (async () => {
+          try {
+            const result = await this.undo!(id,turn);
+            this.print(result.message,"system");
+            if (result.restored) {
+              this.resumable = false;
+              this.set({status:"idle",sessionId:null,turns:0,plan:[],signals:[],children:[],manifest:null});
+              this.print("next prompt starts a fresh conversation; original history is retained", "system");
+            }
+          } catch (error) { this.print(`/undo failed: ${String(error)}`,"error"); }
+        })();
+        try { await this.undoing; } finally { this.undoing = undefined; }
+        return true;
+      }
       case "tree": {
         const id = this.state.sessionId;
         if (id === null) {

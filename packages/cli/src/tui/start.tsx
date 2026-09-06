@@ -10,6 +10,7 @@ import { withBracketedPaste } from "./bracketed-paste-mode.js";
 import { SessionStore, liveChildren, summarizeSession } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
+import { undoSession } from "@agentkitai/agentrig-core";
 import { currentGitBranch } from "../git-branch.js";
 import {
   abortNotice,
@@ -99,6 +100,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     const sessions = new SessionStore({ root: opts.root });
     controller.setSessions({
       fork: (parent, atSeq) => forkSessionAt(sessions, parent, atSeq),
+      undo: (id, toTurn) => undoSession(sessions,id,{cwd:process.cwd(),...(toTurn===undefined?{}:{toTurn})}),
       tree: async (id) => renderSessionTree(await sessions.tree(id), id),
       // read-only: each child's own log is the source of truth, and nothing is copied into ours
       children: async (children, now, parent) =>

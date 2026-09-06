@@ -51,6 +51,12 @@ function stub(program: Command): { run: (argv: string[]) => Promise<Captured | n
 }
 
 describe("argv parsing", () => {
+  it("carries checkpoint opt-in and the explicit undo target", async()=>{
+    for (const argv of [["run","task","--checkpoints"],["--checkpoints"],["sessions","resume","s","--checkpoints"]]) {
+      expect((await stub(buildProgram()).run(argv))?.opts.checkpoints).toBe(true);
+    }
+    expect((await stub(buildProgram()).run(["sessions","undo","s","--to-turn","2","--root","logs"]))?.opts).toMatchObject({toTurn:2,root:"logs"});
+  });
   it.each(["bad", "-1", "1.5", "2147483648"])("rejects invalid dream lock wait %s before work", async lockTimeout => {
     const prior = process.exitCode;
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

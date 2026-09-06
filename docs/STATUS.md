@@ -1,11 +1,29 @@
 # Status
 
-Current roadmap row: **R4a — opt-in pre-mutation checkpoints.** H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **R4b — guarded explicit undo.** R4a, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R4a in progress
+### R4b in progress
+
+Fresh branch `feat/r4b-guarded-undo` from updated main `45dac7f`. [Contract](plans/R4b.md):
+post-tool ownership checks, terminal seals, explicit guarded CLI/TUI undo, retained recovery
+originals and independent audit logs. Older unsealed sessions refuse; no force option. R4c is
+not pulled forward. Build/typecheck and full explicit Node22 suite pass 1,917 plus two skips
+(91 files). One bounded Claude pass `0d3fecf5-0182-4d8c-9140-72e70d19c1fa` approved, independently
+passing build/typecheck, 125 targeted cases and the full suite. Dirty-guard mutation fails its
+named test and is reverted. Optional polish is at ROADMAP's end; exact-head/post-merge CI pending.
+
+Initial head `365d206` passed Linux/macOS CI; Windows exceeded the 5-second Vitest default in
+three multi-step Git cases. Raised only checkpoint integration fixture budgets to 30 seconds;
+all assertions and production deadlines are unchanged. Final-head CI must pass before merge.
+
+### R4a complete (PR #135)
+
+Final head `cc037e7`, merge `45dac7f`, exact-head CI 34008045638 and post-merge main CI
+34008201624 passed Linux/macOS/Windows. One independent Claude pass approved. Final targeted
+rerun passed 130 tests, and the full suite passed 1,901 plus two skips. Notes below are historical.
 
 Fresh branch from updated main `56b4d8a`, after E3 PR #134 exact-head CI 34006960314 and
 post-merge main CI 34007074990 passed Linux/macOS/Windows. E3 is complete under its explicitly
