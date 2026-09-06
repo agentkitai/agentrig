@@ -40,6 +40,8 @@ it.each([true, false])("actual tsc observes changed file, error=%s, without a mo
   expect(result.diagnostics?.entries).toHaveLength(broken ? 1 : 0);
   if (broken) expect(result.diagnostics?.entries[0]).toMatchObject({ code: "TS2322", line: 1, message: expect.stringContaining("not assignable") });
   expect(events.filter(e => e.type === "tool.call" && e.internal?.kind === "diagnostics")).toHaveLength(1);
+  expect(events.find(e => e.type === "tool.result" && e.internal !== undefined)).toMatchObject({ ok: true,
+    display: `checker completed (exit ${broken ? 2 : 0})` });
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.request", req: expect.objectContaining({ tool: "core:diagnostics", class: "exec" }) }));
   expect(f.requests.every(r => r.tools.every(t => t.name !== "core:diagnostics"))).toBe(true);
   const messages = await f.store.materializeMessages(session.id);

@@ -80,7 +80,7 @@ export function checkerTool(checker: DiagnosticChecker): { tool: AnyTool; input:
         sameCommand: isDeepStrictEqual(actual, expectedCommand) };
       // A completed compiler reporting errors is an observation, not a failed tool dispatch.
       // Its exit remains in diagnostics; ordinary in-progress edits must not trigger error bursts.
-      return { output: { exitCode: record.exitCode }, display: reason, isError: observed.incomplete };
+      return { output: { exitCode: record.exitCode }, display: `${reason} (exit ${record.exitCode ?? "unknown"})`, isError: observed.incomplete };
     },
   };
   return { tool, input, observed: () => observed, id: `diagnostic-${randomUUID()}`, join: () => settled };
