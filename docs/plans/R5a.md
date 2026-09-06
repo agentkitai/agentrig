@@ -58,6 +58,8 @@ This API omission does not prevent ambient host access.
   and advertisement are checked inside the draft. Builtin/current registry/reserved authority
   names and the `mcp__` prefix cannot be shadowed. Synchronous JavaScript handlers are normalized
   to promises before the existing core execution pipeline; no new permissions are implied.
+  Use object-literal tools with own properties; prototype-defined class members are not retained
+  by this initial registration copy. Class-instance support is a documented follow-up.
 - `registerCommand({name,args?,summary,run})`: bounded command metadata, built-in/alias and
   cross-extension collision refusal. Runtime receives arguments and a print-only IO object,
   never the controller. Builtins precede extensions, which precede skill slash invocations.

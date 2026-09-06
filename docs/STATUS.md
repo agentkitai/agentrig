@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5a extension API is implemented, pending delivery gates; R12b scoped approval UI is merged, pending main CI; R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5a extension API is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -23,10 +23,16 @@ restored. Full updated-main checks, one bounded review and exact-head PR/post-me
 delivery. No live evaluation spend or new submilestones.
 
 Updated-main build/typecheck and the full suite pass: 2,260 tests plus two skips across 119
-files, using four workers without changing cases or timeouts. Independent review and final
-exact-head CI are pending.
+files, using four workers without changing cases or timeouts. One independent Claude review
+`9b729cf9-e085-476b-90f4-1c230a177f26` approved head `8299b9e` with no material findings and
+independently repeated build/typecheck/full 2,260 + two skips across 119 files. The single
+process ran 247 seconds: max24 was requested; the CLI reported 29 turns. No restart or second
+review. Optional notes are at the roadmap end; final exact-head CI remains pending.
 
-### R12b implemented — pending delivery gates
+### R12b done — PR #155; post-merge CI green
+
+Exact post-merge main `326acdb` passed all three platforms in CI 34024734696. Following gate
+wording records implementation history rather than remaining delivery work.
 
 The TUI explains declared paths/class/argv separately from unknown effects and network access.
 Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
