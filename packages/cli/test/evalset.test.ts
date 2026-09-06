@@ -214,7 +214,7 @@ describe("E1 workspace and outcome mechanics", () => {
     result = check();
     expect(result.status).toBe(1);
     expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "FAIL", behavior: "FAIL", regression: "FAIL" });
-  });
+  }, 30_000); // Real Git plus two evaluator subprocess trees can exceed 5s on Windows CI.
 
   it("classifies a real child timeout as infrastructure on every platform", async () => {
     const { infrastructureFailure } = await import(pathToFileURL(checker).href);

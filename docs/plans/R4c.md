@@ -46,3 +46,7 @@ build/typecheck and 1,036 selected tests. No delegated reviewers or additional r
 Removing the opt-in gate fails the real default-off undo test; removing the post-stream cancellation
 check fails the normally-closing provider test (done instead of aborted). Both mutations restored.
 PR exact-head and post-merge main CI are still required before H6.
+
+Initial head `6593f1b` passed Linux/macOS. Windows CI 34010786976 timed out at the unchanged E1
+signal/numeric-exit integration fixture's 5-second Vitest default, then raced its cleanup. Raise
+only that fixture's timeout to 30 seconds; assertions, evaluator limits and R4c code are unchanged.

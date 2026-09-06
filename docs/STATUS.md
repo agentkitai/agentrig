@@ -17,6 +17,10 @@ approved with no blockers, independently passing build/typecheck and 1,036 selec
 Opt-in-gate and cancellation-classification mutations fail their named tests and are restored.
 Optional polish stays at ROADMAP's end; exact-head PR and post-merge main CI remain pending.
 
+PR #137 initial head `6593f1b` passed Linux/macOS; Windows CI 34010786976 exceeded the unchanged
+E1 signal/numeric-exit fixture's five-second test budget. A scoped test-only 30-second timeout
+keeps all assertions and production limits; final-head three-platform CI is required.
+
 ### R4b complete (PR #136)
 
 Final head `0dcbb09`, merge `1291c77`, exact-head CI 34009706860 and post-merge CI 34009896484
