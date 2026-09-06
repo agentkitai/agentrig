@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
@@ -29,12 +29,15 @@ it("matches exact trusted stdio config and refuses changed command/args/env/dupl
 });
 
 it("actual program resolves each client cwd separately; --trust cannot authorize another project or initialize a provider early", async () => {
-  const root = await mkdtemp(join(tmpdir(), "agentrig-acp-config-")); cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const holder = await mkdtemp(join(tmpdir(), "agentrig-acp-config-")); cleanup.push(() => rm(holder, { recursive: true, force: true }));
+  const target = join(holder, "physical"); await mkdir(target);
+  const root = join(holder, "alias"); await symlink(target, root, process.platform === "win32" ? "junction" : "dir");
   const home = join(root, "home"); const launch = join(root, "launch"); const other = join(root, "other");
   await mkdir(home); for (const cwd of [launch, other]) {
     await mkdir(join(cwd, ".agentrig"), { recursive: true });
     await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ system: cwd === launch ? "trusted launch prompt" : "MUST NOT LOAD OTHER PROJECT" }));
   }
+  const canonicalLaunch = await realpath(launch); const canonicalOther = await realpath(other);
   vi.spyOn(console, "error").mockImplementation(() => {});
   const input = new PassThrough(); const output = new PassThrough(); const captured: AgentBuildOptions[] = [];
   const index = vi.fn(async () => [{ path: "fixture.md", summary: "fixture" }]);
@@ -42,7 +45,7 @@ it("actual program resolves each client cwd separately; --trust cannot authorize
   const program = buildProgram({ config: { cwd: launch, home, env: {} }, acp: { input, output, build: async opts => {
     captured.push(opts);
     return { agent: { run() { throw new Error("not needed"); } }, provider, providers: {} as BuiltAgent["providers"],
-      permissions: new RulePolicy([{ tool: "memory_search", decision: opts.extensionCwd === launch ? "allow" : "deny" }]),
+      permissions: new RulePolicy([{ tool: "memory_search", decision: opts.extensionCwd === canonicalLaunch ? "allow" : "deny" }]),
       memoryStore: { index } as unknown as BuiltAgent["memoryStore"], tools: [], skills: [], memoryIndex: "", mcp: [] } as BuiltAgent;
   } } });
   const running = program.parseAsync(["acp", "--trust", "--no-extension-discovery", "--no-skill-discovery"], { from: "user" });
@@ -51,8 +54,8 @@ it("actual program resolves each client cwd separately; --trust cannot authorize
   await peer.agent.request("initialize", { protocolVersion: 1, clientCapabilities: {} }); expect(captured).toHaveLength(0);
   const a = await peer.agent.request("session/new", { cwd: launch, mcpServers: [] });
   const b = await peer.agent.request("session/new", { cwd: other, mcpServers: [] });
-  expect(captured[0]).toMatchObject({ trustedProjectRoot: launch, extensionCwd: launch, system: "trusted launch prompt", root: join(launch, ".agentrig", "raw", "sessions") });
-  expect(captured[1]).toMatchObject({ extensionCwd: other, root: join(other, ".agentrig", "raw", "sessions") });
+  expect(captured[0]).toMatchObject({ trustedProjectRoot: canonicalLaunch, extensionCwd: canonicalLaunch, system: "trusted launch prompt", root: join(canonicalLaunch, ".agentrig", "raw", "sessions") });
+  expect(captured[1]).toMatchObject({ extensionCwd: canonicalOther, root: join(canonicalOther, ".agentrig", "raw", "sessions") });
   expect(captured[1]!.trustedProjectRoot).toBeUndefined(); expect(captured[1]!.system).not.toBe("MUST NOT LOAD OTHER PROJECT");
   expect(process.cwd()).not.toBe(launch); expect(process.cwd()).not.toBe(other);
   const secret = "UNKNOWN-SERVER-SECRET";

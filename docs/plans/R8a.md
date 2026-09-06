@@ -150,3 +150,22 @@ missing artifacts. This is scripted mechanics evidence, not live model quality.
 Receipt: `/tmp/agentrig-r8a-structure.0P9xv9/run/summary.json`; evaluator revision
 records merge `c3d23fd` with the subsequent type-only permission fix in the tested
 worktree. Exact final-head CI and scripted-structure gates remain required.
+
+## First CI receipt and canonical fixture correction
+
+Initial PR #184 head `54f2599` passed Linux and scripted structure `34048134287`.
+CI `34048134263` macOS job `101526773631` failed only the new ACP config fixture:
+it expected `/var/...` spellings but the runtime correctly supplied canonical
+`/private/var/...` for cwd, session root and trusted project. This was not a
+production trust-boundary failure and was not blindly rerun.
+
+The permanent test now creates an owned directory alias (junction on Windows).
+The old lexical expectations reproduce the same failure on Linux (`alias/launch`
+versus `physical/launch`); canonical expected roots and the stub memory-policy
+comparison then pass both tests. Cross-project refusal, no early provider call,
+secret-safe unknown MCP refusal and denied-memory assertions are unchanged.
+No runtime change and no additional review. All final-head gates run again.
+
+After the fixture correction: build/typecheck and full Docker-enabled suite passed
+again, **2,733 plus two existing skips /161 files**, four workers, 47.64s. The initial
+Windows job was still running at the new push; no initial Windows success is claimed.
