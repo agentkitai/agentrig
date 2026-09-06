@@ -743,7 +743,7 @@ export class TuiController {
         return true;
       }
       case "review": {
-        if (this.session !== null || this.dreamAbort !== undefined || this.undoing !== undefined || this.state.pending !== null || this.state.escalation !== null) {
+        if (this.session !== null || this.dreamAbort !== undefined || this.undoing !== undefined || this.state.pending !== null || this.state.question !== null || this.state.escalation !== null) {
           this.print("work or a prompt is active — stop it before /review", "error"); return true;
         }
         const controller = new AbortController(); this.reviewAbort = controller; this.set({ reviewing: true });

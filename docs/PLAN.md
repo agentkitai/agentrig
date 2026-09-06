@@ -763,6 +763,13 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R15a adds the private-runtime `ask_user` builtin and protected question events.
+TUI and explicitly negotiated ACP clients answer through a bounded clarification
+queue, separate from permissions and supervisor steering. Headless defaults fail;
+explicit first-option/literal-file policies remain externally sourced automation.
+Answers never mint grants or clear external-input restrictions. See
+[questions](QUESTIONS.md) and [R15a](plans/R15a.md) for bounds and lifecycle controls.
+
 R8a adds stable ACP v1 stdio over the headless controller: literal prompts, streamed
 updates and one-time permission replies. Resource links remain separately advisory;
 client MCP configuration must match trusted host entries with existing unchanged

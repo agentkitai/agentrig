@@ -33,7 +33,10 @@ export function bindQuestion(tool: AnyTool, ctx: ToolContext, toolUseId: string,
     let outcome: "answered" | "unavailable" | "timeout" | "cancelled" = "unavailable";
     try {
       await emit({ type: "question.asked", id: request.id, toolUseId, question });
-      const reply = await Promise.race([Promise.resolve().then(() => handler?.(request, controller.signal) ?? null), cancelled]);
+      const reply = await Promise.race([Promise.resolve().then(() => {
+        controller.signal.throwIfAborted();
+        return handler?.(request, controller.signal) ?? null;
+      }), cancelled]);
       controller.signal.throwIfAborted();
       if (reply === null) throw new Error("answer unavailable");
       const parsed = QuestionReplySchema.parse(reply);
