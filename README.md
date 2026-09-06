@@ -131,6 +131,11 @@ abort do not disable it. Idle slash failures print immediately and are audited o
 this is exception containment, not isolation from trusted code's ambient host effects.
 
 Sandbox modes constrain supported tool effects, not arbitrary JavaScript in the harness process.
+The additive `net` permission defaults to ask and is distinct from legacy `network`.
+`--allow net` (or YOLO) does not enable sandbox networking: an enforcing sandbox also requires
+explicit `--sandbox-network` / config `sandboxNetwork: true`. Conversely that policy flag grants
+no tool permission. A separately approved one-time sandbox escape executes outside the sandbox;
+mode `none` provides no OS isolation. See [R11a's boundaries](docs/plans/R11a.md).
 Process stdout/stderr and exit codes do not authenticate sandbox denials. Docker/Seatbelt
 command failures stay ordinary tool failures, even if they print “Read-only file system”;
 only independently established broker/policy/launcher refusals trigger sandbox-denial consent.

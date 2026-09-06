@@ -8,6 +8,7 @@ import { DEFAULT_HOOK_TIMEOUT_MS, HookPoint, type Hook } from "./hooks.js";
 import { sanitizeLine } from "./tools/skills.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { createExtensionOwner, extensionCallback, extensionDisabled, extensionHandler, ownExtension } from "./extension-runtime.js";
+import { PermissionClass } from "./permission-types.js";
 
 export interface ExtensionCommand {
   name: string;
@@ -143,7 +144,7 @@ export async function loadExtensions(options: {
         if (name.startsWith("mcp__") || toolNames.has(name) || tools.some(t => t.name.toLowerCase() === name)) throw new Error(`reserved/duplicate tool ${name}`);
         z.string().min(1).max(8192).parse(tool.description);
         if (typeof tool.execute !== "function" || typeof tool.inputSchema?.parse !== "function") throw new Error("tool requires executable handler and input schema");
-        if (typeof tool.permission !== "function") z.enum(["read", "write", "exec", "network"]).parse(tool.permission);
+        if (typeof tool.permission !== "function") PermissionClass.parse(tool.permission);
         // Validate advertisement while still in the atomic draft, not after startup.
         const schema = tool.jsonSchema ?? zodToJsonSchema(tool.inputSchema, { $refStrategy: "none" });
         z.record(z.unknown()).parse(schema); JSON.stringify(schema);

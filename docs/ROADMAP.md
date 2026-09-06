@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5b failure isolation is implemented, pending delivery gates; R14b is done (PR #165); H7b is done (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done with green post-merge CI (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5b failure isolation is implemented, pending delivery gates; R11a is merged (PR #166), pending post-merge CI; R14b is done (PR #165); H7b is done (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done with green post-merge CI (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -21,7 +21,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
-| Done | R14a: acceptance declarations (PR #162) | Observable declarations remain unverified, not proof |
+| Done — PR #162 | R14a: acceptance declarations | Observable declarations remain unverified, not proof |
 | Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -668,7 +668,7 @@ permission and sandbox layers something to grip.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R11a | `net` added to `PermissionClass` (schema-added; nothing repurposed); default rules leave it at `ask`; sandbox modes deny it unless allowed | core |
+| R11a *(implemented; delivery gates pending)* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
 | R11b | `web_fetch` tool: GET-only, size-capped, html→text, declares `class: "net"` and the URL in the request (so rules like `--allow net` and per-run deny work); no search tool yet — search providers need keys and that is config surface R1 already owns | core |
 
 Acceptance: fetch is refused under default rules until allowed (both interactively and via
@@ -928,7 +928,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
-| Repair | H7a (done) → H7b | Open correctness defects (#116, #95); may interrupt any row above under the existing defect rule. |
+| Repair (done) | H7a (#161) → H7b (#164) | Correctness defects (#116, #95) delivered with green post-merge CI. |
 | 12 | R15a → R15b → R15c | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
 | 13 | R15d → R15e → R15f → R15g | Interop and headless shapes; R15d follows R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h → R15i → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
@@ -1156,6 +1156,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
+- R11a polish: consider `--no-sandbox-network` for a one-run override of config true; current
+  positive-only flag matches other CLI booleans. Consider clarifying unused network metadata
+  forwarded to the none provider; no runtime policy or OS isolation is established in none mode.
 - R14b polish: consider a separate unknown-command-attempt budget when non-shell custom/MCP
   command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
   Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,

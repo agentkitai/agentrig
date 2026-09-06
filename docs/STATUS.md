@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5b failure isolation is implemented, pending delivery gates; R14b is done with green post-merge CI (PR #165); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5b failure isolation is implemented, pending delivery gates; R11a is merged (PR #166), pending post-merge CI; R14b is done with green post-merge CI (PR #165); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -32,6 +32,26 @@ session `865bb096-2ab8-4342-9710-91f55433f68b`, 225 seconds, 20 turns/requested 
 It independently passed build/typecheck and all 2,407 tests plus two skips across 134 files.
 Three optional import/comment/documentation notes were reconciled without runtime expansion;
 their wording is recorded verbatim in the contract. No second general review.
+
+### R11a implemented — delivery gates pending
+
+Additive `net` defaults ask without repurposing legacy `network`. Runtime denies compatible
+net tools under enforcing no-network policy before body/dispatch bookkeeping. Explicit
+`--sandbox-network` / config `sandboxNetwork` is independent from permission allow/YOLO;
+fresh one-time outside escape remains separate and none mode offers no OS sandbox.
+Real inert tool runs cover child views/narrowing, external-expansion consent and actual CLI
+builder wiring; no web fetch or live network effects. [Contract](plans/R11a.md).
+Integrated H7b #164/main `c88a72f`; post-merge gate pending at integration. R12d #163 and
+R14a #162 have green post-merge receipts. Build/typecheck and full 2,393 tests plus two skips
+across 133 files pass (four workers, 36 seconds). Mutations/review and exact-head CI follow.
+Both named mutants failed their controls and were restored. One independent Claude review
+approved with no material findings (154 seconds, 17/max24 turns), independently exercising
+seven related files and typecheck. Verbatim findings are in the contract; optional polish is
+at the roadmap END. H7b post-CI 34029756772 is now green on all three platforms.
+Integrated R14b #165/main `6f25a17`; commandOutcome/evidence and both CI additions preserved.
+Combined build/typecheck/full 2,411 tests plus two skips across 135 files pass (four workers,
+32 seconds). Mechanical docs reconciliation only; no second review. R14b post-CI 34030230354
+and R11a exact-head CI remain pending at this checkpoint.
 
 ### R14b done — PR #165; post-merge CI green
 

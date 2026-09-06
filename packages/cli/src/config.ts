@@ -86,6 +86,7 @@ const ConfigValuesSchema = z
     dangerouslySkipPermissions: z.boolean().optional(),
     yolo: z.boolean().optional(),
     sandbox: z.enum(["read-only", "workspace-write", "none"]).optional(),
+    sandboxNetwork: z.boolean().optional(),
     checkpoints: z.boolean().optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
