@@ -79,6 +79,11 @@ were detected and restored before the full pass. One independent Claude review a
 across 123 files. Optional notes are at the roadmap end; no production changes followed review.
 Final exact-head three-platform CI remains the PR gate.
 
+After R12c PR #158 merged, integrated main `06f5b4b` with both permission/continuation
+renderers, CI suites and delivery sections preserved. Combined build/typecheck and all
+2,337 tests plus two skips across 125 files pass (four workers, 31 seconds). No second
+review for mechanical integration. R12c post-merge CI 34027192976 remains pending.
+
 ### R12c implemented — pending delivery gates
 
 Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
