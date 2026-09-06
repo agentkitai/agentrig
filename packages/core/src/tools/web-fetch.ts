@@ -22,8 +22,17 @@ export interface WebFetchOutput {
 
 /** Bounded lexical text extraction, not a browser/parser, sanitizer, or readability engine. */
 function htmlText(html: string): string {
-  const pieces: string[] = []; let i = 0; let suppressed: string | undefined;
+  const pieces: string[] = []; const lower = html.replace(/[A-Z]/g, c => c.toLowerCase()); let i = 0; let suppressed: string | undefined;
   while (i < html.length) {
+    if (suppressed !== undefined) {
+      // Script/style bodies are raw text: '<' comparisons are not opening tags. Search only
+      // for a complete closing-name boundary, advancing monotonically through rejected prefixes.
+      const close = lower.indexOf(`</${suppressed}`, i);
+      if (close < 0) break;
+      const after = close + suppressed.length + 2;
+      if (!/[\s/>]/.test(html[after] ?? "")) { i = after; continue; }
+      i = close;
+    }
     if (html.startsWith("<!--", i)) { const end = html.indexOf("-->", i + 4); i = end < 0 ? html.length : end + 3; continue; }
     if (html[i] !== "<") {
       const end = html.indexOf("<", i); const stop = end < 0 ? html.length : end;

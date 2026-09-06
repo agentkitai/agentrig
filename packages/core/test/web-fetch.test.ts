@@ -113,6 +113,12 @@ it("returned text is capped independently from body bytes, without splitting sur
   const s = await local((_req, res) => { res.setHeader("content-type", "text/plain"); res.end("a".repeat(19_999) + "😀tail"); });
   const result = await execute(s.url); expect(result.truncated).toBe(true); expect(result.output.text).toBe("a".repeat(19_999)); expect(result.output.bytes).toBe(20_007);
 });
+it.each(["script", "style"])("%s raw text with comparisons cannot swallow following visible HTML", async tag => {
+  const s = await local((_req, res) => { res.setHeader("content-type", "text/html");
+    res.end(`<${tag}>İ if (x<3) y(); </${tag}ed> still hidden < comparison </${tag.toUpperCase()}><h1>Visible heading</h1><p>Body text</p>`); });
+  const result = await execute(s.url);
+  expect(result.output.text).toBe("Visible heading Body text"); expect(result.truncated).toBe(false);
+});
 it.each(["caller", "deadline"])("%s abort stops an in-progress body without waiting ten wall-clock seconds", async mode => {
   const received = Promise.withResolvers<void>(); const closed = Promise.withResolvers<void>();
   const s = await local((_req, res) => { res.on("close", () => closed.resolve()); res.setHeader("content-type", "text/plain"); res.write("partial"); received.resolve(); });
