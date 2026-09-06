@@ -64,7 +64,9 @@ async function ready(work: Promise<unknown>, finished: Promise<{ events: Harness
 }
 
 it("runs two writer children concurrently in distinct raw-baseline worktrees and returns checked parent diffs", async () => {
-  const f = await fixture();
+  // Retain the Windows CI configuration as a cross-platform control. Runtime baseline
+  // capture must ignore this; separately authorized parent apply chooses its own policy.
+  const f = await fixture(2, { prepare: async repo => { await git(repo, ["config", "core.autocrlf", "true"]); } });
   try {
     await ready(Promise.all(f.entered.map(gate => gate.promise)), f.finished);
     expect(new Set(f.cwds).size).toBe(2); expect(f.cwds).not.toContain(f.repo);
@@ -90,7 +92,13 @@ it("runs two writer children concurrently in distinct raw-baseline worktrees and
     let applied = 0;
     const patch = join(f.cwds[0]!, "..", "candidate.patch");
     const apply: AnyTool = { name: "apply_candidate", description: "trusted local fixture", inputSchema: z.object({}), permission: "write", paths: () => ["shared.txt", "binary.dat", "child-0.txt"],
-      async execute(_input, ctx) { await git(ctx.cwd, ["apply", "--check", patch]); await git(ctx.cwd, ["apply", patch]); applied++; return { output: "applied", display: "applied" }; } };
+      async execute(_input, ctx) {
+        // This is the parent's explicitly authorized application policy, not a runtime
+        // merge engine. Do not let ambient autocrlf rewrite the byte-exact fixture output.
+        await git(ctx.cwd, ["-c", "core.autocrlf=false", "apply", "--check", patch]);
+        await git(ctx.cwd, ["-c", "core.autocrlf=false", "apply", patch]);
+        applied++; return { output: "applied", display: "applied" };
+      } };
     for (const decision of ["deny", "allow"] as const) {
       const agent = createAgent({ provider: provider([[call("apply", apply.name, {}), stop]]), store: f.store, tools: [apply], systemPrompt: "inert", repoMap: false, permissions: new RulePolicy([], decision) });
       const run = agent.run("apply candidate", { cwd: f.repo }); for await (const _event of run.events) {} await run.done;

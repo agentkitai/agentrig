@@ -38,6 +38,13 @@ and fixed; mixed barrier coverage and all negative controls pass. Integrated R7b
 `f3a1ec8`; combined build/typecheck/full pass 2,656 plus two existing skips / 152 files
 (four workers, 38 seconds). Eighteen isolated runtime tests and four supervisor order
 controls are retained. Exact-head PR CI is next; no second broad review for integration.
+Initial PR #181 CI 34043109668 passed Linux/macOS but failed Windows parent-application
+line endings (CRLF versus LF), after raw child baseline checks passed. The same mismatch
+reproduced locally with explicit `core.autocrlf=true`; the authorized fixture apply now
+explicitly selects `core.autocrlf=false`. Byte-exact assertions and runtime are unchanged.
+New exact-head checks follow; the initial failure is not rewritten as success.
+Corrected fixture build/typecheck/full pass again: 2,656 plus two skips / 152 files,
+four workers, 38 seconds. New exact-head three-platform CI gates the merge.
 [Contract](plans/R10c.md).
 
 ### R7b done — PR #179, post-main CI green
