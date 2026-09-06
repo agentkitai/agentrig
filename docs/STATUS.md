@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R13f, R5e and R5d in independent worktrees.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13f and R5d in independent worktrees; R5e implemented, closing PR records delivery gates.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -19,6 +19,21 @@ addressed, and green three-platform CI. Integrate current main before merging; s
 and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, with no recursive
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
+
+### R5e implemented — closing PR records delivery gates
+
+Strict versioned skill/extension/package schemas now reject unknown fields before use. The
+existing skill loader rejects malformed frontmatter and equal-precedence names, including late
+duplicates beyond the catalogue limit; plain Markdown and repository skills remain compatible.
+Extension/package runtime consumers remain R5a/R5c, with reusable validation/surface seams ready.
+See [R5e contract](plans/R5e.md) for the intentionally flat skill dialect and supported npm subset.
+
+One bounded Claude review `989005b4-0c49-4e97-a101-b041c1cdd6f1` independently passed typecheck,
+1,993 tests plus two skips and 58 focused tests. Its one material finding (incomplete package
+script blocklist) is fixed by refusing all nonempty scripts; the added regression fails against
+the old blocklist. Strict-schema and equal-precedence negative mutations also fail and are
+restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
+post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
 
 ### R6e complete (PR #140)
 

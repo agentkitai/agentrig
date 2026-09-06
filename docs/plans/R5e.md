@@ -56,7 +56,9 @@ as authority (`description`, `license`, `private`, `keywords`, `author`, `contri
 `repository`, `homepage`, `bugs`, `funding`, `type`, `main`, `module`, `types`, `exports`, `files`,
 `engines`, `packageManager`, `devDependencies`). Other top-level fields reject the package,
 including permission-shaped fields. This intentionally narrows the draft's arbitrary npm
-passthrough: new fields require an explicit schema/consumer decision. Lifecycle/install scripts,
+passthrough: new fields require an explicit schema/consumer decision. An empty `scripts` map is
+accepted; **all nonempty scripts maps are refused**, rather than relying on an incomplete lifecycle
+name blocklist. These are inert content packages, not npm execution environments. Script fields,
 nonempty runtime/optional dependencies and `bin` are unsupported and refused. R5c must consume
 this schema before copying/installing anything and validate nested extension/skill units before
 activation. Archive safety, integrity receipts, module import and package installation remain
@@ -70,3 +72,7 @@ determinism. Existing `skills.test.ts` proves plain Markdown and all repository 
 load. The new suite also runs in Windows CI. Required delivery: build, typecheck, full tests,
 bounded independent review, detected/restored negative mutations, exact-head Linux/macOS/Windows
 CI, merge, then exact-main CI. Final receipts belong to the PR to avoid recursive docs-only PRs.
+
+One bounded independent review on `c5a9972` found the package-script blocklist incomplete. The
+final schema refuses all nonempty scripts, with preprepare/postprepare/dependencies and ordinary
+script regressions. Material finding repaired and self-verified; no second general review.

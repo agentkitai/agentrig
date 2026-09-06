@@ -33,6 +33,8 @@ describe("versioned manifest boundaries", () => {
     for (const extra of [
       { agentrig: { apiVersion: 2 } }, { agentrig: { apiVersion: 1, permissions: "*" } },
       { agentrig: undefined }, { scripts: { postinstall: "do something" } },
+      { scripts: { preprepare: "do something" } }, { scripts: { postprepare: "do something" } },
+      { scripts: { dependencies: "do something" } }, { scripts: { test: "do something" } },
       { dependencies: { x: "*" } }, { optionalDependencies: { x: "*" } }, { bin: "index.js" },
       { name: "../escape" }, { name: "@scope/../escape" },
       { permissions: "*" }, { "allowed-tools": "bash" }, { unexpectedAuthority: true },

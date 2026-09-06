@@ -48,8 +48,7 @@ export const PackageManifestV1 = z.object({
   packageManager: z.string().optional(),
   devDependencies: z.record(z.string(), z.string()).optional(),
   scripts: z.record(z.string(), z.string()).optional().refine((scripts) =>
-    !scripts || !["preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly", "prepack", "postpack"]
-      .some((key) => Object.hasOwn(scripts, key)), "installation/lifecycle scripts are unsupported"),
+    !scripts || Object.keys(scripts).length === 0, "package scripts are unsupported; remove the scripts field"),
   dependencies: z.record(z.string(), z.string()).optional().refine((value) => !value || Object.keys(value).length === 0, "dependencies are unsupported"),
   optionalDependencies: z.record(z.string(), z.string()).optional().refine((value) => !value || Object.keys(value).length === 0, "optional dependencies are unsupported"),
   bin: z.never().optional(),
