@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { inspectPackages } from "./packages.js";
 import { homedir } from "node:os";
 import {
   assertShellExists,
@@ -178,6 +179,10 @@ export interface AgentBuildOptions extends ProviderOptions {
   skillDiscovery?: boolean;
   /** Opt-in generated roots, resolved by loadRunConfig. A label confers no authority. */
   generatedSkills?: boolean;
+  /** Trusted-project installed bundles; no registry or implicit prompt injection. Default on. */
+  packages?: boolean;
+  /** Internal config-resolution insertion point before home/generated roots. */
+  packageSkillIndex?: number;
   /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
   shell?: string;
   /** Canonical root approved by the CLI trust boundary; absent means no project context. */
@@ -410,9 +415,13 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
 /** Assembles the agent. Throws on a bad flag or a missing credential; callers report and exit. */
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  const installed = opts.packages === false || opts.trustedProjectRoot === undefined
+    ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);
+  for (const error of installed.errors) (extras.onNotice ?? console.error)(`package discovery: ${error}`);
   const extensionCandidates = [
     ...(opts.extension ?? []).map(path => ({ path, precedence: 0 })),
     ...(opts.extensionDiscovery !== false && opts.trustedProjectRoot !== undefined ? await discoverExtensions(opts.trustedProjectRoot) : []),
+    ...(opts.extensionDiscovery === false ? [] : installed.packages.flatMap(pkg => pkg.extensions.map(path => ({ path, precedence: 2 })))),
   ];
   if (extensionCandidates.length > 0 && opts.sandbox !== undefined && opts.sandbox !== "none") {
     throw new Error("extensions execute ambient host code outside the sandbox; remove extensions or explicitly select --sandbox none (YOLO does not override this)");
@@ -537,10 +546,16 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   // Skills (PLAN §6): the catalogue rides in the system prompt one line each, and the body is
   // fetched on demand — the same index-first shape as the wiki, for the same reason. Twenty
   // skills of a thousand words each would cost more context than the task.
-  const skills = opts.skills === undefined || opts.skills.length === 0
+  const baseRoots = opts.skills ?? [];
+  const insertion = Math.max(0, Math.min(opts.packageSkillIndex ?? baseRoots.length, baseRoots.length));
+  const packageRoots = opts.skillDiscovery === false || baseRoots.length === 0 ? []
+    : installed.packages.flatMap(pkg => pkg.skills).filter(path => !baseRoots.some(root => resolve(root) === resolve(path)));
+  const skillRoots = [...baseRoots.slice(0, insertion), ...packageRoots, ...baseRoots.slice(insertion)];
+  const skills = skillRoots.length === 0
     ? []
     : await discoverSkills({
-        roots: opts.skills,
+        roots: skillRoots,
+        rootPrecedence: new Map(packageRoots.map(path => [resolve(path), insertion])),
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
 

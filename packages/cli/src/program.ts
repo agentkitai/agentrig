@@ -1,6 +1,6 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
-import { CommandPrefixSchema, SessionStore } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, SessionStore, sanitizeLine } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
@@ -10,6 +10,11 @@ import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
+import { addPackage } from "./packages.js";
+import { withMaintenanceSignal } from "./maintenance.js";
+import { resolveProjectTrust } from "./trust.js";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 
 function parseIngestLimits(text: string) {
   try { return IngestLimitsSchema.parse(JSON.parse(text)); }
@@ -248,6 +253,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
       .option("--extension <path>", "trust and activate a host-code .mjs extension with required sidecar (repeatable; sandbox none only)", collect, [])
       .option("--no-extension-discovery", "do not activate trusted-project .agentrig/extensions host code")
+      .option("--no-packages", "do not discover installed trusted-project skill/extension packages")
       .option(
         "--skill-discovery",
         "override config and auto-load .agentrig/skills from the trusted project root and home",
@@ -403,6 +409,20 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await dreamCommand({ ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });
+    });
+
+  program.command("package").description("Local create-only bundles; no scripts or registry fetching")
+    .command("add <source>").description("Validate and install a local directory or npm tarball; existing destinations refuse")
+    .option("--trust", "explicitly trust this project for installed extension code and instructions")
+    .action(async (source: string, opts: { trust?: boolean }) => {
+      const cwd = dependencies.config?.cwd ?? process.cwd();
+      const trust = await resolveProjectTrust(cwd, { home: dependencies.config?.home ?? homedir(), interactive: false,
+        explicitTrust: opts.trust === true });
+      if (!trust.trusted) throw new Error("package installation requires a trusted project; review its code and use --trust explicitly");
+      const result = await withMaintenanceSignal(signal => addPackage({ projectRoot: trust.projectRoot, source: resolve(cwd, source), signal }), undefined, "package installation");
+      console.log(`installed ${result.name}@${sanitizeLine(result.version, 128)}\n${sanitizeLine(result.destination, 4096)}\nintegrity ${result.digest} (change detection, not authenticity)`);
+      if (result.prompts.length > 0) console.log(`prompt files stored inertly: ${result.prompts.join(", ")}`);
+      if (result.ignored.length > 0) console.log(`ignored: ${result.ignored.join(", ")}`);
     });
 
   program
