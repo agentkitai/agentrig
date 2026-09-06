@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { inspectPackages } from "./packages.js";
 import { promisify } from "node:util";
 import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue, probeProvider, type ModelProvider } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
@@ -474,6 +475,16 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     }
   }
 
+  if (configInvalid || boundary === undefined || !trust.trusted || effective.packages === false) {
+    checks.push(line("skip", "packages", "package discovery disabled or project untrusted; no package code imported"));
+  } else {
+    try {
+      const installed = await inspectPackages(boundary.projectRoot);
+      for (const pkg of installed.packages) checks.push(line("pass", `package:${pkg.name}`, `${display(pkg.version)}; integrity matches (not authenticity); ${pkg.prompts.length} inert prompt file(s)`));
+      for (const error of installed.errors) checks.push(line("fail", "packages", error));
+      if (installed.packages.length === 0 && installed.errors.length === 0) checks.push(line("skip", "packages", "no installed packages"));
+    } catch (error) { checks.push(line("fail", "packages", String(error))); }
+  }
   const memory = typeof effective.memory === "string" ? resolve(cwd, effective.memory) : undefined;
   if (memory === undefined) {
     checks.push(line("skip", "memory", "no memory directory is configured"));

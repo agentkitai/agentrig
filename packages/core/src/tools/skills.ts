@@ -94,6 +94,8 @@ function firstLine(body: string): string | undefined {
 export interface DiscoverOptions {
   /** Directories to scan. Each may hold `<name>.md` or `<name>/SKILL.md`. */
   roots: string[];
+  /** Trusted caller grouping: equal-priority package roots reject ambiguous names together. */
+  rootPrecedence?: ReadonlyMap<string, number>;
   maxSkills?: number;
   maxBytes?: number;
   onError?: (err: Error) => void;
@@ -105,7 +107,8 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
   const maxBytes = opts.maxBytes ?? 256 * 1024;
   const candidates: Array<Skill & { precedence: number }> = [];
 
-  for (const [precedence, root] of [...new Set(opts.roots.map((root) => resolve(root)))].entries()) {
+  for (const [index, root] of [...new Set(opts.roots.map((root) => resolve(root)))].entries()) {
+    const precedence = opts.rootPrecedence?.get(root) ?? index;
     let entries;
     try {
       entries = await readdir(root, { withFileTypes: true });

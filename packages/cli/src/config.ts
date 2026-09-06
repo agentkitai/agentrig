@@ -121,6 +121,7 @@ const ConfigValuesSchema = z
     skills: stringList.optional(),
     extension: stringList.max(32).optional(),
     extensionDiscovery: z.boolean().optional(),
+    packages: z.boolean().optional(),
     /** Auto-load conventional `.agentrig/skills` directories (trusted project + home). Default on. */
     skillDiscovery: z.boolean().optional(),
     /** Include selected-memory and safe-home generated roots. Default off; no benefit claim. */
@@ -356,6 +357,8 @@ export async function loadRunConfig(
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
     skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],
+    // Runtime-only insertion point; packages are verified in buildAgent, never by config data.
+    packageSkillIndex: [...new Set([...explicitSkills, ...(trust.trusted && resolved.skillDiscovery !== false ? [join(trust.projectRoot, ".agentrig", "skills")] : [])])].length,
     extension: (Array.isArray(resolved.extension) ? resolved.extension as string[] : []).map(path => resolve(cwd, path)),
     extensionCwd: cwd,
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
