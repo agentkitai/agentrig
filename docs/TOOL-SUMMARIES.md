@@ -27,13 +27,17 @@ visible. Only ordinary rule/fallback allow receipts are hidden in compact mode.
 It does not erase or redraw earlier Static scrollback. Turning it off affects
 future events only; toggling again does not duplicate already expanded details.
 R15c thinking stays collapsed by default and reveals disclosed text in verbose
-mode; opaque reasoning signatures are not surfaced by this feature.
+mode; opaque reasoning signatures are not surfaced by this feature. Turning verbose
+off while a tool is running discards the display correlation, so its later result
+is honestly labelled unmatched; it is not assigned to a guessed call.
 
 Recent expansion is bounded: at most 128 lines / 64 KiB, 2,048 characters per
 line. Tool inputs are a labelled bounded projection (eight top-level keys,
 256 characters per string, nested values explicitly omitted); full events remain
-in the session log. Elided older lines are counted explicitly. Display controls
-and bidi/invisible formatting are removed, not interpreted as terminal commands.
+in the session log. Elided older lines are counted explicitly. Summary and retained-
+expansion controls and bidi/invisible formatting are removed, not interpreted as
+terminal commands. Existing error/diagnostic details and future raw-event rendering
+keep their prior behavior; this is not a blanket sanitizer for every TUI line.
 
 There are at most 128 pending display correlations and 64 reads per compact run.
 Overflow flushes with an explicit incomplete marker or starts a new read run.

@@ -1268,3 +1268,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
+- R16c optional display hardening: sanitize pre-existing compact error/diagnostic
+  detail lines as well as new summaries/retained expansion; current legacy detail
+  rendering can retain terminal control and bidi characters. No execution or log
+  policy depends on these display strings.
