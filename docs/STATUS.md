@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R14d verification lanes are implemented, pending delivery gates; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14d verification lanes are implemented, pending delivery gates; R10d is merged (PR #171), post-merge gate pending; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -15,6 +15,20 @@ narration establish semantic proof. No new runner, automatic checks or live eval
 Actual correct/broken X2 surfaces keep regression/submitted tests green and discriminate in
 E2 plus attached M6. Removed assumption discount and removed M6 deficit override each failed
 their named negative controls and were restored. One review/full delivery gates remain pending.
+
+### R10d implemented — delivery gates pending
+
+Explicit doctor --probe runs bounded potentially billable empirical samples; normal doctor
+remains offline/read-only. Exact local observations feed actual advertised capability flags;
+unknowns retain labelled unverified defaults. No native strict-format guarantee, permission
+change or live validation spend. [Contract](plans/R10d.md). Actual local HTTP SSE/doctor/cache/
+builder tests plus fake core samples exercise bounds, usage, matching and offline behavior.
+Capability-application removal and unconditional-probe mutants each failed their real-path
+control and were restored. Integrated R14c main `4d3eb91`; config-free evidence display preserved.
+Final build/typecheck/full 2,491 plus two skips across 142 files passed (four workers, 33 seconds).
+One bounded Claude review approved without material findings (178 seconds, 23/max24 turns),
+independently running 17 focused tests and typecheck. Verbatim result is in the contract;
+optional source-summary wording is at the roadmap END. Exact-head CI remains the final gate.
 
 ### R14c done — PR #169; post-merge CI green
 

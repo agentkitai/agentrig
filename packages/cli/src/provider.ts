@@ -2,10 +2,15 @@ import {
   AnthropicProvider,
   OpenAICompatibleProvider,
   OpenAIChatGPTProvider,
+  OpenAIChatGPTAuth,
+  EnvSeededTokenStore,
+  FileTokenStore,
+  applyProviderConformance,
   type ModelProvider,
   type ReasoningEffort,
   type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
+import { providerProbeCachePath, providerProbeFingerprint, readProviderProbe } from "./provider-probe-cache.js";
 import { ROLES, type ProviderEntry, type Role, type Roles } from "./config.js";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
@@ -33,6 +38,10 @@ export interface ProviderOptions {
 export interface ProviderHooks {
   /** Where retry notices go — the TUI frame or stderr. Silent retries look like hangs. */
   onNotice?: (message: string) => void;
+  /** Explicit doctor probe: disable transient HTTP/stream retries, bypass cached labels. */
+  probe?: boolean;
+  env?: NodeJS.ProcessEnv;
+  conformanceCachePath?: string;
 }
 
 /** One phrasing for every provider, so the three adapters cannot drift. */
@@ -89,24 +98,26 @@ export function memoryRole(opts: ProviderOptions): Role {
 }
 
 /** Constructs one entry. `modelExplicit` guards only the flat default, whose model has a built-in fallback. */
-function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
+function rawEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
+  const env = hooks.env ?? process.env;
   const onRetry =
     hooks.onNotice === undefined
       ? {}
       : { onRetry: (info: StreamRetryInfo) => hooks.onNotice?.(describeRetry(info)) };
   const tuning = {
+    ...(hooks.probe === true ? { retry: { maxRetries: 0 } } : {}),
     ...(entry.contextWindow === undefined ? {} : { contextWindow: entry.contextWindow }),
     ...(entry.reasoningEffort === undefined ? {} : { reasoningEffort: entry.reasoningEffort }),
   };
   const modelExplicit = name !== "default" || opts.modelExplicit === true;
   if (entry.provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
     return new AnthropicProvider({ apiKey, model: entry.model, ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }), ...tuning, ...onRetry });
   }
   if (entry.provider === "openai") {
     if (!modelExplicit) throw new Error("--model is required with --provider openai");
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = env.OPENAI_API_KEY;
     if (!apiKey && entry.baseUrl === undefined) {
       throw new Error("OPENAI_API_KEY is not set (or pass --base-url for a local server)");
     }
@@ -127,9 +138,19 @@ function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, h
     if (opts.maxTokensPerTurnExplicit === true) {
       console.error("Warning: --max-tokens-per-turn is ignored by openai-chatgpt (the backend rejects the parameter).");
     }
-    return new OpenAIChatGPTProvider({ model: entry.model, ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }), ...tuning, ...onRetry });
+    return new OpenAIChatGPTProvider({ model: entry.model, ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }), ...tuning, ...onRetry,
+      ...(hooks.probe === true ? { auth: new OpenAIChatGPTAuth({ retry: { maxRetries: 0 },
+        store: new EnvSeededTokenStore(new FileTokenStore(env.AGENTRIG_OPENAI_CHATGPT_AUTH), env) }) } : {}) });
   }
   throw new Error(`unknown provider "${String(entry.provider)}" (anthropic | openai | openai-chatgpt)`);
+}
+
+function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
+  const provider = rawEntry(name, entry, opts, hooks);
+  const fingerprint = hooks.probe === true ? undefined : providerProbeFingerprint(entry, hooks.env ?? process.env);
+  const report = fingerprint === undefined ? undefined : readProviderProbe(hooks.conformanceCachePath ?? providerProbeCachePath(), fingerprint);
+  applyProviderConformance(provider, report);
+  return provider;
 }
 
 /** Every role's provider, built once per entry. Roles are constructed eagerly; `get` builds lazily. */

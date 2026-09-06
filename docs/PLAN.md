@@ -82,6 +82,11 @@ process then runs each role on its own entry; the flat `provider`/`model`/`baseU
 the implicit `default` entry. `reasoningEffort` is an adapter constructor option, never a per-request
 field.
 
+R10d adds explicit `doctor --probe` empirical tool/parallel/prompted-JSON/cache samples and
+configuration-bound local observations consumed by CLI provider capabilities. Native strict
+format support stays unknown; unknown dimensions retain labelled unverified configured fallback.
+Plain doctor never probes. See [R10d](plans/R10d.md) for spend, usage and cache limitations.
+
 ### 2.3 Tools
 
 ```ts

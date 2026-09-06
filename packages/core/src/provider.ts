@@ -1,5 +1,6 @@
 import type { ContentTrust, InstructionContext, Message } from "./messages.js";
 import type { Usage } from "./events.js";
+import type { ProviderCapabilityEvidence } from "./provider-conformance.js";
 
 export interface ToolSpec {
   name: string;
@@ -53,6 +54,8 @@ export interface ModelProvider {
     parallelTools: boolean;
     caching: boolean;
     contextWindow: number;
+    /** Local empirical probe evidence; never a server guarantee or permission authority. */
+    conformance?: ProviderCapabilityEvidence;
     /** Fractions of normal input price; model-derived defaults used only when explicit rates are absent. */
     cacheReadDiscount?: number;
     cacheWriteMultiplier?: number;
