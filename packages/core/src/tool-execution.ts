@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { extensionDisabled, ExtensionHandlerError, flushExtensionFailures } from "./extension-runtime.js";
 import { takeCommandOutcome } from "./command-outcome.js";
+import { proposedFileDiff, takeFileDiff } from "./file-diff.js";
 import { hasDiagnostics, diagnosticContext, takeChanged, unchanged, checkerTool, diagnosticReport, boundDiagnosticReport } from "./diagnostics.js";
 import type { Diagnostics } from "./diagnostics-types.js";
 import { isDeepStrictEqual } from "node:util";
@@ -299,6 +300,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
   const declaredPaths = tool.paths?.(input);
   const operation = tool.operation?.(input);
+  const proposal = proposedFileDiff(tool, input);
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
   const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
     ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
@@ -311,6 +313,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     cwd,
     ...(declaredPaths === undefined ? {} : { paths: declaredPaths }),
     ...(operation === undefined ? {} : { operation }),
+    ...(proposal === undefined ? {} : { fileDiff: proposal }),
     // whose session this is, when it is not the one a human is watching. Set on the config by
     // whoever built the session (the subagent tool's `childConfig`), never by a tool or by
     // the model — an ask that can name its own origin can lie about it.
@@ -489,6 +492,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     }
     const ok = r.isError !== true;
     const commandOutcome = takeCommandOutcome(r, ctx);
+    const fileDiff = takeFileDiff(tool, r, ctx);
     let diagnostics: Diagnostics | undefined;
     const changed = ok ? takeChanged(tool, r, ctx) : undefined;
     if (changed !== undefined) {
@@ -528,6 +532,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       permission: permClass,
       toolCallSeq: callEvent.seq,
       ...(commandOutcome === undefined ? {} : { commandOutcome }),
+      ...(!ok || fileDiff === undefined ? {} : { fileDiff }),
       ...(diagnostics === undefined ? {} : { diagnostics }),
       ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
       ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)

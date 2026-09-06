@@ -1,4 +1,5 @@
 export * from "./events.js";
+export { FileDiff } from "./file-diff-types.js";
 export * from "./questions.js";
 export { askUserTool } from "./question-runtime.js";
 export * from "./diagnostics-types.js";

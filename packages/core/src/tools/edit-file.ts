@@ -6,6 +6,7 @@ import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
 import { writeToolFile } from "./sandbox-write.js";
 import { diagnosticBuiltin, stampChanged } from "../diagnostics.js";
+import { diffBuiltin, fileSnapshot, stampFileDiff } from "../file-diff.js";
 
 const EditFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -19,7 +20,7 @@ const EditFileInput = z.object({
 type EditFileInput = z.infer<typeof EditFileInput>;
 
 export function editFileTool(): Tool<EditFileInput, { path: string; replacements: number }> {
-  return diagnosticBuiltin({
+  return diffBuiltin(diagnosticBuiltin({
     name: "edit_file",
     sandbox: "compatible",
     description:
@@ -78,10 +79,11 @@ export function editFileTool(): Tool<EditFileInput, { path: string; replacements
         output: { path: rel, replacements },
         display: `edited ${rel} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
       };
+      stampFileDiff(result, ctx, rel, fileSnapshot(text), next);
       await stampChanged(result, ctx, path, next);
       return result;
     },
-  });
+  }), "edit");
 }
 
 function occurrences(haystack: string, needle: string): number {

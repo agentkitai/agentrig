@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FileDiff } from "./file-diff-types.js";
 import { QuestionSchema, QuestionReplySchema } from "./questions.js";
 import { AdvisoryPromptContextSchema, MessageSchema, InstructionContextSchema } from "./messages.js";
 import { DiagnosticsSchema, InternalToolSchema } from "./diagnostics-types.js";
@@ -63,6 +64,8 @@ export const PermissionRequest = z.object({
   paths: z.array(z.string()).optional(),
   /** Derived by trusted tool wiring from final validated input, never copied from model metadata. */
   operation: ShellOperationSchema.optional(),
+  /** Builtin proposal from final validated input; no filesystem observation or authority. */
+  fileDiff: FileDiff.optional(),
   /**
    * M7: who is asking, when it is not the session the user is watching — a subagent routes its
    * asks through its parent's prompt, and answering "allow" for a child you cannot see is a
@@ -279,6 +282,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     toolCallSeq: z.number().int().nonnegative().optional(),
     /** Internal foreground execution receipt captured before output hooks. Legacy absence is unknown. */
     commandOutcome: CommandOutcome.optional(),
+    /** Bounded builtin before/after observation, never returned model metadata. */
+    fileDiff: FileDiff.optional(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
     /** The tool stopped collecting or did not supply its full text; even an output artifact
