@@ -72,8 +72,6 @@ no late result, and subsequent connection usability. No SDK/private patch was us
 ACP server is not changed. R15a owns question delivery; R15d owns remote MCP client.
 R8b does not implement either surface or a new approval mechanism.
 
-## Primary sources
-
 ## Verification checkpoint (before independent review)
 
 - Build/typecheck passed; full Docker-enabled suite: 2769 passed, two existing

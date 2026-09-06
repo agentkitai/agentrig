@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { createElement } from "react";
 import { render } from "ink";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/tui/app.tsx";
 import { TuiController } from "../src/tui/controller.ts";
 
@@ -73,6 +73,17 @@ const settle = async (): Promise<void> => {
 };
 
 describe("what the controller says reaches the screen", () => {
+  it("shows actual on-demand review activity and findings without an agent turn", async () => {
+    const h = mount(); let finish!: (value: string[]) => void;
+    h.controller.setReview(async () => new Promise<string[]>(resolve => { finish = resolve; }));
+    await settle(); const running = h.controller.submit("/review");
+    try {
+      await vi.waitFor(() => expect(frame(h.writes)).toContain("reviewing captured diff"));
+      finish(["Advisory diff review — not approval or test evidence", "a.ts:1 (new, medium) Fixture finding"]); await running;
+      await vi.waitFor(() => expect(frame(h.writes)).toContain("Fixture finding"));
+      expect(h.controller.snapshot().status).toBe("idle"); expect(h.controller.snapshot().reviewing).toBe(false);
+    } finally { await h.controller.shutdown(); h.stop(); }
+  });
   it("shows a line the controller printed", async () => {
     const h = mount();
     await settle();
