@@ -90,3 +90,9 @@ CI. No daemon, new maintenance engine, R8 or R15i scope.
   Combined build/typecheck/full: 2,674 passed plus two skips / 154 files, four workers,
   38.23 seconds; 123 focused pass again. Only documentation merge conflicts; both row
   records and CI groups are retained. No second review for mechanical integration.
+- Integrated R9b main `5344291`, preserving Windows serial package fixtures and scoped
+  npm fixture bounds. Build/typecheck and full suite pass: 2,699 plus three skips without
+  explicit evaluation images; with freshly built worker/checker immutable image IDs and
+  `AGENTRIG_EVAL_REQUIRE_DOCKER=1`, 2,700 plus two skips /155 files, four workers,42.91s.
+  The real Docker evaluation discriminator ran, with no live provider spend. R9b post-main
+  gate remains pending at this checkpoint; fresh exact-head PR CI follows.

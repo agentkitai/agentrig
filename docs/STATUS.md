@@ -40,6 +40,9 @@ and five detected/restored mutations pass. One review approved; its count-wordin
 was fixed with a failing-before/passing-after control. Latest-main/CI delivery gates remain.
 Integrated R10c main `7b6cb6a`; combined build/typecheck/full pass 2,674 plus two skips
 /154 files (four workers, 38.23 seconds), with 123 focused green. Exact-head CI follows.
+Then integrated R9b main `5344291`: build/typecheck and full with actual Docker worker/checker
+fixtures pass 2,700 plus two skips /155 files (four workers,42.91s). R9b post-main pending;
+R7c new exact-head CI is required. No second review for mechanical integration.
 
 ### R9b merged — PR #180; post-main gate pending
 
