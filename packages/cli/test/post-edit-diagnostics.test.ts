@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
+import { errorBurstDetector, initialState, reduce } from "@agentkitai/agentrig-supervisor";
 import { buildProgram } from "../src/program.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import { redactExportMessages } from "../src/session-export.js";
@@ -30,7 +31,8 @@ it("actual configured CLI/adapter edit returns tsc diagnostics, logs/render/expo
     let body = ""; for await (const chunk of req) body += chunk;
     requests.push(JSON.parse(body));
     const delta = requests.length === 1 ? { tool_calls: [{ index: 0, id: "edit", type: "function", function: {
-      name: "edit_file", arguments: JSON.stringify({ path: "target.ts", oldText: "1", newText: '"secret-fixture"' }) } }] } : { content: "diagnostics received" };
+      name: "edit_file", arguments: JSON.stringify({ path: "target.ts", oldText: "1", newText: '"secret-fixture"' }) } },
+      { index: 1, id: "second", type: "function", function: { name: "edit_file", arguments: JSON.stringify({ path: "target.ts", oldText: '"secret-fixture"', newText: '"secret-fixture-2"' }) } }] } : { content: "diagnostics received" };
     res.setHeader("content-type", "text/event-stream");
     res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: requests.length === 1 ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
   });
@@ -41,11 +43,14 @@ it("actual configured CLI/adapter edit returns tsc diagnostics, logs/render/expo
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--allow", "write", "--allow", "exec:anywhere", "--max-turns", "3"], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
     expect(requests).toHaveLength(2);
-    expect(requests[1].messages.filter((m: any) => m.role === "tool")).toHaveLength(1);
+    expect(requests[1].messages.filter((m: any) => m.role === "tool")).toHaveLength(2);
     expect(requests[1].messages.find((m: any) => m.role === "tool").content).toContain("TS2322");
     expect(requests[0].tools.some((t: any) => t.function.name === "core:diagnostics")).toBe(false);
     const store = new SessionStore({ root: logs }); const sessions = await store.list();
     const events = await store.readAll(sessions[0]!.id);
+    const state = initialState(), detector = errorBurstDetector();
+    const signals = events.flatMap(event => { reduce(state, event); const signal = detector.observe(event, state); return signal === null ? [] : [signal]; });
+    expect(signals).toEqual([]); expect(state.toolErrors).toBe(0);
     const result = events.find(e => e.type === "tool.result" && e.id === "edit");
     if (result?.type !== "tool.result") throw new Error("missing result");
     expect(result.diagnostics?.entries[0]?.code).toBe("TS2322");

@@ -1,9 +1,11 @@
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
-import { builtinTools, createAgent, DiagnosticsConfigSchema, HarnessEvent, messagesFromEvents, parallel, RulePolicy, SessionStore, summarizeOlderTurns, outsideSandbox,
+import { builtinTools, createAgent, DiagnosticsConfigSchema, HarnessEvent, messagesFromEvents, parallel, RulePolicy, SessionStore, summarizeOlderTurns, outsideSandbox, Checkpointer, undoSession,
   type AgentConfig, type DiagnosticsConfig, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 
 const roots: string[] = [];
@@ -116,6 +118,7 @@ it.each([
   const f = await fixture(scripted(script, extra));
   f.turns.push([call("write_file", "edit", { path: "target.ts", content: "written" }), { type: "stop", reason: "tool_use" }]);
   const { events } = await run(f); expect(diagnosticResult(events)).toMatchObject({ ok: true, diagnostics: { status } });
+  expect(events.find(e => e.type === "tool.result" && e.internal !== undefined)).toMatchObject({ ok: status === "changed" });
 });
 
 it("external ancestry still requires fresh exec approval after a successful contained write", async () => {
@@ -167,6 +170,14 @@ it("a denied edit never starts its otherwise allowed checker", async () => {
   await expect(readFile(join(f.cwd, "target.ts"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("fingerprints the actual UTF-8 encoding of lone surrogates without claiming different bytes", async () => {
+  const f = await fixture(scripted("process.exit(0)"));
+  f.turns.push([call("write_file", "edit", { path: "target.ts", content: "\ud800" }), { type: "stop", reason: "tool_use" }]);
+  const { events } = await run(f);
+  expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("\ufffd");
+  expect(diagnosticResult(events).diagnostics?.status).toBe("reported");
+});
+
 it("a custom provider that permits the write but supplies no checker process launcher cannot bypass sandbox consent", async () => {
   const f = await fixture(scripted('require("fs").writeFileSync("checker-ran", "yes")'));
   let prepared = 0;
@@ -179,3 +190,20 @@ it("a custom provider that permits the write but supplies no checker process lau
   expect(events).toContainEqual(expect.objectContaining({ type: "sandbox.denied", name: "core:diagnostics" }));
   await expect(readFile(join(f.cwd, "checker-ran"))).rejects.toMatchObject({ code: "ENOENT" });
 });
+
+it("two actual edits with checkpoints retain checker ownership and undo both edit and checker effects", async () => {
+  const f = await fixture(scripted('const fs=require("fs");fs.writeFileSync("checker-effect",String(Number(fs.readFileSync("checker-effect","utf8"))+1))'));
+  const git = promisify(execFileCallback);
+  await git("git", ["init", "-q", f.cwd]);
+  await writeFile(join(f.cwd, "target.ts"), "original"); await writeFile(join(f.cwd, "checker-effect"), "0");
+  await git("git", ["add", "target.ts", "checker-effect"], { cwd: f.cwd });
+  await git("git", ["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "seed"], { cwd: f.cwd });
+  f.agent.hooks = [new Checkpointer()];
+  f.turns.push([call("write_file", "edit", { path: "target.ts", content: "first" }), call("write_file", "second", { path: "target.ts", content: "second" }), { type: "stop", reason: "tool_use" }]);
+  const { events, session } = await run(f);
+  expect(events.filter(e => e.type === "tool.result" && e.diagnostics !== undefined).map(e => e.type === "tool.result" && e.diagnostics?.status)).toEqual(["reported", "reported"]);
+  expect(await readFile(join(f.cwd, "checker-effect"), "utf8")).toBe("2");
+  await undoSession(f.store, session.id, { cwd: f.cwd });
+  expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("original");
+  expect(await readFile(join(f.cwd, "checker-effect"), "utf8")).toBe("0");
+}, 30_000);

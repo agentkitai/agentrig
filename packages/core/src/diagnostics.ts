@@ -74,11 +74,13 @@ export function checkerTool(checker: DiagnosticChecker): { tool: AnyTool; input:
       finally { clearTimeout(timer); registry.disposeAll(); }
       const output = registry.read(job.id)!;
       const reason = ctx.signal.aborted ? "checker aborted" : timedOut ? "checker timed out" : record.spawnError !== undefined
-        ? "checker failed to start" : output.droppedBytes > 0 ? "checker output exceeded bound" : "checker completed";
+        ? "checker failed to start" : output.droppedBytes > 0 ? "checker output exceeded bound" : record.exitCode === null ? "checker ended without exit status" : "checker completed";
       observed = { text: output.output, exitCode: record.exitCode, reason,
-        incomplete: ctx.signal.aborted || timedOut || record.spawnError !== undefined || output.droppedBytes > 0,
+        incomplete: ctx.signal.aborted || timedOut || record.spawnError !== undefined || output.droppedBytes > 0 || record.exitCode === null,
         sameCommand: isDeepStrictEqual(actual, expectedCommand) };
-      return { output: { exitCode: record.exitCode }, display: reason, isError: observed.incomplete || record.exitCode !== 0 };
+      // A completed compiler reporting errors is an observation, not a failed tool dispatch.
+      // Its exit remains in diagnostics; ordinary in-progress edits must not trigger error bursts.
+      return { output: { exitCode: record.exitCode }, display: reason, isError: observed.incomplete };
     },
   };
   return { tool, input, observed: () => observed, id: `diagnostic-${randomUUID()}`, join: () => settled };

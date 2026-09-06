@@ -479,6 +479,15 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
         // This call is core-owned, not model-visible registration. The outer exclusive hazard
         // remains held; reacquiring its schedule here would deadlock against ourselves.
         try {
+          // This builtin write has actually settled. Its new bytes must become owned before
+          // the checker's separate pre-mutation checkpoint compares the live tree. The checker
+          // and outer finally still settle their own later effects; no ownership is pregranted.
+          for (const checkpointer of checkpointers) await checkpointer.afterTool({
+            point: "post_tool", sessionId: id, cwd, turn: turns, toolEffect,
+            signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+            hasBackgroundWork: () => [...toolsByName.values()].some(t => t.hasBackgroundWork?.()),
+            checkpointExcludes: [await realpath(config.store.root)],
+          });
           await executeTool({ id: checker.id, name: checker.tool.name, input: checker.input }, {
             ...nested, toolsByName: new Map([...toolsByName, [checker.tool.name, checker.tool]]),
             emit: payload => emit(payload.type === "tool.call" || payload.type === "tool.result" || payload.type === "tool.result.patched"
