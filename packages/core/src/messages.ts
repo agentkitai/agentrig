@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DiagnosticsSchema, type Diagnostics } from "./diagnostics-types.js";
 
 /** Trusted transports may attach data, never extra user instructions or grants. */
 export const AdvisoryPromptContextSchema = z.array(z.string().max(32_768)).max(32)
@@ -29,7 +30,7 @@ export type InstructionContext = z.infer<typeof InstructionContextSchema>;
 export type ContentBlock = { trust?: ContentTrust; context?: InstructionContext } & (
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
-  | { type: "tool_result"; toolUseId: string; content: string | ContentBlock[]; isError?: boolean }
+  | { type: "tool_result"; toolUseId: string; content: string | ContentBlock[]; isError?: boolean; diagnostics?: Diagnostics }
   | { type: "image"; mediaType: string; data: string });
 
 export interface Message {
@@ -49,6 +50,7 @@ export const ContentBlockSchema: z.ZodType<ContentBlock> = z.lazy(
         toolUseId: z.string(),
         content: z.union([z.string(), z.array(ContentBlockSchema)]),
         isError: z.boolean().optional(),
+        diagnostics: DiagnosticsSchema.optional(),
         trust: ContentTrustSchema.optional(),
         context: InstructionContextSchema.optional(),
       }),

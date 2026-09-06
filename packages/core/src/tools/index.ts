@@ -7,6 +7,8 @@ import { grepTool } from "./grep.js";
 import { updatePlanTool } from "./update-plan.js";
 import { readFileTool } from "./read-file.js";
 import { writeFileTool } from "./write-file.js";
+import { configureDiagnostics } from "../diagnostics.js";
+import type { DiagnosticsConfig } from "../diagnostics-types.js";
 import { webFetchTool } from "./web-fetch.js";
 
 export { bashTool, type BashToolOptions } from "./bash.js";
@@ -47,7 +49,7 @@ export function builtinTools(opts: BuiltinToolOptions = {}): AnyTool[] {
   // one registry per tool set: `bash --background` and `bash_job` must share it, and a subagent's
   // rebuilt tool set gets its own, so a child can never see or kill its parent's jobs
   const jobs = new JobRegistry();
-  return [
+  const tools = [
     bashTool({ ...(opts.shell === undefined ? {} : { shell: opts.shell }), jobs }),
     bashJobTool(jobs),
     readFileTool(),
@@ -58,9 +60,12 @@ export function builtinTools(opts: BuiltinToolOptions = {}): AnyTool[] {
     updatePlanTool(),
     webFetchTool(),
   ];
+  configureDiagnostics(tools, opts.diagnostics);
+  return tools;
 }
 
 export interface BuiltinToolOptions {
+  diagnostics?: DiagnosticsConfig;
   /** Which shell `bash` runs commands in. Defaults per platform; see `resolveShell`. */
   shell?: string;
 }

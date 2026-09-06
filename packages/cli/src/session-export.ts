@@ -126,7 +126,8 @@ export function redactExportMessages(messages: readonly Message[], literals: rea
     switch (b.type) {
       case "text": return { ...b, ...labels, text: text(b.text) };
       case "tool_use": return { ...b, ...labels, id: text(b.id), name: text(b.name), input: json(b.input) };
-      case "tool_result": return { ...b, ...labels, toolUseId: text(b.toolUseId), content: typeof b.content === "string" ? text(b.content) : b.content.map(block) };
+      case "tool_result": return { ...b, ...labels, toolUseId: text(b.toolUseId), content: typeof b.content === "string" ? text(b.content) : b.content.map(block),
+        ...(b.diagnostics === undefined ? {} : { diagnostics: json(b.diagnostics) as NonNullable<typeof b.diagnostics> }) };
       case "image":
         if (!omitOpaque) throw new SessionExportError("opaque image content cannot be inspected; use --omit-opaque for an explicitly lossy export");
         omittedOpaque++;

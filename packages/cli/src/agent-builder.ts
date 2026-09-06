@@ -147,6 +147,7 @@ export interface AgentBuildOptions extends ProviderOptions {
   sandboxNetwork?: boolean;
   /** Opt-in raw checkpoints and terminal ownership receipts; requires stopped external writers. */
   checkpoints?: boolean;
+  diagnostics?: import("@agentkitai/agentrig-core").DiagnosticsConfig;
   maxTurns: string;
   maxTokens?: string;
   maxMinutes?: string;
@@ -431,7 +432,7 @@ export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
   delete safe.memory; delete safe.mcpConfig; delete safe.shell;
   const main = opts.providerOverride === true ? "default" : opts.roles?.main ?? "default";
   return Object.assign(safe, { extension: [], extensionDiscovery: false, skills: [], skillDiscovery: false,
-    generatedSkills: false, packages: false, subagents: false, checkpoints: false,
+    generatedSkills: false, packages: false, subagents: false, checkpoints: false, diagnostics: [],
     ingestOnEnd: false, dreamOnEnd: false, repoMap: false,
     roles: { main, supervisor: main, memory: main, subagents: main },
     ...(opts.heartbeat === "empty" ? { maxTurns: "1" } : {}), maxTokens: "10000", maxMinutes: "5" });
@@ -597,7 +598,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   // validated once, here, rather than failing on every bash call with an ENOENT that names
   // neither the flag nor the file
   const shell = opts.shell === undefined ? undefined : assertShellExists(opts.shell);
-  const builtins = (): AnyTool[] => builtinTools(shell === undefined ? {} : { shell });
+  const builtins = (): AnyTool[] => builtinTools({ ...(shell === undefined ? {} : { shell }),
+    ...(opts.diagnostics === undefined ? {} : { diagnostics: opts.diagnostics }) });
 
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));

@@ -112,6 +112,13 @@ R11b adds `web_fetch`: bounded GET-only HTTP(S), explicit `net` permission, no r
 ambient credentials, text/plain or lexical HTML-to-text, external provenance. See
 [R11b](plans/R11b.md) for byte/time/output bounds and trusted-host network limitations.
 
+R15b adds opt-in configured post-edit diagnostics. Actual built-in mutation receipts trigger
+one bounded literal-argv checker through ordinary exec authorization and sandboxing, while the
+edit/checker pair remains exclusive. Internal audit calls never enter model tool registration
+or replay messages. Optional diagnostics on the original result separate touched-file findings,
+other-file errors and unknown/incomplete observations; zero findings are not correctness proof.
+See [R15b](plans/R15b.md) for parser, output, cancellation and cooperative writer limits.
+
 ### 2.4 Permissions
 
 ```ts

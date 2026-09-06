@@ -124,6 +124,7 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/schedule.test.ts
       - run: pnpm exec vitest run packages/cli/test/heartbeat.test.ts
       - run: pnpm exec vitest run packages/cli/test/schedule-report.test.ts packages/cli/test/schedule-banner.test.ts
+      - run: pnpm exec vitest run packages/core/test/post-edit-diagnostics.test.ts packages/cli/test/post-edit-diagnostics.test.ts
       - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/net-permission.test.ts packages/cli/test/net-permission.test.ts
       - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts

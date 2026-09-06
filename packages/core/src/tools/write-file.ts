@@ -5,6 +5,7 @@ import type { Tool, ToolResult } from "../tool.js";
 import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
 import { writeToolFile } from "./sandbox-write.js";
+import { diagnosticBuiltin, stampChanged } from "../diagnostics.js";
 
 const WriteFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -13,7 +14,7 @@ const WriteFileInput = z.object({
 type WriteFileInput = z.infer<typeof WriteFileInput>;
 
 export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: number }> {
-  return {
+  return diagnosticBuiltin({
     name: "write_file",
     sandbox: "compatible",
     description: "Create or overwrite a file with the given content. Parent directories are created.",
@@ -33,10 +34,12 @@ export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: num
         contentHash: contentHash(input.content),
       });
       const bytes = Buffer.byteLength(input.content, "utf8");
-      return {
+      const result = {
         output: { path: rel, bytes },
         display: `${existed ? "overwrote" : "created"} ${rel} (${bytes} bytes)`,
       };
+      await stampChanged(result, ctx, path, input.content);
+      return result;
     },
-  };
+  });
 }

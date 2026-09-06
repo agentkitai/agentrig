@@ -3,6 +3,7 @@
 Active row: **R8a stable ACP v1 stdio**, implemented and reviewed; final combined gates pending.
 R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
 R10b PR #177 post-main CI `34040691166` passed all three platforms.
+R15b PR #185 merged as `74c5073`; post-main gates pending.
 [Reporting contract](plans/R7c.md). R7b PR #179 passed exact CI `34041871904`
 and post-main CI `34042336391` on all three platforms.
 [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/179#issuecomment-5560275859).
@@ -26,7 +27,7 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a ACP is implemented pending final gates; R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a ACP is implemented pending final gates; R15b merged (PR #185), post-main gates pending; R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -51,10 +52,17 @@ Exact final-head four-check CI remains pending.
 R10c is fully done via PR #181, post-main CI `34044235154`;
 [final receipt](https://github.com/agentkitai/agentrig/pull/181#issuecomment-5560486475).
 
-### R9c done — PR #183; CI and scripted-structure post-main green
+### R15b merged — PR #185; post-main gates pending
 
-Final closeout: main `3b7564a`, CI `34047589688` plus scripted structure
-`34047589697` passed. Earlier implementation-stage gate notes remain historical.
+Configured literal checkers follow real builtin edits; private changed-byte receipts,
+exclusive edit/checker pairs and internal audited dispatch preserve permission/sandbox
+boundaries and model conversation shape. Unknown/other-file/truncated output is explicit,
+never proof of correctness. [Contract](plans/R15b.md). Actual tsc/CLI and lifecycle controls
+passed, including actual two-edit supervisor and checkpoint undo controls. One independent
+review approved; its material error-burst finding and an author-found checkpoint issue
+were fixed with failing-before/passing-after controls. Final hosted gates remain.
+
+### R9c done — PR #183, all four post-main checks green
 
 Explicit nightly/manual/PR/main workflow over existing E1/E2/R9b, with R13e controls.
 Actual isolated X1 correct/broken and X4 human-pending fixtures produce PASS/FAIL/BLOCKED;
@@ -68,7 +76,8 @@ existing skips /156 files. One independent review approved with no material find
 independent typecheck, 33 runtime tests, 52 structural tests, actual wrapper and SIGTERM
 checks passed (no independent build/full-suite claim). Requested24/report27 turns,
 351.175s, no restart; [verbatim receipt](plans/R9c-review.md). Hosted exact-head CI,
-including the new actual nightly-wrapper job, remains required before root merge.
+including the new actual nightly-wrapper job, passed before merge. Main `3b7564a` passed
+all three platforms in `34047589688` and scripted structure in `34047589697`.
 
 ### R7c done — PR #182; post-main CI green
 

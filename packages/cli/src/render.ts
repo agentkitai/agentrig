@@ -89,12 +89,12 @@ export function renderEvent(e: HarnessEvent): string {
     }
     case "message.append": return `${p} role=${e.message.role} blocks=${e.message.content.length}`;
     case "model.retry": return `${p} attempt=${e.attempt}/${e.maxAttempts} delay=${e.delayMs}ms ${JSON.stringify(e.reason)}`;
-    case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash} ${JSON.stringify(e.input)}`;
+    case "tool.call": return `${p} ${e.name}#${e.id} hash=${e.inputHash}${e.internal === undefined ? "" : ` internal=${e.internal.kind} parent=${e.internal.parentToolUseId}`} ${JSON.stringify(e.input)}`;
     case "tool.result": {
       const artifact = e.truncated === true && e.output !== undefined
         ? ` artifact={"seq":${e.seq},"from":0,"to":${safeSliceEnd(e.output, Math.min(30_000, e.output.length))}}`
         : "";
-      return `${p} #${e.id} ok=${e.ok} ${e.durationMs}ms${artifact} ${JSON.stringify(e.display.slice(0, 80))}`;
+      return `${p} #${e.id} ok=${e.ok} ${e.durationMs}ms${artifact}${e.diagnostics === undefined ? "" : ` diagnostics=${e.diagnostics.status} entries=${e.diagnostics.entries.length} other=${e.diagnostics.otherFileCount}`} ${JSON.stringify(e.display.slice(0, 80))}`;
     }
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
@@ -202,7 +202,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `⚒ ${toolSummary(e.name, e.input)}`;
     case "tool.result":
       // a successful tool is noise; a failing one is the thing that explains the next turn
-      return e.ok ? null : `✗ ${oneLine(e.display)}`;
+      return e.diagnostics === undefined ? (e.ok ? null : `✗ ${oneLine(e.display)}`)
+        : `Diagnostics: ${e.diagnostics.reason}; ${e.diagnostics.entries.length} touched-file, ${e.diagnostics.otherFileCount} other-file, ${e.diagnostics.omitted} omitted`;
     case "tool.result.patched":
       return `✎ ${e.by} rewrote what the model saw`;
     case "tool.denied":

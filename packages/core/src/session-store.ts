@@ -540,6 +540,7 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
 
   let authoritativeMessages = false;
   for (const event of events) {
+    if ((event.type === "tool.call" || event.type === "tool.result" || event.type === "tool.result.patched") && event.internal !== undefined) continue;
     if (event.type === "message.append") {
       if (!authoritativeMessages && event.message.role === "assistant" && messages.at(-1)?.role === "assistant") {
         messages.pop();
@@ -604,6 +605,7 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
           type: "tool_result",
           toolUseId: event.id,
           content: event.display,
+          ...(event.diagnostics === undefined ? {} : { diagnostics: structuredClone(event.diagnostics) }),
           ...(!event.ok ? { isError: true } : {}),
         };
         const last = messages.at(-1);
