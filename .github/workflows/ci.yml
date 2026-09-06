@@ -79,6 +79,8 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/h6-trace.test.ts
       - run: pnpm exec vitest run packages/memory/test/write-quality.test.ts
       - run: pnpm exec vitest run packages/memory/test/promotion-guardrails.test.ts
+      - run: pnpm exec vitest run packages/core/test/mcp-pins.test.ts packages/core/test/mcp.test.ts packages/cli/test/mcp-pinning.test.ts
+      - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'MCP definition'
       - run: pnpm exec vitest run packages/supervisor/test/corroborated-progress.test.ts packages/supervisor/test/detectors.test.ts
       - run: pnpm exec vitest run packages/core/test/manifests.test.ts
       - run: pnpm exec vitest run packages/memory/test/procedures.test.ts packages/cli/test/procedure-candidates.test.ts

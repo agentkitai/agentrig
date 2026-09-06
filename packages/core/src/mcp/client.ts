@@ -103,21 +103,20 @@ export class McpClient {
     this.notify("notifications/initialized", {});
   }
 
-  async listTools(): Promise<McpToolSpec[]> {
+  async listTools(signal?: AbortSignal): Promise<McpToolSpec[]> {
     const out: McpToolSpec[] = [];
     let cursor: string | undefined;
     // paginate, but bounded: a server returning a cursor forever would loop here
     for (let page = 0; page < 20; page += 1) {
       const parsed = ToolsListResult.safeParse(
-        await this.request("tools/list", cursor === undefined ? {} : { cursor }),
+        await this.request("tools/list", cursor === undefined ? {} : { cursor }, signal),
       );
       if (!parsed.success) throw new Error(`mcp ${this.config.name}: tools/list returned an unrecognised result`);
       out.push(...parsed.data.tools);
       if (parsed.data.nextCursor === undefined) return out;
       cursor = parsed.data.nextCursor;
     }
-    this.opts.onError?.(new Error(`mcp ${this.config.name}: tools/list paginated past 20 pages; truncating`));
-    return out;
+    throw new Error(`mcp ${this.config.name}: tools/list paginated past 20 pages; refusing incomplete definitions`);
   }
 
   async callTool(name: string, args: unknown, signal?: AbortSignal): Promise<ToolsCallResult> {

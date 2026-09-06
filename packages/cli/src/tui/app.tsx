@@ -253,6 +253,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
           <Text dimColor>
             {state.pending.req.origin === "sandbox-escalation"
               ? "y = run outside once, n / esc = deny"
+              : state.pending.req.origin === "mcp-definition-change"
+              ? "y = approve these exact definitions, n / esc = deny (no standing grant)"
               : `y = allow once, a = allow ${state.pending.req.tool} all session, n / esc = deny, d = deny all session`}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>

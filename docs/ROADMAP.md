@@ -514,7 +514,7 @@ become "write an extension" instead of "grow the loop".*
 | R5a | Extension API in core: an extension is an ES module exporting `activate(ctx)` where `ctx` exposes the hook surface, `registerTool`, `registerCommand` (slash commands surface in the TUI), and read-only session info; loaded from `.agentrig/extensions/*.mjs` + `--extension <path>`; every activation emits `extension.loaded` (name, path, granted surfaces) | core |
 | R5b | Failure isolation: a throwing extension is disabled with an `extension.error` event. The API passes no provider or credentials, but in-process extensions remain trusted Node code with ambient access to env/files and can block or terminate the process. Catching exceptions is not security isolation; disclose that boundary before activation | core |
 | R5c | Packages: a directory (or npm tarball path) bundling `extensions/ + skills/ + prompts/`; `agentrig package add <src>` copies it under `.agentrig/packages/` (no lifecycle scripts executed, ever — pi's supply-chain rules adopted verbatim: install with `--ignore-scripts` semantics, integrity hash recorded) | cli |
-| R5d | Tool-definition pinning *(second pass; Goose + the NSA MCP guidance)*: the M7c MCP client records a hash of each server's tool list (names, schemas, descriptions) on first use; a changed hash surfaces as a permission-style prompt naming what changed ("server X's `search` tool now declares network access") before the changed tool runs. A tool description is an executable supply-chain input — today a compromised server can silently swap its schema between sessions | core |
+| R5d *(implemented; PR #144 records delivery gates)* | Tool-definition pinning *(second pass; Goose + the NSA MCP guidance)*: persistent first-use baselines retain exact names, schemas and descriptions. Changed lists show exact before/after definitions and hashes and require explicit user consent before execution, independently of allow/YOLO or standing answers. Re-listing rejects changes after model advertisement; bounded locked CAS prevents stale approval replacement. First use is TOFU, not attestation; names, descriptions and server hints never authorize. See [contract](plans/R5d.md) | core + cli |
 | R5e *(merged, PR #142)* | Fail-closed manifests *(third pass)*: skill, extension, and package front-matter/manifests validate against a versioned schema BEFORE anything loads; a malformed manifest or an unknown security-relevant field rejects the whole unit — never load-the-body-drop-the-fields, which silently widens permissions. Duplicate names across directories stay deterministic (the documented shadowing order); duplicates at equal precedence are an error, never first-wins by directory iteration. Existing skill loader enforced; reusable extension/package validators precede their R5a/R5c consumers. See [contract](plans/R5e.md) | core + cli |
 
 Acceptance: a fixture extension registers a slash command and gates a tool call in a TUI test; a
@@ -793,8 +793,8 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
-| Repair | Windows memory atomic replacement | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair before the next merge; preserve locks, old-target safety and all Windows tests. See [contract](plans/windows-memory-replace.md). |
-| 1 | R13f (implemented, closing gates); R5e (merged); R5d (active) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
+| Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
+| 1 | R13f and R5e (merged); R5d (implemented, closing gates) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e → R12a → R12b → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a → R13b → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
@@ -805,6 +805,10 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a → R8b → R8c → R8d | Reusable control transport, MCP serving, telemetry, then an authenticated local web client. |
+
+R6a has started independently after R5e merged: its memory-hardening dependencies are complete
+and procedure detection does not depend on MCP pinning or extension loading. This parallel start
+does not change the committed sequence or add a demand gate to any remaining row.
 
 Known enforcement or data-loss defects can interrupt this order. Record any necessary reorder
 and its dependency/impact rationale in STATUS; do not create recursively nested milestone IDs.
@@ -939,6 +943,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   of inline-comment-looking flat scalars. Add low-cost boundary coverage for the entry-count cap,
   plain Markdown starting with `--- foo`, and losing-path shadow diagnostics. R5c must independently
   validate installation paths, never treating the accepted package name as filesystem authority.
+- R5d polish: add a successful persisted-consent diagnostic and friendlier held-lock recovery
+  guidance; reduce pin-read allocation while retaining the hard byte cap. Make the current
+  name/description/input-schema-only scope more visible if additional MCP metadata is exposed
+  later. Preserve exact consent, fail-closed state and the explicit non-attestation boundary.
 - R13f polish: allow destructured detector `observe` methods without relying on their receiver;
   release failed-call pending entries earlier than the turn boundary; reuse drift read buffers if
   allocation churn is measured. Consider historical deletion witnesses separately: present absence
