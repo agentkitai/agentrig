@@ -44,6 +44,8 @@ worktree is edited. Integrated checks passed unchanged. One bounded Claude revie
 independently passing 239 tests across ten files and typecheck. Optional presentation polish
 stays at ROADMAP's end. Main `c62009b` is now integrated, preserving committed H7/R15/ACP
 additions and all prior done markers; combined checks and exact-head CI follow.
+Combined build/typecheck/full checks pass: 2,271 tests plus two skips across 119 files, four
+workers (30 seconds). Base `c62009b` passed all three post-merge jobs in CI 34025571103.
 
 ### R12b done — PR #155; post-merge CI green
 
