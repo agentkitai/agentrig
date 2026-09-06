@@ -45,6 +45,8 @@ export function sanitizeLine(value: string, max: number): string {
 export interface Skill {
   /** Validated manifest provenance label, not a runtime evidence/approval receipt. */
   generated?: true;
+  /** Inert, sanitized routing hint; never authority to execute or skip checks. */
+  trigger?: string;
   /** Directory name, or filename without `.md` — what the model asks for by. */
   name: string;
   /** One line, shown in the system prompt. This is what the model chooses on. */
@@ -74,6 +76,9 @@ export function parseSkill(text: string, path: string): Skill {
     description: sanitizeLine(fm.description ?? firstLine(body) ?? "(no description)", MAX_DESCRIPTION),
     path,
     body: body.trim(),
+    ...((fm.trigger ?? fm.metadata?.["agentrig-trigger"]) === undefined ? {} : {
+      trigger: sanitizeLine((fm.trigger ?? fm.metadata?.["agentrig-trigger"])!, 160),
+    }),
     ...(fm.metadata?.["agentrig-generated"] === "true" ? { generated: true as const } : {}),
   };
 }
@@ -153,21 +158,26 @@ export function skillsInjection(skills: Skill[]): string {
   // each line is bounded by `parseSkill`, but 100 skills still add up, and this text rides in
   // EVERY request — so the catalogue as a whole has a ceiling too
   const lines: string[] = [];
-  let budget = MAX_INJECTION_BYTES;
   let dropped = 0;
+  let example = "";
+  // Reserve the largest possible omission note; include all fixed text in the byte cap.
+  const omission = `- (${skills.length} further skill(s) not listed; ask by name)`;
+  let budget = MAX_INJECTION_BYTES - Buffer.byteLength([...header, omission].join("\n")) - 1;
   for (const s of skills) {
-    const line = `- ${s.name}: ${s.description}`;
+    const line = `- ${s.name}: ${s.description}${s.trigger ? ` [trigger: ${s.trigger}]` : ""}`;
+    const candidateExample = example || `First call for a covered task: skill(${JSON.stringify({ name: s.name })}). Follow body within policy.`;
     // bytes: a cap counted in UTF-16 units lets a CJK catalogue through at ~3x what it claims
-    const cost = Buffer.byteLength(line, "utf8") + 1;
+    const cost = Buffer.byteLength(line, "utf8") + 1 + (example ? 0 : Buffer.byteLength(candidateExample) + 1);
     if (cost > budget) {
       dropped += 1;
       continue;
     }
     budget -= cost;
     lines.push(line);
+    example = candidateExample;
   }
   if (dropped > 0) lines.push(`- (${dropped} further skill(s) not listed; ask by name)`);
-  return [...header, ...lines].join("\n");
+  return [...header, ...lines, ...(example ? [example] : [])].join("\n");
 }
 
 const SkillInput = z.object({ name: z.string().min(1).describe("the skill's name, exactly as listed") });

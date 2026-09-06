@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Inert routing text, never executable matching or permission policy. */
+const TriggerHint = z.string().min(1).max(1024);
+
 /** Explicit R6b metadata dialect; string values also conform to Agent Skills metadata. */
 export const GeneratedSkillMetadataV1 = z.object({
   "agentrig-schema": z.literal("1"),
@@ -10,6 +13,7 @@ export const GeneratedSkillMetadataV1 = z.object({
   "agentrig-evidence": z.string().regex(/^[a-f0-9]{64}$/),
   "agentrig-content": z.string().regex(/^[a-f0-9]{64}$/),
   locked: z.enum(["true", "false"]),
+  "agentrig-trigger": TriggerHint.optional(),
 }).strict();
 
 /** Absent schema means the legacy v1 dialect, never latest. Metadata is explicitly versioned. */
@@ -20,6 +24,7 @@ export const SkillFrontmatterV1 = z.object({
   version: z.string().min(1).optional(),
   license: z.string().min(1).optional(),
   compatibility: z.string().min(1).optional(),
+  trigger: TriggerHint.optional(),
   metadata: GeneratedSkillMetadataV1.optional(),
 }).strict();
 
@@ -156,6 +161,9 @@ export function parseSkillFrontmatter(text: string): { fields: z.infer<typeof Sk
     fields[key] = value;
   }
   const parsed = SkillFrontmatterV1.parse(fields);
+  if (parsed.trigger !== undefined && parsed.metadata?.["agentrig-trigger"] !== undefined) {
+    throw new Error("skill trigger: use one placement only, trigger or metadata.agentrig-trigger");
+  }
   if (parsed.metadata !== undefined) {
     z.string().min(1).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).parse(parsed.name);
     z.string().min(1).max(1024).parse(parsed.description);

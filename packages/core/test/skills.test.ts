@@ -163,7 +163,7 @@ describe("what reaches the system prompt is untrusted input", () => {
     expect(found).toHaveLength(100);
     const text = skillsInjection(found);
     // this text rides in EVERY request, so 100 skills must not add up to a quarter megabyte
-    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8 * 1024 + 400);
+    expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(text).toContain("further skill(s) not listed");
   });
 

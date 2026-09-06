@@ -1,11 +1,39 @@
 # Status
 
-Active implementation queue: **R12a live grant records are implemented, pending delivery gates; R13d is active independently. R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R6g catalogue guidance is implemented, pending delivery gates; R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
+### R6g implemented — delivery gates pending
+
+Optional bounded trigger strings reach the compact catalogue through strict parsing and
+sanitization. A worked first-call example names an actually listed skill; the entire catalogue
+stays within 8 KiB. Default routing and effort guidance preserve required verification,
+configured limits and approvals. Generated emission, edit protection and opt-in defaults are
+unchanged. [Contract](plans/R6g.md).
+
+Dependency-order rationale: R6g starts from R6c main `09157ae` after all-platform post-merge
+CI 34022647578 passed. It is independent of concurrent R13d provenance transport work; existing
+prompt source/authority seams remain intact. Named ambiguity-gate and catalogue-byte-cap
+mutations failed their intended controls and were restored. Full validation, one bounded
+independent review and exact-head PR/post-merge CI remain delivery gates.
+
+Integrated main `35f37ba` without production conflicts, preserving R12a grants and all done
+markers. Build/typecheck and the full suite pass: 2,196 tests plus two skips across 114 files,
+with four workers to avoid shared-container contention. One independent Claude review
+`21a600fa-7f06-4d6c-a0ba-20803e760e03` approved source head `f3f07a7`, no material findings.
+Its 20-turn bound ended before a verdict (164 seconds); one authorized tools-disabled final
+summary turn used only gathered evidence (29 seconds). Reviewer build/typecheck passed; its
+initial full run had 23 failures/timeouts across 10 unchanged files. Isolated reruns passed,
+as did 117 related tests. Resource contention is suspected, not proven. There is no independent
+single full-suite pass claim. The four-worker full pass above is our own validation. Optional
+polish is at the roadmap end; exact-head three-platform CI remains authoritative.
+
 ### R6c done — PR #151; post-merge CI green
+
+Final head `9c4951d` passed all three PR platforms and merged as `09157ae`.
+Post-merge CI 34022647578 passed all three platforms.
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
 roots through the existing trust/discovery boundary. Negative overrides and manual-root
@@ -22,8 +50,7 @@ seams and all previous done labels. Build/typecheck and 2,167 tests plus two ski
 their named controls and are restored. One bounded independent Claude review
 `81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
 independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
-polish is at the roadmap end. PR #151 merged as `09157ae`; exact post-merge CI
-34022647578 passed all three platforms.
+polish is at the roadmap end; exact-head PR and post-merge CI completed successfully.
 
 ### R6b done — PR #149; post-merge CI green
 
@@ -64,7 +91,10 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R12a implemented — pending closing delivery gates
+### R12a done — PR #152; post-merge CI green
+
+PR #152 merged as `35f37ba` after all three PR platforms passed. Exact post-merge CI
+34023253550 passed all three platforms. Remaining gate wording below is historical.
 
 Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
 path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for
