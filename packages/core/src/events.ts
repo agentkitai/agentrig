@@ -347,6 +347,8 @@ export const EventPayload = z.discriminatedUnion("type", [
      * the CLI cannot (by design) append events to the session log.
      */
     invokedBy: z.enum(["model", "user"]),
+    /** Selected skill's validated manifest label; never proof of generation, approval or benefit. */
+    generated: z.literal(true).optional(),
   }),
   z.object({ type: z.literal("subagent.spawn"), id: z.string(), task: z.string() }),
   z.object({

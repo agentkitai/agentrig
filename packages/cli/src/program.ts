@@ -250,6 +250,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "override config and auto-load .agentrig/skills from the trusted project root and home",
       )
       .option("--no-skill-discovery", "do not auto-load conventional .agentrig/skills directories")
+      .option("--generated-skills", "opt in to generated skills from selected project memory and safe home; provenance is not approval")
+      .option("--no-generated-skills", "override config and omit automatic generated-skill roots (explicit --skills directories remain)")
       // Config may enable a boolean; paired negations let one invocation still override it.
       .option("--no-dangerously-skip-permissions", "override config and require permission checks")
       .option("--no-yolo", "override config and require permission checks")
