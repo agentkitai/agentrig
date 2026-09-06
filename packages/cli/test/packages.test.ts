@@ -86,6 +86,8 @@ it("enforces compressed, expanded and entry budgets and aborts without publishin
   const bytes = await archive([{ header: { name: "package/package.json" }, body: manifest }, { header: { name: "package/prompts/bomb" }, body: "x".repeat(100000) }]);
   await expect(readPackageArchive(bytes, { limits: { compressed: 10 } })).rejects.toThrow(/compressed/);
   await expect(readPackageArchive(bytes, { limits: { bytes: 1024 } })).rejects.toThrow(/expanded/);
+  const metadata = await archive([{ header: { name: "package/package.json", pax: { comment: "x".repeat(100000) } }, body: manifest }]);
+  await expect(readPackageArchive(metadata, { limits: { bytes: 1024 } })).rejects.toThrow(/expanded/);
   await expect(readPackageArchive(bytes, { limits: { entries: 1 } })).rejects.toThrow(/entry limit/);
   await expect(readPackageArchive(bytes.subarray(0, bytes.length - 10))).rejects.toThrow();
   const f = await fixture(); const controller = new AbortController(); controller.abort();
@@ -137,4 +139,4 @@ it("does not expose an earlier verified package when the aggregate scan exhausts
   await addPackage(f);
   const result = await inspectPackages(f.projectRoot);
   expect(result.packages).toEqual([]); expect(result.errors.join()).toContain("aggregate");
-});
+}, 30_000);

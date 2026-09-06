@@ -44,3 +44,16 @@ Actual CLI, loader, doctor, npm pack --ignore-scripts, malformed archive, script
 tamper, duplicate, trust/override, cancellation/cap and preservation tests precede delivery.
 Full checks, restored named mutants, exactly one bounded independent review, updated-main PR
 all-platform CI and root-controlled merge/post-merge CI remain required. No live evaluation spend.
+
+## Implementation checks
+
+Integrated main `4d3eb91`, preserving R11b web_fetch reservation and R14c's evidence-only CLI
+path. Own build/typecheck/full suite passed 2,500 tests plus two skips across 142 files
+(four workers, 37 seconds). Twenty-six focused package cases include real npm pack output,
+CLI trust/doctor/import sentinel, archive metadata expansion caps, staging cancellation and
+aggregate discovery exhaustion (no previously verified partial catalogue escapes).
+
+Named negative mutations were detected and restored: removing archive type refusal failed
+all five link/device cases; bypassing installed-record comparison loaded the edited skill and
+failed the preservation/integrity test; stripping scripts before manifest validation incorrectly
+published the booby-trapped unit and failed the script refusal test. No mutations remain.

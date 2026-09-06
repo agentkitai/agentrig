@@ -5,6 +5,18 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R5c implemented — delivery gates pending
+
+Local directory/npm-tarball packages validate strict R5e manifests before create-only staged
+publication. Maintained bounded archive parsing rejects unsafe final paths/types/collisions;
+no scripts, imports, registry access or dependency installation occur. Trusted runtime discovery
+rechecks complete-unit content records before existing extension/skill loaders; prompt files
+stay inert. Integrity is change detection, never authenticity or a sandbox. Existing trust,
+explicit roots and negative discovery overrides remain authoritative. [Contract](plans/R5c.md).
+This resumes the extension lane after R5b PR #167/main `fef3f46` post-CI 34031416228 passed
+all three platforms; independent R11b/R14c changes are retained on integration.
+Full gates and exactly one bounded independent review precede delivery.
+
 ### R14c implemented — delivery gates pending
 
 M6 and read-only `sessions show --evidence` share a bounded claim/latest-candidate report.

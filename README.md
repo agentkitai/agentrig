@@ -105,6 +105,16 @@ These flags are available on both `run` and the interactive TUI (and on `session
 
 ### Trusted extensions
 
+Local bundles install with `agentrig package add ./bundle --trust` (or a local npm `.tgz`).
+The mandatory `package.json` includes `{"name":"my-bundle","version":"1","agentrig":{"apiVersion":1}}`.
+Supported content is `extensions/`, `skills/`, `prompts/` and README/LICENSE files. Scripts,
+runtime dependencies and unsafe archive entries refuse; installation never runs bundled code.
+This is create-only under `.agentrig/packages/`: existing packages and edits are preserved.
+Trusted runs discover verified package extensions/skills; `--no-packages` or config
+`"packages": false` disables that discovery. `--trust` remains per-invocation, not a persisted
+approval. Prompts are stored inertly, not injected. `doctor` checks content hashes without
+importing extensions; hashes detect changes, not authenticity. See [package limits](docs/plans/R5c.md).
+
 `--extension ./hello.mjs` activates a local ES module with a mandatory `hello.json` sidecar.
 Trusted projects also load `.agentrig/extensions/*.mjs`; `--no-extension-discovery` disables
 that discovery. **This is ambient host code with access to credentials, environment and files,
