@@ -57,6 +57,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.end": return `${p} reason=${e.reason}`;
     case "turn.start":
     case "turn.end": return `${p} n=${e.n}`;
+    case "turn.continued": return `${p} n=${e.n} from=${e.from} attempt=${e.attempt}/${e.maxAttempts} reason=${e.reason}`;
     case "model.request": return `${p} tokensIn=${e.tokensIn}`;
     case "model.delta": return `${p} ${JSON.stringify(e.text)}`;
     case "model.response": {
@@ -207,6 +208,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     }
     case "error":
       return `! ${oneLine(e.message, 200)}`;
+    case "turn.continued":
+      return `↻ Response truncated; continuing (${e.attempt}/${e.maxAttempts}, turn ${e.n})`;
     case "session.end":
       // "done" is already said by the summary line; anything else is why it stopped
       return e.reason === "done" ? null : `— session ${e.reason}`;
