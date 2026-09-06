@@ -142,4 +142,5 @@ jobs:
 
       - run: pnpm exec vitest run packages/cli/test/mcp-serve.test.ts packages/cli/test/mcp-serve-runtime.test.ts packages/cli/test/mcp-serve-cli.test.ts
       - run: pnpm exec vitest run packages/core/test/thinking.test.ts packages/cli/test/thinking.test.ts packages/core/test/openai-chatgpt.test.ts packages/core/test/anthropic.test.ts packages/core/test/compaction.test.ts
+      - run: pnpm exec vitest run packages/cli/test/tool-summaries.test.ts
       - run: pnpm exec vitest run packages/core/test/otel.test.ts packages/cli/test/otel.test.ts

@@ -1,6 +1,12 @@
 # Status
 
-Active: **R15c persisted reasoning blocks**, alongside separately owned R15h/R15g/R8d
+R16c tool summaries are implementing independently alongside R16a presentation;
+the roadmap explicitly permits R16a/c/d parallel work. [Contract](plans/R16c.md).
+R15c #193 is done: main `749ff26`, post-main CI `34061897223` and structure
+`34061897204` all green. [Final receipt](https://github.com/agentkitai/agentrig/pull/193#issuecomment-5562453419).
+Earlier R15c implementation-stage checks follow as history, not pending gates.
+
+Delivered: **R15c persisted reasoning blocks**, alongside separately owned R15h/R15g/R8d
 worktrees. R15f #190 and R8c #192 are done with all four post-main checks green.
 [Contract](plans/R15c.md); runtime, review and integrated CI gates apply.
 R15c implementation and the single review's compaction fix pass 56 focused tests
