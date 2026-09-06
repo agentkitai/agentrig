@@ -97,7 +97,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
     case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
-    case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}`).join(" | ")}`;
+    case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}; ${renderPlanAcceptance(i.accept)}`).join(" | ")}`;
     case "extension.loaded": return `${p} ${e.name} hooks=${e.surfaces.hooks.join(",")} tools=${e.surfaces.tools.join(",")} commands=${e.surfaces.commands.join(",")}`;
     case "extension.error": return `${p} ${e.name} ${e.phase}: ${e.message}`;
     case "skill.used": return `${p} ${e.name} by=${e.invokedBy}${e.generated === true ? " generated=true" : ""}`;
@@ -151,6 +151,11 @@ function oneLine(text: string, max = 100): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+/** Declaration metadata only; no evidence matcher has evaluated this check. */
+export function renderPlanAcceptance(accept: string | undefined): string {
+  return `accept: ${accept === undefined ? "undeclared (unverified)" : `${JSON.stringify(accept)} (declared, unverified)`}`;
+}
+
 /** The interesting part of a tool's input: one argument reads better than a JSON blob. */
 function toolSummary(name: string, input: unknown): string {
   if (input !== null && typeof input === "object") {
@@ -190,7 +195,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "plan.updated": {
       const current = e.items.find((i) => i.status === "in_progress") ?? e.items.find((i) => i.status === "pending");
       const done = e.items.filter((i) => i.status === "done").length;
-      return `▸ plan ${done}/${e.items.length}${current === undefined ? "" : `: ${oneLine(current.text, 80)}`}`;
+      const declared = e.items.filter(i => i.accept !== undefined).length;
+      return `▸ plan ${done}/${e.items.length}${current === undefined ? "" : `: ${oneLine(current.text, 80)}`} · acceptance ${declared}/${e.items.length} declared, unverified`;
     }
     case "subagent.spawn":
       return `⤷ subagent: ${oneLine(e.task, 80)}`;

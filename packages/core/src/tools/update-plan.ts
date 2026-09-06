@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { AnyTool } from "../tool.js";
+import { PlanItem } from "../events.js";
 
 const Item = z.object({
   id: z.string().min(1).describe("stable id for this step, so status changes can be tracked"),
   text: z.string().min(1).describe("what the step is, in one line"),
   status: z.enum(["pending", "in_progress", "done", "dropped"]),
+  accept: PlanItem.shape.accept.describe("observable acceptance check for this item, e.g. pnpm test exits 0; declaration only, not verified proof; at most 1024 characters"),
   scope: z
     .array(z.string())
     .optional()
@@ -31,7 +33,9 @@ export function updatePlanTool(): AnyTool {
     description:
       "Record or revise your plan for this task. Send the complete list of steps every time. " +
       "Declare a `scope` per step naming the files or directories it may touch — work outside " +
-      "the declared scope is flagged. Call this before starting work and whenever the plan changes.",
+      "the declared scope is flagged. Include `accept` per item: the observable check that would " +
+      "demonstrate completion. Checks are declarations, not verified evidence; status done does not verify them. " +
+      "Call this before starting work and whenever the plan changes.",
     inputSchema: Input,
     // planning touches nothing on disk and reads nothing sensitive; gating it behind a
     // permission prompt would make the safest possible call the most annoying one
@@ -39,7 +43,7 @@ export function updatePlanTool(): AnyTool {
     effects: "read-only",
     execute: async (input: z.infer<typeof Input>, ctx) => {
       ctx.emit({ type: "plan.updated", items: input.items });
-      const rendered = input.items.map((i) => `  [${i.status}] ${i.text}`).join("\n");
+      const rendered = input.items.map((i) => `  [${i.status}] ${i.text}\n    accept: ${i.accept === undefined ? "undeclared (unverified)" : `${JSON.stringify(i.accept)} (declared, unverified)`}`).join("\n");
       return { output: `plan recorded (${input.items.length} steps)`, display: `plan:\n${rendered}` };
     },
   };

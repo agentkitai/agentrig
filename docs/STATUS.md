@@ -1,11 +1,30 @@
 # Status
 
-Active implementation queue: **R5a extension API is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14a acceptance declarations are implemented, pending delivery gates; R12c inspection and H7a continuation repair proceed independently. R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R13c implemented — validation and delivery gates pending
+### R14a implemented — validation and delivery gates pending
+
+PlanItem and update_plan share an optional nonblank acceptance declaration capped at 1024
+characters. The first request of each run with the tool asks for an observable check per item,
+preserving custom and hook prompt text. It is a runtime platform instruction, never new user
+consent, an extra provider call or a mandatory planning/completion gate. Validated tool events,
+storage, resume, supervisor plan state and CLI/TUI displays retain checks and explicitly mark
+declared or missing legacy checks unverified. [Contract](plans/R14a.md). R14b evidence matching
+and R14c grading remain separate; no check text is executed or asserted to have passed.
+
+Dependency order: R13 provenance/guard foundations are delivered. This declaration-only row is
+independent of concurrent R12c grant inspection and H7a continuation repair; its small request
+assembly insertion does not alter either authority or continuation control flow. Actual provider,
+tool/schema, storage/resume, R13c no-fresh-consent and /plan tests pass. Full checks, restored
+mutations, one bounded review and exact-head/post-merge CI remain delivery gates.
+
+### R13c done — PR #159; post-merge CI green
+
+Final head `71b58c7` passed all three PR jobs in CI 34026155677; merged main `78e8e19` passed
+all three post-merge jobs in CI 34026441186. Earlier gate wording below is implementation history.
 
 The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
 write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
@@ -51,7 +70,10 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### R5a implemented — delivery gates pending
+### R5a done — PR #157; post-merge CI green
+
+Merged main `7f01c4c` passed all three post-merge jobs in CI 34026041480. Earlier gate wording
+below records implementation history rather than outstanding delivery work.
 
 Mandatory strict sidecars validate before any selected extension import. Explicit paths and
 trusted-project discovery are bounded and fail closed on equal-precedence duplicates; no home

@@ -461,7 +461,7 @@ describe("renderChatEvent — the conversation, not the trace", () => {
         ],
       }),
     );
-    expect(line).toBe("▸ plan 1/3: second thing");
+    expect(line).toBe("▸ plan 1/3: second thing · acceptance 0/3 declared, unverified");
   });
 
   it("never lets a multi-line value break the one-line shape", () => {

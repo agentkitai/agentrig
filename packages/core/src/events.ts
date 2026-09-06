@@ -76,6 +76,8 @@ export const PlanItem = z.object({
   id: z.string(),
   text: z.string(),
   status: z.enum(["pending", "in_progress", "done", "dropped"]),
+  /** Observable check declared by the plan author, not verified evidence or a completion gate. */
+  accept: z.string().min(1).max(1024).refine(value => value.trim().length > 0, "accept must not be blank").optional(),
   /**
    * Paths or path prefixes this item is allowed to touch. The supervisor's `drift` detector
    * (PLAN §4.1) needs a declared scope to compare `file.changed` against; with no scope on any

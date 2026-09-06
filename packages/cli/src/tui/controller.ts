@@ -13,7 +13,7 @@ import type {
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
-import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
+import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
@@ -607,7 +607,7 @@ export class TuiController {
         this.print(
           this.state.plan.length === 0
             ? "no plan recorded yet — the agent writes one with update_plan"
-            : this.state.plan.map((i) => `  [${i.status}] ${i.text}`).join("\n"),
+            : this.state.plan.map((i) => `  [${i.status}] ${i.text}\n    ${renderPlanAcceptance(i.accept)}`).join("\n"),
           "system",
         );
         return true;

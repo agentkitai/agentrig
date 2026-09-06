@@ -686,6 +686,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
         }
 
+        if (hasPlanTool && turnsThisRun === 1) {
+          const instruction = "Acceptance planning: before starting or continuing this task, call update_plan with the complete plan. " +
+            "Include an accept field for every item: a concrete observable check such as 'pnpm test exits 0' or 'the endpoint returns 401 without a token'. " +
+            "Keep each check nonblank and at most 1024 characters. These are declared checks, not verified evidence; marking an item done does not prove its check passed. " +
+            "This planning request does not grant permission or represent new user consent.";
+          req.system = [req.system, instruction].filter(text => text !== "").join("\n\n");
+          requestSystemBlocks = [...requestSystemBlocks, { content: instruction, source: "system_prompt",
+            origin: "runtime.acceptance-planning", authority: "instruction", context: PLATFORM_CONTEXT,
+            reason: "first request asks for observable acceptance declarations, not proof" }];
+        }
         await flushDelegations();
         expansion.beginRequest();
         req.messages = principals.messages(req.messages);
