@@ -17,7 +17,10 @@ export const VerificationEvidence = z.object({
   runId: z.string().uuid(),
   evaluator: z.object({ id: text, sourceSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   regression: VerificationLane,
-  behavior: VerificationLane,
+  behavior: VerificationLane.extend({ humanReview: z.literal("required").optional() }),
+  /** Optional trusted host assessment of the explicitly designated prose component only. */
+  humanAssessment: z.object({ assessor: z.string().min(1).max(4096), outcome: z.enum(["PASS", "FAIL"]),
+    reason: z.string().min(1).max(4096), evidence: z.string().min(1).max(4096) }).strict().optional(),
 }).strict();
 export type VerificationEvidence = z.infer<typeof VerificationEvidence>;
 export type VerificationVerdict = "PASS" | "FAIL" | "BLOCKED" | "SKIP";
@@ -45,6 +48,15 @@ export function assessVerificationLanes(input?: VerificationEvidence) {
       verdict = "BLOCKED"; reason = "missing/partial observation or references";
     } else if (lane.basis === "unknown" || lane.basis === "same-assumption") {
       verdict = "BLOCKED"; reason = "oracle unknown or shares the implementation assumption; discounted";
+    } else if (name === "behavior" && evidence.behavior.humanReview === "required") {
+      // A4/X4's existing human gate supplements complete structural/golden answer checks.
+      // It does not claim an automated adversarial probe or waive any preceding deficit.
+      if (lane.basis !== "golden" || evidence.humanAssessment === undefined) {
+        verdict = "BLOCKED"; reason = "structured answer checks do not establish semantics; human assessment required";
+      } else {
+        verdict = evidence.humanAssessment.outcome;
+        reason = `structured answer checks passed; semantic component: human ${verdict} by ${JSON.stringify(evidence.humanAssessment.assessor)}; no automatic behavior probe claimed`;
+      }
     } else if (name === "behavior" && (lane.basis === "pinned-regression" || lane.negativeProbe === undefined)) {
       verdict = "BLOCKED"; reason = "behavior needs its own surface/oracle observation and negative/adversarial probe";
     }
@@ -53,6 +65,7 @@ export function assessVerificationLanes(input?: VerificationEvidence) {
       `  observation=${JSON.stringify(lane.observation ?? "unverified")}; negative probe=${JSON.stringify(lane.negativeProbe ?? "unverified")}`);
     return verdict;
   });
+  if (evidence.behavior.humanReview === "required") lines.push(`Human semantic assessment: ${JSON.stringify(evidence.humanAssessment ?? "pending/unverified")}`);
   const verdict: VerificationVerdict = verdicts.includes("FAIL") ? "FAIL" : verdicts.every(v => v === "SKIP") ? "SKIP" :
     verdicts.every(v => v === "PASS") ? "PASS" : "BLOCKED";
   lines.push(`Combined: ${verdict}; no partial pass. Matching evaluator checks never force the model grader to pass.`);

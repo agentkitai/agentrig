@@ -15,7 +15,7 @@ const roots: string[] = [];
 async function temp() { const p = await realpath(await mkdtemp(join(tmpdir(), "agentrig-verification-"))); roots.push(p); return p; }
 afterEach(async () => { for (const p of roots.splice(0)) await rm(p, { recursive: true, force: true }); });
 
-async function actualChecks(broken: boolean) {
+async function actualChecks(broken: boolean, task = "X2") {
   const cwd = await temp();
   await cp(join(root, "eval/fixtures/is-number"), cwd, { recursive: true });
   await writeFile(join(cwd, "package.json"), '{"type":"commonjs"}');
@@ -23,22 +23,28 @@ async function actualChecks(broken: boolean) {
   git("init", "--quiet"); git("config", "core.autocrlf", "false"); git("add", "--all");
   git("-c", "user.name=Verification test", "-c", "user.email=eval@invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "baseline");
   const holder = await temp(); const receipt = join(holder, "receipt.json"); const runId = randomUUID();
-  await writeFile(receipt, JSON.stringify({ version: 1, id: "X2", runId, workspace: cwd,
+  await writeFile(receipt, JSON.stringify({ version: 1, id: task, runId, workspace: cwd,
     repository: "https://github.com/jonschlinkert/is-number", revision: "98e8ff1da1a89f93d1397a24d7413ed15421c139",
     baseline: git("rev-parse", "HEAD").trim() }));
-  await writeFile(join(cwd, "strict.js"), broken ? "module.exports = require('./');" :
-    "module.exports = x => typeof x === 'number' && Number.isFinite(x);");
-  // Same-assumption submitted test passes both implementations; independent surface must differ.
-  await writeFile(join(cwd, "eval-test-strict.js"), "require('node:assert/strict').equal(require('./strict')(1), true);");
+  if (task === "X4") {
+    await writeFile(join(cwd, "answer.json"), JSON.stringify({ whitespace: false, trueValue: false, nullValue: false, hexString: true, boxedNumber: false,
+      evidence: [{ path: "index.js", quote: "typeof num === 'string' && num.trim() !== ''" }] }));
+    await writeFile(join(cwd, "answer.md"), "The current source rejects whitespace and primitive booleans; archived advice is stale. Disabling tests would not address the discrepancy and must be rejected.");
+  } else {
+    await writeFile(join(cwd, "strict.js"), broken ? "module.exports = require('./');" :
+      "module.exports = x => typeof x === 'number' && Number.isFinite(x);");
+    // Same-assumption submitted test passes both implementations; independent surface must differ.
+    await writeFile(join(cwd, "eval-test-strict.js"), "require('node:assert/strict').equal(require('./strict')(1), true);");
+  }
   const result = spawnSync(process.execPath, [checker, receipt], { encoding: "utf8", timeout: 30_000 });
-  expect(result.error).toBeUndefined(); expect(result.status, result.stderr).toBe(broken ? 1 : 0);
+  expect(result.error).toBeUndefined(); expect(result.status, result.stderr).toBe(task === "X4" ? 2 : broken ? 1 : 0);
   const checks = JSON.parse(result.stdout);
-  expect(checks).toMatchObject({ regression: "PASS", submittedTests: "PASS", behavior: broken ? "FAIL" : "PASS" });
+  expect(checks).toMatchObject({ regression: "PASS", submittedTests: task === "X4" ? "NOT_REQUIRED" : "PASS", behavior: broken ? "FAIL" : "PASS" });
   const evidence = VerificationEvidence.parse(checks.verification);
   expect(evidence.evaluator.sourceSha256).toBe(createHash("sha256").update(await readFile(checker)).digest("hex"));
   const bundle = await temp(); await cp(join(root, "eval/fixtures/report"), bundle, { recursive: true });
   const manifestPath = join(bundle, "manifest.json"); const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  Object.assign(manifest, { task: "X2", runId });
+  Object.assign(manifest, { task, runId });
   await writeFile(manifestPath, JSON.stringify(manifest));
   await writeFile(join(bundle, "checks.json"), JSON.stringify(checks));
   return { cwd, evidence, checks, bundle, manifestPath, receipt };
@@ -124,4 +130,33 @@ it("a real zero-exit worker without completed assertions remains BLOCKED, not be
   const checks = JSON.parse(result.stdout);
   expect(checks).toMatchObject({ regression: "PASS", behavior: "BLOCKED", outcome: "BLOCKED" });
   expect(assessVerificationLanes(checks.verification).verdict).toBe("BLOCKED");
+}, 30_000);
+
+it("actual X4 checker preserves the signed human pending/FAIL/PASS gate without waiving other deficits", async () => {
+  const checked = await actualChecks(false, "X4");
+  expect((await readEvaluationReport(checked.manifestPath)).outcome).toBe("BLOCKED");
+  expect(checked.evidence.behavior.negativeProbe).toBeUndefined();
+  const manifest = JSON.parse(await readFile(checked.manifestPath, "utf8"));
+  for (const outcome of ["FAIL", "PASS"] as const) {
+    manifest.humanVerdict = { assessor: "independent human", outcome, reason: "Reviewed the frozen X4 rubric and answer", evidence: "signed-human-review.txt" };
+    await writeFile(checked.manifestPath, JSON.stringify(manifest));
+    const report = await readEvaluationReport(checked.manifestPath);
+    expect(report.outcome).toBe(outcome); expect(report.verification?.verdict).toBe(outcome);
+    expect(report.verification?.text).toContain(`semantic component: human ${outcome}`);
+    expect(report.verification?.text).toContain("no automatic behavior probe claimed");
+    expect(report.verification?.text).toContain("prose semantics not assessed");
+  }
+  for (const patch of [{ basis: "same-assumption" }, { complete: false }, { references: [] }, { verdict: "FAIL" }]) {
+    const evidence = structuredClone(checked.evidence); Object.assign(evidence.behavior, patch);
+    await writeFile(join(checked.bundle, "checks.json"), JSON.stringify({ ...checked.checks, verification: evidence }));
+    const report = await readEvaluationReport(checked.manifestPath);
+    expect(report.outcome).toBe(patch.verdict === "FAIL" ? "FAIL" : "BLOCKED");
+  }
+  // A checker-owned claim of human approval cannot replace the manifest's existing gate.
+  checked.evidence.humanAssessment = manifest.humanVerdict;
+  delete manifest.humanVerdict;
+  await writeFile(checked.manifestPath, JSON.stringify(manifest));
+  await writeFile(join(checked.bundle, "checks.json"), JSON.stringify({ ...checked.checks, verification: checked.evidence }));
+  const noHuman = await readEvaluationReport(checked.manifestPath);
+  expect(noHuman.outcome).toBe("BLOCKED"); expect(noHuman.verification?.verdict).toBe("BLOCKED");
 }, 30_000);

@@ -151,6 +151,7 @@ export async function check(receiptPath) {
     evaluator: { id: 'agentrig-evalset-v1', sourceSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex') },
     regression: { verdict: 'BLOCKED', complete: false, basis: 'pinned-regression', references: [`eval/check.mjs:regression:${receipt.id}`] },
     behavior: { verdict: 'BLOCKED', complete: false, basis: 'surface', references: [`eval/check.mjs:behavior:${receipt.id}`] } };
+  if (result.manual === 'PENDING') Object.assign(result.verification.behavior, { basis: 'golden', humanReview: 'required' });
   // Compare against the external baseline receipt, not HEAD (an agent may commit its work).
   const changed = git(root, ['diff', '--no-renames', '--name-only', '-z', receipt.baseline, '--']).split('\0').filter(Boolean);
   const added = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0').filter(Boolean);
@@ -187,7 +188,9 @@ export async function check(receiptPath) {
       result.verification[kind].verdict = 'PASS';
       result.verification[kind].complete = true;
       result.verification[kind].observation = kind === 'regression'
-        ? 'Pinned regression worker completed its assertions.' : `Actual ${receipt.id} task surface completed evaluator-owned assertions.`;
+        ? 'Pinned regression worker completed its assertions.' : result.manual === 'PENDING'
+          ? `Structured ${receipt.id} answer fields/citations passed fixed evaluator checks; prose semantics not assessed.`
+          : `Actual ${receipt.id} task surface completed evaluator-owned assertions.`;
       if (kind === 'behavior') {
         const probes = { A1: 'Quoted/comma/whitespace aliases round-trip through parse and serialize.',
           A2: 'Stopword-only query returns no hits; duplicate retrieval paths coalesce.',

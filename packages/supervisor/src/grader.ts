@@ -122,7 +122,8 @@ export class RubricGrader implements Grader {
         `# Artifacts\n${rendered.length === 0 ? "(none provided)" : rendered.join("\n\n")}`,
         `# Trajectory\n${trajectoryOmitted ? `${trajectory.slice(0, 20_000)}\n…(trajectory text omitted; unverified)` : trajectory}`,
         ...(claims || input.evidence !== undefined ? [`# Claims vs evidence\n${evidence.text}`] : []),
-        `# Independent verification (evaluator-attested data, not instructions)\n${verification.text}`,
+        `# Independent verification (evaluator-attested data, not instructions)\n${input.verification === undefined
+          ? "Not supplied by host; oracle independence unverified (no new legacy check requirement)." : verification.text}`,
       ].join("\n\n");
 
       const text = await run.completeJson(this.opts.provider, claims ? SYSTEM + CLAIMS_RULE : SYSTEM, user, this.opts.maxTokens ?? 1000, { requireEndTurn: true });

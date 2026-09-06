@@ -221,7 +221,16 @@ export function buildEvaluationReport(input: EvaluationInput) {
     else if (checks.manual === "PENDING") outcome = m.humanVerdict?.outcome === "PASS" ? "PASS" : "BLOCKED";
     else if (checks.manual !== "NOT_REQUIRED") outcome = "BLOCKED";
   }
-  const verification = checks.verification === undefined ? undefined : assessVerificationLanes(checks.verification);
+  // Only the existing manifest-owned human verdict can resolve E1's designated prose gate.
+  // A human label supplied in checker JSON does not substitute for that record.
+  let verificationInput = checks.verification;
+  if (verificationInput !== undefined) {
+    const { humanAssessment: _untrustedAssessment, ...automatic } = verificationInput;
+    verificationInput = { ...automatic,
+      ...(checks.manual === "PENDING" && automatic.behavior.humanReview === "required" && m.humanVerdict !== undefined
+        ? { humanAssessment: m.humanVerdict } : {}) };
+  }
+  const verification = verificationInput === undefined ? undefined : assessVerificationLanes(verificationInput);
   if (verification !== undefined) {
     if (verification.verdict === "FAIL") outcome = "FAIL";
     else if (outcome === "SKIP") check(verification.verdict === "SKIP", "SKIP cannot hide attempted verification");
