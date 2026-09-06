@@ -7,6 +7,11 @@ import { inheritExpansionRestriction } from "../external-expansion.js";
 import { childPermissionView } from "../child-permissions.js";
 import { markIsolatedTool, isolatedContext } from "../isolated-runtime.js";
 import { prepareSubagentWorktree } from "../subagent-worktree.js";
+import { snapshotAgentRoles, type AgentRole } from "../agent-roles.js";
+import { AgentRoleName } from "../manifests.js";
+import type { PromptBlock } from "../context-manifest.js";
+import { ADVISORY_CONTEXT } from "../context-principals.js";
+import { hasDiagnostics } from "../diagnostics.js";
 
 /**
  * A subagent tool. `subagent.spawn` / `subagent.end` have been in the event schema since M0 and
@@ -44,6 +49,7 @@ export interface SubagentChoice {
 }
 
 const baseShape = {
+  agent: AgentRoleName.optional().describe("optional local agent role from the advertised role catalogue; unknown roles are refused"),
   task: z
     .string()
     .min(1)
@@ -83,6 +89,10 @@ function inputSchema(choices: SubagentProviderChoices | undefined): z.ZodTypeAny
 }
 
 export interface SubagentOptions {
+  /** Trusted, validated local role snapshots; no model-provided role definitions. */
+  roles?: readonly AgentRole[];
+  /** Existing provider entries for named runtime roles; absent subagents uses the existing default. */
+  modelRoles?: Partial<Record<AgentRole["model-role"], string>>;
   /** Opt-in cooperative Git worktree isolation and retained patch handoff. No automatic apply. */
   isolation?: "worktree";
   /**
@@ -127,6 +137,16 @@ export interface SubagentOptions {
 
 export const SUBAGENT_TOOL = "subagent";
 
+function rolePrompt(base: AgentConfig["systemPrompt"], role: AgentRole): AgentConfig["systemPrompt"] {
+  return ctx => {
+    const resolved = typeof base === "function" ? base(ctx) : base;
+    const blocks: PromptBlock[] = typeof resolved === "string" ? [{ content: resolved, source: "system_prompt",
+      origin: "sdk:child-default", authority: "instruction", reason: "trusted child configuration" }] : resolved;
+    return [...blocks, { content: role.body, source: "project_instructions", origin: role.origin,
+      authority: "data", context: ADVISORY_CONTEXT, reason: `local agent role ${role.name}; constraints do not grant authority`, freshness: role.hash }];
+  };
+}
+
 export interface Pool {
   /** Descendants, not just direct children: every ancestor is charged. */
   children: number;
@@ -167,9 +187,14 @@ function poolFor(pools: Map<string, Pool>, sessionId: string): Pool {
 }
 
 export function subagentTool(opts: SubagentOptions): AnyTool {
+  return buildSubagentTool(opts);
+}
+function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly string[]; maxTurns: number }): AnyTool {
+  const roles = snapshotAgentRoles(opts.roles ?? []);
+  opts = { ...opts, roles, ...(opts.modelRoles === undefined ? {} : { modelRoles: Object.freeze({ ...opts.modelRoles }) }) };
   const depth = opts.depth ?? 0;
   const maxDepth = opts.maxDepth ?? 1;
-  const maxTurns = opts.maxTurns ?? 15;
+  const maxTurns = Math.min(opts.maxTurns ?? 15, inherited?.maxTurns ?? Infinity);
   const maxChildren = opts.maxChildren ?? 8;
   const pools = new Map<string, Pool>();
 
@@ -192,12 +217,15 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       "job to an isolated worker (implement something, review something). The subagent sees none " +
       "of this conversation, so the task must stand alone." + (opts.isolation === "worktree"
         ? " This worker uses a separate Git worktree and returns a retained patch candidate; inspect and apply it separately with authorized parent tools. No automatic parent edits."
-        : ""),
+        : "") + (roles.length === 0 ? "" : ` Local agent roles (constraints, not permissions): ${roles.map(role => role.name).join(", ")}.`),
     inputSchema: inputSchema(opts.providerChoices),
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
     permission: "exec",
     execute: async (input: Input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
+      const role = input.agent === undefined ? undefined : roles.find(candidate => candidate.name === input.agent);
+      if (input.agent !== undefined && role === undefined) return refuse("unknown or unavailable agent role; no child started");
+      if (role !== undefined && input.provider !== undefined) return refuse("agent role and provider cannot both be selected");
       if (depth >= maxDepth) {
         return refuse(`subagents may not nest more than ${maxDepth} deep; do this task yourself`);
       }
@@ -230,9 +258,26 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         // Not SandboxDeniedError: no implicit escape retry for host Git metadata preparation.
         throw new Error("isolated worktree preparation is unavailable inside an enforcing parent sandbox; common Git metadata is not exposed");
       }
-      const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
+      const roleEntry = role === undefined ? undefined : opts.modelRoles?.[role["model-role"]];
+      if (role !== undefined && roleEntry === undefined && role["model-role"] !== "subagents") return refuse("agent role model-role is unavailable");
+      const entry = role === undefined ? input.provider : roleEntry;
+      const choice: SubagentChoice | undefined = entry === undefined ? undefined : { provider: entry };
       const config = opts.childConfig(choice);
-      const permissionGrants = childPermissionView(ctx, config.permissionGrants);
+      if (role !== undefined) {
+        const available = new Set([...config.tools.map(tool => tool.name), SUBAGENT_TOOL, "read_output"]);
+        if (config.tools.some(hasDiagnostics)) available.add("core:diagnostics");
+        if (role.tools.some(name => !available.has(name))) return refuse("agent role names an unavailable child tool");
+      }
+      let allowlist = inherited?.tools;
+      for (const constraint of [config.toolAllowlist, role?.tools]) {
+        if (constraint !== undefined) allowlist = allowlist === undefined ? [...constraint] : allowlist.filter(name => constraint.includes(name));
+      }
+      if (role !== undefined && !role.delegable) allowlist = allowlist!.filter(name => name !== SUBAGENT_TOOL);
+      if (allowlist !== undefined && depth + 1 >= maxDepth) allowlist = allowlist.filter(name => name !== SUBAGENT_TOOL);
+      const effectiveTurns = Math.min(maxTurns, role?.["max-turns"] ?? Infinity);
+      if (role !== undefined && (!Number.isSafeInteger(effectiveTurns) || effectiveTurns < 1))
+        return refuse("agent role requires a positive integer inherited turn limit");
+      const permissionGrants = childPermissionView(ctx, config.permissionGrants, allowlist);
       if (parentPolicy !== undefined && (
         config.sandbox === undefined || config.sandbox.mode === "none" ||
         (parentPolicy.mode === "read-only" && config.sandbox.mode !== "read-only") ||
@@ -243,9 +288,9 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // The child's own spawning ability is decided here, never by the caller: strip whatever
       // subagent tool `childConfig()` supplied (it carries the CURRENT depth) and, if another
       // level is allowed, add one that knows it is a level deeper.
-      const childTools = config.tools.filter((t) => t.name !== SUBAGENT_TOOL);
+      const childTools = config.tools.filter((t) => t.name !== SUBAGENT_TOOL && (allowlist === undefined || allowlist.includes(t.name)));
 
-      const budget: Budget = { ...(opts.childBudget ?? {}), maxTurns };
+      const budget: Budget = { ...(opts.childBudget ?? {}), maxTurns: effectiveTurns };
       const pricing = opts.pricing ?? config.pricing;
       // A child's abort grace is half its parent's: abort reaches both on the same signal, so a
       // child waiting as long as its parent always finishes its log AFTER the parent gave up
@@ -253,20 +298,22 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       // Floored at 1ms (#96): a parent at 1ms would otherwise hand its child 0 and record
       // "still running 0ms after abort" without waiting a tick.
       const childGrace = Math.max(1, Math.floor(abortGraceOf(config) / 2));
-      if (depth + 1 < maxDepth) {
+      if (depth + 1 < maxDepth && (allowlist === undefined || allowlist.includes(SUBAGENT_TOOL))) {
         // The grandchild's grace must derive from THIS child's, not from the root config the
         // caller's `childConfig()` returns: read from the root, a grandchild got the same grace
         // as its parent, and its end-hook cut landed after the parent had stopped waiting.
-        childTools.push(subagentTool({
+        childTools.push(buildSubagentTool({
           ...opts,
           depth: depth + 1,
           ancestorPools: chain,
           childConfig: (grandchildChoice) => ({ ...opts.childConfig(grandchildChoice), abortGraceMs: childGrace }),
-        }));
+        }, allowlist === undefined ? undefined : { tools: allowlist, maxTurns: effectiveTurns }));
       }
       const { permissionGrants: _configuredGrants, ...childConfig } = config;
       const child = opts.createAgent({
         ...childConfig,
+        ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+        ...(role === undefined ? {} : { systemPrompt: rolePrompt(config.systemPrompt, role) }),
         ...(permissionGrants === undefined ? {} : { permissionGrants }),
         abortGraceMs: childGrace,
         tools: childTools,
@@ -302,7 +349,10 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
           ctx.signal.throwIfAborted();
           binding.ready();
         }
-        ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
+        ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task,
+          ...(role === undefined ? {} : { role: { name: role.name, hash: role.hash, tools: [...(allowlist ?? [])],
+            modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
+            maxTurns: effectiveTurns } }) });
         spawned = true;
 
         // the child's own log names its parent, so a spawn record elsewhere can be checked against it

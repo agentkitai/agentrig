@@ -570,8 +570,8 @@ describe("a subagent cannot run away", () => {
     expect(results.at(-1)!.display).toContain("the limit");
   });
 
-  it("the parent's abort reaches the child", async () => {
-    const provider = new ScriptedProvider([
+  it.each([0, 150])("the parent's abort reaches the child (initial request delay %ims)", async initialDelay => {
+    const scripted = new ScriptedProvider([
       spawn("long job"),
       ...Array.from({ length: 20 }, () => [
         { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
@@ -579,10 +579,33 @@ describe("a subagent cannot run away", () => {
         stop("tool_use"),
       ]),
     ]);
-    // a slow child, so the abort lands while it is still working rather than after it finished
-    const session = harness(provider, { slow: true }).run("do it", { cwd: root });
-    setTimeout(() => session.control.abort(), 80);
-    const events = await collect(session);
+    let firstRequest = true;
+    const provider: ModelProvider = { ...scripted, async *stream() {
+      if (firstRequest) { firstRequest = false; await new Promise(resolve => setTimeout(resolve, initialDelay)); }
+      yield* scripted.stream();
+    } };
+    // Abort only after an actual child tool starts. A wall-clock delay could abort the
+    // parent's initial request before it ever spawned, testing no propagation at all.
+    let entered!: () => void;
+    const toolEntered = new Promise<void>(resolve => { entered = resolve; });
+    const childTool: AnyTool = { ...echoTool(), execute: async (_input, ctx) => {
+      entered();
+      await new Promise<void>(resolve => {
+        if (ctx.signal.aborted) resolve();
+        else ctx.signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      ctx.signal.throwIfAborted();
+      throw Error("fixture tool must finish through cancellation");
+    } };
+    const session = harness(provider, { childExtra: { tools: [childTool] } }).run("do it", { cwd: root });
+    const eventsPromise = collect(session);
+    let timer!: ReturnType<typeof setTimeout>;
+    try {
+      await Promise.race([toolEntered, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(Error("child tool did not start")), 2_000);
+      })]);
+    } finally { clearTimeout(timer); session.control.abort(); }
+    const events = await eventsPromise;
     const summary = await session.done;
 
     // aborting a session must not leave its children running and billing
@@ -1199,7 +1222,7 @@ describe("provider choice on the spawn tool", () => {
   it("has no provider field at all when the caller supplies no choices", () => {
     const tool = subagentTool(noop);
     const shape = (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape;
-    expect(Object.keys(shape).sort()).toEqual(["label", "task"]);
+    expect(Object.keys(shape).sort()).toEqual(["agent", "label", "task"]); // R15h optional role is parsed even when unavailable, never stripped into a generic spawn.
   });
 
   it("offers exactly the configured names, optional, and rejects an unknown one", () => {

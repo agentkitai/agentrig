@@ -7,7 +7,7 @@ export function bindPermissionView(context: object, view: PermissionGrantRegistr
   views.set(context, { view, ...(live?.sessionId === undefined ? {} : { session: live.sessionId }),
     ...(live?.taskId === undefined ? {} : { task: live.taskId }) });
 }
-export function childPermissionView(context: object, configured: PermissionGrantRegistry | undefined): PermissionGrantRegistry | undefined {
+export function childPermissionView(context: object, configured: PermissionGrantRegistry | undefined, toolAllowlist?: readonly string[]): PermissionGrantRegistry | undefined {
   if (!views.has(context)) {
     if (configured !== undefined) throw new Error("unbound tool context cannot inherit permission grants");
     return undefined;
@@ -16,5 +16,5 @@ export function childPermissionView(context: object, configured: PermissionGrant
   if (bound.view !== undefined && (bound.session !== bound.view.context.sessionId || bound.task !== bound.view.context.taskId)) {
     throw new Error("tool permission context expired");
   }
-  return bound.view?.childView();
+  return bound.view?.childView(toolAllowlist);
 }

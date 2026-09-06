@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -124,6 +125,8 @@ export interface AgentConfig {
   onAsk?: (req: PermissionRequest, context?: import("./permissions.js").PermissionAskContext) => Promise<Exclude<Decision, "ask">>;
   /** Explicit live authority only; built-in children receive filtered, task-sealed views. */
   permissionGrants?: PermissionGrantRegistry;
+  /** Trusted host restriction, intersected by local roles; applies even to internal tool dispatch. */
+  toolAllowlist?: readonly string[];
   /**
    * M7: who this session is, when a human answering its permission prompts is not watching it —
    * a subagent sets `"subagent"`. It rides on every `permission.request` this session emits, so
@@ -256,6 +259,8 @@ function estimateTokens(system: string, messages: Message[]): number {
 export { PLAN_TOOL, MAX_REPLAN_REFUSALS } from "./tool-execution.js";
 
 export function createAgent(config: AgentConfig): Agent {
+  if (config.toolAllowlist !== undefined) config = { ...config,
+    toolAllowlist: Object.freeze(AgentRoleToolNames.parse(config.toolAllowlist)) };
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
     throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
   }
@@ -355,7 +360,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
-    const sessionTools = config.tools.length === 0 ? config.tools : [...config.tools, readOutputTool(store)];
+    const availableTools = config.tools.length === 0 && !config.toolAllowlist?.includes("read_output")
+      ? config.tools : [...config.tools, readOutputTool(store)];
+    const sessionTools = config.toolAllowlist === undefined ? availableTools : availableTools.filter(tool => config.toolAllowlist!.includes(tool.name));
     const toolsByName = new Map(sessionTools.map((t) => [t.name, t]));
     const toolSpecs = sessionTools.map(toToolSpec);
     const compaction = config.compaction ?? summarizeOlderTurns();

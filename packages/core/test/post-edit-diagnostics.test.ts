@@ -72,6 +72,19 @@ it("exec denial preserves the successful edit and reports unavailable rather tha
   await expect(readFile(join(f.cwd, "checker-ran"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("a role allowing writes does not implicitly authorize the hidden checker dispatch", async () => {
+  const f = await fixture(scripted('require("fs").writeFileSync("checker-ran", "yes")'));
+  f.agent.toolAllowlist = ["write_file"];
+  f.turns.push([call("write_file", "edit", { path: "target.ts", content: "written" }), { type: "stop", reason: "tool_use" }]);
+  const { events, session } = await run(f);
+  expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("written");
+  await expect(readFile(join(f.cwd, "checker-ran"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(diagnosticResult(events)).toMatchObject({ ok: true, diagnostics: { status: "unavailable" } });
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.denied", name: "core:diagnostics" }));
+  expect(events.some(e => e.type === "tool.call" && e.internal !== undefined)).toBe(false);
+  expect((await f.store.materializeMessages(session.id)).flatMap(m => m.content).filter(b => b.type === "tool_result")).toHaveLength(1);
+});
+
 it("enabled parallel edit/checker pairs are exclusive and do not reacquire their own lease", async () => {
   const f = await fixture(scripted('const fs=require("fs"); if(fs.existsSync("busy")) process.exit(3); fs.writeFileSync("busy", "x"); setTimeout(()=>fs.unlinkSync("busy"),50)'));
   f.agent.turnStrategy = parallel({ maxConcurrency: 2 });
