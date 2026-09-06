@@ -92,6 +92,13 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   );
 
   const s = opts.structural;
+  if (report.procedures !== undefined) {
+    out.push(...section("Skill candidates (report only; fresh evidence/effect review required before emission)", report.procedures.candidates.map(candidate =>
+      `- skill-candidate [${candidate.status}] ${candidate.pages.join(", ")}\n`
+      + renderPromotionProposal(candidate.artifact).replace("→ global", "→ procedure review"))));
+    out.push(...section("Procedure refusals", report.procedures.rejected.map(item => `- ${item.pages.join(", ")}: ${item.reason}`)));
+    if (report.procedures.refinementError !== undefined) out.push("", `Procedure refinement incomplete; retained candidates are structural/unassessed: ${report.procedures.refinementError}`);
+  }
   if (s !== undefined) {
     out.push(
       ...section("Index drift", [
@@ -128,6 +135,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
 /** Total issues, not distinct pins: a conflict and skipped persistence are separate findings. */
 export function findingCount(report: DreamReport, structural?: StructuralFindings): number {
   const base =
+    (report.procedures?.candidates.length ?? 0) + (report.procedures?.rejected.length ?? 0) + (report.procedures?.refinementError === undefined ? 0 : 1) +
     (report.guardrailRejected?.length ?? 0) +
     report.contradictions.length +
     report.superseded.length +

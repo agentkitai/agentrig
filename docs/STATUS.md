@@ -20,6 +20,17 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
+### R6a implemented — closing PR records delivery gates
+
+R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
+(R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
+permission-grant/provenance interfaces, so it can run in parallel; R6b/R6c remain dependent.
+Opt-in dream/CLI detection carries H4 witnesses for every step, scope and limitation. Structural
+mode is zero-call; bounded classification may reject but never rewrite candidates, then R6e
+effect review is required for the distinct reviewed status. Existing model caps are unchanged.
+No skills emitted, no permission change, no live evaluation or benefit claim. See [R6a](plans/R6a.md).
+Closing PR records validation/review and exact-head/post-merge three-platform CI receipts.
+
 ### R5e implemented — closing PR records delivery gates
 
 Strict versioned skill/extension/package schemas now reject unknown fields before use. The

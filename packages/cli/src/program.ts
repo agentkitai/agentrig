@@ -385,6 +385,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--lock-timeout <ms>", "wait for memory mutation locks (default 5000 ms); not a scan deadline")
     .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
     .option("--structural-only", "skip the model-backed consolidation pass — free, no credential needed")
+    .option("--skill-candidates", "report evidence-backed procedures; model refinement/effect checks share --dream-limits (no skill files emitted)")
     .action(async (opts: DreamOptions, cmd: Command) => {
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await dreamCommand({ ...resolved, modelExplicit: modelExplicit(cmd) || resolved.modelExplicit === true });

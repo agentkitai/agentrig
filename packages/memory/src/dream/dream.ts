@@ -19,6 +19,7 @@ import {
 import { assessPromotionEvidence, selectForPromotion, sessionEvidence, type PromotionRejection } from "./promote.js";
 import { reviewPromotionEffects, type PromotionGuardrailIndex } from "./guardrails.js";
 import { loadPromotionEvidence } from "./evidence.js";
+import { detectProcedureCandidates, refineProcedureCandidates, type ProcedureDetection } from "./procedures.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
 import { withMemoryLock, type MemoryLockOptions } from "../lock.js";
@@ -55,6 +56,8 @@ export interface DreamOptions extends Omit<DreamInput, "provider">, ScanOptions 
   now?: () => number;
   /** Skips the model-backed consolidation pass — the free, structural-only dream. */
   structuralOnly?: boolean;
+  /** Opt-in report-only procedure detection/refinement; uses the existing shared call ceiling. */
+  procedureCandidates?: boolean;
   onPhase?: (phase: string) => void;
   /** Advisory warnings, including consolidation failure and skipped pin persistence; not fatal. */
   onError?: (err: Error) => void;
@@ -302,6 +305,15 @@ async function dreamInto(
   // with no global wiki attached there is nowhere to promote *to*, so propose nothing
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
+  let procedures: ProcedureDetection | undefined;
+  if (opts.procedureCandidates === true) {
+    phase("skill-candidates");
+    const candidates = detectProcedureCandidates(finalPages, { ...promotionOptions, signal: run.signal });
+    procedures = modelEnabled && consolidationError === undefined
+      ? await refineProcedureCandidates(candidates, opts.provider!, run)
+      : { candidates, rejected: [] };
+  }
+
   // built from `applied`, never from `consolidation`: the report describes the artifact
   const mergedInto = new Map<string, string[]>();
   for (const m of applied.mergedPages) mergedInto.set(m.into, [...(mergedInto.get(m.into) ?? []), m.from]);
@@ -321,6 +333,7 @@ async function dreamInto(
       return { page: r.page, line: r.line, reason: found?.reason ?? "" };
     }),
     promoted,
+    ...(procedures === undefined ? {} : { procedures }),
     guardrailRejected: rejected.filter(rejection => rejection.guardrails !== undefined),
     pinsAffected: pinChecks.map((c) => ({ pin: `${c.pin.page}: ${c.pin.claim}`, status: c.status })),
     pinPersistence: persistedPins,

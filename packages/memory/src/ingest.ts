@@ -871,6 +871,26 @@ ${serializePage(
   Additive only: BM25 adds recall, it never replaces an index pick.
 - **Lint (dream)** — scheduled, offline, over a copy. Never modifies its input.
 
+## Procedure candidates (opt-in report only)
+
+For a repeatable procedure, use a page containing only tagged, cited fact lines: Scope: ...,
+Step 1: ..., Step 2: ..., Step 3: ..., and Limitation: ... . Keep steps ordered; include all
+conditions and constraints. The exact complete claim (including its marker) must occur in
+independent raw observations. Never invent missing scope/limitations or relabel guesses to
+satisfy this shape. Ordinary prose remains valid wiki content but is not detected by this
+conservative first procedure pass. Example shape (references below must be real):
+
+- [observed] Scope: Local release validation only (session:s1, session:s2)
+- [observed] Step 1: Inspect the changed files (session:s1, session:s2)
+- [observed] Step 2: Run the applicable tests (session:s1, session:s2)
+- [observed] Step 3: Request review of the tested revision (session:s1, session:s2)
+- [observed] Limitation: Not a substitute for deployment approval (session:s1, session:s2)
+
+Run agentrig dream --skill-candidates --structural-only for zero-call proposals. Model
+classification and effect review share the existing --dream-limits ceiling, with no automatic
+increase. Three calls cover consolidation + classification + effects (four with global
+promotion). A structural/unassessed candidate is not approval; no skill files are emitted.
+
 ## Pins
 
 \`pins.json\` holds human corrections that must survive regeneration. A pin stores the *claim*,
