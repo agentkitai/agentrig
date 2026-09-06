@@ -21,7 +21,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
-| Merged; post-merge CI pending | R14a: acceptance declarations (PR #162) | Observable declarations remain unverified, not proof |
+| Done — PR #162 | R14a: acceptance declarations | Observable declarations remain unverified, not proof |
 | Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -668,7 +668,7 @@ permission and sandbox layers something to grip.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R11a | `net` added to `PermissionClass` (schema-added; nothing repurposed); default rules leave it at `ask`; sandbox modes deny it unless allowed | core |
+| R11a *(implemented; delivery gates pending)* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
 | R11b | `web_fetch` tool: GET-only, size-capped, html→text, declares `class: "net"` and the URL in the request (so rules like `--allow net` and per-run deny work); no search tool yet — search providers need keys and that is config surface R1 already owns | core |
 
 Acceptance: fetch is refused under default rules until allowed (both interactively and via

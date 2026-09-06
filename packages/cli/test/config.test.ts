@@ -185,6 +185,16 @@ describe("config file boundary", () => {
     const invalid = await configAt(cwd, { sandbox: "landlock" });
     await expect(readConfigFile(invalid)).rejects.toThrow(/config\.json at sandbox: invalid value/);
   });
+  it("accepts only explicit boolean sandboxNetwork and resolves it on run/TUI/resume", async () => {
+    const { cwd, home } = await fixture(); await configAt(home, { sandboxNetwork: true });
+    for (const names of [["run"], ["tui"], ["sessions", "resume"]]) {
+      let cmd = buildProgram(); for (const name of names) cmd = cmd.commands.find(c => c.name() === name)!;
+      const values = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false });
+      expect(values.sandboxNetwork).toBe(true);
+    }
+    for (const value of ["true", 1, null]) expect(() => parseConfigText("fixture", JSON.stringify({ sandboxNetwork: value }))).toThrow();
+    expect(parseConfigText("fixture", '{"sandboxNetwork":false}')).toMatchObject({ sandboxNetwork: false });
+  });
 
   it("accepts only positive integer supervisor turn floors", async () => {
     const { cwd } = await fixture();

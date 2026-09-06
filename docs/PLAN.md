@@ -85,7 +85,7 @@ field.
 ### 2.3 Tools
 
 ```ts
-type PermissionClass = 'read' | 'write' | 'exec' | 'network';
+type PermissionClass = 'read' | 'write' | 'exec' | 'network' | 'net';
 
 interface Tool<I = unknown, O = unknown> {
   name: string;

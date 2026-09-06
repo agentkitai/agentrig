@@ -93,7 +93,9 @@ function promptBlocks(options: {
 export function buildSandbox(
   value: string,
   platform: NodeJS.Platform = process.platform,
+  network = false,
 ): SandboxConfig {
+  if (typeof network !== "boolean") throw new Error("sandbox network policy must be a boolean");
   const parsed = SandboxModeSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
@@ -101,9 +103,10 @@ export function buildSandbox(
     );
   }
   const mode: SandboxMode = parsed.data;
-  if (mode === "none") return { mode, provider: new NoneSandboxProvider() };
-  if (platform === "linux") return { mode, provider: new DockerSandboxProvider() };
-  if (platform === "darwin") return { mode, provider: new SeatbeltSandboxProvider() };
+  const grant = network ? { network: true } : {};
+  if (mode === "none") return { mode, provider: new NoneSandboxProvider(), ...grant };
+  if (platform === "linux") return { mode, provider: new DockerSandboxProvider(), ...grant };
+  if (platform === "darwin") return { mode, provider: new SeatbeltSandboxProvider(), ...grant };
   throw new Error(
     `--sandbox ${mode} is not supported on ${platform}; use --sandbox none on this platform`,
   );
@@ -136,6 +139,8 @@ export interface AgentBuildOptions extends ProviderOptions {
   yolo?: boolean;
   /** OS execution boundary, independent of permission approvals. Defaults to none. */
   sandbox?: SandboxMode;
+  /** Explicit network policy for the sandbox, independent of --allow/--yolo. */
+  sandboxNetwork?: boolean;
   /** Opt-in raw checkpoints and terminal ownership receipts; requires stopped external writers. */
   checkpoints?: boolean;
   maxTurns: string;
@@ -475,7 +480,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   async function assemble(): Promise<BuiltAgent> {
   // one policy object, shared by parent and children: a subagent that could do more than its
   // parent would be a permission bypass with extra steps
-  const sandbox = buildSandbox(opts.sandbox ?? "none");
+  const sandbox = buildSandbox(opts.sandbox ?? "none", process.platform, opts.sandboxNetwork ?? false);
   const permissionPolicy = buildPermissionPolicy({
     ...(opts.allow === undefined ? {} : { allow: opts.allow }),
     ...(opts.allowCommand === undefined ? {} : { allowCommand: opts.allowCommand }),

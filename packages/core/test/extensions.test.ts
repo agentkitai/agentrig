@@ -20,6 +20,14 @@ const load = (paths: string[] | ExtensionCandidate[], timeoutMs?: number) => loa
   onNotice: message => notices.push(message), ...(timeoutMs === undefined ? {} : { timeoutMs }),
 });
 
+it("actual trusted extension registration accepts the additive net class", async () => {
+  const root = await temp();
+  const path = await extensionFixture(root, "net", `export function activate(ctx){ctx.registerTool({name:"probe",description:"inert",permission:"net",inputSchema:{parse(x){return x}},jsonSchema:{type:"object"},execute(){return{output:"inert",display:"inert"}}})}`,
+    { name: "net", version: "1", apiVersion: 1, surfaces: ["tools"] });
+  const result = await load([path]);
+  expect(result.failed).toEqual([]); expect(result.loaded[0]!.tools[0]!.permission).toBe("net");
+});
+
 it("actual module freezes minimal context and seals late registration", async () => {
   const root = await temp();
   const path = await extensionFixture(root, "context", `export let context;

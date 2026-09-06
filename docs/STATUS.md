@@ -5,6 +5,18 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R11a implemented — delivery gates pending
+
+Additive `net` defaults ask without repurposing legacy `network`. Runtime denies compatible
+net tools under enforcing no-network policy before body/dispatch bookkeeping. Explicit
+`--sandbox-network` / config `sandboxNetwork` is independent from permission allow/YOLO;
+fresh one-time outside escape remains separate and none mode offers no OS sandbox.
+Real inert tool runs cover child views/narrowing, external-expansion consent and actual CLI
+builder wiring; no web fetch or live network effects. [Contract](plans/R11a.md).
+Integrated H7b #164/main `c88a72f`; post-merge gate pending at integration. R12d #163 and
+R14a #162 have green post-merge receipts. Build/typecheck and full 2,393 tests plus two skips
+across 133 files pass (four workers, 36 seconds). Mutations/review and exact-head CI follow.
+
 ### H7b implemented — delivery gates pending
 
 The correctness-repair lane continues after H7a PR #161/main `668f7f1`, whose exact

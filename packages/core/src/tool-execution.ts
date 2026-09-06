@@ -6,7 +6,7 @@ import { EventPayload, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events
 import type { ContentBlock, ContentTrust, InstructionContext } from "./messages.js";
 import { prepareResultTrust } from "./content-provenance.js";
 import type { AnyTool, ToolContext } from "./tool.js";
-import { SandboxDeniedError, withSandboxPolicy } from "./sandbox.js";
+import { SandboxDeniedError, withSandboxPolicy, currentSandboxPolicy } from "./sandbox.js";
 import { outsideSandbox } from "./sandbox-providers.js";
 import { contentHash } from "./session-store.js";
 import { mergePatches, type AttributedHookResult, type Hook, type HookPoint, type runHooks } from "./hooks.js";
@@ -375,6 +375,10 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     }
     const command = () => {
       signal.throwIfAborted();
+      const policy = currentSandboxPolicy();
+      if (permClass === "net" && policy !== undefined && policy.mode !== "none" && policy.network !== true) {
+        throw new SandboxDeniedError("net permission requires explicit network policy inside this sandbox");
+      }
       context.expansion?.dispatched(surface);
       bindExpansionRestriction(ctx, context.expansion?.restricted() ?? true);
       bindPermissionView(ctx, config.permissionGrants);
