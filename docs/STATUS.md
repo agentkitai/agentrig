@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R6g catalogue guidance is implemented, pending delivery gates; R13d is active independently; R12a is merged, pending its post-merge gate. R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R6g catalogue guidance is implemented, pending delivery gates; R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -24,9 +24,10 @@ markers. Build/typecheck and the full suite pass: 2,196 tests plus two skips acr
 with four workers to avoid shared-container contention. One independent Claude review
 `21a600fa-7f06-4d6c-a0ba-20803e760e03` approved source head `f3f07a7`, no material findings.
 Its 20-turn bound ended before a verdict (164 seconds); one authorized tools-disabled final
-summary turn used only gathered evidence (29 seconds). The review's default-worker full run
-had 23 timing/cascade failures in 10 unchanged files; all affected files passed isolated,
-and 117 related tests passed. This is not an independent green full-suite claim. Optional
+summary turn used only gathered evidence (29 seconds). Reviewer build/typecheck passed; its
+initial full run had 23 failures/timeouts across 10 unchanged files. Isolated reruns passed,
+as did 117 related tests. Resource contention is suspected, not proven. There is no independent
+single full-suite pass claim. The four-worker full pass above is our own validation. Optional
 polish is at the roadmap end; exact-head three-platform CI remains authoritative.
 
 ### R6c done — PR #151; post-merge CI green
@@ -90,7 +91,10 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R12a implemented — pending closing delivery gates
+### R12a done — PR #152; post-merge CI green
+
+PR #152 merged as `35f37ba` after all three PR platforms passed. Exact post-merge CI
+34023253550 passed all three platforms. Remaining gate wording below is historical.
 
 Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
 path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for

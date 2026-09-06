@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Committed vision; R12a is implemented with closing delivery gates. R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Committed vision; R6g is implemented with closing delivery gates; R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -658,7 +658,7 @@ exactly this granularity.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R12a *(implemented; closing delivery gates)* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
+| R12a *(done, [PR #152](https://github.com/agentkitai/agentrig/pull/152))* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
 | R12b | The prompt shows semantic effect, not the raw call: paths that may change, whether it reaches the network, what the grant would cover in future. TUI keys grow `s` = scope this grant down (edit resource before granting) | cli |
 | R12c | `/permissions` lists live grants with age and hit-count; revocation applies immediately; a "why was this allowed" line on any auto-decided call names the grant or rule that decided it | cli |
 | R12d | Subagent inheritance is explicit: a child receives the parent's grants filtered by `delegable`, never the full set — the shared-policy-object design from M7d gains a per-subject view | core |
