@@ -152,6 +152,10 @@ it("actual X4 checker preserves the signed human pending/FAIL/PASS gate without 
     const report = await readEvaluationReport(checked.manifestPath);
     expect(report.outcome).toBe(patch.verdict === "FAIL" ? "FAIL" : "BLOCKED");
   }
+  const partialWithHumanFailure = structuredClone(checked.evidence);
+  partialWithHumanFailure.behavior.complete = false;
+  partialWithHumanFailure.humanAssessment = { ...manifest.humanVerdict, outcome: "FAIL" };
+  expect(assessVerificationLanes(partialWithHumanFailure).verdict).toBe("FAIL");
   // A checker-owned claim of human approval cannot replace the manifest's existing gate.
   checked.evidence.humanAssessment = manifest.humanVerdict;
   delete manifest.humanVerdict;

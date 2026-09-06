@@ -66,7 +66,9 @@ export function assessVerificationLanes(input?: VerificationEvidence) {
     return verdict;
   });
   if (evidence.behavior.humanReview === "required") lines.push(`Human semantic assessment: ${JSON.stringify(evidence.humanAssessment ?? "pending/unverified")}`);
-  const verdict: VerificationVerdict = verdicts.includes("FAIL") ? "FAIL" : verdicts.every(v => v === "SKIP") ? "SKIP" :
+  const humanFailure = evidence.behavior.humanReview === "required" && evidence.humanAssessment?.outcome === "FAIL";
+  if (humanFailure) gaps.push("human semantic component: FAIL; incomplete automatic checks cannot hide this failure");
+  const verdict: VerificationVerdict = verdicts.includes("FAIL") || humanFailure ? "FAIL" : verdicts.every(v => v === "SKIP") ? "SKIP" :
     verdicts.every(v => v === "PASS") ? "PASS" : "BLOCKED";
   lines.push(`Combined: ${verdict}; no partial pass. Matching evaluator checks never force the model grader to pass.`);
   return { verdict, text: lines.join("\n"), gaps };
