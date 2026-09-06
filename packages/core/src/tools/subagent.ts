@@ -225,14 +225,14 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
         }
       }
 
-      const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
-      const config = opts.childConfig(choice);
-      const permissionGrants = childPermissionView(ctx, config.permissionGrants);
       const parentPolicy = currentSandboxPolicy();
       if (opts.isolation === "worktree" && parentPolicy !== undefined) {
         // Not SandboxDeniedError: no implicit escape retry for host Git metadata preparation.
         throw new Error("isolated worktree preparation is unavailable inside an enforcing parent sandbox; common Git metadata is not exposed");
       }
+      const choice: SubagentChoice | undefined = input.provider === undefined ? undefined : { provider: input.provider };
+      const config = opts.childConfig(choice);
+      const permissionGrants = childPermissionView(ctx, config.permissionGrants);
       if (parentPolicy !== undefined && (
         config.sandbox === undefined || config.sandbox.mode === "none" ||
         (parentPolicy.mode === "read-only" && config.sandbox.mode !== "read-only") ||
