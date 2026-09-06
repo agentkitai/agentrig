@@ -15,6 +15,7 @@ export * from "./hooks.js";
 export { Checkpointer, isCheckpointerHook, type CheckpointHookEvent, type CheckpointState } from "./checkpointer.js";
 export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";
+export * from "./turn-strategy.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";
 export * from "./extensions.js";
