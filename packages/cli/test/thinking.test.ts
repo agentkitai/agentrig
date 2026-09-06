@@ -1,5 +1,9 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createElement } from "react";
@@ -58,3 +62,54 @@ it("export, memory, supervisor and event rendering never stringify thinking payl
   }
   expect(eventsToTranscript([event])).toContain("thinking replay and disclosed text");
 });
+
+it("actual CI CLI replays signed thinking across a read tool but excludes it from report and OTLP", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agentrig-thinking-ci-"));
+  cleanups.push(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(join(cwd, "home")); await writeFile(join(cwd, "task.txt"), "Read task.txt and finish.");
+  const requests: Array<{ messages: Array<{ content: Array<Record<string, unknown>> }> }> = [];
+  const telemetry: string[] = [];
+  const server = createServer(async (request, response) => {
+    let body = ""; for await (const chunk of request) body += chunk;
+    if (request.url === "/traces") { telemetry.push(body); response.setHeader("content-type", "application/json"); response.end("{}"); return; }
+    requests.push(JSON.parse(body)); const first = requests.length === 1;
+    const events = [
+      { type: "message_start", message: { usage: { input_tokens: 10 } } },
+      { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: thinking.text } },
+      { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: thinking.signature } },
+      { type: "content_block_stop", index: 0 },
+      ...(first ? [
+        { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "read", name: "read_file" } },
+        { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: JSON.stringify({ path: "task.txt" }) } },
+        { type: "content_block_stop", index: 1 },
+      ] : [{ type: "content_block_delta", delta: { type: "text_delta", text: "NORMAL_ANSWER" } }]),
+      { type: "message_delta", delta: { stop_reason: first ? "tool_use" : "end_turn" }, usage: { output_tokens: 2 } },
+    ];
+    response.setHeader("content-type", "text/event-stream"); response.end(events.map(e => `data: ${JSON.stringify(e)}\n\n`).join(""));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  cleanups.push(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("no fixture listener");
+  const endpoint = `http://127.0.0.1:${address.port}`;
+  const result = await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)),
+    "run", "--ci", "--provider", "anthropic", "--model", "fixture", "--base-url", endpoint,
+    "--task-file", "task.txt", "--report", "report.md", "--root", join(cwd, "logs"), "--otel-endpoint", `${endpoint}/traces`,
+    "--max-turns", "2", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
+  { cwd, timeout: 15_000, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), ANTHROPIC_API_KEY: "fixture-only" } });
+  expect(requests).toHaveLength(2);
+  expect(requests[1]!.messages.flatMap(m => m.content).filter(b => b.type === "thinking"))
+    .toEqual([{ type: "thinking", thinking: thinking.text, signature: thinking.signature }]);
+  const report = await readFile(join(cwd, "report.md"), "utf8");
+  expect(report).toContain("Outcome: done"); expect(report).toContain("NORMAL_ANSWER");
+  expect(telemetry.length).toBeGreaterThan(0);
+  for (const output of [report, result.stdout + result.stderr, telemetry.join("")]) {
+    expect(output).not.toContain(thinking.text); expect(output).not.toContain(thinking.signature!);
+  }
+  const files = await readdir(join(cwd, "logs"));
+  const raw = await readFile(join(cwd, "logs", files.find(f => f.endsWith(".jsonl"))!), "utf8");
+  expect(raw).toContain(thinking.text); expect(raw).toContain(thinking.signature!);
+  const events = raw.trim().split("\n").map(line => JSON.parse(line));
+  expect(events.find(e => e.type === "session.start").task).toBe("");
+  expect(events.some(e => e.type === "tool.result" && e.id === "read" && e.ok)).toBe(true);
+}, 30_000);

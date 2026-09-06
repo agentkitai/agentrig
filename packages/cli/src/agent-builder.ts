@@ -56,6 +56,7 @@ import { buildProviders, type ProviderOptions, type ProviderSet } from "./provid
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 import { RESERVED_COMMAND_NAMES } from "./tui/commands.js";
+import { acquireOtel, validateOtel } from "./otel.js";
 
 function promptBlocks(options: {
   system: string;
@@ -126,6 +127,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Explicit CLI activation only; never loaded from config or environment. */
+  otelEndpoint?: string;
   /** Runtime-only heartbeat profile; never accepted from project config fields. */
   heartbeat?: "empty" | "checklist";
   extension?: string[];
@@ -274,6 +277,7 @@ export async function readMcpConfig(path: string): Promise<Array<McpServerConfig
 }
 
 export interface BuiltAgent {
+  closeTelemetry?(): Promise<void>;
   /** Same actual policy used by the runtime; read-only operator surfaces must not bypass denies. */
   permissions?: PermissionPolicy;
   agent: Agent;
@@ -460,6 +464,7 @@ export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
 }
 
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  validateOtel(opts);
   if (opts.mcpConfig !== undefined && opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
     throw new Error("MCP servers start in the host process outside the tool sandbox; remote HTTP requires explicit --sandbox-network and network permission; stdio requires --sandbox none");
   opts = heartbeatBuildOptions(opts);
@@ -651,12 +656,14 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(opts.heartbeat === undefined ? {} : { questions: false }),
     ...(opts.diagnostics === undefined ? {} : { diagnostics: opts.diagnostics }) });
 
+  let telemetry: ReturnType<typeof acquireOtel>;
+  const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
     tools.push(
       subagentTool(
-        subagentOptions({
+        (() => { const options = subagentOptions({
           opts,
           extras,
           budget,
@@ -667,7 +674,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           skills,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
-        }),
+        }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession }) }; })(),
       ),
     );
   }
@@ -684,6 +691,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
     extensions,
     provider,
     tools,
@@ -710,6 +718,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onQuestion === undefined ? {} : { onQuestion: extras.onQuestion }),
   });
 
-  return { agent, permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
+  return { agent, ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }
