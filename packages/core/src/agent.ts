@@ -8,7 +8,7 @@ import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provid
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool } from "./tool.js";
 import type { SandboxConfig } from "./sandbox.js";
-import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
+import { type CompactionStrategy, summarizeOlderTurns, compactWithProvenance } from "./compaction.js";
 import { SessionStore, assertSessionId } from "./session-store.js";
 import { runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { isCheckpointerHook } from "./checkpointer.js";
@@ -813,7 +813,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             compactionExhausted = true;
           } else try {
             // raced so control.abort() wins over a hung summarization call, same as tools
-            const compacted = await raceAbort(compaction.compact(messages, provider, abortController.signal), "compaction");
+            const compacted = await raceAbort(compactWithProvenance(compaction, messages, provider, abortController.signal), "compaction");
             const after = estimateTokens(system, compacted);
             const changed = compacted !== messages;
             if (changed) {

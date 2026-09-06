@@ -19,6 +19,7 @@ export function readFileTool(): Tool<ReadFileInput, string> {
     inputSchema: ReadFileInput,
     permission: "read",
     effects: "read-only",
+    resultSource: { file: input => input.path },
     paths: (input) => [input.path],
     async execute(input, ctx): Promise<ToolResult<string>> {
       const path = resolveIn(ctx.cwd, input.path);

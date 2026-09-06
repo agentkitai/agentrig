@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createAgent,
   RulePolicy,
@@ -1062,7 +1062,7 @@ describe("a subagent cannot run away", () => {
     const provider = new ScriptedProvider([
       [
         say("PARTIAL FINDING: the bug is in parser.ts"),
-        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
+        { type: "tool_use" as const, id: "c", name: "abort_gate", input: { text: "x" } },
         usage(1, 1),
         stop("tool_use"),
       ],
@@ -1072,11 +1072,36 @@ describe("a subagent cannot run away", () => {
         stop("tool_use"),
       ]),
     ]);
-    const { tool, ctx, controller } = bareTool(provider, { slow: true });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const gate: AnyTool = { ...echoTool(), name: "abort_gate", execute: async (_input, context) => {
+      context.signal.throwIfAborted();
+      await new Promise<void>((_resolve, reject) => {
+        context.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true });
+        entered();
+      });
+      throw new Error("abort gate must not finish normally");
+    } };
+    const { tool, ctx, controller } = bareTool(provider, { childExtraTools: [gate] });
+    // Slow startup deterministically catches the old 25ms wall-clock assumption: the abort
+    // could precede the first delta, so there was no partial finding for production to retain.
+    const originalAppend = SessionStore.prototype.append;
+    const delayed = vi.spyOn(SessionStore.prototype, "append").mockImplementation(async function (this: SessionStore, ...args) {
+      if (args[1].type === "turn.start") await new Promise(resolve => setTimeout(resolve, 60));
+      return originalAppend.apply(this, args);
+    });
     const running = tool.execute({ task: "long job" }, ctx);
-    // abort while the FIRST turn is still mid-tool, so that turn never reaches `turn.end` and the
-    // text it carried exists only in the buffer the post-loop promotion reads
-    setTimeout(() => controller.abort(), 25);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([started, new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("child never entered its first tool")), 2_000);
+      })]);
+    } finally {
+      clearTimeout(timeout);
+      controller.abort();
+      await running;
+      delayed.mockRestore();
+    }
     const result = await running;
 
     expect(result.isError).toBe(true);
