@@ -183,8 +183,9 @@ must not be hidden by an earlier matching exit. See [R14b](plans/R14b.md); gradi
 R14c shares that fold between `sessions show --evidence` and M6 claims-vs-evidence grading.
 Current declared unfinished or unverified checks and incomplete views can only force a negative
 verdict; matching exits never establish semantic proof or force pass. Dropped/legacy items remain
-explicit without new legacy requirements. Attach supplies a bounded full-stream frozen report,
-not just recent history; CLI reads finished physical logs without models/config. See [R14c](plans/R14c.md).
+explicit without new legacy requirements. Attach supplies a bounded frozen current-run report,
+not just recent history; resumed/fork runs name their starting sequence and prior history is not
+assessed. CLI separately reads finished physical logs without models/config. See [R14c](plans/R14c.md).
 
 ### 2.6 Agent + session
 

@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R14c evidence grading/reporting is implemented, pending delivery gates; R5b is merged (PR #167), pending post-merge CI; R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14c evidence grading/reporting is implemented, pending delivery gates; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -19,7 +19,20 @@ files (32 seconds). The 39 focused cases include actual >400-event attach retent
 removal and tail-only grading mutations each failed the discriminating runtime controls and were
 restored. One bounded review and exact-head CI remain pending.
 
-### R5b implemented — delivery gates pending
+The single review `24f6be90-8c4a-480d-8032-b0df40f0d362` requested a HIGH resume correction;
+[original findings](plans/R14c-review.md) are retained verbatim (191 seconds, 32 reported turns
+despite the requested 16-turn ceiling). Trusted attach now anchors the current run's first
+session boundary and explicitly excludes unassessed prior history; direct partial inputs still
+refuse. Actual resumed legacy/mismatch controls pass and both fail without the fix. No second
+broad review. R5b main `fef3f46` is integrated; its post-merge CI `34031416228` passed all three jobs.
+
+Final combined build/typecheck/full suite passes 2,442 tests plus two skips across 138 files
+(four workers, 42 seconds). The PR proceeds to fresh exact-head all-platform CI.
+
+### R5b done — PR #167; post-merge CI green
+
+Merged main `fef3f46` passed all three jobs in post-merge CI `34031416228`; the checkpoints
+below remain historical implementation records.
 
 The extension lane resumes after delivered H7b PR #164. A private per-build disabled latch
 spans registered hooks, tools, synchronous descriptors/probes and slash commands. Actual throws

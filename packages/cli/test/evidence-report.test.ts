@@ -6,6 +6,7 @@ import { SessionStore } from "@agentkitai/agentrig-core";
 import { reportEvidence } from "@agentkitai/agentrig-supervisor";
 import { showSessionEvidence } from "../src/sessions.js";
 import { buildProgram } from "../src/program.js";
+import * as config from "../src/config.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -25,13 +26,16 @@ it("actual sessions show --evidence shares the fold, is read-only, and needs no 
   await mkdir(join(root, ".agentrig")); await writeFile(join(root, ".agentrig", "config.json"), "malformed secret config must not be read");
   const original = await readFile(store.pathFor("s"), "utf8");
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
+  const configuration = vi.spyOn(config, "loadRunConfig").mockImplementation(() => { throw new Error("config access forbidden"); });
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   await buildProgram().parseAsync(["sessions", "show", "--evidence", "s", "--root", root], { from: "user" });
   expect(output).toHaveBeenCalledWith(reportEvidence(await store.readAll("s")).text);
   const text = String(output.mock.calls[0]![0]);
   expect(text).toContain("latest exit mismatch"); expect(text).toContain("call#2 → result#3");
+  expect(text).toContain("supplied physical-session history; fork ancestors are not assessed");
   expect(text).not.toContain("private raw output"); expect(text).not.toContain("private task");
-  expect(network).not.toHaveBeenCalled(); expect(await readFile(store.pathFor("s"), "utf8")).toBe(original);
+  expect(network).not.toHaveBeenCalled(); expect(configuration).not.toHaveBeenCalled();
+  expect(await readFile(store.pathFor("s"), "utf8")).toBe(original);
 });
 it("unfinished, corrupt and conflicting views refuse instead of reporting completion", async () => {
   const { store, root } = await fixture(false);
