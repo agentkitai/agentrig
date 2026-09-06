@@ -243,16 +243,16 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     ...(config.origin === undefined ? {} : { origin: config.origin }),
   };
   await emit({ type: "permission.request", req: permReq });
-  if (isEnded() || signal.aborted) return resultBlock("aborted before permission authorization", true);
-  await config.permissionGrants?.flush(emit);
+  if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
   let decision = await config.permissions.decide(permReq);
+  await config.permissionGrants?.flush(emit);
   if (decision === "ask" && config.permissionGrants !== undefined) {
-    decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq) : "deny";
+    decision = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(permReq, true) : "deny";
   }
   await emit({ type: "permission.decision", d: decision });
   if (decision === "ask") {
     decision = config.onAsk ? await config.onAsk(permReq) : "deny";
-    if (isEnded() || signal.aborted) return resultBlock("aborted while awaiting permission", true);
+    if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
     if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
     await emit({ type: "permission.decision", d: decision });
@@ -261,7 +261,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });
     return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
   }
-  if (isEnded() || signal.aborted) return resultBlock("aborted before tool execution", true);
+  if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before tool execution", true);
 
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
   const toolEffect = checkpointers.length === 0 ? "read-only" : typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace");

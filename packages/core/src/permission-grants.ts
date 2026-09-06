@@ -122,9 +122,9 @@ export class PermissionGrantRegistry {
     const promise = (this.draining ?? Promise.resolve()).then(work); this.draining = promise;
     try { await promise; } finally { if (this.draining === promise) this.draining = undefined; }
   }
-  decide(req: PermissionRequest): "allow" | "deny" | "ask" {
+  decide(req: PermissionRequest, auditRequired = false): "allow" | "deny" | "ask" {
     if (separateConsent(req)) return "ask";
-    if (this.auditBlocked) return "deny";
+    if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return "deny";
     for (const grant of this.grants.values()) {
       if (grant.subject !== this.subject || grant.duration.id !== (grant.duration.kind === "session" ? this.sessionId : this.taskId)) continue;
       if (grant.operation.tool !== req.tool || (grant.operation.class !== undefined && grant.operation.class !== req.class)) continue;

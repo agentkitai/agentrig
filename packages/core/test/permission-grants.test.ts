@@ -71,6 +71,11 @@ describe("live grant records", () => {
     expect(events).toEqual([{ type: "permission.granted", grant }]);
     r.revoke(grant.id); await r.flush(emit); expect(events).toHaveLength(2);
   });
+  it("audit-required runtime matching cannot consume a newly queued grant", async () => {
+    const r = registry(); r.grant(spec(r));
+    expect(r.decide(request(), true)).toBe("deny");
+    await r.flush(async () => {}); expect(r.decide(request(), true)).toBe("allow");
+  });
   it("never supplies sandbox escalation or MCP definition consent", () => {
     const r = registry(); r.remember(request(), "allow");
     for (const origin of ["sandbox-escalation", "mcp-definition-change"]) {
@@ -103,6 +108,24 @@ async function collect(session: ReturnType<ReturnType<typeof createAgent>["run"]
 }
 
 describe("core grant enforcement and audit", () => {
+  it("audits grants queued during an asynchronous base policy before using them", async () => {
+    const store = await fixture(); const r = new PermissionGrantRegistry(); const executed: string[] = [];
+    const session = createAgent({ provider: new Provider(["git status"]), tools: [tool(executed)],
+      permissions: { decide: async () => { await Promise.resolve(); r.grant(spec(r)); return "ask"; } },
+      permissionGrants: r, store, systemPrompt: "test" }).run("run", { cwd: store.root });
+    const { events } = await collect(session); expect(executed).toEqual(["git status"]);
+    expect(events.findIndex(e => e.type === "permission.granted")).toBeLessThan(events.findIndex(e => e.type === "tool.call"));
+  });
+  it("an aborted grant-enabled session never dispatches a late permission answer", async () => {
+    const store = await fixture(); const r = new PermissionGrantRegistry(); const executed: string[] = [];
+    let release!: () => void; let started!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; }); const entered = new Promise<void>(resolve => { started = resolve; });
+    const session = createAgent({ provider: new Provider(["git status"]), tools: [tool(executed)], permissions: new RulePolicy([]), permissionGrants: r,
+      store, systemPrompt: "test", abortGraceMs: 20, onAsk: async () => { started(); await barrier; return "allow"; } }).run("wait", { cwd: store.root });
+    const work = collect(session); await entered; session.control.abort(); release(); const { summary } = await work; expect(summary.reason).toBe("aborted");
+    const before = (await store.readPrefix(session.id)).events; await new Promise<void>(resolve => setImmediate(resolve));
+    expect(executed).toEqual([]); expect((await store.readPrefix(session.id)).events).toEqual(before);
+  });
   it("preserves explicitly shared child authority, with delegable still metadata until R12d", async () => {
     const store = await fixture(); const r = new PermissionGrantRegistry(); const id = store.create(); r.beginSession(id);
     r.grant(spec(r, { delegable: false })); const executed: string[] = [];
