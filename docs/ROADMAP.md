@@ -918,7 +918,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 |---|---|---|
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
-| 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
+| 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a (done) → R14b (closing gates) → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
@@ -1156,3 +1156,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
+- R14b polish: consider a separate unknown-command-attempt budget when non-shell custom/MCP
+  command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
+  Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,
+  not a JSON-resumable correlation cache; use full canonical replay and read-only observation copies.

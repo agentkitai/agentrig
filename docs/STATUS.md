@@ -14,6 +14,12 @@ resume, hook replacement, background/timeout and spoof/copy discrimination are c
 [Contract](plans/R14b.md). This follows delivered R14a, independent of H7b's sandbox classifier
 repair and completed R12d child grant views; it does not add grading or automatic check execution.
 
+Build/typecheck/full checks pass 2,377 tests plus two skips across 132 files (33 seconds).
+The receipt-drop and earlier-pass-masks-final-failure mutations each failed the actual-runtime
+control and were restored. One bounded Claude review `70f4a79a-df31-4cdd-90fe-9c9440a558b7`
+approved with no material findings (138 seconds, 13 turns), independently passing 18 focused
+tests. Optional notes stay at the roadmap end; current main `2df8c25` is integrated.
+
 ### R12d done — PR #163
 
 Merged main `2df8c25` passed all three post-merge jobs in CI `34029019887`; historical
