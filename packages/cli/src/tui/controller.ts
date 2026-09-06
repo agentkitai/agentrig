@@ -332,7 +332,8 @@ export class TuiController {
       // all, which is worse than not having one.
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
-      const sandboxEscalation = req.origin === "sandbox-escalation";
+      const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+      if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
       const standing = sandboxEscalation ? undefined : this.standing.get(req.tool);
       if (standing !== undefined) {
         resolve(standing);
