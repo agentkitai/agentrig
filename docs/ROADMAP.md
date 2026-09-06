@@ -21,6 +21,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done | R5a: trusted extension API (PR #157) | Atomic declared activation, registered identities, no child extension inheritance; post-merge CI green |
 | Implemented; closing gates | R14a: plan acceptance declarations | Optional bounded checks and first-request instruction; declaration is not proof |
 | Committed | R5b/R5c, R7–R11, R12c–R12d and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Implemented; closing gates | R12c: live grant inspection | Exact scope/age/counts, revocation and same-call decision attribution; review and exact-head CI |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
@@ -684,7 +685,7 @@ exactly this granularity.*
 |---|---|---|
 | R12a *(done, [PR #152](https://github.com/agentkitai/agentrig/pull/152))* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
 | R12b *(done, [PR #155](https://github.com/agentkitai/agentrig/pull/155))* | Prompt distinguishes declared paths/class/argv from unknown effects and network access. `s` edits bounded path/argv scope; exact future scope is previewed and explicitly confirmed only if it covers the current request. Both input paths preserve existing answers and separate sandbox/MCP consent. See [contract](plans/R12b.md). | cli + core matcher |
-| R12c | `/permissions` lists live grants with age and hit-count; revocation applies immediately; a "why was this allowed" line on any auto-decided call names the grant or rule that decided it | cli |
+| R12c *(implemented; closing delivery gates)* | `/permissions` shows exact live grants, age and matched-decision counts; exact-ID revocation applies to the next decision. Same-call optional policy receipts and correlated events name the actual rule/grant/handler or honest unknown, without re-evaluation or counting previews. See [contract](plans/R12c.md). | core + cli |
 | R12d | Subagent inheritance is explicit: a child receives the parent's grants filtered by `delegable`, never the full set — the shared-policy-object design from M7d gains a per-subject view | core |
 | R12e *(done, [PR #148](https://github.com/agentkitai/agentrig/pull/148))* | Semantic authorization never derives from names, transcript prose or server read-only hints. Explicit `--allow-command` / config argv prefixes bind to trusted post-hook parsed foreground operations; unsupported syntax cannot satisfy a narrow rule and defaults to ask without separate explicit blanket authority. Denies retain precedence; R5d consent and sandbox containment remain independent. See [contract and limits](plans/R12e.md). Grant records/UI/lifecycle remain R12a–R12d. | core, cli |
 
@@ -877,7 +878,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 |---|---|---|
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
-| 2 | R12e (done) → R12a (done) → R12b (done) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
+| 2 | R12e (done) → R12a (done) → R12b (done) → R12c (closing gates) → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a (closing gates) → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
@@ -1084,6 +1085,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R6g polish: normalize fully sanitized-away hints to an absent property; explain beside byte
   accounting that the first admitted entry must fit together with its worked example.
   Neither changes the total cap, selection semantics, emitter ownership or approval policy.
+- R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
+  consider suppressing duplicate handler-source lines where the TUI already printed the answer.
+  Preserve visible rule/grant reasons, honest handler attribution and independent consent.
 - Compaction option polish found during R13c fixtures: validate or deliberately support
   `keepLastMessages: 0`; the current built-in boundary scan assumes a retained last message.
   Preserve conservative summary ancestry and keep this separate from permission guard delivery.

@@ -125,6 +125,11 @@ with a separate exact-scope preview and confirmation in the TUI. The proposal mu
 current request using the same pure scope matcher as runtime enforcement. No effects are inferred
 from names/prose/MCP hints; separate sandbox/MCP-change consent never becomes standing authority.
 See [R12b](plans/R12b.md). Grant inspection/reasons and delegation remain R12c/R12d.
+R12c adds live grant age/matched-decision counts and exact-ID revocation. Optional same-call
+policy receipts identify actual rule/grant decisions without re-evaluation; unknown custom
+attribution stays unknown. Correlated decision events drive chat/trace explanations, never
+restore authority. Preview matches do not count as consumed grants. See [R12c](plans/R12c.md);
+explicit child filtering remains R12d.
 
 v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
 `cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so
