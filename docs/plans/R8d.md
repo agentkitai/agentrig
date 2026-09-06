@@ -180,3 +180,12 @@ No second general review or library edits. All named mutations are restored.
 Post-fix build and typecheck pass. Full Docker-required validation passes 2,911
 tests plus two existing skips across 179 files (four workers, 61.36 seconds);
 the separate real Chromium smoke passes. These are author-run checks.
+
+Integrated root-verified green R15c main `749ff265` (PR #193, CI `34061897223`
+and structure `34061897204`). Combined build/typecheck and Docker-required full
+suite pass 2,931 tests plus two existing skips across 181 files (61.68 seconds).
+The real Chromium smoke also passes with received-WebSocket-frame canaries proving
+standard ACP updates omit private thinking text and opaque signatures. No raw-event
+opt-in is enabled, and canonical core replay/log behavior is unchanged. The prior
+single review covers the implementation; this mechanical integration is not a
+second review. Exact-head platform and scripted-structure CI remain required.

@@ -5,15 +5,17 @@ R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697
 R10b PR #177 post-main CI `34040691166` passed all three platforms.
 R15b PR #185 is done: main `74c5073`, CI `34048869709` and structure `34048869702` green.
 R15c is done (PR #193, all four post-main checks green).
+The following R15c checkpoints are historical; the completed receipt below
+supersedes their then-pending gates.
 R15c implementation and the single review's compaction fix pass 56 focused tests
 and full Docker validation (2,873 passed, two skips, 177 files) on `ff6758c`.
 Original review: REQUEST_CHANGES, requested 24/reported 27 turns; three compaction
 controls reproduce on reviewed code and pass after correction. Author pre-auth
-refusal control also fails before/passes after. Exact PR/post-main gates remain.
+refusal control also fails before/passes after. Exact PR/post-main gates were pending then.
 Integrated green main `b3bb06a` with R15f/R8c: install/build/typecheck, 59 focused
 controls and full Docker **2,913 passed, two skips, 180 files, 59.52s** pass.
 Actual CI CLI signed-thinking replay excludes all reasoning from report/telemetry
-while preserving canonical logs. New exact-head and post-main CI remain pending.
+while preserving canonical logs. Exact-head and post-main CI were pending then.
 R15a #188 and child abort-hook fixture repair #191 are done: repaired main `3174475`
 passed Linux/macOS/Windows CI `34056045886` and structure `34056045804` without reruns.
 [Repair receipt](https://github.com/agentkitai/agentrig/pull/191#issuecomment-5561792580);
@@ -64,7 +66,10 @@ queues and literal reference UI. Eighteen HTTP/WS/actual runtime controls and on
 real Chromium task/permission/question/cancel/XSS smoke pass. One bounded Claude
 review approved with fixes (24 requested / 37 reported turns); findings and
 counterevidence are preserved in the plan. Post-fix build/typecheck and full
-Docker checks pass 2,911 tests plus two skips. Updated-main gates remain pending.
+Docker checks pass 2,911 tests plus two skips. Integrated R15c build/typecheck and
+Docker full checks pass 2,931 plus two skips across 181 files; Chromium additionally
+checks actual received frames exclude thinking/signature canaries. Exact-head
+Linux/macOS/Windows and scripted-structure gates remain pending.
 
 R15c is done (PR #193): main `749ff265b031f19040307b60b44097e825f1c2f9`
 passed CI `34061897223` and structure `34061897204`, all four green.
