@@ -1142,3 +1142,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   retry when a later gate refuses; the `turn.continued` event already records attempts only.
   Consider pairing the pre-existing pre-model veto's `turn.start` with `turn.end` separately;
   H7a preserves its existing done outcome and does not change that lifecycle contract.
+- Windows fixture timing follow-up: investigate the R13c paired real edit→test fixture's
+  one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
+  Preserve assertions and coverage; prefer controlled workers or independently scoped paired
+  setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.

@@ -88,6 +88,15 @@ renderers, CI suites and delivery sections preserved. Combined build/typecheck a
 2,337 tests plus two skips across 125 files pass (four workers, 31 seconds). No second
 review for mechanical integration. R12c post-merge CI 34027192976 remains pending.
 
+PR #160 then advanced main to `9eb28cd`; its committed R16 band and Static-scrollback
+renunciation are retained. Repeated build/typecheck/full 2,337 + two skips across 125 files
+pass (four workers, 32 seconds). R12c's main gate subsequently passed and is marked done.
+The preceding head's Windows run 34027283321 initially hit the unchanged R13c real edit→test
+fixture's 5-second timeout; isolated local checks and the full three-file step passed.
+Exactly one authorized failed-job rerun on identical head `bca3348` passed all platforms.
+Runner timing/contention is suspected, not proven; the original failure is retained in PR #161.
+That diagnostic success is not the final-head gate after this main integration.
+
 ### R12c done — PR #158; post-merge CI green
 
 PR #158 merged as `06f5b4b`; post-merge CI 34027192976 passed all three platforms.
