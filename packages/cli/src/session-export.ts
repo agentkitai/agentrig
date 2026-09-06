@@ -124,6 +124,9 @@ export function redactExportMessages(messages: readonly Message[], literals: rea
       } }),
     };
     switch (b.type) {
+      case "thinking":
+        omittedOpaque++;
+        return { type: "text", text: "[thinking omitted: opaque replay and disclosed text]", ...labels };
       case "text": return { ...b, ...labels, text: text(b.text) };
       case "tool_use": return { ...b, ...labels, id: text(b.id), name: text(b.name), input: json(b.input) };
       case "tool_result": return { ...b, ...labels, toolUseId: text(b.toolUseId), content: typeof b.content === "string" ? text(b.content) : b.content.map(block),

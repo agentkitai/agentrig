@@ -370,7 +370,9 @@ describe("reasoning replay (the live risk for turn 2 of a tool conversation)", (
     const provider = new OpenAIChatGPTProvider({ model: "m", auth, fetchFn, retry: { sleep: async () => {} } });
 
     // turn 1: the model asks for a tool
-    await collect(provider.stream({ ...baseReq, messages: [{ role: "user", content: [{ type: "text", text: "go" }] }] }, new AbortController().signal));
+    const first = await collect(provider.stream({ ...baseReq, messages: [{ role: "user", content: [{ type: "text", text: "go" }] }] }, new AbortController().signal));
+    const thinking = first.filter(event => event.type === "thinking").map(event => event.block);
+    expect(thinking).toHaveLength(1);
 
     // turn 2: history carries the tool_use + its result, as the agent loop builds it
     await collect(
@@ -379,7 +381,7 @@ describe("reasoning replay (the live risk for turn 2 of a tool conversation)", (
           ...baseReq,
           messages: [
             { role: "user", content: [{ type: "text", text: "go" }] },
-            { role: "assistant", content: [{ type: "tool_use", id: "fc_9", name: "bash", input: {} }] },
+            { role: "assistant", content: [...thinking, { type: "tool_use", id: "fc_9", name: "bash", input: {} }] },
             { role: "user", content: [{ type: "tool_result", toolUseId: "fc_9", content: "out" }] },
           ],
         },

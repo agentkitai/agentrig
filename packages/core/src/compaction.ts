@@ -60,6 +60,8 @@ function blockToTranscript(b: ContentBlock): string {
     }
     case "image":
       return "[image]";
+    case "thinking":
+      return "[thinking omitted]";
   }
 }
 
@@ -90,6 +92,11 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
       if (cut <= 1) return messages;
 
       const older = messages.slice(1, cut);
+      // Discard older thinking from the summary input first (blockToTranscript), then
+      // summarize in this same operation. An eviction-only return can trip the loop's
+      // no-progress latch. Keep the complete recent tool pairs, including their opaque
+      // reasoning, verbatim after the new advisory summary; never freeze all rounds
+      // since the original task or single-task sessions could never compact.
       const trust = joinContentTrust(older.flatMap(message => message.content));
       let summary = "";
       for await (const ev of provider.stream(
