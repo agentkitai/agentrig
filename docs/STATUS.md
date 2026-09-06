@@ -24,7 +24,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
-### R9b implemented — validation/review/PR gates pending
+### R9b implemented — reviewed and tested; PR/CI gates pending
 
 Explicit mapped E1 tasks, supported config profiles, pinned local worker/checker images,
 default no-provider preview, opt-in execution and shared main/advisory accounting.
@@ -34,8 +34,13 @@ Historical sessions are identities/baselines, never replayed authorization. Sepa
 coordinator receipts preserve original logs. [Contract and limitations](plans/R9b.md).
 
 R9a is fully done: [PR #175 final receipt](https://github.com/agentkitai/agentrig/pull/175#issuecomment-5559857591).
-No live evaluation or benefit claim is part of this row. Expanded fixture controls,
-full validation and exactly one bounded independent review precede PR readiness.
+No live evaluation or benefit claim is part of this row. Final author build/typecheck
+and full suite pass **2,652 tests plus two existing skips / 151 files, 40.28 seconds**
+with actual Linux container fixtures enabled. One independent review (238 seconds,
+22/max24 turns) passed typecheck and its full 2,649+2 suite; it did not run build.
+Its sole material finding, missing direct event-render coverage, is fixed with
+trace/chat null/true/false advisory controls. Named guard mutations were detected
+and restored. [Original review](plans/R9b-review.md). Exact-head CI and root merge remain.
 
 ### R10b done — PR #177; post-merge CI green
 

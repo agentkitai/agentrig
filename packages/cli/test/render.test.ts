@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it.each([null, true, false])("renders coordinator evaluation outcomes distinctly from advisory assessment (%s)", advisoryPass => {
+  const event = HarnessEvent.parse({ type: "eval.result", seq: 1, sessionId: "coordinator", ts: 1,
+    task: "X4", sourceSessionId: "original", runId: "00000000-0000-4000-8000-000000000001",
+    profile: "candidate", outcome: "BLOCKED", baselineOutcome: "PASS",
+    reportedTokens: 45, usageComplete: false, totalCostUsd: null, advisoryPass });
+  const advisory = advisoryPass === null ? "unavailable" : advisoryPass ? "pass" : "fail";
+  expect(renderEvent(event)).toContain('"X4" BLOCKED (baseline PASS) profile="candidate" reportedTokens=45 usage=unknown');
+  expect(renderEvent(event)).toContain(`advisory=${advisory}`);
+  expect(renderChatEvent(event)).toBe(`Evaluation X4: BLOCKED (baseline PASS; advisory ${advisory})`);
+  expect(HarnessEvent.safeParse({ ...event, reportedTokens: -1 }).success).toBe(false);
+});
+
 it("renders a real budgeted truncation continuation distinctly from provider retries", () => {
   const event = HarnessEvent.parse({ type: "turn.continued", seq: 2, sessionId: "s", ts: 1,
     n: 3, from: 2, attempt: 2, maxAttempts: 2, reason: "max_tokens" });

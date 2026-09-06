@@ -598,7 +598,7 @@ execution and maintenance boundaries; unattended permission and failure paths ne
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R7a *(in progress; [contract](plans/R7a.md))* | `agentrig schedule` subcommand family managing a plain JSON table in `.agentrig/schedule.json` (`ls/add/rm`); each entry: cron expression, task template, flags. **No daemon**: `agentrig schedule tick` runs whatever is due and exits — the user's crontab/launchd/systemd owns wall-clock time. A `run.scheduled` event marks provenance | cli |
+| R7a *(done, PR #176 + repair #178; [contract](plans/R7a.md))* | `agentrig schedule` subcommand family managing a plain JSON table in `.agentrig/schedule.json` (`ls/add/rm`); each entry: cron expression, task template, flags. **No daemon**: `agentrig schedule tick` runs whatever is due and exits — the user's crontab/launchd/systemd owns wall-clock time. A `run.scheduled` event marks provenance | cli |
 | R7b | `HEARTBEAT.md` convention: if present, `tick` with nothing due still runs one bounded session ("work through this checklist; stop when nothing applies") with turn budget from config; silence (nothing applicable) produces no artifacts beyond the log | cli |
 | R7c | Unattended report: a scheduled run appends one line to `.agentrig/schedule.log` (session id, outcome, spend) and — when memory is configured — ingests; failures surface at the *next interactive* session start ("2 scheduled runs failed since Friday") | cli |
 
@@ -641,7 +641,7 @@ regression suite for the harness itself.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R9a *(done, PR #175; [contract](plans/R9a.md))* | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document intentional redaction loss; supported text/tool content round-trips via versioned canonical fields. Opaque images refuse unless explicitly omitted; unknown types fail closed | core + cli |
-| R9b | `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` with this interface | supervisor + cli |
+| R9b *(implemented; closing review/CI gates; [contract](plans/R9b.md))* | `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` with this interface | supervisor + cli |
 | R9c | Nightly structure-regression job using the E1 eval-set definition and E2 reports, driven by a scripted provider. This validates mechanics, not task success or model quality; preserve E3's separate live evaluation lane | docs + .github |
 
 Acceptance: supported secret-free exports round-trip to the identical materialized message list

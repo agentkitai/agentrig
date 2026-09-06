@@ -94,6 +94,8 @@ these directories into its disposable workspace, runs the pinned repository's
 existing `pnpm build` without network, and requires an unchanged tracked tree and
 index. Missing directories, build failure or tracked changes BLOCK before provider
 construction. There is no user-supplied preparation script or product image builder.
+This fixed preparation has a 120-second outer bound on the worker's two-CPU budget;
+slower matching images may therefore BLOCK safely before any provider request.
 
 Container images are trusted evaluator/operator code, not authenticated by a hash
 alone. Workers use network none, read-only root, dropped capabilities, PID/memory/CPU
@@ -141,6 +143,18 @@ Named negative controls detected and restored before review:
   `execFile` does not forward `detached`. Using `spawn` with a real owned process
   group made that same control pass in 49 ms. No timeout or assertion was weakened.
 
-Pending: final combined checks after the review, exactly one bounded independent
-Claude review, updated-main PR and exact-head all-platform CI. These numbers are
-author validation, not attributed to the independent reviewer.
+One bounded independent Claude review completed on clean snapshot `1d7a538`:
+session `7f1cee19-f134-4a87-a109-a26c20a67c2f`, 238 seconds, 22 reported turns
+of requested maximum 24. It independently passed typecheck and the full suite with
+the container fixture environment set: **2,649 passed, two skipped, 151 files,
+40.67 seconds**. It did not run build. [Verbatim findings](R9b-review.md).
+
+The sole material finding was missing direct renderer coverage for `eval.result`.
+Added trace/chat tests for BLOCKED outcomes with null/true/false advisory values and
+invalid negative usage. Optional roadmap annotation and existing preparation-bound
+documentation were corrected; an unrelated pre-existing container was left untouched.
+There is no second review round. Final combined checks and PR/CI gates remain pending.
+
+Final author checks after the review fix: build/typecheck passed; full suite with
+the captured Linux fixture image IDs passed **2,652 tests plus two existing skips,
+151 files, 40.28 seconds**. Exact-head three-platform PR CI remains the delivery gate.
