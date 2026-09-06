@@ -1,5 +1,8 @@
 # AgentRig
 
+The [authenticated local reference web client](docs/WEB.md) uses the same ACP
+controller as the TUI, with explicit one-time permissions and structured questions.
+
 `agentrig doctor` stays offline/read-only. Explicit `agentrig doctor --probe` runs potentially
 billable bounded samples against the selected main provider, recording local configuration-bound
 observations used by advertised capabilities. Empirical tool/parallel/JSON/cache observations
