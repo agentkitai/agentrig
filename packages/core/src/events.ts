@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MessageSchema } from "./messages.js";
+import { MessageSchema, InstructionContextSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
 import { ShellOperationSchema } from "./shell-operation.js";
 import { PermissionClass, Decision } from "./permission-types.js";
@@ -174,6 +174,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.start"),
     task: z.string(),
+    context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
     model: z.string(),
@@ -192,6 +193,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.resume"),
     task: z.string(),
+    context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
     model: z.string(),
@@ -210,6 +212,8 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   /** Authoritative conversation boundary persisted after the in-memory message is appended. */
   z.object({ type: z.literal("message.append"), message: MessageSchema }),
+  z.object({ type: z.literal("context.delegation"), principal: z.string().max(256).regex(/^hook:.+/),
+    action: z.enum(["delegated", "revoked"]), delegation: z.string().max(64) }),
   /**
    * A transient provider failure was retried before anything streamed. Informational, but
    * load-bearing for diagnosis: two real sessions died on overload errors and the logs said
@@ -222,7 +226,7 @@ export const EventPayload = z.discriminatedUnion("type", [
     delayMs: z.number().int().nonnegative(),
     reason: z.string(),
   }),
-  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string() }),
+  z.object({ type: z.literal("tool.call"), id: z.string(), name: z.string(), input: z.unknown(), inputHash: z.string(), context: InstructionContextSchema.optional() }),
   z.object({
     type: z.literal("tool.result"),
     id: z.string(),
@@ -319,6 +323,7 @@ export const EventPayload = z.discriminatedUnion("type", [
       ]),
       origin: z.string(),
       authority: z.enum(["instruction", "data"]),
+      context: InstructionContextSchema.optional(),
       hash: z.string(),
       reason: z.string(),
       bytes: z.number().int().nonnegative(),
@@ -355,7 +360,7 @@ export const EventPayload = z.discriminatedUnion("type", [
     /** M7: how the child finished. Optional so logs written before this still parse. */
     reason: z.enum(["done", "aborted", "error", "budget"]).optional(),
   }),
-  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string() }),
+  z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string(), context: InstructionContextSchema.optional() }),
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
   z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
   z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),

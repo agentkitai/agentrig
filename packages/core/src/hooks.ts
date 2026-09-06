@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CheckpointHookEvent } from "./checkpointer.js";
 import type { PermissionClass } from "./events.js";
-import type { ContentBlock, Message } from "./messages.js";
+import type { ContentBlock, InstructionContext, Message } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import type { SessionSummary } from "./agent.js";
 
@@ -98,7 +98,8 @@ export interface Hook {
 function isolate(ctx: Omit<HookContext, "point">): Omit<HookContext, "point"> {
   const copy: Omit<HookContext, "point"> = { ...ctx };
   if (ctx.request !== undefined) {
-    copy.request = { ...ctx.request, messages: cloneMessages(ctx.request.messages), tools: [...ctx.request.tools] };
+    copy.request = { ...ctx.request, messages: cloneMessages(ctx.request.messages), tools: [...ctx.request.tools],
+      ...(ctx.request.systemContexts === undefined ? {} : { systemContexts: ctx.request.systemContexts.map(value => ({ ...value })) }) };
   }
   if (ctx.messages !== undefined) copy.messages = cloneMessages(ctx.messages);
   if (ctx.response !== undefined) copy.response = cloneMessages([ctx.response])[0]!;
@@ -109,8 +110,10 @@ function isolate(ctx: Omit<HookContext, "point">): Omit<HookContext, "point"> {
 }
 
 function cloneMessages(messages: readonly Message[]): Message[] {
-  const cloneBlock = (block: ContentBlock): ContentBlock => block.type === "tool_result" && Array.isArray(block.content)
-    ? { ...block, content: block.content.map(cloneBlock) } : { ...block };
+  const cloneBlock = (block: ContentBlock): ContentBlock => ({ ...block,
+    ...(block.context === undefined ? {} : { context: { ...block.context } }),
+    ...(block.type === "tool_result" && Array.isArray(block.content) ? { content: block.content.map(cloneBlock) } : {}),
+  });
   return messages.map((m) => ({ ...m, content: m.content.map(cloneBlock) }));
 }
 
@@ -145,6 +148,8 @@ export interface HookRunnerOptions {
   timeoutMs?: number;
   /** Where a hook's failure is reported. The loop passes an `error` event emitter. */
   onError: (message: string) => void;
+  /** Trusted runtime observer of accepted results; attribution never comes from result fields. */
+  onResult?: (hook: Hook, result: HookResult) => void;
   /** Aborting the session stops waiting on hooks; `ctx.signal` fires for cooperative handlers. */
   signal?: AbortSignal;
   /** Total wall clock for the whole chain, regardless of per-hook overrides. */
@@ -240,16 +245,26 @@ export async function runHooks(
     }
 
     if (result.action === "deny") return { denied: result.reason, patches, injects };
-    if (result.action === "modify") patches.push(result.patch);
+    if (result.action === "modify") { patches.push(result.patch); opts.onResult?.(hook, result); }
     if (result.action === "inject") {
       if (typeof result.message !== "string") {
         opts.onError(`hook ${name} inject message must be a string (got ${typeof result.message}); ignoring`);
         continue;
       }
       injects.push(result.message);
+      opts.onResult?.(hook, result);
     }
   }
   return { patches, injects };
+}
+
+/** Internal runtime attribution alongside the legacy public runner's unchanged arrays. */
+export interface AttributedHookResult {
+  denied?: string;
+  patches: unknown[];
+  injects: string[];
+  patchContexts?: InstructionContext[];
+  injectContexts?: InstructionContext[];
 }
 
 async function withTimeout<T>(

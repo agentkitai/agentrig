@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { ContentBlock, ContentTrust, Message } from "./messages.js";
 import type { AnyTool } from "./tool.js";
+import { ADVISORY_CONTEXT, combinedContext } from "./context-principals.js";
 
 /** Source join, not an authorization ranking. Unknown ancestry must not become trusted. */
 export function joinContentTrust(blocks: readonly ContentBlock[]): ContentTrust {
@@ -45,7 +46,7 @@ export async function prepareResultTrust(tool: AnyTool, input: unknown, cwd: str
 }
 
 function structure(block: ContentBlock): unknown {
-  const { trust: _trust, ...data } = block;
+  const { trust: _trust, context: _context, ...data } = block;
   return data.type === "tool_result" && Array.isArray(data.content)
     ? { ...data, content: data.content.map(structure) } : data;
 }
@@ -57,8 +58,10 @@ export function retainCompactionTrust(source: Message[], output: Message[]): Mes
   const label = (block: ContentBlock, candidates: ContentBlock[]): ContentBlock => {
     const matches = candidates.filter(candidate => isDeepStrictEqual(structure(candidate), structure(block)));
     const trust = matches.length === 1 ? matches[0]!.trust : matches.length > 1 ? joinContentTrust(matches) : floor;
-    const { trust: _claimed, ...data } = block;
-    return { ...data, ...(trust === undefined ? {} : { trust }),
+    const context = matches.length === 1 ? matches[0]!.context
+      : matches.length > 1 ? combinedContext(matches.map(match => match.context ?? ADVISORY_CONTEXT)) : ADVISORY_CONTEXT;
+    const { trust: _claimed, context: _claimedContext, ...data } = block;
+    return { ...data, ...(trust === undefined ? {} : { trust }), ...(context === undefined ? {} : { context }),
       ...(data.type === "tool_result" && Array.isArray(data.content) ? { content: data.content.map(child => label(child,
         matches.flatMap(candidate => candidate.type === "tool_result" && Array.isArray(candidate.content) ? candidate.content : []))) } : {}) };
   };

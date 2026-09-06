@@ -3,6 +3,7 @@ import { MessageSchema } from "./messages.js";
 import type { ModelProvider } from "./provider.js";
 import { joinContentTrust, retainCompactionTrust } from "./content-provenance.js";
 import { isDeepStrictEqual } from "node:util";
+import { ADVISORY_CONTEXT, PLATFORM_CONTEXT } from "./context-principals.js";
 
 // Only this module's closed-over built-in implementation can certify its exact source slice.
 const sourceAwareCompactors = new WeakSet<CompactionStrategy["compact"]>();
@@ -94,7 +95,8 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
       for await (const ev of provider.stream(
         {
           system: SUMMARY_SYSTEM,
-          messages: [{ role: "user", content: [{ type: "text", text: toTranscript(older), trust }] }],
+          systemContexts: [PLATFORM_CONTEXT],
+          messages: [{ role: "user", content: [{ type: "text", text: toTranscript(older), trust, context: ADVISORY_CONTEXT }] }],
           tools: [],
           maxTokens: maxSummaryTokens,
         },
@@ -113,6 +115,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
             {
               type: "text",
               trust,
+              context: ADVISORY_CONTEXT,
               text: `${COMPACTION_SUMMARY_PREFIX}${older.length} earlier messages]\n${summary.trim()}`,
             },
           ],
