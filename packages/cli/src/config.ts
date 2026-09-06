@@ -90,6 +90,7 @@ const ConfigValuesSchema = z
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),
     supervisorAbort: z.boolean().optional(),
+    supervisorAbortRestores: z.boolean().optional(),
     supervisorSoft: softSetting.optional(),
     supervisorTurnsRemaining: integerSetting.optional(),
     supervisorReview: z.boolean().optional(),

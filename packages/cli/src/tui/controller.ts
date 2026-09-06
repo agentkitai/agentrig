@@ -249,6 +249,13 @@ export class TuiController {
     this.dream = fn;
   }
 
+  /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
+  forgetRestoredConversation(): void {
+    this.resumable = false;
+    this.set({sessionId:null,turns:0,plan:[],signals:[],children:[],manifest:null,context:null});
+    this.print("next prompt starts a fresh conversation; original history is retained", "system");
+  }
+
   setSessions(fns: {
     fork: (parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>;
     undo?: (id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>;
@@ -635,9 +642,7 @@ export class TuiController {
             const result = await this.undo!(id,turn);
             this.print(result.message,"system");
             if (result.restored) {
-              this.resumable = false;
-              this.set({status:"idle",sessionId:null,turns:0,plan:[],signals:[],children:[],manifest:null});
-              this.print("next prompt starts a fresh conversation; original history is retained", "system");
+              this.forgetRestoredConversation();
             }
           } catch (error) { this.print(`/undo failed: ${String(error)}`,"error"); }
         })();

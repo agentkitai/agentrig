@@ -563,6 +563,17 @@ interface Policy { decide(signals: Signal[], state: SupervisorState): Interventi
 
 Default ladder (per signal type, escalating on repeat): inject_guidance → force_replan → run reviewer → escalate → abort. Cooldowns prevent nagging every turn.
 
+R4c optionally restores after a supervisor-requested abort: `abortRestores: true` plus a trusted
+`restoreCheckpoint(sessionId, signal)` seam. The supervisor imports only core types; CLI/TUI
+provide guarded `undoSession` and require `--supervise --supervisor-abort --checkpoints
+--supervisor-abort-restores` (or equivalent trusted config). Restoration waits for an aborted
+`session.done`, never overrides R4b ownership checks, and is joined by observer `done` even after
+cleanup detach. User abort alone does not trigger it. The restore signal has a 60-second budget;
+trusted destructive callbacks must cooperate and settle, not be abandoned while still mutating.
+Reports use the UI/stderr and separate undo audit, not events after the original `session.end`.
+TUI clears automatic resume state after success. See [R4c](plans/R4c.md); this does not implement
+the independent mid-session `checkpoint_rollback` rung.
+
 A rung is **skipped when the harness cannot perform it** rather than parked on, so one ladder
 definition is correct at every milestone: in M4 (no reviewer, no pre-tool hook, and no human in a
 headless run) it collapses to inject_guidance → abort, and it deepens on its own as M6 attaches a

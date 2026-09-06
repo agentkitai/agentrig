@@ -19,7 +19,7 @@ export interface Policy {
 
 export interface Detachable {
   detach(): void;
-  /** Resolves once the observer has drained the stream — tests and shutdown paths need a join. */
+  /** Joins observation and any already-requested post-abort restore, including after detach. */
   done: Promise<void>;
 }
 

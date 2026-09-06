@@ -1,11 +1,31 @@
 # Status
 
-Current roadmap row: **R4b — guarded explicit undo.** R4a, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **R4c — opt-in supervisor abort restore.** R4a–R4b, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R4b in progress
+### R4c in progress
+
+Fresh branch from updated main `1291c77`; [contract](plans/R4c.md). Add opt-in post-settlement
+supervisor restore using the existing guarded undo seam, joined through observer shutdown and
+shared CLI/TUI wiring. Defaults unchanged; no user-abort-only restore, no force path. Integration
+tests exposed and now cover normal iterator completion after cancellation being mislabeled done;
+core preserves usage but reports aborted. Build/typecheck and the full Node22 suite pass 1,931
+tests plus two skips (92 files). One bounded Claude review `db4e2583-64e6-45c0-9a34-1e42ee8bd5d0`
+approved with no blockers, independently passing build/typecheck and 1,036 selected cases.
+Opt-in-gate and cancellation-classification mutations fail their named tests and are restored.
+Optional polish stays at ROADMAP's end; exact-head PR and post-merge main CI remain pending.
+
+PR #137 initial head `6593f1b` passed Linux/macOS; Windows CI 34010786976 exceeded the unchanged
+E1 signal/numeric-exit fixture's five-second test budget. A scoped test-only 30-second timeout
+keeps all assertions and production limits; final-head three-platform CI is required.
+
+### R4b complete (PR #136)
+
+Final head `0dcbb09`, merge `1291c77`, exact-head CI 34009706860 and post-merge CI 34009896484
+passed all platforms. One independent review approved; one test-only Windows fixture-budget
+repair. Full local suite 1,917 passes plus two skips. Notes below record intermediate gates.
 
 Fresh branch `feat/r4b-guarded-undo` from updated main `45dac7f`. [Contract](plans/R4b.md):
 post-tool ownership checks, terminal seals, explicit guarded CLI/TUI undo, retained recovery

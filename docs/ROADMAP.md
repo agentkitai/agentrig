@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: R4b; R4a, H1–H5 and E1–E3 complete in PRs #118–#135.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: R4c; R4a–R4b, H1–H5 and E1–E3 complete in PRs #118–#136.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -905,3 +905,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - Evaluation test hygiene: use a monotonic-derived or injected fixture clock for the E2 scripted
   usage test. One local full R4b run saw Date.now move backwards; its targeted rerun and two full
   reruns passed. Keep the production negative-wall-time rejection intact.
+- R4c optional polish: keep a user-facing SIGINT diagnostic during the restore join (forced
+  termination already retains R4b recovery originals); add an omitted-option abort control next
+  to the explicit-false test; omit the unused restore adapter from disabled wiring. None changes
+  the current opt-in, joined, guarded restore contract or blocks H6.
