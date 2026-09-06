@@ -8,6 +8,7 @@
  */
 export * from "./types.js";
 export * from "./state.js";
+export * from "./plan-evidence.js";
 export * from "./test-output.js";
 export * from "./detectors/index.js";
 export * from "./policy.js";

@@ -6,6 +6,7 @@ import { bound } from "./shared.js";
 import type { JobRegistry } from "./background-jobs.js";
 import { sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
 import { describeShellOperation } from "../shell-operation.js";
+import { stampCommandOutcome } from "../command-outcome.js";
 
 const BashInput = z.object({
   command: z.string().min(1).describe("The shell command to run"),
@@ -74,6 +75,8 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
     effects: input => input.background === true ? "background" : "workspace",
     hasBackgroundWork: () => opts.jobs?.ids().some(id => opts.jobs?.get(id)?.exited === false) ?? false,
     async execute(input, ctx): Promise<ToolResult<BashOutput>> {
+      const observedCommand = input.command;
+      const observedCwd = ctx.cwd;
       const timeoutMs = input.timeoutMs ?? 120_000;
       if (ctx.signal.aborted) {
         return {
@@ -208,6 +211,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
         result.displayPrefixChars = shown;
       }
       if (exitCode !== 0 || timedOut || aborted) result.isError = true;
+      stampCommandOutcome(result, ctx, { command: observedCommand, cwd: observedCwd, exitCode, timedOut, aborted });
       return result;
     },
   };
