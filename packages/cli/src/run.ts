@@ -20,7 +20,7 @@ import {
 } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
-import { buildAgent, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
+import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
 import {
   dreamOnSessionEnd,
   FileMemoryStore,
@@ -54,7 +54,7 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
-  scheduled?: { entryId: string; minute: number };
+  scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
   signal?: AbortSignal;
   root: string;
   json?: boolean;
@@ -368,6 +368,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
 }
 
 export async function runCommand(task: string, opts: RunOptions): Promise<SessionSummary | void> {
+  if (opts.heartbeat !== undefined) opts = { ...heartbeatBuildOptions(opts), supervise: false, supervisorReview: false, supervisorAbortRestores: false };
   opts.signal?.throwIfAborted();
   let dreamEverySessions: number;
   let dreamEveryHours: number;
@@ -469,6 +470,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<Sessio
         if (e.type === "error" && e.fatal) console.error(`fatal: ${e.message}`);
         continue;
       }
+      if (opts.heartbeat !== undefined && opts.verbose !== true) continue;
       // the model's reply, gathered from the per-token deltas and printed once per turn. Without
       // this the answer was never printed at all: the deltas were skipped and nothing else
       // carries the text.
@@ -486,7 +488,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<Sessio
     }
     const summary = await session.done;
     if (summary.error !== undefined) console.error(summary.error);
-    if (opts.json !== true) {
+    if (opts.json !== true && opts.heartbeat === undefined) {
       console.log(
         `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +
           `${formatUsage(summary.usage)} tokens`,

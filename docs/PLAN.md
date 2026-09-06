@@ -154,7 +154,7 @@ interface is where it plugs in.
 type HarnessEvent =
   | { type: 'session.start'; id: string; task: string; cwd: string; provider: string; ts: number }
   | { type: 'session.end'; reason: 'done' | 'aborted' | 'error' | 'budget'; ts: number }
-  | { type: 'run.scheduled'; entryId: string; minute: number }
+  | { type: 'run.scheduled'; entryId: string; minute: number; source?: 'heartbeat' }
   | { type: 'turn.start'; n: number } | { type: 'turn.end'; n: number }
   | { type: 'model.request'; tokensIn: number }
   | { type: 'model.delta'; text: string }
@@ -761,6 +761,13 @@ without provider/config loading; `--execute` requires trusted project consent an
 advisory scheduled provenance through `run.scheduled`, never fresh user permission. Claims
 serialize cooperating ticks, no daemon/catch-up. R15i remains required before unattended
 execution is enabled by default. See [R7a](plans/R7a.md) for bounds and crash/race limits.
+
+R7b adds advisory `HEARTBEAT.md` fallback only when no cron matches the tick minute.
+Preview stays offline; trusted explicit execution shares the existing lock and durable minute
+claim. Empty checklists have one request and an empty runtime tool registry. Heartbeat disables
+extensions, skills/packages, MCP, subagents, maintenance, checkpoints and supervision even
+when explicitly configured. Log, derived cache and claim are allowed operational metadata;
+no task/wiki/report artifacts for empty/no-action runs. See [R7b](plans/R7b.md).
 
 - `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
 - `agentrig run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
