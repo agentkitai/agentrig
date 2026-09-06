@@ -81,3 +81,8 @@ real CLI opt-in, unchanged source bytes, independent effect refusal, unchanged c
 batch caps, uncooperative timeout and cancellation/accounting. Full build/typecheck/test, named
 detected/restored mutations, one bounded independent review, exact-head three-platform CI and
 root-coordinated merge/post-merge CI are required. Closing PR records exact receipts.
+
+Independent review `b71374d1-cfb4-45f2-b9aa-f219fa707721` approved implementation head `ca1043b`
+with no material findings, independently passing build/typecheck, 2,013 tests plus two skips
+and 20 focused cases. Strict-classification and adverse-effect bypass mutations were detected
+and restored. Main integration retains all independent R13f changes, followed by final tests.

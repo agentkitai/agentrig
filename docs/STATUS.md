@@ -31,6 +31,11 @@ effect review is required for the distinct reviewed status. Existing model caps 
 No skills emitted, no permission change, no live evaluation or benefit claim. See [R6a](plans/R6a.md).
 Closing PR records validation/review and exact-head/post-merge three-platform CI receipts.
 
+One bounded independent Claude review `b71374d1-cfb4-45f2-b9aa-f219fa707721` approved, independently
+passing build/typecheck, 2,013 tests plus two skips and 20 focused cases before integration.
+Strict-classification and adverse-effect bypass mutations failed and were restored. Current
+main is integrated before final validation; optional refinements remain at the roadmap end.
+
 ### R13f implemented — PR #143 records closing delivery gates
 
 Core stamps unique runtime call provenance; only matching successful write-class results in the

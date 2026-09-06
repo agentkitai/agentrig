@@ -942,3 +942,8 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   release failed-call pending entries earlier than the turn boundary; reuse drift read buffers if
   allocation churn is measured. Consider historical deletion witnesses separately: present absence
   is not proof of a prior file. Preserve legacy no-credit behavior and bounded, fail-closed checks.
+- R6a polish: explain skipped refinement after incomplete scans/consolidation failures more
+  directly; show the primary artifact page beside deduplicated source pages. If coverage demands
+  it, consider common-family matching before per-claim witness slicing to reduce conservative
+  false negatives. Preserve tags as advisory unless a future consumer explicitly requires an
+  observed-only dialect; never weaken exact runtime evidence to improve detection counts.
