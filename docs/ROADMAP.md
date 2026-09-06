@@ -989,3 +989,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   propagation; add direct TUI/resume option-key assertions alongside resolved-root coverage.
   Clarify or reject empty CLI memory paths deliberately if changing that existing behavior.
   None changes default-off discovery, ordinary event compatibility or permission separation.
+- R13d polish: expose effective system/message context to pre_model observers before their
+  isolated hook point (today final authority remapping follows it); document arbitrary mid-system
+  replacement's conservative whole-prompt downgrade. Neither permits an authority upgrade or
+  blocks the runtime attribution/revocation contract.

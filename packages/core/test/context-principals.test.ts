@@ -182,6 +182,25 @@ it("request observers cannot mutate nested context or create delegation with ret
   expect((await f.store.readAll(session.id)).some(e => e.type === "context.delegation")).toBe(false);
 });
 
+it.each([false, true])("delegated post_tool injection cannot upgrade retained tool text (error=%s)", async failed => {
+  const f = await fixture(); const p = scripted([[call, toolStop], [stop]]);
+  const session = createAgent({ ...config(f.store, p.provider, [
+    { point: "post_tool", id: "note", handler: () => ({ action: "inject", message: "delegated hook note" }) },
+  ]), hookInstructionDelegations: ["note"], tools: [{ ...echo, execute: async () => {
+    if (failed) throw new Error("external tool instruction");
+    return { output: "external tool instruction", display: "external tool instruction" };
+  } }] }).run("task", { cwd: f.cwd });
+  await session.done;
+  const result = blocks(p.requests[1]!).find(b => b.type === "tool_result");
+  expect(result).toMatchObject({ context: advisory, trust: "external" });
+  expect(JSON.stringify(result)).toContain("external tool instruction");
+  expect(JSON.stringify(result)).toContain("delegated hook note");
+  const manifests = (await f.store.readAll(session.id)).filter(e => e.type === "context.manifest");
+  expect(manifests[1]!.blocks.find(b => b.source === "tool_result"))
+    .toMatchObject({ authority: "data", context: advisory });
+  expect(await f.store.materializeMessages(session.id)).toEqual((await f.store.readSnapshot(session.id))!.messages);
+});
+
 it("instruction delegation does not allow a denied tool", async () => {
   const f = await fixture(); const p = scripted([[call, toolStop], [stop]]); let executed = false;
   const session = createAgent({ ...config(f.store, p.provider, [{ point: "pre_tool", id: "rewrite", handler: () => ({ action: "modify", patch: { text: "allowed by user" } }) }]),

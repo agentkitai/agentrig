@@ -28,6 +28,19 @@ bypass, hook-as-user and custom-compactor authority-laundering mutations fail an
 Full integrated validation, one bounded independent review and exact-head/post-merge CI remain
 delivery gates. No new submilestones or live evaluation spend.
 
+Integrated R12a main `35f37ba` retains tool-grant lifecycle/audit and its permission schema split.
+One bounded Claude review `6d68f4c2-7567-4dc6-a8ad-d91cd0aa6b8b` independently passed build,
+typecheck and 2,203 tests plus two skips across 114 files (16 turns, 200 seconds). It found one
+material inject-only post-tool authority laundering issue: retained tool text borrowed a delegated
+hook note's authority. Success/error-path tests reproduced both failures; joining retained display
+as advisory fixes both, while full hook replacements retain explicit delegation. All 12 focused
+tests pass; optional review notes are at the roadmap end. No second general review.
+
+One overlapping local full run timed out the untouched E1 exact-upstream fixture at its existing
+5-second limit; its isolated diagnostic passes in 559 ms and the reviewer's full run passes.
+Final validation uses four local workers to avoid shared-container contention, without changing
+test cases, assertions or timeouts. Remote exact-head CI remains mandatory.
+
 ### R6c done — PR #151; post-merge CI green
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated

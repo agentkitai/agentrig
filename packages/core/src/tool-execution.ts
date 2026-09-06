@@ -21,6 +21,9 @@ function displayContext(result: AttributedHookResult): InstructionContext | unde
   const index = result.patches.map((patch, index) => typeof patch === "string" ? index : -1).filter(index => index >= 0).at(-1) ?? -1;
   const contexts = [...(index < 0 ? [] : [result.patchContexts?.[index] ?? ADVISORY_CONTEXT]),
     ...result.injects.map((_text, index) => result.injectContexts?.[index] ?? ADVISORY_CONTEXT)];
+  // Inject-only changes retain the tool's own text. A delegated note cannot lend that text
+  // instruction authority; only a complete replacement is solely the hook's contribution.
+  if (index < 0 && result.injects.length > 0) contexts.unshift(ADVISORY_CONTEXT);
   return contexts.length === 0 ? undefined : combinedContext(contexts);
 }
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
