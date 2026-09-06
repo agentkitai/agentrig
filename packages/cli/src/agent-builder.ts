@@ -5,6 +5,7 @@ import {
   assertShellExists,
   Checkpointer,
   builtinTools,
+  OpenAICompatibleProvider,
   createAgent,
   defaultRules,
   DockerSandboxProvider,
@@ -336,6 +337,7 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  outputContract?: import("@agentkitai/agentrig-core").OutputContract;
   signal?: AbortSignal;
   /** Trusted host user-state override, never model/project credential material. */
   mcpCredentialRoot?: string;
@@ -477,6 +479,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
   const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
   const provider = providers.main;
+  if (extras.outputContract?.mode === "native") {
+    if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+    // Explicit host/operator opt-in, not empirical or endpoint-inferred support.
+    provider.capabilities.nativeOutputSchema = true;
+  }
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];
@@ -684,6 +691,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    ...(extras.outputContract === undefined ? {} : { outputContract: extras.outputContract }),
     extensions,
     provider,
     tools,

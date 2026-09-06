@@ -12,6 +12,7 @@ import { openAiCacheReadDiscount } from "./cache-pricing.js";
  */
 
 export interface OpenAIProviderOptions {
+  nativeOutputSchema?: boolean;
   model: string;
   apiKey?: string;
   baseUrl?: string;
@@ -64,6 +65,7 @@ export function toOpenAIRequest(
     }));
   }
   if (req.temperature !== undefined) body.temperature = req.temperature;
+  if (req.outputSchema !== undefined) body.response_format = { type: "json_schema", json_schema: { name: "agentrig_output", strict: true, schema: req.outputSchema } };
   if (reasoningEffort !== undefined) body.reasoning_effort = reasoningEffort;
   return body;
 }
@@ -132,12 +134,17 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
   const toolCalls = new Map<number, { id: string; name: string; args: string }>();
   let usage: Usage | null = null;
   let finishReason: unknown;
+  let refused = false;
 
   const handle = (data: JsonObject): ModelEvent[] => {
     const events: ModelEvent[] = [];
     const choice = (data.choices as JsonObject[] | undefined)?.[0];
     if (choice) {
       const delta = choice.delta as JsonObject | undefined;
+      if (typeof delta?.refusal === "string" && delta.refusal !== "") {
+        refused = true;
+        events.push({ type: "text_delta", text: delta.refusal });
+      }
       if (typeof delta?.content === "string" && delta.content !== "") {
         events.push({ type: "text_delta", text: delta.content });
       }
@@ -210,7 +217,7 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
     yield { type: "tool_use", id: tc.id || `call_${Math.random().toString(36).slice(2, 10)}`, name: tc.name, input };
   }
   yield { type: "usage", usage: usage ?? { input: 0, output: 0 }, ...(usage === null ? { reported: false } : {}) };
-  const mapped = mapFinishReason(finishReason ?? "stop");
+  const mapped = refused ? { reason: "refusal" as const } : mapFinishReason(finishReason ?? "stop");
   yield mapped.raw === undefined
     ? { type: "stop", reason: mapped.reason }
     : { type: "stop", reason: mapped.reason, raw: mapped.raw };
@@ -241,6 +248,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const officialOpenAi = new URL(this.baseUrl).hostname === "api.openai.com";
     const cacheReadDiscount = officialOpenAi ? openAiCacheReadDiscount(this.model) : undefined;
     this.capabilities = {
+      ...(opts.nativeOutputSchema === true ? { nativeOutputSchema: true } : {}),
       tools: true,
       parallelTools: true,
       caching: officialOpenAi,
