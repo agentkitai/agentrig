@@ -39,6 +39,11 @@ pass 2,354 tests plus two skips across 128 files (four workers, 31 seconds), inc
 startup denial/standing controls, failed expiry-audit recovery and bounded descendant depth.
 Final exact-head PR CI follows; R12c/H7a done markers include verified merge receipts.
 
+R14a PR #162 main `fc8327e` is integrated, preserving acceptance declarations, unverified plan
+rendering and both CI selections. Build/typecheck/full combined checks pass 2,359 tests plus
+two skips across 130 files (four workers, 31 seconds). R14a post-merge and this updated exact-head
+CI remain merge gates; no additional general review for mechanical integration.
+
 ### R14a merged — PR #162; post-merge CI pending
 
 Merge `fc8327e` follows green exact-head CI. The gate notes below are implementation history.
