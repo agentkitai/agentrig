@@ -2,7 +2,8 @@ import { realpath } from "node:fs/promises";
 import type { AgentConfig } from "./agent.js";
 import type { HarnessEvent, PermissionRequest } from "./events.js";
 import { EventPayload, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events.js";
-import type { ContentBlock } from "./messages.js";
+import type { ContentBlock, ContentTrust } from "./messages.js";
+import { prepareResultTrust } from "./content-provenance.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { SandboxDeniedError, withSandboxPolicy } from "./sandbox.js";
 import { outsideSandbox } from "./sandbox-providers.js";
@@ -16,7 +17,7 @@ export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<{ denied?: string; patches: unknown[]; injects: string[] }>;
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "onAsk" | "sandbox" | "store">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "onAsk" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   cwd: string;
   turns: number;
@@ -147,10 +148,10 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
 
 export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
   const { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, emitFromTool, hook, signal, endSignal, raceAbort, now, isEnded } = context;
-  const resultBlock = (content: string, isError: boolean): ContentBlock =>
+  const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external"): ContentBlock =>
     isError
-      ? { type: "tool_result", toolUseId: tu.id, content, isError: true }
-      : { type: "tool_result", toolUseId: tu.id, content };
+      ? { type: "tool_result", toolUseId: tu.id, content, isError: true, trust }
+      : { type: "tool_result", toolUseId: tu.id, content, trust };
 
   const tool = toolsByName.get(tu.name);
   if (!tool) {
@@ -285,6 +286,11 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;
   try {
+    let finishTrust: () => Promise<ContentTrust> = async () => tool.resultSource === "external" ? "external" : "tool-output";
+    if (tool.resultSource !== undefined && tool.resultSource !== "external") {
+      finishTrust = await raceAbort(prepareResultTrust(tool, input, cwd, config.trustedProjectRoot), "tool provenance");
+      signal.throwIfAborted();
+    }
     const command = () => tool.execute(input, ctx);
     // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
     // and selecting `none` still traverses the provider seam so providers own mode semantics.
@@ -431,7 +437,12 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
         mode: replaced === undefined ? "inject" : "modify",
       });
     }
-    return resultBlock(body, !ok);
+    // Hook-shaped display changes have unknown ancestry until R13d assigns principals.
+    const trust = !ok || replaced !== undefined || h.injects.length > 0 ? "external"
+      // The authoritative result is already emitted. An abort here degrades provenance;
+      // it must not enter the execution-failure catch and emit a duplicate result.
+      : await raceAbort(finishTrust(), "tool provenance").catch(() => "external" as const);
+    return resultBlock(body, !ok, trust);
   } catch (err) {
     const sandboxDenied = err instanceof SandboxDeniedError && (
       sandboxRetryDenied || (config.sandbox !== undefined && !sandboxDenialRecorded)

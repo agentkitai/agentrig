@@ -1,5 +1,23 @@
 import type { ContentBlock, Message } from "./messages.js";
+import { MessageSchema } from "./messages.js";
 import type { ModelProvider } from "./provider.js";
+import { joinContentTrust, retainCompactionTrust } from "./content-provenance.js";
+import { isDeepStrictEqual } from "node:util";
+
+// Only this module's closed-over built-in implementation can certify its exact source slice.
+const sourceAwareCompactors = new WeakSet<CompactionStrategy["compact"]>();
+
+/** Runtime boundary for arbitrary SDK strategies, which cannot certify returned labels. */
+export async function compactWithProvenance(strategy: CompactionStrategy, messages: Message[], provider: ModelProvider, signal: AbortSignal): Promise<Message[]> {
+  const input = structuredClone(messages);
+  const compact = strategy.compact;
+  const output = await compact.call(strategy, input, provider, signal);
+  const parsed = output.map(message => MessageSchema.parse(message));
+  if (sourceAwareCompactors.has(compact)) return output === input ? messages : parsed;
+  // Even an in-place custom strategy must not erase the original comparison/floor.
+  const retained = retainCompactionTrust(messages, parsed);
+  return isDeepStrictEqual(retained, messages) ? messages : retained;
+}
 
 export interface CompactionStrategy {
   shouldCompact(usage: { tokens: number; window: number }): boolean;
@@ -58,7 +76,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
   const keep = opts.keepLastMessages ?? 8;
   const maxSummaryTokens = opts.maxSummaryTokens ?? 1024;
 
-  return {
+  const strategy: CompactionStrategy = {
     shouldCompact: ({ tokens, window }) => tokens > threshold * window,
 
     async compact(messages, provider, signal) {
@@ -71,11 +89,12 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
       if (cut <= 1) return messages;
 
       const older = messages.slice(1, cut);
+      const trust = joinContentTrust(older.flatMap(message => message.content));
       let summary = "";
       for await (const ev of provider.stream(
         {
           system: SUMMARY_SYSTEM,
-          messages: [{ role: "user", content: [{ type: "text", text: toTranscript(older) }] }],
+          messages: [{ role: "user", content: [{ type: "text", text: toTranscript(older), trust }] }],
           tools: [],
           maxTokens: maxSummaryTokens,
         },
@@ -93,6 +112,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
           content: [
             {
               type: "text",
+              trust,
               text: `${COMPACTION_SUMMARY_PREFIX}${older.length} earlier messages]\n${summary.trim()}`,
             },
           ],
@@ -101,4 +121,6 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
       ];
     },
   };
+  sourceAwareCompactors.add(strategy.compact);
+  return strategy;
 }

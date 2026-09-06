@@ -45,6 +45,9 @@ export interface Tool<I = unknown, O = unknown> {
   /** Trusted SDK effect declaration, not a permission or model/MCP annotation. Omission is
    * potentially mutating. Only read-only calls can skip an opt-in checkpoint. */
   effects?: "read-only" | "workspace" | "background" | ((input: I) => "read-only" | "workspace" | "background");
+  /** Trusted registration provenance, never server/model metadata or permission authority.
+   * File paths are checked canonically against the approved project root by core. */
+  resultSource?: "external" | { file(input: I): string };
   /** Trusted registry probe; unfinished work makes checkpoint ownership uncertain. */
   hasBackgroundWork?(): boolean;
   /**
