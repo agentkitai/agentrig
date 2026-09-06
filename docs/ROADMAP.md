@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c local packages are implemented, pending delivery gates; R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14d verification lanes are implemented, pending delivery gates; R5c is merged (PR #170), post-merge CI pending; R10d and its readiness repair are done with green main CI (PRs #171/#173); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -9,7 +9,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Active repair | Child-grants test readiness | Repeated PR #171 post-merge Windows failure; exact subscribed predicates and green main before R10a |
+| Done — PR #173 | Child-grants test readiness | Main `063cac6` passed all three jobs in CI `34035704275`, closing PR #171's repair gate |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
@@ -25,7 +25,8 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done — PR #162 | R14a: acceptance declarations | Observable declarations remain unverified, not proof |
 | Done — PR #165 | R14b: candidate evidence association | Canonical foreground observations, bounded replay and post-merge CI green |
 | Done — PR #166 | R11a: net permission boundary | Explicit sandbox network policy; post-merge CI green |
-| Done — PR #169 | R14c: evidence grading and reports | Post-merge CI 34032607190 green; deterministic deficits can force false only |
+| Done (#169) | R14c: evidence grading and reports | Exact-head and post-merge three-platform CI green |
+| Implemented; closing gates | R14d: two verification lanes | Reuse E1/E2 observations; one review and exact-head CI |
 | Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -657,7 +658,7 @@ pool already reserves at spawn time specifically because this was coming).*
 | R10a | Extract `TurnStrategy` from the loop: the code that takes a model response and produces tool results becomes an injected strategy; `sequential` (today, default) is the first implementation, byte-identical event stream proven by golden-log test | core |
 | R10b | `parallel` strategy: independent tool calls (no shared declared paths, no exec-class ordering hazard) run concurrently with a bounded pool; events stay strictly ordered by `seq` (results are serialized into the log in completion order — the log's total order is the contract, not wall-clock interleaving); permission asks serialize (one prompt at a time — the TUI queue already exists) | core |
 | R10c | Parallel subagents ride the same strategy (the spawn-time pool reservation was built for this); *(second pass; Cline's pattern, Codex's warning)* a parallel subagent that holds write-class tools gets its own git worktree, and its patch is integrated by the parent as a diff — two writers never share a checkout; supervisor detectors audited for order-sensitivity (loop/stall assume turn-relative counts — verify and pin with tests) | core + supervisor |
-| R10d *(implemented; delivery gates pending)* | Explicit bounded `doctor --probe` observes exact tool roundtrip, simultaneous calls, prompted-schema JSON and cache reporting. Native strictness remains unknown. Validated configuration-bound local cache actually informs advertised flags; missing evidence is labelled unverified fallback. See [contract](plans/R10d.md). | cli + core |
+| R10d *(done, PR #171/#173)* | Explicit bounded `doctor --probe` observes exact tool roundtrip, simultaneous calls, prompted-schema JSON and cache reporting. Native strictness remains unknown. Validated configuration-bound local cache actually informs advertised flags; missing evidence is labelled unverified fallback. See [contract](plans/R10d.md). | cli + core |
 
 Acceptance: golden-log equality for sequential; a parallel run with two independent reads
 completes both under one injected-clock tick; two writes to the same path are *not* parallelized
@@ -742,7 +743,7 @@ the rows below extend the product interface in the committed dependency order.*
 | R14a *(done, [PR #162](https://github.com/agentkitai/agentrig/pull/162))* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
 | R14b *(done, [PR #165](https://github.com/agentkitai/agentrig/pull/165))* | Bounded supervisor per-item attempt ledger associates exact command-exit declarations with internal foreground outcome receipts, never output prose or tool names. Latest failing/unknown attempts stay visible; unsupported checks and semantic acceptance remain unverified. Replay and bounded incompleteness are explicit. See [contract](plans/R14b.md). | core + supervisor |
 | R14c *(done, [PR #169](https://github.com/agentkitai/agentrig/pull/169))* | M6 claims-vs-evidence row and read-only `sessions show --evidence <id>` share bounded candidate reports. Declared unfinished/missing/failing/unknown checks and omissions can force false, never true; legacy/dropped distinctions and current-run attach scope is explicit. See [contract](plans/R14c.md). | supervisor + cli |
-| R14d | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
+| R14d *(implemented; closing delivery gates; [contract](plans/R14d.md))* | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
 
 Acceptance: a fixture session claiming success with a failing final test run grades measurably
 below one whose evidence lines up (the discriminating pair, driven by the fake provider); a plan
@@ -920,16 +921,16 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
-| Repair (active) | Child-grants test readiness | PR #171 post-merge Windows CI 34033869154 repeated two prompt-readiness failures on the single diagnostic rerun. Exact subscribed predicates, bounded waits and run-settlement diagnostics; production authority unchanged. Separate repair and green main gate R10a. [Contract](plans/child-grants-readiness.md). |
+| Repair (done, PR #173) | Child-grants test readiness | Main `063cac6` passed CI `34035704275` on all platforms after the repeated PR #171 post-merge Windows readiness failure. Exact subscribed predicates, bounded waits and settlement diagnostics; production authority unchanged. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
-| 4 | R14a (done) → R14b (done) → R14c (done, PR #169) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 4 | R14a (done) → R14b (done) → R14c (done) → R14d (closing gates) | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b (done) → R5c (closing gates) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
-| 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
+| 8 | R10d (done, PR #171/#173) → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
@@ -1182,6 +1183,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   observer so one corrupt event does not disable later useful observations. Keep incomplete views
   fail-closed. Historical plan seeding for resumed attached runs is separate future work: current
   reports explicitly exclude prior history, while the CLI reads the full named physical log.
+- R14d reporting polish: optionally show malformed trusted verification-loader output as a
+  dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
+  presentation of original evaluator attestations beside derived lane assessments. Neither
+  path may infer independence from labels, erase failures, or create a second evaluation runner.
 - R5c polish: align nested skill filename casing with the loader's exact `SKILL.md` convention;
   make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
   The review's root-alias precedence defect was fixed in R5c, not deferred here.

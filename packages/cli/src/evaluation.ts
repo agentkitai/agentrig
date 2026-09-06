@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { AuxiliaryReportSchema, HarnessEvent, type AuxiliaryCall, type Usage } from "@agentkitai/agentrig-core";
+import { VerificationEvidence, assessVerificationLanes } from "@agentkitai/agentrig-supervisor";
 
 const text = z.string().min(1).max(4096);
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -16,6 +17,7 @@ export const EvaluationChecks = z.object({
   behavior: lane.optional(), regression: lane.optional(), scope: lane.optional(), submittedTests: lane.optional(),
   manual: z.enum(["PENDING", "NOT_REQUIRED"]).optional(), evidence: z.array(z.string().max(256 * 1024)).max(100),
   skipReason: text.optional(),
+  verification: VerificationEvidence.optional(),
 });
 const Pricing = z.object({ input: dollars, output: dollars, cacheRead: dollars.optional(), cacheWrite: dollars.optional() }).strict();
 export const EvaluationManifest = z.object({
@@ -67,6 +69,8 @@ export function buildEvaluationReport(input: EvaluationInput) {
   const checks = EvaluationChecks.parse(input.checks);
   const sidecar = EvaluationAuxiliary.parse(input.auxiliary ?? { snapshots: [], calls: [] });
   check(m.task === checks.task && m.runId === checks.runId, "independent checks belong to another task/run");
+  if (checks.verification !== undefined) check(checks.verification.task === m.task && checks.verification.runId === m.runId,
+    "verification lanes belong to another task/run");
   check(m.configuration.memory ? m.configuration.memoryCorpusSha256 !== null : m.configuration.memoryCorpusSha256 === null,
     "memory configuration/corpus mismatch");
   check(m.timing.settledAt === null || m.timing.settledAt >= m.timing.startedAt, "negative outer wall time");
@@ -217,11 +221,27 @@ export function buildEvaluationReport(input: EvaluationInput) {
     else if (checks.manual === "PENDING") outcome = m.humanVerdict?.outcome === "PASS" ? "PASS" : "BLOCKED";
     else if (checks.manual !== "NOT_REQUIRED") outcome = "BLOCKED";
   }
+  // Only the existing manifest-owned human verdict can resolve E1's designated prose gate.
+  // A human label supplied in checker JSON does not substitute for that record.
+  let verificationInput = checks.verification;
+  if (verificationInput !== undefined) {
+    const { humanAssessment: _untrustedAssessment, ...automatic } = verificationInput;
+    verificationInput = { ...automatic,
+      ...(checks.manual === "PENDING" && automatic.behavior.humanReview === "required" && m.humanVerdict !== undefined
+        ? { humanAssessment: m.humanVerdict } : {}) };
+  }
+  const verification = verificationInput === undefined ? undefined : assessVerificationLanes(verificationInput);
+  if (verification !== undefined) {
+    if (verification.verdict === "FAIL") outcome = "FAIL";
+    else if (outcome === "SKIP") check(verification.verdict === "SKIP", "SKIP cannot hide attempted verification");
+    else if (outcome !== "FAIL" && verification.verdict !== "PASS") outcome = "BLOCKED";
+  }
   const totalCostUsd = main.costUsd !== null && auxiliary.costUsd !== null && m.coverage.externalCostsUsd !== null
     ? main.costUsd + auxiliary.costUsd + m.coverage.externalCostsUsd : null;
   check(totalCostUsd === null || Number.isFinite(totalCostUsd), "total cost overflow");
   const { evidence: checkDiagnostics, ...checkSummary } = checks;
   return { version: 1, runId: m.runId, task: m.task, outcome, evidenceLane: m.evidenceLane, independentChecks: checkSummary, humanVerdict: m.humanVerdict ?? null,
+    ...(verification === undefined ? {} : { verification }),
     agentEndReasons: sessionReasons, configuration: m.configuration, evaluatorRevision: m.evaluatorRevision, startingRevision: m.startingRevision,
     wallMs, eventSpanMs: firstTs === null || lastTs === null ? null : lastTs - firstTs,
     main, auxiliary: { ...auxiliary, unfinishedRuns: unfinishedAuxiliaryRuns }, totalCostUsd,
@@ -278,6 +298,7 @@ export function formatEvaluationReport(report: ReturnType<typeof buildEvaluation
     `Auxiliary reported: ${usage(report.auxiliary.reportedUsage)}; unknown calls: ${report.auxiliary.unknownUsageCalls}; unfinished runs: ${report.auxiliary.unfinishedRuns}; cost: ${cost(report.auxiliary.costUsd)}`,
     `Allows/denies: ${report.permissions.allowDecisions}/${report.permissions.denyDecisions}; tool errors: ${report.toolErrors}; unintended changes: ${report.changes.independentlyChecked ? report.changes.unintended.length : "unknown"}`,
     `Interventions: ${JSON.stringify(report.interventions)}; retrieval requests/successful tool results: ${report.retrievals.requests}/${report.retrievals.successfulToolResults}`,
+    report.verification?.text ?? "Verification oracle provenance: unverified (legacy/absent lane observations).",
     ...report.warnings.map((w) => `Warning: ${w}`),
   ].join("\n");
 }

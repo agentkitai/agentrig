@@ -10,6 +10,7 @@ import { TuiController } from "../src/tui/controller.ts";
 import { App } from "../src/tui/app.tsx";
 import { buildAgent } from "../src/agent-builder.ts";
 import { renderChatEvent, renderEvent } from "../src/render.ts";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -51,38 +52,54 @@ class Stdin extends EventEmitter {
   send(...chunks: string[]): void { this.chunks.push(...chunks); this.emit("readable"); }
 }
 const shell = resolveShell();
-it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed")("real TUI inspection/revocation sees counted grants and changes the next runtime decision", async () => {
+it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").each([0, 1200])("real TUI inspection/revocation sees counted grants and changes the next runtime decision (provider delay %ims)", async providerDelay => {
   const root = await mkdtemp(join(tmpdir(), "agentrig-grant-inspect-")); roots.push(root); vi.stubEnv("ANTHROPIC_API_KEY", "inert-test-key");
   const c = controller(root); const stdin = new Stdin(); const writes: string[] = [];
-  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) { writes.push(text); return true; } });
+  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) { writes.push(text); stdout.emit("frame"); return true; } });
+  const frames = { snapshot: () => c.snapshot(), subscribe(listener: (state: ReturnType<TuiController["snapshot"]>) => void) {
+    const changed = () => listener(c.snapshot()); stdout.on("frame", changed); changed();
+    return () => { stdout.off("frame", changed); };
+  } };
   const instance = render(createElement(App, { controller: c }), { stdin: stdin as never, stdout: stdout as never, patchConsole: false, exitOnCtrlC: false });
-  let release!: () => void; const barrier = new Promise<void>(resolve => { release = resolve; }); let thirdReady = false; let asks = 0;
+  let release!: () => void; const barrier = new Promise<void>(resolve => { release = resolve; }); let asks = 0;
   try {
     const built = await buildAgent({ root, provider: "anthropic", model: "fake", shell: shell.path, maxTurns: "5", maxTokensPerTurn: "100" }, {
       permissionGrants: c.permissionGrants, onAsk: req => { asks++; return c.ask(req); },
     });
     let turn = 0;
     vi.spyOn(built.provider, "stream").mockImplementation(async function* (): AsyncIterable<ModelEvent> {
-      const index = turn++; if (index === 2) { thirdReady = true; await barrier; }
+      const index = turn++; if (index === 2) { await new Promise(r => setTimeout(r, providerDelay)); await barrier; }
       if (index < 3) yield { type: "tool_use", id: `t${index}`, name: "bash", input: { command: `printf '%s' '${index}'` } };
       yield { type: "stop", reason: index < 3 ? "tool_use" : "end_turn" };
     });
-    c.attach(built.agent); await new Promise(r => setTimeout(r, 100)); const run = c.submit("inspect grants");
-    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull()); stdin.send("s");
-    await vi.waitFor(() => expect(c.snapshot().pending?.scope).toBeDefined());
+    c.attach(built.agent); const run = c.submit("inspect grants");
+    await waitForTuiState(c, run, "first shell approval", state => state.pending?.req.tool === "bash");
+    await waitForTuiState(frames, run, "visible shell approval", () => writes.join("").includes('allow "bash"'));
+    stdin.send("s");
+    await waitForTuiState(c, run, "shell scope editor", state => state.pending?.scope !== undefined);
     c.editPermissionScope(JSON.stringify({ commandPrefix: ["printf", "%s"], cwd: root })); stdin.send("\r");
-    await vi.waitFor(() => expect(c.snapshot().pending?.scope?.preview).toBe(true)); expect(c.permissionGrants.inspect()).toEqual([]);
-    stdin.send("y"); await vi.waitFor(() => expect(thirdReady).toBe(true));
+    await waitForTuiState(c, run, "shell scope preview", state => state.pending?.scope?.preview === true);
+    await waitForTuiState(frames, run, "visible exact scope preview", () => writes.join("").includes("Exact future scope printed above"));
+    expect(c.permissionGrants.inspect()).toEqual([]);
+    stdin.send("y");
+    // Controller turns counts completed turns. The next request starts after both dispatches;
+    // provider entry speed is not the contract, and the barrier still prevents the third tool.
+    await waitForTuiState(c, run, "third request after two completed turns", state =>
+      state.turns === 2 && state.activity?.kind === "thinking" && state.pending === null);
     const record = c.permissionGrants.inspect()[0]!; expect(record.matchedDecisions).toBe(1); expect(asks).toBe(1);
-    await vi.waitFor(() => expect(writes.join("")).toContain(`grant ${record.grant.id}`));
-    stdin.send("/permissions", "\r"); await vi.waitFor(() => expect(c.snapshot().lines.at(-1)?.text).toContain("matched-decisions=1"));
+    await waitForTuiState(frames, run, "visible matched grant", () => writes.join("").includes(`grant ${record.grant.id}`));
+    stdin.send("/permissions", "\r");
+    await waitForTuiState(c, run, "grant inspection result", state => state.lines.at(-1)?.text.includes("matched-decisions=1") === true);
     expect(c.permissionGrants.inspect()[0]?.matchedDecisions).toBe(1);
-    stdin.send(`/permissions revoke ${record.grant.id}`, "\r"); await vi.waitFor(() => expect(c.permissionGrants.inspect()).toEqual([]));
-    release(); await vi.waitFor(() => expect(asks).toBe(2)); stdin.send("n"); await run;
+    stdin.send(`/permissions revoke ${record.grant.id}`, "\r");
+    await waitForTuiState(c, run, "exact grant revocation", () => c.permissionGrants.inspect().length === 0);
+    expect(c.permissionGrants.inspect()).toEqual([]);
+    release(); await waitForTuiState(c, run, "new shell ask after revocation", state => state.pending?.req.tool === "bash" && asks === 2);
+    stdin.send("n"); await run;
     const events = await new SessionStore({ root }).readAll(c.snapshot().sessionId!);
     expect(events.filter(e => e.type === "tool.result").map(e => e.type === "tool.result" && e.display)).toEqual(["0", "1"]);
     expect(events.filter(e => e.type === "permission.decision" && e.d === "allow").map(e => e.type === "permission.decision" && e.source?.kind)).toEqual(["approval-handler", "grant"]);
     expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: record.grant.id }));
     expect(events).toContainEqual(expect.objectContaining({ type: "permission.decision", toolUseId: "t2", d: "deny", source: { kind: "approval-handler" } }));
   } finally { release(); await c.shutdown(); instance.unmount(); }
-});
+}, 20_000);

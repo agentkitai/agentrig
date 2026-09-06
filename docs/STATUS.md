@@ -1,15 +1,30 @@
 # Status
 
-Immediate gate: **child-grants test-readiness repair**. R10d merged in PR #171, but its
-post-merge Windows run 34033869154 failed two existing prompt-readiness assertions on both
-the original and single diagnostic attempt. No green post-merge claim; R10a waits for this
-separate test-only repair and green main. [Evidence and contract](plans/child-grants-readiness.md).
+The **child-grants test-readiness repair is done** (PR #173). Main `063cac6` passed all three
+jobs in post-merge CI `34035704275`, closing R10d's earlier failed Windows gate without claiming
+that failed run passed. [Repair receipt](https://github.com/agentkitai/agentrig/pull/173#issuecomment-5559519471),
+[R10d receipt](https://github.com/agentkitai/agentrig/pull/171#issuecomment-5559519594).
 
-Active implementation queue: **R5c local packages are implemented, pending delivery gates; R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14d verification lanes are implemented, pending delivery gates; R5c is merged (PR #170), post-merge CI pending; R10d and its readiness repair are done with green main CI (PRs #171/#173); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
+### R14d implemented — delivery gates pending
+
+Shared bounded regression/behavior verdicts reuse actual E1 workers and stored E2 reports;
+the same host-attested observations reach M6 through a lazy trusted loader. Same-assumption,
+partial, missing-probe and unknown evidence cannot pass; neither matching checks nor model
+narration establish semantic proof. No new runner, automatic checks or live evaluation spend.
+[Contract](plans/R14d.md). R14c is its prerequisite; extension/provider work is independent.
+Actual correct/broken X2 surfaces keep regression/submitted tests green and discriminate in
+E2 plus attached M6. Removed assumption discount and removed M6 deficit override each failed
+their named negative controls and were restored. The one bounded Claude review returned
+REQUEST_CHANGES for the A4/X4 human-gate integration; the material finding is fixed with actual
+pending/FAIL/PASS and non-waiver regressions, including a detected/restored old-behavior control.
+[Original verdict](plans/R14d-review.md). No second review. Integrated R10d main `3d45d9f`;
+combined build/typecheck/full suite passes 2,497 tests plus two skips across 143 files (four
+workers, 34 seconds). Exact-head PR and post-merge gates remain pending.
 ### R5c implemented — delivery gates pending
 
 Local directory/npm-tarball packages validate strict R5e manifests before create-only staged
@@ -47,8 +62,7 @@ and CI group. Combined build/typecheck, 93 focused cases and full 2,526 + two sk
 pass (four workers, 37 seconds). Fresh PR CI and repaired-main post-merge CI still gate delivery;
 no additional broad review was run for this mechanical integration.
 
-
-### Child-grants readiness repair — implementation; delivery gates pending
+### Child-grants readiness repair done — PR #173; post-merge CI green
 
 Replace one-second polling and absent-prompt inequality with exact subscribed state readiness,
 bounded waits and premature run-settlement diagnostics. Production code and authorization
@@ -64,7 +78,7 @@ First PR #173 CI 34035057038 exposed a macOS rendered-output race after controll
 Actual Ink frame readiness now gates confirmation, with a buffered-frame control and both-mode
 fail-first mutation; visible-text and authorization assertions remain unchanged. No second review.
 
-### R10d merged — PR #171; post-merge Windows gate pending repair
+### R10d done — PR #171; Windows readiness repaired in PR #173
 
 Explicit doctor --probe runs bounded potentially billable empirical samples; normal doctor
 remains offline/read-only. Exact local observations feed actual advertised capability flags;
@@ -80,7 +94,8 @@ optional source-summary wording is at the roadmap END. Exact-head CI remains the
 
 ### R14c done — PR #169; post-merge CI green
 
-Main `4d3eb91` passed exact post-merge CI 34032607190 on all three platforms.
+Final head `5ff9f59` passed CI `34032258018`; main `4d3eb91` passed all three post-merge jobs
+in `34032607190`. [Final receipt](https://github.com/agentkitai/agentrig/pull/169#issuecomment-5559190491).
 Following notes are implementation history.
 
 M6 and read-only `sessions show --evidence` share a bounded claim/latest-candidate report.
@@ -107,7 +122,7 @@ Final combined build/typecheck/full suite passes 2,442 tests plus two skips acro
 
 ### R11b done — PR #168; post-merge CI green
 
-Main `4f61b65` passed exact post-merge CI 34032134303 on all three platforms.
+Main `4f61b65` passed all three jobs in post-merge CI `34032134303`.
 Following notes are implementation history.
 
 Built-in GET-only web_fetch declares net and external provenance. Strict credential-free HTTP(S),
