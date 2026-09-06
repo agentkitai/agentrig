@@ -1,4 +1,4 @@
-import type { Message } from "./messages.js";
+import type { ContentTrust, Message } from "./messages.js";
 import type { Usage } from "./events.js";
 
 export interface ToolSpec {
@@ -28,8 +28,9 @@ export interface ModelRequest {
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";
 
 export type ModelEvent =
-  | { type: "text_delta"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown }
+  /** Optional labels are supplied by trusted adapter code, never copied from model prose/JSON. */
+  | { type: "text_delta"; text: string; trust?: ContentTrust }
+  | { type: "tool_use"; id: string; name: string; input: unknown; trust?: ContentTrust }
   /** reported:false marks synthesized/partial fallback counts, not a known zero-cost call. */
   | { type: "usage"; usage: Usage; reported?: boolean }
   /** `raw` carries the provider's verbatim stop reason when it doesn't map cleanly. */

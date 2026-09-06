@@ -83,6 +83,8 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'MCP definition'
       - run: pnpm exec vitest run packages/supervisor/test/corroborated-progress.test.ts packages/supervisor/test/detectors.test.ts
       - run: pnpm exec vitest run packages/core/test/manifests.test.ts
+      - run: pnpm exec vitest run packages/core/test/content-trust.test.ts
+      - run: pnpm exec vitest run packages/memory/test/procedures.test.ts packages/cli/test/procedure-candidates.test.ts
       - run: pnpm exec vitest run packages/memory/test/windows-memory-replace.test.ts
       # Repeat the original real-process regression after its full-suite execution above.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts -t 'conserves shared facts'
