@@ -37,3 +37,4 @@ export * from "./provider-conformance.js";
 export * from "./otel.js";
 export * from "./mcp/index.js";
 export type { AuxiliaryCall, AuxiliaryReport } from "./auxiliary.js";
+export { createOutputContract, parseOutputJson, OUTPUT_LIMITS, type OutputContract, type OutputMode } from "./output-schema.js";

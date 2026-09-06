@@ -16,6 +16,7 @@ import { SessionStore, assertSessionId } from "./session-store.js";
 import { runHooks, type AttributedHookResult, type Hook, type HookPoint } from "./hooks.js";
 import { contextPrincipals, USER_CONTEXT, PLATFORM_CONTEXT, ADVISORY_CONTEXT } from "./context-principals.js";
 import { externalExpansion, readExpansionRestriction } from "./external-expansion.js";
+import { assertOutputContract, type OutputContract } from "./output-schema.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
@@ -78,6 +79,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Optional final-answer constraint, compiled by createOutputContract. Not inherited by children. */
+  outputContract?: OutputContract;
   /** Trusted nonblocking observation only; failure never changes the run or event log. */
   observeSession?: (session: Session) => void;
   /** Explicit clarification handler, never a permission grant or implicit supervisor policy. */
@@ -259,6 +262,11 @@ function estimateTokens(system: string, messages: Message[]): number {
 export { PLAN_TOOL, MAX_REPLAN_REFUSALS } from "./tool-execution.js";
 
 export function createAgent(config: AgentConfig): Agent {
+  if (config.outputContract !== undefined) {
+    assertOutputContract(config.outputContract);
+    if (config.outputContract.mode === "native" && config.provider.capabilities.nativeOutputSchema !== true)
+      throw new Error("Native output requires an explicitly opted-in supported adapter");
+  }
   if (config.toolAllowlist !== undefined) config = { ...config,
     toolAllowlist: Object.freeze(AgentRoleToolNames.parse(config.toolAllowlist)) };
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
@@ -301,6 +309,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
   const questionState: import("./question-runtime.js").QuestionState = {};
+  const output = config.outputContract;
+  let outputRepair = false, outputValidated = false;
   const hasPlanTool = config.tools.some((t) => t.name === PLAN_TOOL);
 
   const lifecycle = createSessionLifecycle(store, id, abortGraceOf(config), (payload) => {
@@ -654,6 +664,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             },
           ];
         }
+        if (output !== undefined) requestSystemBlocks = [...requestSystemBlocks, { content: `Return your final answer as one complete JSON value matching this schema. No Markdown or prose outside JSON. Schema: ${JSON.stringify(output.schema)}`,
+          source: "system_prompt", origin: "output-schema", authority: "data", context: ADVISORY_CONTEXT, reason: "operator-selected final output shape, not execution authority" }];
         const requestSystem = renderSystemBlocks(requestSystemBlocks);
         const eviction = evictToolResults(messages, config.toolResultEviction);
         if (eviction.count > 0) {
@@ -663,7 +675,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         const req: ModelRequest = {
           system: requestSystem,
           messages: eviction.messages,
-          tools: toolSpecs,
+          tools: outputRepair ? [] : toolSpecs,
+          ...(output?.mode === "native" ? { outputSchema: output.schema as Record<string, unknown> } : {}),
           maxTokens: config.maxTokensPerTurn ?? 8192,
           cacheHints: { systemPrefix: true, systemPrefixChars: system.length },
         };
@@ -914,6 +927,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           await emit({ type: "turn.end", n: turns });
           break;
         }
+        // One repair response only. Provider tool calls cannot reach a strategy or any callback,
+        // even if the provider ignores the empty advertised registry. Preserve paired history.
+          if (outputRepair && (toolUses.length > 0 || stop !== "end_turn" || !sawStop)) {
+          if (toolUses.length > 0) {
+            const message: Message = { role: "user", content: toolUses.map(tu => ({ type: "tool_result", toolUseId: tu.id,
+              isError: true, context: ADVISORY_CONTEXT, content: "[not executed: final-output repair cannot use tools]" })) };
+            messages.push(message); await emit({ type: "message.append", message });
+          }
+          await emit({ type: "output.validated", digest: output!.digest, mode: output!.mode, attempt: "repair", valid: false, category: toolUses.length ? "tool" : "stop" });
+          reason = "error"; await emit({ type: "turn.end", n: turns }); break;
+        }
         if (stop === "max_tokens") {
           // Even parseable calls from this response are incomplete work, not permission to
           // dispatch. Persist explicit paired non-execution results before any retry/resume.
@@ -941,6 +965,21 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           consecutiveContinuations = 0;
         }
         if (stop !== "max_tokens" && toolUses.length === 0) {
+          if (output !== undefined) {
+            const finalText = assistantContent.map(block => block.type === "text" ? block.text : "").join("");
+          const category = sawStop && stop === "end_turn" ? output.validate(finalText) : "stop";
+            await emit({ type: "output.validated", digest: output.digest, mode: output.mode,
+              attempt: outputRepair ? "repair" : "initial", valid: category === "valid", category });
+            outputValidated = category === "valid";
+            if (!outputValidated && !outputRepair && category !== "stop") {
+              outputRepair = true;
+              const message: Message = { role: "user", content: [{ type: "text", context: ADVISORY_CONTEXT,
+                text: "[Platform output repair: the final answer failed JSON/schema validation. Return one corrected complete JSON value matching the existing schema. Do not call tools. This is not new user input or permission.]" }] };
+              messages.push(message); await emit({ type: "message.append", message });
+              await emit({ type: "turn.end", n: turns }); continue;
+            }
+            if (!outputValidated) reason = "error";
+          }
           await emit({ type: "turn.end", n: turns });
           break;
         }
@@ -1029,6 +1068,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      if (output !== undefined && !outputValidated && reason === "done") {
+        reason = "error";
+        await emit({ type: "error", message: "No validated final output was produced", fatal: false }).catch(() => {});
+      }
       principals.close();
       await flushDelegations();
       lifecycle.beginEnding();
