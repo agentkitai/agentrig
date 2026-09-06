@@ -87,3 +87,10 @@ locked/edited/foreign/nonregular/link preservation; canonical-root alias and sub
 unchanged input bytes, cancellation and scan caps. Full build/typecheck/test, detected/restored
 named negative mutations, one bounded independent Claude review, exact-head three-platform CI
 and root-coordinated merge/post-merge gates. Exact receipts will be recorded in the closing PR.
+
+One independent Claude review `e1112e28-ebef-4ea5-9c7b-0498f06d2f5e` approved exact head
+`959cc976781981e8a9a91072a8b2b67cbb141845` against main `6cf3865`, with no material findings.
+It independently passed build/typecheck and 2,134 tests plus two skips (107 files); 249 seconds,
+12 reported turns within the requested 20-turn cap. Digest-comparison and ownership-check
+mutations were detected by named refusal/preservation tests and restored. Optional polish is
+at ROADMAP's end, not new submilestones. PR #149 records final-head CI and integration receipts.
