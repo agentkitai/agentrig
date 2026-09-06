@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { afterEach, expect, it, vi } from "vitest";
-import { createAgent, parallel, RulePolicy, SessionStore, writeFileTool, editFileTool,
-  type AgentConfig, type ModelEvent, type ModelProvider, type Session, type Tool } from "@agentkitai/agentrig-core";
+import { createAgent, parallel, RulePolicy, SessionStore, writeFileTool, editFileTool, grepTool,
+  type AgentConfig, type ModelEvent, type ModelProvider, type Tool } from "@agentkitai/agentrig-core";
 
 const roots: string[] = [];
 afterEach(async () => { vi.useRealTimers(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -76,9 +76,43 @@ it.each([
     // Releasing it at paths() time would let a broken classifier accidentally look serial.
     f.gates[1]!.release(); f.gates[2]!.release();
     await new Promise<void>(resolve => setTimeout(resolve, 100)); f.gates[0]!.release();
-    expect((await f.finished).summary.reason).toBe("done");
+    const result = await f.finished; expect(result.summary.reason).toBe("done");
+    const permission = result.events.find(event => event.type === "permission.request" && (event.req.input as Input).label === "two");
+    const completion = result.events.find(event => event.type === "tool.result" && event.id === "one");
+    expect(permission!.seq).toBeGreaterThan(completion!.seq);
     expect(f.stages.indexOf("start:two")).toBeGreaterThan(f.stages.indexOf("end:one"));
   } finally { f.gates.forEach(gate => gate.release()); await f.finished; }
+});
+
+it.each(["new.", "new ", "σ", "new:stream"])("keeps ambiguous missing filename %s exclusive", async path => {
+  const f = await fixture([call("a", "one"), call(path, "two", "write")]);
+  try { await f.entered[0]!.promise; await f.described[1]!.promise; f.gates[1]!.release();
+    await new Promise<void>(resolve => setTimeout(resolve, 100)); f.gates[0]!.release(); await f.finished;
+    expect(f.stages.indexOf("start:two")).toBeGreaterThan(f.stages.indexOf("end:one"));
+  } finally { f.gates.forEach(gate => gate.release()); await f.finished; }
+});
+
+it("orders actual grep directory aliases before writes to their physical targets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-parallel-grep-")); roots.push(root);
+  await mkdir(join(root, "dir")); await writeFile(join(root, "target"), "old value");
+  await link(join(root, "target"), join(root, "dir", "alias"));
+  const entered = latch(); const gate = latch(); const grep = grepTool(); let display = ""; let turn = 0;
+  const provider: ModelProvider = { id: "parallel", model: "inert", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 10000 },
+    async *stream() {
+      if (turn++ === 0) {
+        yield { type: "tool_use" as const, id: "read", name: "grep", input: { pattern: "old", path: "dir" } };
+        yield { type: "tool_use" as const, id: "write", name: "write_file", input: { path: "target", content: "new value" } };
+      }
+      yield { type: "stop" as const, reason: turn === 1 ? "tool_use" as const : "end_turn" as const };
+    } };
+  const session = createAgent({ provider, systemPrompt: "inert", repoMap: false, store: new SessionStore({ root: join(root, "logs") }),
+    permissions: new RulePolicy([{ decision: "allow" }]), turnStrategy: parallel(), tools: [writeFileTool(), { ...grep, async execute(input, context) {
+      entered.release(); await gate.promise; const result = await grep.execute(input, context); display = result.display; return result;
+    } }] }).run("read dir then write target", { cwd: root });
+  try { await entered.promise; await new Promise<void>(resolve => setTimeout(resolve, 100)); gate.release();
+    expect((await session.done).reason).toBe("done"); expect(display).toContain("old value");
+    expect(await readFile(join(root, "target"), "utf8")).toBe("new value");
+  } finally { gate.release(); await session.done; }
 });
 
 it.each(["unknown effect", "empty paths", "too many paths", "long path", "background"])("keeps %s exclusive rather than guessing independence", async kind => {
@@ -86,7 +120,7 @@ it.each(["unknown effect", "empty paths", "too many paths", "long path", "backgr
     if (kind === "unknown effect") delete tool.effects;
     else if (kind === "background") tool.hasBackgroundWork = () => true;
     else { const paths = tool.paths!; tool.paths = input => {
-      const actual = paths(input); return kind === "empty paths" ? [] : kind === "too many paths" ? Array(65).fill("a") : ["x".repeat(4097)];
+      paths(input); return kind === "empty paths" ? [] : kind === "too many paths" ? Array(65).fill("a") : ["x".repeat(4097)];
     }; }
   });
   try { await f.entered[0]!.promise;
@@ -158,6 +192,22 @@ it("bounds the live pool and stops queued bodies on cancellation", async () => {
 it("validates pool bounds and declares built-in write/edit effects explicitly", () => {
   for (const maxConcurrency of [0, 17, 1.5, NaN, Infinity]) expect(() => parallel({ maxConcurrency })).toThrow("1 to 16");
   expect(writeFileTool().effects).toBe("workspace"); expect(editFileTool().effects).toBe("workspace");
+});
+
+it("does not surface a queued sandbox escape prompt after cancellation", async () => {
+  const asking = latch(); const answer = latch(); let asks = 0;
+  const f = await fixture([call("a", "one"), call("b", "two")], {
+    sandbox: { mode: "read-only", provider: { prepare: command => command } },
+    async onAsk(request) { expect(request.origin).toBe("sandbox-escalation"); asks++; asking.release(); await answer.promise; return "deny"; },
+  });
+  try {
+    await asking.promise;
+    // Both real pipelines reached their distinct trusted unsupported-tool sandbox refusals.
+    let denials = 0;
+    for await (const event of f.session.events) if (event.type === "sandbox.denied" && ++denials === 2) break;
+    expect(asks).toBe(1); f.session.control.abort(); answer.release();
+    expect((await f.finished).summary.reason).toBe("aborted"); expect(asks).toBe(1); expect(f.stages).toEqual([]);
+  } finally { answer.release(); f.gates.forEach(gate => gate.release()); await f.finished; }
 });
 
 it("joins an already-started pipeline before surfacing a later fatal policy rejection", async () => {

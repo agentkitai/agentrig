@@ -39,13 +39,20 @@ async function classify(metadata: SchedulingMetadata): Promise<Hazard | undefine
     const absolute = resolve(metadata.cwd, path);
     try {
       const canonical = await realpath(absolute); const info = await stat(canonical, { bigint: true });
-      if ((!info.isFile() && !info.isDirectory()) || info.ino === 0n) return undefined;
-      targets.push({ path: pathKey(canonical), ...(info.ino === 0n ? {} : { inode: `${info.dev}:${info.ino}` }) });
+      // A directory traversal may read child symlinks/hardlinks outside the declared tree.
+      // Its own inode is not a bounded inventory of those physical targets.
+      if (!info.isFile() || info.ino === 0n) return undefined;
+      targets.push({ path: pathKey(canonical), inode: `${info.dev}:${info.ino}` });
     } catch (error) {
       if (!write || (error as NodeJS.ErrnoException).code !== "ENOENT") return undefined;
       // A dangling symlink is not a new ordinary file at this lexical name.
       try { await lstat(absolute); return undefined; }
       catch (missing) { if ((missing as NodeJS.ErrnoException).code !== "ENOENT") return undefined; }
+      const name = basename(absolute);
+      // No inode exists yet. Do not pretend lowercase is universal Windows name resolution.
+      // Conservative on every platform: spelling aliases, streams and device names serialize.
+      if (!/^[\x20-\x7e]+$/.test(name) || /[<>:"|?*]|[. ]$/.test(name) ||
+        /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) return undefined;
       // Missing parents may be created recursively; that effect is deliberately exclusive.
       try { targets.push({ path: pathKey(resolve(await realpath(dirname(absolute)), basename(absolute))) }); }
       catch { return undefined; }
@@ -98,7 +105,13 @@ export async function executeParallel(calls: readonly TurnToolCall[], signal: Ab
         },
         authorized() { if (!exclusive) { release?.(); release = undefined; } },
         finish() { active.delete(token); release?.(); release = undefined; notify(); reset(); },
-        async ask(work) { const done = await ask(); try { return await work(); } finally { done(); } },
+        async ask(work) {
+          const done = await ask();
+          try {
+            if (stopped()) throw signal.reason ?? new Error("parallel batch stopped");
+            return await work();
+          } finally { done(); }
+        },
       };
       try { results[index] = await runTool(calls[index]!, schedule); }
       catch (error) { if (!failed) { failed = true; failure = error; } }
