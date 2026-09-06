@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **Windows memory atomic-replacement repair before the next merge; R5d awaits this repair, while R6a proceeds independently. R13f and R5e are merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5d implemented, pending final delivery gates; R6a active in an independent worktree. R13f and R5e implementations are complete and merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -13,6 +13,10 @@ parallel in separate Git worktrees, each on a fresh branch from updated main and
 its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establishes fail-closed
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
+
+R6a procedure detection is now active in a separate worktree: its memory-hardening and R5e
+manifest dependencies are delivered, and it does not depend on MCP pinning or extension loading.
+This dependency-aware parallel start preserves the committed queue; it introduces no demand veto.
 
 Each exact head needs appropriate tests, one bounded independent review with material findings
 addressed, and green three-platform CI. Integrate current main before merging; serialize merges
@@ -39,11 +43,15 @@ findings, independently passing 692 core tests and all-package typecheck. Schema
 stream-assembly-drop mutations fail named persistence/resume controls and are restored. Actual
 vendor text/tool-call provenance spoofing is inert, and a user-labeled call still obeys denial.
 Crash-only raw-delta reconstruction remains unlabeled; no unrecorded provenance is invented.
-After integrating Windows repair main `3c857d0`, local build/typecheck/full suite pass
-2,039 tests plus two existing skips (99 files);
+After integrating R5d main `008c2ba`, local build/typecheck/full suite pass
+2,052 tests plus two existing skips (101 files);
 66 focused trust/hooks/eviction/H6 trace tests pass with unchanged golden traces.
 
-### Windows memory atomic replacement — CI-blocking repair
+### Windows memory atomic replacement — merged in PR #145
+
+Final head `0abdfc7` passed three-platform CI 34017429109 and merged as `3c857d0`.
+Post-merge main CI is pending at this integration checkpoint and must pass before R5d merges;
+PR #145 records its final result.
 
 R5d combined-head CI 34016959860 failed the existing Windows two-process ingest conservation
 fixture with `EPERM` renaming a temporary index over `index.md`. This is not evidence of a known
@@ -65,7 +73,8 @@ and post-merge CI receipts belong to the repair PR; R5d's earlier independent re
 
 ### R13f merged — PR #143 records closing delivery gates
 
-Merge `1a20f4e` passed post-merge main CI 34016868500 on all three platforms.
+Final head `01127b7` passed three-platform CI 34016646499 and merged as `1a20f4e`.
+That merge passed post-merge main CI 34016868500 on all three platforms.
 
 Core stamps unique runtime call provenance; only matching successful write-class results in the
 same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
@@ -80,7 +89,8 @@ Windows CI caught an absolute-path alias bug (including `/var` versus `/private/
 containment and a portable symlink/junction regression that fails against the old check. The final
 branch integrates R5e main `26e78ec`; build/typecheck and the full local suite pass 2,013 tests
 plus two skips (97 files), with both Windows targeted suites retained. Exact final-head
-three-platform CI and post-merge main CI remain required; PR #143 records the closing receipts.
+three-platform CI passed as recorded above; post-merge main CI gates the next merge. PR #143
+records the closing receipts.
 Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
 
 ### R5e merged — PR #142 records delivery gates
@@ -100,6 +110,28 @@ script blocklist) is fixed by refusing all nonempty scripts; the added regressio
 the old blocklist. Strict-schema and equal-precedence negative mutations also fail and are
 restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
 post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
+
+### R5d implemented — PR #144 records delivery gates
+
+CLI run/TUI now persist MCP tool-definition baselines in trusted user state, scoped by canonical
+config path and server name. First use is explicitly trust-on-first-use, not a safety assessment.
+Changed names, descriptions or input schemas require exact before/after consent independent of
+ordinary allow/YOLO and TUI standing answers. Unattended calls refuse; changes after advertisement
+or during approval require reconnection. Bounded pin reads, complete-list validation and locked
+CAS preserve prior approvals on errors or stale reviews. MCP tools remain `exec`; sandbox limits
+are unchanged. See [R5d contract](plans/R5d.md) for the SDK trusted-host seam and attestation limits.
+
+One bounded Claude review `fc691d69-5cc4-4e35-8b1f-92ac33e9da68` approved with no material findings,
+independently passing typecheck, 42 MCP tests, the TUI consent test and 1,981 tests plus two skips.
+Missing-callback and stale-advertisement mutations failed their named core controls and were
+restored. The CLI adapter independently fails closed on absent user interaction. Real Node stdio
+server tests use an independent effect marker; TUI tests show the exact delta and reject standing
+grants. Integrated with repaired main `3c857d0`: build/typecheck and 2,037 tests plus two skips
+(100 files) pass. The prior integration exposed the Windows memory replacement failure documented
+above; its independently reviewed repair was merged in PR #145 and is now included. No second
+general R5d review was needed. Previous head `65bbc0b` passed all three platforms in CI 34016609070; updated-head and
+post-merge CI remain required before the next merge. PR #144 holds final receipts. Optional polish
+is at ROADMAP's end, not additional release subdivisions.
 
 ### R6e complete (PR #140)
 

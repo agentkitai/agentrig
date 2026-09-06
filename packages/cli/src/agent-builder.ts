@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { homedir } from "node:os";
 import {
   assertShellExists,
   Checkpointer,
@@ -42,9 +43,9 @@ import {
   type MaintenanceLimits,
   formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { z } from "zod";
-import { McpClient, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
+import { McpClient, FileMcpPins, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
 import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
@@ -293,6 +294,8 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  /** Trusted host override for isolated state; never loaded from project config. */
+  mcpPinRoot?: string;
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
@@ -420,6 +423,18 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     const configs = await readMcpConfig(opts.mcpConfig);
     const connected = await connectServers({
       servers: configs.map((c) => new McpClient(c, { onError: (e) => extras.onHookError?.(`mcp: ${e.message}`) })),
+      pins: new FileMcpPins(extras.mcpPinRoot ?? join(homedir(), ".agentrig", "mcp-pins"), await realpath(opts.mcpConfig)),
+      onDefinitionNotice: (message) => extras.onNotice?.(message),
+      onDefinitionChange: async (change, ctx) => {
+        // A separate user decision, never the ordinary allow/yolo policy. Server prose is data.
+        return await extras.onAsk?.({
+          tool: "mcp_definition_change",
+          origin: "mcp-definition-change",
+          class: "exec",
+          cwd: ctx.cwd,
+          input: { action: "Approve these changed MCP definitions? This does not approve tool execution or certify safety.", ...change },
+        }) === "allow";
+      },
       onError: (server, err) => extras.onHookError?.(`mcp ${server} unavailable (continuing): ${err.message}`),
     });
     mcpTools = connected.tools;
