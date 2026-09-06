@@ -49,6 +49,11 @@ skill guidance and regression assertion. Build/typecheck and the full 2,260 + tw
 119 files pass again with four workers. No new review or production scope expansion; the
 updated exact-head CI supersedes the earlier PR-head checks.
 
+Committed roadmap PR #156 then advanced main to `c62009b`. Its H7/R15 additions, ACP amendment
+and fourth-pass narrative are retained alongside the verified done markers. Build/typecheck and
+the same 2,260 + two skips across 119 files pass again. H7a then H7b are next correctness repairs
+after R5a delivery, before R5b; this mechanical integration does not add another review round.
+
 ### R12b done — PR #155; post-merge CI green
 
 Exact post-merge main `326acdb` passed all three platforms in CI 34024734696. Following gate
