@@ -1,8 +1,15 @@
 # Status
 
-Active: **R15c persisted reasoning blocks**, alongside separately owned R15h/R15g/R8d
-worktrees. R15f #190 and R8c #192 are done with all four post-main checks green.
-[Contract](plans/R15c.md); runtime, review and integrated CI gates apply.
+Active row: **R15h bounded local agent roles**, integrated through all-four-green R15c main `749ff26`.
+R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
+R10b PR #177 post-main CI `34040691166` passed all three platforms.
+R15b PR #185 is done: main `74c5073`, CI `34048869709` and structure `34048869702` green.
+
+R15c is done (PR #193): root verified main `749ff265b031f19040307b60b44097e825f1c2f9`,
+CI34061897223 and structure34061897204 all four green.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/193#issuecomment-5562453419).
+The following R15c implementation checkpoints retain earlier validation history;
+its final exact-head and post-main gates are now closed.
 R15c implementation and the single review's compaction fix pass 56 focused tests
 and full Docker validation (2,873 passed, two skips, 177 files) on `ff6758c`.
 Original review: REQUEST_CHANGES, requested 24/reported 27 turns; three compaction
@@ -49,10 +56,31 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is integrating PR #193; R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is in progress; R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R15h in progress — local agent roles
+
+Independent role enforcement proceeds after delivered R5e/R12d/R13c; it does not wait
+on unrelated reasoning/output-schema rows. Trusted project manifests select existing
+provider roles and monotonically narrow tools, child turns and delegation. Runtime
+dispatch includes hidden diagnostic checks; role bodies are project/advisory, never
+grants. Same role-built SDK resume retains restrictions; explicit operator CLI resume
+builds a new root, not an actor reconstructed from historical receipts.
+[Bounded contract and validation](plans/R15h.md). One independent review approved:
+21 reported /24 requested turns, 84 reviewer-run focused tests. Frozen build/typecheck
+and Docker full pass 2,872 plus two existing skips /177 files. Integration with R8c
+retains role discovery and child telemetry together; final delivery gates remain.
+PR #196 first head `ecc4482` passed CI34061166635 and structure34061166651,
+all four green. Final R15c integration retains reasoning/role dispatch and privacy:
+build/typecheck, 63 focused tests and full Docker 2,934 plus two skips /182 files
+pass. Final exact-head and post-main gates remain, not another review round.
+Integrated head `55bd0c6` then failed macOS's pre-spawn 80ms fixture race and Windows
+temporary-directory EBUSY cleanup. Both original failures remain recorded. Bounded
+test-only phase/cleanup repairs retain assertions and production limits; build/typecheck
+and full Docker now pass 2,936 plus two skips /182 files. Fresh all-four CI is required.
 
 ### R8c done — PR #192; all four post-main checks green
 

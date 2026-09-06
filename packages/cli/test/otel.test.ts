@@ -112,20 +112,27 @@ require('node:readline').createInterface({input:process.stdin}).on('line',line=>
     if (pid !== undefined) { try { process.kill(pid, "SIGTERM"); } catch { /* owned child already gone */ } }
   }
 }, 30000);
-it("actual TUI startup and child run share telemetry without ending the parent sink early", async () => {
+it.each([false, true])("actual TUI startup and child run share private telemetry without ending the parent sink early (role=%s)", async role => {
   const f = await fixture(); let rootTurns = 0;
+  if (role) {
+    await mkdir(join(f.cwd, ".agentrig", "agents"), { recursive: true });
+    await writeFile(join(f.cwd, ".agentrig", "agents", "private-role.md"), '---\ntools: []\n---\nPRIVATE_ROLE_BODY');
+  }
   vi.mocked(AnthropicProvider.prototype.stream).mockImplementation(async function* (req): AsyncIterable<ModelEvent> {
     const child = JSON.stringify(req.messages).includes("CHILD_MARKER");
-    if (!child && rootTurns++ === 0) { yield { type: "tool_use", id: "spawn", name: "subagent", input: { task: "CHILD_MARKER" } }; yield { type: "stop", reason: "tool_use" }; }
+    if (child && role) { expect(req.system).toContain("PRIVATE_ROLE_BODY"); expect(req.tools).toEqual([]); }
+    if (!child && rootTurns++ === 0) { yield { type: "tool_use", id: "spawn", name: "subagent", input: { task: "CHILD_MARKER", ...(role ? { agent: "private-role" } : {}) } }; yield { type: "stop", reason: "tool_use" }; }
     else yield { type: "stop", reason: "end_turn" };
   });
   const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY"); Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
   harness.exercise = async c => { await c.submit("parent"); await c.submit("continue"); };
-  try { await startTui({ ...f.opts, subagents: true, allow: ["subagent"] }); }
+  try { await startTui({ ...f.opts, ...(role ? { trustedProjectRoot: f.cwd } : {}), subagents: true, allow: ["subagent"] }); }
   finally { if (descriptor === undefined) Reflect.deleteProperty(process.stdin, "isTTY"); else Object.defineProperty(process.stdin, "isTTY", descriptor); }
   const sessions = f.spans().filter((s: any) => s.name === "session"); expect(sessions.length).toBeGreaterThanOrEqual(3);
   expect(new Set(sessions.map((s: any) => s.traceId)).size).toBe(2); // root resume shares identity, child has its own
   expect(f.bodies.join("")).not.toContain("CHILD_MARKER");
+  expect(f.bodies.join("")).not.toContain("PRIVATE_ROLE_BODY");
+  expect(f.bodies.join("")).not.toContain("private-role");
 });
 it("actual ACP session prompt exports and joins on close", async () => {
   const f = await fixture(); const input = new PassThrough(); const output = new PassThrough();

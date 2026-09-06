@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
+import { AgentRoleToolNames } from "./manifests.js";
 import type { PermissionRequest } from "./events.js";
 import { PermissionClass } from "./permission-types.js";
 import { CommandPrefixSchema, ShellOperationSchema } from "./shell-operation.js";
@@ -63,6 +64,7 @@ export class PermissionGrantRegistry {
     limits: { maxGrants?: number; maxPending?: number; maxViews?: number };
   };
   private ancestors: readonly string[] = [];
+  private allowedTools: ReadonlySet<string> | undefined;
   private seal: { session: string; task: string } | undefined;
   get revision(): number { return this.state.version; }
   get isChildView(): boolean { return this.seal !== undefined; }
@@ -76,12 +78,15 @@ export class PermissionGrantRegistry {
       views: 0, owners: new Map(), rootSubject: this.subject, limits: { ...limits } };
   }
   /** A live view, not a copy of grants. Old child views never reactivate on a later root task. */
-  childView(): PermissionGrantRegistry {
+  childView(toolAllowlist?: readonly string[]): PermissionGrantRegistry {
+    if (toolAllowlist !== undefined) toolAllowlist = AgentRoleToolNames.parse(toolAllowlist);
     this.requireActive();
     if (this.state.sessionId === undefined || this.state.activeRun === undefined) throw new Error("child grants require an active root run");
     if (this.state.views >= (this.state.limits.maxViews ?? 256) || this.ancestors.length >= 64) throw new Error("permission child-view limit reached");
     const child = new PermissionGrantRegistry(this.state.limits);
     child.state = this.state;
+    const inherited = this.allowedTools;
+    child.allowedTools = toolAllowlist === undefined ? inherited : new Set(toolAllowlist.filter(name => inherited === undefined || inherited.has(name)));
     child.ancestors = Object.freeze([...this.ancestors, this.subject]);
     child.seal = { session: this.state.sessionId, task: this.state.activeRun };
     this.state.owners.set(child.subject, child.seal); this.state.views++;
@@ -197,6 +202,7 @@ export class PermissionGrantRegistry {
   }
   private match(req: PermissionRequest, auditRequired: boolean, denialsOnly = false): GrantAuthorization {
     if (!this.active) return { decision: "deny", viewExpired: true };
+    if (this.allowedTools !== undefined && !this.allowedTools.has(req.tool)) return { decision: "deny" };
     if (separateConsent(req)) return { decision: "ask" };
     if (this.state.auditBlocked || (auditRequired && this.state.pending.length > 0)) return { decision: "deny", auditBlocked: true };
     for (const grant of this.state.grants.values()) {
