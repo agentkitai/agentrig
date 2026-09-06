@@ -7,6 +7,7 @@ import type {
   PermissionAskContext,
   PlanItem,
   Session,
+  RunOptions,
   Signal,
   Skill,
   ExtensionCommand,
@@ -598,6 +599,15 @@ export class TuiController {
     return this.run(cmd);
   }
 
+  /** Transport prompt, deliberately not the slash-command interpreter. Joins the actual run. */
+  async prompt(text: string, advisoryContext?: readonly string[]): Promise<void> {
+    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming) throw new Error("session is unavailable or busy");
+    if (!text.trim() && !advisoryContext?.length) throw new Error("prompt is empty");
+    await this.start(text, { cwd: this.opts.cwd,
+      ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
+      ...(advisoryContext === undefined ? {} : { advisoryContext }) });
+  }
+
   private async run(cmd: TuiCommand): Promise<boolean> {
     switch (cmd.kind) {
       case "quit":
@@ -880,7 +890,7 @@ export class TuiController {
     });
   }
 
-  private async start(task: string, opts: { cwd?: string; resume?: string }): Promise<void> {
+  private async start(task: string, opts: Pick<RunOptions, "cwd" | "resume" | "advisoryContext">): Promise<void> {
     if (this.state.status === "running") {
       this.print("a turn is already running — /abort first", "error");
       return;

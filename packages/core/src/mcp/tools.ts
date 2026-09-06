@@ -132,6 +132,8 @@ export interface ConnectOptions {
   onError?: (server: string, err: Error) => void;
   /** CLI always supplies persistent pins; SDK hosts may explicitly manage their own trust. */
   pins?: FileMcpPins;
+  /** Trusted transports may require an existing unchanged baseline; never writes pins. */
+  requireExistingPins?: boolean;
   onDefinitionChange?: (change: McpDefinitionChange, ctx: ToolContext) => Promise<boolean>;
   onDefinitionNotice?: (message: string) => void;
 }
@@ -153,8 +155,10 @@ export async function connectServers(opts: ConnectOptions): Promise<{ tools: Any
       const specs = await client.listTools();
       const snapshot = mcpDefinitionSnapshot(specs);
       const pins = opts.pins;
+      if (opts.requireExistingPins && pins === undefined) throw new Error("MCP transport requires persistent pins");
       if (pins !== undefined) {
         const baseline = await pins.read(client.name);
+        if (opts.requireExistingPins && baseline !== snapshot) throw new Error("MCP definitions require operator approval in the CLI before using this transport");
         if (baseline === undefined) {
           await pins.compareAndSet(client.name, undefined, snapshot);
           opts.onDefinitionNotice?.(`MCP ${JSON.stringify(client.name)}: pinned first-use tool definitions (trust on first use; not a safety assessment)`);
@@ -170,6 +174,7 @@ export async function connectServers(opts: ConnectOptions): Promise<{ tools: Any
         const baseline = await pins.read(client.name);
         if (baseline === undefined) throw new Error("MCP baseline disappeared; refusing to reset trust during execution");
         if (baseline !== snapshot) {
+          if (opts.requireExistingPins) throw new Error("MCP definitions require operator approval in the CLI before using this transport");
           const change = mcpDefinitionChange(client.name, baseline, snapshot);
           if (await opts.onDefinitionChange?.(change, ctx) !== true) {
             throw new Error(`MCP ${JSON.stringify(client.name)}: changed tool definitions not approved; execution refused`);

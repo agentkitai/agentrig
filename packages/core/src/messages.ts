@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { DiagnosticsSchema, type Diagnostics } from "./diagnostics-types.js";
 
+/** Trusted transports may attach data, never extra user instructions or grants. */
+export const AdvisoryPromptContextSchema = z.array(z.string().max(32_768)).max(32)
+  .refine(values => values.reduce((bytes, value) => bytes + Buffer.byteLength(value), 0) <= 262_144,
+    "advisory prompt context exceeds 256 KiB");
+export function advisoryPromptBlocks(values: readonly string[]): ContentBlock[] {
+  return values.map(text => ({ type: "text", text, trust: "external",
+    context: { principal: "platform", authority: "advisory" } }));
+}
+
 /** Unified message schema. Providers map to/from this; core never sees a vendor payload. */
 
 /** Host-supplied provenance metadata, not an authorization grant or proof of authority. */
