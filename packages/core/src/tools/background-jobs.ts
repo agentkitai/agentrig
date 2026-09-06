@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../tool.js";
-import { throwIfSandboxDenied } from "../sandbox-providers.js";
 import { bound } from "./shared.js";
 
 /**
@@ -46,16 +45,15 @@ interface JobRecord {
   unread: string;
   /**
    * The last RETAINED_TAIL_CHARS of everything the job ever wrote, independent of draining.
-   * `read()` hands each poll only what is new, so a sandbox denial printed early and drained by
-   * an intermediate poll was gone by the time the exit could be classified.
+   * Retained for legacy diagnostics after `read()` drains new output; never denial evidence.
    */
   tail: string;
   /**
-   * The first RETAINED_HEAD_CHARS the job wrote. A denial is usually the failing command's first
-   * complaint; a long build log after it would push it out of the tail alone.
+   * The first RETAINED_HEAD_CHARS the job wrote, retained for legacy diagnostics when a long
+   * build log would push initial output out of the tail alone. No runtime denial authority.
    */
   head: string;
-  /** A denial is surfaced once; later polls of the same exited job report plainly. */
+  /** Legacy diagnostic compatibility marker; runtime polling does not use it. */
   denialReported: boolean;
   droppedBytes: number;
   exited: boolean;
@@ -206,7 +204,8 @@ export class JobRegistry {
   /**
    * What the job wrote, bounded to its first RETAINED_HEAD_CHARS plus its last
    * RETAINED_TAIL_CHARS, regardless of what polls already drained. Returns undefined once a
-   * denial from this job has been reported.
+   * caller has marked this job's diagnostic claim as reported.
+   * @deprecated Diagnostic compatibility only; no runtime denial authority.
    */
   classifiable(id: string): string | undefined {
     const record = this.jobs.get(id);
@@ -214,7 +213,7 @@ export class JobRegistry {
     return `${record.head}\n${record.tail}`;
   }
 
-  /** Marks the job's denial as surfaced so a later poll does not raise it again. */
+  /** @deprecated Marks a legacy diagnostic claim only; runtime polling never calls this. */
   markDenialReported(id: string): void {
     const record = this.jobs.get(id);
     if (record !== undefined) record.denialReported = true;
@@ -347,21 +346,7 @@ export function bashJobTool(registry: JobRegistry): Tool<BashJobInput, BashJobOu
       }
 
       const running = !record.exited;
-      if (!running && record.exitCode !== 0) {
-        // classify from the retained head+tail, not from this poll's drain: the denial may have
-        // been printed early and handed to an earlier status call. Classified BEFORE draining, so
-        // a throw here leaves this poll's unread output for the next status call instead of
-        // consuming it on the way out.
-        const retained = registry.classifiable(input.id);
-        if (retained !== undefined) {
-          try {
-            throwIfSandboxDenied(retained);
-          } catch (err) {
-            registry.markDenialReported(input.id);
-            throw err;
-          }
-        }
-      }
+      // Retained or newly drained output is still the child's claim, never a denial receipt.
       const drained = registry.read(input.id)!;
       const output: BashJobOutput = {
         id: input.id,

@@ -23,19 +23,16 @@ type WrappedInvocation = Omit<SandboxSpawnInvocation, "sandboxed">;
 type ActiveSandbox = {
   policy: SandboxPolicy;
   wrap(command: string, args: readonly string[], policy: SandboxPolicy): WrappedInvocation;
-  /** The line of stderr that reads as a boundary denial under `policy`, or undefined. */
-  denied(stderr: string, policy: SandboxPolicy): string | undefined;
 };
 
-/** How much of the child's own words the denial reason may carry. */
-const DENIAL_EXCERPT_CHARS = 200;
 /** Bytes of a child's stderr the classifier reads: its head and its tail, never the middle. */
 const CLASSIFY_HEAD_CHARS = 64 * 1024;
 const CLASSIFY_TAIL_CHARS = 64 * 1024;
 const CLASSIFY_SLACK_CHARS = 8 * 1024;
 
 /**
- * The part of an unbounded stderr the classifier looks at. A denial is printed where the write
+ * @deprecated Diagnostic text sampling only; no runtime denial authority.
+ * The part of an unbounded stderr the legacy classifier looks at. A denial is printed where the write
  * failed — usually near the end, sometimes at the start — and a child that prints megabytes
  * between must not make the synchronous scan proportional to its output.
  */
@@ -86,27 +83,16 @@ export function sandboxSpawnInvocation(
 }
 
 /**
- * Convert only backend-shaped process failures into the denial understood by the agent loop.
- *
- * No provider can authenticate a child's stderr: a command can print "Read-only file system" and
- * exit 1 on purpose. So classification is narrowed to messages the ACTIVE policy would actually
- * produce (a network denial is not one under `network: true`), generic EPERM text is never
- * enough, and the reason carries its provenance so an escalation prompt (R2c) shows the human
- * that the words came from the command, not from the sandbox.
+ * @deprecated Compatibility no-op. Process output cannot authenticate a sandbox denial,
+ * even when its paths, exit status and text are plausible under the active policy. Docker
+ * and Seatbelt currently expose no independent process-denial observation. Runtime tools
+ * preserve ordinary process failures; only trusted broker/policy refusals raise denial.
  */
-export function throwIfSandboxDenied(stderr: string): void {
-  const active = activeSandbox.getStore();
-  if (active === undefined) return;
-  const line = active.denied(classifiable(stderr), active.policy);
-  if (line === undefined) return;
-  const excerpt = line.trim().slice(0, DENIAL_EXCERPT_CHARS);
-  throw new SandboxDeniedError(`reported by the command's own stderr (unauthenticated): ${excerpt}`);
-}
+export function throwIfSandboxDenied(_stderr: string): void {}
 
 /**
- * First line of `stderr` matching any of `patterns` and not `unless`, for a bounded,
- * provenance-labelled reason. `unless` lets a provider drop a denial its policy could not have
- * produced (a network denial under a network grant; a write denial inside a writable workspace).
+ * Legacy diagnostic line matching only; never called by runtime tools or denial handling.
+ * `unless` filters implausible claims but does not authenticate any remaining line.
  */
 type LinePattern = RegExp | ((line: string) => boolean);
 
@@ -174,6 +160,7 @@ type Probed = { kind: "missing" } | { kind: "entry" } | { kind: "link"; target: 
  * just the syscalls. The memo saves syscalls: the sixteen leaves of one line share their
  * prefixes, and a chain that keeps landing on the same directories is walked from memory.
  */
+/** @deprecated Budget for legacy diagnostic heuristics only, never denial evidence. */
 export interface ProbeBudget {
   remaining: number;
   memo: Map<string, Probed>;
@@ -186,6 +173,7 @@ function step(budget: ProbeBudget): boolean {
   return true;
 }
 
+/** @deprecated Legacy diagnostic helper; no runtime denial authority. */
 export function probeBudget(remaining = MAX_PROBES_PER_CLASSIFICATION): ProbeBudget {
   return { remaining, memo: new Map() };
 }
@@ -235,6 +223,7 @@ function operandBeforeErrno(line: string): string | undefined {
  * every path is known to be inside; so is any quoted token, and the unquoted operand right before
  * the errno text. Empty when the line carries no recognisable path.
  */
+/** @deprecated Extracts claimed paths from text; does not observe a denial. */
 export function deniedPaths(line: string): string[] {
   const found: string[] = [];
   const add = (path: string): boolean => {
@@ -279,6 +268,7 @@ function stripTrailingPunctuation(token: string): string {
 }
 
 /** The first path a denial line names, for callers that want one; see `deniedPaths`. */
+/** @deprecated Extracts a claimed path from text; does not observe a denial. */
 export function deniedPath(line: string): string | undefined {
   return deniedPaths(line)[0];
 }
@@ -352,6 +342,7 @@ function under(target: string, cwds: readonly string[]): boolean {
  * through it there is a genuine denial — and only inside strings are canonicalised, because the
  * bind is at the same path on both sides.
  */
+/** @deprecated Plausibility is not evidence. Retained for diagnostic compatibility only. */
 export function writeDenialPlausible(
   line: string,
   policy: SandboxPolicy,
@@ -400,6 +391,7 @@ abstract class ProcessSandboxProvider implements SandboxProvider {
     policy: SandboxPolicy,
   ): WrappedInvocation;
 
+  /** @deprecated Legacy diagnostic hook, no longer called by the runtime. */
   protected abstract denied(stderr: string, policy: SandboxPolicy): string | undefined;
 
   prepare<T>(cmd: SandboxCommand<T>, policy: SandboxPolicy): SandboxCommand<T> {
@@ -408,7 +400,6 @@ abstract class ProcessSandboxProvider implements SandboxProvider {
     return () => activeSandbox.run({
       policy: normalized,
       wrap: (command, args, executionPolicy) => this.wrap(command, args, executionPolicy),
-      denied: (stderr, executionPolicy) => this.denied(stderr, executionPolicy),
     }, cmd);
   }
 }

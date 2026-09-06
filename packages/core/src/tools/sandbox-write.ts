@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { lstat, mkdir, readlink, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { activeSandboxPolicy, sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
+import { activeSandboxPolicy, sandboxSpawnInvocation } from "../sandbox-providers.js";
 import { SandboxDeniedError } from "../sandbox.js";
 
 /** Resolve existing aliases, including a dangling final symlink and missing parent directories. */
@@ -79,7 +79,8 @@ export async function writeToolFile(path: string, content: string, signal: Abort
     signal.throwIfAborted();
     if (timedOut) throw new Error("sandbox file write timed out after 30000ms");
     if (code !== 0) {
-      throwIfSandboxDenied(stderr);
+      // The trusted path/policy checks above can refuse; process stderr cannot attest why
+      // an OS/container write failed (including genuine unrelated read-only host mounts).
       throw new Error(`sandbox file write failed (${code}): ${stderr.trim()}`);
     }
   } finally {
