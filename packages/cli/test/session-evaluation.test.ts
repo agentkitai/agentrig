@@ -21,21 +21,10 @@ const image = `sha256:${"1".repeat(64)}`;
 const pin = "98e8ff1da1a89f93d1397a24d7413ed15421c139";
 const bundle = fileURLToPath(new URL("../../../eval/fixtures/is-number-pinned.bundle", import.meta.url));
 const profile = { provider: "openai" as const, model: "fixture", maxTurns: "4", maxTokensPerTurn: "2000" };
-const fix = `const fs=require('fs');fs.writeFileSync('index.js',fs.readFileSync('index.js','utf8').replace("num !== ''","num.trim() !== ''"));fs.writeFileSync('eval-test-fix.js',"const assert=require('node:assert/strict');const f=require('./');assert.equal(f('   '),false);assert.equal(f(' 1 '),true);\\n");`;
-const broken = `require('fs').writeFileSync('eval-test-broken.js',"require('node:assert/strict').equal(require('./')(1),true);\\n");`;
-const investigation = `const fs=require('fs');fs.writeFileSync('answer.json',JSON.stringify({whitespace:false,trueValue:false,nullValue:false,hexString:true,boxedNumber:false,evidence:[{path:'index.js',quote:"typeof num === 'number'"}]}));fs.writeFileSync('answer.md','The implementation accepts finite primitive numbers and supported numeric strings. It rejects whitespace-only strings and other primitive or boxed types. These statements need independent human review.');`;
-
-function fake(script: string, role: "main" | "supervisor", usage = true): ModelProvider {
-  let calls = 0;
-  return { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
-    async *stream() {
-      if (role === "supervisor") yield { type: "text_delta", text: '{"pass":true,"gaps":[]}' };
-      else if (calls++ === 0) yield { type: "tool_use", id: "edit", name: "bash", input: { command: `node -e ${JSON.stringify(script)}` } };
-      else yield { type: "text_delta", text: "Completed." };
-      if (usage) yield { type: "usage", usage: { input: 10, output: 5 } };
-      yield { type: "stop", reason: role === "main" && calls === 1 ? "tool_use" : "end_turn" };
-    } };
-}
+const { fix, broken, investigation, scriptedProvider: fake } = await import(
+  new URL("../../../eval/scripted-fixtures.mjs", import.meta.url).href
+) as { fix: string; broken: string; investigation: string;
+  scriptedProvider(script: string, role: "main" | "supervisor", usage?: boolean): ModelProvider };
 
 /** Actual E1/checker subprocesses over deliberately trusted fixtures; not an OS-isolation proof. */
 function trustedTransport(): EvaluationTransport {
@@ -110,6 +99,7 @@ it("actual core tools/checker distinguish correct and broken profiles, with coun
     { transport: f.transport, provider: async (_options, role) => fake(script, role) });
     expect(result.results).toMatchObject([{ outcome, baselineOutcome: "PASS" }]);
     const report = JSON.parse(await readFile(join(f.root, label, "01-X1", "report.json"), "utf8"));
+    expect(report.evidenceLane).toBe("live"); // Only the trusted nightly wrapper opts into scripted provenance.
     expect(report.main.reportedUsage).toMatchObject({ input: 20, output: 10 });
     expect(report.auxiliary.reportedUsage).toMatchObject({ input: 10, output: 5 });
     expect(JSON.parse(await readFile(join(f.root, label, "calls.json"), "utf8"))).toHaveLength(3);
@@ -117,7 +107,7 @@ it("actual core tools/checker distinguish correct and broken profiles, with coun
   expect(await readFile(join(f.baseline, "original.jsonl"))).toEqual(original);
 }, 30_000);
 
-it.each(["skills", "extension", "mcpConfig", "shell", "allow", "root"])("unsupported effective %s is rejected explicitly", key => {
+it.each(["skills", "extension", "mcpConfig", "shell", "allow", "root", "evidenceLane"])("unsupported effective %s is rejected explicitly", key => {
   expect(() => validateEvaluationProfile({ [key]: ["x"] } as never)).toThrow(`effective field: ${key}`);
 });
 
