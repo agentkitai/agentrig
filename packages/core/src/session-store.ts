@@ -519,7 +519,8 @@ export class SessionStore {
   }
 }
 
-function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
+/** Shared data-only fold; callers remain responsible for validating and bounding events. */
+export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
   const messages: Message[] = [];
   let streamedText = "";
   let activeAssistant: Message | undefined;
