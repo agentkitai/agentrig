@@ -105,6 +105,7 @@ export function mcpTool(opts: McpToolOptions): AnyTool {
     // would degrade it to "an object", losing every field description the server wrote
     jsonSchema: normalizeSchema(opts.spec.inputSchema),
     permission: MCP_PERMISSION,
+    resultSource: "external",
     execute: async (input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       await opts.beforeExecute?.(ctx);
       ctx.signal.throwIfAborted();

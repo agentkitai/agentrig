@@ -49,6 +49,8 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
     inputSchema: ReadOutputInput,
     permission: "read",
     effects: "read-only",
+    // Artifact logs predate source labels; recovery must never upgrade unknown ancestry.
+    resultSource: "external",
     async execute(input, ctx): Promise<ToolResult<string>> {
       let event: EventOf<"tool.result"> | undefined;
       let sealed = false;

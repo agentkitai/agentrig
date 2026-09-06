@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5d implemented, pending final delivery gates; R6a active in an independent worktree. R13f and R5e implementations are complete and merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13b provenance assembly and R12e semantic authorization are independent active rows. R5d, R5e, R6a, R13a and R13f are merged with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -14,8 +14,8 @@ its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establis
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
 
-R6a procedure detection is now active in a separate worktree: its memory-hardening and R5e
-manifest dependencies are delivered, and it does not depend on MCP pinning or extension loading.
+R6a procedure detection and R13a transport are delivered. R13b now follows R13a while R12e works
+independently on parsed-operation authorization: metadata joins do not depend on permissions.
 This dependency-aware parallel start preserves the committed queue; it introduces no demand veto.
 
 Each exact head needs appropriate tests, one bounded independent review with material findings
@@ -24,7 +24,29 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R13a implemented — PR #147 records delivery gates
+### R13b implemented — closing PR records delivery gates
+
+Trusted registered source metadata assigns actual MCP/external results `external`; file readers
+require canonical approved-root containment before and after execution for `project`. Unknown,
+failed or changed identity checks and hook-altered results remain external. Generic tool output
+has unknown ancestry, and immutable overflow recovery is explicitly external. No name/prose
+heuristics, permissions, principals or web-fetch implementation. [Contract](plans/R13b.md).
+
+Built-in summaries join their precise source slice recursively, including repeated/nested
+summaries. Missing/generated/tool-output ancestry is conservatively external. Custom compaction
+receives detached messages: only exact structural copies recover original labels, ambiguous
+duplicates join conservatively and changed output inherits all-input ancestry, never its claimed
+labels. Legacy no-op compaction and aborted-child lifecycle behavior are retained.
+
+Runtime MCP/file/symlink/overflow controls and resumed summary-laundering discrimination pass.
+H6 trace changes are limited to new metadata and its derived request hashes/token estimates.
+Full validation, restored negative controls, one independent review and exact-head/post-merge
+three-platform CI remain closing delivery gates; optional refinements belong at ROADMAP's end.
+
+### R13a merged — PR #147 records delivery gates
+
+Final head `deef3ab` passed three-platform CI 34018447400 and merged as `76ac082`.
+Exact post-merge CI 34018763831 passed Linux, macOS and Windows.
 
 Optional block-level provenance now round-trips recursively through unified messages, canonical
 events/snapshots, fork materialization, actual provider requests and resumed turns. Custom-provider
@@ -52,7 +74,7 @@ its own checks before merge. PR #147 records exact-head and post-merge receipts.
 ### R6a merged — PR #146 records delivery gates
 
 Final head `fe12d9a` merged as `42cef62` after green PR CI. Post-merge CI 34018319273
-is pending at this integration checkpoint; no post-merge success is claimed here.
+passed on all three platforms.
 
 R6a is independently pulled forward after the completed H3–H5/R6d–R6f and R5e foundations
 (R5e PR #142, main `26e78ec`). Report-only procedure detection does not depend on unfinished
