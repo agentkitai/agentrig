@@ -6,6 +6,8 @@ import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
 import { exportSession } from "./session-export.js";
 import { evaluateSessions, type SessionEvaluationDependencies } from "./session-evaluation.js";
+import { reviewChanges, renderReview, reviewFailure, type ReviewOptions, type ReviewDependencies } from "./review.js";
+import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions, type RunSummary } from "./run.js";
 import { loginCommand } from "./login.js";
@@ -127,6 +129,7 @@ export interface ProgramDependencies {
   config?: LoadRunConfigOptions;
   doctor?: DoctorOptions;
   evaluation?: SessionEvaluationDependencies;
+  review?: ReviewDependencies;
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
@@ -157,7 +160,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -329,6 +332,31 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await executeRun(task, resolved);
+    });
+
+  withProviderOptions(program.command("review").description("One bounded advisory diff review; costs supervisor-role tokens, never runs tests"))
+    .option("--profile <name>", "named config profile")
+    .option("--trust", "load trusted project config")
+    .option("--base <ref>", "review resolved commit-to-HEAD changes (default: tracked HEAD-to-worktree)")
+    .option("--pr <number>", "read a GitHub PR using gh; requires exec and net authorization")
+    .option("--comment", "explicitly post one advisory comment to --pr after identity/usage checks")
+    .option("--allow <rule>", "allow a permission class/tool; PR reads and comments need exec and net", collect, [])
+    .option("--deny <rule>", "deny a permission class/tool", collect, [])
+    .option("--yolo", "allow otherwise unconfigured decisions; explicit deny and sandbox refusal still win")
+    .option("--sandbox <mode>", "host git/gh currently requires none", "none")
+    .option("--max-tokens-per-turn <n>", "requested response-token ceiling, at most2048", "2048")
+    .option("--max-minutes <n>", "operation wall-clock ceiling, at most1.5", "1.5")
+    .addHelpText("after", "\nTracked text only: untracked, binary and metadata-only changes are not reviewed. Refuses diffs over16KiB,40files,128hunks rather than silently trimming. Headless ask denies. No tools/tests/edits, automatic posting or correctness guarantee.\nExamples: agentrig review; agentrig review --base main; agentrig review --pr 12 --allow exec --allow net [--comment]\n")
+    .action(async (opts: ReviewOptions, cmd: Command) => {
+      const resolved = await configured(opts, cmd, false);
+      if (resolved === undefined) return;
+      try {
+        const result = await withMaintenanceSignal(signal => reviewChanges(process.cwd(), resolved, signal, {
+          ...dependencies.review,
+          onUsage: report => { console.error(formatAuxiliaryUsage(report)); dependencies.review?.onUsage?.(report); },
+        }), undefined, "diff review");
+        console.log(renderReview(result).join("\n"));
+      } catch (error) { console.error(reviewFailure(error)); process.exitCode = 1; }
     });
 
   const schedule = program.command("schedule").description("Manage literal UTC tasks; tick previews unless --execute is explicit");

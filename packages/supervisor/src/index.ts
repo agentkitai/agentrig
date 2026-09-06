@@ -14,6 +14,7 @@ export * from "./test-output.js";
 export * from "./detectors/index.js";
 export * from "./policy.js";
 export * from "./reviewer.js";
+export * from "./diff-review.js";
 export * from "./grader.js";
 export * from "./supervisor.js";
 export * from "./auxiliary.js";

@@ -68,6 +68,7 @@ export interface TuiChild {
 }
 
 export interface TuiState {
+  reviewing?: boolean;
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
   /** Work currently in flight, derived from the live event stream rather than persisted separately. */
@@ -136,6 +137,7 @@ export interface TuiControllerOptions {
   onMemory?: (query: string) => Promise<string[]>;
   /** `/dream [--auto]` — returns lines to print. */
   onDream?: (auto: boolean, signal: AbortSignal) => Promise<string[]>;
+  onReview?: (args: string, signal: AbortSignal) => Promise<string[]>;
   /**
    * `/fork [seq]` and `/tree` (R3c). Injected like the others so the controller never touches the
    * session store: the TUI reads and writes logs only through the agent, and a fork is the one
@@ -258,6 +260,8 @@ export class TuiController {
     this.dream = fn;
   }
 
+  setReview(fn: (args: string, signal: AbortSignal) => Promise<string[]>): void { this.review = fn; }
+
   /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
   forgetRestoredConversation(): void {
     this.resetGrants("conversation-restored");
@@ -291,6 +295,9 @@ export class TuiController {
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
   private dreamAbort: AbortController | undefined;
   private dreaming: Promise<void> | undefined;
+  private review: TuiControllerOptions["onReview"];
+  private reviewAbort: AbortController | undefined;
+  private reviewing: Promise<void> | undefined;
   private observer: { detach(): void; done: Promise<void> } | undefined;
   private closing = false;
   private closed = false;
@@ -545,6 +552,10 @@ export class TuiController {
   }
 
   abort(): void {
+    if (this.reviewAbort !== undefined) {
+      this.reviewAbort.abort(); this.denyAllPending(); this.print("cancelling review…", "error");
+      if (this.session === null) return;
+    }
     if (this.dreamAbort !== undefined) {
       this.dreamAbort.abort(); this.print("cancelling dream…", "error");
       if (this.session === null) return;
@@ -576,13 +587,14 @@ export class TuiController {
     if (this.closed) return;
     this.closing = true;
     this.observer?.detach();
-    if (this.session !== null || this.dreamAbort !== undefined) this.abort();
+    if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
     this.state.escalation?.resolve(null, "closed");
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
+    await this.reviewing?.catch(() => {});
     await this.undoing?.catch(() => {});
     this.resetGrants("controller-closed");
     this.closed = true;
@@ -599,10 +611,13 @@ export class TuiController {
   }
 
   private async run(cmd: TuiCommand): Promise<boolean> {
+    if (this.reviewAbort !== undefined && !["abort", "quit", "help", "permissions"].includes(cmd.kind)) {
+      this.print("a review is running — stop it before starting other work", "error"); return true;
+    }
     switch (cmd.kind) {
       case "quit":
         // stop the work before tearing the UI down, or the session runs on invisibly
-        if (this.session !== null) {
+        if (this.session !== null || this.reviewAbort !== undefined) {
           this.print("stopping the running turn before exiting…", "system");
           await this.shutdown();
         }
@@ -649,6 +664,15 @@ export class TuiController {
         const controller = new AbortController(); this.dreamAbort = controller;
         this.dreaming = this.delegate("dream", () => this.dream?.(cmd.auto, controller.signal));
         try { await this.dreaming; } finally { this.dreamAbort = undefined; this.dreaming = undefined; }
+        return true;
+      }
+      case "review": {
+        if (this.session !== null || this.dreamAbort !== undefined || this.undoing !== undefined || this.state.pending !== null || this.state.escalation !== null) {
+          this.print("work or a prompt is active — stop it before /review", "error"); return true;
+        }
+        const controller = new AbortController(); this.reviewAbort = controller; this.set({ reviewing: true });
+        this.reviewing = this.delegate("review", () => (this.review ?? this.opts.onReview)?.(cmd.args, controller.signal));
+        try { await this.reviewing; } finally { this.reviewAbort = undefined; this.reviewing = undefined; this.set({ reviewing: false }); }
         return true;
       }
       case "resume":
