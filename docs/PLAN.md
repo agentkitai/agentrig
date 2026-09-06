@@ -763,6 +763,12 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R8b adds `mcp-serve`: four bounded tools over official modern/legacy stdio MCP,
+reusing the controller and trusted launch configuration. Client tasks remain
+advisory; no execution consent is inferred. Read tools use configured stores and
+policy. Cancellation joins owned work and transport reservations cover queued
+responses. See [MCP serving](MCP-SERVE.md) and [R8b](plans/R8b.md).
+
 R8a adds stable ACP v1 stdio over the headless controller: literal prompts, streamed
 updates and one-time permission replies. Resource links remain separately advisory;
 client MCP configuration must match trusted host entries with existing unchanged

@@ -134,3 +134,4 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/session-export.test.ts
       - run: pnpm exec vitest run packages/core/test/turn-strategy.test.ts packages/core/test/h6-trace.test.ts packages/core/test/token-continuation.test.ts packages/core/test/parallel-strategy.test.ts packages/core/test/isolated-subagents.test.ts
       - run: pnpm exec vitest run packages/core/test/advisory-prompt.test.ts packages/cli/test/acp-transport.test.ts packages/cli/test/acp-server.test.ts packages/cli/test/acp-config.test.ts packages/cli/test/acp-cli.test.ts
+      - run: pnpm exec vitest run packages/cli/test/mcp-serve.test.ts packages/cli/test/mcp-serve-runtime.test.ts packages/cli/test/mcp-serve-cli.test.ts
