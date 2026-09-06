@@ -1100,3 +1100,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   instead of whole-startup refusal for oversized discovery, and canonical explicit-path dedupe
   to suppress benign alias shadow notices. Any child extension inheritance must retain paired
   hooks, ownership and failure state; R5a deliberately inherits none of the extension surfaces.
+- R14a polish: consider less repetitive first-request wording when a resumed conversation already
+  has a plan, and a quieter compact summary for entirely undeclared legacy plans; neither should
+  hide unverified checks. A small shared core acceptance-text formatter could remove duplication
+  between tool output and CLI rendering without adding evidence inference or a completion gate.

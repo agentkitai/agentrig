@@ -21,6 +21,14 @@ assembly insertion does not alter either authority or continuation control flow.
 tool/schema, storage/resume, R13c no-fresh-consent and /plan tests pass. Full checks, restored
 mutations, one bounded review and exact-head/post-merge CI remain delivery gates.
 
+One bounded Claude review `db1b8fba-284f-4557-b725-d367bc4845a8` returned APPROVE with no material
+findings and independently passed 408 tests (15 files). It completed in 147 seconds; the requested
+ceiling was 16 turns and the receipt reports 18 including terminal handling. Field-drop and
+first-directive removal mutations failed the actual-runtime controls and were restored. Optional
+polish is at the roadmap end. Current main `06f5b4b` (R12c) is integrated with its source attribution,
+grant counts and documentation preserved. Build/typecheck and the full four-worker suite pass
+2,326 tests plus two skips across 126 files (31 seconds). Exact-head and post-merge CI remain gates.
+
 ### R13c done — PR #159; post-merge CI green
 
 Final head `71b58c7` passed all three PR jobs in CI 34026155677; merged main `78e8e19` passed
