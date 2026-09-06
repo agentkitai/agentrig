@@ -1,0 +1,2017 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`preserves aborted tool settlement, late-emission guard and end ordering 1`] = `
+{
+  "replay": [
+    {
+      "cwd": "/agentrig-h6-synthetic",
+      "model": "trace",
+      "provider": "trace",
+      "seq": 0,
+      "sessionId": "trace",
+      "task": "abort trace",
+      "ts": 42,
+      "type": "session.start",
+    },
+    {
+      "n": 1,
+      "seq": 1,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "turn.start",
+    },
+    {
+      "blocks": [
+        {
+          "authority": "instruction",
+          "bytes": 12,
+          "disposition": "kept",
+          "hash": "ca0dffa1d43592a0",
+          "origin": "agent.config.systemPrompt",
+          "reason": "base agent instructions",
+          "source": "system_prompt",
+          "tokens": 3,
+        },
+        {
+          "authority": "instruction",
+          "bytes": 11,
+          "disposition": "kept",
+          "hash": "28edd1dd4f7e5a2f",
+          "origin": "message:0:user:0",
+          "reason": "conversation history required for turn continuity",
+          "source": "history",
+          "tokens": 3,
+        },
+        {
+          "authority": "data",
+          "bytes": 982,
+          "disposition": "kept",
+          "hash": "cd4b9fa7f98a5b30",
+          "origin": "tools:2",
+          "reason": "tool schemas advertised for this request",
+          "source": "tool_catalogue",
+          "tokens": 246,
+        },
+      ],
+      "requestHash": "c810ec63596d7764",
+      "seq": 2,
+      "sessionId": "trace",
+      "ts": 42,
+      "turn": 1,
+      "type": "context.manifest",
+    },
+    {
+      "seq": 3,
+      "sessionId": "trace",
+      "tokensIn": 20,
+      "ts": 42,
+      "type": "model.request",
+    },
+    {
+      "seq": 4,
+      "sessionId": "trace",
+      "stop": "tool_use",
+      "ts": 42,
+      "type": "model.response",
+      "usage": {
+        "input": 7,
+        "output": 3,
+      },
+      "usageComplete": true,
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "id": "cancel",
+            "input": {
+              "text": "cancel",
+            },
+            "name": "echo",
+            "type": "tool_use",
+          },
+        ],
+        "role": "assistant",
+      },
+      "seq": 5,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "message.append",
+    },
+    {
+      "req": {
+        "class": "read",
+        "cwd": "/agentrig-h6-synthetic",
+        "input": {
+          "text": "cancel",
+        },
+        "tool": "echo",
+      },
+      "seq": 6,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "permission.request",
+    },
+    {
+      "d": "allow",
+      "seq": 7,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "permission.decision",
+    },
+    {
+      "id": "cancel",
+      "input": {
+        "text": "cancel",
+      },
+      "inputHash": "112eaffff6ec0928",
+      "name": "echo",
+      "seq": 8,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "tool.call",
+    },
+    {
+      "display": "aborted",
+      "durationMs": 0,
+      "id": "cancel",
+      "ok": false,
+      "seq": 9,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "tool.result",
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "content": "aborted",
+            "isError": true,
+            "toolUseId": "cancel",
+            "type": "tool_result",
+          },
+        ],
+        "role": "user",
+      },
+      "seq": 10,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "message.append",
+    },
+    {
+      "n": 1,
+      "seq": 11,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "turn.end",
+    },
+    {
+      "reason": "aborted",
+      "seq": 12,
+      "sessionId": "trace",
+      "ts": 42,
+      "type": "session.end",
+    },
+  ],
+  "requests": [
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "abort trace",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+  ],
+  "result": {
+    "events": [
+      {
+        "cwd": "/agentrig-h6-synthetic",
+        "model": "trace",
+        "provider": "trace",
+        "seq": 0,
+        "sessionId": "trace",
+        "task": "abort trace",
+        "ts": 42,
+        "type": "session.start",
+      },
+      {
+        "n": 1,
+        "seq": 1,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 11,
+            "disposition": "kept",
+            "hash": "28edd1dd4f7e5a2f",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 3,
+          },
+          {
+            "authority": "data",
+            "bytes": 982,
+            "disposition": "kept",
+            "hash": "cd4b9fa7f98a5b30",
+            "origin": "tools:2",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 246,
+          },
+        ],
+        "requestHash": "c810ec63596d7764",
+        "seq": 2,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 1,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 3,
+        "sessionId": "trace",
+        "tokensIn": 20,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 4,
+        "sessionId": "trace",
+        "stop": "tool_use",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "id": "cancel",
+              "input": {
+                "text": "cancel",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        "seq": 5,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "req": {
+          "class": "read",
+          "cwd": "/agentrig-h6-synthetic",
+          "input": {
+            "text": "cancel",
+          },
+          "tool": "echo",
+        },
+        "seq": 6,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.request",
+      },
+      {
+        "d": "allow",
+        "seq": 7,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.decision",
+      },
+      {
+        "id": "cancel",
+        "input": {
+          "text": "cancel",
+        },
+        "inputHash": "112eaffff6ec0928",
+        "name": "echo",
+        "seq": 8,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.call",
+      },
+      {
+        "display": "aborted",
+        "durationMs": 0,
+        "id": "cancel",
+        "ok": false,
+        "seq": 9,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.result",
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "content": "aborted",
+              "isError": true,
+              "toolUseId": "cancel",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+        "seq": 10,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "n": 1,
+        "seq": 11,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "reason": "aborted",
+        "seq": 12,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "session.end",
+      },
+    ],
+    "summary": {
+      "id": "trace",
+      "reason": "aborted",
+      "turns": 1,
+      "usage": {
+        "input": 7,
+        "output": 3,
+      },
+    },
+  },
+  "snapshot": {
+    "cwd": "/agentrig-h6-synthetic",
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "abort trace",
+            "type": "text",
+          },
+        ],
+        "role": "user",
+      },
+      {
+        "content": [
+          {
+            "id": "cancel",
+            "input": {
+              "text": "cancel",
+            },
+            "name": "echo",
+            "type": "tool_use",
+          },
+        ],
+        "role": "assistant",
+      },
+      {
+        "content": [
+          {
+            "content": "aborted",
+            "isError": true,
+            "toolUseId": "cancel",
+            "type": "tool_result",
+          },
+        ],
+        "role": "user",
+      },
+    ],
+    "sessionId": "trace",
+    "task": "abort trace",
+    "ts": 42,
+    "turns": 1,
+    "usage": {
+      "input": 7,
+      "output": 3,
+    },
+    "usd": 0,
+  },
+}
+`;
+
+exports[`preserves complete sequential permission/hook/tool and resumed traces 1`] = `
+{
+  "first": {
+    "events": [
+      {
+        "cwd": "/agentrig-h6-synthetic",
+        "model": "trace",
+        "provider": "trace",
+        "seq": 0,
+        "sessionId": "trace",
+        "task": "trace task",
+        "ts": 42,
+        "type": "session.start",
+      },
+      {
+        "n": 1,
+        "seq": 1,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 10,
+            "disposition": "kept",
+            "hash": "9c3efe93b3efa4c2",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 3,
+          },
+          {
+            "authority": "data",
+            "bytes": 1098,
+            "disposition": "kept",
+            "hash": "97e01489a81196b7",
+            "origin": "tools:3",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 275,
+          },
+        ],
+        "requestHash": "19dcb0288a3f372b",
+        "seq": 2,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 1,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 3,
+        "sessionId": "trace",
+        "tokensIn": 20,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 4,
+        "sessionId": "trace",
+        "stop": "tool_use",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "id": "ok",
+              "input": {
+                "text": "original",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+            {
+              "id": "no",
+              "input": {},
+              "name": "denied",
+              "type": "tool_use",
+            },
+            {
+              "id": "missing",
+              "input": {},
+              "name": "unknown",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        "seq": 5,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "req": {
+          "class": "read",
+          "cwd": "/agentrig-h6-synthetic",
+          "input": {
+            "text": "patched",
+          },
+          "tool": "echo",
+        },
+        "seq": 6,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.request",
+      },
+      {
+        "d": "allow",
+        "seq": 7,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.decision",
+      },
+      {
+        "id": "ok",
+        "input": {
+          "text": "patched",
+        },
+        "inputHash": "600e2e1c9f67dda9",
+        "name": "echo",
+        "seq": 8,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.call",
+      },
+      {
+        "display": "patched",
+        "durationMs": 0,
+        "id": "ok",
+        "ok": true,
+        "seq": 9,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.result",
+      },
+      {
+        "by": "post_tool",
+        "display": "patched
+guidance",
+        "id": "ok",
+        "mode": "inject",
+        "seq": 10,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.result.patched",
+      },
+      {
+        "req": {
+          "class": "write",
+          "cwd": "/agentrig-h6-synthetic",
+          "input": {},
+          "tool": "denied",
+        },
+        "seq": 11,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.request",
+      },
+      {
+        "d": "ask",
+        "seq": 12,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.decision",
+      },
+      {
+        "d": "deny",
+        "seq": 13,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.decision",
+      },
+      {
+        "id": "no",
+        "name": "denied",
+        "seq": 14,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.denied",
+      },
+      {
+        "id": "missing",
+        "input": {},
+        "inputHash": "44136fa355b3678a",
+        "name": "unknown",
+        "seq": 15,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.call",
+      },
+      {
+        "display": "unknown tool: unknown",
+        "durationMs": 0,
+        "id": "missing",
+        "ok": false,
+        "seq": 16,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.result",
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "content": "patched
+guidance",
+              "toolUseId": "ok",
+              "type": "tool_result",
+            },
+            {
+              "content": "permission denied: denied [write]",
+              "isError": true,
+              "toolUseId": "no",
+              "type": "tool_result",
+            },
+            {
+              "content": "unknown tool: unknown",
+              "isError": true,
+              "toolUseId": "missing",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+        "seq": 17,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "n": 1,
+        "seq": 18,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "n": 2,
+        "seq": 19,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 10,
+            "disposition": "kept",
+            "hash": "9c3efe93b3efa4c2",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 3,
+          },
+          {
+            "authority": "data",
+            "bytes": 71,
+            "disposition": "kept",
+            "hash": "2564636a3e2bef3c",
+            "origin": "message:1:assistant:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 18,
+          },
+          {
+            "authority": "data",
+            "bytes": 56,
+            "disposition": "kept",
+            "hash": "df11235e3b21cd7e",
+            "origin": "message:1:assistant:1",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 14,
+          },
+          {
+            "authority": "data",
+            "bytes": 62,
+            "disposition": "kept",
+            "hash": "1c552a4d84c86027",
+            "origin": "message:1:assistant:2",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 16,
+          },
+          {
+            "authority": "data",
+            "bytes": 16,
+            "disposition": "kept",
+            "hash": "f49a8f7e09d7c32e",
+            "origin": "echo:ok",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 4,
+          },
+          {
+            "authority": "data",
+            "bytes": 33,
+            "disposition": "kept",
+            "hash": "5593af3d7adb1237",
+            "origin": "denied:no",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 9,
+          },
+          {
+            "authority": "data",
+            "bytes": 21,
+            "disposition": "kept",
+            "hash": "8a53ec20ebb7c361",
+            "origin": "unknown:missing",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 6,
+          },
+          {
+            "authority": "data",
+            "bytes": 1098,
+            "disposition": "kept",
+            "hash": "97e01489a81196b7",
+            "origin": "tools:3",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 275,
+          },
+        ],
+        "requestHash": "cc4e25c66fc6b110",
+        "seq": 20,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 2,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 21,
+        "sessionId": "trace",
+        "tokensIn": 149,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 22,
+        "sessionId": "trace",
+        "text": "finished",
+        "ts": 42,
+        "type": "model.delta",
+      },
+      {
+        "seq": 23,
+        "sessionId": "trace",
+        "stop": "end_turn",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "text": "finished",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+        "seq": 24,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "n": 2,
+        "seq": 25,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "reason": "done",
+        "seq": 26,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "session.end",
+      },
+    ],
+    "summary": {
+      "id": "trace",
+      "reason": "done",
+      "turns": 2,
+      "usage": {
+        "input": 14,
+        "output": 6,
+      },
+    },
+  },
+  "requests": [
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "trace task",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object",
+          },
+          "name": "denied",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "trace task",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+        {
+          "content": [
+            {
+              "id": "ok",
+              "input": {
+                "text": "original",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+            {
+              "id": "no",
+              "input": {},
+              "name": "denied",
+              "type": "tool_use",
+            },
+            {
+              "id": "missing",
+              "input": {},
+              "name": "unknown",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "content": "patched
+guidance",
+              "toolUseId": "ok",
+              "type": "tool_result",
+            },
+            {
+              "content": "permission denied: denied [write]",
+              "isError": true,
+              "toolUseId": "no",
+              "type": "tool_result",
+            },
+            {
+              "content": "unknown tool: unknown",
+              "isError": true,
+              "toolUseId": "missing",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object",
+          },
+          "name": "denied",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "trace task",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+        {
+          "content": [
+            {
+              "id": "ok",
+              "input": {
+                "text": "original",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+            {
+              "id": "no",
+              "input": {},
+              "name": "denied",
+              "type": "tool_use",
+            },
+            {
+              "id": "missing",
+              "input": {},
+              "name": "unknown",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "content": "patched
+guidance",
+              "toolUseId": "ok",
+              "type": "tool_result",
+            },
+            {
+              "content": "permission denied: denied [write]",
+              "isError": true,
+              "toolUseId": "no",
+              "type": "tool_result",
+            },
+            {
+              "content": "unknown tool: unknown",
+              "isError": true,
+              "toolUseId": "missing",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+        {
+          "content": [
+            {
+              "text": "finished",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "text": "continue",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object",
+          },
+          "name": "denied",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+  ],
+  "resumed": {
+    "events": [
+      {
+        "cwd": "/agentrig-h6-synthetic",
+        "model": "trace",
+        "provider": "trace",
+        "seq": 27,
+        "sessionId": "trace",
+        "task": "continue",
+        "ts": 42,
+        "turns": 2,
+        "type": "session.resume",
+      },
+      {
+        "n": 3,
+        "seq": 28,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 10,
+            "disposition": "kept",
+            "hash": "9c3efe93b3efa4c2",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 3,
+          },
+          {
+            "authority": "data",
+            "bytes": 71,
+            "disposition": "kept",
+            "hash": "2564636a3e2bef3c",
+            "origin": "message:1:assistant:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 18,
+          },
+          {
+            "authority": "data",
+            "bytes": 56,
+            "disposition": "kept",
+            "hash": "df11235e3b21cd7e",
+            "origin": "message:1:assistant:1",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 14,
+          },
+          {
+            "authority": "data",
+            "bytes": 62,
+            "disposition": "kept",
+            "hash": "1c552a4d84c86027",
+            "origin": "message:1:assistant:2",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 16,
+          },
+          {
+            "authority": "data",
+            "bytes": 16,
+            "disposition": "kept",
+            "hash": "f49a8f7e09d7c32e",
+            "origin": "echo:ok",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 4,
+          },
+          {
+            "authority": "data",
+            "bytes": 33,
+            "disposition": "kept",
+            "hash": "5593af3d7adb1237",
+            "origin": "denied:no",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 9,
+          },
+          {
+            "authority": "data",
+            "bytes": 21,
+            "disposition": "kept",
+            "hash": "8a53ec20ebb7c361",
+            "origin": "unknown:missing",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 6,
+          },
+          {
+            "authority": "data",
+            "bytes": 8,
+            "disposition": "kept",
+            "hash": "05343e9845302eb7",
+            "origin": "message:3:assistant:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 2,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 8,
+            "disposition": "kept",
+            "hash": "e256ee8e7aff6957",
+            "origin": "message:4:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 2,
+          },
+          {
+            "authority": "data",
+            "bytes": 1098,
+            "disposition": "kept",
+            "hash": "97e01489a81196b7",
+            "origin": "tools:3",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 275,
+          },
+        ],
+        "requestHash": "0c6fffd74210aaf7",
+        "seq": 29,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 3,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 30,
+        "sessionId": "trace",
+        "tokensIn": 181,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 31,
+        "sessionId": "trace",
+        "text": "resumed",
+        "ts": 42,
+        "type": "model.delta",
+      },
+      {
+        "seq": 32,
+        "sessionId": "trace",
+        "stop": "end_turn",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "text": "resumed",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+        "seq": 33,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "n": 3,
+        "seq": 34,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "reason": "done",
+        "seq": 35,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "session.end",
+      },
+    ],
+    "summary": {
+      "id": "trace",
+      "reason": "done",
+      "turns": 3,
+      "usage": {
+        "input": 21,
+        "output": 9,
+      },
+    },
+  },
+  "snapshot": {
+    "cwd": "/agentrig-h6-synthetic",
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "trace task",
+            "type": "text",
+          },
+        ],
+        "role": "user",
+      },
+      {
+        "content": [
+          {
+            "id": "ok",
+            "input": {
+              "text": "original",
+            },
+            "name": "echo",
+            "type": "tool_use",
+          },
+          {
+            "id": "no",
+            "input": {},
+            "name": "denied",
+            "type": "tool_use",
+          },
+          {
+            "id": "missing",
+            "input": {},
+            "name": "unknown",
+            "type": "tool_use",
+          },
+        ],
+        "role": "assistant",
+      },
+      {
+        "content": [
+          {
+            "content": "patched
+guidance",
+            "toolUseId": "ok",
+            "type": "tool_result",
+          },
+          {
+            "content": "permission denied: denied [write]",
+            "isError": true,
+            "toolUseId": "no",
+            "type": "tool_result",
+          },
+          {
+            "content": "unknown tool: unknown",
+            "isError": true,
+            "toolUseId": "missing",
+            "type": "tool_result",
+          },
+        ],
+        "role": "user",
+      },
+      {
+        "content": [
+          {
+            "text": "finished",
+            "type": "text",
+          },
+        ],
+        "role": "assistant",
+      },
+      {
+        "content": [
+          {
+            "text": "continue",
+            "type": "text",
+          },
+        ],
+        "role": "user",
+      },
+      {
+        "content": [
+          {
+            "text": "resumed",
+            "type": "text",
+          },
+        ],
+        "role": "assistant",
+      },
+    ],
+    "sessionId": "trace",
+    "task": "continue",
+    "ts": 42,
+    "turns": 3,
+    "usage": {
+      "input": 21,
+      "output": 9,
+    },
+    "usd": 0,
+  },
+}
+`;
+
+exports[`preserves tool-emitter authority and released replan state 1`] = `
+{
+  "planRequired": false,
+  "requests": [
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "authority trace",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+    {
+      "cacheHints": {
+        "systemPrefix": true,
+        "systemPrefixChars": 12,
+      },
+      "maxTokens": 8192,
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "authority trace",
+              "type": "text",
+            },
+          ],
+          "role": "user",
+        },
+        {
+          "content": [
+            {
+              "id": "emit",
+              "input": {
+                "text": "x",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "content": "ok",
+              "toolUseId": "emit",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+      ],
+      "system": "trace system",
+      "tools": [
+        {
+          "description": "echo",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "text",
+            ],
+            "type": "object",
+          },
+          "name": "echo",
+        },
+        {
+          "description": "Read a UTF-16 code-unit range from a truncated tool result's complete immutable-log output. Use the {seq, from, to} handle shown in that result; from is inclusive, to is exclusive, and one read may contain at most 30000 code units. This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "description": "Zero-based UTF-16 code-unit offset to start at (inclusive)",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "seq": {
+                "description": "Sequence number from an overflow handle",
+                "minimum": 0,
+                "type": "integer",
+              },
+              "to": {
+                "description": "Zero-based UTF-16 code-unit offset to stop at (exclusive)",
+                "exclusiveMinimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "seq",
+              "from",
+              "to",
+            ],
+            "type": "object",
+          },
+          "name": "read_output",
+        },
+      ],
+    },
+  ],
+  "result": {
+    "events": [
+      {
+        "cwd": "/agentrig-h6-synthetic",
+        "model": "trace",
+        "provider": "trace",
+        "seq": 0,
+        "sessionId": "trace",
+        "task": "authority trace",
+        "ts": 42,
+        "type": "session.start",
+      },
+      {
+        "n": 1,
+        "seq": 1,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 15,
+            "disposition": "kept",
+            "hash": "6270b02d6a23e690",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 4,
+          },
+          {
+            "authority": "data",
+            "bytes": 982,
+            "disposition": "kept",
+            "hash": "cd4b9fa7f98a5b30",
+            "origin": "tools:2",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 246,
+          },
+        ],
+        "requestHash": "a277880f05663d3a",
+        "seq": 2,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 1,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 3,
+        "sessionId": "trace",
+        "tokensIn": 21,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 4,
+        "sessionId": "trace",
+        "stop": "tool_use",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "id": "emit",
+              "input": {
+                "text": "x",
+              },
+              "name": "echo",
+              "type": "tool_use",
+            },
+          ],
+          "role": "assistant",
+        },
+        "seq": 5,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "fatal": false,
+        "message": "replan gate released this session has no update_plan tool, so the gate could never be satisfied; continuing without a fresh plan",
+        "seq": 6,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "error",
+      },
+      {
+        "req": {
+          "class": "read",
+          "cwd": "/agentrig-h6-synthetic",
+          "input": {
+            "text": "x",
+          },
+          "tool": "echo",
+        },
+        "seq": 7,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.request",
+      },
+      {
+        "d": "allow",
+        "seq": 8,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "permission.decision",
+      },
+      {
+        "id": "emit",
+        "input": {
+          "text": "x",
+        },
+        "inputHash": "fcd1ccec08db6f78",
+        "name": "echo",
+        "seq": 9,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.call",
+      },
+      {
+        "fatal": false,
+        "message": "the "echo" tool tried to emit a "plan.updated" event, which only the "update_plan" tool may emit; dropped",
+        "seq": 10,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "error",
+      },
+      {
+        "fatal": false,
+        "message": "the "echo" tool tried to emit a "memory.note" event, which tools may not emit; dropped",
+        "seq": 11,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "error",
+      },
+      {
+        "display": "ok",
+        "durationMs": 0,
+        "id": "emit",
+        "ok": true,
+        "seq": 12,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "tool.result",
+      },
+      {
+        "message": {
+          "content": [
+            {
+              "content": "ok",
+              "toolUseId": "emit",
+              "type": "tool_result",
+            },
+          ],
+          "role": "user",
+        },
+        "seq": 13,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "message.append",
+      },
+      {
+        "n": 1,
+        "seq": 14,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "n": 2,
+        "seq": 15,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.start",
+      },
+      {
+        "blocks": [
+          {
+            "authority": "instruction",
+            "bytes": 12,
+            "disposition": "kept",
+            "hash": "ca0dffa1d43592a0",
+            "origin": "agent.config.systemPrompt",
+            "reason": "base agent instructions",
+            "source": "system_prompt",
+            "tokens": 3,
+          },
+          {
+            "authority": "instruction",
+            "bytes": 15,
+            "disposition": "kept",
+            "hash": "6270b02d6a23e690",
+            "origin": "message:0:user:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 4,
+          },
+          {
+            "authority": "data",
+            "bytes": 66,
+            "disposition": "kept",
+            "hash": "a9d7a967f9e74eab",
+            "origin": "message:1:assistant:0",
+            "reason": "conversation history required for turn continuity",
+            "source": "history",
+            "tokens": 17,
+          },
+          {
+            "authority": "data",
+            "bytes": 2,
+            "disposition": "kept",
+            "hash": "2689367b205c16ce",
+            "origin": "echo:emit",
+            "reason": "tool result retained in conversation",
+            "source": "tool_result",
+            "tokens": 1,
+          },
+          {
+            "authority": "data",
+            "bytes": 982,
+            "disposition": "kept",
+            "hash": "cd4b9fa7f98a5b30",
+            "origin": "tools:2",
+            "reason": "tool schemas advertised for this request",
+            "source": "tool_catalogue",
+            "tokens": 246,
+          },
+        ],
+        "requestHash": "3d2dac06add34c75",
+        "seq": 16,
+        "sessionId": "trace",
+        "ts": 42,
+        "turn": 2,
+        "type": "context.manifest",
+      },
+      {
+        "seq": 17,
+        "sessionId": "trace",
+        "tokensIn": 67,
+        "ts": 42,
+        "type": "model.request",
+      },
+      {
+        "seq": 18,
+        "sessionId": "trace",
+        "stop": "end_turn",
+        "ts": 42,
+        "type": "model.response",
+        "usage": {
+          "input": 7,
+          "output": 3,
+        },
+        "usageComplete": true,
+      },
+      {
+        "n": 2,
+        "seq": 19,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "turn.end",
+      },
+      {
+        "reason": "done",
+        "seq": 20,
+        "sessionId": "trace",
+        "ts": 42,
+        "type": "session.end",
+      },
+    ],
+    "summary": {
+      "id": "trace",
+      "reason": "done",
+      "turns": 2,
+      "usage": {
+        "input": 14,
+        "output": 6,
+      },
+    },
+  },
+}
+`;

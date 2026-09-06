@@ -173,6 +173,12 @@ interface Agent { run(task: string, opts?: { cwd?: string; resume?: string; id?:
 
 Session persistence: one JSONL file per session under `.agentrig/sessions/<id>.jsonl` (events) + periodic snapshot of the message array for cheap resume.
 
+H6 keeps `agent.ts` as the model-loop coordinator. Internal `tool-execution.ts` owns the sequential
+tool pipeline and registered-name emission authority; `session-lifecycle.ts` owns ordered event
+delivery, pause/cancellation, orphan settlement and terminal resource release. Live plan state
+and current turn/cwd are supplied explicitly. These are internal components, not new SDK or plugin
+APIs; public exports and behavior stay unchanged. See [H6](plans/H6.md) for baseline trace checks.
+
 ### 2.7 Hooks
 
 ```ts

@@ -76,4 +76,5 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/checkpointer.test.ts packages/core/test/events.test.ts packages/core/test/hooks.test.ts packages/cli/test/render.test.ts
       - run: pnpm exec vitest run packages/cli/test/checkpoint-undo.test.ts packages/cli/test/program.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/abort-restore.test.ts
+      - run: pnpm exec vitest run packages/core/test/h6-trace.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'

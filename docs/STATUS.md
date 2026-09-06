@@ -1,11 +1,26 @@
 # Status
 
-Current roadmap row: **R4c — opt-in supervisor abort restore.** R4a–R4b, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **H6 — focused core extraction.** R4a–R4c, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R4c in progress
+### H6 in progress
+
+Fresh branch from updated main `3c09f84`; [contract](plans/H6.md). Extract internal tool-execution
+and session-lifecycle components without changing the public API or event behavior. Three complete
+golden traces captured before extraction still match unchanged. Build/typecheck and the full
+Node22 suite pass 1,934 plus two skips (93 files). One bounded Claude review approved, independently
+passing build/typecheck and 372 targeted cases. Two negative mutations were detected/restored;
+one exposed and prompted repair of a replay-only test gap, with expectations unchanged. The final
+trace test also passes against original main agent.ts. PR/main CI gates remain required.
+
+### R4c complete (PR #137)
+
+Final head `15c6e3f`, merge `3c09f84`, PR CI 34010906102 and post-merge CI 34011105236 passed
+all three platforms. One approving independent review, two detected/restored mutations and one
+scoped Windows E1 fixture-timeout repair. Full local 1,931 passes plus two skips. Notes below
+record intermediate gates, not outstanding work.
 
 Fresh branch from updated main `1291c77`; [contract](plans/R4c.md). Add opt-in post-settlement
 supervisor restore using the existing guarded undo seam, joined through observer shutdown and
