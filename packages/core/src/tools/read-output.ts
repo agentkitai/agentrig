@@ -48,6 +48,7 @@ export function readOutputTool(store: SessionStore): Tool<ReadOutputInput, strin
       "This reads only output from an already-authorized tool call in the current session, so no extra permission is required.",
     inputSchema: ReadOutputInput,
     permission: "read",
+    effects: "read-only",
     async execute(input, ctx): Promise<ToolResult<string>> {
       let event: EventOf<"tool.result"> | undefined;
       let sealed = false;

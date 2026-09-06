@@ -69,6 +69,8 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       "Non-zero exits are reported as errors with the output attached.",
     inputSchema: BashInput,
     permission: "exec",
+    effects: input => input.background === true ? "background" : "workspace",
+    hasBackgroundWork: () => opts.jobs?.ids().some(id => opts.jobs?.get(id)?.exited === false) ?? false,
     async execute(input, ctx): Promise<ToolResult<BashOutput>> {
       const timeoutMs = input.timeoutMs ?? 120_000;
       if (ctx.signal.aborted) {

@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: E3 final delivery; H1–H5 and E1–E2 complete in PRs #118–#133.** E3's 96-run collection and user-authorized AI assessment are complete in PR #134; exact-head CI, merge and post-merge CI gate R4a. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: R4a; H1–H5 and E1–E3 complete in PRs #118–#134.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -8,9 +8,9 @@ evidence. This revision changes planned work, not the implementation status of c
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Complete | H1–H5 and E1–E2: hardening, frozen independent tasks and reporting | PRs #118–#133 merged with exact-head and post-merge three-platform CI |
-| Now | E3: final PR/CI delivery | 96 runs and AI-reviewed outcomes published; overall utility inconclusive, no default changes |
-| Then | R4a–R4c: checkpoints and undo; H6: focused core extraction | Shell and file-tool changes recover correctly; extraction preserves behavior |
+| Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
+| Now | R4a–R4c: checkpoints and undo | Opt-in snapshots before mutation, conservative ownership guards and explicit restore |
+| Then | H6: focused core extraction | Extraction preserves behavior |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
 
@@ -892,3 +892,9 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   should be rejected if that prose requirement remains scored. Current tasks asked whether the
   archive matched the code; unchanged tests and correct behavior are distinct from explicit
   rejection in prose. Choose and disclose assessor type before future collection, not afterward.
+- R4a checkpoint polish: batch raw blob hashing if measured workloads need it (the 50,000-path/
+  128 MiB ceilings do not guarantee completion within 60 seconds); improve file-to-directory
+  diagnostics and duplicate-checkpointer configuration errors; consider a narrower Git-environment
+  allowlist without weakening repository isolation; emit a denial on the late-abort path and
+  localize throwing effect callbacks. Add direct fail-closed hook-runner branch tests when touching
+  that runner. Current failures remain fail-closed; these do not block R4b or add subdivisions.

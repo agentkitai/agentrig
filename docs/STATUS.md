@@ -1,11 +1,29 @@
 # Status
 
-Current roadmap row: **E3 — controlled live comparison.** H1–H5 and E1–E2 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **R4a — opt-in pre-mutation checkpoints.** H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### E3 assessment complete — final delivery gates (PR #134)
+### R4a in progress
+
+Fresh branch from updated main `56b4d8a`, after E3 PR #134 exact-head CI 34006960314 and
+post-merge main CI 34007074990 passed Linux/macOS/Windows. E3 is complete under its explicitly
+amended AI-assessment method: 67 PASS / 29 FAIL; original evidence retained, utility inconclusive.
+See [R4a contract](plans/R4a.md). Old PR #109/worktree are preserved; this new branch ports
+selected reviewed pieces and adds conservative effect coverage, raw-byte capture and writer guards.
+Checkpoint creation only; R4b/R4c are not pulled into this PR. Build/typecheck and the full Node22
+suite pass 1,901 tests plus two skips (90 files). Claude's single bounded pass
+`124693ac-c382-45ef-a044-41be0468eb87` approved and passed 127 targeted tests; its throughput
+request is satisfied by a 1,000-file local sample (3,961 ms) and explicit non-guaranteed size ceilings.
+Both effect-gate and scan-consistency mutation controls fail as expected and are reverted.
+Optional polish is at ROADMAP's end. Exact-head PR CI, merge and post-merge main CI remain pending.
+
+### E3 complete (PR #134)
+
+Delivery complete: final head `9b0751c`, merge `56b4d8a`, exact-head CI 34006960314 and
+post-merge main CI 34007074990 passed all three platforms. The following assessment notes
+record intermediate gates; none remain outstanding.
 
 The user authorized independent AI assessment on 2026-09-06 after collection. The Codex
 maintainer reviewed all 12 X4 explanations under the unchanged rubric: one PASS, 11 FAIL.
