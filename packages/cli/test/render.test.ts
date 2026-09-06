@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("makes instruction delegation and revocation visible without implying tool permission", () => {
+  for (const action of ["delegated", "revoked"]) {
+    const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,
+      type: "context.delegation", principal: "hook:notes", action, delegation: "receipt" });
+    expect(renderEvent(event)).toContain(action);
+    expect(renderEvent(event)).toContain("hook:notes");
+    expect(renderEvent(event)).toContain("receipt");
+    expect(renderChatEvent(event)).toContain(`instruction authority ${action}: hook:notes`);
+    expect(renderChatEvent(event)).toContain("no tool permission");
+  }
+});
+
 it("shows file-change call attribution as a claim, never proof of a write", () => {
   const legacy = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, type: "file.changed", path: "a", op: "edit", contentHash: "h" });
   expect(renderEvent(legacy)).not.toContain("claim from");

@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips bounded instruction delegation audit records, distinct from tool grants", () => {
+    for (const action of ["delegated", "revoked"]) {
+      const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,
+        type: "context.delegation", principal: "hook:notes", action, delegation: "receipt" });
+      expect(parseEvent(serializeEvent(event))).toEqual(event);
+      expect(HarnessEvent.safeParse({ ...event, principal: "user" }).success).toBe(false);
+      expect(HarnessEvent.safeParse({ ...event, delegation: "x".repeat(65) }).success).toBe(false);
+      expect(HarnessEvent.safeParse({ ...event, action: "allow" }).success).toBe(false);
+    }
+  });
   it("round-trips additive call provenance and preserves legacy claims/results", () => {
     for (const payload of [
       { type: "file.changed", path: "a", op: "edit", contentHash: "h" },

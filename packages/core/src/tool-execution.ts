@@ -2,19 +2,27 @@ import { realpath } from "node:fs/promises";
 import type { AgentConfig } from "./agent.js";
 import type { HarnessEvent, PermissionRequest } from "./events.js";
 import { EventPayload, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events.js";
-import type { ContentBlock, ContentTrust } from "./messages.js";
+import type { ContentBlock, ContentTrust, InstructionContext } from "./messages.js";
 import { prepareResultTrust } from "./content-provenance.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { SandboxDeniedError, withSandboxPolicy } from "./sandbox.js";
 import { outsideSandbox } from "./sandbox-providers.js";
 import { contentHash } from "./session-store.js";
-import { mergePatches, type Hook, type HookPoint, type runHooks } from "./hooks.js";
+import { mergePatches, type AttributedHookResult, type Hook, type HookPoint, type runHooks } from "./hooks.js";
+import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
-export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<{ denied?: string; patches: unknown[]; injects: string[] }>;
+export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
+
+function displayContext(result: AttributedHookResult): InstructionContext | undefined {
+  const index = result.patches.map((patch, index) => typeof patch === "string" ? index : -1).filter(index => index >= 0).at(-1) ?? -1;
+  const contexts = [...(index < 0 ? [] : [result.patchContexts?.[index] ?? ADVISORY_CONTEXT]),
+    ...result.injects.map((_text, index) => result.injectContexts?.[index] ?? ADVISORY_CONTEXT)];
+  return contexts.length === 0 ? undefined : combinedContext(contexts);
+}
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
   config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "onAsk" | "sandbox" | "store" | "trustedProjectRoot">;
@@ -148,10 +156,10 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
 
 export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
   const { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, emitFromTool, hook, signal, endSignal, raceAbort, now, isEnded } = context;
-  const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external"): ContentBlock =>
+  const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external", context?: InstructionContext): ContentBlock =>
     isError
-      ? { type: "tool_result", toolUseId: tu.id, content, isError: true, trust }
-      : { type: "tool_result", toolUseId: tu.id, content, trust };
+      ? { type: "tool_result", toolUseId: tu.id, content, isError: true, trust, ...(context === undefined ? {} : { context }) }
+      : { type: "tool_result", toolUseId: tu.id, content, trust, ...(context === undefined ? {} : { context }) };
 
   const tool = toolsByName.get(tu.name);
   if (!tool) {
@@ -184,7 +192,8 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
         `Call ${PLAN_TOOL} with your revised plan, then continue.`;
       await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
       await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
-      return resultBlock(display, true);
+      // The platform assembles this reminder around an advisory supervisor reason.
+      return resultBlock(display, true, "external", ADVISORY_CONTEXT);
     }
   }
 
@@ -199,6 +208,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   // A `modify` patch is re-validated against the tool's own schema below — a hook is
   // third-party code, so its patch is a proposal, not an instruction.
   let input = parsed.data;
+  let inputContext: InstructionContext | undefined;
   {
     const h = await hook("pre_tool", {
       sessionId: id,
@@ -215,7 +225,10 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     }
     if (h.patches.length > 0) {
       const merged = tool.inputSchema.safeParse(mergePatches(input, h.patches));
-      if (merged.success) input = merged.data;
+      if (merged.success) {
+        input = merged.data;
+        inputContext = combinedContext(h.patches.map((_patch, index) => h.patchContexts?.[index] ?? ADVISORY_CONTEXT));
+      }
       else {
         await emit({
           type: "error",
@@ -272,7 +285,8 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     }
   }
   if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
-  const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });
+  const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input),
+    ...(inputContext === undefined ? {} : { context: inputContext }) });
   const ctx: ToolContext = {
     cwd,
     sessionId: id,
@@ -442,7 +456,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       // The authoritative result is already emitted. An abort here degrades provenance;
       // it must not enter the execution-failure catch and emit a duplicate result.
       : await raceAbort(finishTrust(), "tool provenance").catch(() => "external" as const);
-    return resultBlock(body, !ok, trust);
+    return resultBlock(body, !ok, trust, displayContext(h));
   } catch (err) {
     const sandboxDenied = err instanceof SandboxDeniedError && (
       sandboxRetryDenied || (config.sandbox !== undefined && !sandboxDenialRecorded)
@@ -503,7 +517,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
         mode: replaced === undefined ? "inject" : "modify",
       });
     }
-    return resultBlock(body, true);
+    return resultBlock(body, true, "external", displayContext(h));
   } finally {
     for (const checkpointer of checkpointers) {
       await checkpointer.afterTool({

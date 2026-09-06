@@ -1,4 +1,4 @@
-import type { ContentTrust, Message } from "./messages.js";
+import type { ContentTrust, InstructionContext, Message } from "./messages.js";
 import type { Usage } from "./events.js";
 
 export interface ToolSpec {
@@ -14,6 +14,8 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface ModelRequest {
   system: string;
+  /** Unified-only authority metadata for consecutive nonempty system components. No vendor field. */
+  systemContexts?: InstructionContext[];
   messages: Message[];
   tools: ToolSpec[];
   maxTokens: number;
