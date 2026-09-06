@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R14a acceptance declarations are implemented, pending delivery gates; R12c inspection and H7a continuation repair proceed independently. R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14a acceptance declarations are implemented, pending delivery gates; H7a continuation repair proceeds independently. R12c (PR #158), R5a (PR #157) and R13c (PR #159) are done with green post-merge CI. R12b, R6g, R13d, R12a, R6c, R13b, R6b, R12e, R5d, R5e, R6a, R13a and R13f are also done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -73,12 +73,19 @@ diagnostics, thinking blocks, remote MCP, on-demand review, CI mode, output sche
 spend ledger, mid-session model switch, TUI `@file`/image input, and an orchestration decision
 row), and an amendment making R8a speak the Agent Client Protocol instead of a bespoke NDJSON
 protocol. Section 5 orders these after the existing continuation; H7 may interrupt it.
+A follow-up read of `packages/cli/src/tui` added R16, eight TUI polish rows (Markdown and diff
+rendering, tool-call summaries, prompt history and completion, notifications, a richer status
+line, in-TUI compact/clear/doctor/diff, themes and keybindings) inside the Static-scrollback
+model; the alternate-screen renunciation stands. Section 5 also now marks R12b and R13d done.
 
 Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 updated against main
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### R12c implemented — pending delivery gates
+### R12c done — PR #158
+
+Merged as `06f5b4b`; exact-head PR CI and post-merge main CI `34027192976` passed on all
+three platforms. The development checkpoints below remain historical validation records.
 
 Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
 `/permissions revoke <exact-id>` changes the next decision without cancelling running tools.
