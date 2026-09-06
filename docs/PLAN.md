@@ -103,6 +103,9 @@ interface ToolResult<O> { output: O; display: string; truncated?: boolean }
 ```
 
 Built-ins for v1: `bash`, `read_file`, `edit_file` (search/replace), `write_file`, `glob`, `grep`. Memory tools come from `memory` and are registered like any other tool.
+R11b adds `web_fetch`: bounded GET-only HTTP(S), explicit `net` permission, no redirects or
+ambient credentials, text/plain or lexical HTML-to-text, external provenance. See
+[R11b](plans/R11b.md) for byte/time/output bounds and trusted-host network limitations.
 
 ### 2.4 Permissions
 
@@ -179,6 +182,13 @@ R14b adds internal foreground command outcome receipts to canonical tool results
 associate same-call observed exits; unsupported checks, missing receipts and incomplete attempts
 remain unknown. Candidate observations never prove semantic acceptance. Latest failure/unknown
 must not be hidden by an earlier matching exit. See [R14b](plans/R14b.md); grading remains R14c.
+
+R14c shares that fold between `sessions show --evidence` and M6 claims-vs-evidence grading.
+Current declared unfinished or unverified checks and incomplete views can only force a negative
+verdict; matching exits never establish semantic proof or force pass. Dropped/legacy items remain
+explicit without new legacy requirements. Attach supplies a bounded frozen current-run report,
+not just recent history; resumed/fork runs name their starting sequence and prior history is not
+assessed. CLI separately reads finished physical logs without models/config. See [R14c](plans/R14c.md).
 
 ### 2.6 Agent + session
 
