@@ -169,3 +169,24 @@ No runtime change and no additional review. All final-head gates run again.
 After the fixture correction: build/typecheck and full Docker-enabled suite passed
 again, **2,733 plus two existing skips /161 files**, four workers, 47.64s. The initial
 Windows job was still running at the new push; no initial Windows success is claimed.
+
+## R15b integration
+
+Integrated PR #185 main `74c5073`, preserving diagnostics event/message replay
+metadata, config option-source fields, heartbeat suppression and all CI groups.
+A real builtin write followed by its authorized Node diagnostic checker exposed
+the missing ACP internal label before the integration fix. Both call/result now
+carry explicit diagnostic parent correlation, and the title says Diagnostics;
+the checker remains absent from model-advertised tools. Focused ACP plus R15b:
+34 passed. No second general review for this required integration.
+
+The initial head's Windows job also ultimately failed only the same lexical
+fixture (`RUNNER~1` versus canonical `runneradmin`), not a new cause; preserved at
+[receipt](https://github.com/agentkitai/agentrig/pull/184#issuecomment-5560920213).
+
+The corrected pre-integration head `708e3bc` passed all four checks: CI
+`34048545979` and structure `34048545969`. After integrating R15b and its ACP
+correlation control, frozen install/build/typecheck/full passed **2,758 plus two
+existing skips /163 files**, four workers, 49.16s, actual Docker fixtures enabled.
+The combined head still requires its own exact four-check gate. R15b post-main
+CI `34048869709` was pending at this integration; structure `34048869702` passed.

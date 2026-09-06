@@ -5,14 +5,14 @@ import { PassThrough, Readable, Writable } from "node:stream";
 import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { client, ndJsonStream, type RequestPermissionResponse, type SessionNotification } from "@agentclientprotocol/sdk";
-import { createAgent, RulePolicy, SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
+import { builtinTools, createAgent, RulePolicy, SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 import { TuiController } from "../src/tui/controller.js";
 import { ACP_LIMITS, acpTransport } from "../src/acp-transport.js";
 import { serveAcp } from "../src/acp-server.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
-async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[] } = {}) {
+async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "allow" | "ask" = "ask", options: { result?: string; deltas?: string[]; diagnostics?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-acp-"));
   const input = new PassThrough(); const output = new PassThrough(); const transport = acpTransport(input, output);
   const requests: ModelRequest[] = []; const updates: SessionNotification[] = []; const controllers: TuiController[] = []; const raw: unknown[] = [];
@@ -23,13 +23,15 @@ async function fixture(answer: () => Promise<RequestPermissionResponse>, base: "
       const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 1_000_000 },
         async *stream(req) {
           requests.push(structuredClone(req));
-          if (calls++ % 2 === 0) { yield { type: "tool_use", id: "effect", name: "effect", input: {} }; yield { type: "stop", reason: "tool_use" }; }
+          if (calls++ % 2 === 0) { yield { type: "tool_use", id: "effect", name: options.diagnostics ? "write_file" : "effect",
+            input: options.diagnostics ? { path: "probe.ts", content: "fixture" } : {} }; yield { type: "stop", reason: "tool_use" }; }
           else { for (const text of options.deltas ?? ["completed fixture"]) yield { type: "text_delta", text }; yield { type: "stop", reason: "end_turn" }; }
         } };
       const controller = new TuiController({ cwd: request.cwd, agent: { run() { throw new Error("not ready"); } }, onSession: observe });
       controller.attach(createAgent({ provider, store: new SessionStore({ root: join(root, String(controllers.length)) }), repoMap: false,
-        systemPrompt: "fixture", permissions: new RulePolicy([{ class: "exec", decision: base }]), permissionGrants: controller.permissionGrants, onAsk: controller.ask,
-        tools: [{ name: "effect", description: "fixture", permission: "exec", inputSchema: z.object({}), execute: async () => {
+        systemPrompt: "fixture", permissions: new RulePolicy([{ class: "exec", decision: base }, { class: "write", decision: "allow" }]), permissionGrants: controller.permissionGrants, onAsk: controller.ask,
+        tools: options.diagnostics ? builtinTools({ diagnostics: [{ parser: "ruff-json", extensions: [".ts"], executable: process.execPath,
+          args: ["-e", "process.stdout.write('[]')"] }] }) : [{ name: "effect", description: "fixture", permission: "exec", inputSchema: z.object({}), execute: async () => {
           effects++; return { output: options.result ?? "effect", display: options.result ?? "effect" }; } }] }));
       controllers.push(controller);
       return { controller, close: async () => { await controller.shutdown(); } };
@@ -97,6 +99,16 @@ it.each(["allow", "deny"])("actual controller permission %s completes before pro
   expect(f.requests[0]!.messages[0]!.content).toContainEqual(expect.objectContaining({ type: "text", text: "/new" }));
   expect(f.updates.at(-1)?.update).toMatchObject({ sessionUpdate: "agent_message_chunk", content: { text: "completed fixture" } });
   expect(f.controllers[0]!.snapshot().status).toBe("idle");
+});
+
+it("actual post-edit checker updates are explicitly internal and correlated to their model-selected parent", async () => {
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }), "allow", { diagnostics: true });
+  expect((await f.peer.agent.request("session/prompt", { sessionId: f.sessionId, prompt: [{ type: "text", text: "write fixture" }] })).stopReason).toBe("end_turn");
+  const internal = f.updates.find(({ update }) => update.sessionUpdate === "tool_call" && update.title.includes("core:diagnostics"))!.update;
+  expect(internal).toMatchObject({ _meta: { agentrig: { internal: { kind: "diagnostics", parentToolCallId: "1:effect" } } } });
+  expect(f.updates).toContainEqual(expect.objectContaining({ update: expect.objectContaining({ sessionUpdate: "tool_call_update",
+    _meta: { agentrig: { internal: { kind: "diagnostics", parentToolCallId: "1:effect" } } } }) }));
+  expect(f.requests.every(request => request.tools.every(tool => tool.name !== "core:diagnostics"))).toBe(true);
 });
 
 it("resource-only initial and continued ACP prompts cannot acquire blanket exec authority", async () => {

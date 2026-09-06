@@ -53,6 +53,10 @@ unchanged. Normal tool/content updates still accompany these notices. There is
 no arbitrary command/maintenance RPC or client-selected memory path. Normal logs
 and notices use stderr; trusted host extensions must also keep stdout protocol-only.
 
+Core-owned post-edit diagnostics have an explicit Diagnostics title and
+`_meta.agentrig.internal` with their kind and parent ACP tool-call ID on both call
+and result updates. They are not additional model-selected calls or approval grants.
+
 Limits: eight sessions per connection, one prompt each, 16 inbound requests, eight
 outstanding permission replies, 1 MiB frames, 4 MiB reserved output, 256 queued
 notifications, 32 prompt blocks, 256 KiB text and 256 KiB advisory data. Overflow

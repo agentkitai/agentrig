@@ -48,7 +48,10 @@ review found oversized raw-event disconnect and SDK-hidden queue accounting;
 both have actual fail-before/pass-after controls and bounded fixes. Integrated
 R9c `3b7564a`: build/typecheck/full pass **2,733 plus two skips /161 files** with
 local Docker fixtures; actual scripted nightly PASS/FAIL/BLOCKED controls pass.
-Exact final-head four-check CI remains pending.
+Integrated R15b `74c5073` and explicit ACP internal checker correlation: frozen
+install/build/typecheck/full pass **2,758 plus two skips /163 files** with local
+Docker fixtures. Pre-integration `708e3bc` passed all four checks; the combined
+head's exact four-check CI remains pending. No second general review.
 R10c is fully done via PR #181, post-main CI `34044235154`;
 [final receipt](https://github.com/agentkitai/agentrig/pull/181#issuecomment-5560486475).
 

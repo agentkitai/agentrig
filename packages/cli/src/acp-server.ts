@@ -75,10 +75,14 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
       let payload: SessionUpdate | undefined;
       if (event.type === "model.delta") payload = { sessionUpdate: "agent_message_chunk", content: { type: "text", text: event.text } };
       if (event.type === "model.response") entry.stop = event.stop;
-      if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id), title: event.name,
+      if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id),
+        title: event.internal === undefined ? event.name : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,
         kind: "other", status: "in_progress", rawInput: event.input };
       if (event.type === "tool.result") payload = { sessionUpdate: "tool_call_update", toolCallId: toolId(event.id), status: event.ok ? "completed" : "failed",
         content: [{ type: "content", content: { type: "text", text: bounded(event.display) } }] };
+      if (payload !== undefined && (event.type === "tool.call" || event.type === "tool.result") && event.internal !== undefined) {
+        payload._meta = { agentrig: { internal: { kind: event.internal.kind, parentToolCallId: toolId(event.internal.parentToolUseId) } } };
+      }
       if (payload !== undefined) void update(sessionId, payload).catch(() => {});
       if (entry.raw) {
         const originalBytes = Buffer.byteLength(JSON.stringify(event));
