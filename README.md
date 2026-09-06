@@ -1,5 +1,11 @@
 # AgentRig
 
+`agentrig doctor` stays offline/read-only. Explicit `agentrig doctor --probe` runs potentially
+billable bounded samples against the selected main provider, recording local configuration-bound
+observations used by advertised capabilities. Empirical tool/parallel/JSON/cache observations
+are not guarantees; native strict-format support stays unknown, and missing evidence retains
+labelled unverified defaults. See [R10d limits and cache semantics](docs/plans/R10d.md).
+
 AgentRig is a working agentic coding harness: a TypeScript SDK core plus a thin CLI for running coding agents interactively or headlessly. It combines a persistent, replayable agent loop with two built-in systems that are usually external to a harness:
 
 - a **supervisor loop** that observes the session out-of-band, detects stalls, loops, drift, and budget pressure, then escalates from guidance and replanning through review or abort;
