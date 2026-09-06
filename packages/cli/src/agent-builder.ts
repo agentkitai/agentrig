@@ -6,6 +6,7 @@ import {
   assertShellExists,
   Checkpointer,
   builtinTools,
+  OpenAICompatibleProvider,
   createAgent,
   SpendLedger,
   dailyCapMicros,
@@ -347,6 +348,7 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  outputContract?: import("@agentkitai/agentrig-core").OutputContract;
   signal?: AbortSignal;
   /** Trusted host user-state override, never model/project credential material. */
   mcpCredentialRoot?: string;
@@ -501,6 +503,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
       onUnavailable: () => (extras.onNotice ?? console.error)("spend accounting unavailable; uncapped execution continues with unknown coverage"),
     }) }) });
   const provider = providers.main;
+  if (extras.outputContract?.mode === "native") {
+    if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+    // Explicit host/operator opt-in, not empirical or endpoint-inferred support.
+    provider.capabilities.nativeOutputSchema = true;
+  }
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];
@@ -715,6 +722,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   }
   const agent = createAgent({
     ...(spend === undefined ? {} : { spend }),
+    ...(extras.outputContract === undefined ? {} : { outputContract: extras.outputContract }),
     ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
     extensions,
     provider,

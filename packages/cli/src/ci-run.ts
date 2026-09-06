@@ -87,6 +87,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   let file: FileHandle | undefined, summary: RunSummary | undefined, pr: GitHubPr | undefined;
   let outcome = "error", asked = 0, denied = 0, currentText = "", omitted = false, diagnostic = "";
   let questions = 0, answered = 0, unanswered = 0;
+  let outputValidation = "not requested or not reached";
   let options: RunOptions | undefined, github: GitHubTransport | undefined;
   let publication = flags.comment === true ? "not posted" : "not requested";
   const controller = new AbortController(), signal = AbortSignal.any([parent, controller.signal]);
@@ -100,6 +101,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
       currentText += bytes.subarray(0, Math.max(0, available)).toString("utf8");
     }
     if (event.type === "tool.denied") denied++;
+    if (event.type === "output.validated") outputValidation = `${event.valid ? "valid" : "invalid"} (${event.mode}, ${event.attempt}, ${event.category})`;
     // Counts only: question/answer prose remains in its original protected log.
     if (event.type === "question.asked") questions++;
     if (event.type === "question.answered") {
@@ -141,6 +143,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
       `Session: ${summary === undefined ? "not available" : inert(summary.id)}`,
       `Unresolved asks: ${asked}; observed tool denials: ${denied}.`,
       `Questions: ${questions}; answered: ${answered}; unanswered: ${unanswered}.`,
+      `Output validation: ${outputValidation}.`,
       `Effective ceilings (smaller configured values win): ${options?.maxTurns ?? "unknown"} turns / ${options?.maxMinutes ?? "unknown"} minutes / ${options?.maxTokens ?? "unknown"} main tokens.`,
       "Main limits do not cap total auxiliary/child usage or remote billing. Completion is not independent verification.",
       `Accounting: ${summary?.scheduledAccounting === undefined ? "unknown" : JSON.stringify(summary.scheduledAccounting)}`,
