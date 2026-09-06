@@ -6,7 +6,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { ExtensionManifestV1, resolveManifestNames, validateExtensionSurfaces } from "./manifests.js";
 import { DEFAULT_HOOK_TIMEOUT_MS, HookPoint, type Hook } from "./hooks.js";
 import { sanitizeLine } from "./tools/skills.js";
-import type { AnyTool } from "./tool.js";
+import type { AnyTool, ToolContext } from "./tool.js";
 
 export interface ExtensionCommand {
   name: string;
@@ -80,7 +80,9 @@ export async function loadExtensions(options: {
   if (options.candidates.length > 32) throw new Error("extension candidate limit 32 exceeded; none imported");
   const result: ExtensionLoadResult = { loaded: [], failed: [] };
   const fail = (candidate: { name: string; path: string }, phase: FailedExtension["phase"], error: unknown) => {
-    result.failed.push({ name: candidate.name, path: candidate.path, phase, message: sanitizeLine(String(error), 1024) });
+    const message = sanitizeLine(String(error), 1024);
+    result.failed.push({ name: candidate.name, path: candidate.path, phase, message });
+    options.onNotice(`extension ${candidate.name} ${phase}: ${message}`);
   };
   const unique = new Map<string, ExtensionCandidate>();
   for (const candidate of options.candidates) {
@@ -144,7 +146,7 @@ export async function loadExtensions(options: {
         z.record(z.unknown()).parse(schema); JSON.stringify(schema);
         const execute = tool.execute;
         // JS authors may return synchronously; the core lifecycle requires a real Promise.
-        tools.push(Object.freeze({ ...tool, execute: async (input, ctx) => execute.call(tool, input, ctx) }));
+        tools.push(Object.freeze({ ...tool, execute: async (input: unknown, ctx: ToolContext) => execute.call(tool, input, ctx) }));
       }); },
       registerCommand(command: ExtensionCommand) { guard("commands", () => {
         const parsed = CommandShape.parse(command);
@@ -156,7 +158,7 @@ export async function loadExtensions(options: {
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      options.onNotice(`extension ${candidate.name} (${candidate.path}): ${EXTENSION_HOST_WARNING}`);
+      options.onNotice(`extension ${candidate.name} (${sanitizeLine(candidate.path, 1024)}): ${EXTENSION_HOST_WARNING}`);
       await Promise.race([
         (async () => {
           const module: unknown = await import(pathToFileURL(candidate.path).href);

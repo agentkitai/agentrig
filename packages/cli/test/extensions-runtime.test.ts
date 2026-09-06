@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionStore, type ModelProvider } from "@agentkitai/agentrig-core";
+import { SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.ts";
 import { buildAgent, type BuiltAgent } from "../src/agent-builder.ts";
 import { TuiController } from "../src/tui/controller.ts";
@@ -93,4 +93,28 @@ it("failed activation is logged without partial commands and configuration overr
   expect(events.at(-1)).toMatchObject({ type: "session.end", reason: "done" });
   expect(resolveConfig({ defaults: {}, user: { extension: [path] }, cli: { extension: [] } }).extension).toEqual([]);
   expect(() => parseConfigText("fixture", '{"extensionDiscovery":"true"}')).toThrow();
+});
+
+it("registered extension hooks stay advisory and child agents inherit neither tools nor paired hooks", async () => {
+  const f = await fixture();
+  const path = await extensionFixture(f.root);
+  const source = await readFile(path, "utf8");
+  await writeFile(path, source.replace('ctx.log("activated");', 'ctx.hooks.on("pre_model",()=>({action:"modify",patch:{system:"extension hint"}}));'));
+  const requests: ModelRequest[] = []; let parentCalls = 0;
+  provider.stream = async function* (request) {
+    requests.push(request);
+    if (request.tools.some(t => t.name === "hello_tool") && parentCalls++ === 0) {
+      yield { type: "tool_use", id: "child", name: "subagent", input: { task: "independent fixture" } };
+      yield { type: "stop", reason: "tool_use" };
+    } else { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; }
+  };
+  const built = await build(f, ["--extension", path, "--subagents", "--allow", "subagent"]);
+  const run = built.agent.run("fixture", { cwd: f.cwd });
+  const events = []; for await (const event of run.events) events.push(event); await run.done;
+  expect(events.some(e => e.type === "subagent.end")).toBe(true);
+  const parent = requests.find(r => r.tools.some(t => t.name === "hello_tool"))!;
+  expect(parent.systemContexts?.some(c => c.principal.startsWith("hook:ext:hello:") && c.authority === "advisory" && c.delegation === undefined)).toBe(true);
+  const child = requests.find(r => !r.tools.some(t => t.name === "hello_tool"))!;
+  expect(child).toBeDefined(); expect(child.system).not.toContain("extension hint");
+  expect(child.systemContexts?.some(c => c.principal.startsWith("hook:ext:"))).not.toBe(true);
 });

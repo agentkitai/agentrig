@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, expect, it } from "vitest";
 import { createAgent, discoverExtensions, EventPayload, loadExtensions, RulePolicy, SessionStore,
+  TOOL_EMITTABLE_EVENTS,
   type ExtensionCandidate, type HarnessEvent, type ModelProvider } from "@agentkitai/agentrig-core";
 import { extensionFixture } from "./fixtures/extensions.ts";
 
@@ -69,7 +70,7 @@ it("deterministic name precedence and same-level duplicate refusal happen before
 it("timeout seals drafts, late completion cannot publish and a rejected activation leaves nothing", async () => {
   const root = await temp();
   const path = await extensionFixture(root, "hang", `export let context;export function activate(ctx){context=ctx;ctx.registerCommand({name:"draft",summary:"draft",run(){}});return new Promise(()=>{})}`);
-  const result = await load([path], 10); expect(result.loaded).toEqual([]); expect(result.failed[0]!.message).toMatch(/timed out/);
+  const result = await load([path], 100); expect(result.loaded).toEqual([]); expect(result.failed[0]!.message).toMatch(/timed out/);
   const module = await import(pathToFileURL(path).href);
   expect(() => module.context.registerCommand({name:"late",summary:"late",run(){}})).toThrow(/sealed/);
   const rejected = await extensionFixture(root, "reject", 'export function activate(){return Promise.reject(new Error("no"))}');
@@ -81,14 +82,16 @@ it("timeout seals drafts, late completion cannot publish and a rejected activati
 it("bounded project discovery and module/manifest symlinks fail closed", async () => {
   const root = await temp(); const path = await extensionFixture(join(root, ".agentrig/extensions"));
   expect(await discoverExtensions(root)).toEqual([{ path, precedence: 1 }]);
+  await expect(load(Array.from({ length: 33 }, () => path))).rejects.toThrow(/limit 32/);
   const link = join(root, ".agentrig/extensions/link.mjs");
   try { await symlink(path, link); } catch (error) { if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") return; throw error; }
   await writeFile(link.slice(0, -4) + ".json", JSON.stringify({ name: "link", version: "1", apiVersion: 1, surfaces: [] }));
   expect((await load([link])).loaded).toEqual([]);
-  await expect(load(Array.from({ length: 33 }, () => path))).rejects.toThrow(/limit 32/);
 });
 
 it("actual startup receipts round-trip after start/resume", async () => {
+  expect(TOOL_EMITTABLE_EVENTS.has("extension.loaded")).toBe(false);
+  expect(TOOL_EMITTABLE_EVENTS.has("extension.error")).toBe(false);
   const root = await temp(); const path = await extensionFixture(root);
   const extensions = await load([path]); const loaded = extensions.loaded[0]!;
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
