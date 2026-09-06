@@ -2,6 +2,7 @@ import type { Readable, Writable } from "node:stream";
 import type { AnyMessage, JsonRpcId, Stream } from "@agentclientprotocol/sdk";
 
 export const ACP_LIMITS = { frameBytes: 1_048_576, outputBytes: 4_194_304, requests: 32, permissions: 8, sessions: 8 } as const;
+export const ACP_SESSION_REFUSAL = "Session refused; check trusted configuration, cwd and existing MCP pins using the CLI";
 const idKey = (id: JsonRpcId): string => JSON.stringify(id);
 const validId = (value: unknown): value is JsonRpcId => value === null ||
   (typeof value === "string" && value.length <= 128) || (typeof value === "number" && Number.isSafeInteger(value));
@@ -92,7 +93,7 @@ export function acpTransport(input: Readable, output: Writable) {
         } else if (!("method" in message) && "id" in message) {
           // SDK-generated errors must never echo invalid client credentials or config values.
           if ("error" in message) wire = { jsonrpc: "2.0", id: message.id,
-            error: { code: message.error.code, message: "ACP request refused" } };
+            error: { code: message.error.code, message: message.error.message === ACP_SESSION_REFUSAL ? ACP_SESSION_REFUSAL : "ACP request refused" } };
         }
         const data = Buffer.from(`${JSON.stringify(wire)}\n`);
         if (data.length > ACP_LIMITS.frameBytes) throw new Error("ACP output frame exceeds limit");

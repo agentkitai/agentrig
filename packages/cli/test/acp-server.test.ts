@@ -72,3 +72,11 @@ it("cancel settles the prompt and denies pending effects even if the client leav
   expect(f.controllers[0]!.snapshot().pending).toBeNull();
   expect(f.updates.at(-1)?.update).toMatchObject({ sessionUpdate: "tool_call_update", status: "failed" });
 });
+
+it("concurrent session creation respects the shared eight-session cap", async () => {
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }));
+  const created = await Promise.allSettled(Array.from({ length: 8 }, () => f.peer.agent.request("session/new", { cwd: f.root, mcpServers: [] })));
+  expect(created.filter(result => result.status === "fulfilled")).toHaveLength(7);
+  expect(created.filter(result => result.status === "rejected")).toHaveLength(1);
+  expect(f.controllers).toHaveLength(8); expect(f.effects()).toBe(0);
+});

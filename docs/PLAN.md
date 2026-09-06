@@ -756,6 +756,12 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R8a adds stable ACP v1 stdio over the headless controller: literal prompts, streamed
+updates and one-time permission replies. Resource links remain separately advisory;
+client MCP configuration must match trusted host entries with existing unchanged
+pins. Per-session cwd/trust, queue bounds and cleanup are described in [ACP](ACP.md)
+and [R8a](plans/R8a.md). No second bespoke protocol, v2 or listening service.
+
 R7a adds bounded plain-JSON schedules with five-field UTC cron. `schedule tick` previews
 without provider/config loading; `--execute` requires trusted project consent and preserves
 advisory scheduled provenance through `run.scheduled`, never fresh user permission. Claims

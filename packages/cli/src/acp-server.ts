@@ -6,7 +6,7 @@ import type { Session, SessionSummary } from "@agentkitai/agentrig-core";
 import { z } from "zod";
 import { TuiController, type PendingPermission } from "./tui/controller.js";
 import { permissionEffectLines } from "./tui/permission-prompt.js";
-import { ACP_LIMITS } from "./acp-transport.js";
+import { ACP_LIMITS, ACP_SESSION_REFUSAL } from "./acp-transport.js";
 
 export interface AcpSessionRuntime {
   controller: TuiController;
@@ -132,7 +132,7 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
         if (closing) { await entry.runtime.close(); throw RequestError.invalidRequest(); }
         entry.unsubscribe = entry.runtime.controller.subscribe(state => { if (state.pending !== null) permission(id, entry, state.pending); });
         return { sessionId: id };
-      } catch { sessions.delete(id); throw new RequestError(-32000, "Session refused; check trusted configuration, cwd and existing MCP pins using the CLI"); }
+      } catch { sessions.delete(id); throw new RequestError(-32000, ACP_SESSION_REFUSAL); }
     })
     .onRequest("session/prompt", async ({ params }) => {
       const entry = current(params.sessionId);
@@ -159,7 +159,7 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
         if (summary === undefined || summary.reason === "error") throw new RequestError(-32000, "Agent run failed");
         const stopReason = entry.cancelled || summary.reason === "aborted" ? "cancelled" : summary.reason === "budget" ? "max_turn_requests"
           : entry.stop === "refusal" ? "refusal" : entry.stop === "max_tokens" ? "max_tokens" : "end_turn";
-        return { stopReason };
+        return { stopReason, _meta: { agentrig: { reason: summary.reason } } };
       } finally { entry.busy = false; }
     })
     .onNotification("session/cancel", ({ params }) => {

@@ -47,6 +47,10 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 
 ## Commands
 
+`agentrig acp` embeds the same controller in ACP v1 editors over stdio, retaining
+configured permissions and per-project trust. See the [ACP guide](docs/ACP.md)
+for the scripted client, existing-pin MCP requirements and transport limits.
+
 - `agentrig` — start the interactive TUI.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.

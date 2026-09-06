@@ -1,12 +1,13 @@
 # Status
 
-Active row: **R7c bounded scheduled receipts and failure visibility**, from green main `f3a1ec8`.
-R10b PR #177 post-main CI `34040691166` passed all three platforms; R9b proceeds independently.
+Active row: **R8a stable ACP v1 stdio**, implemented pending verification/review/final CI.
+R10b PR #177 post-main CI `34040691166` passed all three platforms.
 [Reporting contract](plans/R7c.md). R7b PR #179 passed exact CI `34041871904`
 and post-main CI `34042336391` on all three platforms.
 [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/179#issuecomment-5560275859).
 R10c PR #181 merged as `7b6cb6a`; post-main CI `34044235154` passed all three platforms.
-R9b PR #180 merged as `5344291`; post-main gate pending.
+R9b PR #180 merged as `5344291`; post-main CI `34044946044` passed.
+R7c PR #182 merged as `b2390ce`; post-main CI `34045706663` passed all three platforms.
 
 Completed repair #178: **A1/A2 real-copy fixture scheduling bound**. R7a PR #176 merged as
 main `bf65aec` after exact-head CI `34038810158` passed all three platforms.
@@ -23,12 +24,30 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is in progress; R9b is merged (PR #180), post-main gate pending; R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a ACP is implemented pending final gates; R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R7c in progress — bounded receipts, existing ingestion, actual startup banner
+### R8a implemented — stable ACP controller transport; gates pending
+
+[Contract](plans/R8a.md) and [operator guide](ACP.md). Official SDK v1 sessions,
+streamed updates and one-time approvals reuse the controller. Separate advisory
+resource context survives initial/continued runs and snapshots without becoming
+fresh user authorization. Per-session trust/cwd and exact trusted MCP configuration
+matching preserve host/sandbox boundaries; existing unchanged pins only, no ACP
+consent persistence. Bounded queues, cancellation, raw opt-in events and local
+read-only memory/supervisor extensions are exercised with controlled fixtures.
+Actual spawned CLI + local fake provider completes deny/allow over OS pipes.
+Build/typecheck and focused groups pass; full suite, negative mutations and the
+single independent review are next. Integrated R9b/R7c through `b2390ce`.
+R10c is fully done via PR #181, post-main CI `34044235154`;
+[final receipt](https://github.com/agentkitai/agentrig/pull/181#issuecomment-5560486475).
+
+### R7c done — PR #182, post-main CI green — bounded receipts, existing ingestion, actual startup banner
+
+Final closeout: merged `b2390ce`; post-main CI `34045706663` passed Linux, macOS
+and Windows. The following implementation-stage receipts retain their chronology.
 
 Ordinary cron launches receive structured local receipts and the existing configured-memory
 ingestion lifecycle, respecting explicit opt-out. Successful heartbeat stays quiet; failure-only
@@ -44,7 +63,10 @@ Then integrated R9b main `5344291`: build/typecheck and full with actual Docker 
 fixtures pass 2,700 plus two skips /155 files (four workers,42.91s). R9b post-main pending;
 R7c new exact-head CI is required. No second review for mechanical integration.
 
-### R9b merged — PR #180; post-main gate pending
+### R9b done — PR #180; post-main CI 34044946044 green
+
+Final closeout: merged `5344291`; post-main CI `34044946044` passed all three
+platforms. Earlier pending-gate statements below are historical receipts.
 
 Explicit mapped E1 tasks, supported config profiles, pinned local worker/checker images,
 default no-provider preview, opt-in execution and shared main/advisory accounting.
