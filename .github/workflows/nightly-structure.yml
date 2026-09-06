@@ -1,0 +1,76 @@
+name: Nightly structure regression
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # UTC, best effort; not a punctual delivery promise.
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-structure-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scripted-structure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: build
+        run: pnpm build
+      - name: All eight E1 definitions, E2 reports and R13e adversarial controls
+        id: structural
+        run: pnpm exec vitest run packages/cli/test/evalset.test.ts packages/cli/test/evaluation.test.ts packages/cli/test/verification-lanes.test.ts packages/core/test/injection-fixtures.test.ts --maxWorkers=4 --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/nightly-structure-tests.json"
+      - name: Prepare explicit local worker/checker images (infrastructure only)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        id: images
+        run: |
+          docker build --target worker -t agentrig-nightly-worker -f eval/Dockerfile eval
+          docker build --target checker -t agentrig-nightly-checker -f eval/Dockerfile eval
+          echo "NIGHTLY_WORKER_IMAGE=$(docker image inspect --format '{{.Id}}' agentrig-nightly-worker)" >> "$GITHUB_ENV"
+          echo "NIGHTLY_CHECKER_IMAGE=$(docker image inspect --format '{{.Id}}' agentrig-nightly-checker)" >> "$GITHUB_ENV"
+      - name: Actual scripted X1 positive/negative and X4 human-pending controls
+        if: ${{ !cancelled() && steps.images.outcome == 'success' }}
+        run: node eval/nightly.mjs "$RUNNER_TEMP/nightly-structure" "$NIGHTLY_WORKER_IMAGE" "$NIGHTLY_CHECKER_IMAGE"
+      - name: Retain bounded structural report and job identity, including partial failures
+        if: always()
+        run: |
+          node --input-type=module -e '
+            import { mkdir, writeFile } from "node:fs/promises";
+            import { join } from "node:path";
+            import { retainNightlyArtifacts } from "./eval/nightly-artifacts.mjs";
+            const output = join(process.env.RUNNER_TEMP, "nightly-test-artifacts");
+            await mkdir(output);
+            const receipt = await retainNightlyArtifacts(process.env.RUNNER_TEMP, output, ["nightly-structure-tests.json"]);
+            await writeFile(join(output, "job.json"), JSON.stringify({ lane: "scripted-structure", evaluatorRevision: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID, artifactReceipt: receipt }));
+            if (!receipt.complete || receipt.missing.length) process.exitCode = 1;
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scripted-structure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/nightly-test-artifacts
+            ${{ runner.temp }}/nightly-structure/artifacts
+          retention-days: 14
+          if-no-files-found: error
+          include-hidden-files: false
+      - name: Explain this check
+        if: always()
+        run: |
+          echo '### Scripted structure regression — mechanics only' >> "$GITHUB_STEP_SUMMARY"
+          echo 'E1/E2/R13e structural tests cover all eight definitions. Container controls separately require X1 PASS/FAIL and X4 human-PENDING BLOCKED. This is not model quality, task-performance evidence, or the E3 live lane. Inspect retained artifacts and failed steps; missing infrastructure is not a skip.' >> "$GITHUB_STEP_SUMMARY"

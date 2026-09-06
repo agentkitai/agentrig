@@ -212,3 +212,9 @@ Execution requires Linux Docker and already-local pinned images. The shipped wor
 supports X tasks; A tasks require a matching offline dependency image. Independent
 checks determine outcomes; M6 grading is advisory. See the [fixture/profile contract](docs/plans/R9b.md)
 for supported options, human gates, accounting and isolation limitations.
+
+The **Nightly structure regression** workflow runs at 03:17 UTC, on manual dispatch,
+PRs and main pushes. It combines the eight-task structural suite and injection controls
+with scripted Linux-container PASS/FAIL/human-PENDING checks, retaining bounded evidence
+even when a control fails. It needs no model credentials and measures mechanics, not
+model quality. See [R9c](docs/plans/R9c.md) for the local runner and scheduling limits.

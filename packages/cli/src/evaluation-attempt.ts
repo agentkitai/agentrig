@@ -22,6 +22,7 @@ export interface EvaluationAttemptOptions {
   transport: EvaluationTransport; ledger: EvaluationBudget; profile: ConfigValues;
   main: ModelProvider; supervisor: ModelProvider; budget: Budget; pricing?: Pricing;
   maxTokensPerTurn: number; memory?: { directory: string; sha256: string };
+  evidenceLane?: "live" | "scripted";
 }
 
 /** One ordinary core session; E1 checks, E2 accounting and M6 assessment remain separate. */
@@ -132,7 +133,7 @@ export async function runEvaluationAttempt(options: EvaluationAttemptOptions) {
   };
   const manifest: EvaluationManifest = {
     version: 1, task: receipt.id, runId: receipt.runId, evaluatorRevision: options.evaluatorRevision,
-    startingRevision: receipt.revision, evidenceLane: "live",
+    startingRevision: receipt.revision, evidenceLane: options.evidenceLane ?? "live",
     configuration: { supervisor: profile.supervise === true, memory: wiki !== undefined,
       memoryCorpusSha256: options.memory?.sha256 ?? null, roles: [
         { role: "main", provider: main.id, model: main.model, ...(price === undefined ? {} : { usdPerMillionTokens: price }) },
