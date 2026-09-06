@@ -1,4 +1,4 @@
-import type { ContentTrust, InstructionContext, Message } from "./messages.js";
+import type { ContentTrust, InstructionContext, Message, ThinkingBlock } from "./messages.js";
 import type { Usage } from "./events.js";
 import type { ProviderCapabilityEvidence } from "./provider-conformance.js";
 
@@ -33,6 +33,7 @@ export interface ModelRequest {
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";
 
 export type ModelEvent =
+  | { type: "thinking"; block: ThinkingBlock }
   /** Optional labels are supplied by trusted adapter code, never copied from model prose/JSON. */
   | { type: "text_delta"; text: string; trust?: ContentTrust }
   | { type: "tool_use"; id: string; name: string; input: unknown; trust?: ContentTrust }

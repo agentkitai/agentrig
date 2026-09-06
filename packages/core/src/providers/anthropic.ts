@@ -1,6 +1,7 @@
 import type { ContentBlock, Message } from "../messages.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReason } from "../provider.js";
 import type { Usage } from "../events.js";
+import { thinkingFromItem, thinkingToItem, validateThinkingHistory } from "./thinking.js";
 import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 
 /**
@@ -28,6 +29,7 @@ const API_VERSION = "2023-06-01";
 type JsonObject = Record<string, unknown>;
 
 export function toAnthropicRequest(req: ModelRequest, model: string, reasoningEffort?: ReasoningEffort): JsonObject {
+  validateThinkingHistory(req.messages, "anthropic");
   const body: JsonObject = {
     model,
     max_tokens: req.maxTokens,
@@ -58,6 +60,7 @@ function toAnthropicBlock(b: ContentBlock): JsonObject {
   // Trust metadata stays on the unified block/log. Project only supported wire fields; never
   // serialize provenance as model-visible instructions or mutate the retained source block.
   switch (b.type) {
+    case "thinking": return thinkingToItem(b, "anthropic");
     case "text":
       return { type: "text", text: b.text };
     case "tool_use":
@@ -92,9 +95,13 @@ function mapStopReason(reason: unknown): { reason: StopReason; raw?: string } {
 
 /** Split a byte stream into SSE `data:` JSON payloads and map them to ModelEvents. */
 export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string>): AsyncIterable<ModelEvent> {
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "";
   let pendingTool: { id: string; name: string; json: string } | null = null;
+  let pendingThinking: JsonObject | null = null;
+  let thinkingIndex: unknown;
+  let thinkingBytes = 0;
+  let thinkingCount = 0;
   let inputTokens = 0;
   let cacheRead: number | undefined;
   let cacheWrite: number | undefined;
@@ -115,8 +122,16 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
       }
       case "content_block_start": {
         const block = data.content_block as JsonObject | undefined;
+        if (pendingThinking !== null) throw new Error("overlapping thinking blocks");
         if (block?.type === "tool_use") {
           pendingTool = { id: String(block.id), name: String(block.name), json: "" };
+        }
+        if (block?.type === "thinking" || block?.type === "redacted_thinking") {
+          if (pendingTool !== null) throw new Error("thinking overlaps a tool block");
+          pendingThinking = { ...block };
+          thinkingIndex = data.index;
+          thinkingBytes += Buffer.byteLength(JSON.stringify(block));
+          if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
         }
         break;
       }
@@ -124,9 +139,23 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
         const delta = data.delta as JsonObject | undefined;
         if (delta?.type === "text_delta") yield { type: "text_delta", text: String(delta.text ?? "") };
         else if (delta?.type === "input_json_delta" && pendingTool) pendingTool.json += String(delta.partial_json ?? "");
+        else if (delta?.type === "thinking_delta" || delta?.type === "signature_delta") {
+          const key = delta.type === "thinking_delta" ? "thinking" : "signature";
+          if (pendingThinking?.type !== "thinking" || typeof delta[key] !== "string" || data.index !== thinkingIndex) throw new Error("invalid thinking delta");
+          thinkingBytes += Buffer.byteLength(delta[key]);
+          if (thinkingBytes > 1_048_576 || String(pendingThinking[key] ?? "").length + delta[key].length > 262_144) {
+            throw new Error("reasoning response exceeds retention bound");
+          }
+          pendingThinking[key] = String(pendingThinking[key] ?? "") + delta[key];
+        }
         break;
       }
       case "content_block_stop": {
+        if (pendingThinking) {
+          if (data.index !== thinkingIndex) throw new Error("invalid thinking block boundary");
+          yield { type: "thinking", block: thinkingFromItem("anthropic", pendingThinking) };
+          pendingThinking = null;
+        }
         if (pendingTool) {
           // The accumulated JSON can be truncated (max_tokens mid-tool-input) or garbage.
           // Never throw here — that would kill the session before the buffered usage/stop
@@ -175,8 +204,10 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
     buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     yield* drainLines();
   }
-  buffer += "\n";
+  buffer += decoder.decode() + "\n";
   yield* drainLines();
+
+  if (pendingThinking !== null) throw new Error("incomplete thinking block");
 
   const usage: Usage = { input: inputTokens, output: outputTokens };
   if (cacheRead !== undefined) usage.cacheRead = cacheRead;

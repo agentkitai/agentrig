@@ -1,10 +1,11 @@
 import { realpath } from "node:fs/promises";
+import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { EventPayload, SupervisorRecord } from "./events.js";
-import { AdvisoryPromptContextSchema, advisoryPromptBlocks, ContentTrustSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
+import { AdvisoryPromptContextSchema, advisoryPromptBlocks, ContentTrustSchema, ThinkingBlockSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { PermissionGrantRegistry } from "./permission-grants.js";
@@ -127,6 +128,8 @@ export interface AgentConfig {
   onAsk?: (req: PermissionRequest, context?: import("./permissions.js").PermissionAskContext) => Promise<Exclude<Decision, "ask">>;
   /** Explicit live authority only; built-in children receive filtered, task-sealed views. */
   permissionGrants?: PermissionGrantRegistry;
+  /** Trusted host restriction, intersected by local roles; applies even to internal tool dispatch. */
+  toolAllowlist?: readonly string[];
   /**
    * M7: who this session is, when a human answering its permission prompts is not watching it —
    * a subagent sets `"subagent"`. It rides on every `permission.request` this session emits, so
@@ -264,6 +267,8 @@ export function createAgent(config: AgentConfig): Agent {
     if (config.outputContract.mode === "native" && config.provider.capabilities.nativeOutputSchema !== true)
       throw new Error("Native output requires an explicitly opted-in supported adapter");
   }
+  if (config.toolAllowlist !== undefined) config = { ...config,
+    toolAllowlist: Object.freeze(AgentRoleToolNames.parse(config.toolAllowlist)) };
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
     throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
   }
@@ -365,7 +370,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     let usd = 0;
     let reason: SessionSummary["reason"] = "done";
 
-    const sessionTools = config.tools.length === 0 ? config.tools : [...config.tools, readOutputTool(store)];
+    const availableTools = config.tools.length === 0 && !config.toolAllowlist?.includes("read_output")
+      ? config.tools : [...config.tools, readOutputTool(store)];
+    const sessionTools = config.toolAllowlist === undefined ? availableTools : availableTools.filter(tool => config.toolAllowlist!.includes(tool.name));
     const toolsByName = new Map(sessionTools.map((t) => [t.name, t]));
     const toolSpecs = sessionTools.map(toToolSpec);
     const compaction = config.compaction ?? summarizeOlderTurns();
@@ -677,6 +684,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // Assistant content is assembled in stream order so the history replayed to the
         // model matches what it actually said (text and tool_use blocks can interleave).
         const assistantContent: ContentBlock[] = [];
+        let thinkingBytes = 0;
+        let thinkingCount = 0;
         let text = "";
         let textTrust: ContentTrust | undefined;
         const flushText = () => {
@@ -791,6 +800,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
+              case "thinking": {
+                const parsed = ThinkingBlockSchema.safeParse(ev.block);
+                if (!parsed.success) throw new Error("invalid reasoning block");
+                thinkingBytes += Buffer.byteLength(JSON.stringify(parsed.data));
+                if (++thinkingCount > 32 || thinkingBytes > 1_048_576) throw new Error("reasoning response exceeds retention bound");
+                flushText();
+                // No response prose can supply user provenance or instruction authority.
+                assistantContent.push({ ...parsed.data, trust: "generated", context: ADVISORY_CONTEXT });
+                break;
+              }
               case "text_delta": {
                 const trust = ContentTrustSchema.optional().parse(ev.trust);
                 if (trust !== textTrust) flushText();

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
+import { thinkingFromItem } from "../src/providers/thinking.js";
 import { createAgent, createOutputContract, parseOutputJson, RulePolicy, SessionStore, messagesFromEvents,
   type AgentConfig, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
 
@@ -11,6 +12,34 @@ afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { rec
 const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
 const text = (value: string, stop: "end_turn" | "max_tokens" | "refusal" = "end_turn"): ModelEvent[] => [
   { type: "text_delta", text: value }, { type: "usage", usage: { input: 10, output: 5 } }, { type: "stop", reason: stop }];
+
+it("reasoning replay survives role refusal and JSON repair without entering final validation", async () => {
+  const block = thinkingFromItem("anthropic", { type: "thinking", thinking: "not JSON", signature: "exact-opaque-signature" });
+  const f = await fixture([
+    [{ type: "thinking", block }, { type: "tool_use", id: "excluded", name: "effect", input: {} }, { type: "stop", reason: "tool_use" }],
+    [{ type: "thinking", block }, ...text("invalid")],
+    [{ type: "thinking", block }, ...text('{"ok":true}')],
+  ], { toolAllowlist: [] });
+  const session = f.agent.run("answer", { cwd: f.root });
+  expect((await session.done).reason).toBe("done"); expect(f.effects()).toBe(0);
+  expect(f.requests).toHaveLength(3); expect(f.requests.every(r => r.tools.length === 0)).toBe(true);
+  const retained = f.requests[2]!.messages.flatMap(m => m.content).filter(b => b.type === "thinking");
+  expect(retained).toHaveLength(2);
+  expect(retained.every(b => b.signature === block.signature && b.replay === block.replay)).toBe(true);
+  const events = await f.store.readAll(session.id);
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.denied", name: "effect" }));
+  expect(events.filter(e => e.type === "output.validated").map(e => e.valid)).toEqual([false, true]);
+  expect((await f.store.readSnapshot(session.id))!.messages).toEqual(messagesFromEvents(events));
+});
+
+it("repair refuses a role-allowed call before its strategy can dispatch", async () => {
+  let strategies = 0;
+  const f = await fixture([text("invalid"), [{ type: "tool_use", id: "repair-role", name: "effect", input: {} }, { type: "stop", reason: "tool_use" }]],
+    { toolAllowlist: ["effect"], turnStrategy: { execute: async () => { strategies++; throw Error("not executed"); } } });
+  const session = f.agent.run("answer", { cwd: f.root });
+  expect((await session.done).reason).toBe("error"); expect(strategies).toBe(0); expect(f.effects()).toBe(0);
+  expect(f.requests[0]!.tools.map(t => t.name)).toEqual(["effect"]); expect(f.requests[1]!.tools).toEqual([]);
+});
 async function fixture(responses: ModelEvent[][], overrides: Partial<AgentConfig> = {}) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-output-")); roots.push(root);
   const store = new SessionStore({ root }); const requests: ModelRequest[] = []; let effects = 0;

@@ -3,6 +3,7 @@ import type { ModelEvent, ModelProvider, ModelRequest, ReasoningEffort, StopReas
 import type { Usage } from "../events.js";
 import { fetchWithRetries, streamWithRetries, type RetryPolicy, type StreamRetryInfo } from "./retry.js";
 import { openAiCacheReadDiscount } from "./cache-pricing.js";
+import { validateThinkingHistory } from "./thinking.js";
 
 /**
  * OpenAI-compatible Chat Completions adapter: OpenAI itself plus most local servers
@@ -49,6 +50,7 @@ export function toOpenAIRequest(
   maxTokensParam: "max_tokens" | "max_completion_tokens" = "max_completion_tokens",
   reasoningEffort?: ReasoningEffort,
 ): JsonObject {
+  validateThinkingHistory(req.messages);
   const messages: JsonObject[] = [{ role: "system", content: req.system }];
   for (const m of req.messages) messages.push(...toOpenAIMessages(m));
   const body: JsonObject = {

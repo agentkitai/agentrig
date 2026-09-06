@@ -21,6 +21,8 @@ import {
   skillsInjection,
   skillTool,
   subagentTool,
+  discoverAgentRoles,
+  type AgentRole,
   type Agent,
   type AnyTool,
   type AuxiliaryReport,
@@ -366,6 +368,7 @@ export interface AgentExtras {
 
 
 export interface SubagentWiring {
+  agentRoles?: readonly AgentRole[];
   opts: AgentBuildOptions;
   extras: AgentExtras;
   budget: Budget;
@@ -402,6 +405,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
 
   return {
     createAgent,
+    ...(w.agentRoles === undefined ? {} : { roles: w.agentRoles, modelRoles: { ...w.providers.roleNames } }),
     maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
     childBudget,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
@@ -668,9 +672,12 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
   if (skills.length > 0) tools.push(skillTool(skills));
   if (opts.subagents === true) {
+    const agentRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
+      error => extras.onHookError?.(error.message));
     tools.push(
       subagentTool(
         (() => { const options = subagentOptions({
+          agentRoles,
           opts,
           extras,
           budget,
