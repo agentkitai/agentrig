@@ -75,6 +75,7 @@ export interface TuiChild {
 }
 
 export interface TuiState {
+  reviewing?: boolean;
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
   /** Work currently in flight, derived from the live event stream rather than persisted separately. */
@@ -145,6 +146,7 @@ export interface TuiControllerOptions {
   onMemory?: (query: string) => Promise<string[]>;
   /** `/dream [--auto]` — returns lines to print. */
   onDream?: (auto: boolean, signal: AbortSignal) => Promise<string[]>;
+  onReview?: (args: string, signal: AbortSignal) => Promise<string[]>;
   /**
    * `/fork [seq]` and `/tree` (R3c). Injected like the others so the controller never touches the
    * session store: the TUI reads and writes logs only through the agent, and a fork is the one
@@ -270,6 +272,8 @@ export class TuiController {
     this.dream = fn;
   }
 
+  setReview(fn: (args: string, signal: AbortSignal) => Promise<string[]>): void { this.review = fn; }
+
   /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
   forgetRestoredConversation(): void {
     this.resetGrants("conversation-restored");
@@ -303,6 +307,9 @@ export class TuiController {
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
   private dreamAbort: AbortController | undefined;
   private dreaming: Promise<void> | undefined;
+  private review: TuiControllerOptions["onReview"];
+  private reviewAbort: AbortController | undefined;
+  private reviewing: Promise<void> | undefined;
   private observer: { detach(): void; done: Promise<void> } | undefined;
   private closing = false;
   private closed = false;
@@ -349,8 +356,9 @@ export class TuiController {
   }
 
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
-  readonly ask = (req: PermissionRequest, context?: PermissionAskContext): Promise<Exclude<Decision, "ask">> =>
+  readonly ask = (req: PermissionRequest, context?: PermissionAskContext, signal?: AbortSignal): Promise<Exclude<Decision, "ask">> =>
     new Promise((resolve) => {
+      if (signal?.aborted) { resolve("deny"); return; }
       const registry = context === undefined ? this.permissionGrants : context.permissionGrants;
       // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
       // every single write in a twenty-file task is how a permission prompt stops being read at
@@ -365,14 +373,27 @@ export class TuiController {
         resolve(standing);
         return;
       }
+      let settled = false;
+      const cancel = () => entry.resolve("deny", false);
+      const finish = (decision: "allow" | "deny") => {
+        settled = true; signal?.removeEventListener("abort", cancel); resolve(decision);
+        // Scope editing copies presentation state; the resolver is the stable request identity.
+        if (this.state.pending?.resolve === entry.resolve) this.advanceQueue();
+        else {
+          const index = this.queue.indexOf(entry);
+          if (index >= 0) { this.queue.splice(index, 1); this.set({ queued: this.queue.length }); }
+        }
+      };
       const entry: PendingPermission = {
         req,
         ...(registry === undefined ? {} : { permissionGrants: registry }),
         resolve: (d, remember, scope) => {
+          if (settled) return;
           if (req.origin === "external-input-expansion" && remember === true) {
             this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
             return;
           }
+          settled = true;
           if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
               if (registry === undefined) throw new Error("no runtime grant registry; use a one-time answer");
@@ -384,7 +405,7 @@ export class TuiController {
               }
             } catch (error) {
               this.print(`standing permission refused: ${String(error)}`, "error");
-              resolve("deny"); this.advanceQueue(); return;
+              finish("deny"); return;
             }
             this.print(
               `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} ${registry?.isChildView ? "for this child within the current parent run" : "for the rest of this session"} (/permissions to review)`,
@@ -393,8 +414,7 @@ export class TuiController {
           } else {
             this.print(`${d === "allow" ? "allowed" : "denied"} ${req.tool}`, d === "allow" ? "system" : "error");
           }
-          resolve(d);
-          this.advanceQueue();
+          finish(d);
         },
       };
       // A single slot silently overwrote the first resolver when two requests overlapped,
@@ -409,6 +429,8 @@ export class TuiController {
         this.queue.push(entry);
         this.set({ queued: this.queue.length });
       }
+      signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) cancel();
     });
 
   private advanceQueue(): void {
@@ -596,6 +618,10 @@ export class TuiController {
 
   abort(): void {
     this.closeQuestions();
+    if (this.reviewAbort !== undefined) {
+      this.reviewAbort.abort(); this.denyAllPending(); this.print("cancelling review…", "error");
+      if (this.session === null) return;
+    }
     if (this.dreamAbort !== undefined) {
       this.dreamAbort.abort(); this.print("cancelling dream…", "error");
       if (this.session === null) return;
@@ -627,7 +653,7 @@ export class TuiController {
     if (this.closed) return;
     this.closing = true;
     this.observer?.detach();
-    if (this.session !== null || this.dreamAbort !== undefined) this.abort();
+    if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
@@ -635,6 +661,7 @@ export class TuiController {
     this.closeQuestions();
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
+    await this.reviewing?.catch(() => {});
     await this.undoing?.catch(() => {});
     this.resetGrants("controller-closed");
     this.closed = true;
@@ -660,10 +687,13 @@ export class TuiController {
   }
 
   private async run(cmd: TuiCommand): Promise<boolean> {
+    if (this.reviewAbort !== undefined && !["abort", "quit", "help", "permissions"].includes(cmd.kind)) {
+      this.print("a review is running — stop it before starting other work", "error"); return true;
+    }
     switch (cmd.kind) {
       case "quit":
         // stop the work before tearing the UI down, or the session runs on invisibly
-        if (this.session !== null) {
+        if (this.session !== null || this.reviewAbort !== undefined) {
           this.print("stopping the running turn before exiting…", "system");
           await this.shutdown();
         }
@@ -710,6 +740,15 @@ export class TuiController {
         const controller = new AbortController(); this.dreamAbort = controller;
         this.dreaming = this.delegate("dream", () => this.dream?.(cmd.auto, controller.signal));
         try { await this.dreaming; } finally { this.dreamAbort = undefined; this.dreaming = undefined; }
+        return true;
+      }
+      case "review": {
+        if (this.session !== null || this.dreamAbort !== undefined || this.undoing !== undefined || this.state.pending !== null || this.state.escalation !== null) {
+          this.print("work or a prompt is active — stop it before /review", "error"); return true;
+        }
+        const controller = new AbortController(); this.reviewAbort = controller; this.set({ reviewing: true });
+        this.reviewing = this.delegate("review", () => (this.review ?? this.opts.onReview)?.(cmd.args, controller.signal));
+        try { await this.reviewing; } finally { this.reviewAbort = undefined; this.reviewing = undefined; this.set({ reviewing: false }); }
         return true;
       }
       case "resume":
