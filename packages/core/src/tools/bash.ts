@@ -222,7 +222,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
  * `taskkill` is missing the child is killed directly, which is what the old code did for the
  * whole tree.
  */
-function defaultKillTree(pid: number): void {
+export function defaultKillTree(pid: number): void {
   try {
     const killer = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
       stdio: "ignore",

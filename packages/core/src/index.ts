@@ -1,4 +1,5 @@
 export * from "./events.js";
+export * from "./diagnostics-types.js";
 export * from "./messages.js";
 export * from "./manifests.js";
 export * from "./provider.js";

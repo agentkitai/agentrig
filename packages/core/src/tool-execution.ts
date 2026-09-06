@@ -1,6 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { extensionDisabled, ExtensionHandlerError, flushExtensionFailures } from "./extension-runtime.js";
 import { takeCommandOutcome } from "./command-outcome.js";
+import { hasDiagnostics, diagnosticContext, takeChanged, unchanged, checkerTool, diagnosticReport, boundDiagnosticReport } from "./diagnostics.js";
+import type { Diagnostics } from "./diagnostics-types.js";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentConfig } from "./agent.js";
 import type { HarnessEvent, PermissionRequest } from "./events.js";
@@ -284,7 +286,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
     ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
   const isolated = isIsolatedTool(tool);
-  await context.schedule?.admit({ cwd, permission: permClass, effects: declaredEffect, paths: declaredPaths, isolated });
+  await context.schedule?.admit({ cwd, permission: permClass, effects: hasDiagnostics(tool) ? undefined : declaredEffect, paths: declaredPaths, isolated });
   const permReq: PermissionRequest = {
     tool: tu.name,
     input,
@@ -392,6 +394,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     endSignal: endSignal,
   };
   if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);
+  if (hasDiagnostics(tool)) diagnosticContext(ctx);
   const t0 = now();
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;
@@ -467,6 +470,35 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     }
     const ok = r.isError !== true;
     const commandOutcome = takeCommandOutcome(r, ctx);
+    let diagnostics: Diagnostics | undefined;
+    const changed = ok ? takeChanged(tool, r, ctx) : undefined;
+    if (changed !== undefined) {
+      const checker = checkerTool(changed.checker);
+      if (await unchanged(changed.changed) && !signal.aborted && !isEnded()) {
+        const { schedule: _schedule, ...nested } = context;
+        // This call is core-owned, not model-visible registration. The outer exclusive hazard
+        // remains held; reacquiring its schedule here would deadlock against ourselves.
+        try {
+          // This builtin write has actually settled. Its new bytes must become owned before
+          // the checker's separate pre-mutation checkpoint compares the live tree. The checker
+          // and outer finally still settle their own later effects; no ownership is pregranted.
+          for (const checkpointer of checkpointers) await checkpointer.afterTool({
+            point: "post_tool", sessionId: id, cwd, turn: turns, toolEffect,
+            signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+            hasBackgroundWork: () => [...toolsByName.values()].some(t => t.hasBackgroundWork?.()),
+            checkpointExcludes: [await realpath(config.store.root)],
+          });
+          await executeTool({ id: checker.id, name: checker.tool.name, input: checker.input }, {
+            ...nested, toolsByName: new Map([...toolsByName, [checker.tool.name, checker.tool]]),
+            emit: payload => emit(payload.type === "tool.call" || payload.type === "tool.result" || payload.type === "tool.result.patched"
+              ? { ...payload, internal: { kind: "diagnostics", parentToolUseId: tu.id } } : payload),
+          });
+        } catch { /* The write already succeeded. Diagnostics failure cannot undo that fact. */ }
+        finally { await checker.join(); }
+      }
+      diagnostics = boundDiagnosticReport(await diagnosticReport(changed.changed, changed.checker, cwd, checker.id, checker.observed()));
+      r = { ...r, display: `${r.display}\n[diagnostics] ${JSON.stringify(diagnostics)}` };
+    }
     const overflow = overflowResult(r);
     const resultEvent = await emit({
       type: "tool.result",
@@ -477,6 +509,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       permission: permClass,
       toolCallSeq: callEvent.seq,
       ...(commandOutcome === undefined ? {} : { commandOutcome }),
+      ...(diagnostics === undefined ? {} : { diagnostics }),
       ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
       ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)
         ? { outputIncomplete: true } : {}),
@@ -564,7 +597,9 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       // The authoritative result is already emitted. An abort here degrades provenance;
       // it must not enter the execution-failure catch and emit a duplicate result.
       : await raceAbort(finishTrust(), "tool provenance").catch(() => "external" as const);
-    return resultBlock(body, !ok, trust, displayContext(h));
+    const block = resultBlock(body, !ok, trust, displayContext(h));
+    if (block.type === "tool_result" && diagnostics !== undefined) block.diagnostics = diagnostics;
+    return block;
   } catch (err) {
     const sandboxDenied = err instanceof SandboxDeniedError && (
       sandboxRetryDenied || (config.sandbox !== undefined && !sandboxDenialRecorded)
