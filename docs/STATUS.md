@@ -24,11 +24,34 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
+### Windows memory atomic replacement — merged in PR #145
+
+Final head `0abdfc7` passed three-platform CI 34017429109 and merged as `3c857d0`.
+Post-merge main CI is pending at this integration checkpoint and must pass before R5d merges;
+PR #145 records its final result.
+
+R5d combined-head CI 34016959860 failed the existing Windows two-process ingest conservation
+fixture with `EPERM` renaming a temporary index over `index.md`. This is not evidence of a known
+external actor or a proven transient. A separate bounded repair now retries only Windows
+EPERM/EACCES/EBUSY under the existing writer lock: same temporary file, 250 ms monotonic window,
+at most 20 ms between attempts, signal-aware waits and no destination deletion or force fallback.
+Other errors fail immediately; exhaustion preserves the previous target and existing cleanup.
+See [repair contract](plans/windows-memory-replace.md). Deterministic actual-store regressions,
+the real Windows process fixture, one independent review and exact-head/post-merge CI gate its
+own PR before R5d integrates it. R6a is independent after delivered memory/manifest prerequisites.
+
+Build/typecheck and the full local suite pass 2,024 tests plus two skips (98 files). One bounded
+Claude review `29dd2b60-97d3-4862-aa2e-759c20a5a954` approves with no material findings; it
+independently passes 11 repair tests, 581 memory tests plus two skips and typecheck. Disabling
+eligible retries fails all three error-code controls; removing the per-attempt abort check fails
+the late-attempt control. Both mutations are restored. Windows CI retains the original fixture
+and repeats its conservation case, alongside the deterministic repair tests. Final exact-head
+and post-merge CI receipts belong to the repair PR; R5d's earlier independent review is unchanged.
+
 ### R13f merged — PR #143 records closing delivery gates
 
-Final head `01127b7` passed all three platforms in CI 34016646499 and merged as `1a20f4e`.
-Post-merge main CI is pending at this integration checkpoint and must pass before R5d merges;
-the closing PR records the final result.
+Final head `01127b7` passed three-platform CI 34016646499 and merged as `1a20f4e`.
+That merge passed post-merge main CI 34016868500 on all three platforms.
 
 Core stamps unique runtime call provenance; only matching successful write-class results in the
 same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
@@ -80,8 +103,10 @@ independently passing typecheck, 42 MCP tests, the TUI consent test and 1,981 te
 Missing-callback and stale-advertisement mutations failed their named core controls and were
 restored. The CLI adapter independently fails closed on absent user interaction. Real Node stdio
 server tests use an independent effect marker; TUI tests show the exact delta and reject standing
-grants. Integrated with R13f/R5e main `1a20f4e`: build/typecheck and 2,026 tests plus two skips
-(99 files) pass. Previous head `65bbc0b` passed all three platforms in CI 34016609070; updated-head and
+grants. Integrated with repaired main `3c857d0`: build/typecheck and 2,037 tests plus two skips
+(100 files) pass. The prior integration exposed the Windows memory replacement failure documented
+above; its independently reviewed repair was merged in PR #145 and is now included. No second
+general R5d review was needed. Previous head `65bbc0b` passed all three platforms in CI 34016609070; updated-head and
 post-merge CI remain required before the next merge. PR #144 holds final receipts. Optional polish
 is at ROADMAP's end, not additional release subdivisions.
 
