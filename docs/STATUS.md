@@ -123,6 +123,10 @@ Docker checks pass 2,911 tests plus two skips. Integrated R15c build/typecheck a
 Docker full checks pass 2,931 plus two skips across 181 files; Chromium additionally
 checks actual received frames exclude thinking/signature canaries. Exact-head
 Linux/macOS/Windows and scripted-structure gates remain pending.
+Final integration from green roles/structured-output main `74699da` passes frozen
+install/build/typecheck, Docker full 2,976 plus two skips (185 files, 62.81 seconds),
+and the real Chromium smoke. Only documentation conflicts needed resolution;
+all existing runtime privacy checks remain. Fresh exact-head four-check CI follows.
 
 R15c is done (PR #193): main `749ff265b031f19040307b60b44097e825f1c2f9`
 passed CI `34061897223` and structure `34061897204`, all four green.

@@ -189,3 +189,13 @@ standard ACP updates omit private thinking text and opaque signatures. No raw-ev
 opt-in is enabled, and canonical core replay/log behavior is unchanged. The prior
 single review covers the implementation; this mechanical integration is not a
 second review. Exact-head platform and scripted-structure CI remain required.
+
+Final required integration includes green roles/structured-output main
+`74699dac9fd6a1914e741e5f102cdb36d4bcfb04` (PRs #196/#195). Only documentation
+conflicts required resolution; program/dependency/CI changes merged mechanically.
+Frozen install, build and typecheck pass. Full Docker-required validation passes
+2,976 tests plus two existing skips across 185 files (62.81 seconds), followed by
+one passing real Chromium ACP/permission/question/cancel/literal-render/privacy
+smoke. Structured-output remains its intended `run` surface, not an unrequested
+web capability. Reasoning and role enforcement tests remain in the full suite.
+No second review; final exact-head four-check CI follows this integration.
