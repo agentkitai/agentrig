@@ -29,6 +29,11 @@ polish is at the roadmap end. Current main `06f5b4b` (R12c) is integrated with i
 grant counts and documentation preserved. Build/typecheck and the full four-worker suite pass
 2,326 tests plus two skips across 126 files (31 seconds). Exact-head and post-merge CI remain gates.
 
+Integrated H7a main `668f7f1` after prior PR head `7e5301f` passed all three jobs in
+CI `34027941553`. First-request acceptance assembly and actual-provider-boundary continuation
+remain intact. The combined 86 focused cases and build/typecheck/full 2,342 tests plus two skips
+across 127 files pass. Fresh exact-head CI and H7a's post-merge gate remain pending.
+
 ### R13c done — PR #159; post-merge CI green
 
 Final head `71b58c7` passed all three PR jobs in CI 34026155677; merged main `78e8e19` passed
