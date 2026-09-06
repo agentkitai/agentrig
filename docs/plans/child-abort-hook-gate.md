@@ -38,3 +38,25 @@ timer state. Production code is unchanged.
 The early-cut-at-child-grace mutation fails both variants: immediate terminal-before-
 hook error without storage delay, bounded missing-hook watchdog with delayed storage.
 The mutation was restored. Full validation and one independent review follow.
+
+## Frozen-head validation and review
+
+On `564d0a2`, ordered install/build/typecheck and the full actual-Docker suite
+passed: 2,823 tests, two existing skips, 171 files, 53.38 seconds, four workers.
+Worker image: `sha256:f111ef59dce766519eb2ac455b554b01793aff0e9cd1d68d29b6d314d7db52e9`.
+Checker image: `sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5`.
+
+One independent Claude review approved the frozen change, with no material
+findings. Requested 16 turns, reported 11; 150.854 seconds. It independently
+ran both variants three times, all 43 subagent tests, and core typecheck;
+it did not independently run the full build/Docker suite or the mutant.
+The original result and limitations are preserved in
+[child-abort-hook-gate-review.md](child-abort-hook-gate-review.md).
+The optional timer-assumption comment is recorded at the end of the roadmap.
+No second review and no production changes.
+
+The original main run completed with Linux and Windows green, macOS failed;
+scripted structure was green. Its failure receipt is on PR #188:
+https://github.com/agentkitai/agentrig/pull/188#issuecomment-5561616415.
+The repair still requires all four exact PR-head checks and all four post-main
+checks before roadmap integrations resume; those receipts belong on the PR.

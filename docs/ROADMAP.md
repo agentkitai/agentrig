@@ -1251,3 +1251,5 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   pending; optional terminal questions for non-headless `run`; assert checklist
   heartbeat suppression explicitly; unify timeout outcome attribution between the
   controller and core deadlines. No permission or provenance widening.
+- Child abort-hook fixture polish: name the lifecycle orphan timers beside the
+  200/400 ms phase-gate interception so future equal-delay timers prompt review.
