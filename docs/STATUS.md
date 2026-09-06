@@ -40,6 +40,13 @@ control fix the fixture; assertions remain strong. R10d main `3d45d9f` is integr
 build/typecheck, 91 focused package/doctor/provider cases and full 2,520 + two skips/144 files
 pass (34 seconds). Fresh exact-head CI is required; initial failures remain in the contract receipt.
 
+Head `5c105f5` passed all three PR CI jobs in 34034014045 (Windows on the single authorized
+diagnostic rerun after an unchanged X1 timeout). All 29 Windows package controls passed.
+Separate main readiness repair #173 is now integrated as `063cac6`, retaining its shared helper
+and CI group. Combined build/typecheck, 93 focused cases and full 2,526 + two skips/145 files
+pass (four workers, 37 seconds). Fresh PR CI and repaired-main post-merge CI still gate delivery;
+no additional broad review was run for this mechanical integration.
+
 
 ### Child-grants readiness repair — implementation; delivery gates pending
 

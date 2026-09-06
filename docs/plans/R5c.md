@@ -89,3 +89,15 @@ explicit provider probing and the ordinary offline doctor path.
 Combined final build/typecheck, 91 package/doctor/provider focused cases and the full suite
 pass after integration: 2,520 tests plus two skips across 144 files (four workers, 34 seconds).
 This includes 29 package controls, without replacing either platform's failing doctor assertion.
+
+Head `5c105f5` then passed all three CI platforms in 34034014045: Linux/macOS attempt one;
+Windows passed the single authorized diagnostic attempt two after an unchanged X1 five-second
+fixture timeout. Its 29 package controls, including canonical trust, passed. The timeout and
+local isolated 1.20-second pass are preserved in PR receipts; timing variance was not proven.
+
+The preceding main gate required separate child-grant readiness repair PR #173. Integrated
+main `063cac6` retains its shared readiness helper/tests and Windows test group, plus R10d's
+provider-probe path. Combined build/typecheck, 93 focused package/doctor/provider/readiness
+cases and full 2,526 tests plus two skips across 145 files pass (four workers, 37 seconds).
+No new broad review or package production edits. Fresh exact-head CI and repaired-main
+post-merge CI remain required; PR #171/#173 are not claimed done before that gate is green.
