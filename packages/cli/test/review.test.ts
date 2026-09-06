@@ -188,6 +188,21 @@ describe("R15e explicit PR authorization", () => {
 });
 
 describe("R15e controller lifecycle", () => {
+  it("cancels a scope-edited presentation copy by stable request identity", async () => {
+    const { root } = await repo(); const controller = new TuiController({ cwd: root, agent: { run: () => { throw new Error("no agent"); } } });
+    const abort = new AbortController();
+    const first = controller.ask({ tool: "write_file", class: "write", cwd: root, paths: [join(root, "a.ts")], input: {} }, undefined, abort.signal);
+    const original = controller.snapshot().pending!;
+    controller.startPermissionScope();
+    expect(controller.snapshot().pending?.scope).toBeDefined();
+    expect(controller.snapshot().pending).not.toBe(original);
+    const second = controller.ask({ tool: "sibling", class: "exec", cwd: root, input: {} });
+    abort.abort(); expect(await first).toBe("deny");
+    expect(controller.snapshot().pending?.req.tool).toBe("sibling");
+    original.resolve("allow", true); expect(controller.permissionGrants.inspect()).toHaveLength(0);
+    expect(controller.snapshot().pending?.req.tool).toBe("sibling");
+    await controller.shutdown(); expect(await second).toBe("deny");
+  });
   it("cancels a queued request by identity without answering the active sibling", async () => {
     const { root } = await repo(); const controller = new TuiController({ cwd: root, agent: { run: () => { throw new Error("no agent"); } } });
     const first = controller.ask({ tool: "first", class: "exec", cwd: root, input: {} });

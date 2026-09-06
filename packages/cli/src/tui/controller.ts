@@ -366,7 +366,8 @@ export class TuiController {
       const cancel = () => entry.resolve("deny", false);
       const finish = (decision: "allow" | "deny") => {
         settled = true; signal?.removeEventListener("abort", cancel); resolve(decision);
-        if (this.state.pending === entry) this.advanceQueue();
+        // Scope editing copies presentation state; the resolver is the stable request identity.
+        if (this.state.pending?.resolve === entry.resolve) this.advanceQueue();
         else {
           const index = this.queue.indexOf(entry);
           if (index >= 0) { this.queue.splice(index, 1); this.set({ queued: this.queue.length }); }
