@@ -203,6 +203,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
       .option("--verbose", "show the raw event trace instead of just the conversation")
+      .option("--notifications <mode>", "TUI idle notifications: off (default), bell, desktop, both; ignored in headless run")
+      .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default30)", Number)
       .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
       .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
       .option("--system <prompt>", "override the system prompt")

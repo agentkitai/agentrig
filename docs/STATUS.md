@@ -1,5 +1,15 @@
 # Status
 
+### R16e in progress — opt-in idle TUI notifications
+
+Independent row following delivered R15a, approved from green main `31193d6`;
+R15g and other TUI rows retain their own PRs and serialized merge gates.
+Default-off mounted-TTY observer uses actual prompt identities and input idle,
+not OS focus, model prose or event permissions. Fixed desktop arguments and a
+small shared owned-process helper preserve the review wrapper's prior behavior.
+[Contract](plans/R16e.md), [operator guide](NOTIFICATIONS.md). Full validation,
+the single independent review and exact-head/post-main gates remain pending.
+
 Active row: **R15h bounded local agent roles**, integrated through all-four-green R15c main `749ff26`.
 R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
 R10b PR #177 post-main CI `34040691166` passed all three platforms.

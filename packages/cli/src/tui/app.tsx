@@ -29,7 +29,7 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
   error: "red",
 };
 
-export function App({ controller, onMounted }: { controller: TuiController; onMounted?: () => void }): JSX.Element {
+export function App({ controller, onMounted, onInput }: { controller: TuiController; onMounted?: () => void; onInput?: () => void }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
@@ -96,6 +96,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
   }, [buf, paste, state.activity]);
 
   useRawInput((raw, char, key) => {
+    onInput?.();
     // Use the synchronous controller state, not a React render from before this stdin batch.
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
     const previewAtInput = controller.snapshot().pending?.scope;

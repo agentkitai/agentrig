@@ -129,6 +129,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  notifications?: "off" | "bell" | "desktop" | "both";
+  notificationIdleSeconds?: number;
   /** Explicit CLI activation only; never loaded from config or environment. */
   otelEndpoint?: string;
   /** Runtime-only heartbeat profile; never accepted from project config fields. */

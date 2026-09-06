@@ -28,6 +28,7 @@ import { withMaintenanceSignal } from "../maintenance.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
 import { reviewChanges, reviewArguments, renderReview, reviewFailure } from "../review.js";
+import { mountNotifications, NotificationMode, NotificationIdleSeconds, type Notifications } from "./notifications.js";
 
 export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
 
@@ -45,6 +46,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   let built;
+  NotificationMode.parse(opts.notifications ?? "off");
+  NotificationIdleSeconds.parse(opts.notificationIdleSeconds ?? 30);
   validateAbortRestores(opts);
   const budget = parseBudget(opts);
   // Validate before a session starts. Parsing inside onSession would let an invalid threshold run
@@ -177,7 +180,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     catch (error) { controller.print(`scheduled failure history unavailable: ${error instanceof Error ? error.message : String(error)}`, "error"); }
   }
   let acknowledge: Promise<void> | undefined;
+  let notifications: Notifications | undefined;
   const onMounted = (): void => {
+    notifications ??= mountNotifications(controller, opts, { stdin: process.stdin, stdout: process.stdout });
     if (reports === undefined || notice === undefined || notice.text === null || acknowledge !== undefined) return;
     acknowledge = reports.acknowledge(notice.through).catch(error => {
       controller.print(`scheduled failure notice not acknowledged: ${error instanceof Error ? error.message : String(error)}`, "error");
@@ -187,7 +192,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     await withBracketedPaste(process.stdout, async () => {
       // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
       // to useInput, so the abort handler in the view could never run.
-      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} />, {
+      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} onInput={() => notifications?.input()} />, {
         exitOnCtrlC: false,
       });
       // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this
@@ -196,6 +201,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       await waitUntilExit();
     });
   } finally {
+    await notifications?.close();
     await acknowledge;
     // The UI is gone but the session may still be running, or running its session_end hooks
     // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second
