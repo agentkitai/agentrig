@@ -192,6 +192,19 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
       return;
     }
 
+    // A terminal may coalesce supported Shift-Enter with printable bytes on either
+    // side. Decode only those exact sequences; the remainder is literal paste-like
+    // text, never a stream of Enter/approval actions. Submission still needs its
+    // own input event and the InputBuffer quiet point.
+    const shiftedEnter = /\u001b\[(?:13;2u|27;2;13~)/g;
+    if (shiftedEnter.test(raw)) {
+      const current = controller.snapshot();
+      if (current.pending !== null) return;
+      const protectedInput = questionAtInput !== null || current.question !== null || current.escalation !== null;
+      composerAction({ type: "append", text: raw.replace(shiftedEnter, protectedInput ? "" : "\n").replace(/\r\n?/g, "\n") });
+      return;
+    }
+
     // a permission prompt takes the keyboard: answering it is the only useful thing to do
     if (controller.snapshot().pending !== null) {
       if (key.return) permissionAction({ type: "enter" });
@@ -202,7 +215,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
     }
 
     if (key.upArrow || key.downArrow || key.tab) { composerAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
-    if ((key.return && key.shift) || raw === "\u001b[13;2u" || raw === "\u001b[27;2;13~") { composerAction({ type: "newline" }); return; }
+    if (key.return && key.shift) { composerAction({ type: "newline" }); return; }
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as
       // the text ahead of it, so "the user pressed enter" is not proof that stdin has gone quiet

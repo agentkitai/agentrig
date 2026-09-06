@@ -90,3 +90,22 @@ it("even trailing slashes submit literally and edits detach recall", async () =>
   await vi.waitFor(()=>expect(f.requests).toHaveLength(1),{timeout:5000});
   expect(lastPrompt(f.requests)).toContainEqual(expect.objectContaining({type:"text",text:"old edit\\\\"}));
 });
+it.each(["\u001b[13;2u", "\u001b[27;2;13~", "prefix\u001b[13;2u", "prefix\u001b[27;2;13~"])("coalesced supported Shift-Enter preserves both edges without implicit submission (%j)", async key => {
+  const f = await fixture(); f.input.send("first",key+"second\rthird");
+  await vi.waitFor(()=>expect(f.writes.join("")).toContain("third"));
+  expect(f.requests).toHaveLength(0);
+  f.input.send("\r"); await vi.waitFor(()=>expect(f.requests).toHaveLength(1),{timeout:5000});
+  expect(lastPrompt(f.requests)).toContainEqual(expect.objectContaining({type:"text",text:`first${key.startsWith("prefix") ? "prefix" : ""}\nsecond\nthird`}));
+});
+it("coalesced Shift-Enter does not auto-answer a question or authorize a permission", async () => {
+  const f = await fixture(); const permission = f.controller.ask({tool:"effect",class:"exec",input:{},cwd:process.cwd()});
+  f.input.send("\u001b[13;2uy\r");
+  await vi.waitFor(()=>expect(f.writes.join("")).toContain("effect"));
+  expect(f.controller.snapshot().pending).not.toBeNull(); f.input.send("n"); expect(await permission).toBe("deny");
+  const question = f.controller.askQuestion({id:"00000000-0000-4000-8000-000000000001",sessionId:"fixture",toolUseId:"question",prompt:"Sensitive",options:["one"]},new AbortController().signal);
+  f.input.send("\u001b[13;2uANSWER\rCANARY");
+  await vi.waitFor(()=>expect(f.writes.join("")).toContain("CANARY"));
+  expect(f.controller.snapshot().question).not.toBeNull();
+  f.input.send("\r"); expect(await question).toMatchObject({source:"human",answer:{text:"ANSWER\nCANARY"}});
+  expect(f.history.values()).toEqual([]); expect(f.requests).toHaveLength(0);
+});
