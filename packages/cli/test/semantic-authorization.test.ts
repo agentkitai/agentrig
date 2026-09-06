@@ -7,6 +7,8 @@ import { bashTool, createAgent, describeShellOperation, resolveShell, SessionSto
 import { buildPermissionPolicy } from "../src/run.ts";
 import { parseConfigText } from "../src/config.ts";
 import { buildAgent } from "../src/agent-builder.ts";
+import { HarnessEvent as EventSchema } from "@agentkitai/agentrig-core";
+import { renderEvent } from "../src/render.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -65,6 +67,9 @@ describe("CLI semantic command scope", () => {
   it.skipIf(!supported)("executes quoted metacharacters as inert literal data through the real shell", async () => {
     const events = await run("printf '%s' '$(printf expanded); | * \\'");
     expect(events.find(e => e.type === "permission.request")).toMatchObject({ req: { operation: { status: "parsed", argv: ["printf", "%s", "$(printf expanded); | * \\"] } } });
+    const request = events.find(e => e.type === "permission.request")!;
+    expect(EventSchema.parse(JSON.parse(JSON.stringify(request)))).toEqual(request);
+    expect(renderEvent(request)).toContain('operation={"kind":"shell","status":"parsed"');
     expect(events.find(e => e.type === "tool.result")).toMatchObject({ ok: true, display: "$(printf expanded); | * \\" });
     const control = spawnSync('printf "%s" "$(printf expanded)"', { shell: shell.path, encoding: "utf8" });
     expect(control.status).toBe(0); expect(control.stdout).toBe("expanded");

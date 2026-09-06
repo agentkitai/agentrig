@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R5d implemented, pending final delivery gates; R6a active in an independent worktree. R13f and R5e implementations are complete and merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12e implemented, pending delivery gates; R6b active independently and R13b preparing its contract. R5d, R5e, R13f, R6a and R13a are merged (PRs #144, #142, #143, #146 and #147).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -14,15 +14,34 @@ its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establis
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
 
-R6a procedure detection is now active in a separate worktree: its memory-hardening and R5e
-manifest dependencies are delivered, and it does not depend on MCP pinning or extension loading.
-This dependency-aware parallel start preserves the committed queue; it introduces no demand veto.
+R6a procedure detection is merged; R6b continues its independent memory track after those
+prerequisites. R12e establishes narrow semantic authorization before grant lifecycle work;
+R13b follows delivered R13a metadata. Dependency-aware parallel starts preserve the committed
+queue and introduce no demand veto.
 
 Each exact head needs appropriate tests, one bounded independent review with material findings
 addressed, and green three-platform CI. Integrate current main before merging; serialize merges
 and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, with no recursive
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
+
+### R12e implemented — pending closing delivery gates
+
+Explicit `--allow-command '["git","status"]'` / config argv prefixes now match a bounded
+literal POSIX operation descriptor derived by trusted built-in bash after validated pre-tool
+hooks. Names, transcript claims and MCP hints never mint authority. Unsupported syntax and
+background calls cannot satisfy narrow scopes; existing explicit blanket authority is preserved,
+with CLI deny rules first. This is not read-only/binary/PATH/Git-hook attestation and does not
+implement R12a grant records or R12b–R12d lifecycle/UI. [Contract](plans/R12e.md).
+
+Integrated main `76ac082` includes R6a and R13a; build/typecheck pass and the full suite passes
+2,111 tests plus two skips across 105 files. Bypassing argv equality and deriving descriptors
+before hook modifications both fail named negative controls; both mutations are restored.
+Bounded Claude review `fb4da610-4af1-43fa-b597-98c52b1e2c0f` approves the code and independently
+passes typecheck plus 136 tests. Evidence wording and committing docs resolve its two delivery
+findings. Exact-head three-platform CI and post-merge CI remain closing gates.
+R5d's merged `008c2ba` passed post-merge CI 34018010003; Windows repair `3c857d0` passed
+post-merge CI 34017665328. R13a main `76ac082` passed post-merge CI 34018763831 on all platforms.
 
 ### R13a implemented — PR #147 records delivery gates
 
