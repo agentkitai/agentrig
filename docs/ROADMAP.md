@@ -1271,3 +1271,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
   subagent turn flags consistently at CLI parsing. Current role spawning fails closed
   when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R16e polish: make the TUI headless option explicit in its type, move notification
+  schemas into a shared config-only module, and normalize tiny CLI help spacing.
+  The mounted runtime guard and actual headless CLI already remain silent.
