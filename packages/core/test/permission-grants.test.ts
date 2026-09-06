@@ -126,10 +126,10 @@ describe("core grant enforcement and audit", () => {
     const before = (await store.readPrefix(session.id)).events; await new Promise<void>(resolve => setImmediate(resolve));
     expect(executed).toEqual([]); expect((await store.readPrefix(session.id)).events).toEqual(before);
   });
-  it("preserves explicitly shared child authority, with delegable still metadata until R12d", async () => {
+  it.each([{ delegable: false, explicit: false }, { delegable: true, explicit: false }, { delegable: false, explicit: true }])("real spawn filters grants but retains explicit base authority (%j)", async ({ delegable, explicit }) => {
     const store = await fixture(); const r = new PermissionGrantRegistry(); const id = store.create(); r.beginSession(id);
-    r.grant(spec(r, { delegable: false })); const executed: string[] = [];
-    const permissions = new RulePolicy([{ tool: "subagent", decision: "allow" }]);
+    r.grant(spec(r, { delegable })); const executed: string[] = [];
+    const permissions = new RulePolicy([{ tool: "subagent", decision: "allow" }, ...(explicit ? [{ tool: "bash", decision: "allow" as const }] : [])]);
     const subagent = subagentTool({ createAgent, childConfig: () => ({ provider: new Provider(["git status"]), tools: [tool(executed)],
       permissions, permissionGrants: r, store, systemPrompt: "child", origin: "subagent" }) });
     let turn = 0;
@@ -139,10 +139,10 @@ describe("core grant enforcement and audit", () => {
         yield { type: "stop", reason: turn === 1 ? "tool_use" : "end_turn" };
       } };
     const { events } = await collect(createAgent({ provider, tools: [subagent], permissions, permissionGrants: r, store, systemPrompt: "parent" }).run("spawn", { id, cwd: store.root }));
-    expect(executed).toEqual(["git status"]); expect(events.some(e => e.type === "subagent.spawn")).toBe(true);
-    expect(r.list()[0]!.delegable).toBe(false);
+    expect(executed).toEqual(delegable || explicit ? ["git status"] : []); expect(events.some(e => e.type === "subagent.spawn")).toBe(true);
+    expect(r.list()[0]!.delegable).toBe(delegable);
   });
-  it("an already-running child cannot adopt grants from a different root session", async () => {
+  it.each(["session-one", "session-two"])("an already-running child cannot adopt grants from a later root task in %s", async nextSession => {
     const store = await fixture(); const r = registry(); const oldTask = r.context.taskId!; const executed: string[] = [];
     let release!: () => void; let started!: () => void;
     const barrier = new Promise<void>(resolve => { release = resolve; }); const entered = new Promise<void>(resolve => { started = resolve; });
@@ -152,10 +152,28 @@ describe("core grant enforcement and audit", () => {
         if (turn++ === 0) { started(); await barrier; yield { type: "tool_use", id: "late", name: "bash", input: { command: "git status" } }; }
         yield { type: "stop", reason: turn === 1 ? "tool_use" : "end_turn" };
       } };
-    const child = createAgent({ provider, tools: [tool(executed)], permissions: new RulePolicy([]), permissionGrants: r, store, systemPrompt: "child" }).run("wait", { parent: "oldparent", cwd: store.root });
+    const child = createAgent({ provider, tools: [tool(executed)], permissions: new RulePolicy([]), permissionGrants: r.childView(), store, systemPrompt: "child" }).run("wait", { parent: "oldparent", cwd: store.root });
     const work = collect(child); await entered;
-    r.endRun(oldTask); r.beginRun("session-two"); r.grant(spec(r)); release();
+    r.endRun(oldTask); r.beginRun(nextSession); r.grant(spec(r, { delegable: true })); release();
     const { events } = await work; expect(executed).toEqual([]); expect(events.some(e => e.type === "tool.denied")).toBe(true);
+  });
+  it("actual child runtime sees parent revocation before the next authorization", async () => {
+    const store = await fixture(); const r = new PermissionGrantRegistry(); const id = store.create(); r.beginSession(id); const executed: string[] = [];
+    const grant = r.grant(spec(r, { delegable: true })); let asks = 0;
+    const spawn = subagentTool({ createAgent, childConfig: () => ({ provider: new Provider(["git status", "git status"]), tools: [tool(executed)],
+      permissions: new RulePolicy([]), permissionGrants: r, store, systemPrompt: "child", onAsk: async () => { asks++; return "deny"; },
+      hooks: [{ point: "post_tool", handler: () => { expect(r.inspect()[0]!.matchedDecisions).toBe(1); r.revoke(grant.id); return { action: "continue" }; } }],
+    }) });
+    let turn = 0;
+    const parentProvider: ModelProvider = { id: "fake", model: "fake", capabilities: new Provider([]).capabilities,
+      async *stream(): AsyncIterable<ModelEvent> { if (turn++ === 0) yield { type: "tool_use", id: "spawn", name: "subagent", input: { task: "probe" } };
+        yield { type: "stop", reason: turn === 1 ? "tool_use" : "end_turn" }; } };
+    const parent = await collect(createAgent({ provider: parentProvider, tools: [spawn], permissions: new RulePolicy([{ tool: "subagent", decision: "allow" }]),
+      permissionGrants: r, store, systemPrompt: "parent" }).run("spawn", { id, cwd: store.root }));
+    const spawned = parent.events.find(e => e.type === "subagent.spawn"); if (spawned?.type !== "subagent.spawn") throw Error("missing child");
+    const events = await store.readAll(spawned.id); expect(executed).toHaveLength(1); expect(asks).toBe(1);
+    expect(events).toContainEqual(expect.objectContaining({ type: "permission.decision", d: "allow", source: { kind: "grant", grantId: grant.id } }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: grant.id }));
   });
   it("uses a real grant after ask, audits before dispatch and observes revocation before the next call", async () => {
     const store = await fixture(); const r = new PermissionGrantRegistry(); const executed: string[] = []; let asks = 0; let grantId = "";

@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14a is implemented with closing delivery gates; H7a is merged with its post-merge gate pending. R12c (PR #158), R5a (PR #157), R13c (PR #159), R13d (PR #154), R12b (PR #155), R6g (PR #153) and R12a (PR #152) are done with green post-merge CI. R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14a is merged (PR #162), pending post-merge CI; H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is implemented with closing delivery gates; R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -15,13 +15,14 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R6d–R6f: memory quality, promotion guardrails and lifecycle | R6f delivered by H5; R6d/R6e in PRs #139/#140 with green PR and post-merge CI |
 | Complete | R13f, R5e and R5d: trusted progress, manifests and MCP pinning | PRs #143/#142/#144 passed exact-head and post-merge three-platform CI |
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
-| Done | R12b: semantic scoped approval UI (PR #155) | Honest effect unknowns and bounded scope editing with exact preview/confirmation; post-merge CI green |
-| Done | R13d: injected-context principals (PR #154) | Runtime-assigned authority and explicit revocable hook delegation; post-merge CI green |
-| Done | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence; post-merge CI green |
-| Done | R5a: trusted extension API (PR #157) | Atomic declared activation, registered identities, no child extension inheritance; post-merge CI green |
-| Implemented; closing gates | R14a: plan acceptance declarations | Optional bounded checks and first-request instruction; declaration is not proof |
+| Complete | R12b: semantic scoped approval UI (PR #155) | Exact-head and post-merge CI passed |
+| Complete | R12c: live grant inspection (PR #158) | Exact-head and post-merge CI passed |
+| Implemented; closing gates | R12d: child grant views | Live delegable ancestry, task seals, per-subject TUI approvals and root/sibling isolation |
+| Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
+| Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
+| Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
+| Merged; post-merge CI pending | R14a: acceptance declarations (PR #162) | Observable declarations remain unverified, not proof |
 | Committed | R5b/R5c, R7–R11, R12d and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
-| Done | R12c: live grant inspection (PR #158) | Exact scope/age/counts, revocation and same-call decision attribution; PR and post-merge CI green |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
 
@@ -687,7 +688,7 @@ exactly this granularity.*
 | R12a *(done, [PR #152](https://github.com/agentkitai/agentrig/pull/152))* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
 | R12b *(done, [PR #155](https://github.com/agentkitai/agentrig/pull/155))* | Prompt distinguishes declared paths/class/argv from unknown effects and network access. `s` edits bounded path/argv scope; exact future scope is previewed and explicitly confirmed only if it covers the current request. Both input paths preserve existing answers and separate sandbox/MCP consent. See [contract](plans/R12b.md). | cli + core matcher |
 | R12c *(done, [PR #158](https://github.com/agentkitai/agentrig/pull/158))* | `/permissions` shows exact live grants, age and matched-decision counts; exact-ID revocation applies to the next decision. Same-call optional policy receipts and correlated events name the actual rule/grant/handler or honest unknown, without re-evaluation or counting previews. See [contract](plans/R12c.md). | core + cli |
-| R12d | Subagent inheritance is explicit: a child receives the parent's grants filtered by `delegable`, never the full set — the shared-policy-object design from M7d gains a per-subject view | core |
+| R12d *(implemented; closing delivery gates)* | Live per-subject child views inherit only delegable ancestor grants, share audit/counters and expire at root task end. Runtime-bound descendants and TUI ask/preview/install preserve view scope; child approvals never authorize root or siblings. Explicit shared base policy remains separate. See [contract](plans/R12d.md). | core + cli |
 | R12e *(done, [PR #148](https://github.com/agentkitai/agentrig/pull/148))* | Semantic authorization never derives from names, transcript prose or server read-only hints. Explicit `--allow-command` / config argv prefixes bind to trusted post-hook parsed foreground operations; unsupported syntax cannot satisfy a narrow rule and defaults to ask without separate explicit blanket authority. Denies retain precedence; R5d consent and sandbox containment remain independent. See [contract and limits](plans/R12e.md). Grant records/UI/lifecycle remain R12a–R12d. | core, cli |
 
 Acceptance: a `git *` grant (conceptual shorthand for argv prefix `["git"]`, never a string glob)
@@ -755,7 +756,7 @@ order under its existing rule.
 
 | Row | Deliverable | Package |
 |---|---|---|
-| H7a *(implemented; delivery gates pending)* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
+| H7a *(done, [PR #161](https://github.com/agentkitai/agentrig/pull/161))* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
 | H7b | Issue #95: a forged or host-caused "read-only file system" line under `workspace-write` does not classify as a sandbox denial unless the policy corroborates it (kernel-observed denial where the provider exposes one; otherwise the line is inert) | core |
 
 Acceptance: a fake-provider session that truncates twice finishes the task with two
@@ -1140,6 +1141,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   instead of whole-startup refusal for oversized discovery, and canonical explicit-path dedupe
   to suppress benign alias shadow notices. Any child extension inheritance must retain paired
   hooks, ownership and failure state; R5a deliberately inherits none of the extension surfaces.
+- R12d polish: explain explicitly when parent runtime has no grant registry and a configured
+  child registry is consequently ignored; shared revision invalidation also conservatively
+  cancels a sibling's open standing/scope prompt after a revocation. Preserve scoped inheritance.
 - R14a polish: consider less repetitive first-request wording when a resumed conversation already
   has a plan, and a quieter compact summary for entirely undeclared legacy plans; neither should
   hide unverified checks. A small shared core acceptance-text formatter could remove duplication
