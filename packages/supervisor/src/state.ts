@@ -1,4 +1,5 @@
 import type { HarnessEvent, PlanItem, Usage } from "@agentkitai/agentrig-core";
+import { initialPlanEvidence, reducePlanEvidence, type PlanEvidenceLedger } from "./plan-evidence.js";
 
 /**
  * What every detector can see without keeping its own copy of the stream. Detectors that need
@@ -22,6 +23,8 @@ export interface SupervisorState {
   lastTs: number;
   /** Latest `plan.updated` items; the drift detector reads their `scope`. */
   plan: PlanItem[];
+  /** Bounded candidate observations, never proof that acceptance or completion was achieved. */
+  planEvidence?: PlanEvidenceLedger;
   /** Set once the session has ended — attach() stops applying interventions past this point. */
   ended: boolean;
   /** Current event's write-result-backed claims. Empty for uncorroborated/legacy claims. */
@@ -62,12 +65,15 @@ export function initialState(): SupervisorState {
     startedAt: null,
     lastTs: 0,
     plan: [],
+    planEvidence: initialPlanEvidence(),
     ended: false,
   };
 }
 
 /** Folds one event into the state, in place. Must run before the detectors see that event. */
 export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateOptions = {}): void {
+  state.planEvidence ??= initialPlanEvidence();
+  reducePlanEvidence(state.planEvidence, event);
   state.corroboratedChanges = [];
   let pending = pendingWrites.get(state);
   if (pending === undefined) { pending = new Map(); pendingWrites.set(state, pending); }
