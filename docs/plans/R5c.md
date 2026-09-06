@@ -70,3 +70,10 @@ follow-ups; source hardlinks are deliberately refused, including pnpm-linked fil
 Final updated-main build/typecheck/full suite after the alias fix passes 2,502 tests plus two
 skips across 142 files (four workers, 34 seconds); all 28 focused package cases are included.
 Exact-head all-platform PR CI remains a delivery gate, followed by root merge and main CI.
+
+First PR head `29dcabf` CI 34033531560 failed one new macOS doctor fixture assertion (not
+a timeout): the fixture manually wrote trust for a noncanonical temporary path, while project
+trust uses its canonical path (`/var` aliases `/private/var` on macOS). The fixture now resolves
+its temporary root before constructing the persisted trust record, matching existing trust
+fixtures; production trust checks and the assertion remain intact. No blind CI rerun and no
+new broad review. The assertion now prints the actual doctor report on failure.

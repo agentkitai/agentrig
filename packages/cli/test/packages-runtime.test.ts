@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, realpath, symlink } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
@@ -21,7 +21,7 @@ vi.mock("../src/provider.ts", async importOriginal => {
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "agentrig-package-cli-")); roots.push(root);
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-package-cli-"))); roots.push(root);
   const cwd = join(root, "project"); const home = join(root, "home"); const source = join(root, "bundle");
   await mkdir(cwd); await mkdir(home); await mkdir(source);
   const sentinel = join(root, "imported");
@@ -50,7 +50,7 @@ it("actual package CLI requires trust; installation and readonly doctor do not i
   await writeFile(join(f.home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [f.cwd]: true } }));
   const before = await readdir(join(f.cwd, ".agentrig", "packages"));
   const report = await diagnose({ cwd: f.cwd, home: f.home, env: {}, stdinTTY: false, stdoutTTY: false });
-  expect(report.lines.some(line => line.includes("package:fixture") && line.includes("integrity matches"))).toBe(true);
+  expect(report.lines.join("\n")).toContain('pass package:fixture — "1"; integrity matches');
   expect(await readdir(join(f.cwd, ".agentrig", "packages"))).toEqual(before);
   await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
   const notices: string[] = []; const built = await build(f, [], notices);
@@ -120,4 +120,18 @@ it.each(["relative", "absolute"])("keeps package skills before home after an exp
   expect(notices.some(message => message.includes("equal precedence"))).toBe(false);
   await writeFile(join(f.cwd, ".agentrig", "skills", "guide.md"), "Project wins");
   expect((await build(f, ["--trust", "--skills", alias])).skills.find(skill => skill.name === "guide")?.body).toBe("Project wins");
+});
+
+it("doctor needs canonical persisted project trust even when invoked through a filesystem alias", async () => {
+  const f = await fixture(); await addPackage({ projectRoot: f.cwd, source: f.source });
+  const alias = join(f.root, "project-alias");
+  await symlink(f.cwd, alias, process.platform === "win32" ? "junction" : "dir");
+  await mkdir(join(f.home, ".agentrig"), { recursive: true });
+  const trust = join(f.home, ".agentrig", "trust.json");
+  await writeFile(trust, JSON.stringify({ projects: { [alias]: true } }));
+  const options = { cwd: alias, home: f.home, env: {}, stdinTTY: false, stdoutTTY: false };
+  expect((await diagnose(options)).lines.join("\n")).toContain("fail trust —");
+  await writeFile(trust, JSON.stringify({ projects: { [f.cwd]: true } }));
+  expect((await diagnose(options)).lines.join("\n")).toContain('pass package:fixture — "1"; integrity matches');
+  await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
 });
