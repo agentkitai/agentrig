@@ -24,7 +24,7 @@ interface ToolExecutionContext {
   hasPlanTool: boolean;
   replan: ReplanState;
   emit: Emit;
-  emitFromTool: (name: string) => (payload: EventPayload) => void;
+  emitFromTool: (name: string, callSeq: number) => (payload: EventPayload) => void;
   hook: SessionHook;
   signal: AbortSignal;
   endSignal: AbortSignal;
@@ -111,7 +111,7 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
   // so the log's last event is always session.end.
   // A factory rather than one shared closure: the loop binds the executing tool's registered name
   // (never a name the payload claims), so the gate can hold tools to the events that are theirs.
-  const emitFromTool = (toolName: string) => (payload: EventPayload): void => {
+  const emitFromTool = (toolName: string, callSeq: number) => (payload: EventPayload): void => {
     if (isEnded()) return;
     // A tool's emit is untrusted input, so it is gated on THREE axes, mirroring record():
     //  1. TYPE — a tool may emit only the informational/state kinds tools legitimately produce
@@ -139,7 +139,7 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
     }
     const parsed = EventPayload.safeParse(payload);
     if (!parsed.success) return reject("which is malformed and would corrupt the log");
-    void emit(parsed.data);
+    void emit(parsed.data.type === "file.changed" ? { ...parsed.data, toolCallSeq: callSeq } : parsed.data);
   };
 
   return emitFromTool;
@@ -269,13 +269,13 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     }
   }
   if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
-  await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });
+  const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });
   const ctx: ToolContext = {
     cwd,
     sessionId: id,
     // bound to the REGISTERED tool's name (the one resolved from toolsByName), which is also
     // what tool.call recorded — not anything the tool or model could claim later
-    emit: emitFromTool(tool.name),
+    emit: emitFromTool(tool.name, callEvent.seq),
     signal: signal,
     endSignal: endSignal,
   };
@@ -345,6 +345,8 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       ok,
       display: overflow.display,
       durationMs: now() - t0,
+      permission: permClass,
+      toolCallSeq: callEvent.seq,
       ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
       ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)
         ? { outputIncomplete: true } : {}),

@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { contentHash } from "@agentkitai/agentrig-core";
 import type { EventPayload, HarnessEvent, Signal } from "@agentkitai/agentrig-core";
 import {
   budgetDetector,
@@ -21,7 +25,17 @@ import {
 
 let seq = 0;
 function ev(payload: EventPayload, ts = 1_000): HarnessEvent {
-  return { seq: seq++, sessionId: "s", ts, ...payload } as HarnessEvent;
+  seq += 3;
+  return { seq, sessionId: "s", ts, ...payload } as HarnessEvent;
+}
+
+/** Old detector fixtures represent successful writes, now with explicit runtime receipts. */
+function backed(events: HarnessEvent[]): HarnessEvent[] {
+  return events.flatMap(e => e.type !== "file.changed" ? [e] : [
+    { ...e, type: "tool.call", seq: e.seq - 1, id: `write-${e.seq}`, name: "write", input: {}, inputHash: `write-${e.seq}` } as HarnessEvent,
+    { ...e, toolCallSeq: e.seq - 1 },
+    { ...e, type: "tool.result", seq: e.seq + 1, id: `write-${e.seq}`, permission: "write", toolCallSeq: e.seq - 1, ok: true, display: "written", durationMs: 0 } as HarnessEvent,
+  ]);
 }
 
 /** Feeds events through the same fold + observe path attach() uses, returning every signal. */
@@ -32,12 +46,33 @@ function feed(
 ): { signals: Signal[]; state: SupervisorState } {
   const state = initialState();
   const signals: Signal[] = [];
-  for (const e of events) {
+  for (const e of backed(events)) {
     reduce(state, e, opts);
     const s = detector.observe(e, state);
     if (s !== null) signals.push(s);
   }
   return { signals, state };
+}
+
+async function feedDrift(detector: Detector, events: HarnessEvent[]) {
+  const cwd = await mkdtemp(join(tmpdir(), "agentrig-drift-unit-"));
+  const state = initialState(); state.cwd = cwd;
+  const signals: Signal[] = [];
+  try {
+    for (let e of backed(events)) {
+      if (e.type === "file.changed") {
+        const path = join(cwd, e.path);
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, e.contentHash);
+        e = { ...e, contentHash: contentHash(e.contentHash) };
+      }
+      reduce(state, e);
+      await detector.prepare?.(e, state, new AbortController().signal);
+      const signal = detector.observe(e, state);
+      if (signal) signals.push(signal);
+    }
+    return { signals, state };
+  } finally { await rm(cwd, { recursive: true, force: true }); }
 }
 
 const call = (name: string, hash: string, input: unknown = {}) =>
@@ -566,8 +601,8 @@ describe("drift detector", () => {
   const plan = (scope: string[]) =>
     ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress", scope }] });
 
-  it("uses caller scope when the plan declares none", () => {
-    const { signals } = feed(driftDetector({ scope: ["packages/core/src"] }), [
+  it("uses caller scope when the plan declares none", async () => {
+    const { signals } = await feedDrift(driftDetector({ scope: ["packages/core/src"] }), [
       changed("packages/core/src/a.ts", "h1"),
       changed("packages/cli/src/x.ts", "h2"),
     ]);
@@ -576,15 +611,15 @@ describe("drift detector", () => {
     expect(signals[0]!.evidence[0]).toContain("packages/cli/src/x.ts");
   });
 
-  it("uses plan scope when the caller declares none", () => {
-    const { signals } = feed(driftDetector(), [plan(["packages/core/src"]), changed("packages/cli/src/x.ts", "h")]);
+  it("uses plan scope when the caller declares none", async () => {
+    const { signals } = await feedDrift(driftDetector(), [plan(["packages/core/src"]), changed("packages/cli/src/x.ts", "h")]);
     expect(signals).toHaveLength(1);
     expect(signals[0]!.type).toBe("drift");
     expect(signals[0]!.evidence[0]).toContain("packages/cli/src/x.ts");
   });
 
-  it("unions caller and plan scopes", () => {
-    const { signals } = feed(driftDetector({ scope: ["packages/cli/src"] }), [
+  it("unions caller and plan scopes", async () => {
+    const { signals } = await feedDrift(driftDetector({ scope: ["packages/cli/src"] }), [
       plan(["packages/core/src"]),
       changed("packages/core/src/a.ts", "h1"),
       changed("packages/cli/src/b.ts", "h2"),
@@ -595,30 +630,30 @@ describe("drift detector", () => {
     expect(signals[0]!.evidence[1]).toContain("packages/cli/src, packages/core/src");
   });
 
-  it("reports contract files but stays silent for ordinary files when no scope is declared anywhere", () => {
+  it("reports contract files but stays silent for ordinary files when no scope is declared anywhere", async () => {
     const noScope = ev({ type: "plan.updated", items: [{ id: "1", text: "do it", status: "in_progress" }] });
-    expect(feed(driftDetector(), [noScope, changed("src/ordinary.ts", "h")]).signals).toHaveLength(0);
+    expect((await feedDrift(driftDetector(), [noScope, changed("src/ordinary.ts", "h")])).signals).toHaveLength(0);
     // With no plan and no caller scope, an ordinary file is still silent but a contract file fires.
-    expect(feed(driftDetector(), [changed("src/ordinary.ts", "h")]).signals).toHaveLength(0);
-    const { signals } = feed(driftDetector(), [changed("package.json", "h")]);
+    expect((await feedDrift(driftDetector(), [changed("src/ordinary.ts", "h")])).signals).toHaveLength(0);
+    const { signals } = await feedDrift(driftDetector(), [changed("package.json", "h")]);
     expect(signals).toHaveLength(1);
     expect(signals[0]!.type).toBe("drift");
     expect(signals[0]!.evidence[0]).toContain("part of the project's build or test contract");
   });
 
-  it("stays silent for ordinary and contract files inside a declared scope", () => {
-    const { signals } = feed(driftDetector(), [
+  it("stays silent for ordinary and contract files inside a declared scope", async () => {
+    const { signals } = await feedDrift(driftDetector(), [
       plan(["packages/core/src"]),
       changed("packages/core/src/a.ts", "h"),
       changed("packages/core/src/deep/b.ts", "h"),
     ]);
     expect(signals).toHaveLength(0);
     // A caller names a contract path to say that changing what "passing" means is intentional.
-    expect(feed(driftDetector({ scope: ["package.json"] }), [changed("package.json", "h")]).signals).toHaveLength(0);
+    expect((await feedDrift(driftDetector({ scope: ["package.json"] }), [changed("package.json", "h")])).signals).toHaveLength(0);
   });
 
-  it("reports each stray path once, not on every subsequent edit", () => {
-    const { signals } = feed(driftDetector(), [
+  it("reports each stray path once, not on every subsequent edit", async () => {
+    const { signals } = await feedDrift(driftDetector(), [
       plan(["src"]),
       changed("other.ts", "h1"),
       changed("other.ts", "h2"),
@@ -627,7 +662,7 @@ describe("drift detector", () => {
     expect(signals).toHaveLength(1);
   });
 
-  it("a dropped plan item's scope no longer counts", () => {
+  it("a dropped plan item's scope no longer counts", async () => {
     const dropped = ev({
       type: "plan.updated",
       items: [
@@ -635,7 +670,7 @@ describe("drift detector", () => {
         { id: "2", text: "b", status: "in_progress", scope: ["docs"] },
       ],
     });
-    expect(feed(driftDetector(), [dropped, changed("src/a.ts", "h")]).signals).toHaveLength(1);
+    expect((await feedDrift(driftDetector(), [dropped, changed("src/a.ts", "h")])).signals).toHaveLength(1);
   });
 
   it("inScope treats a scope entry as an exact path or a directory prefix", () => {
@@ -775,9 +810,9 @@ describe("review regressions: false positives that aborted healthy sessions", ()
     }
   });
 
-  it("drift: a plan declaring scope ['.'] produces no strays", () => {
+  it("drift: a plan declaring scope ['.'] produces no strays", async () => {
     const wide = ev({ type: "plan.updated", items: [{ id: "1", text: "all of it", status: "in_progress", scope: ["."] }] });
-    const { signals } = feed(driftDetector(), [wide, changed("src/a.ts", "h"), changed("docs/b.md", "h")]);
+    const { signals } = await feedDrift(driftDetector(), [wide, changed("src/a.ts", "h"), changed("docs/b.md", "h")]);
     expect(signals).toHaveLength(0);
   });
 
@@ -798,34 +833,33 @@ describe("review regressions: bounded state", () => {
     const state = initialState();
     // 400 changes across 40 paths, well past both caps
     for (let i = 0; i < 400; i += 1) {
-      const e = changed(`p${i % 40}.ts`, `h${i}`);
-      reduce(state, e);
-      detector.observe(e, state);
+      for (const e of backed([changed(`p${i % 40}.ts`, `h${i}`)])) {
+        reduce(state, e);
+        detector.observe(e, state);
+      }
     }
     // no assertion on internals — the guarantee is that it stays fast and finishes, which an
     // unbounded O(n^2) history did not
     const t0 = Date.now();
     for (let i = 0; i < 5000; i += 1) {
-      const e = changed("hot.ts", `x${i}`);
-      reduce(state, e);
-      detector.observe(e, state);
+      for (const e of backed([changed("hot.ts", `x${i}`)])) {
+        reduce(state, e);
+        detector.observe(e, state);
+      }
     }
     expect(Date.now() - t0).toBeLessThan(2000);
   });
 
-  it("drift bounds the set of stray paths it remembers", () => {
+  it("drift bounds the set of stray paths it remembers", async () => {
     const detector = driftDetector({ maxReported: 16 });
-    const state = initialState();
     const p = ev({ type: "plan.updated", items: [{ id: "1", text: "t", status: "in_progress", scope: ["src"] }] });
-    reduce(state, p);
-    detector.observe(p, state);
-    for (let i = 0; i < 5000; i += 1) {
-      const e = changed(`stray${i}.ts`, "h");
-      reduce(state, e);
-      detector.observe(e, state);
-    }
+    const { signals } = await feedDrift(detector, [p,
+      ...Array.from({ length: 32 }, (_, i) => changed(`stray${i}.ts`, "h")),
+      changed("stray0.ts", "new"),
+    ]);
     // re-reporting an evicted path is the acceptable cost of the bound; not growing is the point
-    expect(true).toBe(true);
+    expect(signals).toHaveLength(33);
+    expect(signals.at(-1)!.evidence[0]).toContain("stray0.ts");
   });
 });
 

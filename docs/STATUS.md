@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R13f and R5d in independent worktrees; R5e implemented, closing PR records delivery gates.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5d implemented, pending final delivery gates; R6a active in an independent worktree. R13f and R5e implementations are complete and merged (PRs #143 and #142).** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -14,13 +14,43 @@ its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establis
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
 
+R6a procedure detection is now active in a separate worktree: its memory-hardening and R5e
+manifest dependencies are delivered, and it does not depend on MCP pinning or extension loading.
+This dependency-aware parallel start preserves the committed queue; it introduces no demand veto.
+
 Each exact head needs appropriate tests, one bounded independent review with material findings
 addressed, and green three-platform CI. Integrate current main before merging; serialize merges
 and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, with no recursive
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R5e implemented — closing PR records delivery gates
+### R13f merged — PR #143 records closing delivery gates
+
+Final head `01127b7` passed all three platforms in CI 34016646499 and merged as `1a20f4e`.
+Post-merge main CI is pending at this integration checkpoint and must pass before R5d merges;
+the closing PR records the final result.
+
+Core stamps unique runtime call provenance; only matching successful write-class results in the
+same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
+bounded current-worktree bytes before scope classification. Claims stay in immutable JSONL.
+Legacy logs without provenance remain readable but receive no file-progress credit, including
+the stall evidence counter. See [R13f contract](plans/R13f.md) for deletion, race and size limits.
+
+One bounded independent Claude review `2fdeec4f-21ca-4b77-91be-60b0d6d14088` approved with no
+material findings and 162 independently executed tests. Removing the write-class gate and
+bypassing the content hash fail named tests; both mutations are restored. First-head macOS and
+Windows CI caught an absolute-path alias bug (including `/var` versus `/private/var`), fixed with canonical
+containment and a portable symlink/junction regression that fails against the old check. The final
+branch integrates R5e main `26e78ec`; build/typecheck and the full local suite pass 2,013 tests
+plus two skips (97 files), with both Windows targeted suites retained. Exact final-head
+three-platform CI passed as recorded above; post-merge main CI gates the next merge. PR #143
+records the closing receipts.
+Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
+
+### R5e merged — PR #142 records delivery gates
+
+Final head `aafaa5b`, PR CI 34016292275 passed all three platforms and merged as `26e78ec`.
+Post-merge main CI gates the next merge; the closing PR records its result.
 
 Strict versioned skill/extension/package schemas now reject unknown fields before use. The
 existing skill loader rejects malformed frontmatter and equal-precedence names, including late
@@ -50,8 +80,8 @@ independently passing typecheck, 42 MCP tests, the TUI consent test and 1,981 te
 Missing-callback and stale-advertisement mutations failed their named core controls and were
 restored. The CLI adapter independently fails closed on absent user interaction. Real Node stdio
 server tests use an independent effect marker; TUI tests show the exact delta and reject standing
-grants. Integrated with R5e main `26e78ec`: build/typecheck and 2,006 tests plus two skips (98 files)
-pass. Previous head `776f9d2` passed all three platforms in CI 34016345598; updated-head and
+grants. Integrated with R13f/R5e main `1a20f4e`: build/typecheck and 2,026 tests plus two skips
+(99 files) pass. Previous head `65bbc0b` passed all three platforms in CI 34016609070; updated-head and
 post-merge CI remain required before the next merge. PR #144 holds final receipts. Optional polish
 is at ROADMAP's end, not additional release subdivisions.
 
