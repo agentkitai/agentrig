@@ -1,11 +1,35 @@
 # Status
 
-Active implementation queue: **R14b candidate evidence association is implemented, pending delivery gates; H7b is merged (PR #164), pending post-merge CI; R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5b failure isolation is implemented, pending delivery gates; R14b is done with green post-merge CI (PR #165); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d child grant views are done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R14b implemented — delivery gates pending
+### R5b implemented — delivery gates pending
+
+The extension lane resumes after delivered H7b PR #164. A private per-build disabled latch
+spans registered hooks, tools, synchronous descriptors/probes and slash commands. Actual throws
+and existing hook timeouts disable future handlers; expected errors, invalid model input and
+user cancellation do not. Runtime-bound receipts stay with the failing run; idle command errors
+print immediately and queue one next-start receipt without appending after a terminal event.
+Disabled startup receipts do not imply reactivation. Background-probe failure stays conservative.
+The API still exposes no provider, credentials or audit emitter; ambient Node effects, blocking,
+termination and already-running work are not isolated. No child inheritance or new deadlines.
+[Contract and limits](plans/R5b.md).
+
+Integrated R14b main `6f25a17`, retaining object-bound command-outcome evidence. Build/typecheck
+and the full four-worker suite pass 2,407 tests plus two skips across 134 files (34 seconds).
+Actual imported core/CLI/TUI controls cover cross-surface disable, healthy neighbors, reuse,
+concurrent attribution, idle/terminal ordering, timeout/abort and counterfeit event refusal.
+Removing the disabled transition caused a second handler dispatch; moving active receipts into
+the idle queue lost the failing run's audit. Both named mutations failed and were restored.
+One bounded independent review and final exact-head three-platform CI remain delivery gates.
+No live evaluation spend or benefit claims.
+
+### R14b done — PR #165; post-merge CI green
+
+Main `6f25a17` passed all three platforms in exact post-merge CI 34030230354.
+The following gate notes are implementation history.
 
 Exact command-exit declarations associate with immutable internal foreground execution receipts
 in a bounded supervisor attempt ledger. Later failure/unknown never borrows earlier success;
@@ -25,7 +49,10 @@ receipt. Combined focused checks pass 31 cases, and build/typecheck/full checks 
 plus two skips across 133 files (34 seconds). PR #165 now proceeds to exact-head CI; the preceding
 main's post-merge gate remains pending at this checkpoint.
 
-### H7b implemented — delivery gates pending
+### H7b done — PR #164; post-merge CI green
+
+Main `c88a72f` passed all three platforms in exact post-merge CI 34029756772.
+The following gate notes are implementation history.
 
 The correctness-repair lane continues after H7a PR #161/main `668f7f1`, whose exact
 post-merge CI 34028225992 passed all three platforms. H7b removes unauthenticated process

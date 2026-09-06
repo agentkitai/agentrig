@@ -81,8 +81,9 @@ Core emits current-build `extension.loaded` receipts after session start/resume,
 `extension.error` for manifest/import/activation failures. Receipts describe actual registered
 surfaces, not repeated activation, permission grants or replayed authorization; tools cannot
 emit them. CLI renders receipts; TUI `/help` and slash dispatch use the loaded commands.
-Command errors are caught and shown without disabling the extension; existing hook/tool error
-handling remains. Cross-surface runtime disabling belongs to R5b.
+The initial R5a command errors were caught and shown without disabling the extension. This
+historical runtime paragraph is superseded by [R5b's per-build failure isolation](R5b.md),
+including cross-surface disabling and correctly attributed active/idle receipts.
 
 Network-free tests use actual `.mjs` imports, pre-import sentinels, strict sidecars, reserved
 names, poisoned drafts, timeout/late calls, real CLI trust/sandbox checks and a TUI fixture

@@ -11,7 +11,7 @@ import { extensionFixture } from "./fixtures/extensions.ts";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function fixture(body: string, hook = "pre_model") {
+async function fixture(body: string, hook = "pre_model", timeoutMs = 1000) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "extension-failure-"))); roots.push(root);
   const path = await extensionFixture(root, "fragile", `import {z} from ${JSON.stringify(import.meta.resolve("zod"))};
 export const calls={tool:0,hook:0,command:0,activate:0}; export let gate; export let release;
@@ -19,7 +19,7 @@ export function activate(ctx){calls.activate++; const tool={name:"fragile_tool",
 inputSchema:z.object({mode:z.string().optional()}),execute(input,io){calls.tool++;return {output:{},display:"okay"}}};
 let handler=()=>{calls.hook++;return {action:"continue"}};
 let command=()=>{calls.command++}; ${body}
-ctx.registerTool(tool);ctx.hooks.on(${JSON.stringify(hook)},handler,{timeoutMs:25});
+ctx.registerTool(tool);ctx.hooks.on(${JSON.stringify(hook)},handler,{timeoutMs:${timeoutMs}});
 ctx.registerCommand({name:"fragile",summary:"fixture",run:command});}`);
   const extensions = await loadExtensions({ candidates: [{ path, precedence: 0 }],
     session: { cwd: root, provider: { id: "fake", model: "fake" } }, builtinToolNames: new Set(), reservedCommandNames: new Set(), onNotice() {} });
@@ -80,7 +80,7 @@ it.each(["pre_model", "session_end"])("%s throw emits before terminal and disabl
 });
 
 it("existing hook timeout disables once, with late completion unable to re-enable it", async () => {
-  const f = await fixture('handler=()=>{calls.hook++;return new Promise(resolve=>{release=()=>resolve({action:"continue"})})}');
+  const f = await fixture('handler=()=>{calls.hook++;return new Promise(resolve=>{release=()=>resolve({action:"continue"})})}', "pre_model", 25);
   const { agent } = agentFor(f.root, f.extensions, []);
   const result = await collect(agent.run("work", { cwd: f.root }));
   expect(result.events.filter(e => e.type === "extension.error")).toMatchObject([{ phase: "hook" }]);
