@@ -154,6 +154,7 @@ interface is where it plugs in.
 type HarnessEvent =
   | { type: 'session.start'; id: string; task: string; cwd: string; provider: string; ts: number }
   | { type: 'session.end'; reason: 'done' | 'aborted' | 'error' | 'budget'; ts: number }
+  | { type: 'run.scheduled'; entryId: string; minute: number }
   | { type: 'turn.start'; n: number } | { type: 'turn.end'; n: number }
   | { type: 'model.request'; tokensIn: number }
   | { type: 'model.delta'; text: string }

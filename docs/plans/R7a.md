@@ -31,6 +31,13 @@ not silently retried. More than ten due entries is an explicit refusal, not an
 invisible partial tick. Cancellation stops further launches and joins active
 session cleanup. Existing runtime budgets and cancellation limitations still
 apply to uncooperative host JavaScript or remote work.
+Ordinary launch failures and budget-ended sessions retain their claims, report an
+individual outcome on stderr and do not prevent later due entries from being
+attempted. The aggregate exit code is nonzero if any entry fails or exhausts its
+budget. These are CLI reports, not events appended after session end, and do not
+implement R7c's persistent schedule log or banner. Auxiliary numeric run defaults
+are shared with `run`; trusted config can override them, including the per-response
+token cap (default 8192). The table's bounded main-session budgets still win.
 
 Table, lock and mutation paths reject symlinks, including `.agentrig`; canonical
 project containment is checked before access. Atomic replacement and the lock
@@ -61,4 +68,20 @@ One bounded independent Claude review, material fixes, build/typecheck/full test
 and updated-main exact-head three-platform CI precede root-coordinated merge.
 Post-merge CI gates completion. No live provider calls or evaluation spend.
 
-Implementation and evidence receipts pending.
+Initial build/typecheck and full suite: 2,559 passed plus two existing skips,
+148 files, four workers, 38 seconds. Named removed-due, omitted-claim and
+scheduled-as-fresh-user mutations each failed the targeted discriminator and
+were restored; all 17 initial controls passed afterward. The original logs are
+`/tmp/r7a-mutant-due.log`, `/tmp/r7a-mutant-claim.log`, and
+`/tmp/r7a-mutant-provenance.log` in the implementation environment.
+
+One bounded [independent review](R7a-review.md) returned REQUEST_CHANGES.
+Its commands were denied, so no independent execution is claimed. The actual
+CLI→runCommand→loopback OpenAI adapter fixture failed both rows before repair:
+required numeric defaults were absent and no request started. Shared run defaults
+made the ordinary case pass, while the earlier-budget case still failed, proving
+the second finding independently. Continuing and reporting ordinary failures now
+passes both; a thrown-launch/later-success fixture also keeps aggregate failure.
+Configured response token limits remain honored. The third evidence-documentation
+finding is addressed by recording the previously completed mutations above.
+No second broad review. Final updated-main gates remain pending.

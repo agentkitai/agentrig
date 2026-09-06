@@ -20,9 +20,13 @@ Plain bounded JSON and five-field UTC cron; preview is model-free, execution is 
 and requires canonical project trust. Cooperative claim-before-dispatch serializes ticks;
 scheduled tasks stay advisory and never establish fresh permission consent. No daemon,
 heartbeat, report banner or monetary-cap claim. [Contract](plans/R7a.md).
-Initial build/typecheck and 17 actual CLI/runtime/store controls pass. Full suite passes
-2,559 plus two skips across 148 files, four workers, 38 seconds. Mutation controls and the
-single bounded independent review precede final delivery gates.
+Initial build/typecheck/full passes 2,559 plus two skips across 148 files, four workers,
+38 seconds. Three guard-removal mutants failed and were restored. The single bounded
+[review](plans/R7a-review.md) returned REQUEST_CHANGES; its commands were denied, so no
+independent test run is claimed. Missing executable defaults and loss of later due entries
+after an earlier budget end reproduced through real CLI/runCommand/local adapter fixtures.
+Shared defaults with proper config precedence and per-entry outcome aggregation fix both;
+20 focused controls now pass. Final combined full suite and delivery gates follow.
 
 ### R10a done — PR #174; post-merge CI green
 

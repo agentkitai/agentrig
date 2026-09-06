@@ -16,6 +16,7 @@ import {
   type PermissionRule,
   type Pricing,
   type Session,
+  type SessionSummary,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
@@ -46,6 +47,11 @@ export { DEFAULT_ANTHROPIC_MODEL };
  * could never find — the run → ingest flow was broken out of the box.
  */
 export const DEFAULT_SESSIONS_DIR = ".agentrig/raw/sessions";
+
+export const RUN_NUMERIC_DEFAULTS = {
+  maxTokensPerTurn: "8192", supervisorSoft: "0.8", supervisorTurnsRemaining: "15",
+  dreamEverySessions: "10", dreamEveryHours: "24",
+} as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
   scheduled?: { entryId: string; minute: number };
@@ -361,7 +367,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   }
 }
 
-export async function runCommand(task: string, opts: RunOptions): Promise<void> {
+export async function runCommand(task: string, opts: RunOptions): Promise<SessionSummary | void> {
   opts.signal?.throwIfAborted();
   let dreamEverySessions: number;
   let dreamEveryHours: number;
@@ -487,6 +493,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
       );
     }
     process.exitCode = summary.reason === "done" ? 0 : 1;
+    return summary;
   } finally {
     process.removeListener("SIGINT", onSigint);
     opts.signal?.removeEventListener("abort", abortFromSignal);

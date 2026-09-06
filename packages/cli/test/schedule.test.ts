@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createAgent, RulePolicy, SessionStore, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
@@ -9,7 +11,7 @@ import { buildProgram } from "../src/program.js";
 import { renderEvent } from "../src/render.js";
 
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); process.exitCode = 0; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCode = 0; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-schedule-"))); roots.push(root);
   const project = join(root, "project"); const home = join(root, "home");
@@ -147,4 +149,48 @@ it("cancellation joins an actual scheduled session before releasing the tick loc
   expect((await store.readAll(id)).at(-1)).toMatchObject({ type: "session.end", reason: "aborted" });
   expect((await f.store.read()).entries.map(e => e.lastClaimedMinute !== undefined)).toEqual([true, false]);
   await f.store.remove("second"); // proves the held lock was released only after the join
+});
+
+it.each([false, true])("real CLI runCommand/local adapter starts due tasks and continues after an earlier budget end (budget=%s)", async budgetFirst => {
+  const f = await fixture(); const bodies: Record<string, unknown>[] = [];
+  vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential");
+  const server = createServer(async (req, res) => {
+    let body = ""; for await (const chunk of req) body += chunk;
+    bodies.push(JSON.parse(body));
+    res.setHeader("content-type", "text/event-stream");
+    const finish = budgetFirst && bodies.length === 1 ? "length" : "stop";
+    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "fixture response" }, finish_reason: finish }] })}\n\ndata: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`);
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  try {
+    const address = server.address(); if (address === null || typeof address === "string") throw new Error("missing fixture address");
+    await f.store.add({ ...entry("first"), flags: { maxTurns: 1 } });
+    if (budgetFirst) await f.store.add(entry("second"));
+    await writeFile(join(f.project, ".agentrig", "config.json"), JSON.stringify({ repoMap: false, skillDiscovery: false, extensionDiscovery: false, packages: false, maxTokensPerTurn: "1234" }));
+    vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
+    await buildProgram({ config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync([
+      "schedule", "tick", "--execute", "--trust", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
+    ], { from: "user" });
+    expect(bodies).toHaveLength(budgetFirst ? 2 : 1);
+    expect(bodies.every(body => body.max_tokens === 1234)).toBe(true);
+    expect(process.exitCode ?? 0).toBe(budgetFirst ? 1 : 0);
+    const sessionStore = new SessionStore({ root: join(f.project, ".agentrig", "raw", "sessions") });
+    const sessions = await sessionStore.list(); expect(sessions).toHaveLength(budgetFirst ? 2 : 1);
+    const logs = await Promise.all(sessions.map(session => sessionStore.readAll(session.id)));
+    expect(logs.flat().filter(event => event.type === "run.scheduled").map(event => event.entryId).sort()).toEqual(budgetFirst ? ["first", "second"] : ["first"]);
+    expect(logs.map(log => log.at(-1)).filter(event => event?.type === "session.end").map(event => event?.reason).sort()).toEqual(budgetFirst ? ["budget", "done"] : ["done"]);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+it("reports and retains an ordinary launch failure but still attempts later due entries", async () => {
+  const f = await fixture(); await f.store.add(entry("first")); await f.store.add(entry("second"));
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const run = vi.fn().mockRejectedValueOnce(new Error("fixture failure")).mockResolvedValueOnce(undefined);
+  await buildProgram({ run, config: { cwd: f.project, home: f.home }, scheduleNow: () => now }).parseAsync(["schedule", "tick", "--execute", "--trust"], { from: "user" });
+  expect(run).toHaveBeenCalledTimes(2); expect(process.exitCode).toBe(1);
+  expect((await f.store.read()).entries.every(item => item.lastClaimedMinute !== undefined)).toBe(true);
+  const reports = errors.mock.calls.map(call => String(call[0]));
+  expect(reports.some(line => line.includes('"schedule":"first"') && line.includes('"outcome":"error"'))).toBe(true);
+  expect(reports.some(line => line.includes('"schedule":"second"') && line.includes('"outcome":"done"'))).toBe(true);
 });

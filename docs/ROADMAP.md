@@ -1197,3 +1197,8 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R10a polish: reuse the exported call type in the coordinator and consider passing a defensive
   call-array copy to trusted custom strategies. No truncated calls reach that seam; readonly
   typing is not claimed as runtime containment of trusted host JavaScript.
+- R7a polish: explain ignored execution-only preview flags, optionally constrain numeric CLI
+  spelling to decimal (current integer bounds also accept `Number` syntax such as `1e1`),
+  and consider an explicit scheduled cwd selector. Current cwd follows normal `run`.
+  Missing shared defaults, config precedence and stopping later due entries on an ordinary
+  failure were fixed in R7a, not deferred here.
