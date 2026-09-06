@@ -1,9 +1,32 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Decision, PermissionClass, PermissionRequest } from "./events.js";
 import { CommandPrefixSchema, ShellOperationSchema } from "./shell-operation.js";
+import { PermissionPolicyReceiptSchema, type PermissionPolicyReceipt, type PermissionDecisionSource } from "./permission-attribution.js";
 
 export interface PermissionPolicy {
-  decide(req: PermissionRequest): Promise<Decision>;
+  decide(req: PermissionRequest, report?: (receipt: PermissionPolicyReceipt) => void): Promise<Decision>;
+}
+
+/** Evaluate exactly once. Optional diagnostics cannot change the policy's actual decision.
+ * A custom policy may ignore the callback. Malformed, multiple, mismatched or late receipts
+ * never become guessed attribution; trusted policy code itself is not sandboxed. */
+export async function evaluatePermissionPolicy(policy: PermissionPolicy, req: PermissionRequest): Promise<{ decision: Decision; source: PermissionDecisionSource }> {
+  let active = true;
+  let seen = 0;
+  let receipt: PermissionPolicyReceipt | undefined;
+  let decision: Decision;
+  try {
+    decision = await policy.decide(req, value => {
+      if (!active) return;
+      seen = Math.min(2, seen + 1);
+      if (seen !== 1) { receipt = undefined; return; }
+      try { const parsed = PermissionPolicyReceiptSchema.safeParse(value); if (parsed.success) receipt = parsed.data; }
+      catch { receipt = undefined; }
+    });
+  } finally { active = false; }
+  const source = receipt?.decision === decision && (receipt.source.kind !== "rule" || receipt.source.rule.decision === decision)
+    ? receipt.source : { kind: "unknown" as const };
+  return { decision, source };
 }
 
 /**
@@ -40,8 +63,8 @@ export class RulePolicy implements PermissionPolicy {
     this.rules = rules.map(rule => ({ ...rule, ...(rule.commandPrefix === undefined ? {} : { commandPrefix: CommandPrefixSchema.parse(rule.commandPrefix) }) }));
   }
 
-  async decide(req: PermissionRequest): Promise<Decision> {
-    for (const rule of this.rules) {
+  async decide(req: PermissionRequest, report?: (receipt: PermissionPolicyReceipt) => void): Promise<Decision> {
+    for (const [index, rule] of this.rules.entries()) {
       if (rule.tool !== undefined && rule.tool !== "*" && rule.tool !== req.tool) continue;
       if (rule.class !== undefined && rule.class !== req.class) continue;
       if (rule.commandPrefix !== undefined) {
@@ -54,8 +77,11 @@ export class RulePolicy implements PermissionPolicy {
         if (req.paths === undefined) continue;
         if (!req.paths.every((p) => isInsideCwd(req.cwd, p))) continue;
       }
+      // Diagnostic reporting must not give a callback a reference to the live rules.
+      report?.({ decision: rule.decision, source: { kind: "rule", index: index + 1, rule: structuredClone(rule) } });
       return rule.decision;
     }
+    report?.({ decision: this.fallback, source: { kind: "fallback" } });
     return this.fallback;
   }
 }

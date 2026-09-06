@@ -15,6 +15,8 @@ import { bindExpansionRestriction, expansionSurface, type externalExpansion } fr
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
+import { evaluatePermissionPolicy } from "./permissions.js";
+import type { PermissionDecisionSource } from "./permission-attribution.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -284,23 +286,36 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   }
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
-  let decision = await config.permissions.decide(originalPermissionRequest);
+  const evaluated = await evaluatePermissionPolicy(config.permissions, originalPermissionRequest);
+  let decision = evaluated.decision;
+  let decisionSource: PermissionDecisionSource = evaluated.source;
   await config.permissionGrants?.flush(emit);
   if ((decision === "ask" || freshExpansion) && decision !== "deny" && config.permissionGrants !== undefined) {
-    const standing = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(originalPermissionRequest, true, freshExpansion) : "deny";
-    if (standing === "deny" || decision === "ask") decision = standing;
+    if (config.permissionGrants.context.sessionId !== context.grantSessionId) {
+      decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-session-changed" };
+    } else {
+      const authorization = config.permissionGrants.authorize(originalPermissionRequest, true, freshExpansion ? "deny-only" : "all", freshExpansion);
+      if (authorization.decision === "deny" || decision === "ask") decision = authorization.decision;
+      if (authorization.grantId !== undefined) decisionSource = { kind: "grant", grantId: authorization.grantId };
+      else if (authorization.auditBlocked) decisionSource = { kind: "boundary", reason: "grant-audit-blocked" };
+    }
   }
-  if (freshExpansion && decision !== "deny") decision = "ask";
-  await emit({ type: "permission.decision", d: decision });
+  if (freshExpansion && decision !== "deny") {
+    decision = "ask"; decisionSource = { kind: "boundary", reason: "external-input-expansion" };
+  }
+  await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion
       ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq)), "fresh external-input approval").catch(() => "deny" as const)
       : await config.onAsk(permReq);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
+    decisionSource = config.onAsk ? { kind: "approval-handler" } : { kind: "unattended" };
     if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
-    if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) decision = "deny";
-    await emit({ type: "permission.decision", d: decision });
+    if (config.permissionGrants !== undefined && config.permissionGrants.context.sessionId !== context.grantSessionId) {
+      decision = "deny"; decisionSource = { kind: "boundary", reason: "grant-session-changed" };
+    }
+    await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
   }
   if (freshExpansion) {
     await emit({ type: "permission.expansion", id: tu.id, name: tu.name, surface: surface!,

@@ -17,7 +17,7 @@ export type TuiCommand =
   | { kind: "context" }
   | { kind: "verbose" }
   | { kind: "new" }
-  | { kind: "permissions"; reset: boolean }
+  | { kind: "permissions"; reset: boolean; revoke?: string; invalid?: boolean }
   | { kind: "resume"; id: string }
   | { kind: "skills" }
   /** `/fork [seq]` — `at` is the raw argument; the controller validates it and names the fix. */
@@ -48,7 +48,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
-  { name: "permissions", args: "[reset]", summary: "show the standing allow/deny answers, or clear them" },
+  { name: "permissions", args: "[reset | revoke <exact-id>]", summary: "inspect live grants, matched-decision counts, or revoke authority" },
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
   { name: "fork", args: "[seq]", summary: "branch this conversation into a new session; this one is left untouched" },
@@ -113,8 +113,11 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "resume", id: args };
     case "new":
       return { kind: "new" };
-    case "permissions":
-      return { kind: "permissions", reset: /(^|\s)reset(\s|$)/.test(args) };
+    case "permissions": {
+      if (args === "" || args === "reset") return { kind: "permissions", reset: args === "reset" };
+      const match = /^revoke ([^\s\u0000-\u001f\u007f]{1,256})$/.exec(args);
+      return match?.[1] === undefined ? { kind: "permissions", reset: false, invalid: true } : { kind: "permissions", reset: false, revoke: match[1] };
+    }
     case "skills":
       return { kind: "skills" };
     case "fork":

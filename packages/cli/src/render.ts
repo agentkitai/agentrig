@@ -1,5 +1,20 @@
-import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage } from "@agentkitai/agentrig-core";
+import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage, type PermissionDecisionSource } from "@agentkitai/agentrig-core";
 import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
+
+function permissionSource(source: PermissionDecisionSource): string {
+  switch (source.kind) {
+    case "rule": return `rule #${source.index} ${JSON.stringify(source.rule)}`;
+    case "fallback": return "policy fallback (no rule matched)";
+    case "grant": return `grant ${source.grantId}`;
+    case "approval-handler": return "approval handler (human/host)";
+    case "unattended": return "no approval handler (unattended deny)";
+    case "boundary": return `boundary ${JSON.stringify(source.reason)}`;
+    case "unknown": return "policy attribution unknown";
+  }
+}
+function permissionExplanation(event: EventOf<"permission.decision">): string {
+  return `${event.d}${event.tool === undefined ? "" : ` ${JSON.stringify(event.tool)}`}${event.toolUseId === undefined ? "" : ` [${JSON.stringify(event.toolUseId)}]`}${event.source === undefined ? "" : ` — ${permissionSource(event.source)}`}`;
+}
 
 /** Surface unfinished paid work at session end, even if its final snapshot was too late for
  * the closed log. Cumulative snapshots replace by run id; they never inflate main usage. */
@@ -88,7 +103,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "checkpoint.restored": return `${p} session=${e.targetSession} turn=${e.turn} recovery=${e.recovery}`;
     case "permission.request":
       return `${p} ${e.req.tool} [${e.req.class}]${e.req.origin === undefined ? "" : ` (${e.req.origin})`}${e.req.operation === undefined ? "" : ` operation=${JSON.stringify(e.req.operation)}`}`;
-    case "permission.decision": return `${p} ${e.d}`;
+    case "permission.decision": return `${p} ${permissionExplanation(e)}`;
     case "permission.expansion": return `${p} ${e.decision} first ${e.surface}: ${e.name}${e.sourceOrigin === undefined ? "" : ` from ${e.sourceOrigin}`}`;
     case "permission.granted": return `${p} ${e.grant.id} ${e.grant.decision} ${e.grant.operation.tool} ${JSON.stringify(e.grant.resource)} ${e.grant.duration.kind}=${e.grant.duration.id}`;
     case "permission.revoked": return `${p} ${e.grantId} ${e.reason}`;
@@ -208,6 +223,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     }
     case "error":
       return `! ${oneLine(e.message, 200)}`;
+    case "permission.decision":
+      return e.source === undefined || e.d === "ask" ? null : `permission ${permissionExplanation(e)}`;
     case "session.end":
       // "done" is already said by the summary line; anything else is why it stopped
       return e.reason === "done" ? null : `— session ${e.reason}`;
@@ -223,7 +240,6 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     // the provider's onNotice already prints the friendly retry line; a chat line here would double it
     case "model.retry":
     case "permission.request":
-    case "permission.decision":
     case "permission.expansion":
     case "permission.granted":
     case "permission.revoked":
