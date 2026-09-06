@@ -16,6 +16,7 @@ import {
   type PermissionRule,
   type Pricing,
   type Session,
+  type SessionSummary,
 } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
@@ -47,7 +48,14 @@ export { DEFAULT_ANTHROPIC_MODEL };
  */
 export const DEFAULT_SESSIONS_DIR = ".agentrig/raw/sessions";
 
+export const RUN_NUMERIC_DEFAULTS = {
+  maxTokensPerTurn: "8192", supervisorSoft: "0.8", supervisorTurnsRemaining: "15",
+  dreamEverySessions: "10", dreamEveryHours: "24",
+} as const;
+
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  scheduled?: { entryId: string; minute: number };
+  signal?: AbortSignal;
   root: string;
   json?: boolean;
   /** Show the raw event trace instead of the conversation. `--json` is unaffected. */
@@ -359,7 +367,8 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
   }
 }
 
-export async function runCommand(task: string, opts: RunOptions): Promise<void> {
+export async function runCommand(task: string, opts: RunOptions): Promise<SessionSummary | void> {
+  opts.signal?.throwIfAborted();
   let dreamEverySessions: number;
   let dreamEveryHours: number;
   let supervisorSoft: number;
@@ -409,7 +418,7 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
   // on resume, omit cwd so the snapshot's cwd wins
   const session: Session = agent.run(
     task,
-    opts.resume === undefined ? { cwd: process.cwd() } : { resume: opts.resume },
+    opts.resume === undefined ? { cwd: process.cwd(), ...(opts.scheduled === undefined ? {} : { scheduled: opts.scheduled }) } : { resume: opts.resume },
   );
 
   // PLAN §4.4: an out-of-band observer over the same event stream.
@@ -444,7 +453,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
     if (notice !== null) console.error(notice);
     session.control.abort();
   };
-  process.on("SIGINT", onSigint);
+  if (opts.signal === undefined) process.on("SIGINT", onSigint);
+  const abortFromSignal = (): void => session.control.abort();
+  opts.signal?.addEventListener("abort", abortFromSignal, { once: true });
+  if (opts.signal?.aborted) abortFromSignal();
   try {
     const assistant = new AssistantText();
     const auxiliary = new AuxiliaryText();
@@ -481,8 +493,10 @@ export async function runCommand(task: string, opts: RunOptions): Promise<void> 
       );
     }
     process.exitCode = summary.reason === "done" ? 0 : 1;
+    return summary;
   } finally {
     process.removeListener("SIGINT", onSigint);
+    opts.signal?.removeEventListener("abort", abortFromSignal);
     supervisor?.detach();
     // a server left running would outlive the session that spawned it
     for (const server of built.mcp) await server.close().catch(() => {});

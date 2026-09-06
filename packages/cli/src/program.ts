@@ -6,16 +6,17 @@ import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
 import { exportSession } from "./session-export.js";
 import { undoSession } from "@agentkitai/agentrig-core";
-import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, runCommand, type RunOptions } from "./run.js";
+import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";
-import { resolveProjectTrust } from "./trust.js";
+import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
+import { ScheduleStore } from "./schedule.js";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 function parseIngestLimits(text: string) {
   try { return IngestLimitsSchema.parse(JSON.parse(text)); }
@@ -118,6 +119,7 @@ function sequence(value: string): number {
 }
 
 export interface ProgramDependencies {
+  scheduleNow?: () => Date;
   run?: typeof runCommand;
   tui?: typeof startTui;
   config?: LoadRunConfigOptions;
@@ -152,7 +154,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -225,16 +227,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--price-out <usd>", "output price in USD per million tokens")
       .option("--price-cache-read <usd>", "cache-read price per million tokens; overrides provider default")
       .option("--price-cache-write <usd>", "cache-write price per million tokens; overrides provider default")
-      .option("--max-tokens-per-turn <n>", "max_tokens per model response", "8192")
+      .option("--max-tokens-per-turn <n>", "max_tokens per model response", RUN_NUMERIC_DEFAULTS.maxTokensPerTurn)
       .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
       .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires --supervise --supervisor-abort --checkpoints and stopped external writers")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
-      .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", "0.8")
+      .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", RUN_NUMERIC_DEFAULTS.supervisorSoft)
       .option(
         "--supervisor-turns-remaining <n>",
         "warn when this many turns remain, even if the soft fraction has not tripped",
-        "15",
+        RUN_NUMERIC_DEFAULTS.supervisorTurnsRemaining,
       )
       .option(
         "--supervisor-review",
@@ -242,8 +244,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       )
       .option("--ingest-on-end", "distil this session into the wiki when it finishes (PLAN §3.2); costs tokens")
       .option("--dream-on-end", "run the scheduled dream when one is due (PLAN §3.7); reports, never applies")
-      .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", "10")
-      .option("--dream-every-hours <n>", "hours since the last dream before one is due", "24")
+      .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", RUN_NUMERIC_DEFAULTS.dreamEverySessions)
+      .option("--dream-every-hours <n>", "hours since the last dream before one is due", RUN_NUMERIC_DEFAULTS.dreamEveryHours)
       .option("--dream-structural-only", "the scheduled dream skips the model-backed pass — free, no tokens")
       .option("--dream-scan-limits <json>", "wiki/raw scan limits (JSON object; includes scheduler enumeration)", parseDreamScanLimits)
       .option("--dream-limits <json>", "dream lifetime/model limits (JSON object)", parseDreamLimits)
@@ -324,6 +326,61 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       // `run` is a headless entry point even when launched from a terminal.
       const resolved = await configured(opts, cmd, false);
       if (resolved !== undefined) await executeRun(task, resolved);
+    });
+
+  const schedule = program.command("schedule").description("Manage literal UTC tasks; tick previews unless --execute is explicit");
+  async function scheduleStore(): Promise<ScheduleStore> {
+    const boundary = await resolveProjectBoundary(dependencies.config?.cwd ?? process.cwd(), dependencies.config?.home ?? homedir());
+    return new ScheduleStore(boundary.projectRoot);
+  }
+  schedule.command("ls").action(async () => console.log(JSON.stringify(await (await scheduleStore()).read(), null, 2)));
+  schedule.command("add <id> <cron> <task>")
+    .option("--max-turns <n>", "turn budget 1–50", "5")
+    .option("--max-tokens <n>", "requested token budget 1–100000", "10000")
+    .option("--max-minutes <n>", "runtime minute budget 1–30", "5")
+    .action(async (id: string, cron: string, task: string, flags: { maxTurns: string; maxTokens: string; maxMinutes: string }) => {
+      await (await scheduleStore()).add({ id, cron, task, flags: { maxTurns: Number(flags.maxTurns), maxTokens: Number(flags.maxTokens), maxMinutes: Number(flags.maxMinutes) } });
+      console.log(`added schedule ${id}`);
+    });
+  schedule.command("rm <id>").action(async (id: string) => { await (await scheduleStore()).remove(id); console.log(`removed schedule ${id}`); });
+  withProviderOptions(schedule.command("tick"))
+    .option("--execute", "explicitly execute due tasks; default is model-free preview")
+    .option("--trust", "trust canonical project for this tick only")
+    .option("--json", "render executed session events as JSONL")
+    .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
+      const store = await scheduleStore();
+      const date = (dependencies.scheduleNow ?? (() => new Date()))();
+      if (opts.execute !== true) { console.log(JSON.stringify({ preview: true, due: await store.tick(date) })); return; }
+      const trust = await resolveProjectTrust(store.projectRoot, { home: dependencies.config?.home ?? homedir(), interactive: false, ...(opts.trust === undefined ? {} : { explicitTrust: opts.trust }) });
+      if (!trust.trusted) throw new Error("scheduled execution requires trusted canonical project; use --trust explicitly");
+      // These are shared defaults, not typed CLI overrides: preserve config precedence.
+      for (const [key, value] of Object.entries(RUN_NUMERIC_DEFAULTS)) cmd.setOptionValueWithSource(key, value, "default");
+      const resolved = await configured({ ...RUN_NUMERIC_DEFAULTS, ...opts }, cmd, false);
+      if (resolved === undefined) return;
+      await withMaintenanceSignal(async signal => {
+        let failed = false;
+        await store.tick(date, async (entry, minute) => {
+          signal.throwIfAborted();
+          process.exitCode = 0;
+          try {
+            const result = await executeRun(entry.task, {
+              ...resolved, root: join(store.projectRoot, ".agentrig", "raw", "sessions"),
+              maxTurns: String(entry.flags.maxTurns), maxTokens: String(entry.flags.maxTokens),
+              maxMinutes: String(entry.flags.maxMinutes),
+              headless: true, scheduled: { entryId: entry.id, minute }, signal,
+            } as RunOptions);
+            const outcome = result?.reason ?? (Number(process.exitCode) === 0 ? "done" : "error");
+            failed ||= outcome !== "done";
+            console.error(JSON.stringify({ schedule: entry.id, minute, outcome, ...(result === undefined ? {} : { sessionId: result.id }) }));
+          } catch (error) {
+            failed = true;
+            console.error(JSON.stringify({ schedule: entry.id, minute, outcome: "error", claimRetained: true }));
+            if (signal.aborted) throw error;
+          }
+          signal.throwIfAborted();
+        }, signal);
+        process.exitCode = failed ? 1 : 0;
+      }, undefined, "schedule tick");
     });
 
   function collect(value: string, prev: string[] = []): string[] {

@@ -199,6 +199,8 @@ export interface Session {
 export interface RunOptions {
   cwd?: string;
   resume?: string;
+  /** Trusted host provenance only; scheduled tasks are advisory, never fresh user consent. */
+  scheduled?: { entryId: string; minute: number };
   /**
    * A pre-allocated id from `store.create()`, for a caller that must record a session's
    * existence before the session starts writing (the subagent tool logs `subagent.spawn`).
@@ -263,7 +265,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // than letting it reach the filesystem or a session_end hook that builds a path from it
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
   const parent = opts.parent === undefined ? undefined : assertSessionId(opts.parent);
-  const taskContext = parent === undefined ? USER_CONTEXT : ADVISORY_CONTEXT;
+  const scheduled = opts.scheduled === undefined ? undefined : { ...opts.scheduled };
+  if (scheduled !== undefined && (resume !== undefined || parent !== undefined || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u.test(scheduled.entryId) || !Number.isSafeInteger(scheduled.minute) || scheduled.minute < 0)) throw new Error("invalid scheduled run descriptor");
+  const taskContext = parent === undefined && scheduled === undefined ? USER_CONTEXT : ADVISORY_CONTEXT;
   const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
   const grantSessionId = parent === undefined ? id : config.permissionGrants?.context.sessionId;
   // A fresh run owns its log for its lifetime. Two runs appending to one id would restart `seq`
@@ -274,7 +278,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook"; context?: InstructionContext }> = [];
   const principals = contextPrincipals(config.hooks ?? []);
   const expansion = externalExpansion(parent !== undefined && resume === undefined ? readExpansionRestriction(opts) ?? true : true);
-  if (parent === undefined) expansion.user(task);
+  if (parent === undefined && scheduled === undefined) expansion.user(task);
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
@@ -455,7 +459,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           model: provider.model,
           ...(parent === undefined ? {} : { parent }),
         });
-        messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext }] }];
+        if (scheduled !== undefined) await emit({ type: "run.scheduled", entryId: scheduled.entryId, minute: scheduled.minute });
+        messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext, ...(scheduled === undefined ? {} : { trust: "project" as const }) }] }];
       }
 
       for (const extension of config.extensions?.loaded ?? []) {

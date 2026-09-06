@@ -69,6 +69,7 @@ export function renderEvent(e: HarnessEvent): string {
       return `${p} ${e.provider}/${e.model} cwd=${e.cwd}${e.parent === undefined ? "" : ` parent=${e.parent}`} task=${JSON.stringify(e.task)}`;
     case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}`;
+    case "run.scheduled": return `${p} schedule=${e.entryId} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "turn.start":
     case "turn.end": return `${p} n=${e.n}`;
@@ -239,6 +240,7 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return e.reason === "done" ? null : `— session ${e.reason}`;
     case "session.start":
     case "session.fork":
+    case "run.scheduled":
     case "session.resume":
     case "turn.start":
     case "turn.end":
