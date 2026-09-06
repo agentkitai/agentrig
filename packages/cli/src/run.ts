@@ -355,7 +355,7 @@ export function positiveNumber(flag: string, value: string): number {
 }
 
 /** Prompts on stderr so --json event output on stdout stays parseable. */
-async function askInteractively(req: PermissionRequest): Promise<Exclude<Decision, "ask">> {
+export async function askInteractively(req: PermissionRequest, signal?: AbortSignal): Promise<Exclude<Decision, "ask">> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
@@ -363,7 +363,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
     if (req.operation !== undefined) process.stderr.write(`shell operation: ${JSON.stringify(req.operation)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
-    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);
+    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `, signal ? { signal } : {});
     return /^y(es)?$/i.test(answer.trim()) ? "allow" : "deny";
   } finally {
     rl.close();
@@ -409,7 +409,8 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   const scheduledUsage = opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true);
   try {
     built = await buildAgent(opts, {
-      ...(interactive ? { onAsk: askInteractively } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, opts.signal) } : {}),
       onHookError: (m) => { maintenanceFailed = true; console.error(m); },
       onHookDone: (m) => console.error(m),
       ...(scheduledUsage === undefined ? {} : { onIngestUsage: (report, final) => scheduledUsage.ingest(report, final) }),

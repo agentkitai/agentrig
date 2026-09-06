@@ -9,6 +9,7 @@ import { evaluateSessions, type SessionEvaluationDependencies } from "./session-
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions, type RunSummary } from "./run.js";
 import { loginCommand } from "./login.js";
+import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
@@ -420,6 +421,22 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       // commander turns `--no-browser` into `browser: false`
       loginCommand(provider, { ...opts, ...(opts.browser === false ? { noBrowser: true } : {}) }),
     );
+
+  program.command("mcp").description("Manage remote MCP credentials")
+    .command("login <server>").description("Explicit OAuth login; print the validated browser URL, never invoke a model")
+    .requiredOption("--mcp-config <path>", "JSON configuration containing the remote OAuth server")
+    .option("--trust", "load project configuration for this invocation only")
+    .option("--profile <name>", "named configuration profile")
+    .option("--allow <rule>", "network policy allow rule (repeatable)", collect, [])
+    .option("--deny <rule>", "network policy deny rule (repeatable)", collect, [])
+    .option("--headless", "do not prompt for network consent")
+    .option("--sandbox <mode>", "sandbox policy; HTTP runs in the trusted host", "none")
+    .option("--sandbox-network", "explicitly permit trusted host networking under sandbox policy")
+    .action(async (server: string, opts: McpLoginOptions & { profile?: string }, cmd: Command) => {
+      const resolved = await configured(opts, cmd, !opts.headless && !!process.stdin.isTTY);
+      if (!resolved) return;
+      await withMaintenanceSignal(signal => mcpLoginCommand(server, resolved, signal), undefined, "MCP login");
+    });
 
   const memory = program.command("memory").description("Inspect and maintain the LLM Wiki memory");
   const memoryDir = (cmd: Command): Command =>

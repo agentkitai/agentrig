@@ -32,6 +32,12 @@ export async function prepareResultTrust(tool: AnyTool, input: unknown, cwd: str
   if (source === "external") return async () => "external";
   if (source === undefined) return async () => "tool-output";
   try {
+    if ("external" in source) {
+      const external = source.external(input);
+      // A trusted routing predicate can only distinguish external from ordinary tool output.
+      // It cannot mint project/user trust, and malformed returns fail conservatively.
+      return async () => external === false ? "tool-output" : "external";
+    }
     if (root === undefined) return async () => "external";
     const path = resolve(cwd, source.file(input));
     const before = await Promise.all([realpath(root), realpath(cwd), realpath(path)]);

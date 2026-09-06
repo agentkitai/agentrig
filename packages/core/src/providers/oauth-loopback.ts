@@ -59,6 +59,8 @@ export function authorizeUrl(o: AuthorizeUrlOptions): string {
 
 export interface LoopbackCallback {
   code: string;
+  /** Opt-in raw callback for protocols which validate issuer/error parameters themselves. */
+  params?: URLSearchParams;
 }
 
 export interface LoopbackListener {
@@ -82,6 +84,7 @@ export interface ListenOptions {
   path?: string;
   expectedState: string;
   timeoutMs?: number;
+  captureParams?: boolean;
   /** Injected in tests; defaults to `node:http`. */
   createHttpServer?: typeof createServer;
 }
@@ -142,10 +145,26 @@ export async function listenForCallback(opts: ListenOptions): Promise<LoopbackLi
   };
 
   const onRequest = (req: IncomingMessage, res: ServerResponse): void => {
+    if (opts.captureParams === true && Buffer.byteLength(req.url ?? "") > 8192) {
+      res.writeHead(400).end("Invalid authorization callback");
+      done(s => s.reject(new Error("authorization callback exceeds bound")));
+      return;
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname !== path) {
       // a browser asks for /favicon.ico too; that is not a reason to fail a login
       res.writeHead(404).end();
+      return;
+    }
+    if (opts.captureParams === true) {
+      if (url.searchParams.get("state") !== opts.expectedState ||
+          ["state", "code", "iss", "error"].some(k => url.searchParams.getAll(k).length > 1)) {
+        res.writeHead(400).end("Invalid authorization callback");
+        done(s => s.reject(new Error("authorization callback state or shape mismatch")));
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" }).end(PAGE("Authorization received", "You can close this window."));
+      done(s => s.resolve({ code: url.searchParams.get("code") ?? "", params: url.searchParams }));
       return;
     }
     const error = url.searchParams.get("error");
