@@ -297,6 +297,7 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
   mcpPinRoot?: string;
   onAsk?: (req: PermissionRequest) => Promise<Exclude<Decision, "ask">>;
@@ -363,6 +364,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
       // load them, and the catalogue costs one line each
       tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
       permissions: w.permissionPolicy,
+      ...(w.extras.permissionGrants === undefined ? {} : { permissionGrants: w.extras.permissionGrants }),
       ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
       // The same policy object, and the same asker. A child that could do MORE than its parent
       // is a permission bypass; a child that can do LESS is the failure this originally had —
@@ -553,6 +555,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     repoMap: opts.repoMap === false ? false : {},
     // deny rules first so an explicit deny always wins
     permissions: permissionPolicy,
+    ...(extras.permissionGrants === undefined ? {} : { permissionGrants: extras.permissionGrants }),
     sandbox,
     // a function so a resumed session gets its snapshot's cwd, not this process's
     systemPrompt: (ctx) => promptBlocks({

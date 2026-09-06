@@ -87,6 +87,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   try {
     built = await buildAgent(opts, {
+      permissionGrants: controller.permissionGrants,
       onAsk: (req) => controller.ask(req),
       onHookError: (m) => controller.print(m, "error"),
       onHookDone: (m) => controller.print(m, "system"),
