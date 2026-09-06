@@ -31,6 +31,15 @@ jobs:
       # leg must report a live Docker pass, while hosts without Docker skip loudly.
       - if: runner.os == 'Linux'
         run: docker pull alpine:3.20
+      # Explicit test infrastructure only: product execution never builds or pulls images.
+      # Capture IDs, not mutable tags; the same fake-provider/checker discriminator must run here.
+      - if: runner.os == 'Linux'
+        run: |
+          docker build --target worker -t agentrig-r9b-worker -f eval/Dockerfile eval
+          docker build --target checker -t agentrig-r9b-checker -f eval/Dockerfile eval
+          echo "AGENTRIG_EVAL_WORKER_IMAGE=$(docker image inspect --format '{{.Id}}' agentrig-r9b-worker)" >> "$GITHUB_ENV"
+          echo "AGENTRIG_EVAL_CHECKER_IMAGE=$(docker image inspect --format '{{.Id}}' agentrig-r9b-checker)" >> "$GITHUB_ENV"
+          echo "AGENTRIG_EVAL_REQUIRE_DOCKER=1" >> "$GITHUB_ENV"
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
@@ -73,6 +82,8 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/evalset.test.ts
       - run: pnpm exec vitest run packages/cli/test/evaluation.test.ts packages/core/test/auxiliary-usage.test.ts packages/cli/test/render.test.ts
       - run: pnpm exec vitest run packages/cli/test/live-evaluation.test.ts
+      # Real E1/checker subprocesses with trusted fixture transport, not Windows isolation proof.
+      - run: pnpm exec vitest run packages/cli/test/session-evaluation.test.ts
       - run: pnpm exec vitest run packages/core/test/checkpointer.test.ts packages/core/test/events.test.ts packages/core/test/hooks.test.ts packages/cli/test/render.test.ts
       - run: pnpm exec vitest run packages/cli/test/checkpoint-undo.test.ts packages/cli/test/program.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/abort-restore.test.ts

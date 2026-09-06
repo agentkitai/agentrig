@@ -23,6 +23,7 @@ export function guard(ledger) {
   if (Date.now() - ledger.startedAt >= 12 * 60 * 60_000) throw new Error('BLOCKED: experiment wall-time guard reached');
 }
 export function command(program, args, options = {}) {
+  if (options.ownedTree === true) return ownedCommand(program, args, options);
   return new Promise(resolve => execFile(program, args, { encoding: 'utf8', timeout: 120_000,
     maxBuffer: 4 * 1024 * 1024, killSignal: 'SIGKILL', ...options }, (error, stdout, stderr) => resolve({
       code: error ? typeof error.code === 'number' ? error.code : null : 0,
@@ -30,13 +31,43 @@ export function command(program, args, options = {}) {
       stdout, stderr, error: error?.message ?? null,
     })));
 }
+// Explicitly owned preparation subprocess trees only. Production R9b execution is Linux-only;
+// the portable test transport also exercises normal completion on macOS/Windows.
+function ownedCommand(program, args, options) {
+  const { signal, timeout = 120_000, ownedTree: _ownedTree, ...rest } = options;
+  return new Promise(resolve => {
+    if (signal?.aborted) return resolve({ code: null, infrastructure: true, stdout: '', stderr: '', error: 'cancelled' });
+    let interrupted = false;
+    const child = execFile(program, args, { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
+      ...rest, detached: process.platform !== 'win32', windowsHide: true }, (error, stdout, stderr) => {
+      clearTimeout(timer); signal?.removeEventListener('abort', stop);
+      resolve({ code: error ? typeof error.code === 'number' ? error.code : null : 0,
+        infrastructure: interrupted || (!!error && (typeof error.code !== 'number' || error.signal != null)),
+        stdout, stderr, error: interrupted ? 'cancelled or timed out' : error?.message ?? null });
+    });
+    const stop = () => {
+      interrupted = true;
+      if (child.pid === undefined) return;
+      if (process.platform === 'win32') {
+        execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { timeout: 10_000, windowsHide: true }, () => {
+          try { child.kill('SIGKILL'); } catch { /* already exited */ }
+        });
+      } else {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* exited */ } }
+      }
+    };
+    const timer = setTimeout(stop, timeout);
+    signal?.addEventListener('abort', stop, { once: true });
+    if (signal?.aborted) stop();
+  });
+}
 export function dockerArgs({ name, image, workspace, checkerReceipt, network = false }) {
   if (!/^agentrig-e3-[a-f0-9-]+$/.test(name)) throw new Error('invalid owned container name');
   if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error('image must be pinned by ID');
   for (const path of [workspace, checkerReceipt].filter(Boolean)) {
     if (!isAbsolute(path) || /[,\n\r]/.test(path)) throw new Error('invalid mount path');
   }
-  return ['run', '--rm', '--name', name, '--network', network ? 'bridge' : 'none',
+  return ['run', '--pull=never', '--rm', '--name', name, '--network', network ? 'bridge' : 'none',
     '--cap-drop=ALL', '--security-opt=no-new-privileges', '--read-only', '--pids-limit=128',
     '--memory=4g', '--cpus=2', '--user', `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
     '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m', '-e', 'HOME=/tmp/e3-home',

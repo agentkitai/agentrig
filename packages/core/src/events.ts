@@ -222,6 +222,12 @@ export const EventPayload = z.discriminatedUnion("type", [
     turns: z.number().int().nonnegative().optional(),
   }),
   z.object({ type: z.literal("session.end"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
+  /** Trusted evaluation coordinator receipt, not tool/observer-emittable or a model grade. */
+  z.object({ type: z.literal("eval.result"), task: z.string().min(1).max(64),
+    sourceSessionId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), runId: z.string().uuid(), profile: z.string().min(1).max(128),
+    outcome: z.enum(["PASS", "FAIL", "BLOCKED", "SKIP"]), baselineOutcome: z.enum(["PASS", "FAIL", "BLOCKED", "SKIP"]),
+    reportedTokens: z.number().int().nonnegative(), usageComplete: z.boolean(),
+    totalCostUsd: z.number().finite().nonnegative().nullable(), advisoryPass: z.boolean().nullable() }),
   z.object({ type: z.literal("turn.start"), n: z.number().int() }),
   z.object({ type: z.literal("turn.continued"), n: z.number().int().positive(), from: z.number().int().positive(),
     attempt: z.number().int().min(1).max(2), maxAttempts: z.literal(2), reason: z.literal("max_tokens") }),

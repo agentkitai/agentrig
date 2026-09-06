@@ -5,6 +5,7 @@ import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentk
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
 import { exportSession } from "./session-export.js";
+import { evaluateSessions, type SessionEvaluationDependencies } from "./session-evaluation.js";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions } from "./run.js";
 import { loginCommand } from "./login.js";
@@ -124,6 +125,7 @@ export interface ProgramDependencies {
   tui?: typeof startTui;
   config?: LoadRunConfigOptions;
   doctor?: DoctorOptions;
+  evaluation?: SessionEvaluationDependencies;
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
@@ -154,7 +156,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -500,6 +502,43 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       const result = await diagnose({ ...dependencies.doctor, cli: opts });
       for (const diagnostic of result.lines) console.log(diagnostic);
       if (result.exitCode !== 0) process.exitCode = result.exitCode;
+    });
+
+  program.command("eval <sessions...>")
+    .description("Preview explicit session→E1 fixture evaluation against a supported profile; no historic tool replay")
+    .requiredOption("--against <profile>", "named supported evaluation profile")
+    .requiredOption("--fixtures <file>", "bounded version-1 session/task/source/baseline map and local image IDs")
+    .requiredOption("--output <new-directory>", "exclusive retained evaluation evidence directory (created only with --execute)")
+    .option("--execute", "run isolated tasks and advisory grading; may spend provider tokens")
+    .option("--batch-tokens <n>", "required reported-token scheduling cap for execution, not a hard billing cap")
+    .option("--batch-minutes <n>", "required total execution wall-time limit")
+    .addHelpText("after", "\nPreview makes no provider calls. Execution requires Linux Docker and pre-existing image IDs; never pulls images or installs dependencies. Shipped worker supports X tasks; A tasks require a matching offline dependency image. Independent checks decide outcomes; M6 grades are advisory. See docs/plans/R9b.md.\nExample: agentrig eval SESSION --against candidate --fixtures fixtures.json --output ./new-evaluation\nAdd --execute --batch-tokens 100000 --batch-minutes 10 only after reviewing the preview.")
+    .action(async (ids: string[], _opts: unknown, cmd: Command) => {
+      try {
+      const opts = cmd.optsWithGlobals() as { against: string; fixtures: string; output: string; execute?: boolean;
+        batchTokens?: string; batchMinutes?: string; profile?: string };
+      if (opts.profile !== undefined && opts.profile !== opts.against) throw new Error("--profile and --against must select the same evaluation profile");
+      const profile = await loadRunConfig(cmd, {
+        provider: "anthropic" as const, model: DEFAULT_ANTHROPIC_MODEL, profile: opts.against,
+        skillDiscovery: false, extensionDiscovery: false, generatedSkills: false, packages: false,
+        subagents: false, repoMap: false, checkpoints: false, supervise: false,
+      }, dependencies.config);
+      const result = await withMaintenanceSignal(signal => evaluateSessions({
+        sessions: ids, against: opts.against, fixtures: opts.fixtures, output: opts.output,
+        profile: { ...profile, provider: profile.provider ?? "anthropic", model: profile.model ?? DEFAULT_ANTHROPIC_MODEL },
+        ...(opts.execute === undefined ? {} : { execute: opts.execute }),
+        ...(opts.batchTokens === undefined ? {} : { batchTokens: Number(opts.batchTokens) }),
+        ...(opts.batchMinutes === undefined ? {} : { batchMinutes: Number(opts.batchMinutes) }), signal,
+      }, dependencies.evaluation), undefined, "evaluation");
+      console.log(JSON.stringify(result, null, 2));
+      } catch (error) {
+        // Configuration, file and provider errors may include sensitive input. Only expose a
+        // bounded setting-name diagnostic; never forward arbitrary exception messages here.
+        const message = error instanceof Error ? error.message : "";
+        const unsupported = /^evaluation profile does not support effective field: ([A-Za-z./]+)$/.exec(message);
+        throw new Error(unsupported === null ? "Evaluation refused or failed; check the fixture map, supported profile, explicit limits and local image prerequisites. Existing evidence is preserved."
+          : `Evaluation profile does not support effective field: ${unsupported[1]}`);
+      }
     });
 
   const sessions = program.command("sessions").description("Inspect session event logs");
