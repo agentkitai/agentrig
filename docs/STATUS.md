@@ -3,9 +3,26 @@
 Current roadmap row: **E3 — controlled live comparison.** H1–H5 and E1–E2 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
-## Current priorities — revised 2026-09-05
+## Current priorities — revised 2026-09-06
 
-### E3 collection complete — human gate pending (PR #134)
+### E3 assessment complete — final delivery gates (PR #134)
+
+The user authorized independent AI assessment on 2026-09-06 after collection. The Codex
+maintainer reviewed all 12 X4 explanations under the unchanged rubric: one PASS, 11 FAIL.
+Final amended outcomes: **67 PASS, 29 FAIL, zero pending**. This is non-blind AI review,
+not human validation; original automatic outcomes and the 2,872-file archive remain unchanged.
+See [assessment and sensitivity](reviews/E3-AI-ASSESSMENT.md), [attributed verdicts](e3-ai-review.json),
+[derived outcomes](e3-reviewed-results.json), and [final comparison](E3-RESULTS.md).
+Memory-only meets the numerical thresholds but the overall utility evidence remains inconclusive;
+features stay opt-in. No further user prose assessment or live run is needed. Final-head CI,
+merge and exact post-merge main CI are the remaining delivery gates before R4a.
+
+Final maintainer build/typecheck and Node22 suite: 1,871 passes plus two skips, 89 files.
+Fourth scoped Claude pass `ac90b428-f8b2-4a73-b48c-89d1912144fd` approved the assessor amendment,
+count derivation and borderline-judgment consistency with no material blockers (read-only,
+no tests/delegation). The earlier three passes are recorded below; no new roadmap subdivision.
+
+#### Historical collection record (superseded assessor gate)
 
 All 96 scheduled Luna attempts ran once: 66 PASS, 18 FAIL, 12 BLOCKED awaiting genuine X4
 prose judgments. Total 9,358,630 reported tokens including training/ingest, zero incomplete

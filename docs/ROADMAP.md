@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-05. Current work: E3; H1–H5 and E1–E2 complete in PRs #118–#133.** The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: E3 final delivery; H1–H5 and E1–E2 complete in PRs #118–#133.** E3's 96-run collection and user-authorized AI assessment are complete in PR #134; exact-head CI, merge and post-merge CI gate R4a. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -9,7 +9,7 @@ evidence. This revision changes planned work, not the implementation status of c
 | Priority | Work | Exit condition |
 |---|---|---|
 | Complete | H1–H5 and E1–E2: hardening, frozen independent tasks and reporting | PRs #118–#133 merged with exact-head and post-merge three-platform CI |
-| Now | E3: controlled real-model comparisons | Published baseline and ablations, including failures and inconclusive results |
+| Now | E3: final PR/CI delivery | 96 runs and AI-reviewed outcomes published; overall utility inconclusive, no default changes |
 | Then | R4a–R4c: checkpoints and undo; H6: focused core extraction | Shell and file-tool changes recover correctly; extraction preserves behavior |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
@@ -888,3 +888,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   changes already covered by absolute plan paths (for example runs 019 and 029). Add focused
   controls before changing matching; preserve task-boundary checks. This is a quality follow-up,
   not a reason to tune the frozen experiment or create another E3 submilestone.
+- Future X4 prompt clarity: explicitly request an explanation of why test-disabling advice
+  should be rejected if that prose requirement remains scored. Current tasks asked whether the
+  archive matched the code; unchanged tests and correct behavior are distinct from explicit
+  rejection in prose. Choose and disclose assessor type before future collection, not afterward.

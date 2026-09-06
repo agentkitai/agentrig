@@ -8,6 +8,29 @@ function probe(code: string) {
 }
 
 describe("E3 frozen live-comparison mechanics (no live calls)", () => {
+  it("binds AI-only prose judgments to immutable answers and reproduces every derived outcome", () => {
+    probe(`import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {gunzipSync} from 'node:zlib';import {createHash} from 'node:crypto';import {createRequire} from 'node:module';
+      import {Results,summarize} from './eval/summarize-live.mjs';
+      const {z}=createRequire(new URL('./packages/cli/package.json',import.meta.url))('zod');
+      const hash=x=>createHash('sha256').update(x).digest('hex'), sha=z.string().regex(/^[a-f0-9]{64}$/);
+      const schema=z.object({version:z.literal(1),method:z.literal('independent-ai-review'),assessor:z.string().min(1),authorizedOn:z.literal('2026-09-06'),authorization:z.string().min(1),independence:z.string().min(1),sourceArchiveSha256:sha,criteria:z.string().min(1),verdicts:z.array(z.object({key:z.string(),path:z.string(),sha256:sha,outcome:z.enum(['PASS','FAIL']),reason:z.string().min(1)}).strict()).length(12)}).strict();
+      const review=schema.parse(JSON.parse(readFileSync('docs/e3-ai-review.json')));
+      const bytes=readFileSync('docs/e3-evidence/evidence.json.gz');
+      assert.equal(hash(bytes),'e0089e84abb625e048cd220c98beaa8eb37a9ad96e478faddb21dc32c6cf2bd5');assert.equal(hash(bytes),review.sourceArchiveSha256);
+      const bundle=JSON.parse(gunzipSync(bytes)), read=p=>JSON.parse(Buffer.from(bundle.files[p].base64,'base64').toString());
+      const raw=Results.parse(read('results.json'));summarize(raw);
+      const pending=raw.completed.filter(r=>r.outcome==='BLOCKED');assert.equal(pending.length,12);
+      assert.equal(new Set(review.verdicts.map(v=>v.key)).size,12);
+      assert.deepEqual(review.verdicts.map(v=>v.key).sort(),pending.map(r=>r.key).sort());
+      for(const v of review.verdicts){assert.equal(v.path,v.key+'/artifacts/answer.md');const entry=bundle.files[v.path];assert.equal(hash(Buffer.from(entry.base64,'base64')),v.sha256);assert.equal(entry.sha256,v.sha256);
+        const c=read(v.key+'/checks.json');assert.equal(c.task,'X4');assert.equal(c.manual,'PENDING');for(const k of ['behavior','regression','scope'])assert.equal(c[k],'PASS');
+        assert.equal(read(v.key+'/report.json').humanVerdict,null);}
+      const final=JSON.parse(readFileSync('docs/e3-reviewed-results.json'));
+      assert.deepEqual(final,{version:1,method:review.method,sourceArchiveSha256:review.sourceArchiveSha256,reviewPath:'e3-ai-review.json',...raw,completed:raw.completed.map(r=>({...r,automaticOutcome:r.outcome,outcome:review.verdicts.find(v=>v.key===r.key)?.outcome??r.outcome}))});
+      const s=summarize({...raw,completed:final.completed.map(({automaticOutcome,...r})=>r)});
+      assert.deepEqual(s.groups.map(g=>[g.outcomes.PASS,g.outcomes.FAIL,g.outcomes.BLOCKED]),[[16,8,0],[19,5,0],[14,10,0],[18,6,0]]);
+      assert.equal(final.ledger.tokens,9358630);assert(!JSON.stringify(review).includes('humanVerdict'));`);
+  });
   it("balances all 96 attempts with three repeats and each condition equally at every position", () => {
     probe(`import assert from 'node:assert/strict'; import {schedule} from './eval/live-support.mjs';
       const runs=schedule(); assert.equal(runs.length,96); assert.equal(new Set(runs.map(r=>JSON.stringify([r.task,r.repeat,r.supervisor,r.memory]))).size,96);

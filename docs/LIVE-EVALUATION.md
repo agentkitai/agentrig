@@ -53,6 +53,11 @@ results must remain unchanged. Provide the human an answer packet, then attach s
 attributed verdicts through E2's humanVerdict field. Pending or failed checks never become PASS
 because the maintainer or a model reviewer thinks an answer looks right.
 
+For the completed E3 experiment only, the user subsequently authorized the
+[2026-09-06 AI-assessor amendment](plans/E3.md#user-authorized-amendment--2026-09-06-after-collection).
+Its separate `e3-ai-review.json` and `e3-reviewed-results.json` are explicitly AI-reviewed
+derivatives, not E2 `humanVerdict` records. Original reports and the archive remain unchanged.
+
 ## Publication
 
 After collection has closed, `node eval/pack-live.mjs CLOSED_EVIDENCE_ROOT NEW_PUBLICATION_DIRECTORY`

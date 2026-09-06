@@ -5,6 +5,11 @@ three explicit seeded regressions. Four external tasks share a very small librar
 representative of large external systems. Public source, known fixes and evaluator author familiarity
 create contamination risk. Report these limitations with every result; do not claim superiority.
 
+E3-specific exception: on 2026-09-06, after collection, the user authorized independent AI prose
+assessment for that experiment only. See the [dated amendment](plans/E3.md#user-authorized-amendment--2026-09-06-after-collection).
+The frozen rubric and original automatic/human-pending evidence below remain unchanged;
+the separately labeled E3 AI-reviewed outcomes are not human-validated EVALSET results.
+
 The executable source of exact prompts, seeds and allowed paths is [eval/tasks.mjs](../eval/tasks.mjs).
 Freeze the evaluator Git SHA (including this document and every fixture/check) in the run record
 before evaluation. Never revise checks in response to a model run; issue a new eval-set version
