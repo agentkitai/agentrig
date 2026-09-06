@@ -90,14 +90,13 @@ export function stallDetector(opts: StallOptions = {}): Detector {
     observe(event: HarnessEvent, state: SupervisorState) {
       const from = state.recent[0]?.seq ?? event.seq;
 
-      if (event.type === "file.changed") {
+      if (event.type === "tool.result" && (state.corroboratedChanges?.length ?? 0) > 0) {
         changedThisTurn = true;
         reportedQuietStall = false;
         // work landed between two runs, so an identical count across them is not "stuck"
         identicalRuns = 0;
         lastCounts = null;
         reportedTestKey = null;
-        return null;
       }
 
       if (event.type === "tool.call") {

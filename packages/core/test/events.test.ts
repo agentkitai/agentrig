@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips additive call provenance and preserves legacy claims/results", () => {
+    for (const payload of [
+      { type: "file.changed", path: "a", op: "edit", contentHash: "h" },
+      { type: "tool.result", id: "call", ok: true, display: "done", durationMs: 0 },
+    ]) {
+      for (const provenance of [{}, { toolCallSeq: 3, ...(payload.type === "tool.result" ? { permission: "write" } : {}) }]) {
+        const event = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, ...payload, ...provenance });
+        expect(parseEvent(serializeEvent(event))).toEqual(event);
+        expect(HarnessEvent.safeParse({ ...event, toolCallSeq: -1 }).success).toBe(false);
+      }
+    }
+  });
   it("round-trips ownership seals and restoration audit records with bounded Git identifiers",()=>{
     const seal={seq:2,sessionId:"s",ts:1,type:"checkpoint.sealed",turn:1,ref:"refs/agentrig/s/sealed/1",commit:"a".repeat(40),tree:"b".repeat(40),head:"unborn\nrefs/heads/main",indexHash:"c".repeat(64),repo:"/repo",excludes:["/repo/logs"]};
     const restored={seq:0,sessionId:"audit",ts:1,type:"checkpoint.restored",targetSession:"s",turn:1,ref:"refs/agentrig/s/1",tree:"b".repeat(40),recovery:"/repo/.git/recovery"};

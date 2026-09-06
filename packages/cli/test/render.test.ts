@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("shows file-change call attribution as a claim, never proof of a write", () => {
+  const legacy = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, type: "file.changed", path: "a", op: "edit", contentHash: "h" });
+  expect(renderEvent(legacy)).not.toContain("claim from");
+  expect(renderEvent(HarnessEvent.parse({ ...legacy, toolCallSeq: 2 }))).toContain("claim from tool.call #2");
+});
+
 it("labels legacy and incomplete main usage as unknown, not a known zero", () => {
   const event = HarnessEvent.parse({ type: "model.response", seq: 1, ts: 1, sessionId: "s", usage: { input: 0, output: 0 }, stop: "end_turn" });
   expect(renderEvent(event)).toContain("total-usage=unknown");

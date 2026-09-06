@@ -81,7 +81,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "tool.result.patched": return `${p} ${e.by} rewrote what the model saw: ${e.display.replace(/\s+/g, " ").slice(0, 160)}`;
     case "tool.denied": return `${p} ${e.name}#${e.id}`;
     case "sandbox.denied": return `${p} ${e.name}#${e.id} mode=${e.mode} ${JSON.stringify(e.reason)}`;
-    case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}`;
+    case "file.changed": return `${p} ${e.op} ${e.path} hash=${e.contentHash}${e.toolCallSeq === undefined ? "" : ` claim from tool.call #${e.toolCallSeq}`}`;
     case "checkpoint.created": return `${p} turn=${e.turn} ref=${e.ref} commit=${e.commit} tree=${e.tree}`;
     case "checkpoint.warning": return `${p} ${e.message}`;
     case "checkpoint.sealed": return `${p} turn=${e.turn} tree=${e.tree} ref=${e.ref}`;

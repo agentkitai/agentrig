@@ -6,6 +6,8 @@ export type SignalType = Signal["type"];
 
 export interface Detector {
   id: string;
+  /** Optional read-only preparation; attach joins it before observe and passes cancellation. */
+  prepare?(event: HarnessEvent, state: SupervisorState, signal: AbortSignal): Promise<void>;
   observe(event: HarnessEvent, state: SupervisorState): Signal | null;
 }
 
