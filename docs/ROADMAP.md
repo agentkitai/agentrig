@@ -1139,3 +1139,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   instead of whole-startup refusal for oversized discovery, and canonical explicit-path dedupe
   to suppress benign alias shadow notices. Any child extension inheritance must retain paired
   hooks, ownership and failure state; R5a deliberately inherits none of the extension surfaces.
+- R12d polish: explain explicitly when parent runtime has no grant registry and a configured
+  child registry is consequently ignored; shared revision invalidation also conservatively
+  cancels a sibling's open standing/scope prompt after a revocation. Preserve scoped inheritance.

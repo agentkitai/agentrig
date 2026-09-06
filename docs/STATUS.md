@@ -27,6 +27,12 @@ Updated-main build/typecheck/full checks pass 2,334 tests plus two skips across 
 authority both failed actual spawn controls and were restored; 30 focused cases pass. Base
 `9eb28cd` passed all three post-merge platforms in CI 34027657968. Review and PR CI follow.
 
+One Claude review (`3f3727cc-edbb-4d19-8b1f-9d1d235abd77`, 223 seconds, max24 requested /
+31 turns reported) found the production `startTui` wrapper dropping child context. Fixed with
+direct forwarding; actual startup/builder/spawn controls fail before and pass after. The reviewer
+independently passed 40 tests. [Verbatim finding and resolution](plans/R12d-review.md); no second
+general review. Final integration/full checks/CI follow; optional notes remain at ROADMAP's end.
+
 ### R13c done — PR #159; post-merge CI green
 
 Merge `78e8e19` passed all three platforms in CI 34026441186. Following gate notes are history.
