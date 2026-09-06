@@ -763,6 +763,11 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R8d adds an authenticated, exact-loopback reference web page over the existing ACP
+server/controller. Fixed assets, bearer plus Host/Origin checks, bounded WebSocket
+queues and joined connection ownership are explicit; authentication is not project
+trust or execution permission. See [local web client](WEB.md) and [R8d](plans/R8d.md).
+
 R8c adds explicit `--otel-endpoint` observation over the event stream, with fixed
 metadata-only OTLP/HTTP JSON spans, shared bounded process capacity and joined
 shutdown. It never grants model authority or changes immutable event ordering;
