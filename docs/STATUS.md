@@ -14,7 +14,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
-### R7a in progress — explicit scheduler ticks
+### R7a implemented — delivery gates pending
 
 Plain bounded JSON and five-field UTC cron; preview is model-free, execution is explicit
 and requires canonical project trust. Cooperative claim-before-dispatch serializes ticks;
@@ -26,7 +26,10 @@ Initial build/typecheck/full passes 2,559 plus two skips across 148 files, four 
 independent test run is claimed. Missing executable defaults and loss of later due entries
 after an earlier budget end reproduced through real CLI/runCommand/local adapter fixtures.
 Shared defaults with proper config precedence and per-entry outcome aggregation fix both;
-20 focused controls now pass. Final combined full suite and delivery gates follow.
+20 focused controls now pass. Integrated R9a main `a99f3ec`, retaining both CLI surfaces,
+tests and done markers. Combined build/typecheck/full passes 2,597 plus two skips across
+149 files (four workers, 36 seconds). Exact-head PR CI and post-merge gates remain pending;
+R9a's own post-main gate is not yet claimed green. No second broad review for integration.
 
 ### R9a implemented — delivery gates pending
 

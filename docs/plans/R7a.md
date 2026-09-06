@@ -84,4 +84,6 @@ the second finding independently. Continuing and reporting ordinary failures now
 passes both; a thrown-launch/later-success fixture also keeps aggregate failure.
 Configured response token limits remain honored. The third evidence-documentation
 finding is addressed by recording the previously completed mutations above.
-No second broad review. Final updated-main gates remain pending.
+No second broad review. Integrated R9a main `a99f3ec`; final build/typecheck/full passes
+2,597 plus two skips across 149 files, four workers, 36 seconds. Twenty focused
+controls pass. Exact-head three-platform PR CI and post-merge gates remain pending.
