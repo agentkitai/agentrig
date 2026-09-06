@@ -71,6 +71,8 @@ function reconstructFunctionCall(b: Extract<ContentBlock, { type: "tool_use" }>)
  * call is reconstructed, which is correct for non-reasoning models.
  */
 export function toResponsesInput(messages: Message[], rawGroups?: Map<string, RawItemGroup>): JsonObject[] {
+  // Provenance stays on unified blocks, independent of cached vendor reasoning items. Never
+  // overwrite unified history with this lossy wire projection or treat vendor text as labels.
   const input: JsonObject[] = [];
   const emitted = new Set<string>();
   for (const m of messages) {

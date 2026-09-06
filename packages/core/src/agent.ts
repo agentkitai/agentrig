@@ -3,7 +3,7 @@ import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { EventPayload, SupervisorRecord } from "./events.js";
-import type { ContentBlock, Message } from "./messages.js";
+import { ContentTrustSchema, type ContentBlock, type ContentTrust, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { AnyTool } from "./tool.js";
@@ -575,9 +575,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         // model matches what it actually said (text and tool_use blocks can interleave).
         const assistantContent: ContentBlock[] = [];
         let text = "";
+        let textTrust: ContentTrust | undefined;
         const flushText = () => {
           if (text !== "") {
-            assistantContent.push({ type: "text", text });
+            assistantContent.push({ type: "text", text, ...(textTrust === undefined ? {} : { trust: textTrust }) });
             text = "";
           }
         };
@@ -650,15 +651,22 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           abortController.signal.throwIfAborted();
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
-              case "text_delta":
+              case "text_delta": {
+                const trust = ContentTrustSchema.optional().parse(ev.trust);
+                if (trust !== textTrust) flushText();
+                textTrust = trust;
                 text += ev.text;
                 await emit({ type: "model.delta", text: ev.text });
                 break;
-              case "tool_use":
+              }
+              case "tool_use": {
                 flushText();
-                assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input });
+                const trust = ContentTrustSchema.optional().parse(ev.trust);
+                assistantContent.push({ type: "tool_use", id: ev.id, name: ev.name, input: ev.input,
+                  ...(trust === undefined ? {} : { trust }) });
                 toolUses.push(ev);
                 break;
+              }
               case "usage":
                 usage = ev.usage;
                 usageReported = ev.reported !== false;
@@ -699,7 +707,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             sessionId: id,
             cwd,
             turn: turns,
-            response: { role: "assistant", content: [{ type: "text", text }] },
+            response: { role: "assistant", content: textTrust !== undefined || assistantContent.some(block => block.trust !== undefined)
+              ? [...assistantContent, ...(text === "" ? [] : [{ type: "text" as const, text,
+                ...(textTrust === undefined ? {} : { trust: textTrust }) }])]
+              : [{ type: "text", text }] },
           });
           // attributed to `hook`, not `user`: the supervisor's reviewer grades trajectories off
           // these events, and a hook nudge scored as a human correction is a lie in the log

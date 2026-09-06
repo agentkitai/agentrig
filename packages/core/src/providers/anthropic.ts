@@ -55,6 +55,8 @@ function toAnthropicMessage(m: Message): JsonObject {
 }
 
 function toAnthropicBlock(b: ContentBlock): JsonObject {
+  // Trust metadata stays on the unified block/log. Project only supported wire fields; never
+  // serialize provenance as model-visible instructions or mutate the retained source block.
   switch (b.type) {
     case "text":
       return { type: "text", text: b.text };

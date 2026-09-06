@@ -679,7 +679,7 @@ tracks trust through everything else.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R13a | `ContentBlock` gains an optional `trust` field (schema-added): `user` / `project` / `external` / `tool-output` / `generated`. Providers thread it; where a vendor API cannot carry it, the loop keeps it in the unified message list (the log is the source of truth, not the wire format) | core |
+| R13a *(implemented; closing PR records delivery gates)* | `ContentBlock` gains optional recursive `trust` metadata: `user` / `project` / `external` / `tool-output` / `generated`. Validated custom-provider labels survive segmented assistant messages, storage and resume; vendor projections retain unified metadata without unsupported wire fields. Labels confer no authority. R13b assembly/compaction and R13d/R13c policies remain separate. See [contract](plans/R13a.md) | core |
 | R13b | Assembly rules: tool results from `web_fetch` and MCP servers are `external`; file reads from an untrusted repo are `external`, from a trusted one `project`; compaction summaries inherit the LOWEST trust of what they summarize — laundering by summarization is the known bypass | core |
 | R13c | One enforced policy to start, not a framework: a turn whose only new input is `external` content cannot *expand* its permission surface — no first use of exec/net/write-outside-cwd may be triggered by it without a fresh interactive approval, whatever grants exist. The supervisor gains an `injection` detector flagging instruction-shaped external content ("ignore previous instructions", tool-invocation syntax in fetched text) as a signal | core + supervisor |
 | R13d | Principals on injected context *(third pass)*: hook output, steer messages, and injected reminders carry a runtime-assigned principal (`user` / `hook:<name>` / `supervisor` / `platform`) and authority level; text can never upgrade its own authority, and hooks default to advisory — a hook may be installed by the user, a repo, an extension, or a compromised dependency, and the captured harnesses disagree on whether its output speaks for the user, which is precisely the hazard. Explicit, visible, revocable delegation is how a hook earns more | core |
@@ -942,3 +942,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   release failed-call pending entries earlier than the turn boundary; reuse drift read buffers if
   allocation churn is measured. Consider historical deletion witnesses separately: present absence
   is not proof of a prior file. Preserve legacy no-credit behavior and bounded, fail-closed checks.
+- R13a polish: hoist the nested-label helper if touching eviction. After R13b defines provenance
+  aggregation, consider bounded eviction of labeled nested results; until then their metadata must
+  not disappear in a string stub. Raw-delta-only crash reconstruction remains explicitly unlabeled.

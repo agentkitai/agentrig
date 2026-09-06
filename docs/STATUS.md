@@ -20,6 +20,28 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
+### R13a implemented — closing PR records delivery gates
+
+Optional block-level provenance now round-trips recursively through unified messages, canonical
+events/snapshots, fork materialization, actual provider requests and resumed turns. Custom-provider
+labels are validated and text segments retain their boundaries; vendor JSON/prose cannot supply
+those labels. Wire projections add no unsupported fields. Observing hooks cannot mutate nested
+labels and outbound eviction does not flatten labeled children. [Contract](plans/R13a.md).
+
+Parallel-order rationale: R13a carries metadata only and is independent of pending R12e/grant
+work and R6a wiki procedures. No authority or permission is inferred; R13b assembly/compaction,
+R13d principals and R13c enforcement remain later rows. This is not a claim those policies exist.
+Build/typecheck/full tests, one bounded independent review, restored negative controls and exact
+PR/post-merge three-platform CI are the delivery gates; closing receipts belong to the PR.
+
+One bounded Claude review `128bce32-4807-4eb8-9eef-75511eb6c868` approved with no material
+findings, independently passing 692 core tests and all-package typecheck. Schema-drop and
+stream-assembly-drop mutations fail named persistence/resume controls and are restored. Actual
+vendor text/tool-call provenance spoofing is inert, and a user-labeled call still obeys denial.
+Crash-only raw-delta reconstruction remains unlabeled; no unrecorded provenance is invented.
+Final local build/typecheck/full suite pass 2,028 tests plus two existing skips (98 files);
+66 focused trust/hooks/eviction/H6 trace tests pass with unchanged golden traces.
+
 ### R13f implemented — PR #143 records closing delivery gates
 
 Core stamps unique runtime call provenance; only matching successful write-class results in the
