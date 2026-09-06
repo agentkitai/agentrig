@@ -14,6 +14,7 @@ import { validateEvaluationProfile } from "../src/evaluation-fixtures.js";
 import { prepareEvaluationDependencies } from "../src/evaluation-preparation.js";
 import { evaluationMemory } from "../src/evaluation-memory.js";
 import { buildProgram } from "../src/program.js";
+import { parseConfigText } from "../src/config.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -174,6 +175,21 @@ it("explicit CLI preview resolves its real named profile without constructing a 
   await expect(buildProgram({ config: { cwd: f.source, home, env: {}, interactive: false }, evaluation: { transport: f.transport, provider } })
     .parseAsync(["eval", "original", "--against", "candidate", "--fixtures", f.map, "--output", join(f.root, "refused")], { from: "user" }))
     .rejects.toThrow("effective field: packages");
+  expect(provider).not.toHaveBeenCalled();
+}, 30_000);
+
+it("actual config permits explicitly disabled ingestion, not enabled ingestion or forged resolver metadata", async () => {
+  const f = await fixture(), home = join(f.root, "home"); await mkdir(join(home, ".agentrig"), { recursive: true });
+  const path = join(home, ".agentrig", "config.json"), provider = vi.fn();
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const preview = () => buildProgram({ config: { cwd: f.source, home, env: {}, interactive: false },
+    evaluation: { transport: f.transport, provider } }).parseAsync(["eval", "original", "--against", "candidate",
+    "--fixtures", f.map, "--output", join(f.root, "preview")], { from: "user" });
+  await writeFile(path, JSON.stringify({ profiles: { candidate: { ...profile, ingestOnEnd: false } } }));
+  await expect(preview()).resolves.toBeDefined();
+  await writeFile(path, JSON.stringify({ profiles: { candidate: { ...profile, ingestOnEnd: true } } }));
+  await expect(preview()).rejects.toThrow("effective field: ingestOnEnd");
+  expect(() => parseConfigText("fixture", JSON.stringify({ ingestOnEndExplicit: true }))).toThrow();
   expect(provider).not.toHaveBeenCalled();
 }, 30_000);
 

@@ -95,3 +95,30 @@ New portable controls initially pass six plus one conditional container skip; th
 combined E1/E2/R14d/R13e/nightly group with actual Linux containers enabled passes
 59 tests across five files (11.90s). These are mechanics results only. Named negative
 controls, full checks, independent review and exact-head platform receipts follow.
+
+Integrated green R7c main `b2390ce`. Root's integration inspection found its new
+trusted `ingestOnEndExplicit` metadata rejected an otherwise supported profile
+with `ingestOnEnd: false`. An actual config→CLI preview reproduced that rejection;
+allowing only the resolver metadata name fixes it. The same control still refuses
+enabled ingestion and strict config parsing still rejects forged metadata. No
+provider was constructed. This is a root/author finding, not an independent-review finding.
+
+Named mutants detected and restored:
+
+- **ExpectedOutcomeGateRemoved:** dropping the observed-result comparison accepted
+  an incorrect positive/negative result; the discriminator test failed.
+- **ArtifactAncestorGateRemoved:** dropping the ancestor link check copied through
+  a deliberate directory alias; the linked-artifact control failed.
+- **ScriptedLaneDropped:** omitting the trusted wrapper's scripted label produced
+  a live-labelled report; the actual portable core/E1/E2 wrapper failed as required.
+
+Additional controls refuse missing selected accounting artifacts even after the
+three check outcomes match, enforce byte/file/entry bounds, reject destination
+links, preserve occupied files, and retain a RUNNING summary until cancelled owned
+transport work has joined. The underlying owned descendant cancellation control
+from R9b remains in the full suite; the wrapper-specific join test uses trusted
+injected transport, not a claim of hostile-process containment.
+
+Author final pre-review checks on integrated main: build/typecheck pass; full suite
+with both actual Linux container fixtures enabled passes **2,710 tests plus two
+existing skips / 156 files, 47.86s**. One bounded independent review follows.

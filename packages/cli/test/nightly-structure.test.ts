@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, mkdir, writeFile, readFile, realpath, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,13 +77,27 @@ it("retains bounded partial evidence and refuses linked, traversal or oversized 
   const copied = await retainNightlyArtifacts(work, join(root, "good"), ["selected"]);
   expect(copied.complete).toBe(true); expect(copied.files[0]?.sha256).toMatch(/^[a-f0-9]{64}$/);
   expect((await retainNightlyArtifacts(work, join(root, "oversized"), ["selected"], { fileBytes: 1 })).complete).toBe(false);
+  expect((await retainNightlyArtifacts(work, join(root, "byte-cap"), ["selected"], { bytes: 1 })).complete).toBe(false);
   expect((await retainNightlyArtifacts(work, join(root, "entry-cap"), ["selected"], { entries: 1 })).complete).toBe(false);
   expect((await retainNightlyArtifacts(work, join(root, "traversal"), ["../secret"])).complete).toBe(false);
   const outside = join(root, "outside"); await mkdir(outside); await writeFile(join(outside, "secret.json"), "do-not-copy");
   await symlink(outside, join(work, "alias"), process.platform === "win32" ? "junction" : "dir");
   expect((await retainNightlyArtifacts(work, join(root, "linked"), ["alias/secret.json"])).complete).toBe(false);
   await expect(readFile(join(root, "linked", "alias", "secret.json"))).rejects.toThrow();
+  await symlink(outside, join(root, "target-alias"), process.platform === "win32" ? "junction" : "dir");
+  expect((await retainNightlyArtifacts(work, join(root, "target-alias"), ["selected"])).complete).toBe(false);
 });
+
+it("a missing selected accounting artifact fails even when actual checks pass", async () => {
+  const root = await fixture();
+  const result = await runNightly(options(root), { transport: transport(), evaluate: async (options, dependencies) => {
+    const evaluated = await evaluateSessions(options, dependencies);
+    await unlink(join(options.output, "calls.json"));
+    return evaluated;
+  } });
+  expect(result.cases.map(test => test.observed)).toEqual(["PASS", "FAIL", "BLOCKED"]);
+  expect(result.status).toBe("FAIL"); expect(result.artifacts.missing).toContain("correct/calls.json");
+}, 60_000);
 
 it("refuses occupied outputs and records missing infrastructure as failure without starting providers", async () => {
   const root = await fixture(); await mkdir(join(root, "run")); await writeFile(join(root, "run", "sentinel"), "human");

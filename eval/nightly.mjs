@@ -90,8 +90,8 @@ export async function runNightly(options, dependencies = {}) {
     structuralTests: 'See separate E1/E2/R13e test report; wrapper success does not attest that test invocation.',
     cancelled: false, artifacts: null };
   const summaryPath = join(artifacts, 'nightly-summary.json');
-  await save(summaryPath, summary);
   try {
+    await save(summaryPath, summary);
     if (controller.signal.aborted) throw new Error('cancelled');
     await transport.preflight([options.workerImage, options.checkerImage], controller.signal);
     const revision = await transport.command('git', ['rev-parse', 'HEAD'], { cwd: evaluatorRoot, signal: controller.signal, ownedTree: true });
@@ -132,7 +132,7 @@ export async function runNightly(options, dependencies = {}) {
         selections.push(`${test.name}/${file}`);
     }
     summary.artifacts = await retainNightlyArtifacts(work, artifacts, selections);
-    if (!summary.artifacts.complete || summary.cancelled) summary.status = 'FAIL';
+    if (!summary.artifacts.complete || summary.artifacts.missing.length || summary.cancelled) summary.status = 'FAIL';
     await save(summaryPath, summary);
   }
   return summary;
