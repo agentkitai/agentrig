@@ -142,3 +142,4 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/questions.test.ts packages/cli/test/questions.test.ts packages/cli/test/question-acp.test.ts
 
       - run: pnpm exec vitest run packages/cli/test/mcp-serve.test.ts packages/cli/test/mcp-serve-runtime.test.ts packages/cli/test/mcp-serve-cli.test.ts
+      - run: pnpm exec vitest run packages/core/test/otel.test.ts packages/cli/test/otel.test.ts

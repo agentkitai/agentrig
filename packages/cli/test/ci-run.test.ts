@@ -58,6 +58,28 @@ it("actual ask-class tool exits nonzero, writes report, and cannot dispatch eith
   const report = await readFile(join(root, "report.md"), "utf8"); expect(report).toContain("Outcome: permission-refused"); expect(report).toContain("Unresolved asks: 1");
   for (const index of [0, 1]) await expect(readFile(join(root, `sentinel-${index}`))).rejects.toMatchObject({ code: "ENOENT" });
 }, 30_000);
+it("actual CI task outcome survives enabled collector refusal and joins telemetry cleanup", async () => {
+  const root = await fixture(); const payloads: string[] = [];
+  const collector = createServer(async (req, res) => {
+    let body = ""; for await (const chunk of req) body += chunk; payloads.push(body);
+    res.writeHead(500).end("collector-private-error");
+  });
+  collector.listen(0, "127.0.0.1"); await once(collector, "listening");
+  const address = collector.address(); if (!address || typeof address === "string") throw new Error("no collector");
+  try {
+    for (const enabled of [false, true]) {
+      const result = await actual(root, ["--task-file", "task.txt", "--report", `${enabled}.md`,
+        ...(enabled ? ["--otel-endpoint", `http://127.0.0.1:${address.port}/traces`] : [])], { content: "CI-content-canary" });
+      expect(result.code, result.stderr).toBe(0);
+      expect(await readFile(join(root, `${enabled}.md`), "utf8")).toContain("Outcome: done");
+      if (!enabled) expect(payloads).toHaveLength(0);
+      expect(result.stdout + result.stderr).not.toContain("collector-private-error");
+    }
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads.join("")).not.toContain("CI-content-canary");
+    expect(payloads.join("")).not.toContain("Inspect the task safely");
+  } finally { collector.closeAllConnections(); await new Promise<void>(resolve => collector.close(() => resolve())); }
+}, 30_000);
 it("actual remote MCP startup ask aborts unattended CI before HTTP or provider work", async () => {
   const root = await fixture(); let requests = 0;
   const server = createServer((_req, res) => { requests++; res.writeHead(500).end(); });

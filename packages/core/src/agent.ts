@@ -80,6 +80,8 @@ export interface PromptContext {
 export interface AgentConfig {
   /** Optional final-answer constraint, compiled by createOutputContract. Not inherited by children. */
   outputContract?: OutputContract;
+  /** Trusted nonblocking observation only; failure never changes the run or event log. */
+  observeSession?: (session: Session) => void;
   /** Explicit clarification handler, never a permission grant or implicit supervisor policy. */
   onQuestion?: import("./questions.js").QuestionHandler;
   /** Current build's extension receipts, not replayed authorization or repeated activation. */
@@ -268,7 +270,11 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
-  return { run: (task, opts) => runSession(config, task, opts ?? {}) };
+  return { run: (task, opts) => {
+    const session = runSession(config, task, opts ?? {});
+    try { void Promise.resolve(config.observeSession?.(session)).catch(() => {}); } catch { /* observation is not execution authority */ }
+    return session;
+  } };
 }
 
 function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {

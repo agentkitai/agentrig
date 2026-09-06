@@ -548,6 +548,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
     supervisor?.detach();
     // a server left running would outlive the session that spawned it
     for (const server of built.mcp) await server.close().catch(() => {});
+    await built.closeTelemetry?.();
     if (supervisor !== null) {
       await supervisor.done;
     }
