@@ -120,6 +120,11 @@ dispatch. Session/task lifecycle is enforced in the runtime; persisted events ne
 authority. TUI standing answers use the same registry and revoke at conversation boundaries.
 See [R12a](plans/R12a.md) for advisory lexical scopes, shared-child compatibility pending R12d,
 and bounded pending audit behavior. Explicit blanket permissions retain their authority.
+R12b adds honest declared-effect/unknown summaries and explicit bounded path/argv scope editing
+with a separate exact-scope preview and confirmation in the TUI. The proposal must cover the
+current request using the same pure scope matcher as runtime enforcement. No effects are inferred
+from names/prose/MCP hints; separate sandbox/MCP-change consent never becomes standing authority.
+See [R12b](plans/R12b.md). Grant inspection/reasons and delegation remain R12c/R12d.
 
 v1: allowlist/denylist rules from config + `ask` fallback surfaced through the CLI. Rules can be
 `cwdOnly`: they match only calls whose declared `paths()` all resolve inside the session cwd, so

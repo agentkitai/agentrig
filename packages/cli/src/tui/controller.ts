@@ -10,6 +10,8 @@ import type {
   Skill,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
+import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
+  type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
@@ -36,8 +38,9 @@ export interface TuiLine {
 
 export interface PendingPermission {
   req: PermissionRequest;
+  scope?: { kind: ScopeKind; text: string; preview: boolean; error?: string };
   /** `remember` applies the answer to every later request for the same tool this session. */
-  resolve: (d: Exclude<Decision, "ask">, remember: boolean) => void;
+  resolve: (d: Exclude<Decision, "ask">, remember: boolean, scope?: { kind: ScopeKind; text: string }) => void;
 }
 
 export type SupervisorPromptOutcome = "answered" | "expired" | "closed";
@@ -337,8 +340,6 @@ export class TuiController {
       // Crossing the sandbox boundary is a separate grant. A standing tool answer must never
       // auto-approve it, and an escalation answer must never become permission for later calls.
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
-      if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
-      if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
       if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
       const revision = this.permissionGrants.revision;
       const standing = sandboxEscalation ? "ask" : this.permissionGrants.decide(req);
@@ -348,17 +349,21 @@ export class TuiController {
       }
       const entry: PendingPermission = {
         req,
-        resolve: (d, remember) => {
-          if (remember === true && !sandboxEscalation) {
+        resolve: (d, remember, scope) => {
+          if (scope !== undefined || (remember === true && !sandboxEscalation)) {
             try {
               if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");
-              this.permissionGrants.remember(req, d);
+              if (scope === undefined) this.permissionGrants.remember(req, d);
+              else {
+                if (d !== "allow") throw new Error("scoped approval must be an explicit allow");
+                this.permissionGrants.grant(proposedPermissionGrant(req, scope.kind, scope.text, this.permissionGrants));
+              }
             } catch (error) {
               this.print(`standing permission refused: ${String(error)}`, "error");
               resolve("deny"); this.advanceQueue(); return;
             }
             this.print(
-              `${d === "allow" ? "allowing" : "denying"} ${req.tool} for the rest of this session (/permissions to review)`,
+              `${d === "allow" ? "allowing" : "denying"} ${req.tool}${scope === undefined ? "" : " within confirmed scope"} for the rest of this session (/permissions to review)`,
               d === "allow" ? "system" : "error",
             );
           } else {
@@ -372,7 +377,10 @@ export class TuiController {
       // leaving its promise unsettled and the loop wedged with no diagnostic. Core runs tool
       // calls sequentially today, so that is latent rather than live — but parallel tool
       // execution is an obvious near-term change, and a queue costs nothing now.
-      if (this.state.pending === null) this.set({ pending: entry });
+      if (this.state.pending === null) {
+        this.showPermissionEffects(req);
+        this.set({ pending: entry });
+      }
       else {
         this.queue.push(entry);
         this.set({ queued: this.queue.length });
@@ -381,7 +389,14 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
+    if (next !== undefined) this.showPermissionEffects(next.req);
     this.set({ pending: next ?? null, queued: this.queue.length });
+  }
+
+  private showPermissionEffects(req: PermissionRequest): void {
+    if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
+    if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
+    for (const line of permissionEffectLines(req)) this.print(line, "system");
   }
 
   /**
@@ -390,7 +405,54 @@ export class TuiController {
    * for, and nobody would remember making it.
    */
   answerPermission(d: Exclude<Decision, "ask">, remember = false): void {
+    if (this.state.pending?.scope !== undefined) return;
     this.state.pending?.resolve(d, remember);
+  }
+
+  startPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending === null) return;
+    try {
+      const draft = initialPermissionScope(pending.req);
+      if (Buffer.byteLength(draft.text) > MAX_SCOPE_TEXT) throw new Error("initial scope exceeds 24 KiB");
+      this.set({ pending: { ...pending, scope: { ...draft, preview: false } } });
+    } catch (error) { this.print(`scoped approval unavailable: ${String(error).slice(0, 1000)}`, "error"); }
+  }
+
+  editPermissionScope(text: string): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    if (text.length > MAX_SCOPE_TEXT || Buffer.byteLength(text) > MAX_SCOPE_TEXT) {
+      this.set({ pending: { ...pending, scope: { ...pending.scope, preview: false, error: "scope exceeds 24 KiB; input refused" } } });
+      return;
+    }
+    this.set({ pending: { ...pending, scope: { kind: pending.scope.kind, text, preview: false } } });
+  }
+
+  previewPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    try {
+      const spec = proposedPermissionGrant(pending.req, pending.scope.kind, pending.scope.text, this.permissionGrants);
+      this.print(`Exact proposed future grant (NOT installed): ${JSON.stringify(spec)}`, "system");
+      this.print("Covers the current request. Path prefixes include descendants; argv prefixes permit trailing arguments. Cwd is exact. Session-only, shared with children; not OS containment or an effect guarantee. Confirm separately with y.", "system");
+      this.set({ pending: { ...pending, scope: { kind: pending.scope.kind, text: pending.scope.text, preview: true } } });
+    } catch (error) {
+      this.set({ pending: { ...pending, scope: { ...pending.scope, preview: false, error: `scope refused: ${String(error).slice(0, 1000)}` } } });
+    }
+  }
+
+  confirmPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope?.preview !== true) return;
+    pending.resolve("allow", false, pending.scope);
+  }
+
+  cancelPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending?.scope === undefined) return;
+    const { scope: _scope, ...plain } = pending;
+    this.set({ pending: plain });
   }
 
   /**
