@@ -234,6 +234,11 @@ delivery, pause/cancellation, orphan settlement and terminal resource release. L
 and current turn/cwd are supplied explicitly. These are internal components, not new SDK or plugin
 APIs; public exports and behavior stay unchanged. See [H6](plans/H6.md) for baseline trace checks.
 
+R10a adds trusted SDK `AgentConfig.turnStrategy` for scheduling those pipeline calls;
+exported `sequential` remains the default. The loop retains continuation/compaction/budget
+handling, never passes truncated calls to a strategy, and preserves existing abort boundaries.
+No arbitrary strategy loading or concurrency is enabled. See [R10a](plans/R10a.md).
+
 ### 2.7 Hooks
 
 ```ts

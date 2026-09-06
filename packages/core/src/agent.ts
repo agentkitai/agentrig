@@ -22,6 +22,7 @@ import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
 import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
 import { createSessionLifecycle, abortGraceOf } from "./session-lifecycle.js";
 import { executeTool, createToolEmitterFactory, PLAN_TOOL, type ReplanState } from "./tool-execution.js";
+import { sequential, type TurnStrategy } from "./turn-strategy.js";
 import {
   buildContextManifest,
   renderSystemBlocks,
@@ -81,6 +82,8 @@ export interface AgentConfig {
   hookInstructionDelegations?: readonly string[];
   provider: ModelProvider;
   tools: AnyTool[];
+  /** Trusted SDK scheduling seam; sequential by default. Never selected by model content. */
+  turnStrategy?: TurnStrategy;
   permissions: PermissionPolicy;
   /** Optional OS sandbox, applied after permission approval as an independent execution boundary. */
   sandbox?: SandboxConfig;
@@ -896,14 +899,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           break;
         }
 
-        const results: ContentBlock[] = [];
-        for (const tu of stop === "max_tokens" ? [] : toolUses) {
-          if (abortController.signal.aborted) {
-            reason = "aborted";
-            await emit({ type: "turn.end", n: turns });
-            break loop;
-          }
-          results.push(await runTool(tu));
+        // Truncated model calls never reach any strategy, including trusted custom strategies.
+        const { results, interrupted } = stop === "max_tokens" ? { results: [], interrupted: false }
+          : await (config.turnStrategy ?? sequential).execute(toolUses, { signal: abortController.signal, runTool });
+        if (interrupted) {
+          reason = "aborted";
+          await emit({ type: "turn.end", n: turns });
+          break loop;
         }
         if (results.length > 0) {
           const resultMessage: Message = { role: "user", content: results };
