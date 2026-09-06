@@ -58,6 +58,26 @@ it("actual ask-class tool exits nonzero, writes report, and cannot dispatch eith
   const report = await readFile(join(root, "report.md"), "utf8"); expect(report).toContain("Outcome: permission-refused"); expect(report).toContain("Unresolved asks: 1");
   for (const index of [0, 1]) await expect(readFile(join(root, `sentinel-${index}`))).rejects.toMatchObject({ code: "ENOENT" });
 }, 30_000);
+it.each(["fail", "first-option"])("actual CI question policy %s stops unavailable answers or unauthorized follow-up effects", async policy => {
+  const root = await fixture();
+  const question = { index: 0, id: "question", type: "function", function: { name: "ask_user", arguments: JSON.stringify({ prompt: "question-canary", options: ["answer-canary", "Other"] }) } };
+  const write = { index: 1, id: "write", type: "function", function: { name: "write_file", arguments: JSON.stringify({ path: "question-sentinel", content: "must not run" }) } };
+  const bash = { index: 0, id: "exec", type: "function", function: { name: "bash", arguments: JSON.stringify({ command: "echo should-not-execute" }) } };
+  const result = await actual(root, ["--task-file", "task.txt", "--report", "question.md", "--allow", "read", "--allow", "write", "--allow", "exec", ...(policy === "fail" ? [] : ["--answer-policy", policy])],
+    n => ({ tool_calls: n === 1 ? policy === "fail" ? [question, write] : [question] : [bash] }));
+  expect(result.code).toBe(1); expect(result.bodies).toHaveLength(policy === "fail" ? 1 : 2);
+  await expect(readFile(join(root, "question-sentinel"))).rejects.toMatchObject({ code: "ENOENT" });
+  const report = await readFile(join(root, "question.md"), "utf8");
+  expect(report).toContain(policy === "fail" ? "Questions: 1; answered: 0; unanswered: 1." : "Questions: 1; answered: 1; unanswered: 0.");
+  expect(report).toContain(policy === "fail" ? "Outcome: error" : "Outcome: permission-refused");
+  expect(report).not.toContain("question-canary"); expect(report).not.toContain("answer-canary");
+  const names = await readdir(join(root, "logs"));
+  const log = await readFile(join(root, "logs", names.find(name => name.endsWith(".jsonl"))!), "utf8");
+  const events = log.trim().split("\n").map(line => JSON.parse(line));
+  expect(events.find(event => event.type === "question.answered").outcome).toBe(policy === "fail" ? "unavailable" : "answered");
+  expect(events.some(event => event.type === "tool.result" && event.id === "exec")).toBe(false);
+  if (policy === "first-option") expect(events.find(event => event.type === "question.answered").reply.source).toBe("first-option");
+}, 30_000);
 it("actual event selector is literal and malformed/occupied/YOLO input does no provider work", async () => {
   const root = await fixture(); await writeFile(join(root, "event.json"), JSON.stringify({ issue: { body: "Event task" }, yolo: true, command: "do not execute", repository: "wrong/repo" }));
   expect(await readCiTask({ eventFile: join(root, "event.json"), eventField: "issue.body" })).toBe("Event task");

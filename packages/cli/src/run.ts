@@ -23,6 +23,7 @@ import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions, type AgentExtras } from "./agent-builder.js";
 import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
+import { questionPolicy } from "./question-policy.js";
 import {
   dreamOnSessionEnd,
   FileMemoryStore,
@@ -56,6 +57,7 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  answerPolicy?: string;
   /** Runtime config resolution provenance, not a project-config field. */
   ingestOnEndExplicit?: boolean;
   scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
@@ -420,7 +422,9 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   let maintenanceFailed = false;
   const scheduledUsage = dependencies.accounting ?? (opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true));
   try {
+    const onQuestion = await questionPolicy(opts.answerPolicy);
     built = await buildAgent(opts, {
+      onQuestion,
       ...(interactive ? { onAsk: askInteractively } : {}),
       ...(dependencies.onAsk === undefined ? {} : { onAsk: dependencies.onAsk }),
       onHookError: (m) => { maintenanceFailed = true; printError(m); },

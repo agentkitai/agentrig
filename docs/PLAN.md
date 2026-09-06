@@ -769,6 +769,13 @@ settings without claiming aggregate billing containment. Create-only Markdown
 reports and optional authorized, identity-checked PR comments never rewrite logs
 or automatically execute event code. See [CI mode](CI-MODE.md) and [R15f](plans/R15f.md).
 
+R15a adds the private-runtime `ask_user` builtin and protected question events.
+TUI and explicitly negotiated ACP clients answer through a bounded clarification
+queue, separate from permissions and supervisor steering. Headless defaults fail;
+explicit first-option/literal-file policies remain externally sourced automation.
+Answers never mint grants or clear external-input restrictions. See
+[questions](QUESTIONS.md) and [R15a](plans/R15a.md) for bounds and lifecycle controls.
+
 R8b adds `mcp-serve`: four bounded tools over official modern/legacy stdio MCP,
 reusing the controller and trusted launch configuration. Client tasks remain
 advisory; no execution consent is inferred. Read tools use configured stores and

@@ -55,6 +55,12 @@ connection; tool `net` permission does not itself authorize or price that connec
 
 ## Reports and comments
 
+Required `ask_user` clarifications use the ordinary headless `--answer-policy`:
+default `fail` ends the run nonzero and prevents subsequent queued effects.
+Explicit `first-option` or `file:<path>` answers remain automation, never fresh
+human permission. Reports retain only question/answered/unanswered counts, not
+question or answer prose. See [questions](QUESTIONS.md).
+
 `--report` is an explicit host output request, separate from model tool-write
 authority. It exclusively creates a file under a canonical existing parent; it
 never creates parent directories or overwrites an occupied/symlink target. The

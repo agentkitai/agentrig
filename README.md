@@ -60,6 +60,10 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
   repositories refuse rather than silently omitting coverage. Uses time/per-response
   limits; configured total-session token/USD caps explicitly refuse. See [R15e](docs/plans/R15e.md).
 
+The agent can ask [structured questions](docs/QUESTIONS.md) in the TUI or an opted-in
+ACP client. Headless runs fail unanswered questions unless an explicit literal
+`--answer-policy first-option|file:<path>` is selected; answers never grant tools permission.
+
 `agentrig acp` embeds the same controller in ACP v1 editors over stdio, retaining
 configured permissions and per-project trust. See the [ACP guide](docs/ACP.md)
 for the scripted client, existing-pin MCP requirements and transport limits.
