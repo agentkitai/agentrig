@@ -11,6 +11,11 @@ import {
   McpCatalog, McpResourceSpec, McpResourceTemplateSpec, McpPromptSpec, McpPromptArguments,
 } from "./protocol.js";
 
+/** Preserve the validated wire code without interpreting error prose. */
+class McpRpcResponseError extends Error {
+  constructor(readonly code: number, message: string) { super(message); }
+}
+
 /**
  * A stdio MCP client. One child process, newline-delimited JSON-RPC.
  *
@@ -135,8 +140,13 @@ export class McpClient {
     const list = async <T>(method: string, key: string, schema: z.ZodType<T>): Promise<T[]> => {
       const out: T[] = []; let cursor: string | undefined; const seen = new Set<string>();
       for (let page = 0; page < 20; page++) {
-        const raw = z.object({ [key]: z.array(schema), nextCursor: z.string().optional() }).parse(
-          await this.request(method, cursor === undefined ? {} : { cursor }, signal));
+        let result: unknown;
+        try { result = await this.request(method, cursor === undefined ? {} : { cursor }, signal); }
+        catch (error) {
+          if (page === 0 && method === "resources/templates/list" && error instanceof McpRpcResponseError && error.code === -32601) return [];
+          throw error;
+        }
+        const raw = z.object({ [key]: z.array(schema), nextCursor: z.string().optional() }).parse(result);
         out.push(...raw[key] as T[]);
         if (out.length > 256 || Buffer.byteLength(JSON.stringify(out)) > 1_048_576) throw new Error("MCP list exceeds bound");
         if (typeof raw.nextCursor !== "string") return out;
@@ -249,7 +259,7 @@ export class McpClient {
     clearTimeout(p.timer);
 
     if (parsed.data.error !== undefined) {
-      p.reject(new Error(`mcp ${this.config.name}: ${parsed.data.error.message}`));
+      p.reject(new McpRpcResponseError(parsed.data.error.code, `mcp ${this.config.name}: ${parsed.data.error.message}`));
       return;
     }
     p.resolve(parsed.data.result);

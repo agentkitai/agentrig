@@ -45,7 +45,7 @@ function fakeServer(handler: (req: { id: number; method: string; params: unknown
           stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: msg.id, result })}\n`);
         } catch (err) {
           stdout.write(
-            `${JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -1, message: (err as Error).message } })}\n`,
+            `${JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: (err as { code?: number }).code ?? -1, message: (err as Error).message } })}\n`,
           );
         }
       })();
@@ -65,6 +65,22 @@ const okHandler = (tools: unknown[]) => (req: { method: string; params: unknown 
 const SEARCH = { name: "search", description: "search things", inputSchema: { type: "object", properties: { q: { type: "string", description: "the query" } }, required: ["q"] } };
 
 describe("McpClient", () => {
+  it("retains stdio tools when only optional resource templates are unimplemented", async () => {
+    let code = -32601;
+    const { spawnFn } = fakeServer(req => {
+      if (req.method === "initialize") return { protocolVersion: "2024-11-05", capabilities: { resources: {} } };
+      if (req.method === "resources/list") return { resources: [{ name: "readme", uri: "fixture:readme" }] };
+      if (req.method === "resources/templates/list") throw Object.assign(new Error("optional refusal"), { code });
+      return okHandler([SEARCH])(req);
+    });
+    const client = new McpClient({ name: "fake", command: "x" }, { spawnFn });
+    try {
+      await client.start(); const catalog = await client.catalog();
+      expect(catalog.templates).toEqual([]); expect(catalog.tools).toHaveLength(1); expect(catalog.resources).toHaveLength(1);
+      expect((await client.callTool("search", {})).content).toEqual([{ type: "text", text: "called" }]);
+      code = -32603; await expect(client.catalog()).rejects.toThrow("optional refusal");
+    } finally { await client.close(); }
+  });
   it("handshakes, lists tools, and calls one", async () => {
     const { spawnFn } = fakeServer(okHandler([SEARCH]));
     const client = new McpClient({ name: "fake", command: "x" }, { spawnFn });

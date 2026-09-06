@@ -1,4 +1,4 @@
-import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { Client, ProtocolError, ProtocolErrorCode, SdkHttpError, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { z } from "zod";
 import { McpCatalog, McpPromptArguments, McpPromptSpec, McpResourceSpec, McpResourceTemplateSpec,
   McpToolSpec, RemoteMcpToolSpec, ToolsCallResult, type McpConnection } from "./protocol.js";
@@ -50,7 +50,12 @@ export class RemoteMcpClient implements McpConnection {
       // transport wakes that probe immediately when the caller cancels before negotiation.
       const abort = (): void => { void this.transport.close().catch(() => {}); };
       signal.addEventListener("abort", abort, { once: true });
-      try { signal.throwIfAborted(); await this.client.connect(this.transport, { signal, timeout: 30_000 }); signal.throwIfAborted(); }
+      try {
+        signal.throwIfAborted();
+        // Consent precedes credential access, and a refused/stale record costs only this server.
+        await this.opts.oauth?.load();
+        signal.throwIfAborted(); await this.client.connect(this.transport, { signal, timeout: 30_000 }); signal.throwIfAborted();
+      }
       finally { signal.removeEventListener("abort", abort); }
     }, this.opts.signal);
   }
@@ -68,7 +73,13 @@ export class RemoteMcpClient implements McpConnection {
     const out: T[] = []; const cursors = new Set<string>(); let cursor: string | undefined;
     for (let page = 0; page < 20; page++) {
       // Raw public request avoids SDK auto-pagination/cache. Every page is validated here.
-      const raw: unknown = await this.client.request({ method, params: cursor === undefined ? {} : { cursor } }, { signal, timeout: 30_000 });
+      let raw: unknown;
+      try { raw = await this.client.request({ method, params: cursor === undefined ? {} : { cursor } }, { signal, timeout: 30_000 }); }
+      catch (error) {
+        // Only an absent optional endpoint, never a partial list or a generic HTTP failure.
+        if (page === 0 && method === "resources/templates/list" && optionalMethodAbsent(error)) return [];
+        throw error;
+      }
       const parsed = z.object({ [key]: z.array(schema), nextCursor: z.string().max(4096).optional() }).parse(raw);
       out.push(...parsed[key] as T[]);
       if (out.length > 256 || Buffer.byteLength(JSON.stringify(out)) > 1_048_576) throw new Error("MCP list exceeds bound");
@@ -119,6 +130,19 @@ export class RemoteMcpClient implements McpConnection {
       if (this.transport.sessionId) await this.http.operation(() => this.transport.terminateSession(), undefined, 2000).catch(() => {});
     } finally { await this.client.close().catch(() => {}); await this.http.close(); }
   }
+}
+
+/** SDK 2.0 surfaces modern HTTP 404 as SdkHttpError, retaining the bounded body in data.text.
+ * This narrow compatibility policy accepts only a JSON-RPC -32601, not arbitrary 404/prose.
+ */
+function optionalMethodAbsent(error: unknown): boolean {
+  if (error instanceof ProtocolError) return error.code === ProtocolErrorCode.MethodNotFound;
+  if (!(error instanceof SdkHttpError) || error.status !== 404 || typeof error.data.text !== "string") return false;
+  try {
+    return z.object({ jsonrpc: z.literal("2.0"), id: z.union([z.string(), z.number()]),
+      error: z.object({ code: z.literal(-32601), message: z.string(), data: z.unknown().optional() }),
+    }).strict().safeParse(JSON.parse(error.data.text)).success;
+  } catch { return false; }
 }
 
 /** Small schema admission check for SEP-2243; actual header encoding/mirroring is SDK-owned.

@@ -508,7 +508,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     for (const c of configs) {
       if (!("url" in c)) { servers.push(new McpClient(c, { onError: e => extras.onHookError?.(`mcp: ${e.message}`) })); continue; }
       const oauth = c.oauth ? new McpOAuthProvider(c, new McpCredentialStore(extras.mcpCredentialRoot ?? join(homedir(), ".agentrig", "mcp-auth"), new URL(c.url).href)) : undefined;
-      await oauth?.load();
       servers.push(new RemoteMcpClient(c, {
         ...(extras.signal ? { signal: extras.signal } : {}), ...(oauth ? { oauth } : {}),
         authorizeStart: async () => {
