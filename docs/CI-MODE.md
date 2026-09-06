@@ -63,7 +63,8 @@ failure report; an uncatchable kill, crash or I/O failure may leave an empty/par
 reservation. Such a file is **not success**; inspect exit status and the report.
 
 Reports are at most 64 KiB: fixed outcome/usage/limit/refusal fields plus at most
-16 KiB of the latest assistant turn, shown as inert text. Omitted content and
+16 KiB captured from the latest assistant turn, with a separate 32 KiB rendered
+cap after redaction/escaping, shown as inert text. Omitted content and
 partial/unknown accounting are explicit. Raw task/tool/error payloads are not
 copied, and append-only session logs are never scrubbed or rewritten. Report-only
 heuristic redaction can miss arbitrary secrets; review before wider publication.

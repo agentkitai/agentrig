@@ -49,8 +49,11 @@ auxiliary/child/remote billing is not claimed bounded by these ceilings.
 Create-only Markdown and explicit authorized/pinned PR comments share R15e's helper.
 [Contract](plans/R15f.md), [operator guide and uninstalled Actions example](CI-MODE.md).
 Initial build/typecheck/full passes 2,790 plus two skips /166 files with actual
-Linux containers. Three negative mutations were detected/restored; final integrated
-checks and one bounded independent review remain. No live model/comment spending.
+Linux containers. Three negative mutations were detected/restored. The single
+independent review approved with no material findings; requested 24 turns, reported
+35 (not within the requested cap), no restart. It independently passed 66 focused
+tests and full 2,805 plus two skips /169 files with actual containers (52.20s).
+Exact-head PR and post-main gates remain. No live model/comment spending.
 Integrated green R8b main: frozen install/build/typecheck pass and unchanged-source
 full suite passes 2,805 plus two skips /169 files (55.07s, actual Linux containers).
 A mistyped local checker-image digest caused two prior infrastructure controls to

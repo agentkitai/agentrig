@@ -1246,3 +1246,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   R8b, not deferred; the incomplete independent review remains explicitly recorded.
 - R15e polish: distinguish safe fixed refusal categories for malformed flags and policy
   denials without echoing raw Git, provider, path or credential-bearing error content.
+- R15f polish: preserve readable newlines inside the inert report fence, avoid splitting
+  a multibyte character at the capture boundary, and remove the redundant symlink
+  check on an already canonical parent. Existing byte caps and create-only behavior
+  remain required; these cosmetic refinements do not weaken the fail-closed contract.
