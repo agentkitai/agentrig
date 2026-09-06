@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ProviderConformance } from "@agentkitai/agentrig-core";
 import { diagnose, type DoctorOptions } from "../src/doctor.ts";
-import { buildProvider } from "../src/provider.ts";
+import { buildProvider, resolveProviderEntries } from "../src/provider.ts";
 import { providerProbeCachePath, providerProbeFingerprint, readProviderProbe, writeProviderProbe } from "../src/provider-probe-cache.ts";
 import { buildProgram } from "../src/program.ts";
 
@@ -80,4 +80,42 @@ it("ChatGPT fingerprint follows file-first valid-token fallback without refresh 
   const seeded = providerProbeFingerprint(entry, env); expect(seeded).toMatch(/^[a-f0-9]{64}$/);
   await writeFile(path, "bad"); expect(providerProbeFingerprint(entry, env)).toBe(seeded);
   await writeFile(path, JSON.stringify({ accessToken: "file", refreshToken: "file-refresh" })); expect(providerProbeFingerprint(entry, env)).not.toBe(seeded);
+});
+it("probe construction errors are secret-safe and never create cache; invalid config refuses construction", async () => {
+  const f = await fixture(); const factory = vi.fn(() => { throw Error("SECRET endpoint?token=SECRET"); });
+  const result = await diagnose({ ...f.opts, cli: { provider: "openai", model: "fixture", baseUrl: "http://127.0.0.1:1", probe: true }, probeFactory: factory });
+  expect(factory).toHaveBeenCalledTimes(1); expect(result.exitCode).toBe(1); expect(result.lines.join("\n")).not.toContain("SECRET");
+  await expect(readFile(providerProbeCachePath(f.home))).rejects.toMatchObject({ code: "ENOENT" });
+  factory.mockClear(); await diagnose({ ...f.opts, cli: { provider: "openai", model: "fixture", baseUrl: "http://127.0.0.1:1", profile: "absent", probe: true }, probeFactory: factory });
+  expect(factory).not.toHaveBeenCalled();
+});
+it("probe adapter transient retries are disabled: local 500 is one transport per outer sample", async () => {
+  const f = await fixture(); let requests = 0; let probePhase = false;
+  const server = createServer((_req, res) => { requests++;
+    if (probePhase || requests === 1) { res.statusCode = 500; res.end("SECRET upstream body"); }
+    else { res.setHeader("content-type", "text/event-stream"); res.end('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'); }
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening"); cleanup.push(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  const address = server.address(); if (address === null || typeof address === "string") throw Error("no listener");
+  const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  const ordinary = buildProvider({ provider: "openai", model: "fixture", modelExplicit: true, baseUrl }, { env: {}, conformanceCachePath: providerProbeCachePath(f.home) });
+  for await (const _event of ordinary.stream({ system: "fixture", messages: [{ role: "user", content: [{ type: "text", text: "fixture" }] }], tools: [], maxTokens: 10 }, new AbortController().signal)) { /* ordinary retry remains enabled */ }
+  expect(requests).toBe(2); requests = 0; probePhase = true;
+  const result = await diagnose({ ...f.opts, cli: { provider: "openai", model: "fixture", baseUrl, probe: true } });
+  expect(requests).toBe(4); expect(result.lines.join("\n")).toContain("tools=unknown"); expect(result.lines.join("\n")).toContain("complete=false"); expect(result.lines.join("\n")).not.toContain("SECRET");
+});
+it("only the resolved main entry is probed and credential changes during the sample prevent caching", async () => {
+  const f = await fixture(); await mkdir(join(f.home, ".agentrig"), { recursive: true });
+  await writeFile(join(f.home, ".agentrig", "config.json"), JSON.stringify({ providers: {
+    chosen: { provider: "openai", model: "chosen-model", baseUrl: "http://127.0.0.1:1/v1" },
+    unused: { provider: "anthropic", model: "unused-model" },
+  }, roles: { main: "chosen" } }));
+  const env = { OPENAI_API_KEY: "before", ANTHROPIC_API_KEY: "other-role" }; let builds = 0;
+  const result = await diagnose({ ...f.opts, env, cli: { probe: true }, probeFactory: opts => {
+    builds++; const resolved = resolveProviderEntries(opts); expect(resolved.roleNames.main).toBe("chosen");
+    return { id: "fake", model: "chosen-model", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 10000 },
+      async *stream() { env.OPENAI_API_KEY = "after"; yield { type: "text_delta", text: "wrong" }; yield { type: "stop", reason: "end_turn" }; } };
+  } });
+  expect(builds).toBe(1); expect(result.lines.join("\n")).toContain("credential identity unavailable or changed");
+  await expect(readFile(providerProbeCachePath(f.home))).rejects.toMatchObject({ code: "ENOENT" });
 });

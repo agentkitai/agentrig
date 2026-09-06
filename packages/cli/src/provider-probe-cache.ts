@@ -13,8 +13,8 @@ const Entry = z.object({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/), report
 const Cache = z.object({ version: z.literal(1), entries: z.array(Entry).max(64) }).strict();
 export const providerProbeCachePath = (home = homedir()) => join(home, ".agentrig", "provider-probes.json");
 
-function readBounded(path: string, max = MAX_BYTES): string {
-  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+function readBounded(path: string, max = MAX_BYTES, followLinks = false): string {
+  const fd = openSync(path, constants.O_RDONLY | (followLinks ? 0 : constants.O_NOFOLLOW ?? 0));
   try {
     const stat = fstatSync(fd); if (!stat.isFile() || stat.size > max) throw Error("cache bounds");
     const bytes = Buffer.alloc(max + 1); let used = 0;
@@ -49,7 +49,12 @@ export function providerProbeFingerprint(entry: ProviderEntry, env = process.env
   else {
     // Read only: do not construct auth or refresh a token for a cache lookup.
     let tokens;
-    try { tokens = tokensFromEnvValue(readBounded(env.AGENTRIG_OPENAI_CHATGPT_AUTH ?? join(homedir(), ".agentrig", "openai-chatgpt-auth.json"), 65_536)); } catch { /* env fallback matches auth store */ }
+    try { tokens = tokensFromEnvValue(readBounded(env.AGENTRIG_OPENAI_CHATGPT_AUTH ?? join(homedir(), ".agentrig", "openai-chatgpt-auth.json"), 65_536, true)); }
+    catch (error) {
+      // Our bounded read may refuse a file the auth store would accept. Never misidentify its
+      // active credentials as the env seed in that case. Ordinary read errors match auth fallback.
+      if (error instanceof Error && error.message === "cache bounds") return undefined;
+    }
     tokens ??= tokensFromEnvValue(env.AGENTRIG_OPENAI_CHATGPT_TOKEN ?? "");
     if (tokens === null || tokens === undefined) return undefined;
     credential = JSON.stringify(tokens);

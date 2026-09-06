@@ -58,3 +58,14 @@ it("oversized tool/text output remains unknown rather than successful conformanc
   const f = fixture(); f.provider.stream = async function* () { yield { type: "text_delta", text: "x".repeat(16_385) }; yield { type: "stop", reason: "end_turn" }; };
   const report = await probeProvider(f.provider); expect(report.promptedSchema).toBe("unknown"); expect(report.usageComplete).toBe(false);
 });
+it("synthesized usage does not masquerade as reported cost and retry usage remains incomplete", async () => {
+  for (const synthesized of [true, false]) {
+    const f = fixture(); f.provider.stream = async function* () {
+      if (!synthesized) yield { type: "retry", attempt: 1, maxAttempts: 2, delayMs: 0, reason: "fixture" };
+      yield { type: "usage", usage: { input: 99, output: 99, cacheRead: 99 }, reported: !synthesized };
+      yield { type: "text_delta", text: "wrong" }; yield { type: "stop", reason: "end_turn" };
+    };
+    const report = await probeProvider(f.provider); expect(report.usageComplete).toBe(false);
+    expect(report.usage.input).toBe(synthesized ? 0 : 396); expect(report.caching).toBe(synthesized ? "unknown" : "observed");
+  }
+});
