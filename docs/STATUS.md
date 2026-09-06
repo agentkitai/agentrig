@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **H7b sandbox-denial evidence repair is implemented, pending delivery gates; R14a is merged (PR #162), pending post-merge CI; H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **H7b sandbox-denial evidence repair is implemented, pending delivery gates; R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -26,9 +26,20 @@ and failed their named controls; both were restored. Full checks and one bounded
 review precede final exact-head PR CI. No extra milestone or live model evaluation spend.
 
 Updated-main build/typecheck and the full suite pass: 2,355 tests plus two skips across
-128 files with four workers (33 seconds). Independent review is pending.
+128 files with four workers (33 seconds). One bounded independent Claude review approved
+`0decbae` against `fc8327e`, with no material production findings: session
+`d4eb4783-9639-4a7f-ba42-1468541d1876`, 143 seconds, 22 reported turns under requested max24,
+no restart. It independently ran build/typecheck/full 2,355 + two skips across 128 files.
+Four stale documentation/comment notes were reconciled without runtime changes; verbatim
+findings are in the [contract receipt](plans/H7b.md). Integrated R12d main `2df8c25`, preserving
+child views/context and all documentation/CI additions; no second general review.
+Combined build/typecheck and all 2,372 tests plus two skips across 131 files pass
+(four workers, 31 seconds). R12d exact post-merge CI 34029019887 is green on all platforms.
 
-### R12d implemented — pending delivery gates
+### R12d done — PR #163; post-merge CI green
+
+Merged main `2df8c25` passed exact post-merge CI 34029019887 on all three platforms.
+The following gate notes are implementation history.
 
 Live child views share bounded records/audit/counters but match only own or delegable ancestor
 grants. Root/sibling authorization never consumes child-owned records. Views and runtime context
@@ -67,7 +78,9 @@ rendering and both CI selections. Build/typecheck/full combined checks pass 2,35
 two skips across 130 files (four workers, 31 seconds). R14a post-merge and this updated exact-head
 CI remain merge gates; no additional general review for mechanical integration.
 
-### R14a merged — PR #162; post-merge CI pending
+### R14a done — PR #162; post-merge CI green
+
+Merged main `fc8327e` passed exact post-merge CI 34028652558 on all three platforms.
 
 Merge `fc8327e` follows green exact-head CI. The gate notes below are implementation history.
 

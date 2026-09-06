@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; H7b is implemented with delivery gates pending; R14a is merged (PR #162), pending post-merge CI; H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is implemented with closing delivery gates; R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; H7b is implemented with delivery gates pending; R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -17,12 +17,12 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
 | Complete | R12b: semantic scoped approval UI (PR #155) | Exact-head and post-merge CI passed |
 | Complete | R12c: live grant inspection (PR #158) | Exact-head and post-merge CI passed |
-| Implemented; closing gates | R12d: child grant views | Live delegable ancestry, task seals, per-subject TUI approvals and root/sibling isolation |
+| Done — PR #163 | R12d: child grant views | Live delegable ancestry, task seals, per-subject TUI approvals and root/sibling isolation |
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
 | Merged; post-merge CI pending | R14a: acceptance declarations (PR #162) | Observable declarations remain unverified, not proof |
-| Committed | R5b/R5c, R7–R11, R12d and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
+| Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
 
@@ -457,12 +457,12 @@ escalate-retry is a prompt-fatigue machine).
 Renunciation, recorded now: **no Landlock in R2.** Landlock needs a native addon or a helper
 binary; `docker` covers Linux correctness first. Landlock is R2-follow-up if dogfooding demands.
 
-Future investigation, recorded but not scheduled: **kernel-observed denials** (#95). Both
-providers still learn that the boundary refused a write by reading the child's stderr, which
-the child controls; #107 corroborates such a line against the policy, so a line naming only
-paths inside a writable workspace is dropped, but a forged line naming an outside path still
-classifies, because for that path the boundary really would refuse. The fix is a signal the
-provider observes rather than one the child prints. Two candidates, to be prototyped before
+Future investigation, recorded but not scheduled: **kernel-observed denials**. H7b (#95)
+removes the former stderr-based classification from both providers. #107's path-plausibility
+checks could not authenticate a child's claim; even genuine but unobserved process refusals
+now remain ordinary failed outcomes, with no inferred denial/escalation. Legacy helpers are
+diagnostic compatibility only. A future signal must be independently observed rather than
+printed by the child. The following historical candidates require validation before
 either becomes a row: (1) **macOS, cheap** — seatbelt writes every violation to the unified
 log as `Sandbox: proc(pid) deny(1) file-write-* /path`, which the child cannot write to;
 the provider would run `log stream` filtered by the child's pid for the duration of the
@@ -472,8 +472,8 @@ container's cgroup, reporting `{pid, syscall, path, errno}` for EROFS/EACCES/EPE
 CAP_BPF + CAP_PERFMON or root on the host, a privileged sidecar in the VM under Docker
 Desktop, and a CO-RE build step or a `bpftrace` shell-out, since Node has no mature libbpf
 binding. The payoff is larger than #95: the same probe is a ground-truth feed of file writes,
-network connects and execs for the supervisor's detectors. Whichever lands, stderr becomes at
-most a hint and the corroboration walk from #107 can go. Not a renunciation — a cost the
+network connects and execs for the supervisor's detectors. Any future design must establish
+its observation and attribution guarantees; stderr already confers no authority. Not a renunciation — a cost the
 sandbox story has not yet earned.
 
 ### R3 — Session trees: fork, search, replay
@@ -688,7 +688,7 @@ exactly this granularity.*
 | R12a *(done, [PR #152](https://github.com/agentkitai/agentrig/pull/152))* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
 | R12b *(done, [PR #155](https://github.com/agentkitai/agentrig/pull/155))* | Prompt distinguishes declared paths/class/argv from unknown effects and network access. `s` edits bounded path/argv scope; exact future scope is previewed and explicitly confirmed only if it covers the current request. Both input paths preserve existing answers and separate sandbox/MCP consent. See [contract](plans/R12b.md). | cli + core matcher |
 | R12c *(done, [PR #158](https://github.com/agentkitai/agentrig/pull/158))* | `/permissions` shows exact live grants, age and matched-decision counts; exact-ID revocation applies to the next decision. Same-call optional policy receipts and correlated events name the actual rule/grant/handler or honest unknown, without re-evaluation or counting previews. See [contract](plans/R12c.md). | core + cli |
-| R12d *(implemented; closing delivery gates)* | Live per-subject child views inherit only delegable ancestor grants, share audit/counters and expire at root task end. Runtime-bound descendants and TUI ask/preview/install preserve view scope; child approvals never authorize root or siblings. Explicit shared base policy remains separate. See [contract](plans/R12d.md). | core + cli |
+| R12d *(done, [PR #163](https://github.com/agentkitai/agentrig/pull/163))* | Live per-subject child views inherit only delegable ancestor grants, share audit/counters and expire at root task end. Runtime-bound descendants and TUI ask/preview/install preserve view scope; child approvals never authorize root or siblings. Explicit shared base policy remains separate. See [contract](plans/R12d.md). | core + cli |
 | R12e *(done, [PR #148](https://github.com/agentkitai/agentrig/pull/148))* | Semantic authorization never derives from names, transcript prose or server read-only hints. Explicit `--allow-command` / config argv prefixes bind to trusted post-hook parsed foreground operations; unsupported syntax cannot satisfy a narrow rule and defaults to ask without separate explicit blanket authority. Denies retain precedence; R5d consent and sandbox containment remain independent. See [contract and limits](plans/R12e.md). Grant records/UI/lifecycle remain R12a–R12d. | core, cli |
 
 Acceptance: a `git *` grant (conceptual shorthand for argv prefix `["git"]`, never a string glob)
@@ -735,7 +735,7 @@ the rows below extend the product interface in the committed dependency order.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R14a *(implemented; closing delivery gates)* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
+| R14a *(done, [PR #162](https://github.com/agentkitai/agentrig/pull/162))* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
 | R14b | Evidence collection: tool results that match a plan item's check (test runs, command exits, diffs) are tagged to it in supervisor state — the attempts ledger grows an evidence side | supervisor |
 | R14c | The M6 grader gains a claims-vs-evidence rubric row: a session ending with unfulfilled `accept` fields grades lower and says which; `sessions show --evidence <id>` prints the claim→evidence table for a finished run | supervisor + cli |
 | R14d | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
@@ -757,7 +757,7 @@ order under its existing rule.
 | Row | Deliverable | Package |
 |---|---|---|
 | H7a *(done, [PR #161](https://github.com/agentkitai/agentrig/pull/161))* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
-| H7b *(implemented; delivery gates pending)* | [Process-output evidence boundary](plans/H7b.md). Issue #95: a forged or host-caused "read-only file system" line under `workspace-write` does not classify as a sandbox denial unless the policy corroborates it (kernel-observed denial where the provider exposes one; otherwise the line is inert) | core |
+| H7b *(implemented; delivery gates pending)* | [Process-output evidence boundary](plans/H7b.md). Issue #95: process stdout/stderr, exit status and path plausibility confer no denial authority across foreground, background and file-helper paths. Docker/Seatbelt expose no independent process-denial observation, so these failures stay ordinary; trusted broker/policy/launcher refusals retain explicit escalation | core |
 
 Acceptance: a fake-provider session that truncates twice finishes the task with two
 `turn.continued` events; the forged-line fixture produces no escalation and no denial event.

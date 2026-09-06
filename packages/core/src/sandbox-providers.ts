@@ -91,9 +91,8 @@ export function sandboxSpawnInvocation(
 export function throwIfSandboxDenied(_stderr: string): void {}
 
 /**
- * First line of `stderr` matching any of `patterns` and not `unless`, for a bounded,
- * provenance-labelled reason. `unless` lets a provider drop a denial its policy could not have
- * produced (a network denial under a network grant; a write denial inside a writable workspace).
+ * Legacy diagnostic line matching only; never called by runtime tools or denial handling.
+ * `unless` filters implausible claims but does not authenticate any remaining line.
  */
 type LinePattern = RegExp | ((line: string) => boolean);
 

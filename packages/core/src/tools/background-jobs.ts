@@ -45,16 +45,15 @@ interface JobRecord {
   unread: string;
   /**
    * The last RETAINED_TAIL_CHARS of everything the job ever wrote, independent of draining.
-   * `read()` hands each poll only what is new, so a sandbox denial printed early and drained by
-   * an intermediate poll was gone by the time the exit could be classified.
+   * Retained for legacy diagnostics after `read()` drains new output; never denial evidence.
    */
   tail: string;
   /**
-   * The first RETAINED_HEAD_CHARS the job wrote. A denial is usually the failing command's first
-   * complaint; a long build log after it would push it out of the tail alone.
+   * The first RETAINED_HEAD_CHARS the job wrote, retained for legacy diagnostics when a long
+   * build log would push initial output out of the tail alone. No runtime denial authority.
    */
   head: string;
-  /** A denial is surfaced once; later polls of the same exited job report plainly. */
+  /** Legacy diagnostic compatibility marker; runtime polling does not use it. */
   denialReported: boolean;
   droppedBytes: number;
   exited: boolean;

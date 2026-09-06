@@ -41,3 +41,22 @@ failed exits, including large-output and intermediate-drain cases. Named runtime
 mutations must be detected and restored. Full build/typecheck/tests, one bounded independent
 Claude review with material findings addressed, updated-main PR and exact-head three-platform
 CI gate delivery. No live model evaluation, new milestone nesting or runtime observer framework.
+
+## Independent review receipt
+
+Single Claude review `d4eb4783-9639-4a7f-ba42-1468541d1876`: APPROVE at `0decbae` versus
+main `fc8327e`; no material production findings. Requested max24, reported 22 turns,
+143 seconds, no restart/subagents. Independent build/typecheck passed and the full suite
+passed 2,355 tests plus two skips across 128 files (31.5 seconds). Optional findings, verbatim:
+
+> `docs/ROADMAP.md:459-463` still says both providers learn of refusals by reading the child's stderr and that a forged outside-path line "still classifies". That paragraph now contradicts H7b and should say classification was removed pending a provider-observed signal.
+
+> `docs/ROADMAP.md:759` row text says the line is inert "unless the policy corroborates it". The implementation never corroborates; it is always inert. Suggest matching the plan wording.
+
+> `packages/core/src/tools/background-jobs.ts:53-55` still justifies head retention as "a denial is usually the failing command's first complaint". The retention is still useful for diagnostics, but the rationale is stale.
+
+> `packages/core/src/sandbox-providers.ts:93-97` docstring for `firstDenialLine` still describes producing a "provenance-labelled reason". Harmless dead-path prose.
+
+All four stale wording notes were reconciled in documentation/comments only; no post-review
+runtime expansion and no second general review. The existing END-of-roadmap Windows fixture
+timing follow-up remains separate from this repair.
