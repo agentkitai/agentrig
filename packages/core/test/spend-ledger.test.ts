@@ -1,6 +1,7 @@
 import { mkdtemp, realpath, rm, readFile, writeFile, unlink, mkdir, symlink } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -155,10 +156,10 @@ it("two actual processes cannot both reserve the last allowance", async () => {
   const script = `import { SpendLedger } from ${JSON.stringify(new URL("../dist/index.js", import.meta.url).href)};
     try { await new SpendLedger(process.argv[1]).admit({segment:process.argv[2],provider:'fixture',model:'fixture',reserve:20,
       rates:{inputUsdPerMTok:1,outputUsdPerMTok:1,cacheReadUsdPerMTok:1,cacheWriteUsdPerMTok:1}},20);console.log('admitted'); }
-    catch { console.log('refused'); }`;
+    catch (error) { console.log('refused:'+error.reason); }`;
   const results = await Promise.all(["a", "b"].map(id => promisify(execFile)(process.execPath, ["--input-type=module", "-e", script, cwd, id],
     { timeout: 10_000, maxBuffer: 4096 })));
-  expect(results.map(r => r.stdout.trim()).sort()).toEqual(["admitted", "refused"]);
+  expect(results.map(r => r.stdout.trim()).sort()).toEqual(["admitted", "refused:uncertain"]);
   expect((await new SpendLedger(cwd).records()).filter(r => r.type === "admit")).toHaveLength(1);
 }, 15_000);
 
@@ -226,4 +227,62 @@ it.each([false, true])("malformed ledger preserves ordinary uncapped execution, 
   expect(events.some(e => e.type === "error" && e.message.includes("accounting") && !e.message.includes("PRIVATE"))).toBe(true);
   expect(JSON.stringify(events)).not.toContain("PRIVATE TORN DATA");
   expect(await readFile(path, "utf8")).toBe("PRIVATE TORN DATA");
+});
+
+it("a benign lock released within the deadline does not permanently strand a settled call", async () => {
+  const cwd = await root(); const ledger = new SpendLedger(cwd);
+  let release: Promise<void> = Promise.resolve();
+  const provider = meterProvider({ ...fixture(complete), async *stream() {
+    await writeFile(join(cwd, ".agentrig/usage.lock"), "cooperating-writer", { flag: "wx" });
+    release = new Promise<void>(resolve => setTimeout(() => { void unlink(join(cwd, ".agentrig/usage.lock")).then(resolve); }, 100));
+    yield* complete;
+  } }, ledger, { segment: "benign-collision", pricing, boundedProvider: true, capMicros: 100 });
+  try { await consume(provider); } finally { await release; }
+  expect(await ledger.report("2000-01-01")).toMatchObject({ completeCalls: 1, unresolvedCalls: 0 });
+  await expect(ledger.check(100)).resolves.toBeUndefined();
+});
+
+it("admission cancellation during cooperative lock waiting never dispatches or removes another owner's lock", async () => {
+  const cwd = await root(); await mkdir(join(cwd, ".agentrig")); const lock = join(cwd, ".agentrig/usage.lock");
+  await writeFile(lock, "cooperating-owner"); const ledger = new SpendLedger(cwd); const calls: string[] = [];
+  const provider = meterProvider(fixture(complete, calls), ledger, { segment: "cancel-wait", pricing, boundedProvider: true, capMicros: 100 });
+  const abort = new AbortController(); const timer = setTimeout(() => abort.abort(new Error("cancel while waiting")), 50);
+  try {
+    await expect((async () => { for await (const _ of provider.stream(request, abort.signal)) { /* consume */ } })()).rejects.toThrow("cancel while waiting");
+  } finally { clearTimeout(timer); }
+  expect(calls).toEqual([]); expect(await readFile(lock, "utf8")).toBe("cooperating-owner"); expect(await ledger.records()).toEqual([]);
+});
+
+it("a still-live prior-day reservation cannot create a midnight bypass", async () => {
+  let now = Date.parse("2026-09-07T23:59:59Z"); const ledger = new SpendLedger(await root(), () => now);
+  const call = await ledger.admit({ segment: "held", provider: "fixture", model: "fixture", reserve: 20,
+    rates: { ...pricing, cacheReadUsdPerMTok: 1, cacheWriteUsdPerMTok: 1 } }, 100);
+  now += 2000;
+  await expect(ledger.check(100)).rejects.toThrow("uncertain");
+  await ledger.settle(call, { input: 10, output: 10 }, true);
+  await expect(ledger.check(100)).resolves.toBeUndefined();
+});
+
+it("an unmetered nested SDK agent cannot relabel its metered parent's next call", async () => {
+  const cwd = await root(); const ledger = new SpendLedger(cwd); const store = new SessionStore({ root: join(cwd, "logs") });
+  const child = createAgent({ provider: fixture(complete), store, tools: [], permissions: new RulePolicy([]), systemPrompt: "" });
+  let nestedId = "", first = true;
+  const raw: ModelProvider = { ...fixture(complete), async *stream() {
+    if (first) {
+      first = false; const session = child.run("nested", { cwd }); nestedId = session.id; await session.done;
+      yield { type: "tool_use", id: "noop", name: "noop", input: {} } as ModelEvent;
+      yield { type: "usage", usage: { input: 10, output: 10 } } as ModelEvent;
+      yield { type: "stop", reason: "tool_use" } as ModelEvent; return;
+    }
+    yield* complete;
+  } };
+  const provider = meterProvider(raw, ledger, { segment: "auxiliary", pricing });
+  const parent = createAgent({ provider, store, tools: [{ name: "noop", description: "fixture", permission: "read", effects: "read-only", inputSchema: z.object({}),
+    async execute() { return { output: "ok", display: "ok" }; } }], permissions: new RulePolicy([{ class: "read", decision: "allow" }]),
+    systemPrompt: "", spend: { ledger }, maxTokensPerTurn: 10, budget: { maxTurns: 2 }, compaction: { shouldCompact: () => false, async compact(messages) { return messages; } } });
+  const session = parent.run("parent", { cwd }); await session.done;
+  const records = await ledger.records();
+  expect(records.find(r => r.type === "end" && r.session === session.id)?.segment).toBe(records.find(r => r.type === "admit")?.segment);
+  const calls = records.filter(r => r.type === "admit"); expect(calls).toHaveLength(2);
+  expect(calls.every(r => r.session === session.id && r.session !== nestedId)).toBe(true);
 });

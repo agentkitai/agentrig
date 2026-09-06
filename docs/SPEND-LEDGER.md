@@ -61,13 +61,17 @@ artifact requirements.
 
 Cooperating writers serialize append/check operations with `usage.lock`; model
 requests run outside the lock. One ledger instance permits up to 32 live calls
-with at most 64 queued bookkeeping operations. An outstanding reservation owned by
+with at most 64 queued bookkeeping operations. Lock contention retries every 20 ms
+under a two-second overall waiting deadline. Admission observes caller cancellation;
+settlement gets its own bounded cleanup attempt even after a call was aborted.
+It never steals another owner's lock. An outstanding reservation owned by
 another process conservatively blocks capped admission even if that process is
 alive and allowance remains. This is not a general parallel-throughput guarantee.
 
 Each call belongs to its admission UTC day. Missing final usage, interruption,
 retry uncertainty, a crash or failed settlement cannot become zero spend. Unresolved
 reservations and unmetered coverage gaps block later capped execution across midnight.
+A still-live prior-day reservation blocks new-day admission until it settles too.
 An actual cost above the configured reservation also blocks further capped calls.
 There is no automatic expiry, lock stealing, model replay or ledger pruning.
 

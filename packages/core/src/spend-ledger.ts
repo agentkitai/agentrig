@@ -102,6 +102,9 @@ export class SpendLedger {
   }
 
   async records(): Promise<SpendRecord[]> {
+    try { return await this.readRecords(false); } catch { throw new SpendCapError("unavailable"); }
+  }
+  private async readRecords(track: boolean): Promise<SpendRecord[]> {
     const { log } = await this.paths(false);
     let file;
     try { file = await open(log, "r"); }
@@ -118,20 +121,31 @@ export class SpendLedger {
       const lines = text ? text.slice(0, -1).split("\n") : [];
       if (lines.length > RECORD_CAP || lines.some(line => Buffer.byteLength(line) > LINE_CAP)) throw new SpendCapError("unavailable");
       const records = lines.map(line => SpendRecordSchema.parse(JSON.parse(line)));
-      fold(records); this.observed = Buffer.from(bytes.subarray(0, size)); return records;
+      fold(records); if (track) this.observed = Buffer.from(bytes.subarray(0, size)); return records;
     } finally { await file.close(); }
   }
 
-  private async locked<T>(work: () => Promise<T>): Promise<T> {
+  private async locked<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    signal?.throwIfAborted();
+    const deadline = performance.now() + 2000;
     if (this.waiting >= 64) throw new SpendCapError("unavailable");
     this.waiting++;
     const previous = this.tail; let release!: () => void;
     this.tail = new Promise<void>(resolve => { release = resolve; });
     try {
       await previous;
+      signal?.throwIfAborted();
+      if (performance.now() >= deadline) throw new SpendCapError("unavailable");
       const { lock } = await this.paths(true);
       let file;
-      try { file = await open(lock, "wx", 0o600); } catch { throw new SpendCapError("unavailable"); }
+      while (file === undefined) {
+        signal?.throwIfAborted();
+        try { file = await open(lock, "wx", 0o600); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST" || performance.now() >= deadline) throw new SpendCapError("unavailable");
+          await new Promise<void>(resolve => setTimeout(resolve, 20));
+        }
+      }
       try { return await work(); } finally { await file.close(); await unlink(lock); }
     } finally { this.waiting--; release(); }
   }
@@ -183,18 +197,18 @@ export class SpendLedger {
     const { calls, settled } = fold(records); let total = reservation;
     for (const call of calls.values()) {
       const final = settled.get(call.call);
-      if ((!final || !final.complete || final.cost === null) && !this.live.has(call.call)) throw new SpendCapError("uncertain");
+      if ((!final || !final.complete || final.cost === null) && (!this.live.has(call.call) || day(call.ts) !== day(ts))) throw new SpendCapError("uncertain");
       if (final?.cost !== null && final?.cost !== undefined && call.reserve !== null && final.cost > call.reserve) throw new SpendCapError("uncertain");
       if (day(call.ts) === day(ts)) total = safe(total + (final?.cost ?? call.reserve ?? 0));
     }
     if (total > cap || (reservation === 0 && total >= cap)) throw new SpendCapError("exhausted");
   }
 
-  async check(cap: number): Promise<void> { await this.locked(async () => this.gate(await this.records(), cap, 0)); }
+  async check(cap: number, signal?: AbortSignal): Promise<void> { await this.locked(async () => this.gate(await this.readRecords(true), cap, 0), signal); }
 
-  async admit(input: Omit<Admission, "version" | "type" | "ts" | "call">, cap?: number): Promise<Admission> {
+  async admit(input: Omit<Admission, "version" | "type" | "ts" | "call">, cap?: number, signal?: AbortSignal): Promise<Admission> {
     return this.locked(async () => {
-      const records = await this.records();
+      const records = await this.readRecords(true);
       const ts = this.clock();
       if (this.live.size >= 32) throw new SpendCapError("unavailable");
       if (cap !== undefined) {
@@ -203,13 +217,13 @@ export class SpendLedger {
       }
       const record: Admission = { ...input, version: 1, type: "admit", ts, call: randomUUID() };
       await this.append(record, records); this.live.add(record.call); return record;
-    });
+    }, signal);
   }
 
   async settle(call: Admission, value: Settlement["usage"], complete: boolean): Promise<void> {
     try {
       await this.locked(async () => {
-        const records = await this.records(); const state = fold(records);
+        const records = await this.readRecords(true); const state = fold(records);
         if (!this.live.has(call.call) || state.settled.has(call.call)) throw new SpendCapError("unavailable");
         const original = state.calls.get(call.call);
         if (original === undefined) throw new SpendCapError("unavailable");
@@ -220,10 +234,10 @@ export class SpendLedger {
   }
 
   async end(segment: string, session?: string): Promise<void> {
-    await this.locked(async () => this.append({ version: 1, type: "end", ts: this.clock(), segment, session: session ?? null }, await this.records()));
+    await this.locked(async () => this.append({ version: 1, type: "end", ts: this.clock(), segment, session: session ?? null }, await this.readRecords(true)));
   }
   async gap(segment: string, session?: string, reason: "unmetered-provider" | "accounting-unavailable" = "unmetered-provider"): Promise<void> {
-    await this.locked(async () => this.append({ version: 1, type: "gap", ts: this.clock(), segment, session: session ?? null, reason }, await this.records()));
+    await this.locked(async () => this.append({ version: 1, type: "gap", ts: this.clock(), segment, session: session ?? null, reason }, await this.readRecords(true)));
   }
 }
 
@@ -268,7 +282,7 @@ export function meterProvider(provider: ModelProvider, ledger: SpendLedger, opti
         if (context === 0 || output === 0) throw new SpendCapError("unsupported");
         const reserve = pricing === null ? null : price((context * Math.max(pricing.inputUsdPerMTok, pricing.cacheReadUsdPerMTok, pricing.cacheWriteUsdPerMTok)
           + output * pricing.outputUsdPerMTok) / 1_000_000);
-        call = await ledger.admit({ segment: active?.segment ?? options.segment, ...(active?.session === undefined ? {} : { session: active.session }), model: provider.model, provider: provider.id, reserve, rates: pricing }, options.capMicros);
+        call = await ledger.admit({ segment: active?.segment ?? options.segment, ...(active?.session === undefined ? {} : { session: active.session }), model: provider.model, provider: provider.id, reserve, rates: pricing }, options.capMicros, signal);
       } catch (error) {
         if (signal.aborted) throw signal.reason;
         const failure = error instanceof SpendCapError ? error : new SpendCapError("unavailable");

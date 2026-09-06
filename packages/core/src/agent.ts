@@ -513,7 +513,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         catch { await spend.onUnavailable?.(); }
       }
       if (config.spend?.capMicros !== undefined) {
-        try { await config.spend.ledger.check(config.spend.capMicros); }
+        try { await config.spend.ledger.check(config.spend.capMicros, abortController.signal); }
         catch (error) { const capError = error instanceof SpendCapError ? error : new SpendCapError("unavailable"); await spend?.onCap?.(capError); throw capError; }
       }
       for (const extension of config.extensions?.loaded ?? []) {
