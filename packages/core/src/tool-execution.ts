@@ -21,6 +21,7 @@ import { evaluatePermissionPolicy } from "./permissions.js";
 import { bindPermissionView } from "./child-permissions.js";
 import type { PermissionDecisionSource } from "./permission-attribution.js";
 import type { PipelineSchedule } from "./parallel-runtime.js";
+import { isIsolatedTool, bindIsolatedContext } from "./isolated-runtime.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -282,7 +283,8 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
   const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
     ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
-  await context.schedule?.admit({ cwd, permission: permClass, effects: declaredEffect, paths: declaredPaths });
+  const isolated = isIsolatedTool(tool);
+  await context.schedule?.admit({ cwd, permission: permClass, effects: declaredEffect, paths: declaredPaths, isolated });
   const permReq: PermissionRequest = {
     tool: tu.name,
     input,
@@ -377,7 +379,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     }
   }
   if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
-  context.schedule?.authorized();
+  if (!isolated) context.schedule?.authorized();
   const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input),
     ...(inputContext === undefined ? {} : { context: inputContext }) });
   const ctx: ToolContext = {
@@ -389,6 +391,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     signal: signal,
     endSignal: endSignal,
   };
+  if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);
   const t0 = now();
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;
