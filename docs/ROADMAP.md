@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is merged (PR #175), post-merge CI pending; R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI pending; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is implemented pending gates; R7a is merged (PR #176), post-merge CI failed an evaluation-fixture timeout; separate test repair gates continuation; R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -29,7 +29,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done (#169) | R14c: evidence grading and reports | Exact-head and post-merge three-platform CI green |
 | Done — PR #172 | R14d: two verification lanes | Exact-head and post-merge three-platform CI green; reuse E1/E2 observations |
 | Done — PR #170 | R5c: local packages | Exact-head CI 34035857727 and post-main `1ae6b77` CI 34036244589 all three platforms green |
-| Implemented; closing gates | R9a: bounded redacted exports | Supported canonical round trips, safe refusal/redaction; one review and exact-head CI |
+| Done — PR #175 | R9a: bounded redacted exports | Supported canonical round trips, safe refusal/redaction; one review and exact-head CI |
 | Committed | R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -640,7 +640,7 @@ regression suite for the harness itself.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R9a *(implemented; delivery gates pending; [contract](plans/R9a.md))* | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document intentional redaction loss; supported text/tool content round-trips via versioned canonical fields. Opaque images refuse unless explicitly omitted; unknown types fail closed | core + cli |
+| R9a *(done, PR #175; [contract](plans/R9a.md))* | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document intentional redaction loss; supported text/tool content round-trips via versioned canonical fields. Opaque images refuse unless explicitly omitted; unknown types fail closed | core + cli |
 | R9b | `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` with this interface | supervisor + cli |
 | R9c | Nightly structure-regression job using the E1 eval-set definition and E2 reports, driven by a scripted provider. This validates mechanics, not task success or model quality; preserve E3's separate live evaluation lane | docs + .github |
 
@@ -937,7 +937,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 6 | R5a (done) → R5b (done) → R5c (done, PR #170) | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d (done, PR #171 + repair #173) → R10a (done, PR #174) → R10b (closing gates) → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
-| 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
+| 9 | R9a (done, PR #175) → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
 | Repair (done) | H7a (#161) → H7b (#164) | Correctness defects (#116, #95) delivered with green post-merge CI. |
@@ -1210,3 +1210,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   and consider an explicit scheduled cwd selector. Current cwd follows normal `run`.
   Missing shared defaults, config precedence and stopping later due entries on an ordinary
   failure were fixed in R7a, not deferred here.
+- R10b test polish: replace the explicitly timing-sensitive 100ms hazard-mutant observation
+  window with a bounded internal admission observation if it can be done without exposing
+  model-controlled metadata. Actual positive overlap and event-sequence controls remain required.

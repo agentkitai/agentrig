@@ -1,6 +1,6 @@
 import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { afterEach, expect, it, vi } from "vitest";
 import { createAgent, parallel, RulePolicy, SessionStore, writeFileTool, editFileTool, grepTool,
@@ -10,7 +10,7 @@ const roots: string[] = [];
 afterEach(async () => { vi.useRealTimers(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 function latch() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
 type Input = { path: string; label: string; kind: "read" | "write" | "exec" };
-async function fixture(calls: Input[], overrides: Partial<AgentConfig> = {}, configure?: (root: string) => Promise<void>, tweak?: (tool: Tool<Input>) => void) {
+async function fixture(calls: Input[], overrides: Partial<AgentConfig> = {}, configure?: (root: string) => Promise<void>, tweak?: (tool: Tool<Input>) => void, scheduled = false) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-parallel-")); roots.push(root);
   await mkdir(join(root, "dir")); await writeFile(join(root, "a"), "a"); await writeFile(join(root, "b"), "b");
   await configure?.(root);
@@ -27,7 +27,7 @@ async function fixture(calls: Input[], overrides: Partial<AgentConfig> = {}, con
     async execute(input, context) {
       const index = calls.findIndex(call => call.label === input.label);
       stages.push(`start:${input.label}`); entered[index]!.release(); await gates[index]!.promise;
-      const path = join(context.cwd, input.path);
+      const path = resolve(context.cwd, input.path);
       if (input.kind === "write") await writeFile(path, input.label);
       const output = input.kind === "read" ? await readFile(path, "utf8") : input.label;
       stages.push(`end:${input.label}`); return { output, display: output };
@@ -36,7 +36,8 @@ async function fixture(calls: Input[], overrides: Partial<AgentConfig> = {}, con
   const store = new SessionStore({ root: join(root, "logs") });
   const config: AgentConfig = { provider, store, systemPrompt: "inert scheduling fixture", tools: [tool], permissions: new RulePolicy([{ decision: "allow" }]), repoMap: false,
     turnStrategy: parallel(), ...overrides };
-  const session = createAgent(config).run("exercise local declared file operations", { cwd: root });
+  const session = createAgent(config).run("exercise local declared file operations", { cwd: root,
+    ...(scheduled ? { scheduled: { entryId: "parallel-fixture", minute: 1 } } : {}) });
   const finished = (async () => { const events = []; for await (const event of session.events) events.push(event); return { events, summary: await session.done }; })();
   return { root, entered, gates, described, stages, paths, session, finished, store };
 }
@@ -192,6 +193,19 @@ it("bounds the live pool and stops queued bodies on cancellation", async () => {
 it("validates pool bounds and declares built-in write/edit effects explicitly", () => {
   for (const maxConcurrency of [0, 17, 1.5, NaN, Infinity]) expect(() => parallel({ maxConcurrency })).toThrow("1 to 16");
   expect(writeFileTool().effects).toBe("workspace"); expect(editFileTool().effects).toBe("workspace");
+});
+
+it("keeps scheduled outside writes behind fresh consent even with a blanket allow and parallel scheduling", async () => {
+  const outside = await mkdtemp(join(tmpdir(), "agentrig-parallel-outside-")); roots.push(outside);
+  await writeFile(join(outside, "a"), "a"); await writeFile(join(outside, "b"), "b");
+  const f = await fixture([call(join(outside, "a"), "one", "write"), call(join(outside, "b"), "two", "write")], {}, undefined, undefined, true);
+  f.gates.forEach(gate => gate.release());
+  const result = await f.finished;
+  expect(f.stages).toEqual([]); expect(result.summary.reason).toBe("done");
+  expect(result.events.filter(event => event.type === "tool.denied")).toHaveLength(2);
+  expect(result.events.filter(event => event.type === "permission.request").map(event => event.req.origin))
+    .toEqual(["external-input-expansion", "external-input-expansion"]);
+  expect(await readFile(join(outside, "a"), "utf8")).toBe("a"); expect(await readFile(join(outside, "b"), "utf8")).toBe("b");
 });
 
 it("does not surface a queued sandbox escape prompt after cancellation", async () => {
