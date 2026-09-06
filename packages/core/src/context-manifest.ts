@@ -1,5 +1,5 @@
 import type { EventPayload } from "./events.js";
-import type { ContentBlock } from "./messages.js";
+import type { ContentBlock, InstructionContext } from "./messages.js";
 import type { ModelRequest } from "./provider.js";
 import { contentHash } from "./session-store.js";
 import { isCompactionSummary } from "./compaction.js";
@@ -17,6 +17,7 @@ export interface PromptBlock {
   authority: ContextAuthority;
   reason: string;
   freshness?: string;
+  context?: InstructionContext;
 }
 
 function payload(block: ContentBlock): string {
@@ -35,6 +36,7 @@ function measured(
   value: unknown,
   disposition: "kept" | "evicted" = "kept",
   freshness?: string,
+  context?: InstructionContext,
 ): ContextManifestBlock {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   const bytes = Buffer.byteLength(text, "utf8");
@@ -48,6 +50,7 @@ function measured(
     tokens: Math.ceil(bytes / 4),
     disposition,
     ...(freshness === undefined ? {} : { freshness }),
+    ...(context === undefined ? {} : { context }),
   };
 }
 
@@ -71,6 +74,7 @@ export function buildContextManifest(options: {
       block.content,
       "kept",
       block.freshness,
+      block.context,
     ));
 
   const toolNames = new Map<string, string>();
@@ -90,20 +94,26 @@ export function buildContextManifest(options: {
         blocks.push(measured(
           "tool_result",
           `${name}:${block.toolUseId}`,
-          "data",
+          block.context?.authority === "instruction" ? "instruction" : "data",
           evicted ? "stale large result replaced by outbound eviction policy" : "tool result retained in conversation",
           payload(block),
           evicted ? "evicted" : "kept",
+          undefined,
+          block.context,
         ));
       } else {
         blocks.push(measured(
           "history",
           `message:${messageIndex}:${message.role}:${blockIndex}`,
-          message.role === "user" && !isCompactionSummary(block) ? "instruction" : "data",
+          block.context === undefined ? (message.role === "user" && !isCompactionSummary(block) ? "instruction" : "data")
+            : block.context.authority === "instruction" ? "instruction" : "data",
           isCompactionSummary(block)
             ? "model-generated compaction summary retained for turn continuity"
             : "conversation history required for turn continuity",
           payload(block),
+          "kept",
+          undefined,
+          block.context,
         ));
       }
     }

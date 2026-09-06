@@ -101,6 +101,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "subagent.spawn": return `${p} ${e.id} ${JSON.stringify(e.task)}`;
     case "subagent.end": return `${p} ${e.id}${e.reason === undefined ? "" : ` ${e.reason}`}`;
     case "steer": return `${p} from=${e.source} ${JSON.stringify(e.message)}`;
+    case "context.delegation": return `${p} ${e.action} principal=${JSON.stringify(e.principal)} receipt=${e.delegation}`;
     case "memory.note": return `${p} ${e.scope}:${e.path}`;
     case "supervisor.signal": return `${p} ${e.signal.type} conf=${e.signal.confidence} ${e.signal.evidence.join("; ")}`;
     case "auxiliary.usage": return `${p} ${e.id} ${e.final ? "final" : "provisional"} ${formatAuxiliaryUsage(e.report, { final: e.final })}`;
@@ -194,6 +195,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return e.reason === "done" ? null : `⤶ subagent ${e.reason ?? "ended"}`;
     case "steer":
       return `↪ ${e.source}: ${oneLine(e.message)}`;
+    case "context.delegation":
+      return `↪ instruction authority ${e.action}: ${oneLine(e.principal)} (no tool permission)`;
     case "supervisor.signal":
       return `⚠ ${e.signal.type} (${e.signal.confidence}) ${oneLine(e.signal.evidence.join("; "), 80)}`;
     case "supervisor.intervention": {

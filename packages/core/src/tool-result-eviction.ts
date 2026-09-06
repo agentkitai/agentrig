@@ -111,7 +111,7 @@ export function evictToolResults(
       if (block.type !== "tool_result") continue;
       // Flattening tagged child blocks into a string would silently discard provenance.
       // Keep this payload intact until R13b defines an explicit aggregation policy.
-      const hasLabel = (child: ContentBlock): boolean => child.trust !== undefined ||
+      const hasLabel = (child: ContentBlock): boolean => child.trust !== undefined || child.context !== undefined ||
         (child.type === "tool_result" && Array.isArray(child.content) && child.content.some(hasLabel));
       if (Array.isArray(block.content) && block.content.some(hasLabel)) continue;
       const toolUse = toolUses.get(block.toolUseId);
