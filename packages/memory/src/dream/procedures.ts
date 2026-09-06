@@ -4,7 +4,7 @@ import type { WikiPage } from "../types.js";
 import { extractJson } from "../ingest.js";
 import { MaintenanceLimitError, type MaintenanceRun } from "../maintenance.js";
 import { assessPromotionEvidence, type ClaimPromotionAssessment, type PromotionCandidate, type PromotionOptions } from "./promote.js";
-import { checkPromotionGuardrails, reviewPromotionEffects } from "./guardrails.js";
+import { checkPromotionGuardrails, reviewPromotionEffects, type PromotionGuardrailIndex } from "./guardrails.js";
 
 export interface ProcedureCandidate {
   kind: "skill-candidate";
@@ -67,7 +67,8 @@ new scope/limitations/evidence. Return ONLY JSON {"candidates":[{"candidateIndex
 Cover every input index exactly once. No free-form prose, extra fields or substitute instructions.`;
 
 /** Classification plus the existing R6e effect gate. Same maintenance run, no extra hidden budget. */
-export async function refineProcedureCandidates(candidates: ProcedureCandidate[], provider: ModelProvider, run: MaintenanceRun): Promise<ProcedureDetection> {
+export async function refineProcedureCandidates(candidates: ProcedureCandidate[], provider: ModelProvider, run: MaintenanceRun,
+  onReviewed?: (receipts: PromotionGuardrailIndex) => void): Promise<ProcedureDetection> {
   const original = structuredClone(candidates);
   let retained = original;
   const rejected: ProcedureDetection["rejected"] = [];
@@ -95,6 +96,7 @@ export async function refineProcedureCandidates(candidates: ProcedureCandidate[]
       else checked.push({ ...candidate, status: "model-and-effect-reviewed", artifact: { ...candidate.artifact, guardrails } });
     }
     run.check();
+    onReviewed?.(receipts);
     return { candidates: checked, rejected };
   } catch (error) {
     run.check(); // Real cancellation/deadline errors abort the whole dream, not a cosmetic refusal.

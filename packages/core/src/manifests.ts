@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-/** Flat frontmatter only. Absent schema means the legacy v1 dialect, never latest. */
+/** Explicit R6b metadata dialect; string values also conform to Agent Skills metadata. */
+export const GeneratedSkillMetadataV1 = z.object({
+  "agentrig-schema": z.literal("1"),
+  "agentrig-generated": z.literal("true"),
+  "agentrig-sessions": z.string().min(1).max(8192),
+  "agentrig-page": z.string().min(1).max(1024),
+  "agentrig-dream": z.string().min(1).max(128),
+  "agentrig-evidence": z.string().regex(/^[a-f0-9]{64}$/),
+  "agentrig-content": z.string().regex(/^[a-f0-9]{64}$/),
+  locked: z.enum(["true", "false"]),
+}).strict();
+
+/** Absent schema means the legacy v1 dialect, never latest. Metadata is explicitly versioned. */
 export const SkillFrontmatterV1 = z.object({
   schema: z.literal("1").optional(),
   name: z.string().min(1).optional(),
@@ -8,6 +20,7 @@ export const SkillFrontmatterV1 = z.object({
   version: z.string().min(1).optional(),
   license: z.string().min(1).optional(),
   compatibility: z.string().min(1).optional(),
+  metadata: GeneratedSkillMetadataV1.optional(),
 }).strict();
 
 export const ExtensionSurface = z.enum(["hooks", "tools", "commands"]);
@@ -90,22 +103,47 @@ export function resolveManifestNames<T extends ManifestCandidate>(candidates: re
   return selected.sort((a, b) => a.precedence - b.precedence || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/** Deliberately not YAML: reject constructs this scanner cannot faithfully represent. */
+/** Bounded YAML subset: legacy flat scalars plus versioned, JSON-quoted metadata strings.
+ * Arbitrary YAML, aliases, tags and collections remain unsupported, never silently ignored. */
 export function parseSkillFrontmatter(text: string): { fields: z.infer<typeof SkillFrontmatterV1>; body: string } {
   const normalized = text.replace(/^\uFEFF/, "");
   if (!/^---[ \t]*(?:\r?\n|$)/.test(normalized)) return { fields: {}, body: text };
   const lines = normalized.split(/\r?\n/);
   const end = lines.findIndex((line, index) => index > 0 && /^---[ \t]*$/.test(line));
   if (end < 0) throw new Error("skill frontmatter: missing closing ---");
-  const fields: Record<string, string> = Object.create(null) as Record<string, string>;
+  const generatedDialect = lines.slice(1, end).some(line => /^metadata:[ \t]*$/.test(line));
+  if (generatedDialect && (end > 64 || Buffer.byteLength(lines.slice(0, end + 1).join("\n")) > 16384)) throw new Error("skill frontmatter limit exceeded");
+  const fields: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  let metadata: Record<string, string> | undefined;
+  let inMetadata = false;
   for (const line of lines.slice(1, end)) {
     if (line.trim() === "" || line.startsWith("#")) continue;
+    if (inMetadata && line.startsWith("  ")) {
+      const entry = /^  ([A-Za-z_][A-Za-z0-9_-]*): (".*")$/.exec(line);
+      if (!entry) throw new Error("skill metadata requires two-space indentation and JSON-quoted string values");
+      if (Object.hasOwn(metadata!, entry[1]!)) throw new Error(`skill metadata: duplicate key ${entry[1]}`);
+      const value: unknown = JSON.parse(entry[2]!);
+      if (typeof value !== "string") throw new Error("skill metadata values must be strings");
+      metadata![entry[1]!] = value;
+      continue;
+    }
+    inMetadata = false;
     const match = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/.exec(line);
     if (!match) throw new Error("skill frontmatter: expected flat key: value; nested maps and lists are unsupported");
     const key = match[1]!;
     if (Object.hasOwn(fields, key)) throw new Error(`skill frontmatter: duplicate key ${key}`);
     if (key === "allowed-tools") throw new Error("AgentRig does not honour allowed-tools; remove it");
     let value = match[2]!.trim();
+    if (key === "metadata") {
+      if (value !== "") throw new Error("skill metadata requires a versioned nested string map");
+      metadata = Object.create(null) as Record<string, string>;
+      fields[key] = metadata; inMetadata = true; continue;
+    }
+    if (value.startsWith('"') && generatedDialect) {
+      const scalar: unknown = JSON.parse(value);
+      if (typeof scalar !== "string") throw new Error(`skill frontmatter: expected string for ${key}`);
+      fields[key] = scalar; continue;
+    }
     if (/^["']/.test(value)) {
       const quote = value[0]!;
       if (value.length < 2 || !value.endsWith(quote) || value.slice(1, -1).includes(quote) || value.includes("\\")) {
@@ -117,5 +155,12 @@ export function parseSkillFrontmatter(text: string): { fields: z.infer<typeof Sk
     }
     fields[key] = value;
   }
-  return { fields: SkillFrontmatterV1.parse(fields), body: lines.slice(end + 1).join("\n") };
+  const parsed = SkillFrontmatterV1.parse(fields);
+  if (parsed.metadata !== undefined) {
+    z.string().min(1).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).parse(parsed.name);
+    z.string().min(1).max(1024).parse(parsed.description);
+    const sessions: unknown = JSON.parse(parsed.metadata["agentrig-sessions"]);
+    z.array(z.string().regex(/^session:[A-Za-z0-9_-]{1,128}$/)).min(2).max(128).parse(sessions);
+  }
+  return { fields: parsed, body: lines.slice(end + 1).join("\n") };
 }
