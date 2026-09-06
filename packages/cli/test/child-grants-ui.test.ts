@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { render } from "ink";
 import { z } from "zod";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { createAgent, PermissionGrantRegistry, RulePolicy, SessionStore, subagentTool,
   type ModelEvent, type ModelProvider, type AnyTool } from "@agentkitai/agentrig-core";
 import { App } from "../src/tui/app.tsx";
 import { TuiController } from "../src/tui/controller.ts";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 class Stdin extends EventEmitter {
   isTTY = true; chunks: string[] = [];
@@ -45,7 +46,14 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
   const store = new SessionStore({ root: cwd }); const registry = new PermissionGrantRegistry();
   const c = new TuiController({ cwd, permissionGrants: registry, agent: { run() { throw Error("not attached"); } } as never });
   const stdin = new Stdin(); const writes: string[] = [];
-  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) { writes.push(text); return true; } });
+  let holdFrames = false; const heldFrames: string[] = [];
+  const stdout = Object.assign(new EventEmitter(), { columns: 160, rows: 52, isTTY: true, write(text: string) {
+    (holdFrames ? heldFrames : writes).push(text); stdout.emit("frame"); return true;
+  } });
+  const frames = { snapshot: () => c.snapshot(), subscribe(listener: (state: ReturnType<TuiController["snapshot"]>) => void) {
+    const changed = () => listener(c.snapshot()); stdout.on("frame", changed); changed();
+    return () => { stdout.off("frame", changed); };
+  } };
   const instance = render(createElement(App, { controller: c }), { stdin: stdin as never, stdout: stdout as never, patchConsole: false, exitOnCtrlC: false });
   const send = (text: string) => stdin.send(mode === "protocol" ? `\u001b[201~${text}` : text);
   const executed: string[] = []; let children = 0;
@@ -64,17 +72,27 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
     } }] });
   try {
     c.attach(agent); const running = c.submit("spawn probes");
-    await vi.waitFor(() => expect(c.snapshot().pending?.req.tool).toBe("probe"));
+    await waitForTuiState(c, running, "first child probe approval", state => state.pending?.req.tool === "probe");
     const child = c.snapshot().pending!.permissionGrants!;
     expect(child.isChildView).toBe(true); expect(child.subject).not.toBe(registry.subject);
     expect(executed).toEqual([]); // Root nondelegable allow did not reappear through controller.ask.
-    send("s"); await vi.waitFor(() => expect(c.snapshot().pending?.scope).toBeDefined());
-    send("\r"); await vi.waitFor(() => expect(c.snapshot().pending?.scope?.preview).toBe(true));
+    send("s"); await waitForTuiState(c, running, "child scope editor", state => state.pending?.scope !== undefined);
+    holdFrames = true; // Controlled output delay: controller state is not a rendered frame.
+    send("\r"); await waitForTuiState(c, running, "child scope preview", state => state.pending?.scope?.preview === true);
     expect(c.snapshot().lines.some(line => line.text.includes('"subject":'+JSON.stringify(child.subject)))).toBe(true);
+    expect(writes.join("")).not.toContain("Child-owned");
+    await waitForTuiState(frames, running, "Ink child scope preview frame", () => heldFrames.join("").includes("Child-owned"));
+    expect(heldFrames.join("")).toContain("Child-owned");
+    let visible = false;
+    const rendered = waitForTuiState(frames, running, "visible child scope preview", () => writes.join("").includes("Child-owned"))
+      .then(() => { visible = true; });
+    await Promise.resolve(); expect(visible).toBe(false);
+    holdFrames = false; writes.push(...heldFrames.splice(0)); stdout.emit("frame");
+    await rendered; expect(visible).toBe(true);
     send("y");
     // Child's second call and its own grandchild inherit the explicitly confirmed child record.
-    await vi.waitFor(() => expect(c.snapshot().pending?.permissionGrants?.subject).not.toBe(child.subject));
-    await vi.waitFor(() => expect(c.snapshot().pending?.req.tool).toBe("probe"));
+    await waitForTuiState(c, running, "sibling probe approval", state => state.pending?.req.tool === "probe" &&
+      state.pending.permissionGrants !== undefined && state.pending.permissionGrants.subject !== child.subject);
     expect(executed).toHaveLength(3);
     const owned = registry.inspect().find(row => row.grant.subject === child.subject)!;
     expect(owned.matchedDecisions).toBe(2); expect(registry.decide({ tool: "probe", class: "write", input: {}, cwd })).toBe("allow");
@@ -82,7 +100,8 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
     for (const row of registry.inspect().filter(row => row.grant.subject === registry.subject)) registry.revoke(row.grant.id);
     expect(registry.decide({ tool: "probe", class: "write", input: {}, cwd })).toBe("ask");
     expect(c.snapshot().pending!.permissionGrants!.decide({ tool: "probe", class: "write", input: {}, cwd })).toBe("ask");
-    send("n"); await vi.waitFor(() => expect(c.snapshot().pending?.permissionGrants?.subject).toBe(registry.subject)); send("n");
+    send("n"); await waitForTuiState(c, running, "root probe approval", state => state.pending?.req.tool === "probe" &&
+      state.pending.permissionGrants?.subject === registry.subject); send("n");
     await running; expect(executed).toHaveLength(3); expect(child.active).toBe(false); expect(registry.inspect()).toEqual([]);
     const rootEvents = await store.readAll(c.snapshot().sessionId!);
     expect(rootEvents).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: owned.grant.id, subject: child.subject }));
@@ -92,4 +111,4 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
     expect(childEvents).toContainEqual(expect.objectContaining({ type: "permission.decision", source: { kind: "grant", grantId: owned.grant.id } }));
     expect(writes.join("")).toContain("Child-owned");
   } finally { await c.shutdown(); instance.unmount(); }
-});
+}, 20000);

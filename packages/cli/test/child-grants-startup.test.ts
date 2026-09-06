@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore, resolveShell, describeShellOperation, type ModelEvent } from "@agentkitai/agentrig-core";
 import type { TuiController } from "../src/tui/controller.ts";
+import { waitForTuiState } from "./tui-readiness.ts";
 const harness = vi.hoisted(() => ({ exercise: undefined as undefined | ((c: TuiController) => Promise<void>) }));
 // Substitute terminal mounting only. startTui, buildAgent, subagentOptions, runtime, controller
 // and storage are real. Existing Ink tests separately exercise both keyboard input paths.
@@ -23,6 +24,8 @@ vi.mock("../src/agent-builder.js", async importOriginal => {
     for (const provider of new Set([built.provider, built.providers.subagents])) vi.spyOn(provider, "stream").mockImplementation(async function* (request): AsyncIterable<ModelEvent> {
       const child = JSON.stringify(request.messages[0]).includes("R12d child startup probe");
       const first = child ? childTurns++ === 0 : parentTurns++ === 0;
+      // Deliberately exceed the old 1s polling budget on the actual startup/spawn path.
+      if (child && first) await new Promise(resolve => setTimeout(resolve, 1100));
       if (first) yield child ? { type: "tool_use", id: "child-bash", name: "bash", input: { command: "printf child" } }
         : { type: "tool_use", id: "spawn", name: "subagent", input: { task: "R12d child startup probe" } };
       yield { type: "stop", reason: first ? "tool_use" : "end_turn" };
@@ -40,7 +43,7 @@ it.skipIf(describeShellOperation("printf child", shell.path).status !== "parsed"
   Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
   harness.exercise = async c => {
     const run = c.submit("R12d root startup probe");
-    await vi.waitFor(() => expect(c.snapshot().pending?.req.tool).toBe("bash"));
+    await waitForTuiState(c, run, "first child bash approval", state => state.pending?.req.tool === "bash");
     const child = c.snapshot().pending!.permissionGrants!;
     expect(child.isChildView).toBe(true); expect(child.subject).not.toBe(c.permissionGrants.subject);
     c.answerPermission(standing ? "allow" : "deny", standing); await run;
@@ -54,4 +57,4 @@ it.skipIf(describeShellOperation("printf child", shell.path).status !== "parsed"
   };
   try { await startTui({ root, provider: "anthropic", model: "fake", subagents: true, allow: ["subagent"], repoMap: false, shell: shell.path, maxTurns: "5", maxTokensPerTurn: "100" }); }
   finally { if (descriptor === undefined) Reflect.deleteProperty(process.stdin, "isTTY"); else Object.defineProperty(process.stdin, "isTTY", descriptor); }
-});
+}, 10000);

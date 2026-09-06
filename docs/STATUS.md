@@ -1,11 +1,32 @@
 # Status
 
-Active implementation queue: **R10d is implemented, pending delivery gates; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Immediate gate: **child-grants test-readiness repair**. R10d merged in PR #171, but its
+post-merge Windows run 34033869154 failed two existing prompt-readiness assertions on both
+the original and single diagnostic attempt. No green post-merge claim; R10a waits for this
+separate test-only repair and green main. [Evidence and contract](plans/child-grants-readiness.md).
+
+Active implementation queue: **R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R10d implemented — delivery gates pending
+### Child-grants readiness repair — implementation; delivery gates pending
+
+Replace one-second polling and absent-prompt inequality with exact subscribed state readiness,
+bounded waits and premature run-settlement diagnostics. Production code and authorization
+assertions are unchanged. The actual startup path retains a controlled delay that failed the
+old wait; the weakened sibling-readiness mutant fails both real Ink paths and is restored.
+Six helper controls cover readiness, cleanup and failure. Build/typecheck/full suite, one
+independent review and exact-head three-platform CI precede delivery; no repeated blind reruns.
+Local build/typecheck/full passes 2,497 plus two skips across 143 files (four workers, 35 seconds).
+One bounded Claude review approved without material findings (88 seconds, 8/max24 turns),
+independently passing 40 focused tests and typecheck. Original findings are in the repair plan;
+optional test refinements are at the roadmap END. Exact-head three-platform CI is next.
+First PR #173 CI 34035057038 exposed a macOS rendered-output race after controller readiness.
+Actual Ink frame readiness now gates confirmation, with a buffered-frame control and both-mode
+fail-first mutation; visible-text and authorization assertions remain unchanged. No second review.
+
+### R10d merged — PR #171; post-merge Windows gate pending repair
 
 Explicit doctor --probe runs bounded potentially billable empirical samples; normal doctor
 remains offline/read-only. Exact local observations feed actual advertised capability flags;

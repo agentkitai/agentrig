@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R10d is implemented, pending delivery gates; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R10d is merged in PR #171, with its post-merge Windows gate awaiting the child-grants readiness repair; R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -9,6 +9,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
+| Active repair | Child-grants test readiness | Repeated PR #171 post-merge Windows failure; exact subscribed predicates and green main before R10a |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
@@ -24,7 +25,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done — PR #162 | R14a: acceptance declarations | Observable declarations remain unverified, not proof |
 | Done — PR #165 | R14b: candidate evidence association | Canonical foreground observations, bounded replay and post-merge CI green |
 | Done — PR #166 | R11a: net permission boundary | Explicit sandbox network policy; post-merge CI green |
-| Implemented; closing gates | R14c: evidence grading and reports | Deterministic deficits can force false only; one review and exact-head CI |
+| Done — PR #169 | R14c: evidence grading and reports | Post-merge CI 34032607190 green; deterministic deficits can force false only |
 | Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -919,14 +920,15 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 
 | Order | Rows | Reason / dependency |
 |---|---|---|
+| Repair (active) | Child-grants test readiness | PR #171 post-merge Windows CI 34033869154 repeated two prompt-readiness failures on the single diagnostic rerun. Exact subscribed predicates, bounded waits and run-settlement diagnostics; production authority unchanged. Separate repair and green main gate R10a. [Contract](plans/child-grants-readiness.md). |
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
-| 4 | R14a (done) → R14b (done) → R14c (closing gates) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 4 | R14a (done) → R14b (done) → R14c (done, PR #169) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b (done) → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
-| 7 | R11a (done) → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
+| 7 | R11a (done) → R11b (done, PR #168) | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
@@ -1180,3 +1182,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   observer so one corrupt event does not disable later useful observations. Keep incomplete views
   fail-closed. Historical plan seeding for resumed attached runs is separate future work: current
   reports explicitly exclude prior history, while the CLI reads the full named physical log.
+- Child-grants test polish: skip diagnostic snapshot work after a readiness wait has settled;
+  additionally name child-view identity in the sibling predicate. Existing assertions still
+  discriminate root/sibling authority; these are non-blocking test refinements, not new rows.
