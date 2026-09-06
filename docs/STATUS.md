@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R6c generated-skill loading is implemented, pending delivery gates; R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12a live grant records are implemented, pending delivery gates; R13d is active independently. R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -28,7 +28,7 @@ bypass, hook-as-user and custom-compactor authority-laundering mutations fail an
 Full integrated validation, one bounded independent review and exact-head/post-merge CI remain
 delivery gates. No new submilestones or live evaluation spend.
 
-### R6c implemented — PR #151 delivery gates pending
+### R6c done — PR #151; post-merge CI green
 
 Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
 roots through the existing trust/discovery boundary. Negative overrides and manual-root
@@ -45,7 +45,8 @@ seams and all previous done labels. Build/typecheck and 2,167 tests plus two ski
 their named controls and are restored. One bounded independent Claude review
 `81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
 independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
-polish is at the roadmap end; exact-head PR and post-merge CI remain delivery gates.
+polish is at the roadmap end. PR #151 merged as `09157ae`; exact post-merge CI
+34022647578 passed all three platforms.
 
 ### R6b done — PR #149; post-merge CI green
 
@@ -76,10 +77,9 @@ its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establis
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
 
-R6a procedure detection is merged; R6b continues its independent memory track after those
-prerequisites. R12e establishes narrow semantic authorization before grant lifecycle work;
-R13b follows delivered R13a metadata. Dependency-aware parallel starts preserve the committed
-queue and introduce no demand veto.
+R6a/R6b/R6c are delivered; the memory track continues with R6g. R12a follows R12e semantic
+authorization, while R13d follows delivered R13a/R13b metadata and assembly. Dependency-aware
+parallel starts preserve the committed queue and introduce no demand veto.
 
 Each exact head needs appropriate tests, one bounded independent review with material findings
 addressed, and green three-platform CI. Integrate current main before merging; serialize merges
@@ -87,10 +87,34 @@ and wait for green post-merge main CI. Optional polish stays at ROADMAP's end, w
 submilestones. Inconclusive E3 results remain honestly reported; new live comparisons still need
 an agreed spend budget, but do not block implementation. ROADMAP §5 contains the complete queue.
 
-### R13b done — PR #150; post-merge CI green
+### R12a implemented — pending closing delivery gates
 
-Main `97e18bfd8ba24d63740e09943ce1d83e1d7e122f` passed exact post-merge CI 34021998986
-on Linux, macOS and Windows after root merged the all-platform-green PR #150.
+Validated bounded live grant records bind exact tool/class/argv operations, absolute lexical
+path scopes, cwd constraints, subject/group and session/task duration. Core uses them only for
+base-policy `ask`, preserving explicit allows/denies. Permission grant/revocation events flush
+before dispatch; failed audit writes retain their queue head and prevent execution. No event
+replay installs authority. TUI standing allow/deny uses `resource: *` records and now revokes
+across `/new`, fork, session switching and undo instead of leaking across conversations.
+Same-session continuation retains live session grants; task grants expire at run end. Shared
+child groups remain compatible and `delegable` is explicitly unenforced until R12d. See
+[contract](plans/R12a.md) for queue bounds, idle audit and advisory path limits.
+
+Integrated R13b main `97e18bf`, retaining its provenance pipeline and all prior CI steps.
+Build/typecheck pass with 2,176 tests plus two skips across 110 files and 151 focused cases.
+All-path, post-answer-audit and session-transition-revocation mutations were detected and restored.
+One bounded Claude review `8a03542b-c6e2-4b1b-886a-42012a286ad7` approved with no material
+findings, independently repeating 151 focused tests and typecheck. R6c main `09157ae` is now
+integrated; build/typecheck and 2,191 tests plus two skips across 113 files pass.
+Exact-head three-platform CI remains a gate. Optional polish
+stays at the roadmap end. The bounded roadmap cleanup adds missing done
+markers for R4a–R4c (PRs #135–#137), R6d/R6e (#139/#140) and R6f (H5a, #122), using the
+explicit merge/CI receipts below; unfinished rows retain their scope.
+
+### R13b done — PR #150
+
+Final head `8486a53` passed all three jobs in CI 34021725480 and merged as `97e18bf`.
+Exact post-merge CI 34021998986 passed all three platforms. Following notes are implementation
+history, not outstanding delivery gates.
 
 Trusted registered source metadata assigns actual MCP/external results `external`; file readers
 require canonical approved-root containment before and after execution for `project`. Unknown,

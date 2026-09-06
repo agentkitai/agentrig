@@ -14,6 +14,14 @@ it("makes instruction delegation and revocation visible without implying tool pe
   }
 });
 
+it("renders validated grant/revocation records without replaying authority", () => {
+  const grant = { id: "g", subject: "group", operation: { tool: "bash" }, resource: "*", constraints: {}, duration: { kind: "session", id: "s" }, delegable: true, decision: "allow", createdAt: 1 };
+  const granted = HarnessEvent.parse({ type: "permission.granted", grant, seq: 1, sessionId: "s", ts: 1 });
+  expect(renderEvent(granted)).toContain('g allow bash "*" session=s'); expect(renderChatEvent(granted)).toBeNull();
+  const revoked = HarnessEvent.parse({ type: "permission.revoked", grantId: "g", subject: "group", reason: "explicit-reset", seq: 2, sessionId: "s", ts: 2 });
+  expect(renderEvent(revoked)).toContain("g explicit-reset"); expect(renderChatEvent(revoked)).toBeNull();
+});
+
 it("shows file-change call attribution as a claim, never proof of a write", () => {
   const legacy = HarnessEvent.parse({ seq: 4, sessionId: "s", ts: 1, type: "file.changed", path: "a", op: "edit", contentHash: "h" });
   expect(renderEvent(legacy)).not.toContain("claim from");

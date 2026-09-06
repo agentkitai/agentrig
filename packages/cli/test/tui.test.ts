@@ -8,6 +8,7 @@ import {
   createAgent,
   defaultRules,
   RulePolicy,
+  PermissionGrantRegistry,
   SessionStore,
   liveChildren,
   subagentTool,
@@ -198,12 +199,15 @@ function makeControllerWith(
   hooks: Hook[] = [],
   tools: AnyTool[] = [],
 ) {
+  const permissionGrants = new PermissionGrantRegistry();
   const controller: TuiController = new TuiController({
     cwd: root,
+    permissionGrants,
     agent: createAgent({
       provider,
       tools: [askingTool(), ...tools],
       permissions: new RulePolicy(defaultRules),
+      permissionGrants,
       systemPrompt: "test",
       store: new SessionStore({ root }),
       budget: { maxTurns: 5 },
@@ -221,6 +225,56 @@ const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text)
 const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
+  it.each(["new", "fork", "switch"])("revokes session grants across the real %s transition", async transition => {
+    const calls: ModelEvent[][] = [
+      [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+      [{ type: "tool_use", id: "second", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+    ];
+    const store = new SessionStore({ root });
+    const c = makeController(calls, { onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq) });
+    const first = c.submit("first task");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull()); c.answerPermission("allow", true); await first;
+    const oldId = c.snapshot().sessionId!; const oldGrant = c.permissionGrants.list()[0]!;
+    expect(oldGrant.resource).toBe("*"); expect(oldGrant.duration).toEqual({ kind: "session", id: oldId });
+    let next: Promise<boolean>;
+    if (transition === "switch") {
+      const other = makeController([]); await other.submit("other session");
+      next = c.submit(`/resume ${other.snapshot().sessionId!}`);
+    } else {
+      await c.submit(transition === "new" ? "/new" : "/fork");
+      expect(c.permissionGrants.list()).toEqual([]);
+      next = c.submit("next task");
+    }
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    expect(c.permissionGrants.list()).toEqual([]); c.answerPermission("deny"); await next;
+    expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(1);
+    const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
+    expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
+    expect(events.at(-1)?.type).toBe("session.end");
+  });
+  it("same-session continuation retains live session grants but not task grants", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+      [{ type: "tool_use", id: "second", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
+    ]);
+    const c = makeControllerWith(provider); const first = c.submit("first");
+    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    const context = c.permissionGrants.context;
+    const task = c.permissionGrants.grant({ subject: context.subject, operation: { tool: "other" }, resource: "*", constraints: {},
+      duration: { kind: "task", id: context.taskId! }, delegable: false, decision: "allow" });
+    c.answerPermission("allow", true); await first;
+    const id = c.snapshot().sessionId; const live = c.permissionGrants.list();
+    expect(live).toHaveLength(1); expect(live[0]!.id).not.toBe(task.id);
+    await c.submit("continue"); expect(c.snapshot().pending).toBeNull(); expect(c.snapshot().sessionId).toBe(id);
+    expect(c.permissionGrants.list()).toEqual(live); expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(2);
+  });
+  it("a reset invalidates a pending remembered answer without creating new authority", async () => {
+    const c = makeController([[{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")]]);
+    const running = c.submit("first"); await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
+    await c.submit("/permissions reset"); c.answerPermission("allow", true); await running;
+    expect(c.permissionGrants.list()).toEqual([]); expect(text(c)).toContain("permission context changed");
+    expect(text(c)).not.toContain("⚒ needs_permission");
+  });
   it("runs a task and reports how it finished with cached usage", async () => {
     const c = makeController([[usage(400_000, 12_345, 2_900_000), stop("end_turn")]]);
     expect(await c.submit("do the thing")).toBe(true);

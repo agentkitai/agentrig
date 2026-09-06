@@ -2,6 +2,9 @@ import { z } from "zod";
 import { MessageSchema, InstructionContextSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
 import { ShellOperationSchema } from "./shell-operation.js";
+import { PermissionClass, Decision } from "./permission-types.js";
+import { PermissionGrantEventSchema } from "./permission-grants.js";
+export { PermissionClass, Decision } from "./permission-types.js";
 
 /**
  * The event spine. Every session is an append-only log of these events.
@@ -12,12 +15,6 @@ import { ShellOperationSchema } from "./shell-operation.js";
  * - Anything a detector needs to compare cheaply is a hash (inputHash, contentHash).
  * - `seq`, `sessionId`, and `ts` are stamped by the SessionStore, not by emitters.
  */
-
-export const PermissionClass = z.enum(["read", "write", "exec", "network"]);
-export type PermissionClass = z.infer<typeof PermissionClass>;
-
-export const Decision = z.enum(["allow", "deny", "ask"]);
-export type Decision = z.infer<typeof Decision>;
 
 /**
  * The four counts are DISJOINT: `input` is the uncached input tokens only, excluding both
@@ -294,6 +291,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),
   z.object({ type: z.literal("permission.decision"), d: Decision }),
+  ...PermissionGrantEventSchema.options,
   z.object({
     type: z.literal("context.compact"),
     before: z.number().int(),

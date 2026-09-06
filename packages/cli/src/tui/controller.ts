@@ -9,6 +9,7 @@ import type {
   Signal,
   Skill,
 } from "@agentkitai/agentrig-core";
+import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent } from "../render.js";
 import {
   RESERVED_COMMAND_NAMES,
@@ -123,6 +124,7 @@ function bashCommandPrefix(input: unknown): string | undefined {
 
 export interface TuiControllerOptions {
   agent: Agent;
+  permissionGrants?: PermissionGrantRegistry;
   cwd: string;
   /** `/memory <q>` — returns lines to print. Injected so the controller stays free of stores. */
   onMemory?: (query: string) => Promise<string[]>;
@@ -193,8 +195,8 @@ export class TuiController {
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
   private readonly auxiliary = new AuxiliaryText();
-  /** Tool name -> standing answer for this session. Never written to disk. */
-  private readonly standing = new Map<string, Exclude<Decision, "ask">>();
+  /** Same live core registry is passed to the agent; persisted events never restore authority. */
+  readonly permissionGrants: PermissionGrantRegistry;
   /**
    * Whether the current session can be continued. Set by a completed turn, because that is when
    * the loop writes the snapshot a resume reads — a session that died before finishing a turn
@@ -212,6 +214,7 @@ export class TuiController {
   private readonly maxLines: number;
 
   constructor(private readonly opts: TuiControllerOptions) {
+    this.permissionGrants = opts.permissionGrants ?? new PermissionGrantRegistry();
     this.maxLines = opts.maxLines ?? 5_000;
     this.agent = opts.agent;
     this.memory = opts.onMemory;
@@ -251,6 +254,7 @@ export class TuiController {
 
   /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
   forgetRestoredConversation(): void {
+    this.resetGrants("conversation-restored");
     this.resumable = false;
     this.set({sessionId:null,turns:0,plan:[],signals:[],children:[],manifest:null,context:null});
     this.print("next prompt starts a fresh conversation; original history is retained", "system");
@@ -335,8 +339,10 @@ export class TuiController {
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
       if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
       if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
-      const standing = sandboxEscalation ? undefined : this.standing.get(req.tool);
-      if (standing !== undefined) {
+      if (this.permissionGrants.context.sessionId === undefined) this.permissionGrants.beginSession("interactive-prompt");
+      const revision = this.permissionGrants.revision;
+      const standing = sandboxEscalation ? "ask" : this.permissionGrants.decide(req);
+      if (standing !== "ask") {
         resolve(standing);
         return;
       }
@@ -344,7 +350,13 @@ export class TuiController {
         req,
         resolve: (d, remember) => {
           if (remember === true && !sandboxEscalation) {
-            this.standing.set(req.tool, d);
+            try {
+              if (revision !== this.permissionGrants.revision) throw new Error("permission context changed while the prompt was open");
+              this.permissionGrants.remember(req, d);
+            } catch (error) {
+              this.print(`standing permission refused: ${String(error)}`, "error");
+              resolve("deny"); this.advanceQueue(); return;
+            }
             this.print(
               `${d === "allow" ? "allowing" : "denying"} ${req.tool} for the rest of this session (/permissions to review)`,
               d === "allow" ? "system" : "error",
@@ -432,11 +444,17 @@ export class TuiController {
 
   /** What has a standing answer, and how to take it back. */
   private describeStanding(): string {
-    if (this.standing.size === 0) {
+    const grants = this.permissionGrants.list();
+    if (grants.length === 0) {
       return "nothing has a standing answer — every request is asked. `a` at a prompt makes one standing.";
     }
-    const lines = [...this.standing].map(([tool, d]) => `  ${d === "allow" ? "allow" : "deny "} ${tool}`);
+    const lines = grants.map(grant => `  ${grant.decision === "allow" ? "allow" : "deny "} ${grant.operation.tool}`);
     return [...lines, "/permissions reset clears these"].join("\n");
+  }
+
+  private resetGrants(reason: string): number | undefined {
+    try { return this.permissionGrants.clear(reason); }
+    catch (error) { this.print(`permission reset failed (grants blocked): ${String(error)}`, "error"); return undefined; }
   }
 
   /** Settles every outstanding request as a denial — nothing may be dropped unsettled. */
@@ -487,6 +505,7 @@ export class TuiController {
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
     await this.undoing?.catch(() => {});
+    this.resetGrants("controller-closed");
     this.closed = true;
   }
 
@@ -563,8 +582,8 @@ export class TuiController {
         return true;
       case "permissions":
         if (cmd.reset) {
-          const had = this.standing.size;
-          this.standing.clear();
+          const had = this.resetGrants("explicit-reset");
+          if (had === undefined) return true;
           this.print(had === 0 ? "nothing to reset" : `cleared ${had} standing answer(s)`, "system");
         } else {
           this.print(this.describeStanding(), "system");
@@ -684,6 +703,7 @@ export class TuiController {
         await this.continueConversation(cmd.text);
         return true;
       case "new":
+        if (this.resetGrants("new-conversation") === undefined) return true;
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
         this.set({ sessionId: null, plan: [], signals: [], children: [], turns: 0, context: null });
@@ -732,6 +752,7 @@ export class TuiController {
     // The child inherits the parent's conversation up to the fork point, so its plan and signals
     // are still the ones on screen; only the identity changes. Resumable even when the parent was
     // not: a fork resumes from its materialized tree, not from a snapshot.
+    if (this.resetGrants("conversation-forked") === undefined) return;
     this.resumable = true;
     this.set({ sessionId: forked.id });
     this.print(
@@ -793,6 +814,11 @@ export class TuiController {
       return;
     }
     this.session = session;
+    try { this.permissionGrants.beginSession(session.id); }
+    catch (error) {
+      session.control.abort(); await session.done.catch(() => {}); this.session = null;
+      this.print(`permission session refused: ${String(error)}`, "error"); return;
+    }
     // before the events are consumed: an observer attached late misses the start of the session
     // it is meant to be watching
     try {

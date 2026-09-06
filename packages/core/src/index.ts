@@ -6,6 +6,7 @@ export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./children.js";
 export * from "./permissions.js";
+export * from "./permission-grants.js";
 export * from "./shell-operation.js";
 export * from "./sandbox.js";
 export * from "./sandbox-providers.js";
