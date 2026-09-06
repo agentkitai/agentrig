@@ -64,6 +64,10 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 configured permissions and per-project trust. See the [ACP guide](docs/ACP.md)
 for the scripted client, existing-pin MCP requirements and transport limits.
 
+`agentrig mcp-serve` exposes four bounded tools to modern and legacy stdio MCP
+clients under configured permissions. Client tasks remain advisory, never human
+approval. See [MCP serving](docs/MCP-SERVE.md) for limits and sensitive-data handling.
+
 - `agentrig` — start the interactive TUI.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
