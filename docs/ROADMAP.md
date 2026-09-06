@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; H7b is implemented with delivery gates pending; R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R11a is implemented with delivery gates pending; H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -757,7 +757,7 @@ order under its existing rule.
 | Row | Deliverable | Package |
 |---|---|---|
 | H7a *(done, [PR #161](https://github.com/agentkitai/agentrig/pull/161))* | [Bounded continuation contract](plans/H7a.md). Issue #116: a response truncated at `maxTokens` continues the turn (a bounded continuation request with the partial assistant content preserved) instead of ending the session; the continuation is visible as an event and counted against budget | core |
-| H7b *(implemented; delivery gates pending)* | [Process-output evidence boundary](plans/H7b.md). Issue #95: process stdout/stderr, exit status and path plausibility confer no denial authority across foreground, background and file-helper paths. Docker/Seatbelt expose no independent process-denial observation, so these failures stay ordinary; trusted broker/policy/launcher refusals retain explicit escalation | core |
+| H7b *(done, [PR #164](https://github.com/agentkitai/agentrig/pull/164))* | [Process-output evidence boundary](plans/H7b.md). Issue #95: process stdout/stderr, exit status and path plausibility confer no denial authority across foreground, background and file-helper paths. Docker/Seatbelt expose no independent process-denial observation, so these failures stay ordinary; trusted broker/policy/launcher refusals retain explicit escalation | core |
 
 Acceptance: a fake-provider session that truncates twice finishes the task with two
 `turn.continued` events; the forged-line fixture produces no escalation and no denial event.
@@ -928,7 +928,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
 | 11 | R8a (ACP) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
-| Repair | H7a (done) → H7b | Open correctness defects (#116, #95); may interrupt any row above under the existing defect rule. |
+| Repair (done) | H7a (#161) → H7b (#164) | Correctness defects (#116, #95) delivered with green post-merge CI. |
 | 12 | R15a → R15b → R15c | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
 | 13 | R15d → R15e → R15f → R15g | Interop and headless shapes; R15d follows R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h → R15i → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
@@ -1156,3 +1156,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
+- R11a polish: consider `--no-sandbox-network` for a one-run override of config true; current
+  positive-only flag matches other CLI booleans. Consider clarifying unused network metadata
+  forwarded to the none provider; no runtime policy or OS isolation is established in none mode.
