@@ -2,22 +2,22 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
-import { EventPayload, SupervisorRecord, TOOL_EMITTABLE_EVENTS, TOOL_EMIT_SOURCES } from "./events.js";
+import { EventPayload, SupervisorRecord } from "./events.js";
 import type { ContentBlock, Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
-import type { AnyTool, ToolContext } from "./tool.js";
-import { SandboxDeniedError, withSandboxPolicy, type SandboxConfig } from "./sandbox.js";
-import { outsideSandbox } from "./sandbox-providers.js";
+import type { AnyTool } from "./tool.js";
+import type { SandboxConfig } from "./sandbox.js";
 import { type CompactionStrategy, summarizeOlderTurns } from "./compaction.js";
-import { SessionStore, assertSessionId, contentHash } from "./session-store.js";
-import { mergePatches, runHooks, type Hook, type HookPoint } from "./hooks.js";
+import { SessionStore, assertSessionId } from "./session-store.js";
+import { runHooks, type Hook, type HookPoint } from "./hooks.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
 import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
-import { outputArtifactMarker, readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
-import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
+import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
+import { createSessionLifecycle, abortGraceOf } from "./session-lifecycle.js";
+import { executeTool, createToolEmitterFactory, PLAN_TOOL, type ReplanState } from "./tool-execution.js";
 import {
   buildContextManifest,
   renderSystemBlocks,
@@ -205,17 +205,7 @@ export interface Agent {
   run(task: string, opts?: RunOptions): Session;
 }
 
-export const DEFAULT_ABORT_GRACE_MS = 1_000;
-
-/**
- * The abort grace a config asks for: finite and non-negative, else the default (#96). One
- * definition, used by the loop and by the subagent tool when it derives a child's grace, so the
- * two cannot drift apart.
- */
-export function abortGraceOf(config: { abortGraceMs?: number | undefined }): number {
-  const ms = config.abortGraceMs;
-  return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : DEFAULT_ABORT_GRACE_MS;
-}
+export { DEFAULT_ABORT_GRACE_MS, abortGraceOf } from "./session-lifecycle.js";
 
 export function toToolSpec(tool: AnyTool): ToolSpec {
   // a tool carrying its own JSON Schema (an MCP tool) advertises that; deriving one from its
@@ -233,129 +223,7 @@ function estimateTokens(system: string, messages: Message[]): number {
   return Math.ceil((system.length + JSON.stringify(messages).length) / 4);
 }
 
-/** Buffers every event so late subscribers replay the whole session; supports many readers. */
-class EventStream {
-  private readonly buffer: HarnessEvent[] = [];
-  private closed = false;
-  private waiters: Array<() => void> = [];
-
-  push(e: HarnessEvent): void {
-    this.buffer.push(e);
-    this.wake();
-  }
-
-  close(): void {
-    this.closed = true;
-    this.wake();
-  }
-
-  private wake(): void {
-    for (const w of this.waiters.splice(0)) w();
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<HarnessEvent> {
-    let i = 0;
-    while (true) {
-      if (i < this.buffer.length) {
-        yield this.buffer[i++]!;
-        continue;
-      }
-      if (this.closed) return;
-      await new Promise<void>((r) => this.waiters.push(r));
-    }
-  }
-}
-
-class PauseGate {
-  private gate = Promise.resolve();
-  private release: (() => void) | null = null;
-
-  pause(): void {
-    if (this.release) return;
-    this.gate = new Promise<void>((r) => (this.release = r));
-  }
-
-  resume(): void {
-    this.release?.();
-    this.release = null;
-  }
-
-  wait(): Promise<void> {
-    return this.gate;
-  }
-}
-
-/** The tool that satisfies a replan gate. Named once so core and the gate cannot drift apart. */
-export const PLAN_TOOL = "update_plan";
-
-/**
- * Refusals before a replan gate releases itself. Small on purpose: the gate exists to interrupt,
- * not to stop. If two refusals have not produced a plan, a third will not either.
- */
-export const MAX_REPLAN_REFUSALS = 2;
-
-interface OverflowResult {
-  display: string;
-  output?: string;
-  /** Complete-output cursor corresponding to a prefix preview; absent for headers/summaries. */
-  prefixLimit?: number;
-}
-
-/** Bound every tool, and turn both explicit and forgotten representational overflow into artifacts. */
-function overflowResult(result: {
-  display: string;
-  output: unknown;
-  truncated?: boolean;
-  fullDisplay?: string;
-  displayPrefixChars?: number;
-}): OverflowResult {
-  const explicit = result.truncated === true && result.fullDisplay !== undefined && result.fullDisplay.length > 0
-    ? result.fullDisplay
-    : undefined;
-  if (explicit !== undefined && explicit !== result.display) {
-    const prefixLimit = Number.isSafeInteger(result.displayPrefixChars) && result.displayPrefixChars! >= 0 &&
-      result.displayPrefixChars! < explicit.length
-      ? result.displayPrefixChars
-      : undefined;
-    return {
-      display: bound(result.display).display,
-      output: explicit,
-      ...(prefixLimit === undefined ? {} : { prefixLimit }),
-    };
-  }
-  const bounded = bound(result.display);
-  return bounded.truncated
-    ? { display: bounded.display, output: result.display, prefixLimit: bounded.shown }
-    : { display: bounded.display };
-}
-
-/** Keep a directly pageable artifact handle inside a caller-selected model-facing display bound. */
-function displayWithOutputHandle(
-  display: string,
-  output: string,
-  seq: number,
-  prefixLimit: number | undefined,
-  cap = DISPLAY_CAP,
-): string {
-  const preview = prefixLimit === undefined ? display : output;
-  let visible = Math.min(prefixLimit ?? preview.length, cap);
-  let marker = "";
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const cursor = prefixLimit === undefined ? 0 : visible;
-    const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
-    marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
-    const nextVisible = safeSliceEnd(
-      preview,
-      Math.min(prefixLimit ?? preview.length, Math.max(0, cap - marker.length)),
-    );
-    if (nextVisible === visible) break;
-    visible = nextVisible;
-  }
-  const cursor = prefixLimit === undefined ? 0 : visible;
-  const nextTo = safeSliceEnd(output, Math.min(output.length, cursor + DISPLAY_CAP));
-  marker = outputArtifactMarker(seq, cursor, nextTo, output.length);
-  return `${preview.slice(0, visible)}${marker}`;
-}
+export { PLAN_TOOL, MAX_REPLAN_REFUSALS } from "./tool-execution.js";
 
 export function createAgent(config: AgentConfig): Agent {
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
@@ -380,82 +248,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // for a fresh session, where the resume path's advisory file lock does not apply.
   const releaseClaim = resume === undefined ? store.claim(id) : null;
   let cwd = opts.cwd ?? process.cwd();
-  const stream = new EventStream();
-  const gate = new PauseGate();
-  const abortController = new AbortController();
-  const auxiliaryController = new AbortController();
-  /**
-   * `session_end` hooks run under this signal, not the session's (#88). The session's signal is
-   * aborted by definition on an aborted session, and `runHooks` skips a point whose signal is
-   * already aborted — so no `session_end` hook ever ran for an abort, and the ingest and dream
-   * trigger that hang off that point never saw a session that was cut off, which is exactly the
-   * kind a memory wants. The abort reason still reaches hooks in `summary.reason`. A SECOND abort,
-   * once the session is ending, aborts this one too: the hooks are bounded by their budget, but
-   * a person pressing ctrl-C twice means "stop waiting", not "run ingest for fifteen minutes".
-   */
-  const endController = new AbortController();
-  let ending = false;
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook" }> = [];
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
-  let replanReason: string | null = null;
-  /** Refusals under the current gate, so a gate can never be permanent. */
-  let replanRefusals = 0;
+  const replan: ReplanState = { reason: null, refusals: 0 };
   const hasPlanTool = config.tools.some((t) => t.name === PLAN_TOOL);
 
-  // All appends go through one promise chain so events written by tools (via ctx.emit)
-  // and by the loop land in the store — and in `seq` — in the order they were emitted.
-  let chain: Promise<unknown> = Promise.resolve();
-  let ended = false;
-  const emit = (payload: EventPayload): Promise<HarnessEvent> => {
-    // A plan landing satisfies the force_replan gate. Every path to this clearing is authorised:
-    // the loop's own emits, or `update_plan` through emitFromTool — whose SOURCE axis drops a
-    // `plan.updated` from any other tool before it reaches here (issue #67).
-    if (payload.type === "plan.updated") {
-      replanReason = null;
-      replanRefusals = 0;
-    }
-    const p = chain.then(() => store.append(id, payload)).then((e) => {
-      stream.push(e);
-      return e;
-    });
-    chain = p.catch(() => {});
-    return p;
-  };
+  const lifecycle = createSessionLifecycle(store, id, abortGraceOf(config), (payload) => {
+    if (payload.type === "plan.updated") { replan.reason = null; replan.refusals = 0; }
+  });
+  const { stream, gate, abortController, auxiliaryController, endController, emit, raceAbort, settleOrphans } = lifecycle;
 
-  // A tool the abort race orphaned may still emit after session.end; those events are dropped
-  // so the log's last event is always session.end.
-  // A factory rather than one shared closure: the loop binds the executing tool's registered name
-  // (never a name the payload claims), so the gate can hold tools to the events that are theirs.
-  const emitFromTool = (toolName: string) => (payload: EventPayload): void => {
-    if (ended) return;
-    // A tool's emit is untrusted input, so it is gated on THREE axes, mirroring record():
-    //  1. TYPE — a tool may emit only the informational/state kinds tools legitimately produce
-    //     (TOOL_EMITTABLE_EVENTS). A forged permission.decision, session.end, or supervisor
-    //     record is not one of them.
-    //  2. SOURCE — an emittable type that carries authority is held to its one legitimate emitter
-    //     (TOOL_EMIT_SOURCES): `plan.updated` releases the force_replan gate below and rewrites the
-    //     scope the drift detector enforces, `subagent.*` asserts a child session exists. Any tool
-    //     could otherwise emit one `plan.updated` and shrug off the intervention PLAN §4.2 promises
-    //     cannot be ignored (issue #67).
-    //  3. SHAPE — even an allowed type must be a well-formed EventPayload. The store appends with a
-    //     bare JSON.stringify and `read` re-parses with HarnessEvent.parse, which THROWS on a bad
-    //     line; raw/ is immutable, so one malformed `{type:"file.changed"}` would permanently break
-    //     `sessions show`, resume, and ingest for the session (the same corruption record() guards).
-    // Any failure is dropped and reported, never appended — the log stays readable and faithful
-    // whatever a tool (a buggy one, or one forwarding hostile content) tries to write.
-    const reject = (why: string): void => {
-      const type = typeof (payload as { type?: unknown })?.type === "string" ? (payload as { type: string }).type : "unknown";
-      void emit({ type: "error", message: `the "${toolName}" tool tried to emit a "${type}" event, ${why}; dropped`, fatal: false });
-    };
-    if (!TOOL_EMITTABLE_EVENTS.has(payload.type)) return reject("which tools may not emit");
-    const soleEmitter = TOOL_EMIT_SOURCES.get(payload.type);
-    if (soleEmitter !== undefined && soleEmitter !== toolName) {
-      return reject(`which only the "${soleEmitter}" tool may emit`);
-    }
-    const parsed = EventPayload.safeParse(payload);
-    if (!parsed.success) return reject("which is malformed and would corrupt the log");
-    void emit(parsed.data);
-  };
+  const emitFromTool = createToolEmitterFactory(emit, lifecycle.isEnded);
 
   /**
    * Hook fan-out. Failures are surfaced as non-fatal `error` events so they are visible in the
@@ -480,67 +283,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         ...(config.hookTimeoutMs === undefined ? {} : { timeoutMs: config.hookTimeoutMs }),
         ...(failClosed ? { failClosed: true } : {}),
         onError: (message) => {
-          if (!ended) void emit({ type: "error", message, fatal: false });
+          if (!lifecycle.isEnded()) void emit({ type: "error", message, fatal: false });
         },
       },
       point,
       { ...ctx, signal },
     );
-  };
-
-  /**
-   * Work an abort raced past and left running. The loop must not report itself ended while a
-   * subagent it started is still writing its own log: a parent summary that resolves before the
-   * child's `session.end` lands made "aborting a session leaves no running children" true only
-   * in wall time, and a reader of the child's log (the abort test, `sessions show`) saw a session
-   * with no end. Settled entries remove themselves.
-   */
-  const orphans = new Map<Promise<unknown>, string>();
-  const orphan = (work: Promise<unknown>, label: string): void => {
-    orphans.set(work, label);
-    work.then(() => orphans.delete(work), () => orphans.delete(work));
-  };
-  // A negative, NaN, or non-finite grace is a configuration mistake, not a request for a
-  // never-ending wait: fall back to the default rather than hand setTimeout nonsense.
-  const graceMs = abortGraceOf(config);
-  const settleOrphans = async (): Promise<void> => {
-    if (orphans.size === 0) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // NOT unref'd: this timer may be the only handle keeping the process alive while a tool that
-    // ignores its signal blocks on nothing. Unref'd, Node exited mid-grace with no snapshot and no
-    // session.end written — a worse outcome than the wait, and one no in-process test can see.
-    const expired = new Promise<"expired">((res) => {
-      timer = setTimeout(() => res("expired"), graceMs);
-    });
-    const outcome = await Promise.race([Promise.allSettled([...orphans.keys()]).then(() => "settled" as const), expired]);
-    if (timer !== undefined) clearTimeout(timer);
-    if (outcome === "expired") {
-      const labels = [...orphans.values()].join(", ");
-      await emit({
-        type: "error",
-        message: `orphaned work still running ${graceMs}ms after abort (${labels}); session.end written without waiting for it`,
-        fatal: false,
-      }).catch(() => {});
-    }
-  };
-
-  /** Lets `control.abort()` win over a tool that ignores its signal. */
-  const raceAbort = <T>(work: Promise<T>, label: string): Promise<T> => {
-    const signal = abortController.signal;
-    if (signal.aborted) {
-      work.catch(() => {});
-      orphan(work, label);
-      return Promise.reject(new DOMException("aborted", "AbortError"));
-    }
-    return new Promise<T>((res, rej) => {
-      const onAbort = () => {
-        orphan(work, label);
-        rej(new DOMException("aborted", "AbortError"));
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      work.then(res, rej).finally(() => signal.removeEventListener("abort", onAbort));
-      work.catch(() => {});
-    });
   };
 
   const done = (async (): Promise<SessionSummary> => {
@@ -1093,8 +841,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
-      ending = true;
-      auxiliaryController.abort(new DOMException("session main work ended", "AbortError"));
+      lifecycle.beginEnding();
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
       // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.
@@ -1134,373 +881,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }).catch(() => {});
       }
 
-      ended = true;
-      await emit({ type: "session.end", reason }).catch(() => {});
-      await chain.catch(() => {});
-      await releaseLock?.().catch(() => {});
-      releaseClaim?.();
-      // Resource cleanup, deliberately LAST (session_end hooks above run under this signal): a
-      // settled session's signal aborts so anything tied to it — background jobs above all —
-      // dies with the session instead of only on an explicit user abort. A session that ends
-      // "done" leaving an invisible watcher burning CPU is the same leak as an aborted one.
-      abortController.abort();
-      stream.close();
+      await lifecycle.finish(reason, releaseLock, releaseClaim);
     }
     return { id, reason, turns, usage: totals };
 
-    async function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
-      const resultBlock = (content: string, isError: boolean): ContentBlock =>
-        isError
-          ? { type: "tool_result", toolUseId: tu.id, content, isError: true }
-          : { type: "tool_result", toolUseId: tu.id, content };
-
-      const tool = toolsByName.get(tu.name);
-      if (!tool) {
-        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
-        await emit({ type: "tool.result", id: tu.id, ok: false, display: `unknown tool: ${tu.name}`, durationMs: 0 });
-        return resultBlock(`unknown tool: ${tu.name}`, true);
-      }
-
-      // The replan gate: everything except planning is refused while it is up — but it is
-      // self-limiting. A gate that could never be released (no `update_plan` in the tool list,
-      // an agent that will not call it, permissions that deny it) would burn the whole budget on
-      // refusals, which is a worse failure than whatever the supervisor was trying to catch. So
-      // it opens itself after MAX_REPLAN_REFUSALS and says why.
-      if (replanReason !== null && tu.name !== PLAN_TOOL) {
-        replanRefusals += 1;
-        if (replanRefusals > MAX_REPLAN_REFUSALS || !hasPlanTool) {
-          const why = hasPlanTool
-            ? `after ${replanRefusals - 1} refusals`
-            : `this session has no ${PLAN_TOOL} tool, so the gate could never be satisfied`;
-          await emit({
-            type: "error",
-            message: `replan gate released ${why}; continuing without a fresh plan`,
-            fatal: false,
-          });
-          replanReason = null;
-          replanRefusals = 0;
-        } else {
-          const display =
-            `blocked: the supervisor requires a fresh plan before more tool calls (${replanReason}). ` +
-            `Call ${PLAN_TOOL} with your revised plan, then continue.`;
-          await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
-          await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
-          return resultBlock(display, true);
-        }
-      }
-
-      const parsed = tool.inputSchema.safeParse(tu.input);
-      if (!parsed.success) {
-        const display = `invalid input for ${tu.name}: ${parsed.error.message}`;
-        await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
-        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: 0 });
-        return resultBlock(display, true);
-      }
-      // pre_tool: sees the PARSED input, so a hook reasons about typed data rather than raw JSON.
-      // A `modify` patch is re-validated against the tool's own schema below — a hook is
-      // third-party code, so its patch is a proposal, not an instruction.
-      let input = parsed.data;
-      {
-        const h = await hook("pre_tool", {
-          sessionId: id,
-          cwd,
-          turn: turns,
-          tool: { name: tu.name, input },
-        });
-        if (h.denied !== undefined) {
-          // no `tool.call` — matching the permission-deny path exactly. A phantom call for
-          // something that never ran feeds the stall detector's productivity count and the loop
-          // detector's inputHash tally, so the two deny paths must look the same downstream.
-          await emit({ type: "tool.denied", id: tu.id, name: tu.name });
-          return resultBlock(`blocked by hook: ${h.denied}`, true);
-        }
-        if (h.patches.length > 0) {
-          const merged = tool.inputSchema.safeParse(mergePatches(input, h.patches));
-          if (merged.success) input = merged.data;
-          else {
-            await emit({
-              type: "error",
-              message: `hook patch for ${tu.name} did not match its schema; using the original input`,
-              fatal: false,
-            });
-          }
-        }
-      }
-
-      const permClass = typeof tool.permission === "function" ? tool.permission(input) : tool.permission;
-      const declaredPaths = tool.paths?.(input);
-      const permReq: PermissionRequest = {
-        tool: tu.name,
-        input,
-        class: permClass,
-        cwd,
-        ...(declaredPaths === undefined ? {} : { paths: declaredPaths }),
-        // whose session this is, when it is not the one a human is watching. Set on the config by
-        // whoever built the session (the subagent tool's `childConfig`), never by a tool or by
-        // the model — an ask that can name its own origin can lie about it.
-        ...(config.origin === undefined ? {} : { origin: config.origin }),
-      };
-      await emit({ type: "permission.request", req: permReq });
-      let decision = await config.permissions.decide(permReq);
-      await emit({ type: "permission.decision", d: decision });
-      if (decision === "ask") {
-        decision = config.onAsk ? await config.onAsk(permReq) : "deny";
-        await emit({ type: "permission.decision", d: decision });
-      }
-      if (decision === "deny") {
-        await emit({ type: "tool.denied", id: tu.id, name: tu.name });
-        return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
-      }
-
-      const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
-      const toolEffect = checkpointers.length === 0 ? "read-only" : typeof tool.effects === "function" ? tool.effects(input) : (tool.effects ?? "workspace");
-      if (checkpointers.length > 0) {
-        const checkpoint = await hook("pre_tool", {
-          sessionId: id, cwd, turn: turns, tool: { name: tu.name, input }, permission: permClass,
-          toolEffect,
-          hasBackgroundWork: () => [...toolsByName.values()].some(t => t.hasBackgroundWork?.()),
-          checkpointExcludes: [await realpath(config.store.root)],
-          emitCheckpoint: async (event) => {
-            if (ended || abortController.signal.aborted) throw new Error("checkpoint session ended/aborted");
-            await emit(EventPayload.parse(event));
-          },
-        }, checkpointers, true);
-        if (checkpoint.denied !== undefined) {
-          await emit({ type: "tool.denied", id: tu.id, name: tu.name });
-          return resultBlock(`checkpoint failed; tool blocked: ${checkpoint.denied}`, true);
-        }
-      }
-      if (checkpointers.length > 0 && abortController.signal.aborted) return resultBlock("aborted before tool execution", true);
-      await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input) });
-      const ctx: ToolContext = {
-        cwd,
-        sessionId: id,
-        // bound to the REGISTERED tool's name (the one resolved from toolsByName), which is also
-        // what tool.call recorded — not anything the tool or model could claim later
-        emit: emitFromTool(tool.name),
-        signal: abortController.signal,
-        endSignal: endController.signal,
-      };
-      const t0 = now();
-      let sandboxDenialRecorded = false;
-      let sandboxRetryDenied = false;
-      try {
-        const command = () => tool.execute(input, ctx);
-        // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,
-        // and selecting `none` still traverses the provider seam so providers own mode semantics.
-        const prepared = config.sandbox !== undefined && config.sandbox.mode !== "none" && tool.sandbox !== "compatible"
-          ? async () => { throw new SandboxDeniedError(`tool ${tool.name} has no sandbox-compatible execution path; running it requires explicit outside-sandbox approval`); }
-          : config.sandbox === undefined
-          ? command
-          : config.sandbox.provider.prepare(command, {
-              mode: config.sandbox.mode,
-              cwd,
-              ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
-            });
-        let r;
-        try {
-          r = await raceAbort(withSandboxPolicy(
-            config.sandbox === undefined || config.sandbox.mode === "none" ? undefined : {
-              mode: config.sandbox.mode, cwd,
-              ...(config.sandbox.network === undefined ? {} : { network: config.sandbox.network }),
-            }, prepared,
-          ), `tool ${tool.name}`);
-        } catch (err) {
-          if (config.sandbox === undefined || !(err instanceof SandboxDeniedError)) throw err;
-
-          const reason = bound(err.message).display;
-          await emit({
-            type: "sandbox.denied",
-            id: tu.id,
-            name: tu.name,
-            mode: config.sandbox.mode,
-            reason,
-          });
-          sandboxDenialRecorded = true;
-
-          // A sandbox grant is not a standing tool permission: it crosses a second security axis and
-          // must be answered explicitly. The retry bypasses only the sandbox, not input validation,
-          // hooks, logging, or the original permission decision, and this non-looping branch gives
-          // one call exactly one opportunity to run outside the boundary.
-          const escalationReq: PermissionRequest = { ...permReq, origin: "sandbox-escalation" };
-          await emit({ type: "permission.request", req: escalationReq });
-          await emit({ type: "permission.decision", d: "ask" });
-          const escalationDecision = config.onAsk === undefined
-            ? "deny"
-            : await config.onAsk(escalationReq);
-          await emit({ type: "permission.decision", d: escalationDecision });
-          if (escalationDecision !== "allow") {
-            sandboxRetryDenied = true;
-            throw err;
-          }
-
-          // Deliberately call the original deferred command, never `prepared`, and never catch this
-          // as another escalation. A provider-shaped error from this one retry is an ordinary tool
-          // failure because no sandbox was active for it.
-          r = await raceAbort(outsideSandbox(command), `tool ${tool.name} outside sandbox`);
-        }
-        const ok = r.isError !== true;
-        const overflow = overflowResult(r);
-        const resultEvent = await emit({
-          type: "tool.result",
-          id: tu.id,
-          ok,
-          display: overflow.display,
-          durationMs: now() - t0,
-          ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
-          ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)
-            ? { outputIncomplete: true } : {}),
-        });
-        const modelDisplay = overflow.output === undefined
-          ? overflow.display
-          : displayWithOutputHandle(
-              overflow.display,
-              overflow.output,
-              resultEvent.seq,
-              overflow.prefixLimit,
-            );
-        if (overflow.output !== undefined) {
-          // The raw result above preserves the tool's own display. This additive event records the
-          // different bounded handle-bearing display the model actually consumes.
-          await emit({ type: "tool.result.patched", id: tu.id, by: "core:output-overflow", display: modelDisplay });
-        }
-
-        // post_tool: a hook may rewrite what the MODEL sees (redaction, summarising a huge
-        // output) or append to it. The `tool.result` event above is already written, so the log
-        // keeps what the tool actually returned — a hook can shape the conversation without
-        // being able to rewrite history.
-        const h = await hook("post_tool", {
-          sessionId: id,
-          cwd,
-          turn: turns,
-          tool: { name: tu.name, input },
-          // `display` includes the immutable-log handle when output overflowed; `output` remains
-          // the tool's own value, which is very often not a string.
-          result: { ok, display: modelDisplay, output: r.output },
-        });
-        for (const bad of h.patches.filter((p) => typeof p !== "string")) {
-          await emit({
-            type: "error",
-            message: `post_tool patch for ${tu.name} must be a string (got ${typeof bad}); ignoring`,
-            fatal: false,
-          });
-        }
-        const replaced = h.patches.filter((p): p is string => typeof p === "string").at(-1);
-        let body = modelDisplay;
-        if (replaced !== undefined || h.injects.length > 0) {
-          // An ordinary bounded result keeps every code unit and the injection shrinks to the
-          // remaining space. An overflow artifact or replacement shares the frame: half remains
-          // available for guidance and half for result context/the recovery handle.
-          const rawInjected = h.injects.join("\n");
-          const availableAfterResult = Math.max(0, DISPLAY_CAP - modelDisplay.length - 1);
-          const injectedBudget = rawInjected === ""
-            ? 0
-            : overflow.output !== undefined || replaced !== undefined
-              ? Math.floor(DISPLAY_CAP / 2)
-              : availableAfterResult > 0
-                ? availableAfterResult
-                : Math.min(Math.floor(DISPLAY_CAP / 2), rawInjected.length);
-          const injected = injectedBudget === 0 ? "" : bound(rawInjected, injectedBudget).display;
-          const separator = injected === "" ? "" : "\n";
-          const baseBudget = DISPLAY_CAP - separator.length - injected.length;
-          const base = replaced !== undefined
-            ? bound(replaced, baseBudget).display
-            : overflow.output !== undefined
-              ? displayWithOutputHandle(
-                  overflow.display,
-                  overflow.output,
-                  resultEvent.seq,
-                  overflow.prefixLimit,
-                  baseBudget,
-                )
-              : bound(modelDisplay, baseBudget).display;
-          // Keep the strict recovery marker last even when guidance is injected; stale-result
-          // eviction can then preserve the real core marker rather than marker-shaped tool text.
-          body = overflow.output !== undefined && replaced === undefined && injected !== ""
-            ? `${injected}${separator}${base}`
-            : `${base}${separator}${injected}`;
-          // the log keeps what the tool returned; this records that a hook changed what the
-          // model consumed, so the two can never diverge unobserved
-          await emit({
-            type: "tool.result.patched",
-            id: tu.id,
-            by: "post_tool",
-            display: body,
-            mode: replaced === undefined ? "inject" : "modify",
-          });
-        }
-        return resultBlock(body, !ok);
-      } catch (err) {
-        const sandboxDenied = err instanceof SandboxDeniedError && (
-          sandboxRetryDenied || (config.sandbox !== undefined && !sandboxDenialRecorded)
-        );
-        const rawReason =
-          abortController.signal.aborted && err instanceof DOMException && err.name === "AbortError"
-            ? "aborted"
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        // A throw is an unexpected failure, not a successful complete rendering: bound it but do
-        // not persist its unbounded message as an artifact. Still run post_tool so redaction hooks
-        // cover errors exactly as they cover ordinary tool results.
-        const reason = bound(rawReason).display;
-        const display = bound(sandboxDenied ? `sandbox denied: ${rawReason}` : rawReason).display;
-        if (sandboxDenied && config.sandbox !== undefined && !sandboxDenialRecorded) {
-          await emit({
-            type: "sandbox.denied",
-            id: tu.id,
-            name: tu.name,
-            mode: config.sandbox.mode,
-            reason,
-          });
-        }
-        await emit({ type: "tool.result", id: tu.id, ok: false, display, durationMs: now() - t0 });
-        const h = await hook("post_tool", {
-          sessionId: id,
-          cwd,
-          turn: turns,
-          tool: { name: tu.name, input },
-          result: { ok: false, display, output: undefined },
-        });
-        for (const bad of h.patches.filter((patch) => typeof patch !== "string")) {
-          await emit({
-            type: "error",
-            message: `post_tool patch for ${tu.name} must be a string (got ${typeof bad}); ignoring`,
-            fatal: false,
-          });
-        }
-        const replaced = h.patches.filter((patch): patch is string => typeof patch === "string").at(-1);
-        const rawInjected = h.injects.join("\n");
-        const availableAfterError = Math.max(0, DISPLAY_CAP - display.length - 1);
-        const injectedBudget = rawInjected === ""
-          ? 0
-          : availableAfterError > 0
-            ? availableAfterError
-            : Math.min(Math.floor(DISPLAY_CAP / 2), rawInjected.length);
-        const injected = injectedBudget === 0 ? "" : bound(rawInjected, injectedBudget).display;
-        const separator = injected === "" ? "" : "\n";
-        const base = bound(replaced ?? display, DISPLAY_CAP - separator.length - injected.length).display;
-        const body = `${base}${separator}${injected}`;
-        if (replaced !== undefined || h.injects.length > 0) {
-          await emit({
-            type: "tool.result.patched",
-            id: tu.id,
-            by: "post_tool",
-            display: body,
-            mode: replaced === undefined ? "inject" : "modify",
-          });
-        }
-        return resultBlock(body, true);
-      } finally {
-        for (const checkpointer of checkpointers) {
-          await checkpointer.afterTool({
-            point:"post_tool",sessionId:id,cwd,turn:turns,toolEffect,
-            signal:AbortSignal.any([abortController.signal,AbortSignal.timeout(60_000)]),
-            hasBackgroundWork:()=>[...toolsByName.values()].some(t=>t.hasBackgroundWork?.()),
-            checkpointExcludes:[await realpath(config.store.root)],
-          }).catch((error:unknown)=>emit({type:"error",message:`checkpoint ownership failed: ${String(error)}`,fatal:false}));
-        }
-      }
+    function runTool(tu: { id: string; name: string; input: unknown }): Promise<ContentBlock> {
+      return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit,
+        emitFromTool, hook, signal: abortController.signal, endSignal: endController.signal,
+        raceAbort, now, isEnded: lifecycle.isEnded });
     }
   })();
 
@@ -1512,21 +900,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       steer: (message, source = "user") => pendingSteers.push({ message, source }),
       pause: () => gate.pause(),
       resume: () => gate.resume(),
-      abort: () => {
-        auxiliaryController.abort(new DOMException("session aborted", "AbortError"));
-        // an abort while the session is already ending is the second one: stop the end hooks too
-        if (ending || abortController.signal.aborted) endController.abort();
-        abortController.abort();
-        gate.resume();
-      },
+      abort: lifecycle.abort,
       requirePlan: (reason) => {
-        replanReason = reason;
-        replanRefusals = 0;
+        replan.reason = reason;
+        replan.refusals = 0;
       },
-      planRequired: () => replanReason !== null,
+      planRequired: () => replan.reason !== null,
       canRequirePlan: () => hasPlanTool,
       record: (payload) => {
-        if (ended) return;
+        if (lifecycle.isEnded()) return;
         // validated, not trusted: `Detector` is a public interface, and one third-party detector
         // returning confidence 1.4 or NaN would otherwise write a line the store can never read
         // back. Dropped-and-reported beats a corrupted append-only log.

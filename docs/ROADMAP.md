@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: R4c; R4a–R4b, H1–H5 and E1–E3 complete in PRs #118–#136.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Current work: H6; R4a–R4c, H1–H5 and E1–E3 complete in PRs #118–#137.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -9,8 +9,8 @@ evidence. This revision changes planned work, not the implementation status of c
 | Priority | Work | Exit condition |
 |---|---|---|
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
-| Now | R4a–R4c: checkpoints and undo | Opt-in snapshots before mutation, conservative ownership guards and explicit restore |
-| Then | H6: focused core extraction | Extraction preserves behavior |
+| Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
+| Now | H6: focused core extraction | Extraction preserves behavior |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
 
@@ -909,3 +909,6 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
   termination already retains R4b recovery originals); add an omitted-option abort control next
   to the explicit-false test; omit the unused restore adapter from disabled wiring. None changes
   the current opt-in, joined, guarded restore contract or blocks H6.
+- H6 polish: document the normalized abort-grace parameter at the lifecycle signature and add
+  a pointer from the shared replan state to its synchronous clearing callback. Keep internal
+  execution dependencies explicit; shrinking the context object is optional, not a new milestone.
