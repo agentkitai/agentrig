@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { AdvisoryPromptContextSchema, MessageSchema, InstructionContextSchema } from "./messages.js";
 import { DiagnosticsSchema, InternalToolSchema } from "./diagnostics-types.js";
-import { MessageSchema, InstructionContextSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
 import { ShellOperationSchema } from "./shell-operation.js";
 import { PermissionClass, Decision } from "./permission-types.js";
@@ -197,6 +197,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.start"),
     task: z.string(),
+    advisoryContext: AdvisoryPromptContextSchema.optional(),
     context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
@@ -216,6 +217,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.resume"),
     task: z.string(),
+    advisoryContext: AdvisoryPromptContextSchema.optional(),
     context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),

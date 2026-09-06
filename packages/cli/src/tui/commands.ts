@@ -12,6 +12,7 @@ export type TuiCommand =
   | { kind: "abort" }
   | { kind: "memory"; query: string }
   | { kind: "dream"; auto: boolean }
+  | { kind: "review"; args: string }
   | { kind: "supervisor" }
   | { kind: "plan" }
   | { kind: "context" }
@@ -44,6 +45,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "help", summary: "show this list" },
   { name: "memory", args: "[query]", summary: "search the wiki, or list it with no query" },
   { name: "dream", args: "[--auto]", summary: "run the scheduled lint; reports unless --auto" },
+  { name: "review", args: "[--base ref | --pr n] [--comment]", summary: "idle advisory diff review (costs tokens); never runs tests or edits" },
   { name: "supervisor", summary: "show what the supervisor has signalled this session" },
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
@@ -100,6 +102,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "memory", query: args };
     case "dream":
       return { kind: "dream", auto: /(^|\s)--auto(\s|$)/.test(args) };
+    case "review":
+      return { kind: "review", args };
     case "supervisor":
       return { kind: "supervisor" };
     case "plan":
@@ -146,6 +150,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "abort", "stop",
   "memory",
   "dream",
+  "review",
   "supervisor",
   "plan",
   "context",

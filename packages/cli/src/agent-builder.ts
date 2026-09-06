@@ -274,6 +274,8 @@ export async function readMcpConfig(path: string): Promise<Array<McpServerConfig
 }
 
 export interface BuiltAgent {
+  /** Same actual policy used by the runtime; read-only operator surfaces must not bypass denies. */
+  permissions?: PermissionPolicy;
   agent: Agent;
   provider: ModelProvider;
   /** Every role's provider (R3.5a); `provider` is `providers.main`. */
@@ -340,6 +342,9 @@ export interface AgentExtras {
   permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
   mcpPinRoot?: string;
+  /** Trusted ACP adapter: exact-matched subset only; scope still comes from mcpConfig. */
+  mcpServers?: McpServerConfig[];
+  mcpExistingPinsOnly?: boolean;
   onAsk?: import("@agentkitai/agentrig-core").AgentConfig["onAsk"];
   /** Before Ink/controller startup. Must not enqueue a prompt into an unmounted UI. */
   onStartupAsk?: import("@agentkitai/agentrig-core").AgentConfig["onAsk"];
@@ -495,7 +500,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   let mcp: McpConnection[] = [];
   let mcpSkills: Skill[] = [];
   if (opts.mcpConfig !== undefined) {
-    const configs = await readMcpConfig(opts.mcpConfig);
+    const configs = extras.mcpServers ?? await readMcpConfig(opts.mcpConfig);
     if (opts.sandbox !== undefined && opts.sandbox !== "none" && configs.some(c => !("url" in c)))
       throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
     const startupPolicy = buildPermissionPolicy(opts);
@@ -523,6 +528,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     const connected = await connectServers({
       servers,
       pins: new FileMcpPins(extras.mcpPinRoot ?? join(homedir(), ".agentrig", "mcp-pins"), await realpath(opts.mcpConfig)),
+      ...(extras.mcpExistingPinsOnly === undefined ? {} : { requireExistingPins: extras.mcpExistingPinsOnly }),
       onDefinitionNotice: (message) => extras.onNotice?.(message),
       onDefinitionChange: async (change, ctx) => {
         // A separate user decision, never the ordinary allow/yolo policy. Server prose is data.
@@ -701,6 +707,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
   });
 
-  return { agent, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

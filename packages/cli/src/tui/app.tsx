@@ -136,7 +136,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
         // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
         for (const action of ordinaryInputActions(segment.text)) {
           if (action.type === "interrupt") {
-            if (state.status === "running") controller.abort();
+            if (state.status === "running" || state.reviewing) controller.abort();
             else exit();
           } else if (controller.snapshot().pending !== null) {
             permissionAction(action);
@@ -169,7 +169,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
     if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
 
     if (key.ctrl && char === "c") {
-      if (state.status === "running") controller.abort();
+      if (state.status === "running" || state.reviewing) controller.abort();
       else exit();
       return;
     }
@@ -291,6 +291,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
         </Box>
       ) : (
         <Box marginTop={1}>
+          {state.reviewing ? <Text color="yellow">reviewing captured diff · /abort to cancel · </Text> : null}
           <Text color={state.status === "running" ? "yellow" : "green"}>
             {state.status === "running" ? "· " : "> "}
           </Text>

@@ -27,6 +27,7 @@ import { askInteractively } from "../run.js";
 import { withMaintenanceSignal } from "../maintenance.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
+import { reviewChanges, reviewArguments, renderReview, reviewFailure } from "../review.js";
 
 export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
 
@@ -131,6 +132,17 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
   if (warning !== null) controller.print(warning, "error");
+  controller.setReview(async (args, signal) => {
+    try {
+      const result = await reviewChanges(process.cwd(), { ...opts, ...reviewArguments(args) }, signal, {
+        provider: () => built!.providers.supervisor,
+        ask: (req, signal) => controller.ask(req, { permissionGrants: controller.permissionGrants }, signal),
+        onUsage: report => controller.print(formatAuxiliaryUsage(report), "system"),
+      });
+      return renderReview(result);
+    } catch (error) { return [reviewFailure(error)]; }
+  });
+
   if (built.memoryStore !== undefined) {
     const store = built.memoryStore;
     controller.setMemory(async (query) => {

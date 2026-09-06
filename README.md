@@ -47,6 +47,18 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 
 ## Commands
 
+- `agentrig review [--base main | --pr 12] [--comment]` — one bounded advisory
+  supervisor-role diff review; `/review` does the same while the TUI is idle.
+  Default includes tracked HEAD-to-worktree text changes only (not untracked files).
+  PR reads and explicit comments require `--allow exec --allow net`; headless asks deny.
+  No tests or edits run. Binary/oversized/unsupported patches and Git filter-configured
+  repositories refuse rather than silently omitting coverage. Uses time/per-response
+  limits; configured total-session token/USD caps explicitly refuse. See [R15e](docs/plans/R15e.md).
+
+`agentrig acp` embeds the same controller in ACP v1 editors over stdio, retaining
+configured permissions and per-project trust. See the [ACP guide](docs/ACP.md)
+for the scripted client, existing-pin MCP requirements and transport limits.
+
 - `agentrig` — start the interactive TUI.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.

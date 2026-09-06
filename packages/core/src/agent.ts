@@ -4,7 +4,7 @@ import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { EventPayload, SupervisorRecord } from "./events.js";
-import { ContentTrustSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
+import { AdvisoryPromptContextSchema, advisoryPromptBlocks, ContentTrustSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { PermissionGrantRegistry } from "./permission-grants.js";
@@ -200,6 +200,8 @@ export interface Session {
 export interface RunOptions {
   cwd?: string;
   resume?: string;
+  /** Bounded external/advisory data from a trusted transport; never fresh user authority. */
+  advisoryContext?: readonly string[];
   /** Trusted host provenance only; scheduled tasks are advisory, never fresh user consent. */
   scheduled?: { entryId: string; minute: number; source?: "heartbeat" };
   /**
@@ -260,6 +262,7 @@ export function createAgent(config: AgentConfig): Agent {
 }
 
 function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {
+  const advisoryContext = opts.advisoryContext === undefined ? undefined : AdvisoryPromptContextSchema.parse(opts.advisoryContext);
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
   // a resumed id is user input (`--resume <id>`) and becomes a filename; reject it here rather
@@ -280,6 +283,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   const principals = contextPrincipals(config.hooks ?? []);
   const expansion = externalExpansion(parent !== undefined && resume === undefined ? readExpansionRestriction(opts) ?? true : true);
   if (parent === undefined && scheduled === undefined) expansion.user(task);
+  if (advisoryContext?.length) expansion.unknown();
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
@@ -444,17 +448,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
               provider.capabilities.cacheReadDiscount,
               provider.capabilities.cacheWriteMultiplier,
             );
-        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns, context: taskContext });
+        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns, context: taskContext,
+          ...(advisoryContext === undefined ? {} : { advisoryContext }) });
         messages = snap.messages;
         // A written snapshot is already resumable; a materialized one can end at a fork point in
         // the middle of a tool call, and the same synthesis makes it acceptable to the APIs.
         messages = resumableMessages();
         if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task, context: taskContext }] });
+        if (advisoryContext?.length) messages.push({ role: "user", content: advisoryPromptBlocks(advisoryContext) });
       } else {
         await emit({
           type: "session.start",
           context: taskContext,
           task,
+          ...(advisoryContext === undefined ? {} : { advisoryContext }),
           cwd,
           provider: provider.id,
           model: provider.model,
@@ -463,6 +470,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (scheduled !== undefined) await emit({ type: "run.scheduled", entryId: scheduled.entryId, minute: scheduled.minute,
           ...(scheduled.source === undefined ? {} : { source: scheduled.source }) });
         messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext, ...(scheduled === undefined ? {} : { trust: "project" as const }) }] }];
+        if (advisoryContext?.length) {
+          if (task === "") messages = [];
+          messages.push({ role: "user", content: advisoryPromptBlocks(advisoryContext) });
+        }
       }
 
       for (const extension of config.extensions?.loaded ?? []) {
