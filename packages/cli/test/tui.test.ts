@@ -513,7 +513,7 @@ describe("TuiController", () => {
     // asserted on the LAST line each time: `text(c)` is the whole scrollback, and the first
     // /permissions above already printed "nothing has a standing answer" into it
     await c.submit("/permissions");
-    expect(last(c)).toMatch(/allow\s+needs_permission/);
+    expect(last(c)).toMatch(/allow\s+"needs_permission"/);
     await c.submit("/permissions reset");
     expect(last(c)).toContain("cleared 1 standing answer");
     await c.submit("/permissions");

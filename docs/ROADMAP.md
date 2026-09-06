@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; H7a is in implementation; R5a is done with green post-merge CI (PR #157); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; H7a is implemented with delivery gates pending; R5a and R13c are done (PRs #157/#159); R12c is implemented with closing delivery gates; R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -15,9 +15,10 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R6d–R6f: memory quality, promotion guardrails and lifecycle | R6f delivered by H5; R6d/R6e in PRs #139/#140 with green PR and post-merge CI |
 | Complete | R13f, R5e and R5d: trusted progress, manifests and MCP pinning | PRs #143/#142/#144 passed exact-head and post-merge three-platform CI |
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
-| Done | R12b: semantic scoped approval UI (PR #155) | Honest effect unknowns and bounded scope editing with exact preview/confirmation; post-merge CI green |
-| Done | R13d: injected-context principals (PR #154) | Runtime-assigned authority and explicit revocable hook delegation; post-merge CI green |
-| Implemented; closing gates | R13c: external-input permission restrictions | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
+| Complete | R12b: semantic scoped approval UI (PR #155) | Exact-head and post-merge CI passed |
+| Implemented; closing gates | R12c: live grant inspection | Exact scope/age/counts, revocation and same-call decision attribution; review and exact-head CI |
+| Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
+| Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Committed | R5 remainder, R7–R11, R12c–R12d, R13c and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 
@@ -682,7 +683,7 @@ exactly this granularity.*
 |---|---|---|
 | R12a *(done, [PR #152](https://github.com/agentkitai/agentrig/pull/152))* | Live validated `{subject, operation, resource, constraints, duration, delegable}` records now enforce explicit argv/path scopes and emit `permission.granted` / `permission.revoked`. Standing answers become `resource: *` session records; explicit base decisions stay intact. Session transitions intentionally correct the previous process-lifetime leak. Shared child groups remain compatible; `delegable` filtering is R12d. See [contract](plans/R12a.md). | core, cli |
 | R12b *(done, [PR #155](https://github.com/agentkitai/agentrig/pull/155))* | Prompt distinguishes declared paths/class/argv from unknown effects and network access. `s` edits bounded path/argv scope; exact future scope is previewed and explicitly confirmed only if it covers the current request. Both input paths preserve existing answers and separate sandbox/MCP consent. See [contract](plans/R12b.md). | cli + core matcher |
-| R12c | `/permissions` lists live grants with age and hit-count; revocation applies immediately; a "why was this allowed" line on any auto-decided call names the grant or rule that decided it | cli |
+| R12c *(implemented; closing delivery gates)* | `/permissions` shows exact live grants, age and matched-decision counts; exact-ID revocation applies to the next decision. Same-call optional policy receipts and correlated events name the actual rule/grant/handler or honest unknown, without re-evaluation or counting previews. See [contract](plans/R12c.md). | core + cli |
 | R12d | Subagent inheritance is explicit: a child receives the parent's grants filtered by `delegable`, never the full set — the shared-policy-object design from M7d gains a per-subject view | core |
 | R12e *(done, [PR #148](https://github.com/agentkitai/agentrig/pull/148))* | Semantic authorization never derives from names, transcript prose or server read-only hints. Explicit `--allow-command` / config argv prefixes bind to trusted post-hook parsed foreground operations; unsupported syntax cannot satisfy a narrow rule and defaults to ask without separate explicit blanket authority. Denies retain precedence; R5d consent and sandbox containment remain independent. See [contract and limits](plans/R12e.md). Grant records/UI/lifecycle remain R12a–R12d. | core, cli |
 
@@ -875,7 +876,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 |---|---|---|
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
-| 2 | R12e (done) → R12a (done) → R12b (closing gates) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
+| 2 | R12e (done) → R12a (done) → R12b (done) → R12c (closing gates) → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
@@ -1082,6 +1083,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R6g polish: normalize fully sanitized-away hints to an absent property; explain beside byte
   accounting that the first admitted entry must fit together with its worked example.
   Neither changes the total cap, selection semantics, emitter ownership or approval policy.
+- R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
+  consider suppressing duplicate handler-source lines where the TUI already printed the answer.
+  Preserve visible rule/grant reasons, honest handler attribution and independent consent.
 - Compaction option polish found during R13c fixtures: validate or deliberately support
   `keepLastMessages: 0`; the current built-in boundary scan assumes a retained last message.
   Preserve conservative summary ancestry and keep this separate from permission guard delivery.
