@@ -13,7 +13,7 @@ import { type CompactionStrategy, summarizeOlderTurns, compactWithProvenance } f
 import { SessionStore, assertSessionId } from "./session-store.js";
 import { runHooks, type AttributedHookResult, type Hook, type HookPoint } from "./hooks.js";
 import { contextPrincipals, USER_CONTEXT, PLATFORM_CONTEXT, ADVISORY_CONTEXT } from "./context-principals.js";
-import { externalExpansion } from "./external-expansion.js";
+import { externalExpansion, readExpansionRestriction } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
@@ -267,7 +267,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   let cwd = opts.cwd ?? process.cwd();
   const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook"; context?: InstructionContext }> = [];
   const principals = contextPrincipals(config.hooks ?? []);
-  const expansion = externalExpansion();
+  const expansion = externalExpansion(parent !== undefined && resume === undefined ? readExpansionRestriction(opts) ?? true : true);
   if (parent === undefined) expansion.user(task);
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */

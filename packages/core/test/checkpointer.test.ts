@@ -71,12 +71,11 @@ async function collect(session: { events: AsyncIterable<HarnessEvent> }): Promis
 function agent(
   turns: ModelEvent[][],
   tools: AnyTool[],
-  opts: { checkpointer?: Checkpointer; hookTimeoutMs?: number; freshApproval?: boolean } = {},
+  opts: { checkpointer?: Checkpointer; hookTimeoutMs?: number } = {},
 ) {
   return createAgent({
     provider: new FakeProvider(turns),
     tools,
-    ...(opts.freshApproval ? { onAsk: async () => "allow" as const } : {}),
     permissions: new RulePolicy([
       { class: "read", decision: "allow" },
       { class: "write", decision: "allow" },
@@ -132,7 +131,7 @@ describe("Checkpointer", () => {
 
   it("refuses to undo across a session-created commit without rewriting history",async()=>{
     await initRepo();
-    const session=agent([[call("a","write",{path:"tracked.txt",content:"committed change"}),stop("tool_use")],[call("b","bash",{command:"git add tracked.txt && git commit -qm change"}),stop("tool_use")],[stop("end_turn")]], [writeTool(),bashTool()], {freshApproval:true}).run("commit",{cwd:root,id:"undo_commit"});
+    const session=agent([[call("a","write",{path:"tracked.txt",content:"committed change"}),stop("tool_use")],[call("b","bash",{command:"git add tracked.txt && git commit -qm change"}),stop("tool_use")],[stop("end_turn")]], [writeTool(),bashTool()]).run("commit",{cwd:root,id:"undo_commit"});
     await collect(session);await session.done;const head=await git("rev-parse","HEAD");
     await expect(undoSession(new SessionStore({root:join(root,".agentrig","sessions")}),session.id,{cwd:root})).rejects.toThrow("HEAD changed since the checkpoint");
     expect(await git("rev-parse","HEAD")).toBe(head);

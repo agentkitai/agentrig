@@ -110,7 +110,10 @@ export class LadderPolicy implements Policy {
         this.level.set(s.type, 0);
       }
 
-      const rung = this.rungs[Math.min(this.level.get(s.type) ?? 0, this.rungs.length - 1)];
+      // Instruction-shaped external prose is a fallible advisory signal, never sufficient
+      // evidence to force a replan, spend on a reviewer, ask for authority, or abort a session.
+      const rung = s.type === "injection" ? (this.rungs.includes("inject_guidance") ? "inject_guidance" : undefined)
+        : this.rungs[Math.min(this.level.get(s.type) ?? 0, this.rungs.length - 1)];
       if (rung === undefined) continue;
 
       const signature = this.signature(s);

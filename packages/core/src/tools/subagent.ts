@@ -3,6 +3,7 @@ import { abortGraceOf, usageTokens, usageUsd, type Agent, type AgentConfig, type
 import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 import { currentSandboxPolicy, SandboxDeniedError } from "../sandbox.js";
+import { inheritExpansionRestriction } from "../external-expansion.js";
 
 /**
  * A subagent tool. `subagent.spawn` / `subagent.end` have been in the event schema since M0 and
@@ -278,7 +279,9 @@ export function subagentTool(opts: SubagentOptions): AnyTool {
       ctx.emit({ type: "subagent.spawn", id, task: input.label ?? input.task });
 
       // the child's own log names its parent, so a spawn record elsewhere can be checked against it
-      const session = child.run(input.task, { cwd: ctx.cwd, id, parent: ctx.sessionId });
+      const runOptions = { cwd: ctx.cwd, id, parent: ctx.sessionId };
+      inheritExpansionRestriction(ctx, runOptions);
+      const session = child.run(input.task, runOptions);
 
       let ended = false;
       const end = (reason: "done" | "aborted" | "error" | "budget"): void => {

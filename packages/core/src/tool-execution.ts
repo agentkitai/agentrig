@@ -11,7 +11,7 @@ import { outsideSandbox } from "./sandbox-providers.js";
 import { contentHash } from "./session-store.js";
 import { mergePatches, type AttributedHookResult, type Hook, type HookPoint, type runHooks } from "./hooks.js";
 import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
-import { expansionSurface, type externalExpansion } from "./external-expansion.js";
+import { bindExpansionRestriction, expansionSurface, type externalExpansion } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
@@ -355,6 +355,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     const command = () => {
       signal.throwIfAborted();
       context.expansion?.dispatched(surface);
+      bindExpansionRestriction(ctx, context.expansion?.restricted() ?? true);
       return tool.execute(input, ctx);
     };
     // Approval and sandboxing are independent axes: only an approved call reaches the sandbox,

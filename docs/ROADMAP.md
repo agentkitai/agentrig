@@ -1003,3 +1003,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - Compaction option polish found during R13c fixtures: validate or deliberately support
   `keepLastMessages: 0`; the current built-in boundary scan assumes a retained last message.
   Preserve conservative summary ancestry and keep this separate from permission guard delivery.
+- R13c diagnostic polish: distinguish failed/aborted approval from explicit denial in auxiliary
+  explanatory text while preserving the denied audit and no dispatch; optionally log a bounded
+  host approval-handler failure detail. Revisit duplicate-request user-presence accounting only
+  if retry assembly changes, without allowing old input or neutral tool-output to clear restriction.

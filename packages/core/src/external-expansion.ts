@@ -6,9 +6,18 @@ import { writeTarget } from "./tools/sandbox-write.js";
 
 export type ExpansionSurface = "exec" | "network" | "write-outside-cwd";
 
+// Live object identity only: not serialized, model-addressable, or restored from a receipt.
+const inheritedRestriction = new WeakMap<object, boolean>();
+export function bindExpansionRestriction(target: object, restricted: boolean): void { inheritedRestriction.set(target, restricted); }
+export function readExpansionRestriction(target: object): boolean | undefined { return inheritedRestriction.get(target); }
+export function inheritExpansionRestriction(from: object, to: object): void {
+  const value = inheritedRestriction.get(from);
+  if (value !== undefined) inheritedRestriction.set(to, value);
+}
+
 /** Runtime state only: neither persisted labels nor model roles can mint fresh user input. */
-export function externalExpansion() {
-  let restricted = true;
+export function externalExpansion(initiallyRestricted = true) {
+  let restricted = initiallyRestricted;
   let pendingUser = false;
   let pendingExternal = false;
   let requestHasUser = false;
@@ -21,7 +30,7 @@ export function externalExpansion() {
       const unknown = (values: readonly ContentBlock[], depth = 0): boolean => {
         if (depth > 32) return true;
         for (const block of values) {
-          if (--remaining < 0 || (block.trust !== "user" && block.trust !== "project")) return true;
+          if (--remaining < 0 || (block.trust !== "user" && block.trust !== "project" && block.trust !== "tool-output")) return true;
           if (block.type === "tool_result" && Array.isArray(block.content) && unknown(block.content, depth + 1)) return true;
         }
         return false;
@@ -37,6 +46,7 @@ export function externalExpansion() {
     /** A pre-tool merge can introduce advisory input after the model request was assembled. */
     hookInput() { if (!requestHasUser) restricted = true; },
     needs(surface: ExpansionSurface | undefined) { return surface !== undefined && restricted && !used.has(surface); },
+    restricted() { return restricted; },
     dispatched(surface: ExpansionSurface | undefined) { if (surface !== undefined) used.add(surface); },
   };
 }

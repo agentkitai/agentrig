@@ -16,6 +16,14 @@ function state(turns: number): SupervisorState {
 }
 
 describe("LadderPolicy", () => {
+  it("keeps repeated heuristic injection advisory even when every escalation capability is enabled", () => {
+    const policy = new LadderPolicy({ cooldownTurns: 0, rubric: "fixture", capabilities: {
+      forceReplan: true, reviewer: true, grader: true, escalate: true, abort: true,
+    } });
+    const interventions = Array.from({ length: 8 }, (_, turn) => policy.decide([sig("injection")], state(turn))).flat();
+    expect(interventions).toHaveLength(8);
+    expect(interventions.every(intervention => intervention.type === "inject_guidance")).toBe(true);
+  });
   it("starts at inject_guidance and carries the signal's evidence into the message", () => {
     const p = new LadderPolicy({ cooldownTurns: 0 });
     const [i] = p.decide([sig("loop")], state(0));

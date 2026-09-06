@@ -314,7 +314,7 @@ describe("a subagent cannot run away", () => {
       [usage(1, 1), stop("end_turn")],
     ]);
     const created: AgentConfig[] = [];
-    const session = harness(provider, { maxDepth: 2, created, childExtra: { onAsk: async () => "allow" } }).run("do it", { cwd: root });
+    const session = harness(provider, { maxDepth: 2, created }).run("do it", { cwd: root });
     await collect(session);
     await session.done;
 
@@ -502,7 +502,7 @@ describe("a subagent cannot run away", () => {
       [usage(1, 1), stop("end_turn")],
     ]);
     const created: AgentConfig[] = [];
-    const session = harness(provider, { maxDepth: 2, maxChildren: 5, maxChildTokens: 100, created, childExtra: { onAsk: async () => "allow" } }).run(
+    const session = harness(provider, { maxDepth: 2, maxChildren: 5, maxChildTokens: 100, created }).run(
       "do it",
       { cwd: root },
     );
@@ -786,7 +786,7 @@ describe("a subagent cannot run away", () => {
       [say("child done"), usage(1, 1), stop("end_turn")],
       [say("parent done"), usage(1, 1), stop("end_turn")],
     ]);
-    const session = harness(provider, { maxDepth: 2, created, childExtra: { abortGraceMs: 1_000, onAsk: async () => "allow" } }).run("do it", { cwd: root });
+    const session = harness(provider, { maxDepth: 2, created, childExtra: { abortGraceMs: 1_000 } }).run("do it", { cwd: root });
     await collect(session);
     expect((await session.done).reason).toBe("done");
     expect(created.map((c) => c.abortGraceMs)).toEqual([500, 250]);
