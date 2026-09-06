@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AuxiliaryLimitError, auxiliaryDiagnostic, positiveLimit, DEFAULT_AUXILIARY_LIMITS, type AuxiliaryOptions, type AuxiliaryLimits } from "./auxiliary.js";
 import type { Detachable, Detector, EscalationOutcome, Policy } from "./types.js";
 import { initialState, reduce, type StateOptions, type SupervisorState } from "./state.js";
+import { evidenceReportCollector } from "./evidence-report.js";
 import { LadderPolicy, type Capabilities, type LadderOptions } from "./policy.js";
 import { defaultDetectors, type DefaultDetectorOptions } from "./detectors/index.js";
 import type { Attempt, Reviewer } from "./reviewer.js";
@@ -125,6 +126,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   positiveLimit("reviewTimeoutMs", opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
   for (const [key, value] of Object.entries(opts.auxiliaryLimits ?? {})) positiveLimit(key, value);
   const state = initialState();
+  const evidence = evidenceReportCollector({ scope: "current-run" });
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
   if (opts.pricing !== undefined) stateOpts.pricing = opts.pricing;
@@ -206,6 +208,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       const event = next.value;
       try {
         reduce(state, event, stateOpts);
+        evidence.observe(event);
       } catch (err) {
         report("state", err);
         continue;
@@ -328,6 +331,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 return opts.grader!.grade({
                     rubric: active.rubric,
                     artifacts,
+                    evidence: evidence.report(),
                     trajectory: state.recent,
                   }, call);
               });
