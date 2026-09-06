@@ -1246,3 +1246,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   R8b, not deferred; the incomplete independent review remains explicitly recorded.
 - R15e polish: distinguish safe fixed refusal categories for malformed flags and policy
   denials without echoing raw Git, provider, path or credential-bearing error content.
+- R8c polish: consider explicit compatibility with collectors returning an empty HTTP
+  200 body. The current subset requires a valid JSON acknowledgement and makes no
+  claim that a missing acknowledgement means the collector stored nothing. Exporter
+  availability and partial-span accounting were fixed within R8c, not deferred.

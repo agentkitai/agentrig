@@ -1,7 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
 
-export const OTEL_LIMITS = Object.freeze({ sessions: 128, activeSpans: 1024, identities: 1024,
+export const OTEL_LIMITS = Object.freeze({ sessions: 128, activeSpans: 1024,
   queuedSpans: 1024, queuedBytes: 1_048_576, batchSpans: 128, batchBytes: 262_144,
   responseBytes: 65_536, requestMs: 2000, batchMs: 4500, closeMs: 5000 });
 export interface OtlpSpan {
@@ -97,8 +97,10 @@ export class OtlpExporter {
           } finally { reader?.releaseLock(); }
           const parsed = responseSchema.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts))));
           if (!parsed.success) throw new Error("invalid response");
-          if (parsed.data.partialSuccess !== undefined) this.counters.partial += count;
-          else this.counters.exported += count;
+          const rejected = BigInt(parsed.data.partialSuccess?.rejectedSpans ?? 0);
+          if (rejected > BigInt(count)) throw new Error("invalid rejected span count");
+          this.counters.partial += Number(rejected);
+          this.counters.exported += count - Number(rejected);
           return;
         }
       } catch (error) {

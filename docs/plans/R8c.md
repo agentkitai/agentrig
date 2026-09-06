@@ -38,7 +38,7 @@ Per-exporter random keyed trace IDs stay stable for a session during that export
 lifetime, including resume, without storing raw session IDs in exported attributes.
 New exporter lifetimes deliberately get new trace identities; no persistent identity
 cache. Implementation uses keyed derivation directly, retaining zero identity-map
-entries (below the 1024-entry ceiling), so there is no identity-eviction cache.
+entries, so there is no identity-eviction cache or unused retained-map limit.
 
 Export fixed span names and allowlisted numeric/enum metadata only: sequence/turn
 numbers, timestamps/durations, completion/denial/error/incomplete status, reported
@@ -67,7 +67,7 @@ events. Parallel completion order and actual internal checker correlation are te
 - A request has a two-second total deadline covering headers and decoded body;
   response collection is capped at 64 KiB. Cancel the body on refusal/overflow.
 - At most two attempts and 4.5 seconds per batch for network failures or 429/502/503/504, bounded
-  backoff. Honor valid Retry-After only within the remaining shutdown deadline;
+  backoff. Honor valid Retry-After only within the remaining batch and shutdown deadlines;
   otherwise drop explicitly. Partial success never retries. Other refusal, malformed
   or oversized responses do not retry. Never echo server diagnostic text.
 - Close drains for at most five seconds, then aborts owned network and reports dropped
@@ -126,3 +126,42 @@ fails `maps actual parallel ... excludes all content` on `SECRET_TASK`; dropping
 in-flight count gate fails `counts in-flight payload ...` with 1030 vs 1024 spans.
 The held-body fixture retains cleanup even on assertion failure. No live providers
 or remote collectors used. Independent review and final integrated full gates follow.
+
+## Review and material fixes
+
+One read-only Claude Opus 5 review of frozen `160ffd2` versus `6322139` requested
+24 turns and reported 26, with verdict **APPROVE WITH FIXES**. It independently ran
+145 focused/related tests and typecheck, not the full suite or multi-platform CI.
+Two compound command forms were denied before permitted individual checks ran.
+The reported list-price estimate was USD 2.226773, not a subscription billing claim.
+[Original final findings, verbatim](R8c-review.md). No second review was requested.
+
+- F1: an actual held local collector reproduced a new build failing while the prior
+  exporter drained. Availability now soft-omits observation for that build, with a
+  fixed notice; its real task completes. The same bounded behavior applies to owner
+  capacity and different-endpoint contention. No second sink or endpoint substitution
+  occurs. Invalid endpoint/sandbox configuration still fails pre-session.
+- F2: an actual collector returning empty `partialSuccess` reproduced incorrect
+  accepted-span accounting. Exact rejected-span counts now separate acknowledged
+  accepted and rejected spans; empty/warning-only zero rejection means full acceptance.
+  Empty, warning-only and one-rejected-span controls pass without partial retries.
+- F3: an empty HTTP 200 body remains an invalid JSON acknowledgement under this
+  deliberately strict subset. This is not evidence that the collector stored nothing.
+  Optional compatibility treatment is at the roadmap end, not a delivery blocker.
+- F4: removed the unused retained-identity limit; keyed derivation retains no map.
+- F5: the suggested MCP startup leak was not reproduced: the existing enclosing
+  builder `assemble` catch already closes started MCP clients on a late acquisition
+  error. A real Node MCP fixture mutates trusted endpoint options after startup and
+  verifies that rejection joins process cleanup. Its initial first-use approval-hook
+  fixture assumption was incorrect; the corrected first-use notice triggers the
+  intended late failure. No new cleanup guard is claimed. Separately, telemetry close
+  errors now remain observational and cannot replace the task outcome.
+
+F1/F2 reproductions and fixes are author evidence, not reviewer reproductions. Both
+failed before and passed after the repairs; an initial malformed Vitest invocation
+ran no tests and is not evidence. The original privacy/capacity mutants remain restored.
+Post-fix build, typecheck and Docker-required full suite pass: **2,817 tests plus two
+existing skips, 170 files, four workers**. The 23 telemetry controls exercise actual
+core, CLI/TUI/ACP/MCP and local HTTP paths. No live provider or remote collector spend.
+Current-main integration and all four exact-head CI checks remain pending; integration
+waits for the separate post-R15a test-readiness repair's green main gate.

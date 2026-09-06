@@ -36,9 +36,13 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 [Contract](plans/R8c.md) and [operator guide](OTEL.md). Explicit CLI-only endpoint,
 fixed content-free metadata, shared exporter/child capacity and sandbox-network
-refusal. Twenty focused real runtime/entry-point/transport controls pass; named
-privacy and capacity mutants detected and restored. One bounded review and final
-integrated Docker/full/all-four CI gates remain. No live provider/collector spend.
+refusal. Twenty-three focused real runtime/entry-point/transport controls pass;
+named privacy and capacity mutants detected and restored. One bounded Claude review
+approved with fixes (24 requested / 26 reported turns); material availability and
+partial-accounting controls failed before and passed after fixes. Existing MCP cleanup
+counterevidence is recorded alongside the verbatim finding. Build/typecheck/full Docker
+passes 2,817 tests plus two existing skips. Latest-main integration and all-four CI
+remain gated on the separate post-R15a readiness repair. No live provider/collector spend.
 
 ### R8b done — PR #187; all four post-main checks green
 

@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
@@ -70,6 +70,48 @@ it("failed startup retains no exporter owner and closing one build leaves anothe
   expect(f.spans().filter((s: any) => s.name === "session")).toHaveLength(2);
   const third = await buildAgent(f.opts); await third.closeTelemetry?.(); // prior owners really released
 });
+it("a held collector drain cannot fail a concurrent actual session build", async () => {
+  const f = await fixture(); const server = servers.at(-1)!;
+  let release!: () => void; let entered!: () => void;
+  const held = new Promise<void>(r => { release = r; }); const ready = new Promise<void>(r => { entered = r; });
+  server.removeAllListeners("request"); let hits = 0;
+  server.on("request", (req, res) => { hits++; req.resume(); req.on("end", () => { entered(); void held.then(() => {
+    res.setHeader("content-type", "application/json"); res.end("{}");
+  }); }); });
+  const first = await buildAgent(f.opts); await first.agent.run("first", { cwd: f.cwd }).done; await ready;
+  const closing = first.closeTelemetry!(); let second: Awaited<ReturnType<typeof buildAgent>> | undefined;
+  try {
+    second = await buildAgent(f.opts);
+    expect((await second.agent.run("second during drain", { cwd: f.cwd }).done).reason).toBe("done");
+    expect(hits).toBe(1); // no replacement exporter and no implicit different endpoint
+    expect(vi.mocked(console.error).mock.calls.flat().join(" ")).toContain("omitted");
+  } finally { release(); await closing; await second?.closeTelemetry?.(); }
+});
+it("existing builder failure guard closes an actual MCP child after late telemetry validation failure", async () => {
+  const f = await fixture(); const script = join(f.root, "server.cjs"); const pidFile = join(f.root, "pid");
+  await writeFile(script, `const fs=require('node:fs');fs.writeFileSync(process.argv[2],String(process.pid));
+require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
+ const req=JSON.parse(line);if(req.id===undefined)return;
+ const result=req.method==='initialize'?{protocolVersion:'2024-11-05'}:{tools:[{name:'fixture',description:'fixture',inputSchema:{type:'object'}}]};
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result})+'\\n');
+});`);
+  const config = join(f.root, "mcp.json"); await writeFile(config, JSON.stringify({ mcpServers: { fixture: { command: process.execPath, args: [script, pidFile] } } }));
+  const opts = { ...f.opts, mcpConfig: config }; let changed = false; let pid: number | undefined;
+  let built: Awaited<ReturnType<typeof buildAgent>> | undefined;
+  try {
+    await expect(buildAgent(opts, { mcpPinRoot: join(f.root, "pins"), onNotice: message => {
+      if (message.includes("pinned first-use")) {
+        changed = true; opts.otelEndpoint = "file:///invalid"; // trusted callback forces a post-start assembly failure
+      }
+    } }).then(value => { built = value; })).rejects.toThrow("invalid OTLP endpoint");
+    pid = Number(await readFile(pidFile, "utf8"));
+    expect(changed).toBe(true); expect(pid).toBeGreaterThan(0);
+    expect(() => process.kill(pid!, 0)).toThrow(); // enclosing assemble catch already joined MCP cleanup
+  } finally {
+    await Promise.allSettled((built?.mcp ?? []).map(c => c.close())); await built?.closeTelemetry?.();
+    if (pid !== undefined) { try { process.kill(pid, "SIGTERM"); } catch { /* owned child already gone */ } }
+  }
+}, 30000);
 it("actual TUI startup and child run share telemetry without ending the parent sink early", async () => {
   const f = await fixture(); let rootTurns = 0;
   vi.mocked(AnthropicProvider.prototype.stream).mockImplementation(async function* (req): AsyncIterable<ModelEvent> {

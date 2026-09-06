@@ -114,6 +114,19 @@ it("never retries partial success, redirect or oversized decoded responses", asy
     expect(hits).toBe(1); expect(kind === "partial" ? exporter.counters.partial : exporter.counters.dropped).toBe(1);
   }
 });
+it("counts empty/warning partial envelopes as accepted and exact rejected spans as partial", async () => {
+  for (const partial of [{}, { rejectedSpans: "0", errorMessage: "SECRET_WARNING" }, { rejectedSpans: "1", errorMessage: "SECRET_REJECT" }]) {
+    let release!: () => void; let entered!: () => void; let hits = 0;
+    const held = new Promise<void>(r => { release = r; }); const ready = new Promise<void>(r => { entered = r; });
+    const { endpoint } = await collector((_req, res) => { hits++; const first = hits === 1; entered();
+      void (first ? held : Promise.resolve()).then(() => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(first ? {} : { partialSuccess: partial })); }); });
+    const exporter = new OtlpExporter(endpoint); exporter.push(span()); await ready;
+    exporter.push(span()); exporter.push(span()); release(); await exporter.close();
+    expect(hits).toBe(2);
+    const rejected = "rejectedSpans" in partial ? Number(partial.rejectedSpans) : 0;
+    expect(exporter.counters.exported).toBe(3 - rejected); expect(exporter.counters.partial).toBe(rejected);
+  }
+});
 it("bounds Retry-After before shutdown and retries a bounded 503 only once", async () => {
   for (const after of ["3600", "0"]) {
     let hits = 0; const { endpoint } = await collector((_req, res) => { hits++; res.writeHead(503, { "retry-after": after }); res.end(); });

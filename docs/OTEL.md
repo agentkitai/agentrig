@@ -48,6 +48,11 @@ a 1,024-span /1 MiB accounted-payload cap, including in-flight spans. Batches ar
 most 128 spans /256 KiB, with one HTTP request in flight. Serialized request/response
 buffers have additional bounded overhead; this is not a total process RSS guarantee.
 The existing shared session replay buffer is unchanged, not made bounded by telemetry.
+If the shared exporter is draining, its owner capacity is full, or another build owns
+a different endpoint, a fixed notice reports that the new build is unobserved. That
+build continues without telemetry for its lifetime; no second exporter starts and
+its data is never redirected to the other endpoint. Invalid endpoint configuration
+and sandbox-network refusal remain pre-session errors.
 
 Each attempt has two seconds for headers plus decoded body (64 KiB response cap).
 At most two attempts and 4.5 seconds per batch; shutdown drains for at most five
@@ -56,6 +61,11 @@ or shutdown lifetime causes a drop. Partial success never retries. Failed/partia
 dropped/incomplete counts are reported with fixed notices, never collector error text.
 Retries can duplicate spans after ambiguous network failure. No lossless delivery,
 remote persistence or global SDK instrumentation guarantee.
+`exported` counts spans the collector acknowledges as accepted; `partial` counts
+explicitly rejected spans, not whole partially accepted batches. Empty or warning-only
+`partialSuccess` with zero rejected spans is full acceptance. Responses must contain
+valid OTLP JSON; an empty HTTP 200 body is an invalid acknowledgement here. A dropped
+or failed acknowledgement does not prove the collector stored nothing.
 
 Event mapping never waits on network. Shutdown can wait for the bounded drain;
 task outcomes, tool authorization and immutable event logs are not rewritten.
