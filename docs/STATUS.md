@@ -5,6 +5,25 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
+### R6c implemented — PR #151 delivery gates pending
+
+Explicit `--generated-skills` / trusted config adds selected-memory and safe-home generated
+roots through the existing trust/discovery boundary. Negative overrides and manual-root
+precedence remain intact. Validated manifest metadata labels actual successful model loads
+with optional `skill.used.generated: true`; ordinary events stay unchanged, and denied/missing
+loads never count. Labels grant no permission, approval or benefit. [Contract](plans/R6c.md).
+
+Dependency-order rationale: R6b PR #149 and main `7c680c4` passed all-platform post-merge CI
+34021388430 before this new worktree began. R6c closes the opt-in mechanical learning loop;
+R6g trigger work and live benefit comparisons are separate. Existing TUI slash invocation
+does not acquire new usage telemetry. Integrated main `97e18bf` preserves the R13b provenance
+seams and all previous done labels. Build/typecheck and 2,167 tests plus two skips pass across
+111 files; 15 focused tests pass. Default-on discovery and dropped event-marker mutations fail
+their named controls and are restored. One bounded independent Claude review
+`81a14c0e-e6d0-4c3d-a570-df8e42420fba` approved head `7bc42c8` with no material findings,
+independently repeating build/typecheck/full tests (90 seconds, 11 reported turns). Optional
+polish is at the roadmap end; exact-head PR and post-merge CI remain delivery gates.
+
 ### R6b done — PR #149; post-merge CI green
 
 Final head `d02ee57` passed all three PR platforms and merged as `7c680c4`.
@@ -59,7 +78,10 @@ child groups remain compatible and `delegable` is explicitly unenforced until R1
 Integrated R13b main `97e18bf`, retaining its provenance pipeline and all prior CI steps.
 Build/typecheck pass with 2,176 tests plus two skips across 110 files and 151 focused cases.
 All-path, post-answer-audit and session-transition-revocation mutations were detected and restored.
-One bounded independent review and exact-head three-platform CI gate this PR. The bounded roadmap cleanup adds missing done
+One bounded Claude review `8a03542b-c6e2-4b1b-886a-42012a286ad7` approved with no material
+findings, independently repeating 151 focused tests and typecheck. R6c main `09157ae` is now
+integrated; combined-head checks and exact-head three-platform CI remain gates. Optional polish
+stays at the roadmap end. The bounded roadmap cleanup adds missing done
 markers for R4a–R4c (PRs #135–#137), R6d/R6e (#139/#140) and R6f (H5a, #122), using the
 explicit merge/CI receipts below; unfinished rows retain their scope.
 

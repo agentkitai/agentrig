@@ -16,6 +16,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R13f, R5e and R5d: trusted progress, manifests and MCP pinning | PRs #143/#142/#144 passed exact-head and post-merge three-platform CI |
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
 | Implemented; closing gates | R12a: live grant records | Scoped runtime enforcement, session expiry and audited explicit authority; independent review and exact-head CI |
+| Active independently | R13d: injected-context principals | Runtime-assigned authority and explicit revocable hook delegation |
 | Committed | R5 remainder, R6c/R6g, R7–R11, R12b–R12d, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
@@ -542,7 +543,7 @@ comparison against memory without generated skills must establish the additional
 |---|---|---|
 | R6a *(done, [PR #146](https://github.com/agentkitai/agentrig/pull/146))* | Procedure detection in dream: a wiki page (or cluster) describing a repeatable procedure backed by H4-validated independent observations is flagged `skill-candidate` in the dream report (structural pass proposes; model pass refines). Carry evidence for the procedure's steps, scope and limitations, not merely two page-level references. Opt-in report-only detection; fresh evidence/effect review still required before R6b emission. See [contract](plans/R6a.md) | memory |
 | R6b *(done, [PR #149](https://github.com/agentkitai/agentrig/pull/149))* | Explicit `dream --emit-skills` previews; `--apply <review-digest>` writes Agent Skills-compatible `SKILL.md` under the selected memory directory's `skills/generated/` only after fresh runtime evidence/effect checks. Versioned string metadata carries provenance; edited or metadata `locked: "true"` files are preserved. No activation or wiki auto-apply. See [contract](plans/R6b.md) | memory/core parser/CLI |
-| R6c | Loop closure: generated skills load through the M7e skills system like any other; `skill.used` event gains an optional `generated: true` field (schema-added) so R9's eval can later measure whether generated skills actually help | core (field) + cli |
+| R6c *(implemented; delivery gates pending)* | Opt-in `--generated-skills` loads generated roots through existing trust/home-safe discovery and selected memory. Validated metadata adds optional `skill.used.generated: true` only on actual successful model loads; ordinary events/permissions remain unchanged. No automatic default, TUI telemetry expansion or benefit claim. See [contract](plans/R6c.md) | core + cli |
 | R6d *(done, [PR #139](https://github.com/agentkitai/agentrig/pull/139))* | Write-quality lint pack *(third pass; the claude.ai capture's calibration rules, made structural)*: ingest tags each wiki claim with provenance — `stated` (user/task input), `observed` (tool evidence), `inferred` (model conclusion) — and the dream lints for: inference written as fact, per-session status noise (the horizon test — still true and worth reading a month out?), restated-not-new lines (already filed means already remembered), single-observation claims phrased as generalizations, and facts appended to the open page instead of their subject's page | memory |
 | R6e *(done, [PR #140](https://github.com/agentkitai/agentrig/pull/140))* | Guardrail deny-class *(third pass)*: the promotion gate refuses — judged by **effect, not wording** — any candidate lesson that would make future sessions less honest or less careful: skip or weaken verification, stop questioning claims, suppress failures, bypass review, treat a workaround as policy. The refusal is reported in the dream report, and never softened into a milder rewrite the sessions never actually earned | memory |
 | R6f *(done, [PR #122](https://github.com/agentkitai/agentrig/pull/122), H5a)* | Memory tools hardened *(third pass)*: write ops take an `if_version` token from the last read — a stale write is rejected WITH the current content returned, so the recovery path lives in the tool description, not just the error; page front-matter gains `aliases` (durable names only) so recall resolves "the auth thing" to an existing page instead of minting a duplicate; tool descriptions carry the retrieval discipline — an index line is a hint to open the page, never grounds to claim absence unread | memory + core (tool descriptions) |
@@ -978,6 +979,13 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R12a polish: consider a dedicated idle audit sink if durable receipts for resets immediately
   before process exit become necessary; current revocations are effective immediately and queued
   for the next active log, without writing after a terminal event or replaying authority.
+  Revisit fail-closed concurrent-drain retry when R10 adds concurrency, improve queue-overflow
+  diagnostics, and consider separating the standalone `interactive-prompt` registry fallback
+  from production controller wiring. These do not widen grants or restore logged authority.
 - E2 diagnostic polish: include offending event timestamps with run-window failures. One local
   real-observer fixture failed its timing window during R12a verification; isolated and subsequent
   full runs passed unchanged. The cause is unestablished; preserve strict window checks.
+- R6c polish: make the strict schema's literal-generated gate more explicit beside marker
+  propagation; add direct TUI/resume option-key assertions alongside resolved-root coverage.
+  Clarify or reject empty CLI memory paths deliberately if changing that existing behavior.
+  None changes default-off discovery, ordinary event compatibility or permission separation.

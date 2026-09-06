@@ -163,6 +163,8 @@ export interface AgentBuildOptions extends ProviderOptions {
    * the discovered dirs into `skills` — by the time an agent is built, `skills` is final.
    */
   skillDiscovery?: boolean;
+  /** Opt-in generated roots, resolved by loadRunConfig. A label confers no authority. */
+  generatedSkills?: boolean;
   /** Which shell the `bash` tool runs commands in (PLAN §9 F2). Defaults per platform. */
   shell?: string;
   /** Canonical root approved by the CLI trust boundary; absent means no project context. */
