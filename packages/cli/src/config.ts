@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
-import { REASONING_EFFORTS } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 
@@ -81,6 +81,7 @@ const ConfigValuesSchema = z
     root: z.string().min(1).optional(),
     system: z.string().min(1).optional(),
     allow: stringList.optional(),
+    allowCommand: z.array(CommandPrefixSchema).max(128).optional(),
     deny: stringList.optional(),
     dangerouslySkipPermissions: z.boolean().optional(),
     yolo: z.boolean().optional(),

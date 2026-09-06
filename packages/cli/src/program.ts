@@ -1,6 +1,6 @@
 import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
-import { SessionStore } from "@agentkitai/agentrig-core";
+import { CommandPrefixSchema, SessionStore } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions } from "./sessions.js";
@@ -14,6 +14,12 @@ import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 function parseIngestLimits(text: string) {
   try { return IngestLimitsSchema.parse(JSON.parse(text)); }
   catch (error) { throw new InvalidArgumentError(`invalid ingest limits: ${String(error)}`); }
+}
+
+function collectCommandPrefix(text: string, previous: string[][]): string[][] {
+  if (Buffer.byteLength(text) > 16_384 || previous.length >= 128) throw new InvalidArgumentError("command prefixes are limited to 128 entries of at most 16 KiB");
+  try { return [...previous, CommandPrefixSchema.parse(JSON.parse(text))]; }
+  catch (error) { throw new InvalidArgumentError(`invalid command argv prefix: ${String(error)}`); }
 }
 
 function parseDreamScanLimits(text: string) {
@@ -185,6 +191,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         [],
       )
       .option("--drift-scope <path>", "path the drift detector may change (repeatable)", collect, [])
+      .option("--allow-command <argv-json>", "allow a literal foreground shell argv prefix, e.g. '[\"git\",\"status\"]' (repeatable; not a read-only guarantee)", collectCommandPrefix, [])
       .option(
         "--drift-contract <path>",
         "build or test contract path the drift detector watches (repeatable)",

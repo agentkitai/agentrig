@@ -5,6 +5,7 @@ import type { Tool, ToolResult } from "../tool.js";
 import { bound } from "./shared.js";
 import type { JobRegistry } from "./background-jobs.js";
 import { sandboxSpawnInvocation, throwIfSandboxDenied } from "../sandbox-providers.js";
+import { describeShellOperation } from "../shell-operation.js";
 
 const BashInput = z.object({
   command: z.string().min(1).describe("The shell command to run"),
@@ -69,6 +70,7 @@ export function bashTool(opts: BashToolOptions = {}): Tool<BashInput, BashOutput
       "Non-zero exits are reported as errors with the output attached.",
     inputSchema: BashInput,
     permission: "exec",
+    operation: input => describeShellOperation(input.command, shell.path, input.background === true),
     effects: input => input.background === true ? "background" : "workspace",
     hasBackgroundWork: () => opts.jobs?.ids().some(id => opts.jobs?.get(id)?.exited === false) ?? false,
     async execute(input, ctx): Promise<ToolResult<BashOutput>> {

@@ -661,9 +661,10 @@ exactly this granularity.*
 | R12b | The prompt shows semantic effect, not the raw call: paths that may change, whether it reaches the network, what the grant would cover in future. TUI keys grow `s` = scope this grant down (edit resource before granting) | cli |
 | R12c | `/permissions` lists live grants with age and hit-count; revocation applies immediately; a "why was this allowed" line on any auto-decided call names the grant or rule that decided it | cli |
 | R12d | Subagent inheritance is explicit: a child receives the parent's grants filtered by `delegable`, never the full set — the shared-policy-object design from M7d gains a per-subject view | core |
-| R12e | Semantic authorization boundary *(third pass)*: authorization never derives from names or prose — no "read/get/list in the name means safe", no standing allow rules inferred from transcript history (model-generated commands may have been steered by hostile repo content, and a rule minted in one poisoned project would follow the user everywhere), no trust in server-supplied read-only hints (R5d's pinning is the consent mechanism, not the server's word). Decisions bind to the parsed operation; an unsupported or ambiguous shell construct falls back to ask. The evidence is stark: two captured skills of one production harness contradict each other on exactly this, which is what happens when authorization logic is duplicated into natural language | core |
+| R12e | **Implemented; closing delivery gates.** Semantic authorization never derives from names, transcript prose or server read-only hints. Explicit `--allow-command` / config argv prefixes bind to trusted post-hook parsed foreground operations; unsupported syntax cannot satisfy a narrow rule and defaults to ask without separate explicit blanket authority. Denies retain precedence; R5d consent and sandbox containment remain independent. See [contract and limits](plans/R12e.md). Grant records/UI/lifecycle remain R12a–R12d. | core, cli |
 
-Acceptance: a `git *` grant admits `git status` and refuses `rm -rf` (matcher tests, adversarial
+Acceptance: a `git *` grant (conceptual shorthand for argv prefix `["git"]`, never a string glob)
+admits `git status` and refuses `rm -rf` (matcher tests, adversarial
 shapes: `git status; rm -rf /`, `git $(rm)` — command-substring matching is the known failure
 mode, so the matcher is argv-prefix based, not string-contains); revocation mid-session takes
 effect before the next call; a non-delegable grant is invisible to a subagent (test through a real
@@ -963,3 +964,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   reconsider the 250 ms retry window only with measured failure evidence. Any future tuning must
   retain deterministic bound tests, cancellation and atomic old-target preservation, without
   attributing access refusals to an unobserved actor.
+- R12e polish: additional shell dialects and harmless escaped-literal syntax may be added only
+  with dialect-specific inert execution controls. Literal argv scopes intentionally do not
+  attest executable identity, PATH, Git configuration/hooks or program effects; richer semantic
+  effect explanations belong to committed R12b, not inferred read-only name heuristics.
