@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is active independently; R5a is merged (PR #157), pending post-merge CI; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -46,6 +46,42 @@ stays at ROADMAP's end. Main `c62009b` is now integrated, preserving committed H
 additions and all prior done markers; combined checks and exact-head CI follow.
 Combined build/typecheck/full checks pass: 2,271 tests plus two skips across 119 files, four
 workers (30 seconds). Base `c62009b` passed all three post-merge jobs in CI 34025571103.
+
+### R5a merged — PR #157; post-merge CI pending
+
+Merge `7f01c4c` follows green exact-head CI. The implementation notes below are history.
+
+Mandatory strict sidecars validate before any selected extension import. Explicit paths and
+trusted-project discovery are bounded and fail closed on equal-precedence duplicates; no home
+discovery. Host-code warnings precede imports, and non-none sandbox modes refuse even under
+YOLO. Once-per-built-agent activation uses a frozen minimal API and sealed atomic drafts;
+declared surfaces and reserved names are enforced. Actual hooks, tools and TUI slash commands
+are wired with startup receipts. Children inherit no extension surfaces; R13d hook identities
+remain advisory, and R5b runtime cross-surface disabling stays separate. [Contract](plans/R5a.md).
+
+Dependency rationale: H6/R5e foundations are delivered and R6g main `714732d` passed post-merge
+CI 34023837383 before this fresh worktree. Integrated R13d `2ad720f` and R12b `326acdb`, retaining
+registered principal capture and the scope-editing UI. Seventeen actual module/runtime fixtures
+pass; reserved-tool and late-registration-seal bypasses failed their named controls and were
+restored. Full updated-main checks, one bounded review and exact-head PR/post-merge CI gate
+delivery. No live evaluation spend or new submilestones.
+
+Updated-main build/typecheck and the full suite pass: 2,260 tests plus two skips across 119
+files, using four workers without changing cases or timeouts. One independent Claude review
+`9b729cf9-e085-476b-90f4-1c230a177f26` approved head `8299b9e` with no material findings and
+independently repeated build/typecheck/full 2,260 + two skips across 119 files. The single
+process ran 247 seconds: max24 was requested; the CLI reported 29 turns. No restart or second
+review. Optional notes are at the roadmap end; final exact-head CI remains pending.
+
+After external PR #115 advanced main to `fba5d50`, mechanical integration retained its topic
+skill guidance and regression assertion. Build/typecheck and the full 2,260 + two skips across
+119 files pass again with four workers. No new review or production scope expansion; the
+updated exact-head CI supersedes the earlier PR-head checks.
+
+Committed roadmap PR #156 then advanced main to `c62009b`. Its H7/R15 additions, ACP amendment
+and fourth-pass narrative are retained alongside the verified done markers. Build/typecheck and
+the same 2,260 + two skips across 119 files pass again. H7a then H7b are next correctness repairs
+after R5a delivery, before R5b; this mechanical integration does not add another review round.
 
 ### R12b done — PR #155; post-merge CI green
 

@@ -118,6 +118,8 @@ const ConfigValuesSchema = z
     subagentMaxTurns: positiveSetting.optional(),
     subagentMaxChildren: positiveSetting.optional(),
     skills: stringList.optional(),
+    extension: stringList.max(32).optional(),
+    extensionDiscovery: z.boolean().optional(),
     /** Auto-load conventional `.agentrig/skills` directories (trusted project + home). Default on. */
     skillDiscovery: z.boolean().optional(),
     /** Include selected-memory and safe-home generated roots. Default off; no benefit claim. */
@@ -353,6 +355,8 @@ export async function loadRunConfig(
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
     skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],
+    extension: (Array.isArray(resolved.extension) ? resolved.extension as string[] : []).map(path => resolve(cwd, path)),
+    extensionCwd: cwd,
     ...(trust.trusted ? { trustedProjectRoot: trust.projectRoot } : {}),
     modelExplicit: cli.model !== undefined || environment.AGENTRIG_MODEL !== undefined || configHas("model"),
     maxTokensPerTurnExplicit: cli.maxTokensPerTurn !== undefined || configHas("maxTokensPerTurn"),

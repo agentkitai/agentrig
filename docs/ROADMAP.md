@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; R12c is implemented with closing delivery gates; R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row and R15 post-plan band, section 3, ordered in section 5). Committed vision; R5a is merged (PR #157), pending post-merge CI; R12c is implemented with closing delivery gates; R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -15,6 +15,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R6d–R6f: memory quality, promotion guardrails and lifecycle | R6f delivered by H5; R6d/R6e in PRs #139/#140 with green PR and post-merge CI |
 | Complete | R13f, R5e and R5d: trusted progress, manifests and MCP pinning | PRs #143/#142/#144 passed exact-head and post-merge three-platform CI |
 | Complete | R6a/R6b, R12e and R13a/R13b | PRs #146/#149/#148/#147/#150 passed exact-head and post-merge three-platform CI |
+| Complete | R12b: semantic scoped approval UI (PR #155) | Exact-head and post-merge CI passed |
 | Implemented; closing gates | R12c: live grant inspection | Exact scope/age/counts, revocation and same-call decision attribution; review and exact-head CI |
 | Complete | R13d: injected-context principals (PR #154) | Exact-head and post-merge CI passed; runtime-assigned authority and explicit revocable hook delegation |
 | Active independently | R13c: external-input permission restrictions | Build on merged principals; fresh approval cannot become standing authority |
@@ -534,7 +535,7 @@ become "write an extension" instead of "grow the loop".*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R5a | Extension API in core: an extension is an ES module exporting `activate(ctx)` where `ctx` exposes the hook surface, `registerTool`, `registerCommand` (slash commands surface in the TUI), and read-only session info; loaded from `.agentrig/extensions/*.mjs` + `--extension <path>`; every activation emits `extension.loaded` (name, path, granted surfaces) | core |
+| R5a *(implemented; delivery gates pending)* | [Extension API contract](plans/R5a.md): mandatory strict pre-import sidecars, atomic registration, trusted host-code boundary, no child inheritance. Extension API in core: an extension is an ES module exporting `activate(ctx)` where `ctx` exposes the hook surface, `registerTool`, `registerCommand` (slash commands surface in the TUI), and read-only session info; loaded from `.agentrig/extensions/*.mjs` + `--extension <path>`; every activation emits `extension.loaded` (name, path, granted surfaces) | core |
 | R5b | Failure isolation: a throwing extension is disabled with an `extension.error` event. The API passes no provider or credentials, but in-process extensions remain trusted Node code with ambient access to env/files and can block or terminate the process. Catching exceptions is not security isolation; disclose that boundary before activation | core |
 | R5c | Packages: a directory (or npm tarball path) bundling `extensions/ + skills/ + prompts/`; `agentrig package add <src>` copies it under `.agentrig/packages/` (no lifecycle scripts executed, ever — pi's supply-chain rules adopted verbatim: install with `--ignore-scripts` semantics, integrity hash recorded) | cli |
 | R5d *(done, [PR #144](https://github.com/agentkitai/agentrig/pull/144))* | Tool-definition pinning *(second pass; Goose + the NSA MCP guidance)*: persistent first-use baselines retain exact names, schemas and descriptions. Changed lists show exact before/after definitions and hashes and require explicit user consent before execution, independently of allow/YOLO or standing answers. Re-listing rejects changes after model advertisement; bounded locked CAS prevents stale approval replacement. First use is TOFU, not attestation; names, descriptions and server hints never authorize. See [contract](plans/R5d.md) | core + cli |
@@ -1085,3 +1086,8 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
   consider suppressing duplicate handler-source lines where the TUI already printed the answer.
   Preserve visible rule/grant reasons, honest handler attribution and independent consent.
+- R5a polish: retain prototype-defined tool members if class-instance registration is supported
+  later (initial examples/API require own-property object literals); consider failed receipts
+  instead of whole-startup refusal for oversized discovery, and canonical explicit-path dedupe
+  to suppress benign alias shadow notices. Any child extension inheritance must retain paired
+  hooks, ownership and failure state; R5a deliberately inherits none of the extension surfaces.
