@@ -50,6 +50,18 @@ it("actual controller/builder keeps advisory task provenance despite yolo; in-cw
   await f.rt.close();
 });
 
+it("refuses remote serving dependencies before builder, provider or network work", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agentrig-mcp-remote-refusal-")); roots.push(cwd);
+  const config = join(cwd, "mcp.json");
+  await writeFile(config, JSON.stringify({ mcpServers: { remote: { url: "https://example.com/mcp" } } }));
+  const build = vi.fn<typeof buildAgent>(); const fetch = vi.spyOn(globalThis, "fetch");
+  const rt = mcpServeRuntime({ root: join(cwd, "logs"), mcpConfig: config, yolo: true, maxTokensPerTurn: "100" }, cwd, build);
+  try {
+    await expect(rt.run({ task: "invoke remote" }, new AbortController().signal)).rejects.toThrow("remote MCP dependencies are unsupported");
+    expect(build).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  } finally { await rt.close(); }
+});
+
 it("configured denies are preserved and smaller configured turn/token limits reach actual model requests", async () => {
   const f = await fixture({ yolo: true, deny: ["write"], maxTurns: "1", maxTokens: "50" });
   const result = await f.rt.run({ task: "write", maxTurns: 20, maxTokens: 8192 }, new AbortController().signal) as { reason: string; turns: number };
