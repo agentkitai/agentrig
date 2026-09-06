@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R13f and R5d in independent worktrees; R5e implemented, closing PR records delivery gates.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5d; R13f implemented in PR #143 with closing delivery gates; R5e merged in PR #142.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -31,7 +31,28 @@ effect review is required for the distinct reviewed status. Existing model caps 
 No skills emitted, no permission change, no live evaluation or benefit claim. See [R6a](plans/R6a.md).
 Closing PR records validation/review and exact-head/post-merge three-platform CI receipts.
 
-### R5e implemented — closing PR records delivery gates
+### R13f implemented — PR #143 records closing delivery gates
+
+Core stamps unique runtime call provenance; only matching successful write-class results in the
+same turn credit file claims to loop/stall and policy accounting. Drift additionally verifies
+bounded current-worktree bytes before scope classification. Claims stay in immutable JSONL.
+Legacy logs without provenance remain readable but receive no file-progress credit, including
+the stall evidence counter. See [R13f contract](plans/R13f.md) for deletion, race and size limits.
+
+One bounded independent Claude review `2fdeec4f-21ca-4b77-91be-60b0d6d14088` approved with no
+material findings and 162 independently executed tests. Removing the write-class gate and
+bypassing the content hash fail named tests; both mutations are restored. First-head macOS and
+Windows CI caught an absolute-path alias bug (including `/var` versus `/private/var`), fixed with canonical
+containment and a portable symlink/junction regression that fails against the old check. The final
+branch integrates R5e main `26e78ec`; build/typecheck and the full local suite pass 2,013 tests
+plus two skips (97 files), with both Windows targeted suites retained. Exact final-head
+three-platform CI and post-merge main CI remain required; PR #143 records the closing receipts.
+Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
+
+### R5e merged — PR #142 records delivery gates
+
+Final head `aafaa5b`, PR CI 34016292275 passed all three platforms and merged as `26e78ec`.
+Post-merge main CI gates the next merge; the closing PR records its result.
 
 Strict versioned skill/extension/package schemas now reject unknown fields before use. The
 existing skill loader rejects malformed frontmatter and equal-precedence names, including late

@@ -2,6 +2,7 @@ import type { HarnessEvent, PlanItem } from "@agentkitai/agentrig-core";
 import type { Detector } from "../types.js";
 import type { SupervisorState } from "../state.js";
 import { signal } from "../types.js";
+import { verifyCurrentFile } from "../file-verification.js";
 
 export interface DriftOptions {
   /** Caller-declared paths allowed independently of any scope declared by the plan. */
@@ -77,26 +78,58 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
   const contract = opts.contract ?? DEFAULT_CONTRACT;
   const reported = new Set<string>();
   let pending: Array<{ path: string; seq: number; contract: boolean }> = [];
+  const verified = new WeakMap<HarnessEvent, string>();
 
   return {
     id: "drift",
+    async prepare(event, state, cancellation) {
+      if (event.type !== "tool.result" || state.cwd === undefined) return;
+      const bounded = AbortSignal.any([cancellation, AbortSignal.timeout(1_000)]);
+      let abort: (() => void) | undefined;
+      const cancelled = new Promise<void>((resolve) => {
+        abort = () => resolve();
+        bounded.addEventListener("abort", abort, { once: true });
+        if (bounded.aborted) resolve();
+      });
+      const check = async (): Promise<void> => {
+        // One observer event cannot trigger an unbounded file scan.
+        for (const change of (state.corroboratedChanges ?? []).slice(0, 32)) {
+          if (bounded.aborted) return;
+          try {
+            const path = await verifyCurrentFile(change, state.cwd!, bounded);
+            if (path !== null && !bounded.aborted) verified.set(change, path);
+          } catch { /* Missing, unreadable, unsupported and cancelled evidence remains unknown. */ }
+        }
+      };
+      try { await Promise.race([check(), cancelled]); }
+      finally { if (abort !== undefined) bounded.removeEventListener("abort", abort); }
+    },
     observe(event: HarnessEvent, state: SupervisorState) {
+      if (event.type === "tool.result") {
+        const detected = (state.corroboratedChanges ?? []).flatMap(change => {
+          const found = this.observe(change, state); return found === null ? [] : [found];
+        });
+        return detected.length === 0 ? null : signal("drift", Math.max(...detected.map(s => s.confidence)),
+          detected.flatMap(s => s.evidence), [Math.min(...detected.map(s => s.window[0])), event.seq]);
+      }
       if (event.type !== "file.changed") return null;
+      if (!verified.has(event) || !state.corroboratedChanges?.includes(event)) return null;
+      const path = verified.get(event)!;
       const scope = [...new Set([...callerScope, ...declaredScope(state.plan)])];
-      const isContract = inScope(event.path, contract);
-      if (inScope(event.path, scope) || reported.has(event.path)) return null;
+      const isContract = inScope(path, contract);
+      if (inScope(path, scope) || reported.has(path)) return null;
       // Ordinary files cannot be called stray when there is no declared boundary. Contract files
       // are different: changing them changes what "passing" means, so they require explicit scope.
       if (scope.length === 0 && !isContract) return null;
 
-      reported.add(event.path);
+      reported.add(path);
       // bounded: a session touching tens of thousands of files must not grow this forever
       while (reported.size > maxReported) {
         const oldest = reported.values().next();
         if (oldest.done === true) break;
         reported.delete(oldest.value);
       }
-      pending.push({ path: event.path, seq: event.seq, contract: isContract });
+      pending.push({ path, seq: event.seq, contract: isContract });
       if (pending.length < strays) return null;
 
       const strayed = pending;
