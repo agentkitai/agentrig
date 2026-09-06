@@ -16,6 +16,7 @@ import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
+import { startWeb, type WebDependencies, type WebFlags } from "./web.js";
 import { startMcpServe, type McpServeDependencies } from "./mcp-serve.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
@@ -137,6 +138,7 @@ export interface ProgramDependencies {
   review?: ReviewDependencies;
   ci?: CiDependencies;
   acp?: AcpDependencies;
+  web?: WebDependencies;
   mcpServe?: McpServeDependencies;
 }
 
@@ -168,7 +170,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "mcp-serve"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -347,6 +349,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--comment", "explicit CI PR comment; needs exec+net, matching identity and complete accounting")
     .addHelpText("after", "\nCI requires exactly one task/event file and an explicit report path and/or complete PR comment target. CI ceilings: 20 turns, 5 minutes, 50000 main tokens; smaller configured limits win. Auxiliary/child/remote usage is not a hard total billing cap. Effective YOLO, resume and positional CI tasks refuse. Reports redact heuristically, not perfectly; unknown secrets may remain.\n")
     .option("--answer-policy <policy>", "required questions: fail (default), first-option, or file:<path>; automated answers are not human approval")
+    .option("--output-schema <path>", "validate final JSON against a strict bounded local schema file (32 KiB; no refs/regex); at most one budgeted tool-free repair")
+    .option("--output-mode <mode>", "prompted (default) or native (explicit OpenAI-compatible opt-in, not verified server support); local validation always applies")
     .action(async (task: string | undefined, opts: RunOptions & CiFlags, cmd: Command) => {
       const flags: CiFlags = { ci: opts.ci, taskFile: opts.taskFile, eventFile: opts.eventFile, eventField: opts.eventField,
         report: opts.report, pr: opts.pr, repo: opts.repo, comment: opts.comment };
@@ -392,6 +396,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
       await startAcp(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
         ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.acp,
+      });
+    });
+
+  withRunOptions(program.command("web").description("Serve the authenticated loopback ACP reference page"), HEADLESS_MAX_TURNS)
+    .option("--host <host>", "only the literal 127.0.0.1 is accepted", "127.0.0.1")
+    .option("--port <port>", "local TCP port; zero selects an ephemeral port", "0")
+    .action(async (flags: WebFlags, cmd: Command) => {
+      const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      await startWeb(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
+        ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.web,
       });
     });
 

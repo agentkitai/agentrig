@@ -778,6 +778,10 @@ composition without changing paste-safe quiet-point dispatch. Trusted projects
 retain bounded `.agentrig/history` outside raw/ingest inputs; untrusted launches
 remain memory-only. Approval/question/escalation input is excluded. See
 [R16d](plans/R16d.md) for privacy, storage limits and terminal compatibility.
+R8d adds an authenticated, exact-loopback reference web page over the existing ACP
+server/controller. Fixed assets, bearer plus Host/Origin checks, bounded WebSocket
+queues and joined connection ownership are explicit; authentication is not project
+trust or execution permission. See [local web client](WEB.md) and [R8d](plans/R8d.md).
 
 R8c adds explicit `--otel-endpoint` observation over the event stream, with fixed
 metadata-only OTLP/HTTP JSON spans, shared bounded process capacity and joined
