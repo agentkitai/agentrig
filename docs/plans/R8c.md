@@ -173,3 +173,13 @@ no second general review for this mechanical integration. Combined build/typeche
 and Docker-required full suite pass: **2,846 tests plus two existing skips, 173 files,
 four workers**. This includes unchanged pinned logs, telemetry privacy/bounds and
 actual question/TUI/ACP controls. Exact-head CI remains pending.
+
+The first PR head `24eaf57` passed all four checks (CI `34056787349`, structure
+`34056787376`). Subsequent integration of green R15d main `8da49d4` retains remote
+MCP lifecycle and its independent network-policy checks alongside telemetry preflight.
+The actual remote skill/provider/storage/resume fixture now also exports to a local
+OTLP endpoint: no-network refuses before either endpoint is hit; remote content stays
+external and cannot authorize exec, never enters telemetry, and both owned lifetimes
+close. This is focused integration evidence, not another broad review.
+Combined build/typecheck and Docker-required full suite pass **2,877 tests plus two
+existing skips, 177 files, four workers**. New exact-head CI follows this integration.

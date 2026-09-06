@@ -160,9 +160,9 @@ export async function loadExtensions(options: {
         }
         if (tool.hasBackgroundWork !== undefined) registered.hasBackgroundWork = extensionCallback(owner,
           `${tool.name}.hasBackgroundWork`, tool.hasBackgroundWork.bind(tool), () => true);
-        if (tool.resultSource !== undefined && typeof tool.resultSource !== "string") registered.resultSource = {
+        if (tool.resultSource !== undefined && typeof tool.resultSource !== "string") registered.resultSource = "file" in tool.resultSource ? {
           file: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.file.bind(tool.resultSource)),
-        };
+        } : { external: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.external.bind(tool.resultSource), () => true) };
         // Normal zod validation failures remain data, not a thrown extension fault.
         registered.inputSchema = new Proxy(tool.inputSchema, { get(target, key, receiver) {
           const value = Reflect.get(target, key, receiver);

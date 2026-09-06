@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
+import { z } from "zod";
 import {
   InitializeResult,
   JsonRpcResponse,
@@ -7,7 +8,13 @@ import {
   ToolsCallResult,
   ToolsListResult,
   type McpToolSpec,
+  McpCatalog, McpResourceSpec, McpResourceTemplateSpec, McpPromptSpec, McpPromptArguments,
 } from "./protocol.js";
+
+/** Preserve the validated wire code without interpreting error prose. */
+class McpRpcResponseError extends Error {
+  constructor(readonly code: number, message: string) { super(message); }
+}
 
 /**
  * A stdio MCP client. One child process, newline-delimited JSON-RPC.
@@ -52,6 +59,7 @@ export class McpClient {
   private readonly cleanup = new Map<number, () => void>();
   private closed = false;
   private startError: Error | null = null;
+  private capabilities: Record<string, unknown> = {};
 
   constructor(
     private readonly config: McpServerConfig,
@@ -99,6 +107,7 @@ export class McpClient {
     if (!parsed.success) {
       throw new Error(`mcp ${this.config.name}: initialize returned an unrecognised result`);
     }
+    this.capabilities = parsed.data.capabilities ?? {};
     // per spec the client confirms with a notification; a server may wait for it before serving
     this.notify("notifications/initialized", {});
   }
@@ -125,6 +134,38 @@ export class McpClient {
     );
     if (!parsed.success) throw new Error(`mcp ${this.config.name}: ${name} returned an unrecognised result`);
     return parsed.data;
+  }
+
+  async catalog(signal?: AbortSignal): Promise<McpCatalog> {
+    const list = async <T>(method: string, key: string, schema: z.ZodType<T>): Promise<T[]> => {
+      const out: T[] = []; let cursor: string | undefined; const seen = new Set<string>();
+      for (let page = 0; page < 20; page++) {
+        let result: unknown;
+        try { result = await this.request(method, cursor === undefined ? {} : { cursor }, signal); }
+        catch (error) {
+          if (page === 0 && method === "resources/templates/list" && error instanceof McpRpcResponseError && error.code === -32601) return [];
+          throw error;
+        }
+        const raw = z.object({ [key]: z.array(schema), nextCursor: z.string().optional() }).parse(result);
+        out.push(...raw[key] as T[]);
+        if (out.length > 256 || Buffer.byteLength(JSON.stringify(out)) > 1_048_576) throw new Error("MCP list exceeds bound");
+        if (typeof raw.nextCursor !== "string") return out;
+        if (seen.has(raw.nextCursor)) throw new Error("MCP pagination cursor repeated");
+        seen.add(raw.nextCursor); cursor = raw.nextCursor;
+      }
+      throw new Error("MCP incomplete catalog after 20 pages");
+    };
+    return McpCatalog.parse({ tools: await this.listTools(signal),
+      resources: this.capabilities.resources ? await list("resources/list", "resources", McpResourceSpec) : [],
+      templates: this.capabilities.resources ? await list("resources/templates/list", "resourceTemplates", McpResourceTemplateSpec) : [],
+      prompts: this.capabilities.prompts ? await list("prompts/list", "prompts", McpPromptSpec) : [],
+    });
+  }
+  async readResource(uri: string, signal?: AbortSignal): Promise<{ contents: unknown[] }> {
+    return z.object({ contents: z.array(z.unknown()).max(256) }).parse(await this.request("resources/read", { uri }, signal));
+  }
+  async getPrompt(name: string, args: Record<string, string>, signal?: AbortSignal): Promise<{ messages: unknown[] }> {
+    return z.object({ messages: z.array(z.unknown()).max(256) }).parse(await this.request("prompts/get", { name, arguments: McpPromptArguments.parse(args) }, signal));
   }
 
   async close(): Promise<void> {
@@ -218,7 +259,7 @@ export class McpClient {
     clearTimeout(p.timer);
 
     if (parsed.data.error !== undefined) {
-      p.reject(new Error(`mcp ${this.config.name}: ${parsed.data.error.message}`));
+      p.reject(new McpRpcResponseError(parsed.data.error.code, `mcp ${this.config.name}: ${parsed.data.error.message}`));
       return;
     }
     p.resolve(parsed.data.result);

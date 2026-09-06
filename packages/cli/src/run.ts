@@ -21,6 +21,7 @@ import {
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions } from "./agent-builder.js";
+import { withMaintenanceSignal } from "./maintenance.js";
 import { ScheduledUsage, type ScheduledAccounting } from "./schedule-report.js";
 import { questionPolicy } from "./question-policy.js";
 import {
@@ -357,7 +358,7 @@ export function positiveNumber(flag: string, value: string): number {
 }
 
 /** Prompts on stderr so --json event output on stdout stays parseable. */
-async function askInteractively(req: PermissionRequest): Promise<Exclude<Decision, "ask">> {
+export async function askInteractively(req: PermissionRequest, signal?: AbortSignal): Promise<Exclude<Decision, "ask">> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     if (req.origin === "mcp-definition-change") process.stderr.write(`${JSON.stringify(req.input, null, 2)}\n`);
@@ -365,7 +366,7 @@ async function askInteractively(req: PermissionRequest): Promise<Exclude<Decisio
     if (req.operation !== undefined) process.stderr.write(`shell operation: ${JSON.stringify(req.operation)}\n`);
     const where = req.paths === undefined ? "" : ` on ${req.paths.join(", ")}`;
     const who = req.origin === undefined ? "" : ` for ${req.origin}`;
-    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `);
+    const answer = await rl.question(`allow ${req.tool} [${req.class}]${where}${who}? (y/N) `, signal ? { signal } : {});
     return /^y(es)?$/i.test(answer.trim()) ? "allow" : "deny";
   } finally {
     rl.close();
@@ -411,14 +412,15 @@ export async function runCommand(task: string, opts: RunOptions): Promise<RunSum
   const scheduledUsage = opts.scheduled === undefined ? undefined : new ScheduledUsage(opts.memory !== undefined && opts.ingestOnEnd === true, opts.dreamOnEnd === true);
   try {
     const onQuestion = await questionPolicy(opts.answerPolicy);
-    built = await buildAgent(opts, {
+    built = await withMaintenanceSignal(signal => buildAgent(opts, {
+      signal,
       onQuestion,
-      ...(interactive ? { onAsk: askInteractively } : {}),
+      ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
       onHookError: (m) => { maintenanceFailed = true; console.error(m); },
       onHookDone: (m) => console.error(m),
       ...(scheduledUsage === undefined ? {} : { onIngestUsage: (report, final) => scheduledUsage.ingest(report, final) }),
       onNotice: (m) => console.error(m),
-    });
+    }), opts.signal, "agent startup");
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;

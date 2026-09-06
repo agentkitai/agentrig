@@ -23,6 +23,8 @@ import {
   type SupervisorFlags,
 } from "../run.js";
 import { parseBudget } from "../agent-builder.js";
+import { askInteractively } from "../run.js";
+import { withMaintenanceSignal } from "../maintenance.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
 import { reviewChanges, reviewArguments, renderReview, reviewFailure } from "../review.js";
@@ -88,7 +90,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   });
 
   try {
-    built = await buildAgent(opts, {
+    built = await withMaintenanceSignal(signal => buildAgent(opts, {
+      signal,
+      onStartupAsk: req => process.stdin.isTTY ? askInteractively(req, signal) : Promise.resolve("deny"),
       permissionGrants: controller.permissionGrants,
       onAsk: controller.ask,
       onQuestion: controller.askQuestion,
@@ -97,7 +101,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       // in the frame, not on stderr: stderr is overwritten by the next render, and an invisible
       // retry is indistinguishable from the hangs this TUI has already been debugged for
       onNotice: (m) => controller.print(m, "system"),
-    });
+    }), undefined, "agent startup");
   } catch (err) {
     console.error((err as Error).message);
     process.exitCode = 1;

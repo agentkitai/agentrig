@@ -67,8 +67,14 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
       try {
         if (combined.aborted) throw new Error("cancelled");
         const mcp = opts.mcpConfig === undefined ? [] : await readMcpConfig(opts.mcpConfig);
+        // Serving retains its fixed stdio-only dependency contract: no new network startup
+        // consent surface is implied by accepting an external run_task request.
+        const stdio = mcp.map(server => {
+          if ("url" in server) throw new Error("mcp-serve remote MCP dependencies are unsupported; use the operator CLI");
+          return server;
+        });
         built = await build(bounded, { onAsk: async () => "deny", permissionGrants: controller.permissionGrants,
-          mcpServers: mcp, mcpExistingPinsOnly: true, onNotice: notice, onHookError: notice, onHookDone: notice });
+          mcpServers: stdio, mcpExistingPinsOnly: true, onNotice: notice, onHookError: notice, onHookDone: notice });
         if (built.mcp.length !== mcp.length) throw new Error("MCP definitions require operator approval");
         if (combined.aborted) throw new Error("cancelled");
         controller.attach(built.agent);

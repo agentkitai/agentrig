@@ -48,9 +48,10 @@ import {
   type MaintenanceLimits,
   formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat, open } from "node:fs/promises";
 import { z } from "zod";
-import { McpClient, FileMcpPins, connectServers, type McpServerConfig } from "@agentkitai/agentrig-core";
+import { McpClient, RemoteMcpClient, RemoteMcpConfigSchema, McpOAuthProvider, McpCredentialStore,
+  FileMcpPins, connectServers, type McpServerConfig, type RemoteMcpConfig, type McpConnection } from "@agentkitai/agentrig-core";
 import { buildProviders, type ProviderOptions, type ProviderSet } from "./provider.js";
 import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
@@ -205,6 +206,7 @@ const McpServerEntry = z.object({
   cwd: z.string().optional(),
   timeoutMs: z.number().int().positive().optional(),
 });
+const McpEntry = z.union([McpServerEntry.strict(), RemoteMcpConfigSchema.omit({ name: true })]);
 
 /**
  * Both spellings, because the ecosystem has two: Claude Code and Cursor use `mcpServers`, while
@@ -213,11 +215,12 @@ const McpServerEntry = z.object({
  * no error, no warning. Neither key present is now a hard failure naming both.
  */
 const McpConfigFile = z.object({
-  servers: z.record(McpServerEntry).optional(),
-  mcpServers: z.record(McpServerEntry).optional(),
+  servers: z.record(McpEntry).optional(),
+  mcpServers: z.record(McpEntry).optional(),
 });
 
-export function parseMcpConfigText(path: string, text: string): McpServerConfig[] {
+export function parseMcpConfigText(path: string, text: string): Array<McpServerConfig | RemoteMcpConfig> {
+  if (Buffer.byteLength(text) > 1_048_576) throw new Error("MCP config exceeds 1 MiB");
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -233,9 +236,10 @@ export function parseMcpConfigText(path: string, text: string): McpServerConfig[
   if (servers === undefined) {
     throw new Error(`${path} has no "mcpServers" (or "servers") key; nothing to connect to`);
   }
+  if (Object.keys(servers).length > 16) throw new Error("MCP config exceeds 16 servers");
   // `exactOptionalPropertyTypes`: an absent key and an explicit `undefined` are different types,
   // so optional fields are spread in only when present
-  return Object.entries(servers).map(([name, cfg]) => ({
+  return Object.entries(servers).map(([name, cfg]) => "url" in cfg ? RemoteMcpConfigSchema.parse({ name, ...cfg }) : ({
     name,
     command: cfg.command,
     ...(cfg.args === undefined ? {} : { args: cfg.args }),
@@ -245,10 +249,20 @@ export function parseMcpConfigText(path: string, text: string): McpServerConfig[
   }));
 }
 
-export async function readMcpConfig(path: string): Promise<McpServerConfig[]> {
+export async function readMcpConfig(path: string): Promise<Array<McpServerConfig | RemoteMcpConfig>> {
   let text: string;
   try {
-    text = await readFile(path, "utf8");
+    const before = await stat(path);
+    if (!before.isFile() || before.size > 1_048_576) throw new Error("MCP config must be a regular file within 1 MiB");
+    const handle = await open(path, "r");
+    try {
+      const actual = await handle.stat();
+      if (!actual.isFile() || actual.ino !== before.ino || actual.dev !== before.dev) throw new Error("MCP config changed during read");
+      const buffer = Buffer.alloc(1_048_577); let offset = 0;
+      while (offset < buffer.length) { const read = await handle.read(buffer, offset, buffer.length - offset, null); if (!read.bytesRead) break; offset += read.bytesRead; }
+      if (offset > 1_048_576) throw new Error("MCP config exceeds 1 MiB");
+      text = buffer.subarray(0, offset).toString("utf8");
+    } finally { await handle.close(); }
   } catch (err) {
     throw new Error(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -278,7 +292,7 @@ export interface BuiltAgent {
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
   /** Connected MCP servers, so the caller can shut them down when the session ends. */
-  mcp: McpClient[];
+  mcp: McpConnection[];
 }
 
 /** Validates every numeric flag up front. Throws with the flag's own name; callers report it. */
@@ -326,6 +340,9 @@ export function parseBudget(opts: AgentBuildOptions): {
 }
 
 export interface AgentExtras {
+  signal?: AbortSignal;
+  /** Trusted host user-state override, never model/project credential material. */
+  mcpCredentialRoot?: string;
   onQuestion?: import("@agentkitai/agentrig-core").QuestionHandler;
   permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
@@ -334,6 +351,8 @@ export interface AgentExtras {
   mcpServers?: McpServerConfig[];
   mcpExistingPinsOnly?: boolean;
   onAsk?: import("@agentkitai/agentrig-core").AgentConfig["onAsk"];
+  /** Before Ink/controller startup. Must not enqueue a prompt into an unmounted UI. */
+  onStartupAsk?: import("@agentkitai/agentrig-core").AgentConfig["onAsk"];
   extraHooks?: Hook[];
   onHookError?: (message: string) => void;
   onHookDone?: (message: string) => void;
@@ -446,6 +465,8 @@ export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
 
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
   validateOtel(opts);
+  if (opts.mcpConfig !== undefined && opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
+    throw new Error("MCP servers start in the host process outside the tool sandbox; remote HTTP requires explicit --sandbox-network and network permission; stdio requires --sandbox none");
   opts = heartbeatBuildOptions(opts);
   const installed = opts.packages === false || opts.trustedProjectRoot === undefined
     ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);
@@ -457,9 +478,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   ];
   if (extensionCandidates.length > 0 && opts.sandbox !== undefined && opts.sandbox !== "none") {
     throw new Error("extensions execute ambient host code outside the sandbox; remove extensions or explicitly select --sandbox none (YOLO does not override this)");
-  }
-  if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.mcpConfig !== undefined) {
-    throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
   }
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
   const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
@@ -486,11 +504,35 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   // MCP servers (PLAN §6). A server that fails to start costs its own tools and nothing else —
   // one broken entry in a config file must not stop the agent from running.
   let mcpTools: AnyTool[] = [];
-  let mcp: McpClient[] = [];
+  let mcp: McpConnection[] = [];
+  let mcpSkills: Skill[] = [];
   if (opts.mcpConfig !== undefined) {
     const configs = extras.mcpServers ?? await readMcpConfig(opts.mcpConfig);
+    if (opts.sandbox !== undefined && opts.sandbox !== "none" && configs.some(c => !("url" in c)))
+      throw new Error("MCP servers start in the host process outside the tool sandbox; remove --mcp-config or explicitly select --sandbox none");
+    const startupPolicy = buildPermissionPolicy(opts);
+    const servers: McpConnection[] = [];
+    for (const c of configs) {
+      if (!("url" in c)) { servers.push(new McpClient(c, { onError: e => extras.onHookError?.(`mcp: ${e.message}`) })); continue; }
+      const oauth = c.oauth ? new McpOAuthProvider(c, new McpCredentialStore(extras.mcpCredentialRoot ?? join(homedir(), ".agentrig", "mcp-auth"), new URL(c.url).href)) : undefined;
+      servers.push(new RemoteMcpClient(c, {
+        ...(extras.signal ? { signal: extras.signal } : {}), ...(oauth ? { oauth } : {}),
+        authorizeStart: async () => {
+          extras.signal?.throwIfAborted();
+          if (opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
+            throw new Error("MCP trusted host fetch requires explicit sandbox network policy");
+          const req = { tool: `mcp_connect_${c.name}`, class: "net" as const, cwd: process.cwd(),
+            input: { endpoint: c.url, issuers: c.oauth?.issuers ?? [], endpointOrigins: c.oauth?.endpointOrigins ?? [], operation: "MCP discovery and catalog (not tool execution)" } };
+          extras.onNotice?.(`MCP startup network endpoint: ${c.url}; OAuth issuers: ${JSON.stringify(c.oauth?.issuers ?? [])}`);
+          const base = await startupPolicy.decide(req);
+          const decision = base === "ask" ? await extras.onStartupAsk?.(req) ?? "deny" : base;
+          extras.onNotice?.(`MCP ${JSON.stringify(c.name)} startup net: ${decision}; trusted host HTTP, not OS-contained`);
+          return decision === "allow";
+        },
+      }));
+    }
     const connected = await connectServers({
-      servers: configs.map((c) => new McpClient(c, { onError: (e) => extras.onHookError?.(`mcp: ${e.message}`) })),
+      servers,
       pins: new FileMcpPins(extras.mcpPinRoot ?? join(homedir(), ".agentrig", "mcp-pins"), await realpath(opts.mcpConfig)),
       ...(extras.mcpExistingPinsOnly === undefined ? {} : { requireExistingPins: extras.mcpExistingPinsOnly }),
       onDefinitionNotice: (message) => extras.onNotice?.(message),
@@ -508,9 +550,11 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     });
     mcpTools = connected.tools;
     mcp = connected.connected;
+    mcpSkills = connected.skills;
   }
 
   try {
+    extras.signal?.throwIfAborted();
     return await assemble();
   } catch (err) {
     // anything after connectServers can throw (a bad --dream-every-* flag, a provider error),
@@ -601,6 +645,9 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         rootPrecedence,
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
+  if (mcpSkills.some(remote => skills.some(local => local.name.toLowerCase() === remote.name.toLowerCase())))
+    throw new Error("MCP prompt skill conflicts with a local skill; refusing ambiguous activation");
+  skills.push(...mcpSkills);
 
   // validated once, here, rather than failing on every bash call with an ENOENT that names
   // neither the flag nor the file
