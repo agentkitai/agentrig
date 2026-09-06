@@ -124,7 +124,7 @@ These flags are available on both `run` and the interactive TUI (and on `session
   ```
 
   Typed `--provider`/`--model`/`--base-url` flags pin the main role to those values; other roles keep their entries. `agentrig doctor` checks every entry.
-- **MCP:** `--mcp-config <path>` starts the stdio MCP servers in the JSON config and adds their namespaced tools to the session. MCP tools use the `exec` permission class.
+- **MCP:** `--mcp-config <path>` supports stdio (`exec`) and remote Streamable HTTP (`net`), including external advisory resources and prompts. Remote discovery requires network permission before connection. `agentrig mcp login <server> --mcp-config <path> --allow net` explicitly prints an OAuth browser URL; ordinary runs never register or open a browser. All advertised lists are pinned and changed definitions require separate consent. See [configuration and limits](docs/plans/R15d.md).
 - **Shell:** `--shell <path>` chooses the shell used by the `bash` tool instead of the platform default (`/bin/sh` on POSIX; Git Bash, then PowerShell, then `cmd.exe` on Windows).
 
 ## Development
@@ -184,7 +184,9 @@ See [H7b](docs/plans/H7b.md) for this conservative evidence boundary.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
 tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
 `--yolo`; headless runs deny that escalation. Host hooks, including `--ingest-on-end` and
-`--dream-on-end`, and CLI MCP startup are refused with an enforcing sandbox selected. Use
+`--dream-on-end`, and stdio MCP startup are refused with an enforcing sandbox selected. Remote
+MCP uses trusted host HTTP, not OS-contained execution, and requires explicit `--sandbox-network`
+as well as network permission. Use
 `--sandbox none` explicitly when accepting those host effects. SDK code, provider calls and
 session bookkeeping remain trusted host operations; extensions are not isolated by this boundary.
 Local memory reads/searches and subagents that inherit or narrow the sandbox remain available.
