@@ -341,6 +341,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     let system = "";
     let warnedNoUsage = false;
     let compactionExhausted = false;
+    let consecutiveContinuations = 0;
+    let continuationFrom: number | undefined;
 
     // Two concurrent resumes of one id would interleave appends and corrupt the log's seq
     // order, so resume takes an advisory lock. On failure nothing may be appended (the other
@@ -398,10 +400,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       }
     };
 
-    const budgetExceeded = (): string | null => {
+    const budgetExceeded = (completedTurns = turns): string | null => {
       const b = config.budget;
       if (!b) return null;
-      if (b.maxTurns !== undefined && turns >= b.maxTurns) return `turn budget reached (${b.maxTurns})`;
+      if (b.maxTurns !== undefined && completedTurns >= b.maxTurns) return `turn budget reached (${b.maxTurns})`;
       if (b.maxTokens !== undefined && usageTokens(totals) >= b.maxTokens)
         return `token budget reached (${b.maxTokens})`;
       if (b.maxUsd !== undefined && usd >= b.maxUsd) return `USD budget reached ($${b.maxUsd})`;
@@ -694,6 +696,15 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           return { ...block, context, authority: context.authority === "instruction" ? "instruction" : "data" };
         });
         req.systemContexts = requestSystemBlocks.filter(block => block.content !== "").map(block => block.context!);
+        // Hooks/context preparation can consume wall time or receive cancellation. The
+        // current iteration already owns one turn slot; do not charge it a second time.
+        const beforeRequestBudget = budgetExceeded(turns - 1);
+        if (abortController.signal.aborted || beforeRequestBudget !== null) {
+          reason = abortController.signal.aborted ? "aborted" : "budget";
+          if (reason === "budget") await emit({ type: "error", message: beforeRequestBudget!, fatal: false });
+          await emit({ type: "turn.end", n: turns });
+          break;
+        }
         // Emitted only after the last request mutation and immediately before the provider call.
         // It contains hashes and accounting metadata, never prompt content.
         await emit(buildContextManifest({
@@ -713,6 +724,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         let stopRaw: string | undefined;
         try {
           abortController.signal.throwIfAborted();
+          // Only an actual provider attempt is a continuation, never a staged retry that a
+          // budget, cancellation or pre_model veto prevents. This remains a normal paid turn.
+          if (continuationFrom !== undefined) {
+            await emit({ type: "turn.continued", n: turns, from: continuationFrom,
+              attempt: consecutiveContinuations, maxAttempts: 2, reason: "max_tokens" });
+            continuationFrom = undefined;
+          }
           for await (const ev of provider.stream(req, abortController.signal)) {
             switch (ev.type) {
               case "text_delta": {
@@ -833,19 +851,38 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           break;
         }
         if (stop === "max_tokens") {
-          // an answer cut off mid-thought is an incomplete session, not a completed one
-          reason = "error";
-          await emit({ type: "error", message: `response truncated at maxTokens (${req.maxTokens})`, fatal: false });
-          await emit({ type: "turn.end", n: turns });
-          break;
+          // Even parseable calls from this response are incomplete work, not permission to
+          // dispatch. Persist explicit paired non-execution results before any retry/resume.
+          if (toolUses.length > 0) {
+            const message: Message = { role: "user", content: toolUses.map(tu => ({
+              type: "tool_result", toolUseId: tu.id, isError: true, context: ADVISORY_CONTEXT,
+              content: "[interrupted: response reached max_tokens; this tool was NOT executed. Request it again if still needed.]",
+            })) };
+            messages.push(message);
+            await emit({ type: "message.append", message });
+          }
+          if (consecutiveContinuations >= 2) {
+            reason = "error";
+            await emit({ type: "error", message: `response truncated at maxTokens (${req.maxTokens}); continuation limit exhausted (2)`, fatal: false });
+            await emit({ type: "turn.end", n: turns });
+            break;
+          }
+          consecutiveContinuations += 1;
+          continuationFrom = turns;
+          const message: Message = { role: "user", content: [{ type: "text", context: ADVISORY_CONTEXT,
+            text: "[Platform continuation: the previous response reached its output limit. Continue the existing task from the partial response. No tool calls from that truncated response were executed; request any needed calls again. This is not new user input or approval.]" }] };
+          messages.push(message);
+          await emit({ type: "message.append", message });
+        } else {
+          consecutiveContinuations = 0;
         }
-        if (toolUses.length === 0) {
+        if (stop !== "max_tokens" && toolUses.length === 0) {
           await emit({ type: "turn.end", n: turns });
           break;
         }
 
         const results: ContentBlock[] = [];
-        for (const tu of toolUses) {
+        for (const tu of stop === "max_tokens" ? [] : toolUses) {
           if (abortController.signal.aborted) {
             reason = "aborted";
             await emit({ type: "turn.end", n: turns });
@@ -853,10 +890,12 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
           results.push(await runTool(tu));
         }
-        const resultMessage: Message = { role: "user", content: results };
-        expansion.input(results);
-        messages.push(resultMessage);
-        await emit({ type: "message.append", message: resultMessage });
+        if (results.length > 0) {
+          const resultMessage: Message = { role: "user", content: results };
+          expansion.input(results);
+          messages.push(resultMessage);
+          await emit({ type: "message.append", message: resultMessage });
+        }
 
         // Fall back to the estimate when the provider reports no usage, so compaction still
         // fires for servers that never send a usage chunk.
