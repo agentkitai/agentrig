@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { EventPayload, PermissionClass } from "./events.js";
+import type { ShellOperation } from "./shell-operation.js";
 
 export interface ToolContext {
   cwd: string;
@@ -38,6 +39,9 @@ export interface Tool<I = unknown, O = unknown> {
   description: string;
   inputSchema: z.ZodType<I>;
   permission: PermissionClass | ((input: I) => PermissionClass);
+  /** Trusted host descriptor of the actual implementation/validated input. Never a model or
+   * MCP hint. Narrow rules cannot match tools without a supported descriptor. */
+  operation?(input: I): ShellOperation;
   /** Trusted SDK effect declaration, not a permission or model/MCP annotation. Omission is
    * potentially mutating. Only read-only calls can skip an opt-in checkpoint. */
   effects?: "read-only" | "workspace" | "background" | ((input: I) => "read-only" | "workspace" | "background");

@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R13b provenance assembly and R12e semantic authorization are independent active rows. R5d, R5e, R6a, R13a and R13f are merged with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b continues independently. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -14,9 +14,10 @@ its own merged PR. R13f repairs uncorroborated supervisor progress; R5e establis
 manifest validation before generated skills and extensions; R5d pins MCP tool definitions and
 requires consent for changes. These are independent first items.
 
-R6a procedure detection and R13a transport are delivered. R13b now follows R13a while R12e works
-independently on parsed-operation authorization: metadata joins do not depend on permissions.
-This dependency-aware parallel start preserves the committed queue; it introduces no demand veto.
+R6a procedure detection is merged; R6b continues its independent memory track after those
+prerequisites. R12e establishes narrow semantic authorization before grant lifecycle work;
+R13b follows delivered R13a metadata. Dependency-aware parallel starts preserve the committed
+queue and introduce no demand veto.
 
 Each exact head needs appropriate tests, one bounded independent review with material findings
 addressed, and green three-platform CI. Integrate current main before merging; serialize merges
@@ -43,7 +44,34 @@ H6 trace changes are limited to new metadata and its derived request hashes/toke
 Full validation, restored negative controls, one independent review and exact-head/post-merge
 three-platform CI remain closing delivery gates; optional refinements belong at ROADMAP's end.
 
-### R13a merged — PR #147 records delivery gates
+One bounded Claude review `44f6ca76-9abe-4f58-baf1-e055d241fa4a` independently passed 119 tests
+and typecheck, finding one material post-tool cancellation regression. A failing runtime test
+reproduced duplicate result events; the fix degrades provenance without re-emission. All 18 new
+tests pass. MCP source removal, summary upgrade and custom-retention bypass mutations failed
+and were restored. Integrated main `6cf3865`: build/typecheck and full suite pass 2,129 tests
+plus two existing skips across 106 files. No second general review for mechanical integration.
+
+### R12e done — PR #148 records delivery gates
+
+Merge `6cf3865` passed three-platform post-merge CI 34019474635.
+
+Explicit `--allow-command '["git","status"]'` / config argv prefixes now match a bounded
+literal POSIX operation descriptor derived by trusted built-in bash after validated pre-tool
+hooks. Names, transcript claims and MCP hints never mint authority. Unsupported syntax and
+background calls cannot satisfy narrow scopes; existing explicit blanket authority is preserved,
+with CLI deny rules first. This is not read-only/binary/PATH/Git-hook attestation and does not
+implement R12a grant records or R12b–R12d lifecycle/UI. [Contract](plans/R12e.md).
+
+Integrated main `76ac082` includes R6a and R13a; build/typecheck pass and the full suite passes
+2,111 tests plus two skips across 105 files. Bypassing argv equality and deriving descriptors
+before hook modifications both fail named negative controls; both mutations are restored.
+Bounded Claude review `fb4da610-4af1-43fa-b597-98c52b1e2c0f` approves the code and independently
+passes typecheck plus 136 tests. Evidence wording and committing docs resolve its two delivery
+findings. Exact-head three-platform CI and post-merge CI remain closing gates.
+R5d's merged `008c2ba` passed post-merge CI 34018010003; Windows repair `3c857d0` passed
+post-merge CI 34017665328. R13a main `76ac082` passed post-merge CI 34018763831 on all platforms.
+
+### R13a done — PR #147 records delivery gates
 
 Final head `deef3ab` passed three-platform CI 34018447400 and merged as `76ac082`.
 Exact post-merge CI 34018763831 passed Linux, macOS and Windows.
@@ -71,7 +99,7 @@ After integrating R6a main `42cef62`, local build/typecheck/full suite pass
 Previous head `a93406a` passed three-platform CI 34018081611; the integrated head requires
 its own checks before merge. PR #147 records exact-head and post-merge receipts.
 
-### R6a merged — PR #146 records delivery gates
+### R6a done — PR #146 records delivery gates
 
 Final head `fe12d9a` merged as `42cef62` after green PR CI. Post-merge CI 34018319273
 passed on all three platforms.
@@ -113,7 +141,7 @@ the late-attempt control. Both mutations are restored. Windows CI retains the or
 and repeats its conservation case, alongside the deterministic repair tests. Final exact-head
 and post-merge CI receipts belong to the repair PR; R5d's earlier independent review is unchanged.
 
-### R13f merged — PR #143 records closing delivery gates
+### R13f done — PR #143 records closing delivery gates
 
 Final head `01127b7` passed three-platform CI 34016646499 and merged as `1a20f4e`.
 That merge passed post-merge main CI 34016868500 on all three platforms.
@@ -135,7 +163,7 @@ three-platform CI passed as recorded above; post-merge main CI gates the next me
 records the closing receipts.
 Optional refinements are at the roadmap end, not prerequisites for R5d or later rows.
 
-### R5e merged — PR #142 records delivery gates
+### R5e done — PR #142 records delivery gates
 
 Final head `aafaa5b`, PR CI 34016292275 passed all three platforms and merged as `26e78ec`.
 Post-merge main CI gates the next merge; the closing PR records its result.
@@ -153,7 +181,7 @@ the old blocklist. Strict-schema and equal-precedence negative mutations also fa
 restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
 post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
 
-### R5d merged — PR #144 records delivery gates
+### R5d done — PR #144 records delivery gates
 
 Merge `008c2ba` passed three-platform post-merge CI 34018010003.
 

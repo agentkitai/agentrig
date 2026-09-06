@@ -120,6 +120,7 @@ export interface AgentBuildOptions extends ProviderOptions {
   memory?: string;
   system?: string;
   allow?: string[];
+  allowCommand?: string[][];
   deny?: string[];
   /** Allow everything nothing else matched, rather than asking. `--deny` still wins. */
   dangerouslySkipPermissions?: boolean;
@@ -456,6 +457,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const sandbox = buildSandbox(opts.sandbox ?? "none");
   const permissionPolicy = buildPermissionPolicy({
     ...(opts.allow === undefined ? {} : { allow: opts.allow }),
+    ...(opts.allowCommand === undefined ? {} : { allowCommand: opts.allowCommand }),
     ...(opts.deny === undefined ? {} : { deny: opts.deny }),
     ...(opts.dangerouslySkipPermissions === undefined
       ? {}

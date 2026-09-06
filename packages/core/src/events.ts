@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MessageSchema } from "./messages.js";
 import { SandboxMode } from "./sandbox.js";
+import { ShellOperationSchema } from "./shell-operation.js";
 
 /**
  * The event spine. Every session is an append-only log of these events.
@@ -60,6 +61,8 @@ export const PermissionRequest = z.object({
   cwd: z.string(),
   /** Filesystem paths the call touches, as declared by the tool's `paths()`; absent when the tool declares none. */
   paths: z.array(z.string()).optional(),
+  /** Derived by trusted tool wiring from final validated input, never copied from model metadata. */
+  operation: ShellOperationSchema.optional(),
   /**
    * M7: who is asking, when it is not the session the user is watching — a subagent routes its
    * asks through its parent's prompt, and answering "allow" for a child you cannot see is a
