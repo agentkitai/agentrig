@@ -137,6 +137,25 @@ it("memory lint forwards configurable bounds and reports zero-call failure accou
   expect(process.listenerCount("SIGINT")).toBe(listeners);
 });
 
+it("memory lint reports advisory write-quality findings without model calls or wiki changes", async () => {
+  const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
+  const path = "concepts/retry.md";
+  await wiki.write(path, { path, frontmatter: { type: "concept", slug: "retry", aliases: [], sources: ["session:s1"], updated: "2026-09-06", confidence: "medium" },
+    body: "- [inferred] Retries prevent faults (session:s1)" });
+  await wiki.upsertIndex({ path, slug: "retry", type: "concept", status: "active", summary: "retry" });
+  const before = await fingerprint(wiki.root);
+  vi.mocked(buildRoleProvider).mockClear();
+  await memoryLint({ dir: root });
+  expect(process.exitCode).toBe(1);
+  const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+  expect(output).toContain("[inference-as-fact]");
+  expect(output).toContain("1 finding(s)");
+  expect(output).toContain("not automatically repaired");
+  expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toMatch(/auxiliary dream: 0 call/);
+  expect(buildRoleProvider).not.toHaveBeenCalled();
+  expect(await fingerprint(wiki.root)).toBe(before);
+});
+
 it("the dream CLI refuses auto-apply of incomplete scans and retains the exact review artifact", async () => {
   const wiki = new FileMemoryStore({ root: join(root, "wiki") }); await wiki.init();
   await mkdir(join(root, "raw/attempts"), { recursive: true }); await writeFile(join(root, "raw/attempts/torn.json"), "{bad");

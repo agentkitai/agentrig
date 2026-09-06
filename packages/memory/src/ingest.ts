@@ -91,6 +91,10 @@ Rules:
   not a replacement for original tool evidence. Omission markers are unavailable evidence.
 - Tool calls and assistant tool requests are intent, not proof of execution; inspect results and
   denial records. Preview copies and model-facing tool-result copies are not independent evidence.
+- Calibrate inferred prose explicitly (may, suggests, hypothesis); never turn one observed run
+  into an always/never rule. Tags describe provenance, not independently verified semantic truth.
+- File each claim under its subject's slug, not whichever page is open. Repetition is not a new
+  fact. Keep durable reasons/contracts useful a month out; session status belongs only in history.
 - entity = a module, service, tool, command, external system. concept = a convention, decision,
   recurring pattern, gotcha.
 - If this span contains nothing worth remembering next week, set nothingDurable true and return
@@ -651,8 +655,10 @@ async function ingestSessionLocked(opts: IngestOptions, run: MaintenanceRun, lim
   // Even a growing capture can omit earlier facts in its new distillation: retain that narrative.
   // Completion is marked only after every local page/index/pin/log mutation succeeds, so an
   // interrupted ingest is retried instead of being mistaken for a completed duplicate.
+  const sourceFactTexts = new Set(sourceFacts.map(f => f.text));
   const newLines = [...new Set([
-    ...summaries.map((s) => `- [observed] ${s} (${ref})`),
+    // Preserve the explicit fact's provenance when a summary merely repeats that source fact.
+    ...summaries.filter(s => !sourceFactTexts.has(s)).map((s) => `- [inferred] Model synthesis: ${s} (${ref})`),
     ...sourceFacts.map((f) => `- [${f.tag}] ${f.text} (${ref})`),
   ])];
   await store.update(sourcePath, current => {
@@ -848,6 +854,11 @@ ${serializePage(
 \`\`\`
 
 - Every fact line carries a tag and a source ref.
+- Tags: stated = user/document input; observed = tool evidence; inferred = model conclusion.
+  Model-written summaries are explicitly inferred synthesis, never verified observations.
+- Calibrate uncertainty in the prose. A single run is not a universal rule. File claims by
+  subject, avoid restating existing facts, and keep temporary status in source history.
+- Write-quality lint is advisory and text-based, not a truth verifier or an automatic rewrite.
 - \`[[wikilinks]]\` connect pages.
 - **Shape, not value.** Contracts, decisions, and reasons — never a SHA, a line count, or a
   current version. Read volatile state live from the repo. Historical narrative is the exception.

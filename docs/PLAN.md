@@ -357,6 +357,13 @@ confidence: high | medium | low
 
 ### 3.4 Store interface and tools
 
+R6d adds advisory, model-free write-quality findings to lint/dream: prose calibration of inferred
+claims, temporary status outside source history, exact repeated claims, thinly cited universal
+observations and explicit subject-link routing. Missing provenance tags are reported for review.
+New ingest summaries are inferred model synthesis, not observed evidence. No quality finding
+automatically edits or promotes a claim; tags/citation counts are not semantic verification.
+See [R6d](plans/R6d.md) for heuristic limits and controls.
+
 ```ts
 interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number; version?: string }
 

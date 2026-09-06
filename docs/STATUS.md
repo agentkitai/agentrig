@@ -1,11 +1,24 @@
 # Status
 
-Current roadmap row: **H6 — focused core extraction.** R4a–R4c, H1–H5 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Current roadmap row: **R6d — memory write-quality lint.** R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### H6 in progress
+### R6d in progress
+
+Fresh branch from updated main `412a9af`; [contract](plans/R6d.md). Complete advisory write-quality
+lint on existing claim tags, and identify new model summaries as inferred synthesis instead of
+observed evidence. No auto-rewrite or promotion change. Build/typecheck and the full Node22 suite
+pass 1,945 plus two skips (94 files). One bounded Claude review approved, independently passing
+the same full suite. Reporting and provenance negative mutations fail and are restored. Optional
+polish stays at ROADMAP's end. R6e remains next, after exact-head and post-merge CI gates.
+
+### H6 complete (PR #138)
+
+Final head `6e6803b`, merge `412a9af`, PR CI 34011748505 and post-merge CI 34011951160 all green.
+One independent review, 1,934 local passes plus two skips, unchanged complete baseline traces
+and two detected/restored mutations. Following notes are intermediate records, not pending gates.
 
 Fresh branch from updated main `3c09f84`; [contract](plans/H6.md). Extract internal tool-execution
 and session-lifecycle components without changing the public API or event behavior. Three complete

@@ -327,7 +327,7 @@ async function lintWithSignal(opts: MemoryLintOptions, signal: AbortSignal): Pro
 
   const findings = findingCount(result.report, result.structural);
   if (findings > 0) {
-    console.log(`${findings} finding(s). \`agentrig dream\` writes a corrected wiki you can review.`);
+    console.log(`${findings} finding(s). \`agentrig dream\` writes a reviewable copy; advisory write-quality findings are not automatically repaired.`);
     process.exitCode = 1;
   }
 }
