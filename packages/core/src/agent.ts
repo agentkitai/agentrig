@@ -3,7 +3,7 @@ import { isAbsolute, relative, sep } from "node:path";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { Decision, HarnessEvent, PermissionRequest, Usage } from "./events.js";
 import { EventPayload, SupervisorRecord } from "./events.js";
-import { ContentTrustSchema, type ContentBlock, type ContentTrust, type Message } from "./messages.js";
+import { ContentTrustSchema, type ContentBlock, type ContentTrust, type InstructionContext, type Message } from "./messages.js";
 import type { ModelProvider, ModelRequest, StopReason, ToolSpec } from "./provider.js";
 import type { PermissionPolicy } from "./permissions.js";
 import type { PermissionGrantRegistry } from "./permission-grants.js";
@@ -11,7 +11,8 @@ import type { AnyTool } from "./tool.js";
 import type { SandboxConfig } from "./sandbox.js";
 import { type CompactionStrategy, summarizeOlderTurns, compactWithProvenance } from "./compaction.js";
 import { SessionStore, assertSessionId } from "./session-store.js";
-import { runHooks, type Hook, type HookPoint } from "./hooks.js";
+import { runHooks, type AttributedHookResult, type Hook, type HookPoint } from "./hooks.js";
+import { contextPrincipals, USER_CONTEXT, PLATFORM_CONTEXT, ADVISORY_CONTEXT } from "./context-principals.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { discoverProjectInstructions } from "./project-context.js";
 import { evictToolResults, type ToolResultEvictionOptions } from "./tool-result-eviction.js";
@@ -74,6 +75,8 @@ export interface PromptContext {
 export interface AgentConfig {
   /** Current build's extension receipts, not replayed authorization or repeated activation. */
   extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
+  /** Trusted host opt-in for this run only; unambiguous explicit hook ids, never tool grants. */
+  hookInstructionDelegations?: readonly string[];
   provider: ModelProvider;
   tools: AnyTool[];
   permissions: PermissionPolicy;
@@ -148,6 +151,8 @@ export interface SessionControl {
   auxiliarySignal?: AbortSignal;
   /** Queued and injected at the next turn boundary. Source defaults to `user`; M4's supervisor passes its own. */
   steer(message: string, source?: "user" | "supervisor" | "hook"): void;
+  /** Trusted host control, no model-facing tool. Revokes retained authority on the next request. */
+  setHookDelegation?(hookId: string, enabled: boolean): boolean;
   pause(): void;
   resume(): void;
   abort(): void;
@@ -225,7 +230,13 @@ export function toToolSpec(tool: AnyTool): ToolSpec {
 
 /** Cheap request-size estimate for `model.request.tokensIn`; real usage lands in `model.response`. */
 function estimateTokens(system: string, messages: Message[]): number {
-  return Math.ceil((system.length + JSON.stringify(messages).length) / 4);
+  // Instruction context is unified-only metadata, not prompt text billed by the provider.
+  const withoutContext = (block: ContentBlock): ContentBlock => {
+    const { context: _context, ...rest } = block;
+    return rest.type === "tool_result" && Array.isArray(rest.content)
+      ? { ...rest, content: rest.content.map(withoutContext) } : rest;
+  };
+  return Math.ceil((system.length + JSON.stringify(messages.map(message => ({ ...message, content: message.content.map(withoutContext) }))).length) / 4);
 }
 
 export { PLAN_TOOL, MAX_REPLAN_REFUSALS } from "./tool-execution.js";
@@ -247,6 +258,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // than letting it reach the filesystem or a session_end hook that builds a path from it
   const resume = opts.resume === undefined ? undefined : assertSessionId(opts.resume);
   const parent = opts.parent === undefined ? undefined : assertSessionId(opts.parent);
+  const taskContext = parent === undefined ? USER_CONTEXT : ADVISORY_CONTEXT;
   const id = resume ?? (opts.id === undefined ? store.create() : assertSessionId(opts.id));
   const grantSessionId = parent === undefined ? id : config.permissionGrants?.context.sessionId;
   // A fresh run owns its log for its lifetime. Two runs appending to one id would restart `seq`
@@ -254,7 +266,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
   // for a fresh session, where the resume path's advisory file lock does not apply.
   const releaseClaim = resume === undefined ? store.claim(id) : null;
   let cwd = opts.cwd ?? process.cwd();
-  const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook" }> = [];
+  const pendingSteers: Array<{ message: string; source: "user" | "supervisor" | "hook"; context?: InstructionContext }> = [];
+  const principals = contextPrincipals(config.hooks ?? []);
   let grantTaskId: string | undefined;
   /** Set by `control.requirePlan`, cleared by the next `plan.updated`. */
   const replan: ReplanState = { reason: null, refusals: 0 };
@@ -264,6 +277,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     if (payload.type === "plan.updated") { replan.reason = null; replan.refusals = 0; }
   });
   const { stream, gate, abortController, auxiliaryController, endController, emit, raceAbort, settleOrphans } = lifecycle;
+  const flushDelegations = async () => {
+    for (const change of principals.drain()) await emit({ type: "context.delegation", ...change });
+  };
 
   const emitFromTool = createToolEmitterFactory(emit, lifecycle.isEnded);
 
@@ -277,14 +293,20 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     ctx: Omit<Parameters<typeof runHooks>[2], "signal">,
     selectedHooks?: Hook[],
     failClosed = false,
-  ): Promise<{ denied?: string; patches: unknown[]; injects: string[] }> => {
+  ): Promise<AttributedHookResult> => {
     const hooks = selectedHooks ?? (config.hooks ?? []).filter((candidate) => !isCheckpointerHook(candidate));
     if (!hooks.some((h) => h.point === point)) return { patches: [], injects: [] };
     const signal = point === "session_end" ? endController.signal : abortController.signal;
-    return runHooks(
+    const patchContexts: InstructionContext[] = [];
+    const injectContexts: InstructionContext[] = [];
+    const result = await runHooks(
       {
         hooks,
         signal,
+        onResult: (registered, result) => {
+          if (result.action === "modify") patchContexts.push(principals.hook(registered));
+          if (result.action === "inject") injectContexts.push(principals.hook(registered));
+        },
         // one wall-clock budget for the whole point, so generous per-hook overrides cannot add up
         totalTimeoutMs: point === "session_end" ? (config.sessionEndBudgetMs ?? 15 * 60_000) : 60_000,
         ...(config.hookTimeoutMs === undefined ? {} : { timeoutMs: config.hookTimeoutMs }),
@@ -296,6 +318,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       point,
       { ...ctx, signal },
     );
+    await flushDelegations();
+    return { ...result, patchContexts, injectContexts };
   };
 
   const done = (async (): Promise<SessionSummary> => {
@@ -345,6 +369,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             type: "tool_result" as const,
             toolUseId: tu.id,
             content: "[interrupted: the session ended before this tool ran to completion]",
+            context: ADVISORY_CONTEXT,
             isError: true,
           })),
         },
@@ -404,22 +429,23 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
               provider.capabilities.cacheReadDiscount,
               provider.capabilities.cacheWriteMultiplier,
             );
-        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns });
+        await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns, context: taskContext });
         messages = snap.messages;
         // A written snapshot is already resumable; a materialized one can end at a fork point in
         // the middle of a tool call, and the same synthesis makes it acceptable to the APIs.
         messages = resumableMessages();
-        if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task }] });
+        if (task !== "") messages.push({ role: "user", content: [{ type: "text", text: task, context: taskContext }] });
       } else {
         await emit({
           type: "session.start",
+          context: taskContext,
           task,
           cwd,
           provider: provider.id,
           model: provider.model,
           ...(parent === undefined ? {} : { parent }),
         });
-        messages = [{ role: "user", content: [{ type: "text", text: task }] }];
+        messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext }] }];
       }
 
       for (const extension of config.extensions?.loaded ?? []) {
@@ -428,6 +454,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       for (const extension of config.extensions?.failed ?? []) await emit({ type: "extension.error", ...extension });
       if (parent === undefined) grantTaskId = config.permissionGrants?.beginRun(id);
       await config.permissionGrants?.flush(emit);
+      if ((config.hookInstructionDelegations?.length ?? 0) > 128) throw new Error("at most 128 hook instruction delegations per run");
+      for (const hookId of config.hookInstructionDelegations ?? []) {
+        if (!principals.set(hookId, true)) throw new Error(`unknown or ambiguous hook instruction delegation: ${hookId}`);
+      }
+      await flushDelegations();
 
       // user_prompt: a hook may refuse the task outright, rewrite it, or append to it
       {
@@ -446,10 +477,11 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         // last string wins: two hooks each rewriting the task is a conflict, and the later
         // registration is the more specific one by convention
-        const rewritten = h.patches.filter((p): p is string => typeof p === "string").at(-1);
-        const extra = [...(rewritten === undefined ? [] : [rewritten]), ...h.injects];
-        for (const text of extra) {
-          const message: Message = { role: "user", content: [{ type: "text", text }] };
+        const rewrittenIndex = h.patches.map((p, index) => typeof p === "string" ? index : -1).filter(index => index >= 0).at(-1) ?? -1;
+        const extra = [...(rewrittenIndex < 0 ? [] : [{ text: h.patches[rewrittenIndex] as string, context: h.patchContexts?.[rewrittenIndex] ?? ADVISORY_CONTEXT }]),
+          ...h.injects.map((text, index) => ({ text, context: h.injectContexts?.[index] ?? ADVISORY_CONTEXT }))];
+        for (const { text, context } of extra) {
+          const message: Message = { role: "user", content: [{ type: "text", text, context }] };
           messages.push(message);
           await emit({ type: "message.append", message });
         }
@@ -546,8 +578,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
 
         for (const s of pendingSteers.splice(0)) {
-          await emit({ type: "steer", source: s.source, message: s.message });
-          messages.push({ role: "user", content: [{ type: "text", text: s.message }] });
+          const context = principals.effective(s.context ?? (s.source === "user" ? USER_CONTEXT
+            : { principal: s.source === "supervisor" ? "supervisor" : "hook:anonymous:steer", authority: "advisory" }));
+          await emit({ type: "steer", source: s.source, message: s.message, context });
+          messages.push({ role: "user", content: [{ type: "text", text: s.message, context }] });
         }
 
         turns += 1;
@@ -604,7 +638,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
             reason = "done";
             break loop;
           }
-          for (const patch of h.patches) {
+          for (const [index, patch] of h.patches.entries()) {
             if (patch !== null && typeof patch === "object" && "system" in patch && typeof patch.system === "string") {
               const previous = req.system;
               req.system = patch.system;
@@ -616,8 +650,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
                   {
                     content: patch.system.slice(previous.length + 2),
                     source: "system_prompt",
-                    origin: "hook:pre_model",
-                    authority: "instruction",
+                    origin: h.patchContexts?.[index]?.principal ?? "hook:anonymous:pre_model",
+                    authority: "data",
+                    context: h.patchContexts?.[index] ?? ADVISORY_CONTEXT,
                     reason: "pre_model hook appended instructions",
                   },
                 ];
@@ -627,8 +662,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
                 requestSystemBlocks = [{
                   content: patch.system,
                   source: "system_prompt",
-                  origin: "hook:pre_model",
-                  authority: "instruction",
+                  origin: h.patchContexts?.[index]?.principal ?? "hook:anonymous:pre_model",
+                  authority: "data",
+                  context: h.patchContexts?.[index] ?? ADVISORY_CONTEXT,
                   reason: "pre_model hook replaced the rendered system prompt",
                 }];
               }
@@ -644,6 +680,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           }
         }
 
+        await flushDelegations();
+        req.messages = principals.messages(req.messages);
+        requestSystemBlocks = requestSystemBlocks.map(block => {
+          const context = principals.effective(block.context ?? (block.authority === "instruction" ? PLATFORM_CONTEXT : ADVISORY_CONTEXT));
+          return { ...block, context, authority: context.authority === "instruction" ? "instruction" : "data" };
+        });
+        req.systemContexts = requestSystemBlocks.filter(block => block.content !== "").map(block => block.context!);
         // Emitted only after the last request mutation and immediately before the provider call.
         // It contains hashes and accounting metadata, never prompt content.
         await emit(buildContextManifest({
@@ -728,7 +771,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           });
           // attributed to `hook`, not `user`: the supervisor's reviewer grades trajectories off
           // these events, and a hook nudge scored as a human correction is a lie in the log
-          for (const message of h.injects) pendingSteers.push({ message, source: "hook" });
+          for (const [index, message] of h.injects.entries()) pendingSteers.push({ message, source: "hook", context: h.injectContexts?.[index] ?? ADVISORY_CONTEXT });
         }
         totals.input += usage.input;
         totals.output += usage.output;
@@ -866,6 +909,8 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
+      principals.close();
+      await flushDelegations();
       lifecycle.beginEnding();
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
@@ -930,6 +975,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     events: stream,
     control: {
       auxiliarySignal: auxiliaryController.signal,
+      setHookDelegation: (hookId, enabled) => principals.set(hookId, enabled),
       steer: (message, source = "user") => pendingSteers.push({ message, source }),
       pause: () => gate.pause(),
       resume: () => gate.resume(),

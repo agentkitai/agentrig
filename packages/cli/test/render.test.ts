@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("makes instruction delegation and revocation visible without implying tool permission", () => {
+  for (const action of ["delegated", "revoked"]) {
+    const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,
+      type: "context.delegation", principal: "hook:notes", action, delegation: "receipt" });
+    expect(renderEvent(event)).toContain(action);
+    expect(renderEvent(event)).toContain("hook:notes");
+    expect(renderEvent(event)).toContain("receipt");
+    expect(renderChatEvent(event)).toContain(`instruction authority ${action}: hook:notes`);
+    expect(renderChatEvent(event)).toContain("no tool permission");
+  }
+});
+
 it("renders validated grant/revocation records without replaying authority", () => {
   const grant = { id: "g", subject: "group", operation: { tool: "bash" }, resource: "*", constraints: {}, duration: { kind: "session", id: "s" }, delegable: true, decision: "allow", createdAt: 1 };
   const granted = HarnessEvent.parse({ type: "permission.granted", grant, seq: 1, sessionId: "s", ts: 1 });

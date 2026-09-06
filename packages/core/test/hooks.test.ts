@@ -687,7 +687,7 @@ describe("pre_model and post_model", () => {
     if (manifest?.type !== "context.manifest") throw new Error("missing context manifest");
     expect(manifest.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: "system_prompt", origin: "agent.config.systemPrompt" }),
-      expect.objectContaining({ source: "system_prompt", origin: "hook:pre_model", reason: "pre_model hook appended instructions" }),
+      expect.objectContaining({ source: "system_prompt", origin: "hook:anonymous:0", authority: "data", context: { principal: "hook:anonymous:0", authority: "advisory" }, reason: "pre_model hook appended instructions" }),
     ]));
   });
 

@@ -4,6 +4,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
 {
   "replay": [
     {
+      "context": {
+        "authority": "instruction",
+        "principal": "user",
+      },
       "cwd": "/agentrig-h6-synthetic",
       "model": "trace",
       "provider": "trace",
@@ -25,6 +29,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
         {
           "authority": "instruction",
           "bytes": 12,
+          "context": {
+            "authority": "instruction",
+            "principal": "platform",
+          },
           "disposition": "kept",
           "hash": "ca0dffa1d43592a0",
           "origin": "agent.config.systemPrompt",
@@ -35,6 +43,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
         {
           "authority": "instruction",
           "bytes": 11,
+          "context": {
+            "authority": "instruction",
+            "principal": "user",
+          },
           "disposition": "kept",
           "hash": "28edd1dd4f7e5a2f",
           "origin": "message:0:user:0",
@@ -53,7 +65,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           "tokens": 246,
         },
       ],
-      "requestHash": "c810ec63596d7764",
+      "requestHash": "603a9b94aefb6be8",
       "seq": 2,
       "sessionId": "trace",
       "ts": 42,
@@ -185,6 +197,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "abort trace",
               "type": "text",
             },
@@ -193,6 +209,12 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -246,6 +268,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
   "result": {
     "events": [
       {
+        "context": {
+          "authority": "instruction",
+          "principal": "user",
+        },
         "cwd": "/agentrig-h6-synthetic",
         "model": "trace",
         "provider": "trace",
@@ -267,6 +293,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -277,6 +307,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
           {
             "authority": "instruction",
             "bytes": 11,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "28edd1dd4f7e5a2f",
             "origin": "message:0:user:0",
@@ -295,7 +329,7 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
             "tokens": 246,
           },
         ],
-        "requestHash": "c810ec63596d7764",
+        "requestHash": "603a9b94aefb6be8",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -432,6 +466,10 @@ exports[`preserves aborted tool settlement, late-emission guard and end ordering
       {
         "content": [
           {
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "text": "abort trace",
             "type": "text",
           },
@@ -482,6 +520,10 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
   "first": {
     "events": [
       {
+        "context": {
+          "authority": "instruction",
+          "principal": "user",
+        },
         "cwd": "/agentrig-h6-synthetic",
         "model": "trace",
         "provider": "trace",
@@ -503,6 +545,10 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -513,6 +559,10 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
           {
             "authority": "instruction",
             "bytes": 10,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "9c3efe93b3efa4c2",
             "origin": "message:0:user:0",
@@ -531,7 +581,7 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
             "tokens": 275,
           },
         ],
-        "requestHash": "19dcb0288a3f372b",
+        "requestHash": "ec070693f1528122",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -610,6 +660,10 @@ exports[`preserves complete sequential permission/hook/tool and resumed traces 1
         "type": "permission.decision",
       },
       {
+        "context": {
+          "authority": "advisory",
+          "principal": "hook:anonymous:0",
+        },
         "id": "ok",
         "input": {
           "text": "patched",
@@ -704,6 +758,10 @@ guidance",
             {
               "content": "patched
 guidance",
+              "context": {
+                "authority": "advisory",
+                "principal": "platform",
+              },
               "toolUseId": "ok",
               "trust": "external",
               "type": "tool_result",
@@ -749,6 +807,10 @@ guidance",
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -759,6 +821,10 @@ guidance",
           {
             "authority": "instruction",
             "bytes": 10,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "9c3efe93b3efa4c2",
             "origin": "message:0:user:0",
@@ -799,6 +865,10 @@ guidance",
           {
             "authority": "data",
             "bytes": 16,
+            "context": {
+              "authority": "advisory",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "f49a8f7e09d7c32e",
             "origin": "echo:ok",
@@ -837,7 +907,7 @@ guidance",
             "tokens": 275,
           },
         ],
-        "requestHash": "0cdc3a86d8df4a9d",
+        "requestHash": "f10ee851553babe2",
         "seq": 20,
         "sessionId": "trace",
         "ts": 42,
@@ -921,6 +991,10 @@ guidance",
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "trace task",
               "type": "text",
             },
@@ -929,6 +1003,12 @@ guidance",
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -997,6 +1077,10 @@ guidance",
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "trace task",
               "type": "text",
             },
@@ -1033,6 +1117,10 @@ guidance",
             {
               "content": "patched
 guidance",
+              "context": {
+                "authority": "advisory",
+                "principal": "platform",
+              },
               "toolUseId": "ok",
               "trust": "external",
               "type": "tool_result",
@@ -1056,6 +1144,12 @@ guidance",
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -1124,6 +1218,10 @@ guidance",
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "trace task",
               "type": "text",
             },
@@ -1160,6 +1258,10 @@ guidance",
             {
               "content": "patched
 guidance",
+              "context": {
+                "authority": "advisory",
+                "principal": "platform",
+              },
               "toolUseId": "ok",
               "trust": "external",
               "type": "tool_result",
@@ -1193,6 +1295,10 @@ guidance",
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "continue",
               "type": "text",
             },
@@ -1201,6 +1307,12 @@ guidance",
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -1263,6 +1375,10 @@ guidance",
   "resumed": {
     "events": [
       {
+        "context": {
+          "authority": "instruction",
+          "principal": "user",
+        },
         "cwd": "/agentrig-h6-synthetic",
         "model": "trace",
         "provider": "trace",
@@ -1285,6 +1401,10 @@ guidance",
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -1295,6 +1415,10 @@ guidance",
           {
             "authority": "instruction",
             "bytes": 10,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "9c3efe93b3efa4c2",
             "origin": "message:0:user:0",
@@ -1335,6 +1459,10 @@ guidance",
           {
             "authority": "data",
             "bytes": 16,
+            "context": {
+              "authority": "advisory",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "f49a8f7e09d7c32e",
             "origin": "echo:ok",
@@ -1375,6 +1503,10 @@ guidance",
           {
             "authority": "instruction",
             "bytes": 8,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "e256ee8e7aff6957",
             "origin": "message:4:user:0",
@@ -1393,7 +1525,7 @@ guidance",
             "tokens": 275,
           },
         ],
-        "requestHash": "9f0c9c7f5e2974f8",
+        "requestHash": "8637b7299b98e5fc",
         "seq": 29,
         "sessionId": "trace",
         "ts": 42,
@@ -1472,6 +1604,10 @@ guidance",
       {
         "content": [
           {
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "text": "trace task",
             "type": "text",
           },
@@ -1508,6 +1644,10 @@ guidance",
           {
             "content": "patched
 guidance",
+            "context": {
+              "authority": "advisory",
+              "principal": "platform",
+            },
             "toolUseId": "ok",
             "trust": "external",
             "type": "tool_result",
@@ -1541,6 +1681,10 @@ guidance",
       {
         "content": [
           {
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "text": "continue",
             "type": "text",
           },
@@ -1584,6 +1728,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "authority trace",
               "type": "text",
             },
@@ -1592,6 +1740,12 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -1651,6 +1805,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
         {
           "content": [
             {
+              "context": {
+                "authority": "instruction",
+                "principal": "user",
+              },
               "text": "authority trace",
               "type": "text",
             },
@@ -1683,6 +1841,12 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
         },
       ],
       "system": "trace system",
+      "systemContexts": [
+        {
+          "authority": "instruction",
+          "principal": "platform",
+        },
+      ],
       "tools": [
         {
           "description": "echo",
@@ -1736,6 +1900,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
   "result": {
     "events": [
       {
+        "context": {
+          "authority": "instruction",
+          "principal": "user",
+        },
         "cwd": "/agentrig-h6-synthetic",
         "model": "trace",
         "provider": "trace",
@@ -1757,6 +1925,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -1767,6 +1939,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           {
             "authority": "instruction",
             "bytes": 15,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "6270b02d6a23e690",
             "origin": "message:0:user:0",
@@ -1785,7 +1961,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
             "tokens": 246,
           },
         ],
-        "requestHash": "a277880f05663d3a",
+        "requestHash": "180ed4d68e4eecad",
         "seq": 2,
         "sessionId": "trace",
         "ts": 42,
@@ -1935,6 +2111,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           {
             "authority": "instruction",
             "bytes": 12,
+            "context": {
+              "authority": "instruction",
+              "principal": "platform",
+            },
             "disposition": "kept",
             "hash": "ca0dffa1d43592a0",
             "origin": "agent.config.systemPrompt",
@@ -1945,6 +2125,10 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
           {
             "authority": "instruction",
             "bytes": 15,
+            "context": {
+              "authority": "instruction",
+              "principal": "user",
+            },
             "disposition": "kept",
             "hash": "6270b02d6a23e690",
             "origin": "message:0:user:0",
@@ -1983,7 +2167,7 @@ exports[`preserves tool-emitter authority and released replan state 1`] = `
             "tokens": 246,
           },
         ],
-        "requestHash": "e8cab63b0668c446",
+        "requestHash": "aedb8680db3ae635",
         "seq": 16,
         "sessionId": "trace",
         "ts": 42,

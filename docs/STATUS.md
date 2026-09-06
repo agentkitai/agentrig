@@ -1,11 +1,65 @@
 # Status
 
-Active implementation queue: **R6g catalogue guidance is implemented, pending delivery gates; R13d is active independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13d context principals are implemented, pending delivery gates; R12b and R6g continue independently. R12a, R6c, R13b, R6b and R12e are done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R6g implemented — delivery gates pending
+### R13d implemented — closing PR records delivery gates
+
+Runtime context principals distinguish source trust, instruction authority and tool permissions.
+All accepted hook injection/modification surfaces use collision-safe registered identities;
+user steers are user/instruction, supervisor/hook contributions and platform-assembled replan
+reminders default advisory. Optional recursive metadata survives canonical events, storage,
+resume, unified provider requests and conservative compaction. Vendor fields/prose cannot
+mint authority; vendor wire formats remain unchanged. [Contract](plans/R13d.md).
+
+Trusted SDK config/control can explicitly delegate instruction authority to unique named hooks.
+Visible bounded `context.delegation` receipts do not grant tool permissions. Revocation downgrades
+retained content on the next request; replay and regrant cannot revive an old receipt. Historical
+events remain immutable. SDK JavaScript is not sandboxed, and metadata does not enforce model
+obedience; R13c permission restrictions remain a separate committed row.
+
+Dependency-order rationale: R13a/R13b are delivered, including R13b main `97e18bf` all-platform
+post-merge CI 34021998986. R13d's instruction-source registry is independent of parallel R12a
+tool-dispatch grants and R6c/R6g generated-skill work. Integrated R6c main `09157ae` preserves its
+schema/config/render changes. Ten new actual-runtime/schema/provider tests pass; revocation
+bypass, hook-as-user and custom-compactor authority-laundering mutations fail and are restored.
+Full integrated validation, one bounded independent review and exact-head/post-merge CI remain
+delivery gates. No new submilestones or live evaluation spend.
+
+Integrated R12a main `35f37ba` retains tool-grant lifecycle/audit and its permission schema split.
+One bounded Claude review `6d68f4c2-7567-4dc6-a8ad-d91cd0aa6b8b` independently passed build,
+typecheck and 2,203 tests plus two skips across 114 files (16 turns, 200 seconds). It found one
+material inject-only post-tool authority laundering issue: retained tool text borrowed a delegated
+hook note's authority. Success/error-path tests reproduced both failures; joining retained display
+as advisory fixes both, while full hook replacements retain explicit delegation. All 12 focused
+tests pass; optional review notes are at the roadmap end. No second general review.
+
+The analogous pre-tool shallow-merge path is conservative: actual changed inputs keep registered
+mutator identity but remain advisory/no receipt; no-op and ignored patches add no attribution.
+Partial/no-op/ignored regressions all failed before this bounded fix, then passed. Fifteen focused
+tests now pass. H6's inject-only result principal/hash expectations reflect the reviewed mixed
+display downgrade; actual tool text and lifecycle order remain unchanged.
+
+One overlapping local full run timed out the untouched E1 exact-upstream fixture at its existing
+5-second limit; its isolated diagnostic passes in 559 ms and the reviewer's full run passes.
+Final validation uses four local workers to avoid shared-container contention, without changing
+test cases, assertions or timeouts. Remote exact-head CI remains mandatory.
+
+Final updated-main build/typecheck and full suite pass: 2,208 tests plus two existing skips across
+114 files, with four local workers (29 seconds). Source head `a595fb9` includes both reviewed-path
+fixes; PR exact-head three-platform CI and post-merge main CI are the remaining delivery gates.
+
+PR #154 then integrated R6g main `714732d`, retaining catalogue/default-prompt guidance and both
+feature test sets. Build/typecheck and all 2,213 tests plus two skips across 115 files pass
+(four workers, 29 seconds). No second review for this mechanical integration; fresh exact-head
+CI supersedes the earlier pre-integration run.
+
+### R6g merged — PR #153; post-merge gate pending
+
+Merged as `714732d` after all three exact-head PR CI platforms passed. Post-merge main CI remains
+pending; the implementation details and review receipt below are preserved.
 
 Optional bounded trigger strings reach the compact catalogue through strict parsing and
 sanitization. A worked first-call example names an actually listed skill; the entire catalogue
@@ -112,7 +166,7 @@ All-path, post-answer-audit and session-transition-revocation mutations were det
 One bounded Claude review `8a03542b-c6e2-4b1b-886a-42012a286ad7` approved with no material
 findings, independently repeating 151 focused tests and typecheck. R6c main `09157ae` is now
 integrated; build/typecheck and 2,191 tests plus two skips across 113 files pass.
-Exact-head three-platform CI remains a gate. Optional polish
+Exact-head and post-merge three-platform CI have passed. Optional polish
 stays at the roadmap end. The bounded roadmap cleanup adds missing done
 markers for R4a–R4c (PRs #135–#137), R6d/R6e (#139/#140) and R6f (H5a, #122), using the
 explicit merge/CI receipts below; unfinished rows retain their scope.
