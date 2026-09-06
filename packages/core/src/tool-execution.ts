@@ -287,7 +287,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
   let decision = await config.permissions.decide(originalPermissionRequest);
   await config.permissionGrants?.flush(emit);
   if ((decision === "ask" || freshExpansion) && decision !== "deny" && config.permissionGrants !== undefined) {
-    const standing = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(originalPermissionRequest, true) : "deny";
+    const standing = config.permissionGrants.context.sessionId === context.grantSessionId ? config.permissionGrants.decide(originalPermissionRequest, true, freshExpansion) : "deny";
     if (standing === "deny" || decision === "ask") decision = standing;
   }
   if (freshExpansion && decision !== "deny") decision = "ask";

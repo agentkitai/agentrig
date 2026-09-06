@@ -144,12 +144,15 @@ it("no-new-input boundaries retain restriction and forged context metadata canno
   state.user("actual fresh input"); state.beginRequest(); expect(state.needs("exec")).toBe(false);
 });
 
-it.each(["standing", "scoped"])("a live %s deny cannot be overridden by a willing fresh approval handler or blanket allow", async kind => {
+it.each(["standing", "scoped", "overlapping"])("a live %s deny cannot be overridden by a willing fresh approval handler or blanket allow", async kind => {
   const f = await fixture([call("document"), call("exec")]);
   const registry = new PermissionGrantRegistry(); registry.beginSession("run");
+  if (kind === "overlapping") registry.grant({ subject: registry.subject, operation: { tool: "exec", class: "exec" }, resource: "*", constraints: {},
+    duration: { kind: "session", id: "run" }, delegable: false, decision: "allow" });
   if (kind === "standing") registry.remember({ tool: "exec", class: "exec", input: {}, cwd: f.cwd }, "deny");
   else registry.grant({ subject: registry.subject, operation: { tool: "exec", class: "exec" }, resource: "*", constraints: { cwd: f.cwd },
     duration: { kind: "session", id: "run" }, delegable: false, decision: "deny" });
+  if (kind === "overlapping") expect(registry.decide({ tool: "exec", class: "exec", input: {}, cwd: f.cwd })).toBe("allow");
   let asks = 0;
   const { events } = await run(f, { permissionGrants: registry, onAsk: async () => { asks++; return "allow"; } });
   expect(asks).toBe(0); expect(f.invoked).toEqual([]);
