@@ -47,3 +47,38 @@ resolution/rejection, synchronous readiness, predicate failure and cleanup. No l
 
 Local build/typecheck and full suite pass: 2,497 tests plus two skips across 143 files,
 four workers, 35 seconds. Independent review and exact-head CI follow.
+
+## Independent review receipt
+
+Single bounded Claude review `8f8e96af-3314-4c96-b1c2-464cf4a6e48a`: 88 seconds,
+8 reported turns / maximum 24 requested. APPROVE, no material findings. Independently ran
+the five-file 40-test CI group and typecheck. Its attempted fetch was denied; coordinator
+independently fetched and verified unchanged main `3d45d9f`. No subagents or live probe calls.
+Optional status wording corrected; two optional test refinements recorded at roadmap END.
+The reviewer shorthand about every predicate naming a tool is broader than the code:
+editor/preview predicates require a present pending scope/preview, not a tool-name comparison.
+Verbatim reviewer result follows (mutation reproduction was author-run, not reviewer-run):
+
+> **Verdict: APPROVE.** No material defects found. The focused CI group and workspace typecheck both pass locally.
+>
+> | Check | Result |
+> |---|---|
+> | CI child-grants group (5 files) | 40 passed |
+> | `pnpm typecheck` (4 packages) | clean |
+>
+> **What I verified against the controller contracts**
+>
+> - **Exact subscription readiness.** The controller's subscribe publishes the current state synchronously and returns a disposer. The helper handles that ordering correctly: a synchronous match sets the settled flag before the disposer exists, and the post-subscribe check disposes it. The timer is declared before subscribe runs, so there is no temporal dead zone on the clear.
+> - **Premature run settlement and timeout cleanup.** Both settlement branches, the timeout, predicate failure and success all route through one guarded finish that clears the timer and unsubscribes. The helper tests confirm disposer called once and zero timers in every path, including the rejected-run case with no unhandled rejection.
+> - **Authorization discrimination unchanged.** Every assertion on root, child and sibling grants, counters, revocation and persisted audit events is textually identical to origin/main. Only the wait mechanics changed. The sibling wait now requires a present probe prompt with a present registry and a different subject, which removes the old absent-prompt inequality. The mutation result in the plan doc is author-reported; I did not reproduce it since the review is read-only.
+> - **Startup delayed-stage regression.** The 1,100ms delay sits on the real spawn path for the child's first turn only, and the old wait would have missed it. Both startup cases pass with the new helper. The docs correctly claim timing sensitivity, not a proven Windows cause.
+> - **Both Ink input paths.** Ordinary and protocol modes run through the identical five-stage wait sequence and pass.
+> - **Absent state is never ready.** Every predicate requires a non-null pending prompt with a specific tool. The timeout test confirms an absent prompt rejects with a state diagnostic.
+>
+> **Optional polish, non-blocking**
+>
+> - `packages/cli/test/tui-readiness.ts:31` builds a diagnostic string via snapshot before finish checks the settled flag, so every normal run completion does that work needlessly. Checking settled first would avoid it.
+> - `packages/cli/test/child-grants-ui.test.ts:77` could additionally require the sibling prompt's registry to be a child view. Today it excludes only the first child, and the root prompt is distinguished by the later executed-count and subject assertions, same as before.
+> - `docs/STATUS.md:7` still describes R10d as "implemented, pending delivery gates" while the new heading says it merged as PR #171. One line should be updated for consistency.
+>
+> Scope stayed bounded to the two test files, the helper and its tests, one CI line and docs. No production code touched.
