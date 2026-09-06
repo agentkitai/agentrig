@@ -17,6 +17,7 @@ export class BoundedMcpTransport implements Transport {
   private cancelledIds = new Set<string | number>();
   private inputBytes = 0;
   private notifications = 0;
+  private notificationBytes = 0;
   private ended = false;
   private started = false;
   private finishClosed!: () => void;
@@ -61,7 +62,7 @@ export class BoundedMcpTransport implements Transport {
       const id = message.id;
       if (!(typeof id === "string" && id.length <= 128 || typeof id === "number" && Number.isSafeInteger(id)) ||
         this.slots.has(id) || this.cancelledIds.has(id) || this.slots.size >= MCP_SERVE_LIMITS.pending ||
-        this.inputBytes + frame.length > MCP_SERVE_LIMITS.input) throw new Error("capacity exceeded");
+        this.inputBytes + this.notificationBytes + frame.length > MCP_SERVE_LIMITS.input) throw new Error("capacity exceeded");
       this.slots.set(id, { bytes: frame.length, cancelled: false, settled: false, abort: new AbortController() });
       this.inputBytes += frame.length;
       if (message.method === "tools/call") {
@@ -75,7 +76,9 @@ export class BoundedMcpTransport implements Transport {
         }
       }
     } else {
-      if (++this.notifications > MCP_SERVE_LIMITS.notifications) throw new Error("notification capacity exceeded");
+      if (++this.notifications > MCP_SERVE_LIMITS.notifications ||
+        this.inputBytes + this.notificationBytes + frame.length > MCP_SERVE_LIMITS.input) throw new Error("notification capacity exceeded");
+      this.notificationBytes += frame.length; // conservatively retained for the connection lifetime
       if (message.method === "notifications/cancelled") {
         const id = message.params?.requestId;
         if (typeof id !== "string" && typeof id !== "number") throw new Error("invalid cancellation");
@@ -130,7 +133,7 @@ export class BoundedMcpTransport implements Transport {
     // must not become an uncaught exception that abandons the cleanup join.
     this.buffer = Buffer.alloc(0);
     for (const slot of this.slots.values()) slot.abort.abort();
-    this.slots.clear(); this.cancelledIds.clear(); this.inputBytes = 0;
+    this.slots.clear(); this.cancelledIds.clear(); this.inputBytes = 0; this.notificationBytes = 0;
     this.input.pause();
     this.onclose?.(); this.finishClosed();
   }

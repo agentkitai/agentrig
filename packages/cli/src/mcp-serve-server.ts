@@ -24,10 +24,15 @@ export function serveMcp(transport: BoundedMcpTransport, runtime: McpServeRuntim
       if (task && taskActive) throw new Error("busy");
       if (task) taskActive = true;
       try {
-        const value = await body(signal);
+        let value = await body(signal);
         if (signal.aborted) throw new Error("cancelled");
-        const text = JSON.stringify(value);
-        if (Buffer.byteLength(text) > 250_000) throw new Error("result too large");
+        const fits = (text: string) => Buffer.byteLength(JSON.stringify({ content: [{ type: "text", text }] })) <= 240_000;
+        let text = JSON.stringify(value);
+        if (task && !fits(text) && value !== null && typeof value === "object" && "answer" in value) {
+          value = { ...value, answer: "", answerOmitted: true };
+          text = JSON.stringify(value);
+        }
+        if (!fits(text)) throw new Error("result too large");
         return { content: [{ type: "text" as const, text }] };
       } finally { if (task) taskActive = false; }
     })();

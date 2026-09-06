@@ -40,13 +40,17 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
       let session: Session | undefined;
       let observed = Promise.resolve();
       let answer = ""; let omitted = false;
+      let responses = 0; let completeUsage = true;
       const controller = new TuiController({ cwd, model: opts.model, maxLines: 100,
         agent: { run() { throw new Error("agent not ready"); } }, onSession: current => {
           session = current;
           observed = (async () => {
-            for await (const event of current.events) if (event.type === "model.delta") {
+            for await (const event of current.events) {
+              if (event.type === "model.response") { responses++; completeUsage &&= event.usageComplete === true; }
+              if (event.type === "model.delta") {
               if (Buffer.byteLength(answer) + Buffer.byteLength(event.text) <= 120_000) answer += event.text;
               else omitted = true;
+              }
             }
           })();
           if (!opts.supervise || built === undefined) return;
@@ -77,7 +81,8 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
         if (session === undefined) throw new Error("run unavailable");
         const summary: SessionSummary = await session.done;
         return { sessionId: session.id, reason: summary.reason, turns: summary.turns, usage: summary.usage,
-          answer, answerOmitted: omitted, warning: "Model output is advisory, not verified task success. Main usage excludes separately accounted auxiliary work." };
+          usageComplete: responses > 0 && completeUsage, answer, answerOmitted: omitted,
+          warning: "Model output is advisory, not verified task success. Usage counters may be incomplete; missing usage is not reported zero. Main usage excludes separately accounted auxiliary work." };
       } finally {
         clearTimeout(timer); combined.removeEventListener("abort", stop);
         await controller.shutdown(); await observed;

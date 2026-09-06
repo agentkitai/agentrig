@@ -90,6 +90,44 @@ R8b does not implement either surface or a new approval mechanism.
 - All mutations restored. Numeric-zero cancellation has its separate actual
   fail-before/pass-after receipt above. No live provider/evaluation calls.
 
+## Review closeout and author checks
+
+[Original review](R8b-review.md) remains **INCOMPLETE**, not approval. First requested
+24/reported25 turns hit the cap; an authorized same-session no-tools summary-only
+continuation requested at most two/reported one. No reviewer tests/typecheck ran.
+No second broad review. Root accepted bounded author closure and final gates.
+
+Material inference reproduced: an actual modern SDK run with a 120,000-byte
+quote-dense answer failed with `MCP response exceeds output bound`, losing finished
+session metadata. The same test passes after budgeting the nested JSON cost and
+omitting only `answer`, preserving sessionId/reason/turns/usage. Read-session
+overflow remains explicit refusal; documentation now states escaping can reduce
+the usable raw-text bound. Notification bytes now share the 8 MiB admission cap;
+the new control closes before the ninth 1 MB notification is delivered.
+
+Author reporting correction: `usageComplete` derives from actual response receipts;
+missing reports are not zero. A separate token-budget test reports 35 tokens against
+a configured 20-token cap with a 20-turn cap: only one request runs, outcome budget.
+This is a cooperative observed budget, not a hard remote spend ceiling.
+
+Open reviewer questions closed by author checks, not independent verification:
+`parseBudget` consumes and positively validates maxTokens/maxMinutes; actual token
+and turn controls discriminate separately. The builder uses `extras.mcpServers ??
+readMcpConfig`, so only one configured list is started. Controller shutdown checks
+closed state and joins work; the serving close path first joins owned handlers,
+then closes the runtime. EOF/cancel/continued-connection controls pass. Ordinary
+tool calls/listing generate no advertised subscriptions or outbound requests; all
+unsupported output fails closed. Both CI legs build before tests. Validated IDs,
+store.pathFor and bounded union retrieval run through actual session/memory fixtures.
+
+Main R15e #186 `eead687` integrated before review; all four post-main checks now
+green (root verified). R8a #184 and R15b #185 are marked done throughout the roadmap.
+Final integrated build/typecheck pass. Docker-enabled full suite: **2,794 passed,
+two existing skips /168 files**, four workers, 50.13 seconds; all fourteen R8b
+focused tests included. Worker image `sha256:f111ef59dce766519eb2ac455b554b01793aff0e9cd1d68d29b6d314d7db52e9`,
+checker image `sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5`.
+Hosted exact-head Linux/macOS/Windows and scripted-structure checks remain required.
+
 ## Primary sources
 
 - https://modelcontextprotocol.io/specification/2026-07-28

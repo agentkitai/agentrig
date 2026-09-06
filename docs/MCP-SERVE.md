@@ -32,6 +32,7 @@ merely because they are exposed through a protocol.
 
 One task runs at a time. Defaults cap it at 20 turns, 8192 **main-model** tokens,
 and a 120-second cooperative deadline; smaller configured or requested caps win.
+`usageComplete: false` means counters are incomplete, not reported zero.
 Auxiliary work retains its existing independent limits/accounting, so these are
 not total remote billing ceilings. Cancellation and EOF abort and join owned
 runtime cleanup; uncooperative trusted host code cannot be forcibly made quiescent.
@@ -43,8 +44,12 @@ retired for that connection. Overload/duplicate IDs/unsupported notifications cl
 the connection. Capacity stays reserved through actual stdout writes or cancelled
 handler cleanup, not merely until the SDK has queued a result. Schema and method
 errors are fixed nonreflective refusals. A large run answer explicitly marks omitted
-text; other oversized results refuse. Transcript text is additionally limited to
-120,000 bytes before JSON framing. Session enumeration caps at 4096 entries; memory
+text. If JSON escaping overflows the answer budget, only the answer is omitted;
+the completed session ID, outcome and usage remain. Other oversized results refuse.
+Transcript text is additionally limited to 120,000 bytes before JSON framing;
+escaping can still trigger an explicit refusal below that raw-text limit.
+Notification bytes share the input cap and are conservatively retained for the
+connection lifetime. Session enumeration caps at 4096 entries; memory
 scans cap at 512 entries, depth eight, 256 KiB/file and 2 MiB total. No automatic
 resource fetching, sampling, elicitation, event streaming or remote memory search.
 

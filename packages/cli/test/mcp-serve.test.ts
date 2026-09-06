@@ -55,6 +55,16 @@ it("EOF aborts and joins owned handler cleanup before server done resolves", asy
   await f.client.close(); await call;
 });
 
+it("actual SDK quote-dense run answer preserves completed session metadata with explicit answer omission", async () => {
+  const rt = runtime();
+  rt.run = async () => ({ sessionId: "finished", reason: "done", turns: 1, usage: { input: 10, output: 2 }, answer: '"'.repeat(120_000), answerOmitted: false });
+  const f = await peer(rt);
+  const result = await f.client.callTool({ name: "run_task", arguments: { task: "bounded answer" } });
+  const block = result.content[0]; if (block?.type !== "text") throw new Error("missing text");
+  expect(JSON.parse(block.text)).toMatchObject({ sessionId: "finished", reason: "done", turns: 1,
+    usage: { input: 10, output: 2 }, answer: "", answerOmitted: true });
+});
+
 it("cancel holds the actual task slot until handler cleanup settles and emits no late answer", async () => {
   let release!: () => void; let started!: () => void; let cancelled!: () => void;
   const entered = new Promise<void>(resolve => { started = resolve; });
@@ -94,4 +104,14 @@ it.each(["[{}]\n", "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n{\
   const input = new PassThrough(); const output = new PassThrough(); const transport = new BoundedMcpTransport(input, output);
   await transport.start(); input.write(frame); await transport.closed;
   expect(transport.pending).toBe(0);
+});
+
+it("notification bytes share the admitted-input cap before SDK queues, not merely a count cap", async () => {
+  const input = new PassThrough(); const output = new PassThrough();
+  const transport = new BoundedMcpTransport(input, output); let delivered = 0; let closed = false;
+  transport.onmessage = () => { delivered++; }; transport.onclose = () => { closed = true; };
+  await transport.start();
+  const frame = JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: { padding: "x".repeat(1_000_000) } }) + "\n";
+  for (let n = 0; n < 9; n++) input.write(frame);
+  expect(closed).toBe(true); expect(delivered).toBe(8);
 });
