@@ -90,6 +90,8 @@ export interface DreamInput {
 }
 
 export interface DreamReport {
+  /** Opt-in report-only R6a candidates; absent on legacy/default reports. */
+  procedures?: import("./dream/procedures.js").ProcedureDetection;
   contradictions: Array<{ pages: string[]; claims: string[]; resolution: string }>;
   superseded: Array<{ page: string; old: string; new: string; source: string }>;
   orphans: string[];

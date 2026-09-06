@@ -540,7 +540,7 @@ comparison against memory without generated skills must establish the additional
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R6a | Procedure detection in dream: a wiki page (or cluster) describing a repeatable procedure backed by H4-validated independent observations is flagged `skill-candidate` in the dream report (structural pass proposes; model pass refines). Carry evidence for the procedure's steps, scope and limitations, not merely two page-level references | memory |
+| R6a *(implemented; closing PR records delivery gates)* | Procedure detection in dream: a wiki page (or cluster) describing a repeatable procedure backed by H4-validated independent observations is flagged `skill-candidate` in the dream report (structural pass proposes; model pass refines). Carry evidence for the procedure's steps, scope and limitations, not merely two page-level references. Opt-in report-only detection; fresh evidence/effect review still required before R6b emission. See [contract](plans/R6a.md) | memory |
 | R6b | Skill emission through the existing gate: `dream --apply` (review mode default) writes agentskills.io-compatible `SKILL.md` files under `.agentrig/skills/generated/`, front-matter carrying provenance (source sessions, wiki page, dream run); regenerated skills update in place, human-edited ones (`locked: true`) are never overwritten | memory |
 | R6c | Loop closure: generated skills load through the M7e skills system like any other; `skill.used` event gains an optional `generated: true` field (schema-added) so R9's eval can later measure whether generated skills actually help | core (field) + cli |
 | R6d | Write-quality lint pack *(third pass; the claude.ai capture's calibration rules, made structural)*: ingest tags each wiki claim with provenance — `stated` (user/task input), `observed` (tool evidence), `inferred` (model conclusion) — and the dream lints for: inference written as fact, per-session status noise (the horizon test — still true and worth reading a month out?), restated-not-new lines (already filed means already remembered), single-observation claims phrased as generalizations, and facts appended to the open page instead of their subject's page | memory |
@@ -954,6 +954,11 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R13a polish: hoist the nested-label helper if touching eviction. After R13b defines provenance
   aggregation, consider bounded eviction of labeled nested results; until then their metadata must
   not disappear in a string stub. Raw-delta-only crash reconstruction remains explicitly unlabeled.
+- R6a polish: explain skipped refinement after incomplete scans/consolidation failures more
+  directly; show the primary artifact page beside deduplicated source pages. If coverage demands
+  it, consider common-family matching before per-claim witness slicing to reduce conservative
+  false negatives. Preserve tags as advisory unless a future consumer explicitly requires an
+  observed-only dialect; never weaken exact runtime evidence to improve detection counts.
 - Windows memory replacement polish: document the mockable OS platform probe if refactoring;
   reconsider the 250 ms retry window only with measured failure evidence. Any future tuning must
   retain deterministic bound tests, cancellation and atomic old-target preservation, without

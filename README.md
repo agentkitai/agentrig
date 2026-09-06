@@ -47,6 +47,7 @@ agentrig --provider openai-chatgpt --model gpt-5.6-sol
 - `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.
 - `agentrig memory init|ls|show|search|promote|lint|ingest` — create, inspect, search, maintain, or populate the Markdown wiki.
 - `agentrig dream` — run structural and model-backed wiki consolidation on a copy; review is the default and `--auto` applies it while retaining the previous wiki.
+- `agentrig dream --skill-candidates --structural-only` — report [evidence-backed procedures](docs/plans/R6a.md) without model calls or skill emission. Model classification/effect review is opt-in and shares `--dream-limits`; explicitly budget three calls (four with global promotion) for a complete pass.
 - `agentrig memory reset-dream-stamp --dir <memory-dir>` — preview a scheduling reset. Stop running/scheduled dreams, then add `--confirm` to archive the regular `.last-dream` file in a named sibling backup and reset cadence. It never initializes missing wikis or removes locks; symlinks and special files require manual inspection.
 - `agentrig memory discard-dream <outputRoot>` — preview one registered review artifact. After stopping its users, repeat with the displayed `--owner <uuid> --confirm` to discard that copy and sidecar. Only explicitly released or exited same-host producers are eligible. Source wikis, install backups and writer locks are never removed.
 
