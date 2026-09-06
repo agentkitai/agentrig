@@ -1181,3 +1181,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   observer so one corrupt event does not disable later useful observations. Keep incomplete views
   fail-closed. Historical plan seeding for resumed attached runs is separate future work: current
   reports explicitly exclude prior history, while the CLI reads the full named physical log.
+- R14d reporting polish: optionally show malformed trusted verification-loader output as a
+  dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
+  presentation of original evaluator attestations beside derived lane assessments. Neither
+  path may infer independence from labels, erase failures, or create a second evaluation runner.
