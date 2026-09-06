@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent } from "@agentkitai/agentrig-core";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
 
+it("renders the distinct external expansion audit with its original child attribution", () => {
+  const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1, type: "permission.expansion",
+    id: "call", name: "bash", surface: "exec", decision: "deny", sourceOrigin: "child:actual" });
+  expect(renderEvent(event)).toContain("deny first exec: bash");
+  expect(renderEvent(event)).toContain("child:actual");
+  expect(renderChatEvent(event)).toBeNull(); // the interactive consent prompt explains the boundary
+});
+
 it("makes instruction delegation and revocation visible without implying tool permission", () => {
   for (const action of ["delegated", "revoked"]) {
     const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,

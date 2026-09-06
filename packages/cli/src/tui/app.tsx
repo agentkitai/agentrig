@@ -270,6 +270,8 @@ export function App({ controller }: { controller: TuiController }): JSX.Element 
               ? "y = run outside once, n / esc = deny"
               : state.pending.req.origin === "mcp-definition-change"
               ? "y = approve these exact definitions, n / esc = deny (no standing grant)"
+              : state.pending.req.origin === "external-input-expansion"
+              ? "y = approve this first-use expansion once, n / esc = deny (no standing grant)"
               : "y = allow once, a = allow all session, s = scope, n / esc = deny, d = deny all session"}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>}

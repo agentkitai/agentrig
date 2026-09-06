@@ -30,7 +30,7 @@ const inside = (root: string, path: string): boolean => {
   const rel = relative(root, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel));
 };
-const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change";
+const separateConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
 /** Pure scope check shared by runtime enforcement and approval previews. This does not grant
  * authority or check live subject/duration; callers must validate/install records separately. */
@@ -153,22 +153,24 @@ export class PermissionGrantRegistry {
     const promise = (this.draining ?? Promise.resolve()).then(work); this.draining = promise;
     try { await promise; } finally { if (this.draining === promise) this.draining = undefined; }
   }
-  decide(req: PermissionRequest, auditRequired = false): "allow" | "deny" | "ask" {
-    return this.match(req, auditRequired).decision;
+  decide(req: PermissionRequest, auditRequired = false, denialsOnly = false): "allow" | "deny" | "ask" {
+    return this.match(req, auditRequired, denialsOnly).decision;
   }
-  /** Count matched allow/deny decisions, not executions. The core calls this once only when
-   * base policy asks; inspection, proposals and TUI peeks keep using pure decide()/scope match. */
-  authorize(req: PermissionRequest, auditRequired = true, countMode: "all" | "deny-only" = "all"): GrantAuthorization {
-    const result = this.match(req, auditRequired);
+  /** Count matched allow/deny decisions, not executions. The core calls this once when
+   * base policy asks, or to honor fresh-boundary denies; previews keep using pure decide(). */
+  authorize(req: PermissionRequest, auditRequired = true, countMode: "all" | "deny-only" = "all", denialsOnly = false): GrantAuthorization {
+    const result = this.match(req, auditRequired, denialsOnly);
     // A separate fresh-consent gate may honor an existing deny while overriding any allow.
     // Count only the decision actually consumed; never count its inspected allow as authority.
     if (result.grantId !== undefined && (countMode === "all" || result.decision === "deny")) this.matchedDecisions.set(result.grantId, Math.min(Number.MAX_SAFE_INTEGER, (this.matchedDecisions.get(result.grantId) ?? 0) + 1));
     return result;
   }
-  private match(req: PermissionRequest, auditRequired: boolean): GrantAuthorization {
+  private match(req: PermissionRequest, auditRequired: boolean, denialsOnly = false): GrantAuthorization {
     if (separateConsent(req)) return { decision: "ask" };
     if (this.auditBlocked || (auditRequired && this.pending.length > 0)) return { decision: "deny", auditBlocked: true };
     for (const grant of this.grants.values()) {
+      // Fresh consent honors any matching deny; ordinary first-match ordering is unchanged.
+      if (denialsOnly && grant.decision !== "deny") continue;
       if (!this.live(grant)) continue;
       if (!permissionGrantCoversRequest(grant, req)) continue;
       return { decision: grant.decision, grantId: grant.id };

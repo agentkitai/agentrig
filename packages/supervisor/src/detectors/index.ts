@@ -5,6 +5,7 @@ import { errorBurstDetector, type ErrorBurstOptions } from "./error-burst.js";
 import { budgetDetector, type BudgetOptions } from "./budget.js";
 import { testRegressionDetector } from "./test-regression.js";
 import { driftDetector, type DriftOptions } from "./drift.js";
+import { injectionDetector } from "./injection.js";
 
 export * from "./loop.js";
 export * from "./stall.js";
@@ -12,6 +13,7 @@ export * from "./error-burst.js";
 export * from "./budget.js";
 export * from "./test-regression.js";
 export * from "./drift.js";
+export * from "./injection.js";
 
 export interface DefaultDetectorOptions {
   loop?: LoopOptions;
@@ -21,7 +23,7 @@ export interface DefaultDetectorOptions {
   drift?: DriftOptions;
 }
 
-/** The six v1 detectors from PLAN §4.1, all heuristic and all free — no model call anywhere. */
+/** Runtime heuristic detectors, including external instruction-shape signals; no model calls. */
 export function defaultDetectors(opts: DefaultDetectorOptions = {}): Detector[] {
   return [
     loopDetector(opts.loop ?? {}),
@@ -30,5 +32,6 @@ export function defaultDetectors(opts: DefaultDetectorOptions = {}): Detector[] 
     budgetDetector(opts.budget ?? {}),
     testRegressionDetector(),
     driftDetector(opts.drift ?? {}),
+    injectionDetector(),
   ];
 }

@@ -1,9 +1,42 @@
 # Status
 
-Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is active independently; R5a is merged (PR #157), pending post-merge CI; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
+
+### R13c done — PR #159; post-merge CI green
+
+Merge `78e8e19` passed all three platforms in CI 34026441186. Following gate notes are history.
+
+The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
+write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
+a restriction through continuations, summaries and resume; only actual fresh user input clears it.
+No roles, hook delegation, old receipts or prose manufacture that input. Fresh consent bypasses
+allow grants, never applicable denials; grants/approval/preparation alone do not count as dispatch.
+The separate consent origin retains child provenance and cannot become a standing/scoped grant.
+The default supervisor emits a bounded, explicitly heuristic injection signal over external
+canonical content. [Contract and honest limits](plans/R13c.md).
+
+Dependency order: delivered R13a/R13b/R13d provide source/assembly/principal seams. R12b's current
+request coverage and exact scope preview are retained; R12c attribution is an additive independent
+row, not a reason to defer this guard. Actual runtime/storage/provider, built-in summary laundering,
+canonical new-file/symlink, two-path Ink consent and supervisor attachment tests are included.
+Recognized tool-output is neutral, never sufficient to clear restriction; clean-parent children
+inherit live restriction through an internal object-identity seam, not generated brief text.
+These restore ordinary headless edit→test and clean child workflows while external pairs deny.
+One bounded Claude review (`0225d5ce-58ab-4bbf-be2a-3709deccfeab`, 16-turn cap) produced three
+original findings, all addressed: tool-output usability, child inheritance and non-advisory
+heuristic escalation. [Verbatim findings and resolutions](plans/R13c-review.md). No second review.
+Fresh-bypass, summary-source-drop, overlapping-deny and child-laundering mutations failed their
+named controls and were restored; full-capability injection escalation failed before its fix.
+Current main `7f01c4c` is integrated, preserving R5a extensions and fourth-pass H7/R15/ACP scope.
+Build/typecheck and all 2,292 tests plus two skips across 122 files pass (four workers, 30 seconds).
+Exact-head three-platform CI and post-merge CI remain delivery gates; this is not marked done yet.
+
+R13d PR #154 is done: final head `d327bdf` passed CI 34023974105; merged main `2ad720f` passed
+all three post-merge jobs in CI 34024190216. R12b PR #155 is done: main `326acdb` passed all
+three post-merge jobs in CI 34024734696. These receipts supersede their earlier pending notes below.
 
 ### Fourth pass: roadmap extended past the committed continuation
 
@@ -52,9 +85,18 @@ wiring and both Windows test selections. Combined build/typecheck/full suite pas
 tests plus two skips across 121 files (four workers, 30 seconds). No new general review for
 mechanical integration; updated exact-head CI and R5a post-merge CI remain delivery gates.
 
-### R5a merged — PR #157; post-merge CI pending
+R13c PR #159 main `78e8e19` is now integrated; its post-merge CI 34026441186 and R5a's
+34026041480 are all green. Same-call attribution/counts preserve R13c's any-live-deny restriction:
+only the selected deny counts; superseded allows do not. Runtime tests cover both base ask/allow,
+fresh handler attribution, subsequent ordinary matches and overlapping-deny ID/count receipts.
+Removing fresh denial selection failed its control and was restored. Combined build/typecheck
+and full suite pass 2,321 tests plus two skips across 124 files (four workers, 31 seconds).
+Updated exact-head CI remains the delivery gate; no second general review for integration.
 
-Merge `7f01c4c` follows green exact-head CI. The implementation notes below are history.
+### R5a done — PR #157; post-merge CI green
+
+Merge `7f01c4c` passed all three platforms in post-merge CI 34026041480 after green exact-head CI.
+The implementation notes below are history.
 
 Mandatory strict sidecars validate before any selected extension import. Explicit paths and
 trusted-project discovery are bounded and fail closed on equal-precedence duplicates; no home
