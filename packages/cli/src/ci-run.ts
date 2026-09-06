@@ -15,6 +15,7 @@ export interface CiDependencies { run?: typeof runCommand; process?: ReviewProce
 export const CI_LIMITS = { turns: 20, minutes: 5, tokens: 50_000, taskBytes: 16_384, eventBytes: 262_144, reportBytes: 65_536 } as const;
 const selector = z.enum(["issue.body", "comment.body", "pull_request.body"]);
 const failure = "CI run refused or failed; inspect trusted configuration and bounded input/output requirements. Raw errors are not included.";
+class CiRefusal extends Error {}
 
 async function readInput(path: string, cap: number): Promise<string> {
   const before = await lstat(path);
@@ -62,8 +63,10 @@ function ceiling(value: string | undefined, maximum: number, integer: boolean): 
   return String(Math.min(parsed, maximum));
 }
 export function ciRunOptions(options: RunOptions): RunOptions {
+  if (options.json === true || options.verbose === true)
+    throw new CiRefusal("CI refuses --json/--verbose; use the bounded report or ordinary run for raw/chat output. No provider work was started.");
   if (skipsPermissions(options) || options.resume !== undefined || options.scheduled !== undefined || options.heartbeat !== undefined)
-    throw new Error("unsupported CI execution posture");
+    throw new CiRefusal("CI refuses effective YOLO/skip-permissions, resume and scheduled/heartbeat modes. No provider work was started.");
   const result = { ...options, headless: true, maxTurns: ceiling(options.maxTurns, CI_LIMITS.turns, true),
     maxMinutes: ceiling(options.maxMinutes, CI_LIMITS.minutes, false), maxTokens: ceiling(options.maxTokens, CI_LIMITS.tokens, true) };
   parseBudget(result); return result;
@@ -123,7 +126,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
     summary = result || undefined;
     outcome = asked ? "permission-refused" : parent.aborted ? "aborted" : summary?.reason ?? "error";
     if (summary?.maintenanceFailed) outcome = "error";
-  } catch { outcome = asked ? "permission-refused" : signal.aborted ? "aborted" : "error"; diagnostic = failure; }
+  } catch (error) { outcome = asked ? "permission-refused" : signal.aborted ? "aborted" : "error"; diagnostic = error instanceof CiRefusal ? error.message : failure; }
   const rendered = Buffer.from(inert(currentText));
   if (rendered.length > 32_768) omitted = true;
   const text = rendered.subarray(0, 32_768).toString("utf8");
@@ -156,5 +159,5 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   catch { failed = true; }
   finally { if (timer !== undefined) clearTimeout(timer); try { await file?.close(); } catch { failed = true; } }
   process.exitCode = failed ? 1 : 0;
-  if (failed) console.error(failure);
+  if (failed) console.error(diagnostic || failure);
 }

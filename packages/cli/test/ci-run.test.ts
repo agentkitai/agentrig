@@ -62,7 +62,7 @@ it("actual event selector is literal and malformed/occupied/YOLO input does no p
   expect(await readCiTask({ eventFile: join(root, "event.json"), eventField: "issue.body" })).toBe("Event task");
   const okay = await actual(root, ["--event-file", "event.json", "--event-field", "issue.body", "--report", "event.md"], { content: "event handled" });
   expect(okay.code, okay.stderr).toBe(0); expect(okay.bodies).toHaveLength(1);
-  for (const extra of [["--yolo"], ["--event-field", "issue.body"], ["--resume", "arbitrary"]]) {
+  for (const extra of [["--yolo"], ["--json"], ["--verbose"], ["--event-field", "issue.body"], ["--resume", "arbitrary"]]) {
     const result = await actual(root, ["--task-file", "task.txt", "--report", `refused-${extra[0]!.slice(2)}.md`, ...extra], { content: "must not call" });
     expect(result.code).toBe(1); expect(result.bodies).toHaveLength(0);
   }
@@ -78,6 +78,8 @@ it("bounds file bytes/depth/selectors and preserves smaller configured limits", 
   expect(ciRunOptions({ ...options(root), maxTurns: "2", maxMinutes: "0.5", maxTokens: "100" })).toMatchObject({ headless: true, maxTurns: "2", maxMinutes: "0.5", maxTokens: "100" });
   expect(ciRunOptions({ ...options(root), maxTurns: "99", maxMinutes: "99", maxTokens: "999999" })).toMatchObject({ maxTurns: "20", maxMinutes: "5", maxTokens: "50000" });
   expect(() => ciRunOptions({ ...options(root), yolo: true })).toThrow();
+  expect(() => ciRunOptions({ ...options(root), json: true })).toThrow();
+  expect(() => ciRunOptions({ ...options(root), verbose: true })).toThrow();
   await writeFile(event, " ".repeat(262_145)); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();
   await writeFile(event, JSON.stringify({ issue: { body: { command: "do not coerce" } } })); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();
 });
