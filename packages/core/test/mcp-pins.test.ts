@@ -2,7 +2,8 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileMcpPins, connectServers, mcpDefinitionSnapshot, mcpDefinitionChange, type McpClient, type McpToolSpec } from "@agentkitai/agentrig-core";
+import { FileMcpPins, connectServers, mcpDefinitionSnapshot, mcpDefinitionChange, mcpCatalogSnapshot,
+  type McpClient, type McpToolSpec, type McpCatalog, type McpConnection } from "@agentkitai/agentrig-core";
 
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "mcp-pins-")); });
@@ -16,6 +17,50 @@ function server(initial: McpToolSpec[]) {
   return { client, callTool, change: (next: McpToolSpec[]) => { specs = next; } };
 }
 const context = () => ({ cwd: root, sessionId: "test", signal: new AbortController().signal, emit() {} });
+
+it.each(["resource", "template", "prompt", "capabilities", "endpoint", "annotations", "outputSchema", "parameter-header"])("R15d %s changes require independent consent and an uncached post-consent check", async kind => {
+  const pins = new FileMcpPins(root, "config");
+  const catalog: McpCatalog = { tools: structuredClone(original), resources: [{ name: "doc", uri: "opaque:doc", description: "old" }],
+    templates: [{ name: "item", uriTemplate: "opaque:{id}", description: "old" }], prompts: [{ name: "review", description: "old" }] };
+  const identity = { endpoint: "https://fixture.test/mcp", capabilities: { resources: {}, tools: {}, prompts: {} } };
+  const baseline = mcpCatalogSnapshot(catalog, identity);
+  await pins.compareAndSet("remote", undefined, baseline);
+  if (kind === "resource") catalog.resources[0]!.description = "new";
+  if (kind === "template") catalog.templates[0]!.description = "new";
+  if (kind === "prompt") catalog.prompts[0]!.description = "new";
+  if (kind === "capabilities") identity.capabilities.resources = { subscribe: true };
+  if (kind === "endpoint") identity.endpoint = "https://fixture.test/other";
+  if (kind === "annotations") Object.assign(catalog.tools[0]!, { annotations: { readOnlyHint: true } });
+  if (kind === "outputSchema") Object.assign(catalog.tools[0]!, { outputSchema: { type: "object", required: ["result"] } });
+  if (kind === "parameter-header") catalog.tools[0]!.inputSchema = { type: "object", properties: { region: { type: "string", "x-mcp-header": "Region" } } };
+  const read = vi.fn(async () => ({ contents: [{ uri: "opaque:doc", text: "external" }] }));
+  const list = vi.fn(async () => structuredClone(catalog));
+  const client: McpConnection = { name: "remote", remote: true, identity, start: async () => {}, close: async () => {},
+    listTools: async () => original, catalog: list, callTool: async () => ({ content: [] }), readResource: read,
+    getPrompt: async () => ({ messages: [] }) };
+  const denied = await connectServers({ servers: [client], pins });
+  const tool = denied.tools.find(t => t.effects === "read-only")!;
+  expect(tool.permission).toBe("net");
+  await expect(tool.execute({ uri: "opaque:doc" }, context())).rejects.toThrow("not approved");
+  expect(read).not.toHaveBeenCalled(); expect(await pins.read("remote")).toBe(baseline);
+  const consent = vi.fn(async () => true);
+  const accepted = await connectServers({ servers: [client], pins, onDefinitionChange: consent });
+  list.mockClear();
+  await accepted.tools.find(t => t.effects === "read-only")!.execute({ uri: "opaque:doc" }, context());
+  expect(consent).toHaveBeenCalledOnce(); expect(list).toHaveBeenCalledTimes(2); expect(read).toHaveBeenCalledOnce();
+  expect(await pins.read("remote")).toBe(mcpCatalogSnapshot(catalog, identity));
+});
+
+it("R15d never replaces a v1 tool baseline silently when remote catalogue surfaces appear", async () => {
+  const pins = new FileMcpPins(root, "config");
+  const baseline = mcpDefinitionSnapshot(original); await pins.compareAndSet("example", undefined, baseline);
+  const fake = server(original);
+  Object.assign(fake.client, { remote: true, identity: { endpoint: "https://fixture.test/mcp", capabilities: { tools: {} } },
+    catalog: async () => ({ tools: original, resources: [], templates: [], prompts: [] }) });
+  const connected = await connectServers({ servers: [fake.client], pins });
+  await expect(connected.tools[0]!.execute({}, context())).rejects.toThrow("not approved");
+  expect(fake.callTool).not.toHaveBeenCalled(); expect(await pins.read("example")).toBe(baseline);
+});
 
 describe("R5d persistent definition consent", () => {
   it("pins first use, ignores key/list ordering, preserves exact prose and schemas", async () => {

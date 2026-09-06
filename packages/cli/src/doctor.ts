@@ -521,6 +521,10 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
       checks.push(line("fail", "mcp", `${display(mcpPath)} cannot be read or parsed — fix --mcp-config ${display(mcpPath)}`));
     }
     for (const server of servers ?? []) {
+      if ("url" in server) {
+        checks.push(line("pass", `mcp:${display(server.name)}`, "remote URL configuration valid; no network/auth probe performed"));
+        continue;
+      }
       let exists = false;
       const serverEnv = { ...env, ...server.env };
       const serverCwd = server.cwd === undefined ? cwd : resolve(cwd, server.cwd);

@@ -496,7 +496,7 @@ export class OpenAIChatGPTAuth {
  * Strip inherited ACEs and grant the current account full control — the Windows equivalent of
  * the `0600` this file already asks for everywhere else.
  */
-async function restrictToOwnerWindows(path: string): Promise<void> {
+export async function restrictToOwnerWindows(path: string): Promise<void> {
   const user = process.env.USERNAME;
   if (user === undefined || user === "") throw new Error("USERNAME is not set");
   await new Promise<void>((resolve, reject) => {

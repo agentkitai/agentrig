@@ -837,7 +837,8 @@ export class TuiController {
           return true;
         }
         const composed = composeSkillInvocation(skill, cmd.args, cmd.invocation);
-        this.print(`skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
+        this.print(skill.remote ? `remote prompt "${skill.name}" requested; loading still requires its tool permissions`
+          : `skill "${skill.name}" loaded into this turn (${composed.length} chars)`, "system");
         await this.continueConversation(composed);
         return true;
       }
