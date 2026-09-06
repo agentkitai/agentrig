@@ -125,7 +125,10 @@ export function activate(ctx) {
 
 The [R5a contract](docs/plans/R5a.md) covers hooks/tools, manifest limits, atomic activation,
 CLI/config precedence, session receipts and child non-inheritance. Failed activation publishes
-no partial surfaces; runtime cross-surface disabling is the separate R5b roadmap item.
+no partial surfaces. [R5b failure isolation](docs/plans/R5b.md) disables an extension's handlers
+after a throw or existing hook timeout until a new agent build. Expected error results and user
+abort do not disable it. Idle slash failures print immediately and are audited on the next run;
+this is exception containment, not isolation from trusted code's ambient host effects.
 
 Sandbox modes constrain supported tool effects, not arbitrary JavaScript in the harness process.
 The additive `net` permission defaults to ask and is distinct from legacy `network`.

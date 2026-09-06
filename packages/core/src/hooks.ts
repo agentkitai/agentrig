@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { extensionHookFailed } from "./extension-runtime.js";
 import type { CheckpointHookEvent } from "./checkpointer.js";
 import type { PermissionClass } from "./events.js";
 import type { ContentBlock, InstructionContext, Message } from "./messages.js";
@@ -217,6 +218,7 @@ export async function runHooks(
         opts.signal,
       );
     } catch (err) {
+      extensionHookFailed(hook, err, opts.signal);
       // Ordinary third-party handlers remain fail-open. Built-in safety hooks can require successful
       // completion before the operation they guard is allowed to proceed.
       const detail = err instanceof Error ? err.message : String(err);
