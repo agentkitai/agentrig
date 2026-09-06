@@ -42,7 +42,9 @@ approved with fixes (24 requested / 26 reported turns); material availability an
 partial-accounting controls failed before and passed after fixes. Existing MCP cleanup
 counterevidence is recorded alongside the verbatim finding. Build/typecheck/full Docker
 passes 2,817 tests plus two existing skips. Latest-main integration and all-four CI
-remain gated on the separate post-R15a readiness repair. No live provider/collector spend.
+remain pending after integrating repaired green main `3174475`. Combined build,
+typecheck and full Docker pass 2,846 tests plus two skips across 173 files.
+No live provider/collector spend.
 
 ### R15a done — PR #188; gate restored by repair #191
 
