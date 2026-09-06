@@ -109,7 +109,9 @@ it.each([false, true])("actual empty CLI heartbeat has one request, no tools or 
     expect(events.some(e => e.type === "extension.loaded" || e.type === "tool.result" && e.ok)).toBe(false);
     await expect(readFile(sentinel)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await readdir(f.project)).sort()).toEqual([".agentrig", "HEARTBEAT.md"]);
-    expect((await readdir(join(f.project, ".agentrig"))).sort()).toEqual(["config.json", "raw", "schedule.json"]);
+    expect((await readdir(join(f.project, ".agentrig"))).sort()).toEqual(maliciousCall
+      ? ["config.json", "raw", "schedule.json", "schedule.log"] : ["config.json", "raw", "schedule.json"]);
+    if (maliciousCall) expect(JSON.parse(await readFile(join(f.project, ".agentrig/schedule.log"), "utf8"))).toMatchObject({ source: "heartbeat", outcome: "budget", maintenanceFailed: false });
     expect((await f.store.read()).lastHeartbeatMinute).toBe(Math.floor(now.getTime() / 60000));
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

@@ -24,11 +24,15 @@ import type { ScanLimits } from "./scan.js";
 export interface SessionEndIngestOptions {
   /** `.agentrig` directory. */
   dir: string;
+  /** Trusted runtime's actual SessionStore directory; never selected by model content. */
+  sessionDir?: string;
   provider: ModelProvider;
   backend?: MemoryBackend;
   onError?: (err: Error) => void;
   onDone?: (summary: string) => void;
   onUsage?: (report: AuxiliaryReport) => void;
+  /** Trusted observer; called once after cleanup, including absent/failed usage. */
+  onSettled?: (report: AuxiliaryReport | undefined) => void;
   onBackendError?: (operation: string, error: Error) => void;
   limits?: Partial<IngestLimits>;
   maxSpanChars?: number;
@@ -48,7 +52,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
       try {
         // defence in depth: core validates session ids, but this hook builds a path from one and
         // must not depend on a caller upstream having done the right thing
-        const sessionDir = resolve(join(opts.dir, "raw", "sessions"));
+        const sessionDir = resolve(opts.sessionDir ?? join(opts.dir, "raw", "sessions"));
         const logPath = resolve(join(sessionDir, `${ctx.sessionId}.jsonl`));
         if (logPath !== sessionDir && !logPath.startsWith(sessionDir + sep)) {
           maintenanceDiagnostic(() => opts.onError?.(new Error(`refusing to ingest a session log outside ${sessionDir}: ${ctx.sessionId}`)));
@@ -85,6 +89,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
         maintenanceDiagnostic(() => opts.onError?.(err instanceof Error ? err : new Error(String(err))));
       } finally {
         maintenanceDiagnostic(() => { if (auxiliary !== undefined) return opts.onDone?.(formatAuxiliaryUsage(auxiliary)); });
+        maintenanceDiagnostic(() => opts.onSettled?.(auxiliary));
       }
       return { action: "continue" };
     },
