@@ -103,6 +103,9 @@ interface ToolResult<O> { output: O; display: string; truncated?: boolean }
 ```
 
 Built-ins for v1: `bash`, `read_file`, `edit_file` (search/replace), `write_file`, `glob`, `grep`. Memory tools come from `memory` and are registered like any other tool.
+R11b adds `web_fetch`: bounded GET-only HTTP(S), explicit `net` permission, no redirects or
+ambient credentials, text/plain or lexical HTML-to-text, external provenance. See
+[R11b](plans/R11b.md) for byte/time/output bounds and trusted-host network limitations.
 
 ### 2.4 Permissions
 

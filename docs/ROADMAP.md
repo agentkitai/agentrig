@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14c evidence grading/reporting is implemented, pending delivery gates; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14c evidence grading/reporting is implemented, pending delivery gates; R11b is merged (PR #168), post-merge CI pending; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -672,7 +672,7 @@ permission and sandbox layers something to grip.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R11a *(done, [PR #166](https://github.com/agentkitai/agentrig/pull/166))* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
-| R11b | `web_fetch` tool: GET-only, size-capped, html→text, declares `class: "net"` and the URL in the request (so rules like `--allow net` and per-run deny work); no search tool yet — search providers need keys and that is config surface R1 already owns | core |
+| R11b *(implemented; delivery gates pending)* | Built-in `web_fetch`: strict GET-only credential-free HTTP(S), no redirects, decoded byte/time/text caps, lexical HTML-to-text, explicit net permission and external provenance. Real local HTTP and CLI composition tests. No search/SSRF isolation claim. See [contract](plans/R11b.md). | core, cli |
 
 Acceptance: fetch is refused under default rules until allowed (both interactively and via
 `--allow net`); the sandbox's no-network default blocks it even under `--yolo` unless net is
@@ -1166,6 +1166,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
   Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,
   not a JSON-resumable correlation cache; use full canonical replay and read-only observation copies.
+- R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
+  HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
+  and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
 - R5b defensive API follow-up: validate unsupported async/thenable implementations of the
   synchronously typed tool descriptor/probe/schema callbacks, including rejected promises and
   malformed return shapes. Current isolation covers synchronous callback throws and supported

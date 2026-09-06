@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R14c evidence grading/reporting is implemented, pending delivery gates; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14c evidence grading/reporting is implemented, pending delivery gates; R11b is merged (PR #168), post-merge CI pending; R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -29,10 +29,26 @@ broad review. R5b main `fef3f46` is integrated; its post-merge CI `34031416228` 
 Final combined build/typecheck/full suite passes 2,442 tests plus two skips across 138 files
 (four workers, 42 seconds). The PR proceeds to fresh exact-head all-platform CI.
 
+### R11b implemented — delivery gates pending
+
+Built-in GET-only web_fetch declares net and external provenance. Strict credential-free HTTP(S),
+no redirects/custom headers/body, 1 MiB decoded cap, 20k text and 10-second total deadline.
+Text/plain or lexical HTML extraction only. Actual local HTTP/runtime and CLI controls cover
+permission/sandbox composition, cancellation, compression, target refusal and source restrictions.
+No live network/model tests or SSRF/OS-host-JavaScript containment claim. [Contract](plans/R11b.md).
+Redirect-follow and removed decoded-cap mutants failed five and two named controls respectively;
+both restored. Full checks, one independent review and exact-head CI precede delivery.
+Single review found one material script/style raw-text defect; actual local HTTP cases failed
+before and passed after a bounded closing-tag fix. Verbatim original verdict and disposition:
+[review receipt](plans/R11b-review.md). Reviewer ran 87 tests, 11/max24 turns, 168 seconds;
+ad-hoc reproduction attempts were denied, not claimed as executed. No second review.
+Final build/typecheck and full 2,460 tests plus two skips across 138 files pass (four workers,
+35 seconds). R5b main `fef3f46` post-CI 34031416228 passed all three platforms.
+
 ### R5b done — PR #167; post-merge CI green
 
-Merged main `fef3f46` passed all three jobs in post-merge CI `34031416228`; the checkpoints
-below remain historical implementation records.
+Main `fef3f46` passed exact post-merge CI 34031416228 on all three platforms.
+Following notes are implementation history.
 
 The extension lane resumes after delivered H7b PR #164. A private per-build disabled latch
 spans registered hooks, tools, synchronous descriptors/probes and slash commands. Actual throws
@@ -68,7 +84,7 @@ post-merge CI 34030682233 passed all three platforms. Final exact-head PR CI fol
 ### R11a done — PR #166; post-merge CI green
 
 Main `cee1ad9` passed exact post-merge CI 34030682233 on all three platforms.
-The following gate notes are implementation history.
+Final receipt: PR #166 comment-5558978375. Following notes are implementation history.
 
 Additive `net` defaults ask without repurposing legacy `network`. Runtime denies compatible
 net tools under enforcing no-network policy before body/dispatch bookkeeping. Explicit
