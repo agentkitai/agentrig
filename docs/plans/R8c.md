@@ -165,3 +165,8 @@ existing skips, 170 files, four workers**. The 23 telemetry controls exercise ac
 core, CLI/TUI/ACP/MCP and local HTTP paths. No live provider or remote collector spend.
 Current-main integration and all four exact-head CI checks remain pending; integration
 waits for the separate post-R15a test-readiness repair's green main gate.
+
+That gate is now released: integrated main `3174475`, containing R15a and test-only
+repair #191, passed CI `34056045886` and structure `34056045804` on all four checks.
+Question handlers, ACP/controller wiring and telemetry observers are retained together;
+no second general review for this mechanical integration. Combined checks follow.

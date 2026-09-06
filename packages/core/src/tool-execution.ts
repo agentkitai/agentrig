@@ -24,6 +24,7 @@ import { bindPermissionView } from "./child-permissions.js";
 import type { PermissionDecisionSource } from "./permission-attribution.js";
 import type { PipelineSchedule } from "./parallel-runtime.js";
 import { isIsolatedTool, bindIsolatedContext } from "./isolated-runtime.js";
+import { bindQuestion, isQuestionTool, questionResultTrust, type QuestionState } from "./question-runtime.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -39,9 +40,10 @@ function displayContext(result: AttributedHookResult): InstructionContext | unde
 }
 type Emit = (payload: EventPayload) => Promise<HarnessEvent>;
 interface ToolExecutionContext {
+  questionState?: QuestionState;
   schedule?: PipelineSchedule;
   expansion?: ReturnType<typeof externalExpansion>;
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "sandbox" | "store" | "trustedProjectRoot">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   grantSessionId?: string;
   cwd: string;
@@ -179,7 +181,13 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     context = { ...context, config: { ...context.config, onAsk: (request, askContext) =>
       schedule.ask(() => Promise.resolve(onAsk(request, askContext))) } };
   }
-  try { return await executeToolInner(tu, context); }
+  try {
+    const result = await executeToolInner(tu, context);
+    const tool = context.toolsByName.get(tu.name);
+    if (tool !== undefined && isQuestionTool(tool) && result.type === "tool_result" && result.isError &&
+      !context.signal.aborted && context.questionState !== undefined) context.questionState.failed ??= "Required question refused; no answer supplied";
+    return result;
+  }
   catch (error) {
     if (!(error instanceof ExtensionHandlerError)) throw error;
     await context.emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
@@ -195,6 +203,11 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       : { type: "tool_result", toolUseId: tu.id, content, trust, ...(context === undefined ? {} : { context }) };
 
   const tool = toolsByName.get(tu.name);
+  if (context.questionState?.failed !== undefined) {
+    await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
+    await emit({ type: "tool.result", id: tu.id, ok: false, display: "Blocked after unanswered required question", durationMs: 0 });
+    return resultBlock("Blocked after unanswered required question", true);
+  }
   if (tool !== undefined && extensionDisabled(tool)) throw new ExtensionHandlerError(`extension tool ${tool.name} is disabled until a new agent build`);
   if (!tool) {
     await emit({ type: "tool.call", id: tu.id, name: tu.name, input: tu.input, inputHash: contentHash(tu.input) });
@@ -395,6 +408,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   };
   if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);
   if (hasDiagnostics(tool)) diagnosticContext(ctx);
+  bindQuestion(tool, ctx, tu.id, context.questionState ?? {}, async payload => { if (!isEnded()) await emit(payload); }, config.onQuestion);
   const t0 = now();
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;
@@ -406,6 +420,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     }
     const command = () => {
       signal.throwIfAborted();
+      if (context.questionState?.failed !== undefined) throw new Error("Blocked after unanswered required question");
       const policy = currentSandboxPolicy();
       if (permClass === "net" && policy !== undefined && policy.mode !== "none" && policy.network !== true) {
         throw new SandboxDeniedError("net permission requires explicit network policy inside this sandbox");
@@ -596,7 +611,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     const trust = !ok || replaced !== undefined || h.injects.length > 0 ? "external"
       // The authoritative result is already emitted. An abort here degrades provenance;
       // it must not enter the execution-failure catch and emit a duplicate result.
-      : await raceAbort(finishTrust(), "tool provenance").catch(() => "external" as const);
+      : questionResultTrust(r) ?? await raceAbort(finishTrust(), "tool provenance").catch(() => "external" as const);
     const block = resultBlock(body, !ok, trust, displayContext(h));
     if (block.type === "tool_result" && diagnostics !== undefined) block.diagnostics = diagnostics;
     return block;
