@@ -1,11 +1,13 @@
 # Status
 
-Active implementation queue: **R5a extension API is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c is preparing independently; R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R13c implemented — validation and delivery gates pending
+### R13c done — PR #159; post-merge CI green
+
+Merge `78e8e19` passed all three platforms in CI 34026441186. Following gate notes are history.
 
 The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
 write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
@@ -55,7 +57,50 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
-### R5a implemented — delivery gates pending
+### R12c implemented — pending delivery gates
+
+Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
+`/permissions revoke <exact-id>` changes the next decision without cancelling running tools.
+Optional same-call policy receipts preserve custom/subclass compatibility and identify actual
+rules/fallbacks without re-evaluation. Runtime grant matching counts consumed allow/deny
+decisions, never previews; denial-only consumption supports separately gated fresh consent.
+Correlated optional event sources drive visible rule/grant/handler/unknown explanations.
+Malformed/mismatched/multiple/late reports cannot manufacture attribution. [Contract](plans/R12c.md).
+
+Actual Ink/CLI/inert-shell tests inspect a counted grant, revoke its exact ID and observe the
+next request ask/deny. First prompted call is handler-decided, subsequent match counts once;
+failed tool execution still counts its authorization, while previews/base rules do not.
+H6 snapshots add only source/correlation fields, preserving existing trace order and content.
+Build/typecheck/full tests, restored mutations, one bounded review and current-head CI gate delivery.
+
+Initial build/typecheck/full four-worker suite passes 2,271 tests plus two skips across 119 files.
+Double-evaluation and preview-counting mutants were detected/restored; 28 focused cases pass.
+Committed main `fba5d50` is integrated, preserving PR #115 topic guidance/tests; only this assigned
+worktree is edited. Integrated checks passed unchanged. One bounded Claude review
+`ad1a5faa-2e7b-4745-9068-5bc43627f006` approved with no material findings (18 turns),
+independently passing 239 tests across ten files and typecheck. Optional presentation polish
+stays at ROADMAP's end. Main `c62009b` is now integrated, preserving committed H7/R15/ACP
+additions and all prior done markers; combined checks and exact-head CI follow.
+Combined build/typecheck/full checks pass: 2,271 tests plus two skips across 119 files, four
+workers (30 seconds). Base `c62009b` passed all three post-merge jobs in CI 34025571103.
+
+R5a PR #157 main `7f01c4c` is integrated, retaining extension startup/controller/command
+wiring and both Windows test selections. Combined build/typecheck/full suite passes 2,288
+tests plus two skips across 121 files (four workers, 30 seconds). No new general review for
+mechanical integration; updated exact-head CI and R5a post-merge CI remain delivery gates.
+
+R13c PR #159 main `78e8e19` is now integrated; its post-merge CI 34026441186 and R5a's
+34026041480 are all green. Same-call attribution/counts preserve R13c's any-live-deny restriction:
+only the selected deny counts; superseded allows do not. Runtime tests cover both base ask/allow,
+fresh handler attribution, subsequent ordinary matches and overlapping-deny ID/count receipts.
+Removing fresh denial selection failed its control and was restored. Combined build/typecheck
+and full suite pass 2,321 tests plus two skips across 124 files (four workers, 31 seconds).
+Updated exact-head CI remains the delivery gate; no second general review for integration.
+
+### R5a done — PR #157; post-merge CI green
+
+Merge `7f01c4c` passed all three platforms in post-merge CI 34026041480 after green exact-head CI.
+The implementation notes below are history.
 
 Mandatory strict sidecars validate before any selected extension import. Explicit paths and
 trusted-project discovery are bounded and fail closed on equal-precedence duplicates; no home
@@ -91,8 +136,8 @@ after R5a delivery, before R5b; this mechanical integration does not add another
 
 ### R12b done — PR #155; post-merge CI green
 
-Exact post-merge main `326acdb` passed all three platforms in CI 34024734696. Following gate
-wording records implementation history rather than remaining delivery work.
+Merge `326acdb` passed all three post-merge platforms in CI 34024734696; prior PR head
+`eaae698` passed all three in CI 34024445722. Following pending notes are implementation history.
 
 The TUI explains declared paths/class/argv separately from unknown effects and network access.
 Bounded `s` editing proposes lexical path or supported foreground argv scopes with exact cwd;
@@ -125,8 +170,8 @@ delivery notes below; permission records and limits remain documented in [R12a](
 
 ### R13d done — PR #154; post-merge CI green
 
-Exact post-merge main `2ad720f` passed all three platforms in CI 34024190216. Following gate
-language is implementation history, not outstanding delivery work.
+Merge `2ad720f` passed all three post-merge platforms in CI 34024190216 after green PR #154.
+Following validation notes are implementation history, not outstanding gates.
 
 Runtime context principals distinguish source trust, instruction authority and tool permissions.
 All accepted hook injection/modification surfaces use collision-safe registered identities;

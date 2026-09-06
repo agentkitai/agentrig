@@ -61,18 +61,26 @@ it("allows a canonically contained new file but requires approval through an out
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", surface: "write-outside-cwd", decision: "deny" }));
 });
 
-it("fresh consent bypasses scoped live grants, preserves child origin and cannot be remembered", async () => {
+it.each(["allow", "ask"] as const)("fresh consent bypasses scoped live grants, preserves child origin and cannot be remembered (base=%s)", async base => {
   const f = await fixture([call("document"), call("exec"), call("exec")]);
   const registry = new PermissionGrantRegistry(); registry.beginSession("run");
   registry.grant({ subject: registry.subject, operation: { tool: "exec", class: "exec" }, resource: "*", constraints: {},
     duration: { kind: "session", id: "run" }, delegable: false, decision: "allow" });
   const asks: PermissionRequest[] = [];
-  const { events } = await run(f, { permissionGrants: registry, origin: "child:actual", onAsk: async req => {
+  const { events } = await run(f, { permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: base }]),
+    permissionGrants: registry, origin: "child:actual", onAsk: async req => {
+    expect(registry.inspect()[0]!.matchedDecisions).toBe(0);
     asks.push(req); expect(registry.decide(req)).toBe("ask"); expect(() => registry.remember(req, "allow")).toThrow("separate consent"); return "allow";
   } });
   expect(asks, JSON.stringify(events)).toHaveLength(1); expect(asks[0]).toMatchObject({ origin: "external-input-expansion", sourceOrigin: "child:actual", expansionSurface: "exec" });
   expect(f.invoked).toEqual(["exec", "exec"]);
   expect(events.filter(e => e.type === "permission.expansion")).toHaveLength(1);
+  const decisions = events.filter(e => e.type === "permission.decision" && e.tool === "exec");
+  expect(decisions).toHaveLength(3);
+  expect(decisions[0]).toMatchObject({ d: "ask", source: { kind: "boundary", reason: "external-input-expansion" } });
+  expect(decisions[1]).toMatchObject({ d: "allow", source: { kind: "approval-handler" } });
+  expect(decisions[2]).toMatchObject({ d: "allow", source: { kind: base === "ask" ? "grant" : "rule" } });
+  expect(registry.inspect()[0]!.matchedDecisions).toBe(base === "ask" ? 1 : 0);
 });
 
 it("denial and approval without dispatch do not open a category; only actual invocation does", async () => {
@@ -125,8 +133,10 @@ it("resume never replays an old user instruction or dispatch receipt as new auth
 
 it("explicit policy denial wins and an absent or cancelled fresh approval cannot dispatch", async () => {
   const f = await fixture([call("document"), call("exec")]); let asked = false;
-  await run(f, { permissions: new RulePolicy([{ class: "exec", decision: "deny" }, { class: "read", decision: "allow" }]), onAsk: async () => { asked = true; return "allow"; } });
+  const denied = await run(f, { permissions: new RulePolicy([{ class: "exec", decision: "deny" }, { class: "read", decision: "allow" }]), onAsk: async () => { asked = true; return "allow"; } });
   expect(asked).toBe(false); expect(f.invoked).toEqual([]);
+  expect(denied.events).toContainEqual(expect.objectContaining({ type: "permission.decision", tool: "exec", d: "deny",
+    source: { kind: "rule", index: 1, rule: { class: "exec", decision: "deny" } } }));
   for (const permissionGrants of [undefined, new PermissionGrantRegistry()]) {
     const g = await fixture([call("document"), call("exec")]); let session!: Session;
     session = createAgent({ ...g.config, ...(permissionGrants === undefined ? {} : { permissionGrants }), onAsk: async () => { session.control.abort(); return "allow"; } }).run("read", { cwd: g.cwd });
@@ -175,6 +185,12 @@ it.each(["standing", "scoped", "overlapping"])("a live %s deny cannot be overrid
   const { events } = await run(f, { permissionGrants: registry, onAsk: async () => { asks++; return "allow"; } });
   expect(asks).toBe(0); expect(f.invoked).toEqual([]);
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
+  const grants = registry.inspect();
+  const winning = grants.find(record => record.grant.decision === "deny")!;
+  expect(winning.matchedDecisions).toBe(1);
+  expect(grants.filter(record => record.grant.decision === "allow").every(record => record.matchedDecisions === 0)).toBe(true);
+  expect(events).toContainEqual(expect.objectContaining({ type: "permission.decision", tool: "exec", d: "deny",
+    source: { kind: "grant", grantId: winning.grant.id } }));
 });
 
 it.each([false, true])("failed fresh approval is audited as denial (async=%s)", async asynchronous => {
