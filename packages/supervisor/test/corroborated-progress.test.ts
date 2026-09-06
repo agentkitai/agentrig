@@ -152,6 +152,14 @@ it("drift refuses paths outside the worktree and parent symlink escapes", async 
   await symlink(outside, join(cwd, "link"), process.platform === "win32" ? "junction" : "dir");
   expect(await driftCase(cwd, { path: "link/other.txt" })).toBeNull();
 });
+it("drift accepts an absolute path through a worktree-root alias and scopes its canonical path", async () => {
+  const cwd = await root(); const aliases = await root(); const alias = join(aliases, "workspace");
+  await symlink(cwd, alias, process.platform === "win32" ? "junction" : "dir");
+  await writeFile(join(cwd, "other.txt"), "actual");
+  expect((await driftCase(alias, { path: join(alias, "other.txt") }))?.type).toBe("drift");
+  await mkdir(join(cwd, "src")); await writeFile(join(cwd, "src", "inside.txt"), "actual");
+  expect(await driftCase(alias, { path: join(alias, "src", "inside.txt") })).toBeNull();
+});
 it("cancelled drift preparation grants no evidence", async () => {
   const cwd = await root(); await writeFile(join(cwd, "other.txt"), "actual");
   expect(await driftCase(cwd, {}, AbortSignal.abort())).toBeNull();

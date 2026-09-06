@@ -15,7 +15,10 @@ export async function verifyCurrentFile(change: Change, cwd: string, signal: Abo
     const rel = relative(root, path);
     return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
   };
-  if (!inside(target) || !inside(await realpath(target))) return null;
+  // macOS /var -> /private/var (and caller-selected worktree aliases) can make an absolute
+  // spelling lexically outside the canonical cwd while identifying a file inside it.
+  const canonicalTarget = await realpath(target);
+  if (!inside(canonicalTarget)) return null;
   // NOFOLLOW is not exposed on every supported platform; reject existing links portably too.
   if (!(await lstat(target)).isFile()) return null;
   signal.throwIfAborted();
@@ -38,6 +41,6 @@ export async function verifyCurrentFile(change: Change, cwd: string, signal: Abo
     signal.throwIfAborted();
     if (size > 1_048_576 || size !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs) return null;
     return createHash("sha256").update(bytes.subarray(0, size)).digest("hex").slice(0, 16) === change.contentHash
-      ? relative(root, target).split(sep).join("/") : null;
+      ? relative(root, canonicalTarget).split(sep).join("/") : null;
   } finally { await handle.close(); }
 }
