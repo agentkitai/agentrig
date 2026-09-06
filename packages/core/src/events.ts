@@ -88,6 +88,16 @@ export const PlanItem = z.object({
 });
 export type PlanItem = z.infer<typeof PlanItem>;
 
+/** Observed foreground shell outcome, not proof that its command checks the intended behavior. */
+export const CommandOutcome = z.object({
+  command: z.string().min(1).max(1024),
+  cwd: z.string().min(1).max(4096),
+  exitCode: z.number().int().nullable(),
+  timedOut: z.boolean(),
+  aborted: z.boolean(),
+});
+export type CommandOutcome = z.infer<typeof CommandOutcome>;
+
 /** Emitted by the supervisor package; core only knows the shape. */
 export const Signal = z.object({
   type: z.enum(["loop", "stall", "error_burst", "drift", "budget", "test_regression", "injection"]),
@@ -244,6 +254,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     /** Resolved by core after validation/permission, never supplied by tool output. */
     permission: PermissionClass.optional(),
     toolCallSeq: z.number().int().nonnegative().optional(),
+    /** Internal foreground execution receipt captured before output hooks. Legacy absence is unknown. */
+    commandOutcome: CommandOutcome.optional(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
     /** The tool stopped collecting or did not supply its full text; even an output artifact

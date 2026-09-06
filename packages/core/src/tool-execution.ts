@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { takeCommandOutcome } from "./command-outcome.js";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentConfig } from "./agent.js";
 import type { HarnessEvent, PermissionRequest } from "./events.js";
@@ -438,6 +439,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       r = await raceAbort(outsideSandbox(command), `tool ${tool.name} outside sandbox`);
     }
     const ok = r.isError !== true;
+    const commandOutcome = takeCommandOutcome(r, ctx);
     const overflow = overflowResult(r);
     const resultEvent = await emit({
       type: "tool.result",
@@ -447,6 +449,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
       durationMs: now() - t0,
       permission: permClass,
       toolCallSeq: callEvent.seq,
+      ...(commandOutcome === undefined ? {} : { commandOutcome }),
       ...(overflow.output === undefined ? {} : { output: overflow.output, truncated: true }),
       ...(r.truncated === true && !(typeof r.fullDisplay === "string" && r.fullDisplay.length > 0)
         ? { outputIncomplete: true } : {}),
