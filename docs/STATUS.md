@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **H7a is done with green post-merge CI (PR #161); R12d child grant views are implemented, pending delivery gates; R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -35,7 +35,8 @@ general review. Final integration/full checks/CI follow; optional notes remain a
 
 ### R13c done — PR #159; post-merge CI green
 
-Merge `78e8e19` passed all three platforms in CI 34026441186. Following gate notes are history.
+PR #159 merged as `78e8e19`; exact post-merge CI 34026441186 passed on all three platforms.
+The implementation narrative below retains its historical intermediate validation state.
 
 The runtime tracks three coarse first-dispatch categories per run: exec, network, and declared
 write paths outside or unverifiable relative to canonical cwd. External/unknown new input latches
@@ -85,6 +86,48 @@ Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 update
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
 (merged as #155, left for its owning session to remove), R12c, R13c, R13d and R5a remain.
 
+### H7a done — PR #161; post-merge CI green
+
+Merge `668f7f1` passed all three post-merge platforms in CI 34028225992. Following gate notes
+are historical; R12d integrates this continuation/source guard without another general review.
+
+The committed correctness-repair lane interrupts R5b after R5a delivery: H7a then H7b,
+without expanding into provider-cap configuration or reasoning UI. A fresh worktree starts
+from R5a main `7f01c4c`, whose post-merge CI 34026041480 passed on all three platforms.
+Integrated R13c main `78e8e19` for the real external-input restriction test pair. Two bounded
+consecutive continuations preserve typed partial responses, never dispatch truncated calls,
+and persist explicit paired non-execution results. Platform/advisory nudges confer no user
+approval; actual retries use ordinary turns, accounting, compaction and cancellation gates.
+Only an attempted provider request emits `turn.continued`; no event on budget/abort/hook veto.
+See [H7a contract](plans/H7a.md). Local verification, one bounded independent review and
+exact-head PR/post-merge CI gate delivery. No live evaluation spending.
+
+Updated-main build/typecheck pass; the full suite passes 2,308 tests plus two skips across
+123 files with four workers (33 seconds). Fifteen new core cases and one rendering case
+cover actual adapters, persistence, budgets and the R13c pair. Removing truncated-call dispatch
+suppression made the named non-execution control run the incomplete call; treating the nudge
+as fresh user input made the external-input pair execute forbidden first exec. Both mutations
+were detected and restored before the full pass. One independent Claude review approved
+`2ffc821` against main `78e8e19`, with no material findings: session
+`fb321df8-52c6-45dc-a950-6d1bd57c05fb`, 167 seconds, 19 reported turns under the requested
+24-turn cap, no restart. It independently ran build/typecheck and the full 2,308 + two skips
+across 123 files. Optional notes are at the roadmap end; no production changes followed review.
+Final exact-head three-platform CI remains the PR gate.
+
+After R12c PR #158 merged, integrated main `06f5b4b` with both permission/continuation
+renderers, CI suites and delivery sections preserved. Combined build/typecheck and all
+2,337 tests plus two skips across 125 files pass (four workers, 31 seconds). No second
+review for mechanical integration. R12c post-merge CI 34027192976 remains pending.
+
+PR #160 then advanced main to `9eb28cd`; its committed R16 band and Static-scrollback
+renunciation are retained. Repeated build/typecheck/full 2,337 + two skips across 125 files
+pass (four workers, 32 seconds). R12c's main gate subsequently passed and is marked done.
+The preceding head's Windows run 34027283321 initially hit the unchanged R13c real edit→test
+fixture's 5-second timeout; isolated local checks and the full three-file step passed.
+Exactly one authorized failed-job rerun on identical head `bca3348` passed all platforms.
+Runner timing/contention is suspected, not proven; the original failure is retained in PR #161.
+That diagnostic success is not the final-head gate after this main integration.
+
 ### R12c done — PR #158; post-merge CI green
 
 Merge `06f5b4b` passed all three post-merge jobs in CI 34027192976; head `1921f00` passed
@@ -130,8 +173,9 @@ Updated exact-head CI remains the delivery gate; no second general review for in
 
 ### R5a done — PR #157; post-merge CI green
 
-Merge `7f01c4c` passed all three platforms in post-merge CI 34026041480 after green exact-head CI.
-The implementation notes below are history.
+Final PR head `005a16c` passed CI 34025733117 on all three platforms. PR #157 merged as
+`7f01c4c`; exact post-merge CI 34026041480 also passed on Linux, macOS and Windows.
+The following implementation narrative retains its historical intermediate gate status.
 
 Mandatory strict sidecars validate before any selected extension import. Explicit paths and
 trusted-project discovery are bounded and fail closed on equal-precedence duplicates; no home

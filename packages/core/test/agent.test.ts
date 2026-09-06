@@ -1107,8 +1107,8 @@ describe("agent loop", () => {
     await expect(readFile(join(root, "escape.txt"), "utf8")).rejects.toThrow();
   });
 
-  it("ends with reason error when the final response is truncated at max_tokens", async () => {
-    const provider = new FakeProvider([[{ type: "text_delta", text: "cut off mid-" }, usage(1, 1), stop("max_tokens")]]);
+  it("ends with reason error when consecutive max_tokens continuations are exhausted", async () => {
+    const provider = new FakeProvider(Array.from({ length: 3 }, () => [{ type: "text_delta", text: "cut off mid-" }, usage(1, 1), stop("max_tokens")]));
     const session = createAgent(makeConfig(provider)).run("t");
     const events = await collect(session);
     const summary = await session.done;
@@ -1702,20 +1702,20 @@ describe("resume", () => {
       // truncated mid-tool-call: tool_use emitted, but stop is max_tokens so it never runs
       [{ type: "tool_use", id: "t1", name: "echo", input: {} }, usage(10, 5), stop("max_tokens")],
     ]);
-    const config = makeConfig(first);
+    const config = makeConfig(first, { budget: { maxTurns: 1 } });
     const s1 = createAgent(config).run("task", { cwd: "/w" });
     await collect(s1);
-    expect((await s1.done).reason).toBe("error");
+    expect((await s1.done).reason).toBe("budget");
 
     const snap = await config.store.readSnapshot("sess1");
-    expect(snap!.messages.at(-1)).toMatchObject({
+    expect(snap!.messages.at(-2)).toMatchObject({
       role: "user",
       content: [{ type: "tool_result", toolUseId: "t1", isError: true }],
     });
 
     // the resumed request must be valid: every tool_use answered before the new task
     const second = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
-    const s2 = createAgent({ ...config, provider: second }).run("carry on", { resume: "sess1" });
+    const s2 = createAgent({ ...config, budget: { maxTurns: 2 }, provider: second }).run("carry on", { resume: "sess1" });
     await collect(s2);
     expect((await s2.done).reason).toBe("done");
     const msgs = second.requests[0]!.messages;
