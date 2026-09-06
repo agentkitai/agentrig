@@ -763,6 +763,12 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R15f adds explicit `run --ci` file/event input as advisory context, configured
+headless policy and actual ask-deny cancellation. Fixed CI ceilings clamp larger
+settings without claiming aggregate billing containment. Create-only Markdown
+reports and optional authorized, identity-checked PR comments never rewrite logs
+or automatically execute event code. See [CI mode](CI-MODE.md) and [R15f](plans/R15f.md).
+
 R8a adds stable ACP v1 stdio over the headless controller: literal prompts, streamed
 updates and one-time permission replies. Resource links remain separately advisory;
 client MCP configuration must match trusted host entries with existing unchanged

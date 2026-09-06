@@ -1,6 +1,6 @@
 # Status
 
-Active row: **R15e on-demand diff review**, from green R9c main `3b7564a`, integrating ACP main `0493b09`.
+Active row: **R15f CI / bot mode**, from green R15e main `eead687`.
 R15e is independent of ACP and reuses delivered M6/permission foundations; it proceeds
 having started while R15a awaited R8a, without claiming partial R15a/R15c delivery. R15b PR185 is done; all four exact post-main checks are green. R8a PR184 is
 done; all four exact post-main checks are green. R9c PR183 is done: all four post-main
@@ -31,12 +31,27 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI green); R9b is done (PR #180, post-main CI green); R8a is done (PR #184), all four post-main checks green; R15b is done (PR #185), all four post-main checks green; R15e is implemented and reviewed, final CI pending (started independently while R15a awaited ACP); R9c is done (PR #183), all four post-main checks green; R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI green); R9b is done (PR #180, post-main CI green); R8a is done (PR #184), all four post-main checks green; R15b is done (PR #185), all four post-main checks green; R15e is done (PR #186), all four post-main checks green; R15f is implementing independently; R9c is done (PR #183), all four post-main checks green; R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R15e implemented and reviewed — final combined gates pending
+### R15f in progress — bounded CI input, fail-closed execution and reporting
+
+Independent after R15e's green post-main gate; R12c/R13c/ACP provenance and report
+seams are already delivered. R15a questions, R15d remote MCP and R8b MCP serving
+can proceed separately; integrate their committed interfaces without duplicating rows.
+Existing runCommand hosts explicit file/event input as advisory context with an
+empty runtime task, configured headless policy and actual ask deny/abort. Fixed
+20-turn/five-minute/50,000-main-token ceilings clamp larger settings; aggregate
+auxiliary/child/remote billing is not claimed bounded by these ceilings.
+Create-only Markdown and explicit authorized/pinned PR comments share R15e's helper.
+[Contract](plans/R15f.md), [operator guide and uninstalled Actions example](CI-MODE.md).
+Initial build/typecheck/full passes 2,790 plus two skips /166 files with actual
+Linux containers. Three negative mutations were detected/restored; final integrated
+checks and one bounded independent review remain. No live model/comment spending.
+
+### R15e done — PR #186; all four post-main checks green
 
 CLI and idle TUI share the existing supervisor reviewer with an explicit diff mode,
 bounded text capture and validated hunk locations. No tests, edits, automatic comments
@@ -49,7 +64,9 @@ Final ACP-integrated build/typecheck pass; unchanged-snapshot full suite passes
 2,780 plus two existing skips /165 files with actual Linux containers (48.81s).
 The initial scoped-copy cancellation regression was fixed, not dismissed as timing;
 its detected/restored negative control and full review findings are retained in the plan.
-Exact-head hosted CI remains pending.
+Exact-head CI34050738172 and structure34050738407 passed; merged main `eead687`
+passed CI34051436203 and structure34051436058.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/186#issuecomment-5561285218).
 
 ### R8a done — PR #184; all four post-main checks green
 
