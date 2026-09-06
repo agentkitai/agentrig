@@ -915,10 +915,10 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | Repair | Windows memory atomic replacement (merged, PR #145) | CI 34016959860 exposed EPERM replacing the wiki index during real concurrent ingest. Separate bounded, cancellation-aware same-temp retry repair; preserve locks, old-target safety and all Windows tests. Post-merge CI gates the next merge. See [contract](plans/windows-memory-replace.md). |
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
-| 3 | R13a/R13b/R13d (done) → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
+| 3 | R13a/R13b/R13d/R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
 | 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
-| 6 | R5a → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
+| 6 | R5a (done) → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
 | 7 | R11a → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
