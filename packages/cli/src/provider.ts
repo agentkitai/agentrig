@@ -33,9 +33,12 @@ export interface ProviderOptions {
   maxTokensPerTurnExplicit?: boolean;
   /** Named config profile; consumed by loadRunConfig. */
   profile?: string;
+  dailyCap?: string;
 }
 
 export interface ProviderHooks {
+  /** Trusted construction seam; applied exactly once per cached entry. */
+  meter?: (provider: ModelProvider, entry: ProviderEntry) => ModelProvider;
   /** Where retry notices go — the TUI frame or stderr. Silent retries look like hangs. */
   onNotice?: (message: string) => void;
   /** Explicit doctor probe: disable transient HTTP/stream retries, bypass cached labels. */
@@ -105,7 +108,7 @@ function rawEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hoo
       ? {}
       : { onRetry: (info: StreamRetryInfo) => hooks.onNotice?.(describeRetry(info)) };
   const tuning = {
-    ...(hooks.probe === true ? { retry: { maxRetries: 0 } } : {}),
+    ...(hooks.probe === true || opts.dailyCap !== undefined ? { retry: { maxRetries: 0 } } : {}),
     ...(entry.contextWindow === undefined ? {} : { contextWindow: entry.contextWindow }),
     ...(entry.reasoningEffort === undefined ? {} : { reasoningEffort: entry.reasoningEffort }),
   };
@@ -146,11 +149,15 @@ function rawEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hoo
 }
 
 function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
+  if (opts.dailyCap !== undefined && hooks.meter === undefined) throw new Error("--daily-cap requires metered session execution; this standalone model path is unsupported");
+  if (opts.dailyCap !== undefined && (entry.provider === "openai-chatgpt" ||
+    (entry.baseUrl !== undefined && entry.baseUrl !== (entry.provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"))))
+    throw new Error("--daily-cap refuses providers/endpoints without the supported configured output envelope");
   const provider = rawEntry(name, entry, opts, hooks);
   const fingerprint = hooks.probe === true ? undefined : providerProbeFingerprint(entry, hooks.env ?? process.env);
   const report = fingerprint === undefined ? undefined : readProviderProbe(hooks.conformanceCachePath ?? providerProbeCachePath(), fingerprint);
   applyProviderConformance(provider, report);
-  return provider;
+  return hooks.meter?.(provider, entry) ?? provider;
 }
 
 /** Every role's provider, built once per entry. Roles are constructed eagerly; `get` builds lazily. */

@@ -16,6 +16,7 @@ export type TuiCommand =
   | { kind: "supervisor" }
   | { kind: "plan" }
   | { kind: "context" }
+  | { kind: "cost" }
   | { kind: "verbose" }
   | { kind: "new" }
   | { kind: "permissions"; reset: boolean; revoke?: string; invalid?: boolean }
@@ -49,6 +50,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "supervisor", summary: "show what the supervisor has signalled this session" },
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
+  { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
   { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
   { name: "permissions", args: "[reset | revoke <exact-id>]", summary: "inspect live grants, matched-decision counts, or revoke authority" },
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
@@ -110,6 +112,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "plan" };
     case "context":
       return { kind: "context" };
+    case "cost":
+      return { kind: "cost" };
     case "verbose":
     case "trace":
       return { kind: "verbose" };

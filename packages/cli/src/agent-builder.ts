@@ -1,11 +1,15 @@
 import { join, resolve } from "node:path";
 import { inspectPackages } from "./packages.js";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import {
   assertShellExists,
   Checkpointer,
   builtinTools,
   createAgent,
+  SpendLedger,
+  dailyCapMicros,
+  meterProvider,
   defaultRules,
   DockerSandboxProvider,
   NoneSandboxProvider,
@@ -279,6 +283,7 @@ export async function readMcpConfig(path: string): Promise<Array<McpServerConfig
 }
 
 export interface BuiltAgent {
+  spend?: { ledger: SpendLedger; segment: string; capMicros?: number };
   closeTelemetry?(): Promise<void>;
   /** Same actual policy used by the runtime; read-only operator surfaces must not bypass denies. */
   permissions?: PermissionPolicy;
@@ -484,7 +489,17 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     throw new Error("extensions execute ambient host code outside the sandbox; remove extensions or explicitly select --sandbox none (YOLO does not override this)");
   }
   const { budget, pricing, maxTokensPerTurn } = parseBudget(opts);
-  const providers = buildProviders(opts, extras.onNotice === undefined ? {} : { onNotice: extras.onNotice });
+  const capMicros = opts.dailyCap === undefined ? undefined : dailyCapMicros(Number(opts.dailyCap));
+  if (capMicros !== undefined && (opts.trustedProjectRoot === undefined || pricing === undefined))
+    throw new Error("--daily-cap requires a trusted project and explicit --price-in/--price-out");
+  const spend = opts.trustedProjectRoot === undefined ? undefined : { ledger: new SpendLedger(opts.trustedProjectRoot),
+    segment: randomUUID(), ...(capMicros === undefined ? {} : { capMicros }) };
+  const providers = buildProviders(opts, { ...(extras.onNotice === undefined ? {} : { onNotice: extras.onNotice }),
+    ...(spend === undefined ? {} : { meter: (provider: ModelProvider) => meterProvider(provider, spend.ledger, {
+      segment: spend.segment, ...(pricing === undefined ? {} : { pricing }), ...(capMicros === undefined ? {} : { capMicros }),
+      boundedProvider: true, onError: error => extras.onNotice?.(error.message),
+      onUnavailable: () => (extras.onNotice ?? console.error)("spend accounting unavailable; uncapped execution continues with unknown coverage"),
+    }) }) });
   const provider = providers.main;
 
   let memoryIndex = "";
@@ -681,7 +696,8 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           skills,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
-        }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession }) }; })(),
+        }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession,
+          ...(spend === undefined ? {} : { spend }) }) }; })(),
       ),
     );
   }
@@ -698,6 +714,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    ...(spend === undefined ? {} : { spend }),
     ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
     extensions,
     provider,
@@ -726,6 +743,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
-  return { agent, ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }
