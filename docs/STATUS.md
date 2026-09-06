@@ -20,6 +20,11 @@ control and were restored. One bounded Claude review `70f4a79a-df31-4cdd-90fe-9c
 approved with no material findings (138 seconds, 13 turns), independently passing 18 focused
 tests. Optional notes stay at the roadmap end; current main `2df8c25` is integrated.
 
+H7b main `c88a72f` is now integrated; all stderr-inference removals coexist with the foreground
+receipt. Combined focused checks pass 31 cases, and build/typecheck/full checks pass 2,390 tests
+plus two skips across 133 files (34 seconds). PR #165 now proceeds to exact-head CI; the preceding
+main's post-merge gate remains pending at this checkpoint.
+
 ### H7b implemented — delivery gates pending
 
 The correctness-repair lane continues after H7a PR #161/main `668f7f1`, whose exact
