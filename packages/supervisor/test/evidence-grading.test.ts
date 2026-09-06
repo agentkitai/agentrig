@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createAgent, bashTool, updatePlanTool, SessionStore, RulePolicy, HarnessEvent,
   type EventPayload, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
-import { RubricGrader, reportEvidence, MAX_EVIDENCE_EVENTS } from "@agentkitai/agentrig-supervisor";
+import { RubricGrader, reportEvidence, MAX_EVIDENCE_EVENTS, attach, type GradeInput, type GradeOutput } from "@agentkitai/agentrig-supervisor";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -44,6 +44,41 @@ it("actual passing/failing final runs discriminate despite identical optimistic 
   const prompt = JSON.stringify(failing.provider.requests[0]!.messages);
   expect(prompt).toContain("latest exit mismatch"); expect(prompt).toContain("result#");
   expect((await grade(good, false)).result).toEqual({ pass: false, gaps: ["behavior still wrong"] });
+});
+
+it("actual attach retains declared failure beyond its 400-event trajectory window", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-evidence-tail-")); roots.push(root);
+  await writeFile(join(root, "check.cjs"), "process.exit(1)");
+  let release!: () => void; const graded = new Promise<void>(resolve => { release = resolve; });
+  let turn = 0;
+  const provider: ModelProvider = { ...model([]), async *stream() {
+    if (++turn === 1) yield { type: "tool_use", id: "plan", name: "update_plan", input: { items: [item] } };
+    else if (turn === 2) yield { type: "tool_use", id: "check", name: "bash", input: { command: "node check.cjs" } };
+    else {
+      for (let i = 0; i < 450; i++) yield { type: "text_delta", text: "." };
+      yield { type: "text_delta", text: "trigger grading" }; await graded;
+    }
+    yield { type: "stop", reason: turn < 3 ? "tool_use" : "end_turn" };
+  } };
+  const session = createAgent({ provider, store: new SessionStore({ root: join(root, "logs") }), tools: [updatePlanTool(), bashTool()],
+    systemPrompt: "fixture", repoMap: false, permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]) }).run("verify", { cwd: root });
+  const optimistic = new RubricGrader({ provider: judge() });
+  let supplied: GradeInput | undefined; let result: GradeOutput | undefined;
+  const observer = attach(session, { detectors: [{ id: "grade-trigger", observe: event => event.type === "model.delta" && event.text === "trigger grading"
+    ? { type: "stall", confidence: 1, evidence: ["grade now"], window: [event.seq, event.seq] } : null }],
+    policy: { decide: signals => signals.length > 0 ? [{ type: "run_grader", rubric: "all checks" }] : [] },
+    grader: { grade: async (input, options) => { supplied = input; try { result = await optimistic.grade(input, options); return result; } finally { release(); } } },
+    onError: (_where, error) => { release(); throw error; },
+  });
+  try {
+    await session.done; await observer.done;
+    expect(supplied?.trajectory.length).toBeLessThanOrEqual(400);
+    expect(supplied?.trajectory.some(event => event.type === "plan.updated")).toBe(false);
+    expect(supplied?.evidence).toBeDefined();
+    expect(Object.isFrozen(supplied?.evidence)).toBe(true);
+    expect(Object.isFrozen(supplied?.evidence?.gaps)).toBe(true);
+    expect(result?.pass).toBe(false); expect(result?.gaps.join()).toMatch(/tests.*latest exit mismatch/);
+  } finally { release(); session.control.abort(); }
 });
 
 function trajectory(items: Array<{ id: string; text: string; status: "done" | "pending" | "in_progress" | "dropped"; accept?: string }>, code: number | null = 0) {
@@ -92,4 +127,12 @@ it("many concrete deficits remain a failing bounded gap list even when later row
   expect(result.pass).toBe(false); expect(result.gaps.length).toBeLessThanOrEqual(33);
   expect(result.gaps.join()).toContain("further acceptance gaps omitted");
   expect(reportEvidence(events).text).not.toContain("secret raw stdout");
+});
+
+it("direct grader prefix and internal sequence omissions remain incomplete instead of preserving an earlier match", async () => {
+  const complete = trajectory([item]);
+  for (const partial of [complete.slice(1), complete.filter(event => event.type !== "tool.result")]) {
+    expect(reportEvidence(partial).incomplete).toBe(true);
+    expect((await grade(partial)).result.pass).toBe(false);
+  }
 });

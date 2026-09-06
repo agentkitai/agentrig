@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { HarnessEvent, ModelProvider } from "@agentkitai/agentrig-core";
 import { condenseTrajectory, lastValid } from "./reviewer.js";
 import { AuxiliaryRun, auxiliaryDiagnostic, positiveLimit, type AuxiliaryOptions } from "./auxiliary.js";
-import { reportEvidence } from "./evidence-report.js";
+import { reportEvidence, type EvidenceReport } from "./evidence-report.js";
 
 /**
  * PLAN §4.3. The grader is the Outcomes piece: a written rubric checked by a *separate*
@@ -23,6 +23,8 @@ export interface GradeInput {
   rubric: string;
   artifacts: FileRef[];
   trajectory: HarnessEvent[];
+  /** Trusted in-process full-run fold supplied by attach; never accept model-produced reports. */
+  evidence?: EvidenceReport;
 }
 
 export interface GradeOutput {
@@ -104,7 +106,7 @@ export class RubricGrader implements Grader {
         budget -= block.length;
       }
 
-      const evidence = reportEvidence(input.trajectory);
+      const evidence = input.evidence ?? reportEvidence(input.trajectory);
       run.check();
       const claims = evidence.hasDeclarations || evidence.incomplete;
       const trajectory = condenseTrajectory(input.trajectory, this.opts.maxEvents ?? 60);

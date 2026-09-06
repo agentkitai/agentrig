@@ -5,11 +5,11 @@ export const MAX_EVIDENCE_EVENTS = 100_000;
 const MAX_REPORT_CHARS = 12_000;
 const MAX_GAPS = 32;
 export interface EvidenceReport {
-  text: string;
-  gaps: string[];
-  hasDeclarations: boolean;
-  incomplete: boolean;
-  finished: boolean;
+  readonly text: string;
+  readonly gaps: readonly string[];
+  readonly hasDeclarations: boolean;
+  readonly incomplete: boolean;
+  readonly finished: boolean;
 }
 
 /** Streaming bounded state, shared by the grader and read-only finished-session report. */
@@ -27,7 +27,8 @@ export function evidenceReportCollector() {
     observe(event: HarnessEvent): void {
       if (++count > MAX_EVIDENCE_EVENTS) { omittedEvents++; finished = false; return; }
       sessionId ??= event.sessionId;
-      if (event.sessionId !== sessionId || event.seq <= previousSeq) { invalidOrder = true; return; }
+      if (event.sessionId !== sessionId || event.seq !== previousSeq + 1) invalidOrder = true;
+      if (event.sessionId !== sessionId || event.seq <= previousSeq) return;
       previousSeq = event.seq;
       finished = event.type === "session.end";
       if (event.type === "plan.updated") {
@@ -36,6 +37,7 @@ export function evidenceReportCollector() {
       }
       reducePlanEvidence(ledger, event);
     },
+    omitEvents(amount: number): void { omittedEvents += amount; finished = false; },
     report(): EvidenceReport {
       const gaps: string[] = [];
       let omittedGaps = 0;
@@ -74,7 +76,7 @@ export function evidenceReportCollector() {
       }
       if (omittedGaps > 0) gaps.push(`unverified: ${omittedGaps} further acceptance gaps omitted`);
       if (ledger.items.length === 0) lines.push("(no current plan declarations observed; not evidence of completion)");
-      return { text: lines.join("\n"), gaps, hasDeclarations, incomplete, finished: finished && !invalidOrder && omittedEvents === 0 };
+      return Object.freeze({ text: lines.join("\n"), gaps: Object.freeze(gaps), hasDeclarations, incomplete, finished: finished && !invalidOrder && omittedEvents === 0 });
     },
   };
 }
@@ -86,6 +88,7 @@ function label(item: PlanItemEvidence): string {
 
 export function reportEvidence(trajectory: readonly HarnessEvent[]): EvidenceReport {
   const collector = evidenceReportCollector();
-  for (const event of trajectory) collector.observe(event);
+  for (const event of trajectory.slice(0, MAX_EVIDENCE_EVENTS)) collector.observe(event);
+  if (trajectory.length > MAX_EVIDENCE_EVENTS) collector.omitEvents(trajectory.length - MAX_EVIDENCE_EVENTS);
   return collector.report();
 }

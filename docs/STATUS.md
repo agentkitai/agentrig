@@ -1,11 +1,28 @@
 # Status
 
-Active implementation queue: **R14b is merged (PR #165), pending post-merge CI; R11a is implemented, pending delivery gates; H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R14c evidence grading/reporting is implemented, pending delivery gates; R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R11a implemented — delivery gates pending
+### R14c implemented — delivery gates pending
+
+M6 and read-only `sessions show --evidence` share a bounded claim/latest-candidate report.
+Declared unfinished/unsupported/missing/failing checks and omitted history can force false only;
+matching exits never prove semantics or force a pass. Dropped and legacy items stay explicit.
+The actual supervisor passes a frozen full-stream report beyond its 400-event recent window.
+[Contract](plans/R14c.md). This follows delivered R14b independently of R5b tool quarantine and
+R11 network work; no new grammar, automatic check execution or R14d lanes are added.
+
+Integrated main `cee1ad9`; build/typecheck/full tests pass 2,423 plus two skips across 137
+files (32 seconds). The 39 focused cases include actual >400-event attach retention. Deficit-guard
+removal and tail-only grading mutations each failed the discriminating runtime controls and were
+restored. One bounded review and exact-head CI remain pending.
+
+### R11a done — PR #166
+
+Merged main `cee1ad9` passed all three post-merge jobs in CI `34030682233`; prior checkpoints
+below remain historical implementation notes.
 
 Additive `net` defaults ask without repurposing legacy `network`. Runtime denies compatible
 net tools under enforcing no-network policy before body/dispatch bookkeeping. Explicit
@@ -25,7 +42,10 @@ Combined build/typecheck/full 2,411 tests plus two skips across 135 files pass (
 32 seconds). Mechanical docs reconciliation only; no second review. R14b post-CI 34030230354
 and R11a exact-head CI remain pending at this checkpoint.
 
-### R14b implemented — delivery gates pending
+### R14b done — PR #165
+
+Final head `4c00278` passed CI `34029893408`; merged main `6f25a17` passed all three jobs in
+post-merge CI `34030230354`. [Final receipt](https://github.com/agentkitai/agentrig/pull/165#issuecomment-5558936168).
 
 Exact command-exit declarations associate with immutable internal foreground execution receipts
 in a bounded supervisor attempt ledger. Later failure/unknown never borrows earlier success;

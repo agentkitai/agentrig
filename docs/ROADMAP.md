@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14b is merged (PR #165), pending post-merge CI; R11a is implemented with delivery gates pending; H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R14c evidence grading/reporting is implemented, pending delivery gates; R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -22,6 +22,9 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Complete | R13c: external-input permission restrictions (PR #159) | Three actual-dispatch categories; sticky source restriction, fresh consent and denial precedence |
 | Complete | R5a: trusted extension API (PR #157) | Exact-head and post-merge CI passed |
 | Done — PR #162 | R14a: acceptance declarations | Observable declarations remain unverified, not proof |
+| Done — PR #165 | R14b: candidate evidence association | Canonical foreground observations, bounded replay and post-merge CI green |
+| Done — PR #166 | R11a: net permission boundary | Explicit sandbox network policy; post-merge CI green |
+| Implemented; closing gates | R14c: evidence grading and reports | Deterministic deficits can force false only; one review and exact-head CI |
 | Committed | R5b/R5c, R7–R11 and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 | Committed *(fourth pass, 2026-09-06)* | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | Section 5 orders R15 after the committed continuation; H7 may interrupt as a known correctness defect |
 | Committed *(fourth pass, 2026-09-06)* | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
@@ -668,7 +671,7 @@ permission and sandbox layers something to grip.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R11a *(implemented; delivery gates pending)* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
+| R11a *(done, [PR #166](https://github.com/agentkitai/agentrig/pull/166))* | Additive `net` defaults ask; compatible tools require explicit sandbox network policy independent of permission approval. Legacy `network` unchanged; fresh outside escape remains separate. CLI/config and child/provenance controls exercised. See [contract](plans/R11a.md). | core, cli |
 | R11b | `web_fetch` tool: GET-only, size-capped, html→text, declares `class: "net"` and the URL in the request (so rules like `--allow net` and per-run deny work); no search tool yet — search providers need keys and that is config surface R1 already owns | core |
 
 Acceptance: fetch is refused under default rules until allowed (both interactively and via
@@ -736,8 +739,8 @@ the rows below extend the product interface in the committed dependency order.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R14a *(done, [PR #162](https://github.com/agentkitai/agentrig/pull/162))* | Optional nonblank, bounded `PlanItem.accept` shares validation with `update_plan`; the first request asks for an observable check per item without replacing custom prompts or creating fresh consent. Tool/log/resume/plan displays retain declarations, visibly undeclared or unverified rather than proof. No evidence matching, check execution or mandatory completion gate. See [contract](plans/R14a.md). | core + cli |
-| R14b *(implemented; closing delivery gates)* | Bounded supervisor per-item attempt ledger associates exact command-exit declarations with internal foreground outcome receipts, never output prose or tool names. Latest failing/unknown attempts stay visible; unsupported checks and semantic acceptance remain unverified. Replay and bounded incompleteness are explicit. See [contract](plans/R14b.md). | core + supervisor |
-| R14c | The M6 grader gains a claims-vs-evidence rubric row: a session ending with unfulfilled `accept` fields grades lower and says which; `sessions show --evidence <id>` prints the claim→evidence table for a finished run | supervisor + cli |
+| R14b *(done, [PR #165](https://github.com/agentkitai/agentrig/pull/165))* | Bounded supervisor per-item attempt ledger associates exact command-exit declarations with internal foreground outcome receipts, never output prose or tool names. Latest failing/unknown attempts stay visible; unsupported checks and semantic acceptance remain unverified. Replay and bounded incompleteness are explicit. See [contract](plans/R14b.md). | core + supervisor |
+| R14c *(implemented; closing delivery gates)* | M6 claims-vs-evidence row and read-only `sessions show --evidence <id>` share bounded candidate reports. Declared unfinished/missing/failing/unknown checks and omissions can force false, never true; legacy/dropped distinctions and full-stream attach history are explicit. See [contract](plans/R14c.md). | supervisor + cli |
 | R14d | Two lanes, independent oracles *(third pass)*: evidence is classified as regression (tests, lint, typecheck) or behavior (the real user-facing surface driven, output observed, at least one adversarial or negative probe), with explicit verdicts PASS / FAIL / BLOCKED / SKIP — a partial result is FAIL or BLOCKED, never "mostly passed". Evidence sharing the implementation's own assumption is discounted: a test written from the same misreading as the patch is not an independent oracle; golden outputs, a second method, or the surface itself are | supervisor |
 
 Acceptance: a fixture session claiming success with a failing final test run grades measurably
@@ -920,10 +923,10 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 1 | R13f, R5e and R5d (done) | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
 | 2 | R12e (done) → R12a (done) → R12b (done) → R12c (done) → R12d (done) | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
 | 3 | R13a/R13b (done) → R13d (done) → R13c (done) | Track content provenance and principals before enforcing external-input permission restrictions. |
-| 4 | R14a (done) → R14b (closing gates) → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 4 | R14a (done) → R14b (done) → R14c (closing gates) → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
 | 5 | R6a/R6b/R6c (done) → R6g (done) | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
 | 6 | R5a (done) → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
-| 7 | R11a → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
+| 7 | R11a (done) → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
 | 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |

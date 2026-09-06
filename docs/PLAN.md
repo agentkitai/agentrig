@@ -180,6 +180,12 @@ associate same-call observed exits; unsupported checks, missing receipts and inc
 remain unknown. Candidate observations never prove semantic acceptance. Latest failure/unknown
 must not be hidden by an earlier matching exit. See [R14b](plans/R14b.md); grading remains R14c.
 
+R14c shares that fold between `sessions show --evidence` and M6 claims-vs-evidence grading.
+Current declared unfinished or unverified checks and incomplete views can only force a negative
+verdict; matching exits never establish semantic proof or force pass. Dropped/legacy items remain
+explicit without new legacy requirements. Attach supplies a bounded full-stream frozen report,
+not just recent history; CLI reads finished physical logs without models/config. See [R14c](plans/R14c.md).
+
 ### 2.6 Agent + session
 
 ```ts
