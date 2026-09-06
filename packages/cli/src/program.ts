@@ -14,6 +14,7 @@ import { loginCommand } from "./login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
+import { startMcpServe, type McpServeDependencies } from "./mcp-serve.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";
@@ -132,6 +133,7 @@ export interface ProgramDependencies {
   evaluation?: SessionEvaluationDependencies;
   review?: ReviewDependencies;
   acp?: AcpDependencies;
+  mcpServe?: McpServeDependencies;
 }
 
 export function buildProgram(dependencies: ProgramDependencies = {}): Command {
@@ -162,7 +164,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "mcp-serve"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -366,6 +368,14 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
       await startAcp(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
         ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.acp,
+      });
+    });
+
+  withRunOptions(program.command("mcp-serve").description("Serve four bounded MCP tools over stdio under configured permissions"), "20")
+    .action(async (flags: AcpFlags, cmd: Command) => {
+      const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      await startMcpServe(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
+        ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.mcpServe,
       });
     });
 
