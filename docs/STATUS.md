@@ -1,11 +1,30 @@
 # Status
 
-Current roadmap row: **R6d — memory write-quality lint.** R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **implemented through R6e; closing PR records delivery gates.** R6d, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R6d in progress
+### R6e implementation complete — closing PR carries delivery receipts
+
+Fresh branch from updated main `762aa0c`; [contract](plans/R6e.md). Add bounded, fail-closed
+effect assessment beside runtime evidence eligibility. Preserve offline previews and explicit
+publication confirmation; no keyword-only safety claim or automatic rewrite. Build/typecheck and
+the full Node22 suite pass 1,968 tests plus two skips (95 files). One bounded independent review
+approved and independently passed the same full suite. Effect-denial and artifact-binding
+mutations were detected and restored. Delivery requires green exact-head and post-merge CI;
+the closing PR records those receipts. No later backlog item is activated.
+
+After those gates, the active implementation queue is exhausted. R6f was delivered by H5;
+R6a–R6c still require useful memory evidence (E3 remained inconclusive) and a separately scoped
+comparison. Other backlog activation requires a named user need. No new live evaluation budget
+or conditional feature is inferred from completing R6e; small nice-to-haves remain at ROADMAP's end.
+
+### R6d complete (PR #139)
+
+Final head `2e14117`, merge `762aa0c`, PR CI 34012625855 and post-merge CI 34012808696 passed all
+three platforms. One approving review, full local 1,945 passes plus two skips, final targeted 76,
+and two detected/restored mutations. Following notes record intermediate gates, not pending work.
 
 Fresh branch from updated main `412a9af`; [contract](plans/R6d.md). Complete advisory write-quality
 lint on existing claim tags, and identify new model summaries as inferred synthesis instead of

@@ -11,6 +11,8 @@ import {
   loreConfigFromEnv,
   loadPromotionEvidence,
   selectForPromotion,
+  assessPromotionEvidence,
+  reviewPromotionEffects,
   sessionEvidence,
   renderPromotionProposal,
   renderReport,
@@ -243,7 +245,11 @@ export async function memoryIngest(sessionId: string, opts: MemoryIngestOptions)
 }
 
 /** Preview checked witnesses; an explicit confirmation is required before shared-scope writes. */
-export async function memoryPromote(path: string, opts: MemoryOptions & { confirm?: boolean }): Promise<void> {
+export interface MemoryPromoteOptions extends MemoryOptions, ProviderOptions { confirm?: boolean; signal?: AbortSignal; guardrailLimits?: Partial<MaintenanceLimits> }
+export async function memoryPromote(path: string, opts: MemoryPromoteOptions): Promise<void> {
+  return withMaintenanceSignal(signal => promoteWithSignal(path, opts, signal), opts.signal);
+}
+async function promoteWithSignal(path: string, opts: MemoryPromoteOptions, signal: AbortSignal): Promise<void> {
   let page;
   try {
     page = await (await openStore(opts.dir)).read(path);
@@ -258,9 +264,9 @@ export async function memoryPromote(path: string, opts: MemoryOptions & { confir
     return;
   }
   const evidenceIndex = await loadPromotionEvidence(new FileRawStore({ root: opts.dir }),
-    sessionEvidence(page).map(ref => ref.slice("session:".length)));
-  const checked = selectForPromotion([page], { evidenceIndex });
-  const proposal = checked.promote[0];
+    sessionEvidence(page).map(ref => ref.slice("session:".length)), { signal });
+  const checked = assessPromotionEvidence([page], { evidenceIndex });
+  let proposal = checked.promote[0];
   if (proposal === undefined) {
     for (const rejected of checked.rejected) {
       console.error(`not eligible: ${rejected.reason}`);
@@ -271,7 +277,7 @@ export async function memoryPromote(path: string, opts: MemoryOptions & { confir
   }
   console.log(renderPromotionProposal(proposal));
   if (opts.confirm !== true) {
-    console.log("Review these excerpts and the claim's meaning; rerun with --confirm to request shared-scope promotion. Nothing was published.");
+    console.log("Review these excerpts and the claim's meaning; --confirm additionally runs a bounded memory-role effect assessment before shared-scope promotion. Nothing was published.");
     return;
   }
   if (loreConfigFromEnv() === null) {
@@ -279,14 +285,30 @@ export async function memoryPromote(path: string, opts: MemoryOptions & { confir
     process.exitCode = 1;
     return;
   }
+  let publicationStarted = false;
   try {
+    const guardrailIndex = await reviewPromotionEffects([proposal], { provider: buildRoleProvider(opts, memoryRole(opts)), signal,
+      ...(opts.guardrailLimits === undefined ? {} : { limits: opts.guardrailLimits }), onUsage: report => console.error(formatAuxiliaryUsage(report)) });
+    const current = await (await openStore(opts.dir)).read(path);
+    if (current === null || current.version !== page.version) throw new Error("wiki page changed during effect assessment; review the current page again");
+    const currentEvidence = await loadPromotionEvidence(new FileRawStore({ root: opts.dir }),
+      sessionEvidence(current).map(ref => ref.slice("session:".length)), { signal });
+    const approved = selectForPromotion([current], { evidenceIndex: currentEvidence, guardrailIndex });
+    proposal = approved.promote[0];
+    if (proposal === undefined) {
+      for (const rejection of approved.rejected) console.error(`not eligible: ${rejection.reason}`);
+      process.exitCode = 1; return;
+    }
+    signal.throwIfAborted();
+    console.log(renderPromotionProposal(proposal));
     // An explicit publication must not report success after tolerant() swallowed a transport error.
     const backend = new LoreBackend();
+    publicationStarted = true;
     await backend.promote({ ...page, body: proposal.publicationBody,
       frontmatter: { ...page.frontmatter, sources: proposal.publicationSources } });
     console.log(`promoted ${page.path} to ${backend.id} shared scope`);
   } catch (err) {
-    console.error(`promotion failed; the backend may have accepted a partial update: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`${publicationStarted ? "promotion failed; the backend may have accepted a partial update" : "not eligible; effect assessment or revalidation failed, nothing published"}: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;
   }
 }

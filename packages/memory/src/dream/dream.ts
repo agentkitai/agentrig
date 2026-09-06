@@ -16,7 +16,8 @@ import {
   type Consolidation,
   type Signal,
 } from "./phases.js";
-import { selectForPromotion, sessionEvidence, type PromotionRejection } from "./promote.js";
+import { assessPromotionEvidence, selectForPromotion, sessionEvidence, type PromotionRejection } from "./promote.js";
+import { reviewPromotionEffects, type PromotionGuardrailIndex } from "./guardrails.js";
 import { loadPromotionEvidence } from "./evidence.js";
 import { applyConsolidation, type AppliedChanges } from "./apply.js";
 import { SCHEMA_MD } from "../ingest.js";
@@ -282,10 +283,22 @@ async function dreamInto(
   const evidenceIndex = await loadPromotionEvidence(opts.raw,
     finalPages.flatMap(page => sessionEvidence(page).map(ref => ref.slice("session:".length))),
     { scanLimits: scan.limits, ...(opts.signal === undefined ? {} : { signal: opts.signal }) });
-  const { promote, rejected } = selectForPromotion(
-    finalPages,
-    { evidenceIndex, ...(opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote }) },
-  );
+  const promotionOptions = { evidenceIndex, ...(opts.minSessionsToPromote === undefined ? {} : { minSessions: opts.minSessionsToPromote }) };
+  const eligible = assessPromotionEvidence(finalPages, promotionOptions);
+  let guardrailIndex: PromotionGuardrailIndex | undefined;
+  let guardrailError: string | undefined;
+  if (opts.globalWiki !== undefined && eligible.promote.length > 0 && modelEnabled) {
+    try { guardrailIndex = await reviewPromotionEffects(eligible.promote, { provider: opts.provider! }, run); }
+    catch (error) {
+      run.check(); // Cancellation/deadlines still stop the complete maintenance run.
+      guardrailError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const { promote, rejected } = opts.globalWiki === undefined ? eligible : selectForPromotion(finalPages,
+    { ...promotionOptions, ...(guardrailIndex === undefined ? {} : { guardrailIndex }) });
+  if (guardrailError !== undefined) for (const rejection of rejected) {
+    if (rejection.guardrails !== undefined) rejection.reason += `; assessment failed: ${guardrailError}`;
+  }
   // with no global wiki attached there is nowhere to promote *to*, so propose nothing
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
@@ -308,6 +321,7 @@ async function dreamInto(
       return { page: r.page, line: r.line, reason: found?.reason ?? "" };
     }),
     promoted,
+    guardrailRejected: rejected.filter(rejection => rejection.guardrails !== undefined),
     pinsAffected: pinChecks.map((c) => ({ pin: `${c.pin.page}: ${c.pin.claim}`, status: c.status })),
     pinPersistence: persistedPins,
   };

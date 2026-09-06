@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Current work: R6d; R4a–R4c, H1–H6 and E1–E3 complete in PRs #118–#138.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Implemented through R6e; closing PR records delivery gates. R6d, R4a–R4c, H1–H6 and E1–E3 complete in PRs #118–#139.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
@@ -11,7 +11,7 @@ evidence. This revision changes planned work, not the implementation status of c
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
-| Now | R6d → R6e: memory write-quality and promotion guardrails | Advisory quality checks; reject harmful promotion effects |
+| Implemented | R6d–R6e: memory quality and promotion guardrails | R6d in PR #139; R6e closing PR records final review and exact-head/post-merge CI receipts |
 | Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
 | Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
 
@@ -777,6 +777,12 @@ The completed foundation is R1 → R1.5 → R2 → R3 → R3.5, plus R13e's fixt
 remain historical; newly discovered gaps are repaired explicitly in H rather than hidden by a
 `done` label. The current order is:
 
+**Implementation closeout (2026-09-06):** the activated rows through R6e are implemented. Each
+row's PR must carry green exact-head and post-merge CI before its delivery is complete. After
+the closing R6e gates, stop at the conditional boundary below: R6f is already done, E3 did not
+establish useful memory benefit, and no generated-skill/backlog activation or new live-run budget
+is automatic. The ordering below remains the historical dependency order, not a fresh work queue.
+
 1. **H1 → H2 → H3 → H4 → H5:** correct enforcement and evidence, stabilize memory lifecycle.
 2. **E1 → E2 → E3:** establish independent checks, instrument outcomes, publish the first real
    comparison. Define tasks and tolerances before seeing the results.
@@ -916,3 +922,7 @@ after the active sequence, unless new evidence demonstrates a safety or data-los
 - R6d polish: make legacy source-summary duplication on regrowth easier to inspect without
   relabeling old observations; reduce advisory missing-tag noise for nested hand-written bullets.
   Preserve historical originals and heuristic disclaimers. Neither blocks R6e.
+- R6e polish: distinguish missing assessor credentials from adverse claim judgments more clearly,
+  reduce duplicate pre/post-assessment CLI output, and make the 1,000-character per-claim rationale
+  cap clearer when tuning assessors. Explicit one-call dream budgets intentionally refuse an
+  additional promotion assessment. Keep fail-closed behavior and model-judgment limitations.

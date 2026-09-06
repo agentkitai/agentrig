@@ -1,6 +1,7 @@
 import type { WikiPage } from "../types.js";
 import { factLines } from "../page.js";
 import { witnessesForClaim, type PromotionEvidenceIndex, type PromotionWitness } from "./evidence.js";
+import { checkPromotionGuardrails, type PromotionGuardrailAssessment, type PromotionGuardrailIndex } from "./guardrails.js";
 
 /**
  * PLAN §3.4 and §7 both say it, so it is a hard gate rather than a prompt instruction:
@@ -26,6 +27,8 @@ export interface PromotionCandidate {
   /** Checked publication artifact; never send unvalidated extra citations from the input page. */
   publicationBody: string;
   publicationSources: string[];
+  /** Absent on evidence-only previews; never sufficient without runtime receipt validation. */
+  guardrails?: PromotionGuardrailAssessment;
 }
 
 export interface ClaimPromotionAssessment {
@@ -41,6 +44,7 @@ export interface PromotionRejection {
   reason: string;
   evidence: string[];
   claims?: ClaimPromotionAssessment[];
+  guardrails?: PromotionGuardrailAssessment;
 }
 
 export interface PromotionOptions {
@@ -50,6 +54,7 @@ export interface PromotionOptions {
   minConfidence?: "low" | "medium" | "high";
   /** Must come from loadPromotionEvidence; absent or fabricated indexes fail closed. */
   evidenceIndex?: PromotionEvidenceIndex;
+  guardrailIndex?: PromotionGuardrailIndex;
 }
 
 const RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
@@ -123,7 +128,8 @@ function independentWitnesses(witnesses: PromotionWitness[]): PromotionWitness[]
   return [...byObservation.values()].sort((a, b) => a.family.localeCompare(b.family));
 }
 
-export function selectForPromotion(pages: WikiPage[], opts: PromotionOptions = {}): PromotionSplit {
+/** Evidence eligibility only. Its previews are NOT approved promotion candidates. */
+export function assessPromotionEvidence(pages: WikiPage[], opts: PromotionOptions = {}): PromotionSplit {
   if (opts.minSessions !== undefined && (!Number.isSafeInteger(opts.minSessions) || opts.minSessions < 0)) throw new Error("minSessions must be a non-negative integer");
   const minSessions = Math.max(2, opts.minSessions ?? 2);
   const minConfidence = opts.minConfidence ?? "medium";
@@ -168,6 +174,20 @@ export function selectForPromotion(pages: WikiPage[], opts: PromotionOptions = {
       claims, requiresHumanReview: true, semanticAssessment: "not-assessed", advisoryConfidence: page.frontmatter.confidence,
       publicationBody: claims.map(claim => `- [${claim.tag}] ${claim.claim} (${[...new Set(claim.witnesses.map(w => `session:${w.sessionId}`))].sort().join(", ")})`).join("\n"),
       publicationSources: [...new Set(claims.flatMap(claim => claim.witnesses.map(w => `session:${w.sessionId}`)))].sort() });
+  }
+  return { promote, rejected };
+}
+
+/** Both runtime gates are mandatory; --confirm and copied assessment JSON cannot bypass them. */
+export function selectForPromotion(pages: WikiPage[], opts: PromotionOptions = {}): PromotionSplit {
+  const eligible = assessPromotionEvidence(pages, opts);
+  const promote: PromotionCandidate[] = [];
+  const rejected = [...eligible.rejected];
+  for (const candidate of eligible.promote) {
+    const guardrails = checkPromotionGuardrails(opts.guardrailIndex, candidate);
+    if (guardrails.status !== "allow") rejected.push({ page: candidate.from, evidence: candidate.evidence,
+      claims: candidate.claims, guardrails, reason: `guardrail refusal: ${guardrails.reason}` });
+    else promote.push({ ...candidate, guardrails });
   }
   return { promote, rejected };
 }

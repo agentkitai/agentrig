@@ -364,6 +364,20 @@ New ingest summaries are inferred model synthesis, not observed evidence. No qua
 automatically edits or promotes a claim; tags/citation counts are not semantic verification.
 See [R6d](plans/R6d.md) for heuristic limits and controls.
 
+R6e separates `assessPromotionEvidence` (offline evidence-only previews) from `selectForPromotion`
+(evidence plus effect approval). `reviewPromotionEffects` makes one bounded model call over exact
+candidate artifacts and mints process-local receipts; missing, copied, changed or uncertain
+receipts refuse. Any weakening of verification, scrutiny, failure disclosure, review, workaround
+scope or honest reporting refuses the whole candidate without a replacement lesson. Model effect
+assessment is fallible and never replaces human confirmation or H4's runtime witnesses.
+
+`memory promote` previews offline; `--confirm` also requires the bounded memory-role assessment
+and fresh page/evidence validation before backend publication. `--guardrail-limits` controls its
+limits. A full dream with an eligible global candidate uses at most one additional batch call;
+its default total call ceiling is two, sharing accounting and cancellation. Structural-only
+dream remains zero-call and reports unassessed candidates as refused. [R6e](plans/R6e.md) records
+the exact contract and limits. No generated skills or conditional backlog is activated by it.
+
 ```ts
 interface WikiPage { path: string; frontmatter: PageFrontmatter; body: string; updatedAt: number; version?: string }
 
