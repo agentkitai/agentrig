@@ -79,4 +79,5 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/h6-trace.test.ts
       - run: pnpm exec vitest run packages/memory/test/write-quality.test.ts
       - run: pnpm exec vitest run packages/memory/test/promotion-guardrails.test.ts
+      - run: pnpm exec vitest run packages/core/test/manifests.test.ts
       - run: pnpm exec vitest run packages/cli/test/tui.test.ts -t 'interactive dream|synchronous dream'
