@@ -1,6 +1,6 @@
 # Status
 
-Active implementation queue: **H7a output-limit continuation is implemented, pending delivery gates; R12c grant inspection is implemented, pending delivery gates; R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **H7a output-limit continuation is implemented, pending delivery gates; R12c grant inspection is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
@@ -49,6 +49,10 @@ diagnostics, thinking blocks, remote MCP, on-demand review, CI mode, output sche
 spend ledger, mid-session model switch, TUI `@file`/image input, and an orchestration decision
 row), and an amendment making R8a speak the Agent Client Protocol instead of a bespoke NDJSON
 protocol. Section 5 orders these after the existing continuation; H7 may interrupt it.
+A follow-up read of `packages/cli/src/tui` added R16, eight TUI polish rows (Markdown and diff
+rendering, tool-call summaries, prompt history and completion, notifications, a richer status
+line, in-TUI compact/clear/doctor/diff, themes and keybindings) inside the Static-scrollback
+model; the alternate-screen renunciation stands. Section 5 also now marks R12b and R13d done.
 
 Housekeeping the same day: PR #109 (superseded R4a draft) closed; PR #115 updated against main
 for merge; fourteen worktrees and local branches for merged rows removed. Worktrees for R12b
@@ -84,7 +88,10 @@ renderers, CI suites and delivery sections preserved. Combined build/typecheck a
 2,337 tests plus two skips across 125 files pass (four workers, 31 seconds). No second
 review for mechanical integration. R12c post-merge CI 34027192976 remains pending.
 
-### R12c implemented — pending delivery gates
+### R12c done — PR #158; post-merge CI green
+
+PR #158 merged as `06f5b4b`; post-merge CI 34027192976 passed all three platforms.
+The implementation notes below retain historical intermediate gate states.
 
 Live grant inspection shows exact scope/duration/subject, age and matched-decision counts;
 `/permissions revoke <exact-id>` changes the next decision without cancelling running tools.
