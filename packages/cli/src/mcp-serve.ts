@@ -93,6 +93,7 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
         clearTimeout(timer); combined.removeEventListener("abort", stop);
         await controller.shutdown(); await observed;
         await Promise.allSettled((built?.mcp ?? []).map(client => client.close()));
+        await built?.closeTelemetry?.();
         controllers.delete(controller);
       }
     },

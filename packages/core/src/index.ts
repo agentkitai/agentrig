@@ -33,5 +33,6 @@ export * from "./providers/oauth-loopback.js";
 export * from "./providers/retry.js";
 export * from "./tools/index.js";
 export * from "./provider-conformance.js";
+export * from "./otel.js";
 export * from "./mcp/index.js";
 export type { AuxiliaryCall, AuxiliaryReport } from "./auxiliary.js";

@@ -72,6 +72,9 @@ for the scripted client, existing-pin MCP requirements and transport limits.
 clients under configured permissions. Client tasks remain advisory, never human
 approval. See [MCP serving](docs/MCP-SERVE.md) for limits and sensitive-data handling.
 
+Optional `--otel-endpoint <url>` exports bounded metadata-only OTLP/HTTP JSON traces.
+It is off unless explicitly requested; see [telemetry privacy and limits](docs/OTEL.md).
+
 - `agentrig` — start the interactive TUI.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
