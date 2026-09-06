@@ -1,14 +1,14 @@
 # Status
 
-Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b is merged, pending its post-merge CI gate. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R13b provenance assembly is implemented, pending delivery gates; R6b is done with green post-merge CI. R12e is done with green post-merge CI. R5d, R5e, R6a, R13a and R13f are delivered with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R6b merged — PR #149 post-merge gate pending
+### R6b done — PR #149; post-merge CI green
 
 Final head `d02ee57` passed all three PR platforms and merged as `7c680c4`.
-Post-merge CI 34021388430 is pending at this integration checkpoint; no success is claimed yet.
+Post-merge CI 34021388430 passed all three platforms.
 
 Explicit opt-in skill previews bind human confirmation to an exact artifact digest. Fresh
 runtime evidence, classification and effect receipts are mandatory at apply; saved reports
@@ -70,6 +70,13 @@ reproduced duplicate result events; the fix degrades provenance without re-emiss
 tests pass. MCP source removal, summary upgrade and custom-retention bypass mutations failed
 and were restored. Integrated R6b main `7c680c4`: build/typecheck and full suite pass 2,152 tests
 plus two existing skips across 108 files. No second general review for mechanical integration.
+
+Integrated-head CI 34021454352 exposed a macOS partial-child-output fixture race: its 25 ms
+timer could abort before any text was emitted. Delaying initial turn persistence reproduced
+the exact failure. The fixture now waits for actual first-tool entry with a bounded timeout,
+then aborts; delayed startup and the exact partial-output assertion remain. Suppressing retained
+child text still fails the assertion (mutation restored). Production code is unchanged; full
+build/typecheck and 2,152 tests plus two skips pass, including 62 focused lifecycle/provenance cases.
 
 ### R12e done — PR #148 records delivery gates
 
