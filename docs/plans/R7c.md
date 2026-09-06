@@ -86,3 +86,7 @@ CI. No daemon, new maintenance engine, R8 or R15i scope.
 - Initial full-test failure was only the new uncertainty frame assertion's line wrapping;
   normalizing whitespace retained the exact words in actual rendered output. No production
   behavior or timing threshold changed. Updated-main final checks/CI are recorded in the PR.
+- Integrated R10c main `7b6cb6a` (post-main CI `34044235154`, all three green).
+  Combined build/typecheck/full: 2,674 passed plus two skips / 154 files, four workers,
+  38.23 seconds; 123 focused pass again. Only documentation merge conflicts; both row
+  records and CI groups are retained. No second review for mechanical integration.
