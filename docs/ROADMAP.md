@@ -615,8 +615,8 @@ it to transports.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R8a *(done — [PR #184](https://github.com/agentkitai/agentrig/pull/184); [contract](plans/R8a.md))* | `agentrig acp`: speak the Agent Client Protocol (ACP, JSON-RPC over stdio, the editor↔agent standard Zed, Gemini CLI, Goose and OpenCode already implement) instead of a bespoke NDJSON protocol — session/new, prompt, permission requests and streamed content map onto the existing `TuiController`; AgentRig-specific requests (`state`, event stream, supervisor/memory) ride as documented extension methods; the mapping is zod-schema'd and versioned; one page of docs and a scripted client. Renunciation: no second bespoke protocol beside ACP | cli |
-| R8b | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
+| R8a *(done, PR #184; [contract](plans/R8a.md))* | `agentrig acp`: speak the Agent Client Protocol (ACP, JSON-RPC over stdio, the editor↔agent standard Zed, Gemini CLI, Goose and OpenCode already implement) instead of a bespoke NDJSON protocol — session/new, prompt, permission requests and streamed content map onto the existing `TuiController`; AgentRig-specific requests (`state`, event stream, supervisor/memory) ride as documented extension methods; the mapping is zod-schema'd and versioned; one page of docs and a scripted client. Renunciation: no second bespoke protocol beside ACP | cli |
+| R8b *(in progress; [contract](plans/R8b.md))* | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
 | R8c | OTEL sink (carried follow-up): an optional event-stream subscriber mapping `HarnessEvent`s to OTLP spans (session→trace, turn→span, tool→child span), behind `--otel-endpoint`; no dependency added when unused | core (subscriber) + cli |
 | R8d | Reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Define and test client authentication and Origin/Host validation before exposing it; loopback binding alone is not the authorization contract. Refuse non-loopback binding | cli |
 
@@ -787,7 +787,7 @@ planner mode or a fusion service.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R15a | `ask_user` tool: the model poses one structured question (prompt, 2–4 options, free-text allowed) and the turn suspends until answered — through the TUI queue interactively, through R8a/ACP when embedded, and in headless `run` through a `--answer-policy` (`fail` default, `first-option`, `file:<path>`). Emits `question.asked` / `question.answered`. The supervisor may answer on the model's behalf only through an explicit policy step, never by default | core + cli |
-| R15b *(done — [PR #185](https://github.com/agentkitai/agentrig/pull/185); [contract](plans/R15b.md))* | Post-edit diagnostics: after a successful `edit_file` / `write_file`, run the project's configured checker for that file's language (from `.agentrig/config`: e.g. `tsc --noEmit -p`, `ruff`, `go vet`), bounded by time and output bytes, and append the errors for the touched file to the tool result as `diagnostics` (schema-added). No LSP server, no daemon, no cross-file index — renunciation 7 holds; this is observation quality, the SWE-agent lesson | core |
+| R15b *(done, PR #185; [contract](plans/R15b.md))* | Post-edit diagnostics: after a successful `edit_file` / `write_file`, run the project's configured checker for that file's language (from `.agentrig/config`: e.g. `tsc --noEmit -p`, `ruff`, `go vet`), bounded by time and output bytes, and append the errors for the touched file to the tool result as `diagnostics` (schema-added). No LSP server, no daemon, no cross-file index — renunciation 7 holds; this is observation quality, the SWE-agent lesson | core |
 | R15c | Reasoning blocks: `ContentBlock` gains a `thinking` variant (schema-added, with provider-opaque `signature`/`id`); adapters round-trip it so interleaved reasoning and prompt caching are not silently lost; the TUI renders it collapsed under `/verbose`; compaction and export treat it as evictable first. Measure cache-hit delta on the E1 fixtures before and after | core + cli |
 | R15d *(in progress; [contract](plans/R15d.md))* | Remote MCP: Streamable HTTP transport beside stdio; OAuth 2.1 authorization-code flow reusing the R1 loopback login seam; `resources/*` and `prompts/*` surfaced as read-class tools and skills; R5d pinning applies to all three lists. Servers declared with a URL are `net`-class (R11a) for permission purposes | core + cli |
 | R15e *(done — [PR #186](https://github.com/agentkitai/agentrig/pull/186); [contract](plans/R15e.md))* | `agentrig review [--base <ref>] [--pr <n>]` and idle TUI `/review`: the M6 reviewer provides bounded advisory file:line findings over captured text hunks. Explicit `--comment` uses authorized `gh`; no tests, edits or automatic posting. Tracked-only default, unsupported/binary/oversized patches and configured Git filters refuse; no second review engine | cli + supervisor |
@@ -940,7 +940,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 8 | R10d (done, PR #171 + repair #173) → R10a (done, PR #174) → R10b (done, PR #177) → R10c (done, PR #181) | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
 | 9 | R9a (done, PR #175) → R9b (done, PR #180) → R9c (done, PR #183) | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
 | 10 | R7a (done, PR #176 + repair #178) → R7b (done, PR #179) → R7c (done, PR #182) | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
-| 11 | R8a (done, PR #184) → R8b → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
+| 11 | R8a (done, PR #184) → R8b (in progress) → R8c → R8d | Reusable control transport on the editor standard, MCP serving, telemetry, then an authenticated local web client. |
 | Repair (done) | H7a (#161) → H7b (#164) | Correctness defects (#116, #95) delivered with green post-merge CI. |
 | 12 | R15b (done, PR #185) → R15a (after ACP) → R15c | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
 | 13 | R15d (in progress) / R15e (done, PR #186) → R15f → R15g | Independent interop and review lanes; R15d follows completed R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
@@ -1239,5 +1239,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R9c polish: persist each RUNNING phase transition so a hard-killed wrapper's partial
   summary names the latest phase; terminal summaries are already accurate. Pin the broken
   control's regression-failure reason in addition to its required overall FAIL outcome.
+- R8b polish: preserve Unicode code-point boundaries when splitting very long advisory
+  task blocks, optimize bounded partial-frame concatenation, and consider a fixed
+  non-sensitive stderr notice for out-of-band SDK errors. Completed-run answer
+  overflow, missing-usage labeling and notification-byte accounting were fixed in
+  R8b, not deferred; the incomplete independent review remains explicitly recorded.
 - R15e polish: distinguish safe fixed refusal categories for malformed flags and policy
   denials without echoing raw Git, provider, path or credential-bearing error content.

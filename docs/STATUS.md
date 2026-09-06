@@ -49,6 +49,23 @@ independent review remain. [Contract and limits](plans/R15d.md).
 
 Root verified main `eead687` with CI34051436203 and scripted structure34051436058.
 [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/186#issuecomment-5561285218).
+### R8b in progress — bounded MCP server
+
+[Contract](plans/R8b.md): four tools over exact official SDK 2.0.0 modern/legacy
+stdio, fixed trusted configuration, actual controller and advisory client tasks.
+Pre-SDK capacity reservations survive physical writes and cancellation cleanup.
+Actual modern client, existing core 2024 client/built CLI, permission and read
+controls are under verification. The single independent review ended INCOMPLETE;
+its material finding was reproduced and fixed, with bounded author closure recorded
+in [the plan](plans/R8b.md). No further broad review. Final integrated build/typecheck
+and Docker-enabled full suite pass: 2,794 tests plus two existing skips /168 files,
+four workers, 50.13 seconds. Four exact-head CI gates remain; root owns merge.
+
+R8a final receipt: main `0493b09`, CI `34049720509` and structure `34049720468`
+all green. [Receipt](https://github.com/agentkitai/agentrig/pull/184#issuecomment-5561091432).
+Earlier R8a failure/integration notes below remain historical, not current gate state.
+
+### R15e done — PR #186; all four post-main checks green
 
 CLI and idle TUI share the existing supervisor reviewer with an explicit diff mode,
 bounded text capture and validated hunk locations. No tests, edits, automatic comments
@@ -61,7 +78,8 @@ Final ACP-integrated build/typecheck pass; unchanged-snapshot full suite passes
 2,780 plus two existing skips /165 files with actual Linux containers (48.81s).
 The initial scoped-copy cancellation regression was fixed, not dismissed as timing;
 its detected/restored negative control and full review findings are retained in the plan.
-Exact-head hosted CI remains pending.
+Exact-head and post-main checks passed. Main `eead687`: CI `34051436203` and
+scripted-structure `34051436058` all green, independently verified by root.
 
 ### R8a done — PR #184; all four post-main checks green
 
@@ -86,7 +104,7 @@ head and merged main `0493b09` passed all four checks (CI `34049720509`, structu
 R10c is fully done via PR #181, post-main CI `34044235154`;
 [final receipt](https://github.com/agentkitai/agentrig/pull/181#issuecomment-5560486475).
 
-### R15b done — PR #185; all four post-main checks green
+### R15b done — PR #185, all four post-main checks green
 
 Configured literal checkers follow real builtin edits; private changed-byte receipts,
 exclusive edit/checker pairs and internal audited dispatch preserve permission/sandbox
