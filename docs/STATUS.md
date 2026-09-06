@@ -35,6 +35,26 @@ the old blocklist. Strict-schema and equal-precedence negative mutations also fa
 restored. Final build/typecheck/tests and exact-head three-platform CI are required before merge;
 post-merge CI gates the next merge. Optional review refinements are at ROADMAP's end.
 
+### R5d implemented — PR #144 records delivery gates
+
+CLI run/TUI now persist MCP tool-definition baselines in trusted user state, scoped by canonical
+config path and server name. First use is explicitly trust-on-first-use, not a safety assessment.
+Changed names, descriptions or input schemas require exact before/after consent independent of
+ordinary allow/YOLO and TUI standing answers. Unattended calls refuse; changes after advertisement
+or during approval require reconnection. Bounded pin reads, complete-list validation and locked
+CAS preserve prior approvals on errors or stale reviews. MCP tools remain `exec`; sandbox limits
+are unchanged. See [R5d contract](plans/R5d.md) for the SDK trusted-host seam and attestation limits.
+
+One bounded Claude review `fc691d69-5cc4-4e35-8b1f-92ac33e9da68` approved with no material findings,
+independently passing typecheck, 42 MCP tests, the TUI consent test and 1,981 tests plus two skips.
+Missing-callback and stale-advertisement mutations failed their named core controls and were
+restored. The CLI adapter independently fails closed on absent user interaction. Real Node stdio
+server tests use an independent effect marker; TUI tests show the exact delta and reject standing
+grants. Integrated with R5e main `26e78ec`: build/typecheck and 2,006 tests plus two skips (98 files)
+pass. Previous head `776f9d2` passed all three platforms in CI 34016345598; updated-head and
+post-merge CI remain required before the next merge. PR #144 holds final receipts. Optional polish
+is at ROADMAP's end, not additional release subdivisions.
+
 ### R6e complete (PR #140)
 
 Final head `77a8814`, merge `2a3aee8`, PR CI 34013775380 and post-merge CI 34014007805 passed all
