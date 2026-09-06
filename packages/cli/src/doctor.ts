@@ -5,10 +5,11 @@ import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { inspectPackages } from "./packages.js";
 import { promisify } from "node:util";
-import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue } from "@agentkitai/agentrig-core";
+import { ChatGPTTokens, decodeJwtClaims, tokensFromEnvValue, probeProvider, type ModelProvider } from "@agentkitai/agentrig-core";
 import { parseMcpConfigText } from "./agent-builder.js";
 import { parseConfigText, resolveConfig, type ConfigFile, type ConfigValues } from "./config.js";
-import { DEFAULT_ANTHROPIC_MODEL, resolveProviderEntries } from "./provider.js";
+import { DEFAULT_ANTHROPIC_MODEL, resolveProviderEntries, buildRoleProvider, type ProviderOptions, type ProviderHooks } from "./provider.js";
+import { providerProbeCachePath, providerProbeFingerprint, writeProviderProbe } from "./provider-probe-cache.js";
 import { parseTrustText, resolveProjectBoundary, type ProjectBoundary } from "./trust.js";
 
 const execFileAsync = promisify(execFile);
@@ -16,6 +17,7 @@ const OPAQUE_TOKEN_MAX_AGE_MS = 45 * 60_000;
 
 export interface DoctorCliValues extends Partial<ConfigValues> {
   profile?: string;
+  probe?: boolean;
 }
 
 export interface DoctorGitState {
@@ -47,6 +49,9 @@ export interface DoctorOptions {
   stdoutTTY?: boolean;
   cli?: DoctorCliValues;
   probes?: Partial<DoctorProbes>;
+  /** Trusted test/embedder seam; never constructed/called by ordinary doctor. */
+  probeFactory?: (options: ProviderOptions, hooks: ProviderHooks) => ModelProvider;
+  probeSignal?: AbortSignal;
 }
 
 export interface DoctorResult {
@@ -543,6 +548,38 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   checks.push(stdinTTY && stdoutTTY
     ? line("pass", "tty", "stdin TTY yes; stdout TTY yes; interactive TUI is available")
     : line("skip", "tty", `stdin TTY ${stdinTTY ? "yes" : "no"}; stdout TTY ${stdoutTTY ? "yes" : "no"}; headless-only, use agentrig run`));
+
+  if (cli.probe === true) {
+    if (configInvalid || checks.some(check => check.status === "fail" && (check.label.startsWith("config:") || check.label.startsWith("providers:") || check.label === "credentials")) || boundary?.userStateSafe !== true) {
+      checks.push(line("fail", "probe", "not started: fix configuration/credentials and use a safe user state directory first"));
+    } else {
+      checks.push(line("pass", "probe:limits", "explicit potentially billable probe: at most 5 outer streams, 256 requested output tokens each, 30s local deadline; transient retries disabled, ChatGPT may refresh auth/retry one 401; not a hard remote billing cap"));
+      try {
+        const providerOptions: ProviderOptions = { provider: String(effective.provider), model: String(effective.model), modelExplicit: true,
+          ...(effective.baseUrl === undefined ? {} : { baseUrl: effective.baseUrl }),
+          ...(effective.contextWindow === undefined ? {} : { contextWindow: effective.contextWindow }),
+          ...(effective.reasoningEffort === undefined ? {} : { reasoningEffort: effective.reasoningEffort }),
+          ...(effective.providers === undefined ? {} : { providers: effective.providers }),
+          ...(effective.roles === undefined ? {} : { roles: effective.roles }),
+          providerOverride: cli.provider !== undefined || cli.model !== undefined || cli.baseUrl !== undefined || env.AGENTRIG_MODEL !== undefined };
+        const resolved = resolveProviderEntries(providerOptions); const entry = resolved.entries[resolved.roleNames.main]!;
+        const fingerprint = providerProbeFingerprint(entry, env);
+        const provider = options.probeFactory?.(providerOptions, { probe: true, env }) ?? buildRoleProvider(providerOptions, "main", { probe: true, env });
+        const report = await probeProvider(provider, { ...(options.probeSignal === undefined ? {} : { signal: options.probeSignal }), now: () => now });
+        checks.push(line("pass", "probe:observations", `tools=${report.tools}; parallelTools=${report.parallelTools}; promptedSchema=${report.promptedSchema}; nativeStrictness=unknown; caching=${report.caching}; cacheReporting=${report.cacheReporting}; empirical samples, not guarantees`));
+        checks.push(line("pass", "probe:usage", `${JSON.stringify(report.usage)}; reported aggregate only; complete=${report.usageComplete}; streams=${report.streams}; observed retries=${report.retries}; missing usage is unknown, not zero cost`));
+        if (fingerprint === undefined || fingerprint !== providerProbeFingerprint(entry, env)) {
+          checks.push(line("skip", "probe:cache", "credential identity unavailable or changed during probe; observations not cached"));
+        } else {
+          await writeProviderProbe(providerProbeCachePath(home), fingerprint, report);
+          checks.push(line("pass", "probe:cache", "stored local advisory observations for this exact configuration, 24h expiry; unknown dimensions retain unverified configured fallback"));
+        }
+      } catch {
+        // Provider exceptions may contain credential-bearing URLs/output. Never echo them.
+        checks.push(line("fail", "probe", "probe construction, observation or cache write failed; no raw provider error is printed"));
+      }
+    }
+  }
 
   return {
     lines: checks.map((check) => `${check.status} ${check.label} — ${check.detail}`),

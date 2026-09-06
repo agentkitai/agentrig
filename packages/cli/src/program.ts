@@ -427,7 +427,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
 
   program
     .command("doctor")
-    .description("Diagnose configuration, credentials, project state, and local prerequisites (read-only)")
+    .description("Diagnose local configuration read-only; --probe explicitly runs potentially billable provider samples")
+    .option("--probe", "run bounded potentially billable provider conformance samples and cache local observations")
     .option("-p, --provider <provider>", "provider override to diagnose")
     .option("-m, --model <model>", "model override to diagnose")
     .option("--base-url <url>", "server base URL override to diagnose (OpenAI-compatible servers; also honoured by anthropic and openai-chatgpt entries)")
