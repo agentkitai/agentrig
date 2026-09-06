@@ -74,6 +74,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Current build's extension receipts, not replayed authorization or repeated activation. */
+  extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
   /** Trusted host opt-in for this run only; unambiguous explicit hook ids, never tool grants. */
   hookInstructionDelegations?: readonly string[];
   provider: ModelProvider;
@@ -449,6 +451,10 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext }] }];
       }
 
+      for (const extension of config.extensions?.loaded ?? []) {
+        await emit({ type: "extension.loaded", name: extension.name, path: extension.path, surfaces: extension.surfaces });
+      }
+      for (const extension of config.extensions?.failed ?? []) await emit({ type: "extension.error", ...extension });
       if (parent === undefined) grantTaskId = config.permissionGrants?.beginRun(id);
       await config.permissionGrants?.flush(emit);
       if ((config.hookInstructionDelegations?.length ?? 0) > 128) throw new Error("at most 128 hook instruction delegations per run");

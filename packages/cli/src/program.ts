@@ -245,6 +245,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--subagent-max-turns <n>", "turn budget for each subagent", "15")
       .option("--subagent-max-children <n>", "subagents one session may run in total", "8")
       .option("--skills <dir>", "directory of markdown skills; earlier dirs shadow later (repeatable)", collect, [])
+      .option("--extension <path>", "trust and activate a host-code .mjs extension with required sidecar (repeatable; sandbox none only)", collect, [])
+      .option("--no-extension-discovery", "do not activate trusted-project .agentrig/extensions host code")
       .option(
         "--skill-discovery",
         "override config and auto-load .agentrig/skills from the trusted project root and home",

@@ -103,6 +103,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   controller.attach(built.agent);
   controller.setSkills(built.skills);
+  controller.setCommands(built.commands ?? []);
   {
     // The same root the agent's own store writes to; a separate instance because the store is
     // per-agent and forks/trees are read-mostly operations over the directory.
