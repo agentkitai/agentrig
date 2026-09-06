@@ -1,23 +1,24 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06. Implemented through R6e; closing PR records delivery gates. R6d, R4a–R4c, H1–H6 and E1–E3 complete in PRs #118–#139.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06. Committed vision; implementation resumes with R13f. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete through PR #140.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
-supervisor and memory improve real task outcomes. Adding capabilities is conditional on that
-evidence. This revision changes planned work, not the implementation status of completed rows.
+supervisor and memory improve real task outcomes. The remaining roadmap is committed product
+scope, reaffirmed by the user on 2026-09-06. Evidence guides design, sequencing, defaults and
+benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
 | Complete | R4a–R4c: checkpoints and undo | PRs #135–#137 passed exact-head and post-merge CI; opt-in snapshots, guarded undo and supervisor restore |
 | Complete | H6: focused core extraction | PR #138 passed exact-head/post-merge three-platform CI and unchanged baseline traces |
-| Implemented | R6d–R6e: memory quality and promotion guardrails | R6d in PR #139; R6e closing PR records final review and exact-head/post-merge CI receipts |
-| Conditional | R6a–R6c: generated skills, after R6d–R6f hardening | Verified provenance and demonstrated memory benefit; skill benefit measured separately |
-| Backlog | R5, R7, R8, R9–R14 remainder and R6g | A named user need, prerequisites, and a measurable acceptance criterion justify activation |
+| Complete | R6d–R6f: memory quality, promotion guardrails and lifecycle | R6f delivered by H5; R6d/R6e in PRs #139/#140 with green PR and post-merge CI |
+| Next | R13f: corroborated supervisor progress | Forged changes cannot establish progress; drift uses checked worktree evidence |
+| Committed | R5, R6a–R6c/R6g, R7–R12, R13 remainder and R14 remainder | Dependency-ordered delivery under section 5; each row has observable acceptance checks |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
-measurement work from R9/R14 forward; H5 pulls R6f forward. No backlog row is authorized simply
-because the preceding row landed. Section 5 is the authoritative order; older implementation
+measurement work from R9/R14 forward; H5 pulls R6f forward. All remaining milestone rows are
+authorized; optional follow-ups remain at the end. Section 5 is the authoritative order; older implementation
 plans must be reconciled with it before work starts.
 
 This is the continuation of `PLAN.md` §6: what to build after M0–M7, chosen by studying what
@@ -36,9 +37,9 @@ this way — permissions decide before tools run — and each security-flavoured
 moves another decision out of the model's hands and into that structure.
 
 The roadmap is worked through reviewable changes, with dogfooding where useful. Start from a
-fresh branch, implement the activated scope, run appropriate checks, update STATUS, and open a
-PR. Regression tests remain network-free; E3 explicitly requires separately budgeted live runs.
-Large rows may need several PRs. Section 5 defines validation and activation gates.
+fresh branch, implement the assigned row, run appropriate checks, update STATUS, and open a
+PR. Regression tests remain network-free; new live comparisons require separately agreed budgets.
+Use one PR per row, without recursive submilestones. Section 5 defines sequencing and delivery gates.
 
 Rules that bind every milestone here, restated because each one has already been violated once
 this project and each violation cost a day:
@@ -497,9 +498,9 @@ Mutation: dropping the dirty-worktree guard fails a named test.
 
 ### R5 — Extensions and packages
 
-**Conditional backlog.** H6 precedes extension lifecycle work. Activate a minimal API only for
-a concrete extension use case; packaging and distribution need separate demonstrated demand.
-`docs/plans/R5.md` is a retained draft, not an instruction to start this band.
+**Committed expansion.** H6 is complete. Manifest validation precedes extension/package loading;
+the API and exception isolation precede distribution. Reconcile the retained `docs/plans/R5.md`
+draft with section 5 and current interfaces when its row starts.
 
 *Evidence: pi's whole ecosystem (permission gates, plan modes, sub-agents, editors — all
 third-party); dsh's plugins. AgentRig has the hook points since M7a but only compiled-in wiring
@@ -519,7 +520,7 @@ throwing extension's session finishes green with the error event in the log; the
 installer refuses anything with an install script (test with a booby-trapped fixture). Mutation:
 removing the isolation try/catch fails the crash test.
 
-Renunciation: **no extension marketplace, no auto-update.** If R5c is activated, its initial
+Renunciation: **no extension marketplace, no auto-update.** R5c's initial
 sources are local directories and npm tarball files, as the row specifies. Prefer a maintained
 archive parser with explicit limits and validation over the R5 draft's custom tar reader;
 dependency avoidance alone does not justify owning a security-sensitive parser.
@@ -527,8 +528,9 @@ dependency avoidance alone does not justify owning a security-sensitive parser.
 ### R6 — Memory → skills: the compounding bridge
 
 **Hardening before generation.** H3–H5 and R6d–R6f precede R6a–R6c; H5 owns the early R6f
-implementation, so that work is not repeated. E3 must demonstrate useful memory behavior first.
-R6g remains conditional. Two session references alone are not independent evidence (H4).
+implementation, so that work is not repeated. These prerequisites are complete; R5e precedes
+generated-skill loading. E3's inconclusive utility does not block implementation. R6g follows
+loop closure. Two session references alone are not independent evidence (H4).
 
 *Hypothesis: recurring, independently supported procedures can become useful reusable skills.
 The existing citation-count gate is insufficient. H4 supplies evidence eligibility, and a
@@ -553,8 +555,8 @@ hardened memory without generated skills must establish benefit before generatio
 
 ### R7 — Scheduler and heartbeat
 
-*Candidate use cases: scheduled dream, memory lint, or a bounded PR check. Activate only after
-the task proves useful manually and H1/H5 establish its execution and maintenance boundaries.*
+*Initial use cases: scheduled dream, memory lint, or a bounded PR check. H1/H5 establish the
+execution and maintenance boundaries; unattended permission and failure paths need explicit tests.*
 
 | Row | Deliverable | Package |
 |---|---|---|
@@ -578,7 +580,7 @@ it to transports.*
 | R8a | `agentrig rpc`: newline-delimited JSON over stdio — requests (`submit`, `answerPermission`, `abort`, `state`) and the event stream out; the protocol is zod-schema'd and versioned; one page of docs with an example client | cli |
 | R8b | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
 | R8c | OTEL sink (carried follow-up): an optional event-stream subscriber mapping `HarnessEvent`s to OTLP spans (session→trace, turn→span, tool→child span), behind `--otel-endpoint`; no dependency added when unused | core (subscriber) + cli |
-| R8d | Conditional reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Define and test client authentication and Origin/Host validation before activation; loopback binding alone is not the authorization contract. Refuse non-loopback binding | cli |
+| R8d | Reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Define and test client authentication and Origin/Host validation before exposing it; loopback binding alone is not the authorization contract. Refuse non-loopback binding | cli |
 
 Acceptance: an RPC round-trip test drives a full permission-ask cycle over pipes; the MCP server
 answers `tools/list` and executes `run_task` against the fake provider; OTEL mapping is tested
@@ -590,7 +592,7 @@ tests make.
 ### R9 — Trajectory export and replay-as-eval
 
 **Measurement core pulled forward into E1–E3.** Reuse those task definitions, checks and metrics;
-do not create a second evaluator. Remaining export formats and convenience commands are backlog.
+do not create a second evaluator. Remaining export formats and convenience commands are committed.
 Fresh runs require pinned, isolated workspaces, not just replayed user turns against today's tree.
 
 *Evidence: Hermes exports ShareGPT for fine-tuning; dsh ships a "Minimal" benchmark preset.
@@ -601,8 +603,8 @@ regression suite for the harness itself.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R9a | `sessions export <id> --format sharegpt\|jsonl\|md`: transcripts from the event log with explicit export redaction and tests for credentials in prompts, commands and tool outputs. Do not assume raw logs are scrubbed. Document the intentional loss of redacted content | cli |
-| R9b | Optional `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` only when this interface is activated | supervisor + cli |
-| R9c | Optional nightly structure-regression job using the E1 eval-set definition and E2 reports, driven by a scripted provider. This validates mechanics, not task success or model quality; preserve E3's separate live evaluation lane | docs + .github |
+| R9b | `agentrig eval <session...> --against <profile>` convenience command over E's isolated task fixtures and independent outcome checks. The M6 rubric Grader supplies advisory analysis; print per-task and aggregate results with usage. Add `eval.result` with this interface | supervisor + cli |
+| R9c | Nightly structure-regression job using the E1 eval-set definition and E2 reports, driven by a scripted provider. This validates mechanics, not task success or model quality; preserve E3's separate live evaluation lane | docs + .github |
 
 Acceptance: secret-free exports round-trip to an identical message list; secret-bearing exports
 round-trip to the deliberately redacted representation. An eval
@@ -692,13 +694,13 @@ eval set is where its real precision gets measured.
 ### R14 — Acceptance contracts and evidence *(second pass)*
 
 **Independent outcome checks and evidence lanes are pulled forward into E1–E3.** The remaining
-plan fields, automatic evidence association and presentation are conditional UX work. A model
+plan fields, automatic evidence association and presentation are committed product work. A model
 grader's verdict cannot replace the independent checks used to establish task success.
 
 *Evidence: OpenHands's evidence-producing QA and Codex's independent reviewer, generalized by the
 second pass into "every completion claim maps to evidence". AgentRig's M6 reviewer and grader
 judge the trajectory; this points them at the OUTCOME. E1–E3 now establish those checks early;
-the rows below extend the product interface only when the need is demonstrated.*
+the rows below extend the product interface in the committed dependency order.*
 
 | Row | Deliverable | Package |
 |---|---|---|
@@ -773,40 +775,44 @@ feature list):
 
 ## 5. Sequencing and exit criteria
 
-The completed foundation is R1 → R1.5 → R2 → R3 → R3.5, plus R13e's fixtures. Completion records
-remain historical; newly discovered gaps are repaired explicitly in H rather than hidden by a
-`done` label. The current order is:
+The completed foundation is R1 → R1.5 → R2 → R3 → R3.5, R13e's fixtures, H1–H6, E1–E3,
+R4a–R4c and R6d–R6f. R6e closed in PR #140 with green exact-head and post-merge CI.
 
-**Implementation closeout (2026-09-06):** the activated rows through R6e are implemented. Each
-row's PR must carry green exact-head and post-merge CI before its delivery is complete. After
-the closing R6e gates, stop at the conditional boundary below: R6f is already done, E3 did not
-establish useful memory benefit, and no generated-skill/backlog activation or new live-run budget
-is automatic. The ordering below remains the historical dependency order, not a fresh work queue.
+**Committed continuation (user direction, 2026-09-06):** all remaining milestone rows are part
+of AgentRig's vision and will be implemented. There is no demand/evidence activation veto.
+Evidence still governs honest benefit claims and default enablement; generated skills remain
+opt-in until a separate comparison establishes benefit. E3 remains inconclusive, not rewritten.
+New live evaluation spending still needs an agreed budget, but does not block network-free
+implementation and verification. Optional polish remains at the literal end of this roadmap.
 
-1. **H1 → H2 → H3 → H4 → H5:** correct enforcement and evidence, stabilize memory lifecycle.
-2. **E1 → E2 → E3:** establish independent checks, instrument outcomes, publish the first real
-   comparison. Define tasks and tolerances before seeing the results.
-3. **R4a → R4b → R4c → H6:** recover from failed work and reduce core coupling before new lifecycle
-   machinery is introduced. E1's isolated fixtures do not depend on product-level undo.
-4. **R6d → R6e, with R6f already delivered by H5:** finish memory write-quality and promotion
-   hardening. Re-run the relevant memory comparisons before activating R6a → R6b → R6c.
-5. **Select backlog work by evidence:** each activation names the user problem, prerequisites,
-   bounded scope, and observable benefit in STATUS. There is no automatic R5-to-R14 release train.
+The following is the default delivery order, chosen for impact and dependencies. Arrows are
+order within a group, not new milestone identifiers. Independent rows may be implemented in
+parallel in separate Git worktrees; dependent rows wait for their prerequisites to merge.
 
-Known enforcement or data-loss defects can always interrupt this order. Security repairs do not
-wait for a feature's demand gate. Needed R5d/R5e or R12/R13 protections may be pulled forward
-independently of their surrounding feature bands.
+| Order | Rows | Reason / dependency |
+|---|---|---|
+| 1 | R13f; R5e; R5d | Repair known supervisor evidence weakness and establish manifest/tool-definition trust before expansion. These independent rows may run in parallel. |
+| 2 | R12e → R12a → R12b → R12c → R12d | Parsed-operation authorization before scoped grants, approval UI and delegated permissions. |
+| 3 | R13a → R13b → R13d → R13c | Track content provenance and principals before enforcing external-input permission restrictions. |
+| 4 | R14a → R14b → R14c → R14d remainder | Connect acceptance checks to evidence; reuse E's existing independent outcome lanes. |
+| 5 | R6a → R6b → R6c → R6g | Deliver the learning loop after completed memory hardening and R5e manifest validation. |
+| 6 | R5a → R5b → R5c | Extension lifecycle and failure handling before package distribution; reuse R5e schemas. |
+| 7 | R11a → R11b | Structured network access after permission/provenance foundations; preserve existing network-class compatibility. |
+| 8 | R10d → R10a → R10b → R10c | Probe provider behavior, preserve sequential traces, then add safe concurrency and isolated writers. |
+| 9 | R9a → R9b → R9c | Redacted export and evaluation interfaces over E, not a second evaluation engine. |
+| 10 | R7a → R7b → R7c | Bounded unattended execution using completed permission, lifecycle and reporting foundations. |
+| 11 | R8a → R8b → R8c → R8d | Reusable control transport, MCP serving, telemetry, then an authenticated local web client. |
 
-| Candidate | Evidence required to activate |
-|---|---|
-| R5a/R5b minimal extension API | A concrete integration currently requiring core edits; H6 complete and the host-code trust boundary documented |
-| R5c packaging | Real distribution needs beyond explicit local extension/skill paths; manifest validation ships before package activation |
-| R6a–R6c generated skills | H3–H5 and R6d–R6f complete, useful memory results, reviewable claim-level evidence; evaluate generated skills separately |
-| R7 scheduling | A recurring task already useful when invoked manually, with bounded execution and known failure reporting |
-| R8 RPC/MCP/web/OTEL | A named client or observability need; activate only the transport/sink required and define its security boundary |
-| R10 parallelism | Measured sequential latency bottleneck; safe effect ordering and isolated writers |
-| R11 network tools | A task that needs structured network access and an enforceable network policy |
-| R9/R12/R13/R14 remainder, R6g | A measured evaluation, permission, provenance or usability gap; reuse E rather than duplicating its machinery |
+Known enforcement or data-loss defects can interrupt this order. Record any necessary reorder
+and its dependency/impact rationale in STATUS; do not create recursively nested milestone IDs.
+Reconcile each retained implementation draft with current interfaces when that row starts.
+
+Delivery workflow: each item starts on a new branch from updated main, in its own worktree
+when parallel. Each item ends in its own PR merged to main. Before merging, update the branch
+against current main and run the checks on that exact head. Merge one PR at a time; verify
+post-merge main CI before the next merge. Parallel implementation does not waive integration
+validation. Use one bounded independent review per item, address material findings, and use
+focused follow-up checks for fixes rather than unbounded general review rounds.
 
 Exit criteria for active work: appropriate build/typecheck/regression checks pass; a named
 negative case fails without the fix; current guarantees and limitations are updated; and the
@@ -840,8 +846,8 @@ concise and place detailed implementation history in dated notes as it is mainta
 
 ## Follow-ups / nice to haves — not active prerequisites
 
-These do not block H5 or E1 and do not recursively create new milestones. Activate deliberately
-after the active sequence, unless new evidence demonstrates a safety or data-loss defect.
+These do not block the committed milestone sequence and do not recursively create new milestones.
+Address them after that sequence, unless new evidence demonstrates a safety or data-loss defect.
 
 - Improve repo-map breadth when the file list alone exceeds its byte cap (for example, directory
   summaries). Current truncation is explicit; the production 8 KiB budget is unchanged.
