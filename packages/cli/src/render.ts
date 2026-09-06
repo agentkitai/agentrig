@@ -71,6 +71,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
+    case "eval.result": return `${p} ${JSON.stringify(e.task)} ${e.outcome} (baseline ${e.baselineOutcome}) profile=${JSON.stringify(e.profile)} reportedTokens=${e.reportedTokens} usage=${e.usageComplete ? "complete" : "unknown"} advisory=${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"}`;
     case "turn.start":
     case "turn.end": return `${p} n=${e.n}`;
     case "turn.continued": return `${p} n=${e.n} from=${e.from} attempt=${e.attempt}/${e.maxAttempts} reason=${e.reason}`;
@@ -195,6 +196,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "eval.result": return `Evaluation ${e.task}: ${e.outcome} (baseline ${e.baselineOutcome}; advisory ${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"})`;
     case "auxiliary.usage": return e.final ? formatAuxiliaryUsage(e.report) : null;
     case "tool.call":
       return `⚒ ${toolSummary(e.name, e.input)}`;
