@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { z } from "zod";
@@ -8,7 +8,17 @@ import { createAgent, RulePolicy, SessionStore, HarnessEvent, ProviderSelectionI
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-async function fixture() { const root = await mkdtemp(join(tmpdir(), "agentrig-selection-")); roots.push(root); return { root, store: new SessionStore({ root: join(root, "logs") }) }; }
+async function fixture(alias = false) {
+  const temporary = await mkdtemp(join(tmpdir(), "agentrig-selection-")); roots.push(temporary);
+  let root = temporary;
+  if (alias) {
+    const target = join(temporary, "project"); await mkdir(target);
+    root = join(temporary, "alias"); await symlink(target, root, "junction");
+  }
+  // SpendLedger requires the trusted canonical root; OS temp paths can be aliases.
+  root = await realpath(root);
+  return { root, store: new SessionStore({ root: join(root, "logs") }) };
+}
 const caps = { tools: true, parallelTools: false, caching: false, contextWindow: 10 };
 const done = (model: string, called: string[]): ModelProvider => ({ id: "fixture", model, capabilities: caps,
   async *stream() { called.push(model); yield { type: "usage", usage: { input: 1, output: 1 } }; yield { type: "stop", reason: "end_turn" }; } });
@@ -51,8 +61,8 @@ it("legacy agents retain no selection fields; bounded metadata cannot be observe
     to: { entry: "entry", provider: "p", model: "m", effort: "high" } }).success).toBe(true);
 });
 
-it("a switched unmetered provider cannot bypass the original cap", async () => {
-  const f = await fixture(); const ledger = new SpendLedger(f.root); const calls: string[] = [];
+it.each([false, true])("a switched unmetered provider cannot bypass the original cap (temp alias=%s)", async alias => {
+  const f = await fixture(alias); const ledger = new SpendLedger(f.root); const calls: string[] = [];
   const a = meterProvider(done("a", calls), ledger, { segment: "fallback", boundedProvider: true, capMicros: 100,
     pricing: { inputUsdPerMTok: 1, outputUsdPerMTok: 1 } });
   let provider = a;
@@ -63,8 +73,8 @@ it("a switched unmetered provider cannot bypass the original cap", async () => {
   expect(() => agent.run("blocked", { cwd: f.root })).toThrow(); expect(calls).toEqual(["a"]);
 });
 
-it("incompatible opaque history refuses before metered admission and remains intact", async () => {
-  const f = await fixture(); const ledger = new SpendLedger(f.root); let fetched = 0;
+it.each([false, true])("incompatible opaque history refuses before metered admission and remains intact (temp alias=%s)", async alias => {
+  const f = await fixture(alias); const ledger = new SpendLedger(f.root); let fetched = 0;
   const block = { type: "thinking" as const, format: "anthropic" as const, text: "private", signature: "signed", replay: JSON.stringify({ type: "thinking", thinking: "private", signature: "signed" }) };
   const origin: ModelProvider = { id: "origin", model: "a", capabilities: caps, async *stream() {
     yield { type: "thinking", block }; yield { type: "stop", reason: "end_turn" };

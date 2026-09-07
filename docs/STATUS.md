@@ -16,6 +16,12 @@ and real Chromium pass. Exact integrated-head CI and delivery remain pending.
 After R16d integration: build/typecheck, 32 focused controls including actual Ink
 completion, full required-Docker (3,069 passed + two skips /193 files, 70.75s) and
 real Chromium pass. Original review remains the single frozen review; no repeat.
+Initial R15j PR CI34075001809 passed Linux/structure but failed macOS/Windows on
+two new ledger fixtures using non-canonical temporary roots. Explicit alias controls
+reproduced both exact failures; fixture-only realpath normalization restores them
+without weakening production trust checks or assertions. New-head gates pending.
+Repaired full required-Docker: 3,071 passed + two skips /193 files (66.98s),
+build/typecheck and Chromium pass; the original failed run is not rerun or hidden.
 
 ### R16d done — PR #200; all four post-main checks green
 
