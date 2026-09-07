@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink, link } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, rename, symlink, link } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -49,6 +49,35 @@ it("validates every selected manifest before any destination publication", async
   await writeFile(join(f.source, "extensions", "bad.json"), JSON.stringify({ name: "bad", version: "1", apiVersion: 1, surfaces: [] }));
   await writeFile(join(f.source, "skills", "guide.md"), "---\nallowed-tools: bash\n---\nno");
   await expect(addPackage(f)).rejects.toThrow(/allowed-tools/);
+});
+
+it.each(["skill.md", "Skill.md", "SKILL.MD", "sKiLl.Md"])("refuses nested marker %s before directory package publication", async marker => {
+  const f = await fixture(); await mkdir(join(f.source, "skills", "nested"));
+  await writeFile(join(f.source, "skills", "nested", marker), "---\nname: nested\n---\nNested content");
+  await expect(addPackage(f)).rejects.toThrow("nested package skill filename must be exactly SKILL.md");
+  await expect(readdir(join(f.projectRoot, ".agentrig"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(f.source, "skills", "nested", marker), "utf8")).toContain("Nested content");
+});
+
+it("refuses case-variant nested markers in archive installs before publication", async () => {
+  const f = await fixture(); const source = join(f.root, "case.tgz");
+  await writeFile(source, await archive([{ header: { name: "package/package.json" }, body: manifest },
+    { header: { name: "package/skills/nested/skill.md" }, body: "Nested skill" }]));
+  await expect(addPackage({ projectRoot: f.projectRoot, source })).rejects.toThrow("nested package skill filename must be exactly SKILL.md");
+  await expect(readdir(join(f.projectRoot, ".agentrig"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("installed package inspection refuses a changed nested marker with the same explicit casing diagnostic", async () => {
+  const f = await fixture(); await mkdir(join(f.source, "skills", "nested"));
+  await writeFile(join(f.source, "skills", "nested", "SKILL.md"), "Nested content");
+  const installed = await addPackage(f), directory = join(installed.destination, "skills", "nested");
+  // Use an intermediate name so this exercises a real spelling change on case-insensitive hosts too.
+  await rename(join(directory, "SKILL.md"), join(directory, "marker.tmp"));
+  await rename(join(directory, "marker.tmp"), join(directory, "skill.md"));
+  const result = await inspectPackages(f.projectRoot);
+  expect(result.packages).toEqual([]);
+  expect(result.errors.join()).toContain("nested package skill filename must be exactly SKILL.md");
+  expect(await readFile(join(directory, "skill.md"), "utf8")).toBe("Nested content");
 });
 
 it("rejects all nonempty scripts and runtime dependency declarations without running them", async () => {

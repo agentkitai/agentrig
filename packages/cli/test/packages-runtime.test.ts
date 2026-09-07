@@ -77,6 +77,29 @@ it("untrusted/disabled/tampered packages never load and sandbox refusal happens 
   await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("canonical nested markers and uppercase flat files actually load after trusted installation", async () => {
+  const f = await fixture(); await mkdir(join(f.source, "skills", "nested"));
+  await writeFile(join(f.source, "skills", "nested", "SKILL.md"), "---\nname: nested\n---\nNested content");
+  await writeFile(join(f.source, "skills", "flat.MD"), "---\nname: flat\n---\nFlat content");
+  const installed = await addPackage({ projectRoot: f.cwd, source: f.source });
+  await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await build(f)).skills).toEqual([]);
+  const built = await build(f, ["--trust"]);
+  expect(built.skills.find(skill => skill.name === "nested")).toMatchObject({ body: "Nested content", path: join(installed.destination, "skills", "nested", "SKILL.md") });
+  expect(built.skills.find(skill => skill.name === "flat")).toMatchObject({ body: "Flat content", path: join(installed.destination, "skills", "flat.MD") });
+  expect((await inspectPackages(f.cwd)).errors).toEqual([]);
+});
+
+it("refused nested casing cannot reach trusted package discovery or extension import", async () => {
+  const f = await fixture(); await mkdir(join(f.source, "skills", "nested"));
+  await writeFile(join(f.source, "skills", "nested", "skill.md"), "Nested content");
+  await expect(addPackage({ projectRoot: f.cwd, source: f.source })).rejects.toThrow("nested package skill filename must be exactly SKILL.md");
+  const built = await build(f, ["--trust"]);
+  expect(built.skills).toEqual([]); expect(built.commands).toEqual([]);
+  expect((await inspectPackages(f.cwd)).packages).toEqual([]);
+  await expect(readFile(f.sentinel)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("equal package names fail closed across packages while project roots win before home", async () => {
   const f = await fixture(); await addPackage({ projectRoot: f.cwd, source: f.source });
   await writeFile(join(f.source, "package.json"), JSON.stringify({ name: "second", version: "1", agentrig: { apiVersion: 1 } }));

@@ -156,6 +156,10 @@ function validate(files: File[]) {
   let skillBytes = 0;
   if (skillRoots.size > 1024) throw new Error("package skill root exceeds loader entry limit");
   for (const file of files) {
+    const nestedSkill = /^skills\/[^/]+\/(skill\.md)$/i.exec(file.path);
+    if (nestedSkill !== null && nestedSkill[1] !== "SKILL.md") {
+      throw new Error(`nested package skill filename must be exactly SKILL.md: ${file.path}`);
+    }
     if (/^extensions\/[^/]+\.mjs$/.test(file.path)) {
       const sidecar = files.find(other => other.path === file.path.slice(0, -4) + ".json");
       if (file.bytes.length > 1024 * 1024 || sidecar === undefined || sidecar.bytes.length > 16384) throw new Error(`extension module/sidecar missing or oversized: ${file.path}`);
