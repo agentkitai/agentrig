@@ -17,6 +17,8 @@ const positiveSetting = z
   .transform(String)
   .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, "must be a positive number");
 const integerSetting = positiveSetting.refine((value) => Number.isInteger(Number(value)), "must be a positive integer");
+/** The role runtime requires an exactly representable positive turn count. */
+export const SubagentTurnLimitSchema = positiveSetting.refine(value => Number.isSafeInteger(Number(value)), "must be a positive safe integer");
 const softSetting = z
   .union([z.string().min(1), z.number().finite()])
   .transform(String)
@@ -125,7 +127,7 @@ const ConfigValuesSchema = z
     dreamLimits: DreamLimitsSchema.optional(),
     mcpConfig: z.string().min(1).optional(),
     subagents: z.boolean().optional(),
-    subagentMaxTurns: positiveSetting.optional(),
+    subagentMaxTurns: SubagentTurnLimitSchema.optional(),
     subagentMaxChildren: positiveSetting.optional(),
     skills: stringList.optional(),
     extension: stringList.max(32).optional(),

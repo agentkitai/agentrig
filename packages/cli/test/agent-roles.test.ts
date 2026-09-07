@@ -7,6 +7,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SessionStore } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
+import * as providers from "../src/provider.js";
+import { buildAgent } from "../src/agent-builder.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -14,7 +16,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-it("actual trusted CLI role discovery reaches the child request and blocks bash despite YOLO", async () => {
+it.each([undefined, "2", "2.0"])("actual trusted CLI role discovery reaches the child request and blocks bash despite YOLO (turns=%s)", async turns => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-cli-roles-"))); roots.push(root);
   const cwd = join(root, "project"), home = join(root, "home"), logs = join(root, "logs");
   await mkdir(join(cwd, ".agentrig", "agents"), { recursive: true }); await mkdir(home);
@@ -42,7 +44,8 @@ it("actual trusted CLI role discovery reaches the child request and blocks bash 
   try {
     const address = server.address(); if (!address || typeof address === "string") throw Error("fixture address");
     await buildProgram({ config: { cwd, home } }).parseAsync(["run", "delegate inspection", "--trust", "--yolo",
-      "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`, "--max-turns", "3"], { from: "user" });
+      "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`, "--max-turns", "3",
+      ...(turns === undefined ? [] : ["--subagent-max-turns", turns])], { from: "user" });
     expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(0);
     expect(children).toBe(2); expect(parents).toBe(2);
     const childRequests = requests.filter(r => JSON.stringify(r.messages.filter((m: any) => m.role === "system")).includes("ROLE FIXTURE"));
@@ -55,3 +58,24 @@ it("actual trusted CLI role discovery reaches the child request and blocks bash 
     expect(renderEvent(spawn!)).toContain("role=reader"); expect(renderChatEvent(spawn!)).toContain("reader");
   } finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
 }, 30_000);
+
+it.each(["flag", "config-number", "config-string"])("actual CLI refuses fractional subagent turns before provider construction (%s)", async source => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-turn-limit-"))); roots.push(root);
+  const cwd = join(root, "project"), home = join(root, "home");
+  await mkdir(join(cwd, ".agentrig"), { recursive: true }); await mkdir(home);
+  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ subagents: true,
+    ...(source === "flag" ? {} : { subagentMaxTurns: source === "config-number" ? 1.5 : "1.5" }) }));
+  vi.spyOn(process, "cwd").mockReturnValue(cwd);
+  const construct = vi.spyOn(providers, "buildProviders").mockImplementation(() => { throw Error("PROVIDER_CONSTRUCTION_CANARY"); });
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  await buildProgram({ config: { cwd, home } }).parseAsync(["run", "task", "--trust", "--provider", "openai", "--model", "fixture",
+    ...(source === "flag" ? ["--subagent-max-turns", "1.5"] : [])], { from: "user" });
+  expect(process.exitCode).toBe(1); expect(construct).not.toHaveBeenCalled();
+  expect(error.mock.calls.flat().join("\n")).toMatch(/integer/);
+});
+
+it.each(["1.5", "0", "NaN", "Infinity", "9007199254740992"])("direct builder refuses invalid subagent turn count %s before providers", async subagentMaxTurns => {
+  const construct = vi.spyOn(providers, "buildProviders").mockImplementation(() => { throw Error("PROVIDER_CONSTRUCTION_CANARY"); });
+  await expect(buildAgent({ provider: "openai", model: "fixture", subagentMaxTurns })).rejects.toThrow(/integer/);
+  expect(construct).not.toHaveBeenCalled();
+});

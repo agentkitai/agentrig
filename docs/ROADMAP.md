@@ -1358,9 +1358,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
-- R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
-  subagent turn flags consistently at CLI parsing. Current role spawning fails closed
-  when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R15h polish (turn-count validation implemented, delivery pending): CLI/config/builder
+  reject fractional subagent turn limits before provider construction, preserving positive
+  safe integers and the default. [Contract](plans/subagent-integer-turn-limits.md).
+  Clearer canonical role-directory refusal diagnostics remain queued; no limit is widened.
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.

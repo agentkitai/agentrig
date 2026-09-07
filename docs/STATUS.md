@@ -1,5 +1,13 @@
 # Status
 
+Active independent follow-up: reject fractional subagent turn limits before provider
+construction. [Contract](plans/subagent-integer-turn-limits.md). Eight new controls
+fail before the correction; all61 focused CLI/config tests pass afterward, including
+actual role spawning with omitted/default,2 and2.0 limits. Other numeric settings and
+role-directory diagnostics are unchanged. Build/review/full/hosted gates pending.
+Base300c5e2 is the parent-confirmed green slash-suggestions delivery; earlier checkpoint
+text below is historical, not a prohibition on this authorized follow-up.
+
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
 structure34097862218 is pending. Slash suggestions PR#213 integrates that main.
