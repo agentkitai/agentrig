@@ -10,6 +10,7 @@ import {
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
 import { useRawInput } from "./raw-input.js";
+import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js";
 
 /**
  * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
@@ -29,12 +30,15 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
   error: "red",
 };
 
-export function App({ controller, onMounted }: { controller: TuiController; onMounted?: () => void }): JSX.Element {
+export function App({ controller, onMounted, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; history?: PromptHistory }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   const [clock, setClock] = useState(Date.now());
+  const historyRef = useRef<PromptHistory>(suppliedHistory ?? new PromptHistory());
+  const recall = useRef(new PromptRecall());
+  const completionHint = useRef("");
   // Startup notices are already in the initial controller snapshot. Never acknowledge them
   // before this actual React/Ink mount (a timer or queued controller line is not readiness).
   const mounted = useRef(false);
@@ -100,6 +104,33 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
     const previewAtInput = controller.snapshot().pending?.scope;
     const questionAtInput = controller.snapshot().question;
+    const composerAction = (action: OrdinaryInputAction): void => {
+      const current = controller.snapshot();
+      const protectedInput = questionAtInput !== null || current.question !== null || current.escalation !== null || current.pending !== null;
+      const edit = (text: string): void => { recall.current.reset(); completionHint.current = ""; buf.set(text); };
+      if (action.type === "up" || action.type === "down") {
+        if (!protectedInput) { completionHint.current = ""; buf.set(recall.current.move(action.type === "up" ? -1 : 1, buf.value, historyRef.current.values())); }
+      } else if (action.type === "tab") {
+        if (!protectedInput) { const result = completePrompt(buf.value, controller.completionNames()); recall.current.reset(); completionHint.current = result.hint; buf.set(result.text); }
+      } else if (action.type === "newline") {
+        if (!protectedInput) edit(buf.value + "\n");
+      } else if (action.type === "backspace") edit(buf.value.slice(0, -1));
+      else if (action.type === "append") edit(buf.value + action.text);
+      else if (action.type === "enter") {
+        const line = buf.value;
+        if (questionAtInput !== null) buf.set("", () => controller.answerQuestionText(line, questionAtInput));
+        else if (current.escalation !== null) buf.set("", () => controller.answerEscalation(line));
+        else if (!protectedInput) {
+          const trailing = /\\+$/.exec(line)?.[0].length ?? 0;
+          if (trailing % 2 === 1) { edit(line.slice(0, -1) + "\n"); return; }
+          recall.current.reset(); completionHint.current = "";
+          buf.set("", () => {
+            historyRef.current.remember(line);
+            void controller.submit(line).then(keepGoing => { if (!keepGoing) exit(); });
+          });
+        }
+      }
+    };
     const permissionAction = (action: OrdinaryInputAction): void => {
       const pending = controller.snapshot().pending;
       if (pending === null) return;
@@ -129,7 +160,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
         if (segment.text === "") continue;
         if (segment.pasted) {
           // The decoder normalises CRLF across chunks; every other payload byte is preserved.
-          if (state.pending === null) buf.set(buf.value + segment.text);
+          if (controller.snapshot().pending === null) { recall.current.reset(); completionHint.current = ""; buf.set(buf.value + segment.text); }
           continue;
         }
 
@@ -141,22 +172,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
             else exit();
           } else if (controller.snapshot().pending !== null) {
             permissionAction(action);
-          } else if (action.type === "backspace") {
-            buf.set(buf.value.slice(0, -1));
-          } else if (action.type === "enter") {
-            const line = buf.value;
-            if (questionAtInput !== null) buf.set("", () => controller.answerQuestionText(line, questionAtInput));
-            else if (state.escalation !== null) buf.set("", () => controller.answerEscalation(line));
-            else {
-              buf.set("", () => {
-                void controller.submit(line).then((keepGoing) => {
-                  if (!keepGoing) exit();
-                });
-              });
-            }
-          } else if (action.type === "append") {
-            buf.set(buf.value + action.text);
-          }
+          } else composerAction(action);
         }
       }
       // There is deliberately no timer while a paste or possible split marker remains open. Even a
@@ -176,6 +192,19 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
       return;
     }
 
+    // A terminal may coalesce supported Shift-Enter with printable bytes on either
+    // side. Decode only those exact sequences; the remainder is literal paste-like
+    // text, never a stream of Enter/approval actions. Submission still needs its
+    // own input event and the InputBuffer quiet point.
+    const shiftedEnter = /\u001b\[(?:13;2u|27;2;13~)/g;
+    if (shiftedEnter.test(raw)) {
+      const current = controller.snapshot();
+      if (current.pending !== null) return;
+      const protectedInput = questionAtInput !== null || current.question !== null || current.escalation !== null;
+      composerAction({ type: "append", text: raw.replace(shiftedEnter, protectedInput ? "" : "\n").replace(/\r\n?/g, "\n") });
+      return;
+    }
+
     // a permission prompt takes the keyboard: answering it is the only useful thing to do
     if (controller.snapshot().pending !== null) {
       if (key.return) permissionAction({ type: "enter" });
@@ -185,33 +214,16 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
       return;
     }
 
-    if (questionAtInput !== null && key.return) {
-      const answer = buf.value;
-      buf.set("", () => controller.answerQuestionText(answer, questionAtInput));
-      return;
-    }
-
-    // Unlike a permission decision, an escalation needs a real sentence. It uses the normal input
-    // buffer but bypasses submit(), which correctly refuses ordinary new tasks while a turn runs.
-    if (state.escalation !== null && key.return) {
-      const answer = buf.value;
-      buf.set("", () => controller.answerEscalation(answer));
-      return;
-    }
-
+    if (key.upArrow || key.downArrow || key.tab) { composerAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
+    if (key.return && key.shift) { composerAction({ type: "newline" }); return; }
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as
       // the text ahead of it, so "the user pressed enter" is not proof that stdin has gone quiet
-      const line = buf.value;
-      buf.set("", () => {
-        void controller.submit(line).then((keepGoing) => {
-          if (!keepGoing) exit();
-        });
-      });
+      composerAction({ type: "enter" });
       return;
     }
     if (key.backspace || key.delete) {
-      buf.set(buf.value.slice(0, -1));
+      composerAction({ type: "backspace" });
       return;
     }
     if (char === undefined || char === "" || key.ctrl || key.meta) return;
@@ -221,10 +233,10 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
     // Enter is its own chunk and is handled above; a paste is kept whole, line breaks and all —
     // `fitToRows` measures rendered rows, so a multi-line buffer draws correctly.
     if (/[\r\n]/.test(char)) {
-      buf.set(buf.value + char.replace(/\r\n?/g, "\n"));
+      composerAction({ type: "append", text: char.replace(/\r\n?/g, "\n") });
       return;
     }
-    buf.set(buf.value + char);
+    composerAction({ type: "append", text: char });
   });
 
   // `||`, not `??`: Ink's own layout notes that `columns` is undefined OR ZERO off a TTY, and a
@@ -321,7 +333,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
           sized to hold
         */}
         <Text dimColor wrap="truncate-end">
-          {statusLine(state, clock)}
+          {state.pending === null && state.question === null && state.escalation === null && completionHint.current ? completionHint.current : statusLine(state, clock)}
         </Text>
       </Box>
     </Box>
