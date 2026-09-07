@@ -1532,3 +1532,11 @@ need an explicit budget; neither prevents continuing other actionable entries.
   unrelated changes (including tracked wiki edits), and refuse uncertain/unjoined
   writers. Do not broaden exclusions, silently adopt hook changes, or skip ingestion.
   This is an end-of-roadmap follow-up, not an added R17 gate or subrow.
+- [ ] Fixture temporary-root ancestry isolation ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
+  detect unexpected ancestor Git markers before fixtures grant trust or write state.
+  Private controls disprove the original `.agentrig`-only explanation; the historical
+  cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
+- [ ] Package-cap fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240)):
+  investigate measured slow phases and ensure owned work settles before cleanup.
+  Preserve real aggregate-cap inputs/assertions; do not blindly increase deadlines,
+  skip checks, or claim an intermittent CI failure's root cause is known.
