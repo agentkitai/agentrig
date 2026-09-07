@@ -7,7 +7,8 @@ semantics. Continuation child `b9109d9f` waited roughly 77 minutes for an
 `attempt_log` approval while its parent conductor `8fbde1a3` stayed pending on
 `subagent`, after the operator ended its monitoring turn
 ([feel #236](https://github.com/agentkitai/agentrig/issues/236)).
-The operator approved that scoped write and resumed active recursive child
+The operator approved the one-time write-outside-cwd expansion (no standing
+grant) and resumed active recursive child
 monitoring; this was an outside-train operator failure, not a model halt or a
 reason to weaken security. A saved status script alone is not unattended monitoring.
 See [train operations](TRAIN-OPERATIONS.md) and the [PTY protocol](TUI-SETTINGS.md#driving-the-tui-from-a-pty).

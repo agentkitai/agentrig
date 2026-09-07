@@ -15,8 +15,11 @@ operating the train:
 - Unresolved `permission.decision` asks and their `permission.request` inputs.
   Inspect the exact command/effects before approving a scoped request through
   the TUI; never auto-approve unknown effects or change policy to avoid prompts.
-- `question.asked` without its matching `question.answered`. Questions have a
-  bounded response window; a timed-out question is not still awaiting an answer.
+- `question.asked` without its matching `question.answered`. The current
+  `QUESTION_TIMEOUT_MS` in `packages/core/src/questions.ts` is 120,000 ms;
+  timeout emits `question.answered` with `outcome: "timeout"`. The 30-second
+  cadence gives time to respond, but is not permission to invent an answer.
+  A timed-out question is not still awaiting an answer.
 - Child `session.end` and the conductor's resulting decision. Read the report;
   a terminal reason of `done` alone does not prove the roadmap row was delivered.
 - Recent child activity and pending tools. A long-running test/review can be

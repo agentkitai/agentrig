@@ -352,6 +352,21 @@ describe("the input buffer", () => {
     expect(seen).toEqual(["baseline task\n"]);
   });
 
+  it.each(["\n", "\r\n"])("does not submit on a standalone %j chunk", async newline => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+    h.stdin.paste("probe");
+    await settle();
+    h.stdin.paste(newline);
+    await settle();
+    expect(seen).toHaveLength(0);
+    h.stdin.paste("\r");
+    await settle();
+    h.stop();
+    expect(seen).toEqual(["probe\n"]);
+  });
+
   it("keeps a multi-line paste whole instead of submitting its first line", async () => {
     const h = mount(50);
     await settle();
