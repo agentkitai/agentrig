@@ -1523,3 +1523,12 @@ need an explicit budget; neither prevents continuing other actionable entries.
   the CI log does not establish the remote delay's cause. Wait for bounded real blocked-child
   readiness, preserve100ms grace/warning/order checks, and release/join in finally instead
   of sleeping for cleanup. Retain original failure evidence; no timeout inflation.
+- [ ] Checkpoint/session-end memory integration ([feel #235](https://github.com/agentkitai/agentrig/issues/235)):
+  R4b intentionally refuses verified undo when session-end maintenance changes covered
+  files, even though checkpoint snapshots were created and ingest completed. The
+  outside-train diagnostic repair explains this distinction; the capability remains
+  unresolved. A separate design decision is needed on whether undo should also revert
+  maintenance writes. Any integration must account for exact trusted writes, reject
+  unrelated changes (including tracked wiki edits), and refuse uncertain/unjoined
+  writers. Do not broaden exclusions, silently adopt hook changes, or skip ingestion.
+  This is an end-of-roadmap follow-up, not an added R17 gate or subrow.

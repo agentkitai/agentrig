@@ -1,5 +1,19 @@
 # Status
 
+R17 checkpoint/ingest visibility repair (outside train, 2026-09-07): conductor
+`8fbde1a3`, continuation builder `b9109d9f`, reported
+[feel #235](https://github.com/agentkitai/agentrig/issues/235) from nested fixture
+`2eda835f`. Codex's outside-train diagnostic repair distinguishes retained checkpoint
+snapshots from unavailable verified undo, and names session-end memory maintenance
+as a possible cause without asserting ownership of those writes. Real-Git/fake-provider
+tests cover completed ingest with tracked/untracked wiki files, an unrelated human
+edit during ingest, unchanged refusal/no restoration, and successful undo without ingest.
+No ingestion is skipped, exclusions widened, or ownership checks changed. This does
+**not** repair the integration limitation: R4b deliberately refuses to seal covered
+session-end changes. Issue #235 remains open for that capability decision, recorded
+at the end of the roadmap, not as a new blocking R17 subrow. No R17 row is completed
+by this diagnostic repair.
+
 R17 skill-selection recovery (outside train, 2026-09-07): the user resolved
 [feel #229](https://github.com/agentkitai/agentrig/issues/229) by authorizing R17g
 as sequential package PRs; R17b–R17f remain one PR per row. Conductor `c1a25934`
