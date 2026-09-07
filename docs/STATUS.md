@@ -1,5 +1,14 @@
 # Status
 
+Active END follow-up: **compaction zero retention**, independently implemented
+beside automatic slash suggestions under the user's follow-up authorization.
+Root merges slash suggestions first, then this item after updated green main.
+[Contract](plans/compaction-zero-retention.md). Zero now retains the task plus
+conservative advisory summary; positive-count tool-pair widening is unchanged.
+Nine fail-before controls are restored; all 152 focused compaction/runtime/
+provenance/thinking/manual tests pass. One review and full/hosted gates pending.
+Earlier implementation checkpoints below remain historical.
+
 Final implementation: **R16h themes/keybindings**, integrated with delivered R16g.
 [PR#211](https://github.com/agentkitai/agentrig/pull/211) holds the final hosted
 delivery receipt. This is its pre-merge checkpoint; completed implementation does

@@ -29,7 +29,7 @@ export interface CompactionStrategy {
 export interface SummarizeOptions {
   /** Compact once the last response's context passes this fraction of the window (default 0.7). */
   thresholdFraction?: number;
-  /** Messages kept verbatim at the tail (default 8); the boundary is widened so no tool_result is orphaned. */
+  /** Nonnegative safe integer (default 8). Zero summarizes all but the task; positive tails widen to retain tool pairs. */
   keepLastMessages?: number;
   /** max_tokens for the summarization call (default 1024). */
   maxSummaryTokens?: number;
@@ -77,6 +77,7 @@ function toTranscript(messages: Message[]): string {
 export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStrategy {
   const threshold = opts.thresholdFraction ?? 0.7;
   const keep = opts.keepLastMessages ?? 8;
+  if (!Number.isSafeInteger(keep) || keep < 0) throw new Error("keepLastMessages must be a nonnegative safe integer");
   const maxSummaryTokens = opts.maxSummaryTokens ?? 1024;
 
   const strategy: CompactionStrategy = {
@@ -86,7 +87,7 @@ export function summarizeOlderTurns(opts: SummarizeOptions = {}): CompactionStra
       let cut = messages.length - keep;
       // never orphan a tool_result: pull the boundary back until the kept tail doesn't
       // start with results whose tool_use would be summarized away
-      while (cut > 1 && messages[cut]!.role === "user" && messages[cut]!.content.some((b) => b.type === "tool_result")) {
+      while (cut > 1 && cut < messages.length && messages[cut]!.role === "user" && messages[cut]!.content.some((b) => b.type === "tool_result")) {
         cut -= 1;
       }
       if (cut <= 1) return messages;
