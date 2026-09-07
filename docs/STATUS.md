@@ -2,6 +2,12 @@
 
 ### R16e in progress — opt-in idle TUI notifications
 
+Backlog-drain integration includes merged #203 main `2181859` and delivered #204
+status. Build/typecheck, 123 focused plus 13 actual diff/approval controls, required
+Docker full 3,120 plus two skips /198 files (73.53s), and real Chromium pass.
+Both #203 post-main and #201 fresh exact-head all-four gates remain mandatory.
+Only documentation conflicted; no new source fixes or review rounds.
+
 Current integration includes repaired-green main `0b65aa1` (#206) and delivered
 Markdown/history. Frozen install/build/typecheck, 89 focused controls, full
 required-Docker 3,087 plus two skips /193 files (72.70s), and real Chromium pass.
