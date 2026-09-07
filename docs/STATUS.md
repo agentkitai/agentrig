@@ -23,6 +23,16 @@ TypeScript 5.9.3 compiler check inferred `checkpoint.created` at the questioned
 cast was added. Replaying the stored reason at the undo entry point remains an
 explicit follow-up, not a change to ownership or an implemented capability.
 
+The subscription-capacity halt ([feel #246](https://github.com/agentkitai/agentrig/issues/246))
+interrupted the train and outside repair before landing. The diagnostic branch was
+preserved unpushed at `5267c04b482242fa24ac1042570a4bff44edf568`. After the user
+reported a quota reset and authorized resumption, Codex resumed this outside-train
+repair; that authorization is not itself proof of provider recovery or train progress.
+The completed Claude delta review reported convergence; Codex identified that
+`toThrow(string)` only checks a substring, so the refusal assertion now compares
+the error's message property exactly. Prior review evidence and limitations remain
+applicable; neither an interrupted review nor green CI replaces the remaining gates.
+
 R17 PTY/monitoring recovery (outside train, 2026-09-07): Codex documented the
 task/paste-versus-Enter protocol for [feel #232](https://github.com/agentkitai/agentrig/issues/232)
 and added a trailing-Enter regression test without changing input or permission
