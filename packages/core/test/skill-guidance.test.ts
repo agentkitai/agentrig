@@ -25,18 +25,18 @@ it("total byte cap covers multibyte hints, example and omitted entries", () => {
   const text = skillsInjection(skills);
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
   expect(text).toContain("further skill(s) not listed");
-  expect(text).toContain('skill({"name":"s0"})');
-  expect(text.match(/First call/g)).toHaveLength(1);
+  expect(text).toContain("- s0:");
+  expect(text.match(/Select the skill matching the task/g)).toHaveLength(1);
 });
 
-it("example uses an actually listed name and valid tool input, with none for an empty catalogue", () => {
+it("selection guidance accompanies listed names, with none for an empty catalogue", () => {
   const oversized: Skill = { name: "x".repeat(9000), description: "too large", path: "/x", body: "body" };
   const actual = parseSkill("body", '/skills/a"quote.md');
   const text = skillsInjection([oversized, actual]);
   expect(text).toContain(`- ${actual.name}:`);
-  const json = /First call for a covered task: skill\((.*?)\)\./.exec(text)![1]!;
-  expect(skillTool([actual]).inputSchema.parse(JSON.parse(json))).toEqual({ name: actual.name });
-  expect(skillsInjection([oversized])).not.toContain("First call");
+  expect(text).toContain("Select the skill matching the task");
+  expect(skillTool([actual]).inputSchema.parse({ name: actual.name })).toEqual({ name: actual.name });
+  expect(skillsInjection([oversized])).not.toContain("Select the skill");
   expect(Buffer.byteLength(skillsInjection([oversized]))).toBeLessThanOrEqual(8192);
   expect(skillsInjection([])).toBe("");
 });
