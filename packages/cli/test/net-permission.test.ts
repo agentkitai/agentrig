@@ -1,11 +1,40 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { currentSandboxPolicy, NoneSandboxProvider, type ModelEvent } from "@agentkitai/agentrig-core";
+import { createAgent, currentSandboxPolicy, NoneSandboxProvider, SessionStore, type ModelEvent } from "@agentkitai/agentrig-core";
+import { z } from "zod";
 import { buildAgent, buildSandbox } from "../src/agent-builder.ts";
 import { buildPermissionPolicy } from "../src/run.ts";
 import { initialPermissionScope, permissionEffectLines } from "../src/tui/permission-prompt.ts";
+import { buildProgram } from "../src/program.ts";
+import { loadRunConfig } from "../src/config.ts";
+
+it.each([[], ["--sandbox-network"], ["--no-sandbox-network"]])("resolved network flags %j reach the actual net dispatch gate despite YOLO", async (...flags) => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-net-override-")); roots.push(root);
+  const home = join(root, "home"), cwd = join(root, "project");
+  await mkdir(join(home, ".agentrig"), { recursive: true }); await mkdir(cwd);
+  await writeFile(join(home, ".agentrig", "config.json"), JSON.stringify({ sandboxNetwork: true, sandbox: "workspace-write", yolo: true }));
+  const cmd = buildProgram().commands.find(c => c.name() === "run")!;
+  cmd.parseOptions(flags);
+  const resolved = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false, notice: () => {} });
+  const sandbox = buildSandbox(resolved.sandbox!, "linux", resolved.sandboxNetwork);
+  const calls = vi.fn(async () => ({ output: "inert", display: "inert" }));
+  const prepare = vi.fn((command: Parameters<NonNullable<typeof sandbox.provider>["prepare"]>[0]) => command);
+  const store = new SessionStore({ root: join(root, "sessions") }); let turn = 0;
+  const agent = createAgent({ store, systemPrompt: "inert test", repoMap: false,
+    sandbox: { ...sandbox, provider: { prepare } }, permissions: buildPermissionPolicy(resolved),
+    tools: [{ name: "probe", description: "inert trusted net fixture", inputSchema: z.object({}), permission: "net", sandbox: "compatible", execute: calls }],
+    provider: { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 10000 },
+      async *stream(): AsyncIterable<ModelEvent> { if (turn++ === 0) yield { type: "tool_use", id: "probe", name: "probe", input: {} };
+        yield { type: "stop", reason: turn === 1 ? "tool_use" : "end_turn" }; } },
+  });
+  const session = agent.run("exercise declared network operation", { cwd }); await session.done;
+  const events = await store.readAll(session.id);
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(calls).toHaveBeenCalledTimes(flags.includes("--no-sandbox-network") ? 0 : 1);
+  expect(events.some(e => e.type === "sandbox.denied")).toBe(flags.includes("--no-sandbox-network"));
+});
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });

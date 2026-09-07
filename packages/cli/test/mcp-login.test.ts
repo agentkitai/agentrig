@@ -1,11 +1,36 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { mkdtemp, rm, writeFile, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { mcpLoginCommand } from "../src/mcp-login.js";
+import * as core from "@agentkitai/agentrig-core";
+
+it("mcp login negative flag overrides configured network true before the fake OAuth transport", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-login-network-"));
+  const home = join(root, "home"), cwd = join(root, "project");
+  await mkdir(join(home, ".agentrig"), { recursive: true }); await mkdir(cwd);
+  await writeFile(join(home, ".agentrig", "config.json"), JSON.stringify({ sandbox: "workspace-write", sandboxNetwork: true }));
+  const config = join(root, "mcp.json");
+  await writeFile(config, JSON.stringify({ mcpServers: { fixture: { url: "https://fixture.invalid/mcp", oauth: { issuers: ["https://fixture.invalid/issuer"], clientId: "fixture" } } } }));
+  const transport = vi.spyOn(core, "loginMcp").mockImplementation(async (_config, _store, options) => {
+    if (!await options.authorize()) throw new Error("fake transport permission refused");
+  });
+  const notice = vi.fn();
+  const make = () => buildProgram({ config: { cwd, home, env: {}, notice },
+    mcpLogin: (name, opts, signal) => mcpLoginCommand(name, opts, signal, { home, notice }) }).exitOverride().configureOutput({ writeErr: () => {} });
+  const argv = ["mcp", "login", "fixture", "--mcp-config", config, "--headless"];
+  try {
+    await expect(make().parseAsync([...argv, "--allow", "net", "--no-sandbox-network"], { from: "user" })).rejects.toThrow("requires explicit sandbox network policy");
+    expect(transport).not.toHaveBeenCalled();
+    await make().parseAsync([...argv, "--allow", "net"], { from: "user" });
+    await make().parseAsync([...argv, "--allow", "net", "--sandbox-network"], { from: "user" });
+    expect(transport).toHaveBeenCalledTimes(2);
+    await expect(make().parseAsync([...argv, "--sandbox-network", "--deny", "net"], { from: "user" })).rejects.toThrow("fake transport permission refused");
+  } finally { transport.mockRestore(); await rm(root, { recursive: true, force: true }); }
+});
 
 it("actual mcp login argv reaches bounded OAuth without a provider, and explicit deny prevents all traffic", async () => {
   const home = await mkdtemp(join(tmpdir(), "agentrig-mcp-login-"));

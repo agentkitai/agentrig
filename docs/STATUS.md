@@ -1,14 +1,26 @@
 # Status
 
-Current integration: #215 merged as main f196709697b1832063ddee6288fdac004a2ee7d0
-after all four exact-head checks; post-main CI34103360944 / structure34103361105
-are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
+Current follow-up: one-invocation `--no-sandbox-network` config override, on a fresh
+branch from green main5d91ce09686b634a35000afd2d3e20a57759cdc2. All END follow-ups
+remain authorized work, with independent PRs and serialized green-main merges.
+No runtime permission or sandbox-policy changes. [Contract](plans/no-sandbox-network.md).
+Six named controls failed before registration (four config surfaces, actual inert
+net dispatch, actual MCP login argv); omitted/positive runtime controls already passed.
+All106 focused tests pass after the two-option change. Build/typecheck, required
+pinned Docker full3,314 passed+2 existing skips/209files87.30s and Chromium1 pass.
+One Claude APPROVE/no blocking findings,24 requested/21 reported; original
+[review](plans/no-sandbox-network-review.md) retained. Hosted gates pending.
+
+#215 is done as main f196709697b1832063ddee6288fdac004a2ee7d0, all-four post-main
+CI34103360944 / structure34103361105 green. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
 #214 is done, all-four post-main CI34102581250 / structure34102581248 green;
 [final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
-#216 is the remaining PR in this batch; no new lane until it is delivered.
+#216 is done as main5d91ce09686b634a35000afd2d3e20a57759cdc2, all-four post-main
+CI34104220683 / structure34104220637 green;
+[final receipt](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
 The earlier implementation checkpoints below retain their historical test evidence.
 
-Active independent follow-up: reject fractional subagent turn limits before provider
+Historical implementation checkpoint: reject fractional subagent turn limits before provider
 construction. [Contract](plans/subagent-integer-turn-limits.md). Eight new controls
 fail before the correction; all61 focused CLI/config tests pass afterward, including
 actual role spawning with omitted/default,2 and2.0 limits. Other numeric settings and

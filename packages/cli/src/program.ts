@@ -232,6 +232,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
       .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")
+      .option("--no-sandbox-network", "disable sandbox networking for this invocation, overriding config; none mode remains unsandboxed")
       .option("--otel-endpoint <url>", "explicit OTLP/HTTP JSON traces URL; exports minimized timing/status metadata")
       .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
@@ -522,6 +523,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("--headless", "do not prompt for network consent")
     .option("--sandbox <mode>", "sandbox policy; HTTP runs in the trusted host", "none")
     .option("--sandbox-network", "explicitly permit trusted host networking under sandbox policy")
+    .option("--no-sandbox-network", "disable sandbox networking for this invocation, overriding config; none mode remains unsandboxed")
     .action(async (server: string, opts: McpLoginOptions & { profile?: string }, cmd: Command) => {
       const resolved = await configured(opts, cmd, !opts.headless && !!process.stdin.isTTY);
       if (!resolved) return;
