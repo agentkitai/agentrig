@@ -200,7 +200,11 @@ The additive `net` permission defaults to ask and is distinct from legacy `netwo
 `--allow net` (or YOLO) does not enable sandbox networking: an enforcing sandbox also requires
 explicit `--sandbox-network` / config `sandboxNetwork: true`. Conversely that policy flag grants
 no tool permission. A separately approved one-time sandbox escape executes outside the sandbox;
-mode `none` provides no OS isolation. See [R11a's boundaries](docs/plans/R11a.md).
+mode `none` provides no OS isolation. `--no-sandbox-network` overrides configured
+`sandboxNetwork: true` for one run, TUI launch, session resume or `mcp login`; it does
+not rewrite config. Omission preserves config and the last positive/negative flag wins.
+In mode `none`, forwarded network metadata is inert: neither flag creates a sandbox
+policy or a host-wide firewall. See [R11a's boundaries](docs/plans/R11a.md).
 The built-in `web_fetch` uses that class for GET-only HTTP(S): no redirects, credentials or
 custom headers; text/plain and text/html only, 1 MiB decoded body, 20,000 returned characters,
 10-second deadline. HTML is lexical text extraction, not browser rendering. It is trusted host

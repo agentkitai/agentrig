@@ -1274,9 +1274,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
-- R11a polish: consider `--no-sandbox-network` for a one-run override of config true; current
-  positive-only flag matches other CLI booleans. Consider clarifying unused network metadata
-  forwarded to the none provider; no runtime policy or OS isolation is established in none mode.
+- R11a follow-up (implemented, delivery gates pending): `--no-sandbox-network` overrides
+  config true for one invocation on run/TUI/resume and MCP login, without config writes.
+  Omission and explicit positive remain compatible; none-provider network metadata is inert,
+  not a runtime policy or OS isolation. [Contract](plans/no-sandbox-network.md).
 - R14b polish: consider a separate unknown-command-attempt budget when non-shell custom/MCP
   command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
   Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,
