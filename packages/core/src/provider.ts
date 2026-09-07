@@ -14,6 +14,8 @@ export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface ModelRequest {
+  /** Trusted run-level opt-in. Never inferred from model prose or prompted-schema probes. */
+  outputSchema?: Record<string, unknown>;
   system: string;
   /** Unified-only authority metadata for consecutive nonempty system components. No vendor field. */
   systemContexts?: InstructionContext[];
@@ -55,6 +57,8 @@ export interface ModelProvider {
     parallelTools: boolean;
     caching: boolean;
     contextWindow: number;
+    /** Native wire support explicitly opted into by trusted host code, not observed support. */
+    nativeOutputSchema?: boolean;
     /** Local empirical probe evidence; never a server guarantee or permission authority. */
     conformance?: ProviderCapabilityEvidence;
     /** Fractions of normal input price; model-derived defaults used only when explicit rates are absent. */

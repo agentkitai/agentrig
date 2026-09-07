@@ -71,6 +71,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
+    case "output.validated": return `${p} ${e.mode} ${e.attempt} valid=${e.valid} category=${e.category} schema=${e.digest}`;
     case "question.asked": return `${p} ${e.id} ${JSON.stringify(e.question.prompt)} options=${JSON.stringify(e.question.options)}`;
     case "question.answered": return `${p} ${e.id} ${e.outcome}${e.reply === undefined ? "" : ` source=${e.reply.source} ${JSON.stringify(e.reply.answer)}`}`;
     case "eval.result": return `${p} ${JSON.stringify(e.task)} ${e.outcome} (baseline ${e.baselineOutcome}) profile=${JSON.stringify(e.profile)} reportedTokens=${e.reportedTokens} usage=${e.usageComplete ? "complete" : "unknown"} advisory=${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"}`;
@@ -78,6 +79,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "turn.end": return `${p} n=${e.n}`;
     case "turn.continued": return `${p} n=${e.n} from=${e.from} attempt=${e.attempt}/${e.maxAttempts} reason=${e.reason}`;
     case "model.request": return `${p} tokensIn=${e.tokensIn}`;
+    case "budget.cap": return `${p} configured-estimate cap ${e.reason} (not invoice accounting)`;
     case "model.delta": return `${p} ${JSON.stringify(e.text)}`;
     case "model.response": {
       const input = e.usage.input + (e.usage.cacheRead ?? 0) + (e.usage.cacheWrite ?? 0);
@@ -198,6 +200,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "output.validated": return `Output ${e.valid ? "valid" : "invalid"} (${e.mode}, ${e.attempt}, ${e.category})`;
     case "question.asked": return `Question: ${e.question.prompt}`;
     case "question.answered": return `Question ${e.outcome}${e.reply === undefined ? "" : ` (${e.reply.source}): ${"text" in e.reply.answer ? oneLine(e.reply.answer.text) : `option ${e.reply.answer.option + 1}`}`}`;
     case "eval.result": return `Evaluation ${e.task}: ${e.outcome} (baseline ${e.baselineOutcome}; advisory ${e.advisoryPass === null ? "unavailable" : e.advisoryPass ? "pass" : "fail"})`;
@@ -238,6 +241,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     }
     case "error":
       return `! ${oneLine(e.message, 200)}`;
+    case "budget.cap":
+      return `! Configured-estimate daily cap: ${e.reason}; not invoice accounting`;
     case "turn.continued":
       return `↻ Response truncated; continuing (${e.attempt}/${e.maxAttempts}, turn ${e.n})`;
     case "permission.decision":
