@@ -32,6 +32,45 @@ async function fixture(history = new PromptHistory(), columns = 80, rows = 24) {
   return {controller,input,writes,requests,history,unreadAtWrite};
 }
 const lastPrompt = (requests: ModelRequest[]) => requests.at(-1)?.messages.filter(m=>m.role==="user").at(-1)?.content;
+const graphemes = ["😀", "e\u0301", "👩🏽‍💻", "🇮🇱", "👨‍👩‍👧‍👦"];
+it.each(["", "\u001b[201~"])("backspace removes whole graphemes in actual prompt input (%j)", async prefix => {
+  const f=await fixture();
+  for (const [index,grapheme] of graphemes.entries()) {
+    f.input.send(`kept${index}`,grapheme,prefix+"\u007f",prefix+"\r");
+    await vi.waitFor(()=>{expect(f.requests).toHaveLength(index+1);expect(f.controller.snapshot().status).toBe("idle");},{timeout:5000});
+    expect(lastPrompt(f.requests)).toContainEqual(expect.objectContaining({type:"text",text:`kept${index}`}));
+  }
+});
+it.each(["", "\u001b[201~"])("backspace removes whole graphemes from an unconfirmed permission scope (%j)",async prefix=>{
+  const f=await fixture();
+  const answer=f.controller.ask({tool:"file",class:"write",input:{},paths:[join(process.cwd(),"file")],cwd:process.cwd()});
+  f.input.send(prefix+"s");expect(f.controller.snapshot().pending?.scope).toBeDefined();
+  const original=f.controller.snapshot().pending!.scope!.text;
+  for (const grapheme of graphemes) {
+    f.input.send(grapheme,prefix+"\u007f");
+    expect(f.controller.snapshot().pending?.scope?.text).toBe(original);
+    expect(f.controller.permissionGrants.list()).toEqual([]);
+  }
+  f.controller.cancelPermissionScope();f.input.send(prefix+"n");expect(await answer).toBe("deny");
+  expect(f.requests).toEqual([]);expect(f.history.values()).toEqual([]);
+});
+it.each(["", "\u001b[201~"])("grapheme editing preserves protected question and supervisor answer semantics (%j)",async prefix=>{
+  const f=await fixture();
+  const question=f.controller.askQuestion({id:"00000000-0000-4000-8000-000000000001",sessionId:"fixture",toolUseId:"question",prompt:"Question",options:["one"]},new AbortController().signal);
+  f.input.send("kept👩🏽‍💻",prefix+"\u007f",prefix+"\r");expect(await question).toMatchObject({answer:{text:"kept"}});
+  const escalation=f.controller.askSupervisor("Guidance");
+  f.input.send("kept🇮🇱",prefix+"\u007f");
+  await vi.waitFor(()=>expect(f.writes.at(-1)).toContain("answer: kept"));
+  expect(f.writes.at(-1)).not.toContain("🇮");
+  f.input.send(prefix+"\r");expect(await escalation).toBe("answered");
+  expect(f.history.values()).toEqual([]);expect(f.requests).toEqual([]);expect(f.controller.permissionGrants.list()).toEqual([]);
+});
+it("backspace inside a framed paste remains literal text",async()=>{
+  const f=await fixture();const text="kept😀\u007f";
+  f.input.send("\u001b[200~",text,"\u001b[201~","\r");
+  await vi.waitFor(()=>expect(f.requests).toHaveLength(1),{timeout:5000});
+  expect(lastPrompt(f.requests)).toContainEqual(expect.objectContaining({type:"text",text}));
+});
 it.each(["", "\u001b[201~"])("suggestion selection redraws even when the wall clock does not advance (%j)", async prefix => {
   const now=vi.spyOn(Date,"now").mockReturnValue(42);
   try {

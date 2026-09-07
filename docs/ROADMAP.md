@@ -1,5 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+Active delivery: grapheme PR#215 and turn-limit PR#216. Skill casing PR#214
+merged first as main dbc89c9; its post-main gate is pending at this checkpoint.
+Each PR holds its final hosted receipt. Merge whichever reviewed item is ready
+on green current main; no new lane until this batch drains.
+PR#212 and PR#213 are done; main300c5e2 passed all-four CI34098667334 /
+structure34098667328. [Slash delivery receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+The previous queue checkpoints below are historical.
+
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
 work, including automatic slash suggestions reported during actual use. Compaction
 PR#212 merged first on main1cdfe53; its post-main gate is pending. Slash discovery
@@ -1365,7 +1373,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
-- R16d polish: grapheme-aware editing across both keyboard paths; retire a completion
+- R16d polish: grapheme-aware editing is done implementation, PR#215 ([contract](plans/grapheme-editing.md)); retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
   within R16d with actual Ink controls, not deferred. History is sensitive local
@@ -1414,3 +1422,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   prompts inert and the live frame bounded. Cover actual Ink typing, skill discovery,
   navigation, narrowing, dismissal and permission/paste controls in both input paths.
   [Contract and controls](plans/slash-suggestions.md); final hosted receipt on PR#213.
+- Grapheme-editing follow-up: held backspace across long ZWJ clusters can keep
+  resetting the code-unit-based quiet timer. Buffer contents remain correct, but
+  the redraw may wait for release. Consider an explicit edit-gesture classification
+  with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.
