@@ -58,11 +58,13 @@ it("the built CLI prints a maintenance failure without an unhandled-rejection st
     expect(result.stderr).toContain("auxiliary dream");
     expect(result.stderr).not.toContain("triggerUncaughtException"); expect(result.stderr).not.toMatch(/\n\s+at /);
   } finally { await rm(root, { recursive: true, force: true }); }
-});
+}, 15_000);
 
 // The former single cases each ran five sequential CLIs under one 15s fixture deadline,
 // although every CLI legitimately has its own 5s bound. Independent fixtures keep at most
 // two dependent calls (preview/confirm or confirm/repeat) inside the unchanged 15s deadline.
+// Keep isolated confirmation/preview cases even where a paired scenario repeats their checks:
+// they localize failures to the first operation instead of obscuring them behind the pair.
 it.each(["preview without wiki", "confirmation without wiki", "preview existing stamp", "confirmed reset", "idempotent reset"])(
   "the built CLI handles stamp-reset %s without losing backup evidence", async mode => {
   const root = await mkdtemp(join(tmpdir(), "agentrig-cli-stamp-"));
