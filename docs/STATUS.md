@@ -1,5 +1,13 @@
 # Status
 
+Active: **grant-transition readiness repair**, not a roadmap item. R16b #203
+merged2181859 after all four exact-head checks; post-main CI34082267021 failed
+Windows `tui.test.ts:236`, first prompt in the existing real new-transition test.
+Other160 tests in that group and Linux/macOS/structure passed. R16b delivery is
+blocked, not done. [Failure and repair controls](plans/grant-transition-readiness.md).
+Hold #201's merge until repaired main is green; then drain201→205→207→194.
+No further unsubmitted roadmap work or parallel PR-refresh churn.
+
 R16f runtime-backed status line is **done**, PR #204: exact main7fe3440 passed
 all four checks CI34080476921/structure34080476920.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/204#issuecomment-5564785990).

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -22,6 +23,7 @@ import {
 import { COMMANDS, RESERVED_COMMAND_NAMES, helpText, parseCommand, suggestFor } from "../src/tui/commands.ts";
 import { TuiController, applyChildEvent, type TuiChild } from "../src/tui/controller.ts";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../src/sessions.ts";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 describe("parseCommand", () => {
   it("treats anything not starting with / as a task", () => {
@@ -109,9 +111,10 @@ class FakeProvider implements ModelProvider {
   /** Every request it was given, so a test can see what the model was actually sent. */
   readonly requests: ModelRequest[] = [];
   /** An `Error` entry throws instead of streaming — what a provider rejecting a request does. */
-  constructor(private readonly turns: Array<ModelEvent[] | Error>) {}
-  async *stream(req: ModelRequest): AsyncIterable<ModelEvent> {
+  constructor(private readonly turns: Array<ModelEvent[] | Error>, private readonly startupMs = 0) {}
+  async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
     this.requests.push(structuredClone(req));
+    if (this.requests.length === 1 && this.startupMs > 0) await delay(this.startupMs, undefined, { signal });
     const turn = this.turns.shift() ?? [{ type: "stop" as const, reason: "end_turn" as const }];
     if (turn instanceof Error) throw turn;
     yield* turn;
@@ -225,32 +228,36 @@ const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text)
 const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
-  it.each(["new", "fork", "switch"])("revokes session grants across the real %s transition", async transition => {
+  it.each(["new", "fork", "switch"].flatMap(transition => [0, 1100].map(startupMs => ({ transition, startupMs }))))(
+    "revokes session grants across the real $transition transition (startup=$startupMs ms)", async ({ transition, startupMs }) => {
     const calls: ModelEvent[][] = [
       [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
       [{ type: "tool_use", id: "second", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
     ];
     const store = new SessionStore({ root });
-    const c = makeController(calls, { onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq) });
-    const first = c.submit("first task");
-    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull()); c.answerPermission("allow", true); await first;
-    const oldId = c.snapshot().sessionId!; const oldGrant = c.permissionGrants.list()[0]!;
-    expect(oldGrant.resource).toBe("*"); expect(oldGrant.duration).toEqual({ kind: "session", id: oldId });
-    let next: Promise<boolean>;
-    if (transition === "switch") {
-      const other = makeController([]); await other.submit("other session");
-      next = c.submit(`/resume ${other.snapshot().sessionId!}`);
-    } else {
-      await c.submit(transition === "new" ? "/new" : "/fork");
-      expect(c.permissionGrants.list()).toEqual([]);
-      next = c.submit("next task");
-    }
-    await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
-    expect(c.permissionGrants.list()).toEqual([]); c.answerPermission("deny"); await next;
-    expect(text(c).match(/✓ needs_permission/g)).toHaveLength(1);
-    const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
-    expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
-    expect(events.at(-1)?.type).toBe("session.end");
+    const c = makeControllerWith(new FakeProvider(calls, startupMs), { onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq) });
+    try {
+      const first = c.submit("first task");
+      await waitForTuiState(c, first, "first grant prompt", state => state.pending?.req.tool === "needs_permission");
+      c.answerPermission("allow", true); await first;
+      const oldId = c.snapshot().sessionId!; const oldGrant = c.permissionGrants.list()[0]!;
+      expect(oldGrant.resource).toBe("*"); expect(oldGrant.duration).toEqual({ kind: "session", id: oldId });
+      let next: Promise<boolean>;
+      if (transition === "switch") {
+        const other = makeController([]); await other.submit("other session");
+        next = c.submit(`/resume ${other.snapshot().sessionId!}`);
+      } else {
+        await c.submit(transition === "new" ? "/new" : "/fork");
+        expect(c.permissionGrants.list()).toEqual([]);
+        next = c.submit("next task");
+      }
+      await waitForTuiState(c, next, "post-transition grant prompt", state => state.pending?.req.tool === "needs_permission");
+      expect(c.permissionGrants.list()).toEqual([]); c.answerPermission("deny"); await next;
+      expect(text(c).match(/✓ needs_permission/g)).toHaveLength(1);
+      const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
+      expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
+      expect(events.at(-1)?.type).toBe("session.end");
+    } finally { await c.shutdown(); }
   });
   it("same-session continuation retains live session grants but not task grants", async () => {
     const provider = new FakeProvider([

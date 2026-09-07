@@ -1,7 +1,10 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Active parallel implementation: **R16b captured transcript diffs**, PR #203;
-single review approved, final integration and delivery gates pending.
+Active delivery blocker: **grant-transition readiness repair**. R16b #203 merged
+as2181859, but post-main Windows CI34082267021 failed an existing one-second
+permission-prompt wait. R16b is not yet done. [Repair contract](plans/grant-transition-readiness.md).
+Restore green main, then drain open PRs201→205→207→194 before any unsubmitted
+roadmap work. No new product milestone or repeated broad review.
 R16f #204 is done: main7fe3440 passed CI34080476921 and structure34080476920,
 all four checks. [Receipt](https://github.com/agentkitai/agentrig/pull/204#issuecomment-5564785990).
 Completed delivery repair: **PR #206**; **R16a #199 is done**. Repaired main
@@ -22,6 +25,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
+| Active gate repair | Existing new/fork/switch grant-transition prompt readiness | Delayed fail-before/pass-after controls retain grant assertions; exact-head and repaired-main all four checks green |
 | Done — PR #206 | Two existing multi-stage runtime fixture bounds and owned cleanup | Repaired main0b65aa1 passed Linux/macOS/Windows CI34078485717 and structure34078485698; original failures retained |
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
 | Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
@@ -924,6 +928,11 @@ feature list):
 ---
 
 ## 5. Sequencing and exit criteria
+
+Current delivery prerequisite: repair2181859's failed grant-transition readiness
+check, then drain existing open PRs201→205→207→194 before unsubmitted roadmap
+items. Resolve only the next queued PR; serialize merges with both exact-head and
+current-main all-four gates green. [Bounded repair](plans/grant-transition-readiness.md).
 
 The failed339f795 main gate is restored by the bounded #206
 [runtime-fixture repair](plans/runtime-fixture-ci-bound.md): repairedmain0b65aa1
