@@ -338,6 +338,20 @@ describe("the input buffer", () => {
     return seen;
   };
 
+  it("does not submit a task whose trailing Enter arrived in the same chunk", async () => {
+    const h = mount(50);
+    await settle();
+    const seen = submitted(h);
+    h.stdin.paste("baseline task\r");
+    await settle();
+    expect(seen).toHaveLength(0);
+    expect(h.writes.join("")).toContain("baseline task");
+    h.stdin.paste("\r");
+    await settle();
+    h.stop();
+    expect(seen).toEqual(["baseline task\n"]);
+  });
+
   it("keeps a multi-line paste whole instead of submitting its first line", async () => {
     const h = mount(50);
     await settle();
