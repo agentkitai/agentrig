@@ -1093,6 +1093,25 @@ concise and place detailed implementation history in dated notes as it is mainta
 
 ## Follow-ups / nice to haves — active continuation queue
 
+### Delivery progress
+
+Checked means merged with all four post-merge checks green. An unchecked delivery
+is not done yet. The detailed entries below retain remaining parts of composite items;
+completing one part does not close its unrelated follow-ups. This checklist is updated
+in each implementation PR; its linked PR holds the final post-merge receipt.
+
+- [x] Zero-retention compaction — [PR #212](https://github.com/agentkitai/agentrig/pull/212#issuecomment-5567364631).
+- [x] Automatic slash suggestions — [PR #213](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+- [x] Canonical nested skill filenames — [PR #214](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+- [x] Grapheme-safe backspace — [PR #215](https://github.com/agentkitai/agentrig/pull/215#issuecomment-5568164344).
+- [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
+- [ ] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218), merged; post-merge CI pending at this checkpoint.
+- [ ] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217), open; integrated tests pass, hosted gates pending.
+
+All other follow-up fragments below remain queued unless explicitly marked done.
+
+### Detailed follow-up queue
+
 - R15k optional polish: persistent audit of pre-session directory-completion metadata
   reads. Current completion explicitly uses configured read policy/one-time approval,
   not canonical tool receipts or standing-grant consumption. Payload reads are audited.
