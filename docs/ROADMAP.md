@@ -1107,7 +1107,7 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
 - [x] One-run sandbox-network disable override — [PR #218 final receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
 - [x] All-unknown capability evidence label — [PR #217 final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
-- [ ] Abort-grace fixture observed readiness — implemented; review and delivery gates pending ([contract](plans/abort-grace-readiness.md)).
+- [ ] Abort-grace fixture observed readiness — implemented, reviewed and locally tested; hosted delivery pending ([contract](plans/abort-grace-readiness.md)).
 
 All other follow-up fragments below remain queued unless explicitly marked done.
 

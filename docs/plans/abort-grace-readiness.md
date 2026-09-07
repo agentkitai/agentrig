@@ -14,3 +14,11 @@ not a longer product grace or arbitrary cleanup sleep. No production changes.
 Validation: failing-before delayed control, restored focused pair, build/typecheck,
 full required pinned Docker suite, Chromium, one bounded independent Claude review
 and exact-head three-platform plus scripted-structure CI. Delivery remains pending.
+
+Local results: delayed150ms control failed before (ordinary control passed); both
+restored controls pass. All45 subagent tests pass. Build/typecheck pass, required
+Docker full suite3318 passed+2 skipped/209 files88.83s with worker
+`sha256:f111ef59dce766519eb2ac455b554b01793aff0e9cd1d68d29b6d314d7db52e9`
+and checker `sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5`.
+Real Chromium1passed3.23s. [Single review](abort-grace-readiness-review.md):
+APPROVE,15reported/24requested turns, no material findings; limitations retained.
