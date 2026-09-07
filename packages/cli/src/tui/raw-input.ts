@@ -8,6 +8,10 @@ export interface InputKey {
   meta: boolean;
   backspace: boolean;
   delete: boolean;
+  upArrow?: boolean;
+  downArrow?: boolean;
+  tab?: boolean;
+  shift?: boolean;
 }
 
 /**

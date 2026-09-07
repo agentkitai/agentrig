@@ -43,6 +43,12 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Install Chromium for the local reference client smoke
+        if: runner.os == 'Linux'
+        run: pnpm --filter @agentkitai/agentrig-cli exec playwright install --with-deps chromium
+      - name: Real Chromium ACP reference client
+        if: runner.os == 'Linux'
+        run: pnpm exec vitest run --config vitest.web.config.ts
 
   windows-sandbox-none:
     runs-on: windows-latest
@@ -126,10 +132,12 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/schedule-report.test.ts packages/cli/test/schedule-banner.test.ts
       - run: pnpm exec vitest run packages/core/test/post-edit-diagnostics.test.ts packages/cli/test/post-edit-diagnostics.test.ts
       - run: pnpm exec vitest run packages/core/test/agent-roles.test.ts packages/cli/test/agent-roles.test.ts
+      - run: pnpm exec vitest run packages/core/test/spend-ledger.test.ts packages/cli/test/spend-ledger.test.ts
       # Real local HTTP/OAuth, exact catalogue consent, advisory prompt and ACP refusal controls.
       - run: pnpm exec vitest run packages/core/test/mcp-remote.test.ts packages/core/test/mcp-oauth.test.ts packages/cli/test/mcp-remote-runtime.test.ts packages/cli/test/mcp-login.test.ts packages/cli/test/acp-config.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/diff-review.test.ts packages/cli/test/review.test.ts packages/cli/test/tui-visible.test.ts
       - run: pnpm exec vitest run packages/cli/test/ci-run.test.ts
+      - run: pnpm exec vitest run packages/core/test/output-schema.test.ts packages/cli/test/output-schema.test.ts
       - run: pnpm exec vitest run packages/core/test/sandbox-denial-evidence.test.ts
       - run: pnpm exec vitest run packages/core/test/net-permission.test.ts packages/cli/test/net-permission.test.ts
       - run: pnpm exec vitest run packages/core/test/web-fetch.test.ts packages/cli/test/web-fetch.test.ts
@@ -143,4 +151,8 @@ jobs:
 
       - run: pnpm exec vitest run packages/cli/test/mcp-serve.test.ts packages/cli/test/mcp-serve-runtime.test.ts packages/cli/test/mcp-serve-cli.test.ts
       - run: pnpm exec vitest run packages/core/test/thinking.test.ts packages/cli/test/thinking.test.ts packages/core/test/openai-chatgpt.test.ts packages/core/test/anthropic.test.ts packages/core/test/compaction.test.ts
+      - run: pnpm exec vitest run packages/cli/test/tool-summaries.test.ts
       - run: pnpm exec vitest run packages/core/test/otel.test.ts packages/cli/test/otel.test.ts
+      - run: pnpm exec vitest run packages/cli/test/markdown.test.ts
+      - run: pnpm exec vitest run packages/cli/test/prompt-history.test.ts packages/cli/test/prompt-composer.test.ts packages/cli/test/prompt-history-startup.test.ts
+      - run: pnpm exec vitest run packages/cli/test/web.test.ts
