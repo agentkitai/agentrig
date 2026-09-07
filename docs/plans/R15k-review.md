@@ -4,6 +4,17 @@ Frozen head: `08d41a31c95f5e503a948cf26014d6619fd7b557`; base `93452df`.
 One read-only Claude invocation requested at most 24 turns; result reported 35 turns,
 `is_error: false`. No additional review round. Two attempted ad-hoc Node checks
 were denied; those findings were explicitly inference, not independent reproduction.
+Review session: `e2cb24b5-3134-4865-9e2d-68d1b0efb2eb`; reported duration
+270,068 ms (API duration 268,563 ms).
+
+## Author clarification
+
+The original review's statement that no `renderEvent` function exists is incorrect:
+`packages/cli/src/render.ts:64` exports it. The statement that this row adds no new
+event type is correct. The post-review additive `session.start.inputAttachments`
+marker passes the real event-schema/store pipeline and the attachment-only
+initial/resumed regression asserts materialized messages equal snapshot messages.
+This clarification does not change the original prose below or imply another review.
 
 ## Original result (verbatim)
 
