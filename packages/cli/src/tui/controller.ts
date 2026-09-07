@@ -18,6 +18,7 @@ import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposed
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
 import {
+  COMMANDS,
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
   helpText,
@@ -317,6 +318,16 @@ export class TuiController {
   /** The loaded catalogue, for `/skills` and `/<skill-name>`. Set after buildAgent discovers it. */
   setSkills(skills: Skill[]): void {
     this.skills = skills;
+  }
+  /** Names only: completion never loads or invokes a skill/extension. */
+  completionNames(): string[] {
+    const names = new Map(COMMANDS.map(command => [command.name.toLowerCase(), command.name]));
+    for (const skill of this.skills) {
+      const name = skill.name;
+      if (/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(name) && !RESERVED_COMMAND_NAMES.has(name.toLowerCase()) && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+      if (names.size >= 256) break;
+    }
+    return [...names.values()].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0);
   }
   private extensionCommands: Array<ExtensionCommand & { extension: string }> = [];
   setCommands(commands: Array<ExtensionCommand & { extension: string }>): void { this.extensionCommands = commands; }
