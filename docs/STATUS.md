@@ -6,7 +6,10 @@ remain authorized work, with independent PRs and serialized green-main merges.
 No runtime permission or sandbox-policy changes. [Contract](plans/no-sandbox-network.md).
 Six named controls failed before registration (four config surfaces, actual inert
 net dispatch, actual MCP login argv); omitted/positive runtime controls already passed.
-All106 focused tests pass after the two-option change. Full/review/hosted gates pending.
+All106 focused tests pass after the two-option change. Build/typecheck, required
+pinned Docker full3,314 passed+2 existing skips/209files87.30s and Chromium1 pass.
+One Claude APPROVE/no blocking findings,24 requested/21 reported; original
+[review](plans/no-sandbox-network-review.md) retained. Hosted gates pending.
 
 #215 is done as main f196709697b1832063ddee6288fdac004a2ee7d0, all-four post-main
 CI34103360944 / structure34103361105 green. [Receipt](https://github.com/agentkitai/agentrig/pull/215).

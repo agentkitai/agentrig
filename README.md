@@ -201,7 +201,8 @@ The additive `net` permission defaults to ask and is distinct from legacy `netwo
 explicit `--sandbox-network` / config `sandboxNetwork: true`. Conversely that policy flag grants
 no tool permission. A separately approved one-time sandbox escape executes outside the sandbox;
 mode `none` provides no OS isolation. `--no-sandbox-network` overrides configured
-`sandboxNetwork: true` for one run, TUI launch, session resume or `mcp login`; it does
+`sandboxNetwork: true` for one run, TUI launch, session resume, ACP/web/MCP-serving
+launch or `mcp login`; it does
 not rewrite config. Omission preserves config and the last positive/negative flag wins.
 In mode `none`, forwarded network metadata is inert: neither flag creates a sandbox
 policy or a host-wide firewall. See [R11a's boundaries](docs/plans/R11a.md).
