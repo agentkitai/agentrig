@@ -8,7 +8,11 @@ function accountingLabel(value: StatusDetails["accounting"]): string {
   if (value.state !== "reported") return `cost:${value.state === "loading" ? "pending" : value.state === "unknown" ? "unknown" : "unavailable"}`;
   const { report: r, unavailable } = value.snapshot;
   const unknown = unavailable || r.unknownCalls > 0 || r.unresolvedCalls > 0 || r.unknownSegments > 0 || r.coverageStarted === null;
-  const cost = r.calls > 0 && r.completeCalls === 0
+  const hasUsage = (r.usageSnapshots ?? 0) > 0 ||
+    (r.usageSnapshots === undefined && Object.values(r.reportedUsage).some(count => count > 0));
+  const cost = r.completeCalls === 0 && !hasUsage
+    ? "run tokens:unreported cost:?"
+    : r.calls > 0 && r.completeCalls === 0
     ? `run tokens:${r.reportedUsage.input}/${r.reportedUsage.output}/${r.reportedUsage.cacheRead}/${r.reportedUsage.cacheWrite} cost:?`
     : `run~$${(r.estimatedMicros / 1e6).toFixed(6)}${unknown ? "+?" : ""}`;
   return `${cost}${r.reservedMicros > 0 ? ` reserved~$${(r.reservedMicros / 1e6).toFixed(6)}` : ""}${r.overrun ? " overrun" : ""}${value.stale ? " stale" : ""}`;

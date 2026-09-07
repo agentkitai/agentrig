@@ -57,6 +57,8 @@ export interface SpendReport {
   unknownSegments: number;
   /** Sum of available last snapshots; incomplete/retried calls remain explicitly unknown. */
   reportedUsage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  /** Available settled usage snapshots in this report window, not complete/priced calls. Legacy reports may omit. */
+  usageSnapshots?: number;
   overrun: boolean;
 }
 
@@ -169,7 +171,7 @@ export class SpendLedger {
     const result: SpendReport = { since, coverageStarted: records[0]?.ts ?? null, calls: 0, completeCalls: 0,
       estimatedMicros: 0, reservedMicros: 0, unknownCalls: 0, unresolvedCalls: 0,
       unknownSegments: new Set(records.filter(r => r.type === "gap" && (segment === undefined || r.segment === segment)).map(r => r.segment)).size,
-      reportedUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, overrun: false };
+      reportedUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, usageSnapshots: 0, overrun: false };
     for (const call of calls.values()) {
       if (segment !== undefined && call.segment !== segment) continue;
       const final = settled.get(call.call);
@@ -179,6 +181,7 @@ export class SpendLedger {
       if (day(call.ts) < since) continue;
       result.calls++;
       if (final?.usage !== null && final?.usage !== undefined) {
+        result.usageSnapshots!++;
         for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
           result.reportedUsage[key] = safe(result.reportedUsage[key] + (final.usage[key] ?? 0));
       }

@@ -1,5 +1,15 @@
 # Status
 
+Current user authorization: finish and merge PR #222, then stop again. No further
+roadmap implementation is authorized in this pass. Integrating green main
+e793fd0ffcfdb89b139d7cdab0d18132ead750e4; #219 and #220 are fully delivered.
+[Final #220 receipt](https://github.com/agentkitai/agentrig/pull/220#issuecomment-5569761339),
+all-four post-main CI34114715742 / structure34114715682 green.
+#222's original Claude review and addressed findings remain valid: no source conflict
+or production change during integration. Updated build/typecheck, full pinned-Docker,
+Chromium and exact-head CI precede merge; final post-main receipt will be on PR #222.
+All paragraphs below are historical checkpoints, not current continuation instructions.
+
 Current user instruction: finish PR #219 and PR #220, then STOP and wait for further
 instructions. Do not start more work. PR #222 (usage display, already opened) remains
 unmerged. External roadmap PR #221 merged separately as fd350d1d6dc71dab5846f355ddf4b8e6ed2b873a;
@@ -49,6 +59,20 @@ Historical preceding checkpoint:
 
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
+R16f no-usage status is active from green main ebfd10f. Three actual held-provider/
+settled-missing ledger/controller controls reproduced zero-looking absent usage.
+Additive report presence and footer wording only; accounting/permissions unchanged.
+[Contract](plans/pending-usage-status.md).65 focused, build/typecheck, required
+pinned Docker full3,325+2 existing skips/209files81.48s and Chromium1 pass.
+One Claude APPROVE with two low notes,24 requested/16 reported; zero-call/legacy
+compatibility closures tested and [original review](plans/pending-usage-status-review.md)
+preserved. Hosted gates pending; no merge claimed.
+#217 done: all-four post-main CI34109938845 / structure34109938825 green,
+[receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+#218 done: all-four post-main CI34108756786 / structure34108756915 green,
+[receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+The prior pending integration text below is historical.
+
 Network override #218 merged first as main8f741a800cfef739993a04b9c1a33d37548cfc48
 after all-four exact-head checks. Post-main CI34108756786 / structure34108756915
 are pending; final hosted receipt is on PR#218. Capability summary #217 integrates it.
