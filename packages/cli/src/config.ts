@@ -7,6 +7,7 @@ import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from 
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 import { NotificationMode, NotificationIdleSeconds } from "./tui/notifications.js";
+import { TuiSettingsSchema } from "./tui/settings.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
 export type { ReasoningEffort } from "@agentkitai/agentrig-core";
@@ -92,6 +93,7 @@ const ConfigValuesSchema = z
     checkpoints: z.boolean().optional(),
     diagnostics: DiagnosticsConfigSchema.optional(),
     notifications: NotificationMode.optional(),
+    tui: TuiSettingsSchema.optional(),
     notificationIdleSeconds: NotificationIdleSeconds.optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),

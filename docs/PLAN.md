@@ -788,6 +788,11 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R16h adds startup-captured strict `tui` settings: fixed dark/light palettes and
+bounded permission/history/abort keys. NO_COLOR overrides TUI styling; fixed
+Ctrl+C/Escape and paste/protected-prompt guards remain. No runtime editor or
+arbitrary terminal code. See [TUI settings](TUI-SETTINGS.md).
+
 R15k adds explicit TUI `@path` reads and Ctrl+V clipboard images, bounded metadata
 completion with one-time policy approval, and advisory source-labeled content
 through the normal core read pipeline. Canonical logs retain sensitive payloads;

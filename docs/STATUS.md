@@ -1,6 +1,11 @@
 # Status
 
-Last open backlog PR: **#194 orchestration decision**. #207 is done on `82b2f27`,
+Active: **R16g manual commands and independent R16h themes/keybindings**.
+Backlog drained; R15l #194 is done on main8fe6f29, all-four
+CI34091238822 / structure34091238830 green.
+[Receipt](https://github.com/agentkitai/agentrig/pull/194#issuecomment-5566147772).
+R16g merges first, then R16h integrates and retests. [R16h contract](plans/R16h.md).
+Earlier backlog checkpoints below are historical. #207 is done on `82b2f27`,
 all-four CI34089126856 / structure34089126808 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/207#issuecomment-5565941414).
 #194 integrates separately merged CI optimization #209, green main716f810
@@ -11,7 +16,7 @@ all-four CI34089126856 / structure34089126808 green.
 `8da21be`, all-four CI34086055156 / structure34086055211 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/201#issuecomment-5565536470).
 Only merges are serialized; independent existing PR preparation may run in
-parallel. R16g/R16h remain frozen until this backlog is drained.
+parallel. The prior R16g/R16h backlog freeze is lifted.
 Earlier integration checkpoints below retain their historical pending gates.
 
 Historical attachment integration checkpoint:
@@ -345,7 +350,7 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ## Current priorities — revised 2026-09-06
 
-### R15l decision recorded — independent documentation row, delivery gates pending
+### R15l done — PR #194; historical decision and verification checkpoints
 
 Refreshed on repaired green main0b65aa1; only documentation conflicts, original
 review unchanged.212local links resolve; build/typecheck and7structure tests pass

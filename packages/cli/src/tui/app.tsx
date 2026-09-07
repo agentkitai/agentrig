@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useStdout } from "ink";
+import { Children, cloneElement, createContext, isValidElement, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Box, Static, Text as InkText, useApp, useStdout } from "ink";
 import type { TuiController, TuiState } from "./controller.js";
 import {
   BracketedPasteDecoder,
@@ -12,6 +12,7 @@ import { fitToRows, liveRows } from "./viewport.js";
 import { useRawInput } from "./raw-input.js";
 import { createMarkdownCache } from "./markdown.js";
 import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js";
+import { mapTuiAction, resolveTuiSettings, type TuiSettings } from "./settings.js";
 
 /**
  * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
@@ -20,21 +21,27 @@ import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js
  * hold it.
  */
 
-// `exactOptionalPropertyTypes` means `color={undefined}` is not the same as omitting it, so the
-// default tone is a real colour rather than an absent prop
-const TONE: Record<TuiState["lines"][number]["tone"], string> = {
-  event: "gray",
-  you: "cyan",
-  system: "gray",
-  // the reply is what the user asked for; everything else is context around it
-  assistant: "white",
-  error: "red",
-};
+const PlainText = createContext(false);
+function withoutSgr(children: ReactNode): ReactNode {
+  return Children.map(children, child => typeof child === "string" ? child.replace(/\u001b\[[0-9;:]*m/g, "")
+    : isValidElement<{ children?: ReactNode }>(child) ? cloneElement(child, {}, withoutSgr(child.props.children)) : child);
+}
+/** Per-tree styling only: NO_COLOR never mutates Ink/chalk/global process settings. */
+function Text(props: ComponentProps<typeof InkText>): JSX.Element {
+  const plain = useContext(PlainText);
+  if (!plain) return <InkText {...props} />;
+  const { color: _color, backgroundColor: _backgroundColor, dimColor: _dim, bold: _bold, italic: _italic,
+    underline: _underline, strikethrough: _strike, inverse: _inverse, children, ...rest } = props;
+  return <InkText {...rest}>{withoutSgr(children)}</InkText>;
+}
 
-export function App({ controller, onMounted, onInput, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; onInput?: () => void; history?: PromptHistory }): JSX.Element {
+export function App({ controller, onMounted, onInput, history: suppliedHistory, settings: suppliedSettings }: { controller: TuiController; onMounted?: () => void; onInput?: () => void; history?: PromptHistory; settings?: TuiSettings }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [markdown] = useState(createMarkdownCache);
+  const [settings] = useState(() => resolveTuiSettings(suppliedSettings));
+  const [plain] = useState(() => process.env["NO_COLOR"] !== undefined);
+  const palette = settings.palette, permissionKeys = settings.keybindings.permission;
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   const [clock, setClock] = useState(Date.now());
@@ -148,23 +155,32 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
     const permissionAction = (action: OrdinaryInputAction): void => {
       const pending = controller.snapshot().pending;
       if (pending === null) return;
+      const pressed = action.type === "append" && /^[a-zA-Z]$/.test(action.text) ? action.text.toLowerCase() : undefined;
       buf.touch(); // coalesce scope edits and controller redraws at the input quiet point
       if (pending.scope !== undefined) {
         if (action.type === "escape") controller.cancelPermissionScope();
         else if (pending.scope.preview) {
-          if (action.type === "append" && /^(y|Y)$/.test(action.text) && pending.scope === previewAtInput) controller.confirmPermissionScope();
-          else if (action.type === "append" && /^(e|E)$/.test(action.text)) controller.editPermissionScope(pending.scope.text);
-          else if (action.type === "append" && /^(n|N)$/.test(action.text)) controller.cancelPermissionScope();
+          if (pressed === permissionKeys.allowOnce && pending.scope === previewAtInput) controller.confirmPermissionScope();
+          else if (pressed === permissionKeys.editScope) controller.editPermissionScope(pending.scope.text);
+          else if (pressed === permissionKeys.denyOnce) controller.cancelPermissionScope();
         } else if (action.type === "enter") controller.previewPermissionScope();
         else if (action.type === "backspace") controller.editPermissionScope(pending.scope.text.slice(0, -1));
         else if (action.type === "append") controller.editPermissionScope(pending.scope.text + action.text);
         return;
       }
-      if (action.type === "append" && /^(s|S)$/.test(action.text)) controller.startPermissionScope();
-      else if (action.type === "append" && /^(y|Y)$/.test(action.text)) controller.answerPermission("allow");
-      else if (action.type === "append" && /^(a|A)$/.test(action.text)) controller.answerPermission("allow", true);
-      else if (action.type === "append" && /^(d|D)$/.test(action.text)) controller.answerPermission("deny", true);
-      else if (action.type === "escape" || (action.type === "append" && /^(n|N)$/.test(action.text))) controller.answerPermission("deny");
+      if (pressed === permissionKeys.scope) controller.startPermissionScope();
+      else if (pressed === permissionKeys.allowOnce) controller.answerPermission("allow");
+      else if (pressed === permissionKeys.allowSession) controller.answerPermission("allow", true);
+      else if (pressed === permissionKeys.denySession) controller.answerPermission("deny", true);
+      else if (action.type === "escape" || pressed === permissionKeys.denyOnce) controller.answerPermission("deny");
+    };
+    const dispatchAction = (original: OrdinaryInputAction): void => {
+      const action = mapTuiAction(original, settings); if (action === undefined) return;
+      if (action.type === "interrupt") {
+        if (controller.snapshot().status === "running" || controller.snapshot().reviewing || controller.inputBusy()) controller.abort();
+        else exit();
+      } else if (controller.snapshot().pending !== null) permissionAction(action);
+      else composerAction(action);
     };
     const decoded = paste.feed(raw);
     if (decoded.protocol) {
@@ -180,14 +196,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
 
         // Bytes adjacent to an unmatched closing marker are ordinary input. Ink gives one semantic
         // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
-        for (const action of ordinaryInputActions(segment.text)) {
-          if (action.type === "interrupt") {
-            if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
-            else exit();
-          } else if (controller.snapshot().pending !== null) {
-            permissionAction(action);
-          } else composerAction(action);
-        }
+        for (const action of ordinaryInputActions(segment.text)) dispatchAction(action);
       }
       // There is deliberately no timer while a paste or possible split marker remains open. Even a
       // long delivery pause is not proof that the terminal has finished writing the paste.
@@ -201,10 +210,11 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
     if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
 
     if (key.ctrl && char === "c") {
-      if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
-      else exit();
+      dispatchAction({ type: "interrupt" });
       return;
     }
+
+    if (raw === "\u0010" || raw === "\u000e" || raw === "\u0007") { dispatchAction({ type: "append", text: raw }); return; }
 
     if (raw === "\u0016") { void controller.pasteImage(); return; }
 
@@ -230,7 +240,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
       return;
     }
 
-    if (key.upArrow || key.downArrow || key.tab) { composerAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
+    if (key.upArrow || key.downArrow || key.tab) { dispatchAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
     if (key.return && key.shift) { composerAction({ type: "newline" }); return; }
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as
@@ -262,7 +272,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
   const rows = liveRows(stdout?.rows);
 
   return (
-    <Box flexDirection="column">
+    <PlainText.Provider value={plain}><Box flexDirection="column">
       {/*
         `Static` writes each line ONCE above the live frame and never re-renders it. Keeping the
         scrollback as live `<Text>` made render cost grow with the buffer — 800 lines took 5s at
@@ -271,8 +281,8 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
       */}
       <Static items={state.lines}>
         {(l) => (
-          <Text key={l.key} color={TONE[l.tone]}>
-            {markdown(l, columns, process.env["NO_COLOR"] === undefined)}
+          <Text key={l.key} color={palette[l.tone]}>
+            {markdown(l, columns, !plain)}
           </Text>
         )}
       </Static>
@@ -285,13 +295,13 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
       */}
       {state.streaming !== "" ? (
         <Box marginTop={1}>
-          <Text>{fitToRows(state.streaming, columns, rows)}</Text>
+          <Text color={palette.assistant}>{fitToRows(state.streaming, columns, rows)}</Text>
         </Box>
       ) : null}
 
       {state.pending !== null ? (
         <Box marginTop={1} flexDirection="column">
-          <Text color="yellow">
+          <Text color={palette.warning}>
             {state.pending.req.origin === "sandbox-escalation" ? (
               <>blocked by sandbox — run outside it?</>
             ) : (
@@ -302,40 +312,40 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
           </Text>
           {state.pending.scope !== undefined ? <>
             <Text>{fitToRows(state.pending.scope.preview
-              ? "Exact future scope printed above. y = confirm grant, e = edit, n / esc = cancel scope"
+              ? `Exact future scope printed above. ${permissionKeys.allowOnce} = confirm grant, ${permissionKeys.editScope} = edit, ${permissionKeys.denyOnce} / esc = cancel scope`
               : `Edit ${state.pending.scope.kind === "path" ? "absolute pathPrefix" : "literal commandPrefix + absolute cwd"} JSON; enter = preview, esc = cancel scope`, columns, 2)}</Text>
             <Text>{fitToRows(state.pending.scope.error ?? state.pending.scope.text, columns, rows)}</Text>
           </> : <Text dimColor>
             {state.pending.req.origin === "sandbox-escalation"
-              ? "y = run outside once, n / esc = deny"
+              ? `${permissionKeys.allowOnce} = run outside once, ${permissionKeys.denyOnce} / esc = deny`
               : state.pending.req.origin === "mcp-definition-change"
-              ? "y = approve these exact definitions, n / esc = deny (no standing grant)"
+              ? `${permissionKeys.allowOnce} = approve these exact definitions, ${permissionKeys.denyOnce} / esc = deny (no standing grant)`
               : state.pending.req.origin === "external-input-expansion"
-              ? "y = approve this first-use expansion once, n / esc = deny (no standing grant)"
-              : state.pending.permissionGrants === undefined ? "y = allow once, n / esc = deny (no standing grants for this request)"
-              : "y = allow once, a = allow all session, s = scope, n / esc = deny, d = deny all session"}
+              ? `${permissionKeys.allowOnce} = approve this first-use expansion once, ${permissionKeys.denyOnce} / esc = deny (no standing grant)`
+              : state.pending.permissionGrants === undefined ? `${permissionKeys.allowOnce} = allow once, ${permissionKeys.denyOnce} / esc = deny (no standing grants for this request)`
+              : `${permissionKeys.allowOnce} = allow once, ${permissionKeys.allowSession} = allow all session, ${permissionKeys.scope} = scope, ${permissionKeys.denyOnce} / esc = deny, ${permissionKeys.denySession} = deny all session`}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>}
         </Box>
       ) : state.question !== null ? (
         <Box marginTop={1} flexDirection="column">
-          <Text color="yellow">{fitToRows(`Question: ${state.question.request.prompt}\n${state.question.request.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}`, columns, Math.max(2, Math.min(7, rows - 3)))}</Text>
+          <Text color={palette.warning}>{fitToRows(`Question: ${state.question.request.prompt}\n${state.question.request.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}`, columns, Math.max(2, Math.min(7, rows - 3)))}</Text>
           <Text>{fitToRows(`answer: ${input}`, columns, 2)}</Text>
           <Text dimColor>{fitToRows(`Enter a number or free text; clarification is not permission.${state.queuedQuestions ? ` ${state.queuedQuestions} more waiting.` : ""}`, columns, 2)}</Text>
         </Box>
       ) : state.escalation !== null ? (
         <Box marginTop={1} flexDirection="column">
-          <Text color="yellow">supervisor asks: {state.escalation.question}</Text>
+          <Text color={palette.warning}>supervisor asks: {state.escalation.question}</Text>
           <Box>
-            <Text color="cyan">answer: </Text>
+            <Text color={palette.you}>answer: </Text>
             <Text>{fitToRows(input, columns - 8, rows)}</Text>
           </Box>
           <Text dimColor>enter sends this guidance to the running agent; unanswered prompts expire</Text>
         </Box>
       ) : (
         <Box marginTop={1}>
-          {state.reviewing ? <Text color="yellow">reviewing captured diff · /abort to cancel · </Text> : null}
-          <Text color={state.status === "running" ? "yellow" : "green"}>
+          {state.reviewing ? <Text color={palette.warning}>reviewing captured diff · /abort to cancel · </Text> : null}
+          <Text color={state.status === "running" ? palette.warning : palette.prompt}>
             {state.status === "running" ? "· " : "> "}
           </Text>
           {/* less the two columns the prompt marker takes, or the line wraps one row further */}
@@ -349,10 +359,10 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
           long branch name wrapping to two would push the frame past the height the viewport was
           sized to hold
         */}
-        <Text dimColor wrap="truncate-end">
+        <Text color={palette.status} dimColor wrap="truncate-end">
           {state.pending === null && state.question === null && state.escalation === null && completionHint.current ? completionHint.current : statusLine(state, clock)}
         </Text>
       </Box>
-    </Box>
+    </Box></PlainText.Provider>
   );
 }
