@@ -29,3 +29,9 @@ command disclosed. Author verified the reviewer fallback source matched the base
 No source changes after the frozen review. Invalid explicitly supplied limits also
 refuse when subagents are disabled; no rounding or raw-value echo. Exact-head CI
 and root-only merge/post-main gates remain required.
+
+Integrated merged #214 main dbc89c9231bcce10cca5ee67de6cf0204008ce91. Source
+changes merge without conflict; only STATUS needed additive historical-checkpoint
+resolution. Skill-casing validation/controls retained. #214 post-main pending at
+integration; #215/#216 remain independently eligible, not a fixed merge order.
+Combined local and exact-head hosted checks follow; no additional broad review.
