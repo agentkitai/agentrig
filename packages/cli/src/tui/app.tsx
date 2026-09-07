@@ -38,6 +38,7 @@ export function App({ controller, onMounted }: { controller: TuiController; onMo
   // Startup notices are already in the initial controller snapshot. Never acknowledge them
   // before this actual React/Ink mount (a timer or queued controller line is not readiness).
   const mounted = useRef(false);
+  useEffect(() => controller.mountStatus(), [controller]);
   useEffect(() => { if (!mounted.current) { mounted.current = true; onMounted?.(); } }, [onMounted]);
   const deferredState = useRef<TuiState | null>(null);
   /**
