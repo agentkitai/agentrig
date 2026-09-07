@@ -1105,8 +1105,9 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] Canonical nested skill filenames — [PR #214](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
 - [x] Grapheme-safe backspace — [PR #215](https://github.com/agentkitai/agentrig/pull/215#issuecomment-5568164344).
 - [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
-- [ ] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218), merged; post-merge CI pending at this checkpoint.
-- [ ] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217), open; integrated tests pass, hosted gates pending.
+- [x] One-run sandbox-network disable override — [PR #218 final receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+- [x] All-unknown capability evidence label — [PR #217 final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+- [ ] Abort-grace fixture observed readiness — implemented; review and delivery gates pending ([contract](plans/abort-grace-readiness.md)).
 
 All other follow-up fragments below remain queued unless explicitly marked done.
 
@@ -1453,7 +1454,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
   resetting the code-unit-based quiet timer. Buffer contents remain correct, but
   the redraw may wait for release. Consider an explicit edit-gesture classification
   with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.
-- Abort-grace fixture repair (next): macOS PR#217 CI34107659557 missed the expected
+- Abort-grace fixture repair (implemented; delivery pending): macOS PR#217 CI34107659557 missed the expected
   orphan warning in subagent.test.ts because its fixed80ms abort assumes child startup.
   A controlled150ms provider-start delay independently reproduces that precondition race;
   the CI log does not establish the remote delay's cause. Wait for bounded real blocked-child

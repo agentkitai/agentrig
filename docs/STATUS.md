@@ -1,5 +1,18 @@
 # Status
 
+Current implementation: bounded abort-grace fixture readiness repair, from green
+main ebfd10f. No production changes. Original/delayed-start pair reproduces one
+missing-warning failure before correction; both pass after observing the blocked
+child terminal-store gate. Exact100ms grace, nonfatal warning and ordering remain;
+finally releases the gate and joins the actual child. [Contract](plans/abort-grace-readiness.md).
+Review/full local/hosted delivery gates pending. Entire END queue remains active;
+independent serializer and status-accounting follow-ups proceed in other worktrees.
+#217 and #218 are delivered with all-four post-main checks green:
+[217 receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445),
+[218 receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+
+Historical preceding checkpoint:
+
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
 Network override #218 merged first as main8f741a800cfef739993a04b9c1a33d37548cfc48
