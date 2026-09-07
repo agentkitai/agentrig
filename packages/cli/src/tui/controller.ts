@@ -492,7 +492,7 @@ export class TuiController {
   private showPermissionEffects(req: PermissionRequest): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
-    for (const line of permissionEffectLines(req)) this.print(line, "system");
+    for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) this.print(line, "system");
   }
 
   /**
