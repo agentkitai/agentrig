@@ -1300,3 +1300,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   tone after inline SGR resets (coordinate with R16h themes). Consider a bounded way
   to inspect oversized replies beyond the literal display prefix; original logs
   remain complete and this does not remove the rendering resource bounds.
+- Fixture polish: extend abort/join ownership to the unrelated evidence-grading
+  fixtures if they gain longer-lived children. The two demonstrated Windows
+  outer-timeout failures are handled in the bounded repair, not deferred here.

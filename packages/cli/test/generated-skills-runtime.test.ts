@@ -46,7 +46,7 @@ it("manual hint reaches the assembled prompt without claiming activation or repl
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; denied loads never become usage evidence (startup=%ims)", async (delayMs, { signal, onTestFinished }) => {
+it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; denied loads never become usage evidence (startup=%ims)", { timeout: 30_000 }, async (delayMs, { signal, onTestFinished }) => {
   const work = (async () => {
   const f = await skillFixture();
   const home = await realpath(await mkdtemp(join(tmpdir(), "agentrig-generated-home-")));
@@ -81,10 +81,10 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
       let turn = 0;
       const systems: string[] = [];
       selectedProvider = { id: "fixture", model: "selection", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
-        async *stream(request, signal) {
+        async *stream(request, requestSignal) {
           systems.push(request.system);
           if (turn++ === 0) {
-            if (delayMs) await delay(delayMs, undefined, { signal });
+            if (delayMs) await delay(delayMs, undefined, { signal: requestSignal });
             yield { type: "tool_use", id: "select", name: "skill", input: { name, generated: true } };
             yield { type: "stop", reason: "tool_use" };
           } else { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; }
@@ -141,4 +141,4 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
   // A timeout cancels the owned session; join the complete fixture before reuse.
   onTestFinished(() => work.catch(() => {}), 30_000);
   await work;
-}, 30_000);
+});

@@ -52,5 +52,16 @@ session completion asserted additionally. Initial cleanup implementation used
 shape. Corrected to `it.for`; no product edits or assertion removal.
 
 Build/typecheck pass. Focused CLI skill/evidence and supervisor evidence suites:
-18passed /3files,8.40s. Actual Chromium:1passed,2.80s. Full required-Docker
-verification and one bounded Claude review pending; no passing delivery claimed.
+18passed /3files,8.40s. Actual Chromium:1passed,2.80s. Full required-Docker:
+3,070passed +2 existing skips /192files,75.98s.
+
+One bounded [Claude review](runtime-fixture-ci-bound-review.md): APPROVE, static
+only, no material defect established.24requested/25reported turns exhausted with
+no verdict; sole same-session tools-disabled summary1/1, total26reported.
+Three denied Bash commands are distinguished from the original summary's broader
+denial wording in the retained review. No independent test pass claimed.
+Two trivial optional suggestions applied: typed `it.for` options and distinct
+provider request-signal name. Unrelated fixtures remain outside this repair.
+Final post-review build/typecheck pass; required-Docker3,070passed +2 existing
+skips /192files,70.98s; actual Chromium1passed,2.35s. Exact-head/repaired-main
+gates pending. No production code changed, no second substantive review.
