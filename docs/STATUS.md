@@ -101,6 +101,9 @@ Integrated repaired green main0b65aa1: frozen install/build/typecheck,
 actual Chromium1passed,2.45s. No production conflicts or second review.
 Those prior-head checks passed. #204 is now delivered; this branch integrates
 its green main7fe3440 and requires fresh final exact-head/post-main gates.
+Final local verification passes build/typecheck,70focused diff/Markdown/status
+tests, required-Docker3,103passed +2skips /197files,74.05s, and actual Chromium
+1passed,2.56s. Only docs conflicts; no second substantive review.
 
 Bounded builtin before/after event observations and shared diff rendering for
 completed edits and explicitly proposed permission excerpts. No preapproval read,
