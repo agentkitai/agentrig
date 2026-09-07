@@ -10,6 +10,7 @@ import {
 import { statusLine } from "./status.js";
 import { fitToRows, liveRows } from "./viewport.js";
 import { useRawInput } from "./raw-input.js";
+import { createMarkdownCache } from "./markdown.js";
 import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js";
 
 /**
@@ -33,6 +34,7 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
 export function App({ controller, onMounted, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; history?: PromptHistory }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
+  const [markdown] = useState(createMarkdownCache);
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   const [clock, setClock] = useState(Date.now());
@@ -256,7 +258,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
       <Static items={state.lines}>
         {(l) => (
           <Text key={l.key} color={TONE[l.tone]}>
-            {l.text}
+            {markdown(l, columns, process.env["NO_COLOR"] === undefined)}
           </Text>
         )}
       </Static>

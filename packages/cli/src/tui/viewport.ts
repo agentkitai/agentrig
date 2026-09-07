@@ -93,3 +93,29 @@ export function liveRows(terminalRows: number | undefined, cap = 8): number {
   // Below about six rows there is no arrangement that fits and the cliff is unavoidable.
   return Math.max(1, Math.min(cap, Math.floor((rows - 6) / 2)));
 }
+
+/** Final-answer table layout lives beside the other terminal-width decisions, not in a parser. */
+export function markdownTable(header: string[], rows: string[][], columns: number, omitted = false): string {
+  const width = Math.max(1, Math.min(240, Math.floor(columns) || 80));
+  // Renderer-owned SGR only. Dropping styles in cells avoids slicing escape sequences.
+  const plain = (text: string) => text.replace(/\u001b\[[\d;]*m/g, "").replace(/\n/g, " ");
+  const values = [header, ...rows].map(row => row.map(plain));
+  const count = header.length;
+  if (!count) return "";
+  const available = Math.max(1, Math.floor((width - (count - 1) * 3) / count));
+  if (available < 3 || count * 4 > width) {
+    return values.map(row => row.map((cell, i) => `${plain(header[i] ?? String(i + 1))}: ${cell}`).join("\n")).join("\n\n")
+      + (omitted ? "\n[table rows/columns omitted]" : "");
+  }
+  const sizes = header.map((_cell, index) => Math.max(1, Math.min(available, Math.max(...values.map(row => stringWidth(row[index] ?? ""))))));
+  const fit = (text: string, size: number) => {
+    let value = "", used = 0; const truncated = stringWidth(text) > size;
+    for (const char of text) { const next = stringWidth(char); if (used + next > size - (truncated ? 1 : 0)) break; value += char; used += next; }
+    if (truncated) { value += "…"; used++; omitted = true; }
+    return value + " ".repeat(Math.max(0, size - used));
+  };
+  const lines = values.map(row => sizes.map((size, i) => fit(row[i] ?? "", size)).join(" │ "));
+  lines.splice(1, 0, sizes.map(size => "─".repeat(size)).join("─┼─"));
+  if (omitted) lines.push("[table display elided; original text retained]");
+  return lines.join("\n");
+}
