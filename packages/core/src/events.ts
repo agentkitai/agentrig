@@ -243,6 +243,7 @@ export const EventPayload = z.discriminatedUnion("type", [
     attempt: z.number().int().min(1).max(2), maxAttempts: z.literal(2), reason: z.literal("max_tokens") }),
   z.object({ type: z.literal("turn.end"), n: z.number().int() }),
   z.object({ type: z.literal("model.request"), tokensIn: z.number().int() }),
+  z.object({ type: z.literal("budget.cap"), reason: z.enum(["exhausted", "uncertain", "unavailable", "unsupported"]), segment: z.string().min(1).max(256) }),
   z.object({ type: z.literal("model.delta"), text: z.string() }),
   z.object({ type: z.literal("model.response"), usage: Usage, stop: z.string(),
     /** E2: missing on legacy logs means unknown, not a provider-reported zero. Retried,
