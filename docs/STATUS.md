@@ -6,10 +6,14 @@ Prior halt feel #248 is resolved by the human outside the train: restore diagnos
 under the existing acceptance, not a new exception; no second arbiter. This is
 round 2 of the three-round cap, preserving completed round 1 and the sandbox
 approval by 1bb8ec86. Previous conductors: 8fbde1a3, 38c4612d. Prior children:
-7dbfad2b, 1bb8ec86, b9109d9f, 12b8dd75. This continuation is child 5 (builder
-agentrig); it spawns zero children. Current child token/session telemetry is not
+7dbfad2b, 1bb8ec86, b9109d9f, 12b8dd75. This continuation is the fifth known implementation/arbitration child (builder
+agentrig; external-review child counts are unavailable here); it spawns zero children. Current child token/session telemetry is not
 available in this tool surface; prior partial snapshots remain below, not totals.
 One prior halt (#248); historical friction and accounting are preserved.
+Round-2 repairs and reproducible evidence: [R17b-round2](plans/R17b-round2.md).
+Local build/test/typecheck exit 0 (213 files, 3379 passed / 4 skipped).
+No child spawned. Feel #251 records orphan worktree index.lock friction before
+recovery (cause unverified); exact pushed-head CI is reported in PR #234.
 
 
 ## R17 builder gate

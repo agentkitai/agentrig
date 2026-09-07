@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -28,7 +28,6 @@ it('fresh repository without config records default diagnostics, checkpoints and
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r)); const address = server.address(); if (!address || typeof address === 'string') throw Error('address');
   try {
     await exec('git', ['init', '-q'], { cwd });
-    await writeFile(join(cwd, 'tsconfig.json'), JSON.stringify({ compilerOptions: { noEmit: true } }));
     const { stdout, stderr } = await exec(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), 'run', 'Write a.ts then reply with Markdown',
       // Transport and one explicit user write approval only: no feature toggles, profile or config.
       '--provider', 'openai', '--model', 'gpt-4o', '--base-url', `http://127.0.0.1:${address.port}`, '--allow', 'write_file'],

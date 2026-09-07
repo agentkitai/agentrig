@@ -22,7 +22,7 @@ async function resolved(argv: string[] = [], config?: object, protocolNotice = f
 it('zero-config recommended profile enables existing conveniences without moving authority', async () => {
   const opts = await resolved();
   expect(opts).toMatchObject({ supervise: true, checkpoints: true, ingestOnEnd: true, memory: '.agentrig', notifications: 'bell' });
-  expect(opts.diagnostics).toEqual([]);
+  expect(opts.diagnostics).toEqual([expect.objectContaining({parser: "tsc"})]);
   expect(opts.yolo).not.toBe(true); expect(opts.allow).toEqual([]); expect(opts.sandbox).toBe("none");
   expect(opts.supervisorReview).not.toBe(true); expect(opts.supervisorAbort).not.toBe(true);
 });
@@ -92,11 +92,11 @@ it.each([{args: ['tui']}, {args: ['sessions', 'resume', 'fixture']}])('real $arg
   expect(received?.checkpoints).toBe(true);
 });
 
-it('implicit checkers skip config-less and reference-only roots and scope configured Python edits', async () => {
-  expect((await resolved()).diagnostics).toEqual([]);
-  expect((await resolved([], undefined, false, {'tsconfig.json': '{"references":[{"path":"./packages/a"}]}'})).diagnostics).toEqual([]);
-  expect((await resolved([], undefined, false, {'tsconfig.json': '{"compilerOptions":{"noEmit":true}}'})).diagnostics).toEqual([expect.objectContaining({parser: 'tsc'})]);
-  expect((await resolved([], undefined, false, {'pyproject.toml': '[project]\nname="fixture"'})).diagnostics).toEqual([expect.objectContaining({parser: 'ruff-json', args: ['check', '--output-format=json', '--', '{path}']})]);
+it.each([undefined, '{"references":[]}', '{"references":[],"include":["*.ts"]}', '{/* "references": [] */ "include":["*.ts"]}'])('implicit tsc remains available with config %s', async text => {
+  expect((await resolved([], undefined, false, text === undefined ? {} : {'tsconfig.json': text})).diagnostics).toEqual([expect.objectContaining({parser: 'tsc'})]);
+});
+it('implicit Python checker scopes edited paths and retains tsc', async () => {
+  expect((await resolved([], undefined, false, {'pyproject.toml': '[project]\nname="fixture"'})).diagnostics).toEqual([expect.objectContaining({parser:'tsc'}), expect.objectContaining({parser: 'ruff-json', args: ['check', '--output-format=json', '--', '{path}']})]);
 });
 it('one explicit restore prerequisite cannot borrow authority from the other implicit default', async () => {
   const flags = ['--supervisor-abort', '--supervisor-abort-restores'];
@@ -104,4 +104,14 @@ it('one explicit restore prerequisite cannot borrow authority from the other imp
     const opts = await resolved(flags, config);
     expect(() => validateAbortRestores(opts)).toThrow();
   }
+});
+
+it('review accepts the built-in recommended baseline without enabling run hooks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'recommended-review-')); roots.push(root);
+  const errors: string[] = [];
+  const spy = vi.spyOn(console, "error").mockImplementation((...args) => {errors.push(args.join(" "));});
+  await buildProgram({config: {cwd: root, home: root, env: {}}}).parseAsync(['review', '--profile', 'recommended'], {from:'user'});
+  spy.mockRestore(); process.exitCode = 0;
+  expect(errors.join("\n")).not.toContain("unknown config profile");
+  expect(errors.join("\n")).toContain("diff review refused or failed");
 });

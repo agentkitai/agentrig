@@ -843,8 +843,33 @@ it("sealing retains only the last two turn refs and preserves last retained undo
   expect(await git("rev-parse", "HEAD")).toBe(branch);
   expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(5);
   const store = new SessionStore({root: join(root, ".agentrig", "sessions")});
-  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow();
+  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two sealed turn refs are retained");
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 5");
   await undoSession(store, session.id, {cwd: root, toTurn: 4});
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 3");
+});
+
+it("prune failure cannot publish a seal and successful seal observes already-pruned refs", async () => {
+  await initRepo();
+  const cp = new Checkpointer(); const events: CheckpointHookEvent[] = [];
+  let refsAtSeal: string | undefined;
+  const ctx = {point:"pre_tool" as const, sessionId:"atomicprune", cwd:root, turn:1,
+    signal:new AbortController().signal, emitCheckpoint:async(e:CheckpointHookEvent)=>{
+      if(e.type==="checkpoint.sealed") refsAtSeal=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+      events.push(e);
+    }};
+  try {
+    for(let turn=1;turn<=4;turn++) {ctx.turn=turn;await cp.handler(ctx);await writeFile(join(root,"tracked.txt"),`turn ${turn}`);await cp.afterTool(ctx);}
+    const lock=join(root,".git","refs","agentrig","atomicprune","1.lock");
+    await writeFile(lock,"locked");
+    await expect(cp.seal(ctx)).rejects.toThrow();
+    expect(events.some(e=>e.type==="checkpoint.sealed")).toBe(false);
+    const failedRefs=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+    expect(failedRefs.split("\n")).toHaveLength(4);
+    expect(failedRefs).not.toContain("/sealed/");
+    await rm(lock);
+    await cp.seal(ctx);
+    expect(refsAtSeal).toContain("/sealed/");
+    expect(refsAtSeal).not.toMatch(/atomicprune\/[12](?:\n|$)/);
+  } finally {await cp.endSession(ctx.sessionId);}
 });

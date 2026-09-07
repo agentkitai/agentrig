@@ -1,5 +1,9 @@
 # R17b repair round 1/3 — PR #234
 
+> Preserved historical record. Current behavior/evidence and explicit withdrawals
+> are in [repair round 2](R17b-round2.md); the old skipped-tsc, empty E1 errors,
+> 18-mutant current-head implication and pending CI claims do not apply to round 2.
+
 Builder **agentrig**, conductor **8fbde1a3**, repair child **12b8dd75** (child 4:
 `7dbfad2b`, `1bb8ec86`, `b9109d9f`, `12b8dd75`). Old head
 `33cf281fa2e6d36d07537dee9940e2e635cd816d`; baseline-first commit `cf3ed28`

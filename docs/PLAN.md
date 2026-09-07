@@ -308,7 +308,7 @@ unknown effects and foreground shell calls require capture. Raw worktree trees a
 `refs/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
 `checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
 background-work refusal, coverage exclusions and host quiescence preconditions are specified in
-[R4a](plans/R4a.md). R4b exposes opt-in `--checkpoints` / config `checkpoints: true` in run/TUI,
+[R4a](plans/R4a.md). R4b exposes config `checkpoints: true` in run/TUI (R17b makes it implicit for sandbox absent/none),
 subject to the existing host-hook sandbox restriction. It tracks stable post-tool ownership,
 rejects later external edits, and records `checkpoint.sealed` at a quiescent session end.
 `undoSession` powers `sessions undo <id> [--to-turn n]` and idle TUI `/undo [turn]`: require a
@@ -697,8 +697,9 @@ Default ladder (per signal type, escalating on repeat): inject_guidance → forc
 
 R4c optionally restores after a supervisor-requested abort: `abortRestores: true` plus a trusted
 `restoreCheckpoint(sessionId, signal)` seam. The supervisor imports only core types; CLI/TUI
-provide guarded `undoSession` and require `--supervise --supervisor-abort --checkpoints
---supervisor-abort-restores` (or equivalent trusted config). Restoration waits for an aborted
+provide guarded `undoSession` and require explicit trusted config `supervise: true` and `checkpoints: true`, plus
+`--supervisor-abort --supervisor-abort-restores` (or equivalent trusted config).
+Implicit recommended defaults cannot authorize destructive restore. Restoration waits for an aborted
 `session.done`, never overrides R4b ownership checks, and is joined by observer `done` even after
 cleanup detach. User abort alone does not trigger it. The restore signal has a 60-second budget;
 trusted destructive callbacks must cooperate and settle, not be abandoned while still mutating.

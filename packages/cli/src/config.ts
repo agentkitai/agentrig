@@ -351,22 +351,17 @@ export async function loadRunConfig(
     ...(project === undefined ? {} : { project }),
     ...(environment.AGENTRIG_MODEL === undefined ? {} : { env: { model: environment.AGENTRIG_MODEL } }),
     cli,
-    ...(profile === undefined || (recommended && profile === "recommended" && user?.profiles?.recommended === undefined && project?.profiles?.recommended === undefined) ? {} : { profile }),
+    ...(profile === undefined || (profile === "recommended" && user?.profiles?.recommended === undefined && project?.profiles?.recommended === undefined) ? {} : { profile }),
   });
-  // Implicit checkers run only where their existing root-based contract applies. Never
-  // manufacture a failing tsc invocation for a JS project or a references-only root.
+  // Keep tsc available even without a root project (including monorepos and JSONC
+  // solutions). Existing execution/reporting yields honest unavailable/incomplete
+  // diagnostics, rather than silently dropping the acceptance signal.
   if (recommended && !configHas("diagnostics") && cli.diagnostics === undefined) {
-    let tsProject = false;
-    try {
-      const text = await readFile(join(cwd, "tsconfig.json"), "utf8");
-      // A references-only solution is not a compilable project for `tsc --noEmit`.
-      tsProject = !/"references"\s*:/.test(text);
-    } catch { /* no root TypeScript project: skip rather than report false diagnostics */ }
     const pythonProject = await Promise.all(["ruff.toml", ".ruff.toml", "pyproject.toml"].map(async name => {
       try { await readFile(join(cwd, name), "utf8"); return true; } catch { return false; }
     }));
     resolved.diagnostics = recommendedDefaults.diagnostics?.filter(check =>
-      check.parser === "tsc" ? tsProject : pythonProject.some(Boolean));
+      check.parser === "tsc" || pythonProject.some(Boolean));
   }
   let defaultHookNotice: string | undefined;
   if (recommended && resolved.sandbox !== undefined && resolved.sandbox !== "none") {

@@ -61,3 +61,16 @@ it.each([true,false])("actual TUI restart recalls only trusted project disk hist
     else await expect(readFile(join(root,".agentrig/history"))).rejects.toMatchObject({code:"ENOENT"});
   } finally {if(tty)Object.defineProperty(process.stdin,"isTTY",tty);else Reflect.deleteProperty(process.stdin,"isTTY");}
 },15000);
+
+it.each([true, false])("startTui forwards persistent verbose=%s to the mounted controller", async verbose => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-verbose-start-")); roots.push(root);
+  vi.stubEnv("ANTHROPIC_API_KEY", "fixture");
+  const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  Object.defineProperty(process.stdin, "isTTY", {value:true, configurable:true});
+  try {
+    let observed: boolean | undefined;
+    harness.exercise = async c => { observed = c.snapshot().verbose; };
+    await startTui({verbose, root:join(root,"logs"), provider:"anthropic", model:"fake", maxTurns:"1", maxTokensPerTurn:"100", repoMap:false});
+    expect(observed).toBe(verbose);
+  } finally { if (tty) Object.defineProperty(process.stdin,"isTTY",tty); else Reflect.deleteProperty(process.stdin,"isTTY"); }
+});

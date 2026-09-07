@@ -77,6 +77,7 @@ export async function manualDiff(cwd: string, args: string, signal: AbortSignal,
     if (seal?.type !== "checkpoint.sealed" || await realpath(seal.repo) !== root) throw new Error("checkpoint repository is unverified");
     const verify = async () => {
       const ref = (await git(["for-each-ref", "--format=%(symref) %(objectname)", checkpoint.ref])).trimEnd();
+      if (ref === "") throw new Error(`checkpoint turn ${checkpoint.turn} is unavailable (pruned or missing); only the last two sealed turn refs are retained`);
       if (ref !== ` ${checkpoint.commit}` || await gitRevision(git, checkpoint.ref) !== checkpoint.commit ||
         (await git(["rev-parse", "--verify", "--end-of-options", `${checkpoint.commit}^{tree}`])).trim() !== checkpoint.tree)
         throw new Error("checkpoint ref/object changed");

@@ -1,0 +1,34 @@
+{
+  "fixture": "local deterministic TUI; toolSummaries:false in user config",
+  "command": [
+    "node",
+    "/home/amit/agentrig/.claude/worktrees/r17b-defaults/packages/cli/dist/index.js",
+    "--provider",
+    "openai",
+    "--model",
+    "gpt-4o",
+    "--base-url",
+    "http://127.0.0.1:44881",
+    "--allow",
+    "write_file"
+  ],
+  "session_ids": [
+    "621d6c36"
+  ],
+  "provider_requests": 3,
+  "ingest_requests": 1,
+  "expanded_preference_applied": true,
+  "permission_requests": 2,
+  "main_responses": 2,
+  "auxiliary_usage": [],
+  "complete": true,
+  "raw_markdown_preserved": true,
+  "markdown_rendered": true,
+  "diagnostics_line": true,
+  "checkpoint_created": true,
+  "checkpoint_visible": true,
+  "ingest_at_end": true,
+  "config_expected": true,
+  "security": "explicit fixture write approval; diagnostic exec approval declined via n; no YOLO/sandbox/grant change",
+  "terminal_final_frame": ", or /help for commands\r\nWrite a TypeScript file then give a Markdown heading and bold result.\r\n   0 19:44:35.780 session.start          openai-compatible/gpt-4o \r\ncwd=/var/tmp/r17-recommended-ereacn07/project task=\"Write a TypeScript file then\r\n give a Markdown heading and bold result.\"\r\n   1 19:44:35.784 turn.start             n=1\r\n   2 19:44:35.786 provider.switched      turn=1 \"unknown\" -> \r\n{\"entry\":\"default\",\"provider\":\"openai-compatible\",\"model\":\"gpt-4o\"}\r\n   3 19:44:35.788 context.manifest       turn=1 blocks=4 \r\nrequest=1f5b6c9510ee104d \r\nprovider={\"entry\":\"default\",\"provider\":\"openai-compatible\",\"model\":\"gpt-4o\"}\r\n   4 19:44:35.790 model.request          tokensIn=485\r\n   5 19:44:35.802 model.response         in=10 out=2 stop=tool_use\r\n   6 19:44:35.804 message.append         role=assistant blocks=1\r\n   7 19:44:35.807 permission.request     write_file [write]\r\n   8 19:44:35.809 permission.decision    allow \"write_file\" [\"edit\"] \u2014 rule #1 \r\n{\"tool\":\"write_file\",\"cwdOnly\":true,\"decision\":\"allow\"}\r\n   9 19:44:35.848 checkpoint.created     turn=1 ref=refs/agentrig/621d6c36/1 \r\ncommit=3e056bde498a46ea68d77e3e6dfa07592a7a45df \r\ntree=4b825dc642cb6eb9a060e54bf8d69288fbee4904\r\n  10 19:44:35.852 tool.call              write_file#edit hash=07b4c1bcb42f2ee8 \r\n{\"path\":\"a.ts\",\"content\":\"const n: number = 1;\\n\"}\r\n  11 19:44:35.855 file.changed           create a.ts hash=f87a7182af757d36 claim\r\n from tool.call #10\r\n  12 19:44:35.894 permission.request     core:diagnostics [exec]\r\nDeclared permission: \"exec\" for \"core:diagnostics\".\r\nExec may change files and reach the network; effects are not established by \r\nargv.\r\ncwd: \"/var/tmp/r17-recommended-ereacn07/project\"\r\nDeclared paths: none; path effects unknown (not an empty effect set).\r\nNames, model prose and MCP read-only hints do not establish effects or \r\nauthority.\r\nStanding session answers cover ALL future \"core:diagnostics\" requests in this \r\nlive session, any resource/class/cwd. Children currently share that group. \r\nExplicit base rules still apply.\r\n  13 19:44:35.896 permission.decision    ask \"core:diagnostics\" \r\n[\"diagnostic-61e873b1-733f-46a5-b958-404cb464e302\"] \u2014 policy fallback (no rule \r\nmatched)\r\ndenied core:diagnostics\r\n  14 19:44:36.103 permission.decision    deny \"core:diagnostics\" \r\n[\"diagnostic-61e873b1-733f-46a5-b958-404cb464e302\"] \u2014 approval handler \r\n(human/host)\r\n  15 19:44:36.104 tool.denied            \r\ncore:diagnostics#diagnostic-61e873b1-733f-46a5-b958-404cb464e302\r\n  16 19:44:36.105 tool.result            #edit ok=true 253ms \r\ndiagnostics=unavailable entries=0 other=0 \"created a.ts (21 \r\nbytes)\\n[diagnostics] {\\\"path\\\":\\\"/var/tmp/r17-recommended-ereacn07\"\r\n  17 19:44:36.146 message.append         role=user blocks=1\r\n  18 19:44:36.148 turn.end               n=1\r\n  19 19:44:36.152 turn.start             n=2\r\n  20 19:44:36.154 context.manifest       turn=2 blocks=5 \r\nrequest=bc1a17d98928e0ff \r\nprovider={\"entry\":\"default\",\"provider\":\"openai-compatible\",\"model\":\"gpt-4o\"}\r\n  21 19:44:36.158 model.request          tokensIn=584\r\n  23 19:44:36.165 model.response         in=10 out=2 stop=end_turn\r\n  24 19:44:36.167 message.append         role=assistant blocks=1\r\nResult\r\n\r\nReady\r\n  25 19:44:36.169 turn.end               n=2\r\nmemory: ingested 0 fact(s) into 1 page(s)\r\nmemory: auxiliary ingest: 1 call(s), 10 input / 2 output / 0 cache-read / 0 \r\ncache-write reported tokens; 0 call(s) with unknown total usage; cost unknown; \r\ncompleted; local writes completed\r\n  26 19:44:36.249 error                  fatal=false checkpoint seal failed: \r\nError: undo unavailable: non-session changes after the final tool. Checkpoint \r\nsnapshots remain, but undo has no verified ownership seal; session-end hooks \r\nsuch as memory ingest may change covered files, including tracked or unignored \r\nwiki files. Later changes were not adopted. See docs/plans/R4b.md for checkpoint\r\n coverage limits.\r\n  27 19:44:36.999 session.end            reason=done\r\ndone after 2 turn(s), 20 in / 4 out\r\n\r\n> \r\nasks:0 \u00b7 ask(policy) grants:0 \u00b7 sb:none \u00b7 cost:unknown \u00b7 sup:unavailable \u00b7 idle\u2026"
+}

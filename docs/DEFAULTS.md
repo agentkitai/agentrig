@@ -14,8 +14,11 @@ trust is still required; untrusted project configuration is not loaded.
   immutable messages retain their raw Markdown; rendering never rewrites history.
 - **Post-edit diagnostics**: existing `tsc` parser for `.ts`, `.tsx`, `.mts`, `.cts`
   (`tsc --noEmit --pretty false`) and existing Ruff JSON parser for `.py`, `.pyi`
-  (`ruff check --output-format=json .`). These use installed executables on PATH;
+  (`ruff check --output-format=json -- {path}`, for roots with `pyproject.toml`,
+  `ruff.toml` or `.ruff.toml`). These use installed executables on PATH;
   no package installation, checker discovery, new parser or approval bypass.
+  TypeScript remains enabled without a root tsconfig, including references-only
+  roots and JSONC; absent project/unsupported output is incomplete, not clean.
   A checker still needs the existing exec permission and sandbox. Missing tools,
   denied execution and unsupported output are visibly unavailable/incomplete,
   never a fabricated clean result. Other extensions have no invented checker.
@@ -110,6 +113,6 @@ or relax that safety check. #232 is the prior declaration-only plan-check fricti
 
 ## Checkpoint retention and destructive restore
 
-After a durable terminal ownership seal, the last **two mutating-turn refs** remain as undo targets; older turn refs are deleted using compare-and-delete, never by rewriting session JSONL. Immutable checkpoint events for pruned turns remain historical receipts; attempting to undo a pruned target refuses before writing. Retained targets keep the existing ownership, quiescence, index and HEAD guards. Sealed refs are kept. Interrupted/unsealed sessions keep all refs to avoid discarding recovery data; sessions and sealed refs therefore still grow over time. This is not global garbage collection and does not add a prune command.
+In one atomic Git ref transaction before publishing the terminal ownership seal, the last **two mutating-turn refs** remain as undo targets; older turn refs are deleted using compare-and-delete, never by rewriting session JSONL. Immutable checkpoint events for pruned turns remain historical receipts; attempting to undo or `/diff checkpoint <turn>` a pruned target reports "pruned or missing" before writing. A pruning failure leaves all refs unchanged and emits no sealed event. Retained targets keep the existing ownership, quiescence, index and HEAD guards. Sealed refs are kept. Interrupted/unsealed sessions keep all refs to avoid discarding recovery data; sessions and sealed refs therefore still grow over time. This is not global garbage collection and does not add a prune command.
 
 `supervisorAbortRestores` requires explicit trusted-config or CLI sources for both `supervise` and `checkpoints`, as well as explicit abort/restore flags and the existing sandbox-none/quiescence conditions. The implicit recommended layer never supplies destructive-restore authority. Resolver provenance markers cannot be set in config.
