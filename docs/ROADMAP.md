@@ -1277,9 +1277,10 @@ need an explicit budget; neither prevents continuing other actionable entries.
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
-- R11a polish: consider `--no-sandbox-network` for a one-run override of config true; current
-  positive-only flag matches other CLI booleans. Consider clarifying unused network metadata
-  forwarded to the none provider; no runtime policy or OS isolation is established in none mode.
+- R11a follow-up (implemented, delivery gates pending): `--no-sandbox-network` overrides
+  config true for one invocation on run/TUI/resume and MCP login, without config writes.
+  Omission and explicit positive remain compatible; none-provider network metadata is inert,
+  not a runtime policy or OS isolation. [Contract](plans/no-sandbox-network.md).
 - R14b polish: consider a separate unknown-command-attempt budget when non-shell custom/MCP
   command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
   Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,
@@ -1433,3 +1434,9 @@ need an explicit budget; neither prevents continuing other actionable entries.
   resetting the code-unit-based quiet timer. Buffer contents remain correct, but
   the redraw may wait for release. Consider an explicit edit-gesture classification
   with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.
+- Abort-grace fixture repair (next): macOS PR#217 CI34107659557 missed the expected
+  orphan warning in subagent.test.ts because its fixed80ms abort assumes child startup.
+  A controlled150ms provider-start delay independently reproduces that precondition race;
+  the CI log does not establish the remote delay's cause. Wait for bounded real blocked-child
+  readiness, preserve100ms grace/warning/order checks, and release/join in finally instead
+  of sleeping for cleanup. Retain original failure evidence; no timeout inflation.

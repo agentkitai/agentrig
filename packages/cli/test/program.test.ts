@@ -106,6 +106,7 @@ describe("argv parsing", () => {
     for (const prefix of [["run", "x"], [], ["sessions", "resume", "s1"]]) {
       const opts = (await stub(buildProgram()).run([...prefix, "--sandbox-network", "--allow", "net"]))!.opts;
       expect(opts.sandboxNetwork).toBe(true); expect(opts.allow).toEqual(["net"]);
+      expect((await stub(buildProgram()).run([...prefix, "--no-sandbox-network", "--yolo"]))!.opts.sandboxNetwork).toBe(false);
       expect((await stub(buildProgram()).run([...prefix, "--yolo"]))!.opts.sandboxNetwork).toBeUndefined();
     }
   });

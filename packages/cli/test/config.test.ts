@@ -207,6 +207,33 @@ describe("config file boundary", () => {
     expect(parseConfigText("fixture", '{"sandboxNetwork":false}')).toMatchObject({ sandboxNetwork: false });
   });
 
+  it.each([["run"], ["tui"], ["sessions", "resume"], ["mcp", "login"]])(
+    "sandbox network invocation override preserves omitted config and positive compatibility: %j", async (...names) => {
+      const { cwd, home } = await fixture();
+      await configAt(home, { sandboxNetwork: true });
+      await configAt(cwd, { sandboxNetwork: true, profiles: { restricted: { sandboxNetwork: true } } });
+      for (const [flags, expected] of [
+        [[], true], [["--no-sandbox-network"], false], [["--sandbox-network"], true],
+        [["--sandbox-network", "--no-sandbox-network"], false],
+        [["--no-sandbox-network", "--sandbox-network"], true],
+      ] as const) {
+        let cmd = buildProgram(); for (const name of names) cmd = cmd.commands.find(c => c.name() === name)!;
+        const parsed = cmd.parseOptions(["--profile", "restricted", ...flags]);
+        expect(parsed.unknown).toEqual([]);
+        const values = await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false });
+        expect(values.sandboxNetwork).toBe(expected);
+      }
+      // Invocations do not rewrite either trusted file, and omission must not become true by default.
+      expect((await readConfigFile(join(cwd, ".agentrig", "config.json")))?.sandboxNetwork).toBe(true);
+      await configAt(home, { sandboxNetwork: false }); await configAt(cwd, {});
+      for (const [flags, expected] of [[[], false], [["--sandbox-network"], true]] as const) {
+        let cmd = buildProgram(); for (const name of names) cmd = cmd.commands.find(c => c.name() === name)!;
+        cmd.parseOptions([...flags]);
+        expect((await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, interactive: false })).sandboxNetwork).toBe(expected);
+      }
+    },
+  );
+
   it("accepts only positive integer supervisor turn floors", async () => {
     const { cwd } = await fixture();
     const valid = await configAt(cwd, { supervisorTurnsRemaining: 20 });
