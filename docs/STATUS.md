@@ -4,6 +4,11 @@ Backlog drained: **R15l #194 is done** on main `8fe6f29`, all-four post-main
 CI34091238822 / structure34091238830 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/194#issuecomment-5566147772).
 Active **R16g manual commands**; root owns independent parallel **R16h themes**.
+R16g integrates all delivered backlog features: one sampled selected provider with
+ledger/native guards, shared attachment/maintenance/selection ownership, and real
+Ctrl+C cancellation in both App input paths. Discriminating controls failed before
+each integration fix and pass afterward. Original static-only review is retained;
+final full and hosted gates remain required.
 #207 is done on `82b2f27`,
 all-four CI34089126856 / structure34089126808 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/207#issuecomment-5565941414).

@@ -35,16 +35,45 @@ class Input extends EventEmitter {
   setEncoding() { return this; } setRawMode() { return this; } ref() { return this; } unref() { return this; }
   read() { return this.chunks.shift() ?? null; }
 }
-async function conversation() {
+async function conversation(onSummary?: (signal: AbortSignal) => Promise<void>) {
   const cwd = await root(); const store = new SessionStore({ root: join(cwd, "logs") }); let calls = 0;
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
-    async *stream(request) { calls++; yield { type: "text_delta", text: request.system.startsWith("You compress") ? "Short history." : "Detailed context. ".repeat(100) };
+    async *stream(request, signal) { calls++; if (request.system.startsWith("You compress")) await onSummary?.(signal);
+      yield { type: "text_delta", text: request.system.startsWith("You compress") ? "Short history." : "Detailed context. ".repeat(100) };
       yield { type: "usage", usage: { input: 10, output: 10 } }; yield { type: "stop", reason: "end_turn" }; } };
   const agent = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "fixture", repoMap: false });
   const controller = new TuiController({ cwd, agent }); cleanup.push(() => controller.shutdown());
   for (let i = 0; i < 7; i++) await controller.submit(`task${i}: ${"context ".repeat(50)}`);
   return { cwd, store, agent, controller, calls: () => calls };
 }
+
+it.each(["\u0003", "\u001b[201~\u0003"])("actual App Ctrl+C %j aborts owned compaction without exiting", async key => {
+  let entered!: () => void; let cancelled!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const aborted = new Promise<void>(resolve => { cancelled = resolve; });
+  const f = await conversation(async signal => {
+    entered(); await new Promise<void>(resolve => {
+      const stop = () => { cancelled(); resolve(); };
+      if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
+    });
+  });
+  const parent = f.controller.snapshot().sessionId; const input = new Input();
+  const stdout = Object.assign(new EventEmitter(), { columns: 80, rows: 24, isTTY: true, write: () => true });
+  let mounted!: () => void; const mount = new Promise<void>(resolve => { mounted = resolve; });
+  const ink = render(createElement(App, { controller: f.controller, onMounted: mounted }),
+    { stdout: stdout as never, stdin: input as never, patchConsole: false, exitOnCtrlC: false });
+  const exited = ink.waitUntilExit().then(() => "exit");
+  const work = f.controller.submit("/compact");
+  try {
+    await mount; await ready;
+    input.chunks.push(key); input.emit("readable");
+    expect(await Promise.race([aborted.then(() => "abort"), exited])).toBe("abort");
+    await work;
+    expect(f.controller.snapshot().sessionId).toBe(parent);
+    expect(f.controller.snapshot().lines.some(line => line.text.includes("cancelling maintenance"))).toBe(true);
+    expect(f.controller.isIdle()).toBe(true);
+  } finally { f.controller.abort(); await work; ink.unmount(); await exited; }
+});
 
 it("attachment preparation excludes maintenance and /clear; maintenance excludes attachment callbacks", async () => {
   const f = await conversation(); const parent = f.controller.snapshot().sessionId; const before = f.calls();

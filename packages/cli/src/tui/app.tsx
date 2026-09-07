@@ -182,7 +182,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
         // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
         for (const action of ordinaryInputActions(segment.text)) {
           if (action.type === "interrupt") {
-            if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
+            if (!controller.isIdle()) controller.abort();
             else exit();
           } else if (controller.snapshot().pending !== null) {
             permissionAction(action);
@@ -201,7 +201,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory }
     if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
 
     if (key.ctrl && char === "c") {
-      if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
+      if (!controller.isIdle()) controller.abort();
       else exit();
       return;
     }
