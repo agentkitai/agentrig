@@ -63,11 +63,11 @@ function ceiling(value: string | undefined, maximum: number, integer: boolean): 
   return String(Math.min(parsed, maximum));
 }
 export function ciRunOptions(options: RunOptions): RunOptions {
-  if (options.json === true || options.verbose === true)
-    throw new CiRefusal("CI refuses --json / toolSummaries:false; use the bounded report or ordinary run for raw/chat output. No provider work was started.");
+  if (options.json === true)
+    throw new CiRefusal("CI refuses --json; use the bounded report or ordinary run for raw/chat output. No provider work was started.");
   if (skipsPermissions(options) || options.resume !== undefined || options.scheduled !== undefined || options.heartbeat !== undefined)
     throw new CiRefusal("CI refuses effective YOLO/skip-permissions, resume and scheduled/heartbeat modes. No provider work was started.");
-  const result = { ...options, headless: true, maxTurns: ceiling(options.maxTurns, CI_LIMITS.turns, true),
+  const result = { ...options, verbose: false, toolSummaries: true, headless: true, maxTurns: ceiling(options.maxTurns, CI_LIMITS.turns, true),
     maxMinutes: ceiling(options.maxMinutes, CI_LIMITS.minutes, false), maxTokens: ceiling(options.maxTokens, CI_LIMITS.tokens, true) };
   parseBudget(result); return result;
 }

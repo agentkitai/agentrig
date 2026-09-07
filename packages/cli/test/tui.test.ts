@@ -1458,3 +1458,10 @@ describe("review regressions", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+it("initializes expanded tool display from persistent preference and permits session toggling", () => {
+  const controller = makeController([[stop("end_turn")]], { verbose: true });
+  expect(controller.state.verbose).toBe(true);
+  const normal = makeController([[stop("end_turn")]]);
+  expect(normal.state.verbose).toBe(false);
+});

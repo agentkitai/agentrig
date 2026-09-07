@@ -34,7 +34,7 @@ export function takeChanged(tool: AnyTool, result: ToolResult, context: ToolCont
   const receipt = changes.get(result); changes.delete(result);
   if (receipt?.context !== context) return undefined;
   const checker = configured.get(tool)?.find(c => c.extensions.includes(extname(receipt.changed.path).toLowerCase()));
-  return checker === undefined ? undefined : { changed: receipt.changed, checker };
+  return checker === undefined ? undefined : { changed: receipt.changed, checker: { ...checker, args: checker.args.map(arg => arg === "{path}" ? receipt.changed.path : arg) } };
 }
 export async function unchanged(changed: Changed): Promise<boolean> {
   if (changed.unverifiable) return false;

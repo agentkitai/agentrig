@@ -13,16 +13,16 @@ import { renderEvent, renderChatEvent } from "../src/render.js";
 
 const exec = promisify(execFile), roots: string[] = [];
 const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => Promise.all([rm(root, { recursive: true, force: true }), rm(`${root}-home`, { recursive: true, force: true })]))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "agentrig-schema-cli-")); roots.push(root);
-  await mkdir(join(root, "home")); await writeFile(join(root, "schema.json"), JSON.stringify(schema));
+  await mkdir(`${root}-home`); await writeFile(join(root, "schema.json"), JSON.stringify(schema));
   await writeFile(join(root, "task.txt"), "Produce an answer."); return root;
 }
 async function actual(root: string, deltas: Record<string, unknown>[], args: string[] = []) {
   // Isolate main-loop assertions from the recommended session-end auxiliary call.
-  await mkdir(join(root, ".agentrig"), { recursive: true });
-  await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
+  await mkdir(join(`${root}-home`, ".agentrig"), { recursive: true });
+  await writeFile(join(`${root}-home`, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
   const bodies: any[] = [];
   const server = createServer(async (request, response) => {
     let input = ""; for await (const chunk of request) input += chunk; bodies.push(JSON.parse(input));
@@ -34,10 +34,10 @@ async function actual(root: string, deltas: Record<string, unknown>[], args: str
   if (!address || typeof address === "string") throw new Error("fixture listener missing");
   try {
     const argv = [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--provider", "openai", "--model", "fixture",
-      "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "logs"), "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
+      "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "logs"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       "--output-schema", "schema.json", ...(args.includes("--ci") ? [] : ["--headless", "Produce an answer."]), ...args];
     try { return { code: 0, bodies, ...await exec(process.execPath, argv, { cwd: root, timeout: 15_000,
-      env: { ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-key" } }) }; }
+      env: { ...process.env, HOME: `${root}-home`, USERPROFILE: `${root}-home`, OPENAI_API_KEY: "fixture-key" } }) }; }
     catch (error) { const e = error as { code?: number; stdout?: string; stderr?: string }; if (typeof e.code !== "number") throw error;
       return { code: e.code, bodies, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }; }
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

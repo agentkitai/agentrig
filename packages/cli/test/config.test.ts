@@ -509,6 +509,16 @@ describe("both agent entry points use config", () => {
     expect(received?.modelExplicit).toBe(true);
   });
 
+  it("lets explicit negative CLI override trusted project config for surviving sandbox network flag", async () => {
+    const { cwd, home } = await fixture();
+    await configAt(cwd, { sandboxNetwork: true });
+    let received: RunOptions | undefined;
+    await buildProgram({ config: { cwd, home, env: {} }, run: async (_task, opts) => void (received = opts) }).parseAsync([
+      "node", "agentrig", "run", "test", "--no-sandbox-network",
+    ]);
+    expect(received?.sandboxNetwork).toBe(false);
+  });
+
   it("lets an explicit config false override recommended defaults", async () => {
     const { cwd, home } = await fixture();
     await configAt(cwd, { supervise: false });

@@ -48,7 +48,7 @@ export function matchAcpMcp(request: NewSessionRequest, trusted: Array<McpServer
 }
 
 export async function startAcp(command: Command, flags: AcpFlags, dependencies: AcpDependencies = {}): Promise<void> {
-  if (flags.json || flags.verbose) throw new Error("ACP stdout is protocol-only; use the negotiated raw-event extension instead of --json / toolSummaries:false");
+  if (flags.json) throw new Error("ACP stdout is protocol-only; use the negotiated raw-event extension instead of --json");
   const launchCwd = await realpath(dependencies.config?.cwd ?? process.cwd());
   const home = dependencies.config?.home ?? homedir();
   const transport = acpTransport(dependencies.input ?? process.stdin, dependencies.output ?? process.stdout);

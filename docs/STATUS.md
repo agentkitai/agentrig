@@ -7,6 +7,17 @@ or names the blocking `feel` issue if AgentRig could not build it. Record child
 count, observable token usage (never an invented estimate), and halts for each row.
 File AgentRig friction with the `feel` label before the next child starts.
 
+- **R17b repair round 1/3 — builder agentrig, conductor 8fbde1a3.** Child 4
+  `12b8dd75` repairs all 13 Claude findings and the shared Codex TUI finding on
+  existing PR #234; no nested builder, arbitration or merge. Baseline-first
+  history retained; the sole sandbox deviation remains unchanged. Full resolution,
+  real mutation probes and reproducible measurements: [repair ledger](plans/R17b-repair.md).
+  Pending fresh independent delta pair on the pushed head; no clean-review claim.
+  This repair has no human permission pause. Known feel issues #235/#236/#237/#239
+  remain referenced, not used to waive any open review finding. Available repair
+  usage snapshot through canonical session `12b8dd75` seq 863: 72 model responses,
+  input 637,051 / output 26,271 / cache-read 2,423,168 / cache-write 0 (not final totals).
+
 - **R17b implemented, awaiting independent review — builder agentrig, conductor
   8fbde1a3.** Existing single worktree/PR [#234](https://github.com/agentkitai/agentrig/pull/234);
   baseline-first history preserved. Three children: builder `7dbfad2b`, arbiter

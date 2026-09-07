@@ -66,7 +66,7 @@ it("export, memory, supervisor and event rendering never stringify thinking payl
 it("actual CI CLI replays signed thinking across a read tool but excludes it from report and OTLP", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-thinking-ci-"));
   cleanups.push(() => rm(cwd, { recursive: true, force: true }));
-  await mkdir(join(cwd, "home")); await writeFile(join(cwd, "task.txt"), "Read task.txt and finish.");
+  await mkdir(`${cwd}-home`); await writeFile(join(cwd, "task.txt"), "Read task.txt and finish.");
   const requests: Array<{ messages: Array<{ content: Array<Record<string, unknown>> }> }> = [];
   const telemetry: string[] = [];
   const server = createServer(async (request, response) => {
@@ -92,14 +92,15 @@ it("actual CI CLI replays signed thinking across a read tool but excludes it fro
   cleanups.push(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
   const address = server.address(); if (!address || typeof address === "string") throw new Error("no fixture listener");
   // Isolate main-loop assertions from the recommended session-end auxiliary call.
-  await mkdir(join(cwd, ".agentrig"), { recursive: true });
-  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
+  await mkdir(join(`${cwd}-home`, ".agentrig"), { recursive: true });
+  await writeFile(join(`${cwd}-home`, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
+  cleanups.push(() => rm(`${cwd}-home`, { recursive: true, force: true }));
   const endpoint = `http://127.0.0.1:${address.port}`;
   const result = await promisify(execFile)(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)),
     "run", "--ci", "--provider", "anthropic", "--model", "fixture", "--base-url", endpoint,
     "--task-file", "task.txt", "--report", "report.md", "--root", join(cwd, "logs"), "--otel-endpoint", `${endpoint}/traces`,
-    "--max-turns", "2", "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-  { cwd, timeout: 15_000, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), ANTHROPIC_API_KEY: "fixture-only" } });
+    "--max-turns", "2", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
+  { cwd, timeout: 15_000, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, ANTHROPIC_API_KEY: "fixture-only" } });
   expect(requests).toHaveLength(2);
   expect(requests[1]!.messages.flatMap(m => m.content).filter(b => b.type === "thinking"))
     .toEqual([{ type: "thinking", thinking: thinking.text, signature: thinking.signature }]);

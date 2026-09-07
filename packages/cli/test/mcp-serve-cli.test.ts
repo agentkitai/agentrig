@@ -12,10 +12,10 @@ afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await c
 
 it("existing 2024 core client calls the real CLI over OS pipes; configured allow works without minting exec consent", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-mcp-cli-")); cleanup.push(() => rm(cwd, { recursive: true, force: true }));
-  const home = join(cwd, "home"); await mkdir(home);
+  const home = `${cwd}-home`; await mkdir(home); cleanup.push(() => rm(home, { recursive: true, force: true }));
   // Isolate main-loop assertions from the recommended session-end auxiliary call.
-  await mkdir(join(cwd, ".agentrig"), { recursive: true });
-  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
+  await mkdir(join(home, ".agentrig"), { recursive: true });
+  await writeFile(join(home, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
   let calls = 0; const requests: unknown[] = [];
   const http = createServer(async (req, res) => {
     let body = ""; for await (const chunk of req) body += chunk; requests.push(JSON.parse(body));
@@ -32,7 +32,7 @@ it("existing 2024 core client calls the real CLI over OS pipes; configured allow
   const client = new McpClient({ name: "self", command: process.execPath, cwd,
     args: [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "mcp-serve", "--provider", "openai", "--model", "fixture",
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"),
-      "--yolo", "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
+      "--yolo", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
     env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
       HOME: home, USERPROFILE: home, OPENAI_API_KEY: "inert-fixture-key" } });
   cleanup.push(() => client.close());

@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execFile as execFileCallback } from "node:child_process";
@@ -224,3 +225,26 @@ it("two actual edits with checkpoints retain checker ownership and undo both edi
   expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("original");
   expect(await readFile(join(f.cwd, "checker-effect"), "utf8")).toBe("0");
 }, 30_000);
+
+it("expands the exact diagnostic path placeholder before exec permission without shell interpolation", async () => {
+  const f = await fixture([{parser: "ruff-json", extensions: [".py"], executable: process.execPath,
+    args: ["-e", "console.log('[]')", "--", "{path}"]}]);
+  f.turns.push([call("write_file", "edit", {path: "space ; name.py", content: "x=1\n"}), {type: "stop", reason: "tool_use"}]);
+  const { events } = await run(f);
+  const invocation = events.find(e => e.type === "tool.call" && e.internal?.kind === "diagnostics");
+  expect(invocation?.type === "tool.call" && invocation.input).toMatchObject({args: ["-e", "console.log('[]')", "--", join(f.cwd, "space ; name.py")]});
+  expect(diagnosticResult(events).diagnostics?.status).toBe("reported");
+});
+
+it.each([false, true])('real root TypeScript checker reports edited-file errors=%s instead of tsc help', async erroneous => {
+  const f = await fixture([{parser: 'tsc', extensions: ['.ts'], executable: process.execPath,
+    args: [createRequire(import.meta.url).resolve('typescript/lib/tsc.js'), '--noEmit', '--pretty', 'false']}]);
+  await writeFile(join(f.cwd, 'tsconfig.json'), JSON.stringify({compilerOptions: {types: [], skipLibCheck: true}, include: ['*.ts']}));
+  f.turns.push([call('write_file', 'edit', {path: 'a.ts', content: erroneous ? 'const x: number = "bad";\n' : 'const x: number = 1;\n'}), {type: 'stop', reason: 'tool_use'}]);
+  const {events} = await run(f);
+  const result = diagnosticResult(events).diagnostics!;
+  expect(result.status).toBe('reported');
+  expect(result.entries).toHaveLength(erroneous ? 1 : 0);
+  if (erroneous) expect(result.entries[0]?.code).toBe('TS2322');
+  expect(result.exitCode).toBe(erroneous ? 2 : 0);
+}, 20_000);

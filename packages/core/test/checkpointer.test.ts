@@ -830,3 +830,21 @@ describe("Checkpointer", () => {
     expect(appends).toBe(2);
   });
 });
+
+it("sealing retains only the last two turn refs and preserves last retained undo", async () => {
+  await initRepo();
+  const branch = await git("rev-parse", "HEAD");
+  const turns: ModelEvent[][] = Array.from({length: 5}, (_, i) => [call(String(i), "write", {path: "tracked.txt", content: `turn ${i+1}`}), stop("tool_use")]);
+  turns.push([stop("end_turn")]);
+  const session = agent(turns, [writeTool()]).run("change", {cwd: root, id: "retention"});
+  const events = await collect(session); await session.done;
+  const refs = (await git("for-each-ref", "--format=%(refname)", "refs/agentrig/retention/")).split("\n");
+  expect(refs).toEqual(["refs/agentrig/retention/4", "refs/agentrig/retention/5", "refs/agentrig/retention/sealed/6"]);
+  expect(await git("rev-parse", "HEAD")).toBe(branch);
+  expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(5);
+  const store = new SessionStore({root: join(root, ".agentrig", "sessions")});
+  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow();
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 5");
+  await undoSession(store, session.id, {cwd: root, toTurn: 4});
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 3");
+});

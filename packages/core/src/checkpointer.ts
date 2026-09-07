@@ -423,6 +423,17 @@ export class Checkpointer implements Hook {
     const commit = (await git(lease.repo,["commit-tree",owned.tree,"-m",`AgentRig ownership ${ctx.sessionId}`],env,ctx.signal)).stdout.trim();
     await git(lease.repo,["update-ref","--no-deref",ref,commit,"0".repeat(commit.length)],undefined,ctx.signal);
     await ctx.emitCheckpoint?.({type:"checkpoint.sealed",turn:ctx.turn,ref,commit,repo:lease.repo,excludes:ctx.checkpointExcludes??[],...owned});
+    // Retain the last two undo targets after a durable seal. Older immutable events
+    // remain historical receipts, not promises that their Git refs are retained.
+    const prefix = `refs/agentrig/${ctx.sessionId}/`;
+    const refs = (await git(lease.repo,["for-each-ref","--format=%(refname) %(objectname) %(symref)",prefix],undefined,ctx.signal)).stdout.split("\n")
+      .map(line => line.split(" "))
+      .filter((parts): parts is [string,string,string] => parts.length === 3 && parts[2] === "" && /^\d+$/.test(parts[0]!.slice(prefix.length)))
+      .sort((a,b) => Number(b[0].slice(prefix.length)) - Number(a[0].slice(prefix.length)));
+    for (const [oldRef, oid] of refs.slice(2)) {
+      await git(lease.repo,["update-ref","--no-deref","-d",oldRef,oid],undefined,ctx.signal);
+    }
+
   }
 
   private async create(ctx: HookContext): Promise<void> {

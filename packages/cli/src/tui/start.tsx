@@ -37,7 +37,7 @@ import { buildPermissionPolicy } from "../run.js";
 import { diagnosticConfigValues } from "../config.js";
 import { mountNotifications, NotificationMode, NotificationIdleSeconds, type Notifications } from "./notifications.js";
 
-export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
+export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean; verbose?: boolean };
 
 /**
  * `agentrig` with no subcommand (PLAN §5). Thin by design: `buildAgent` assembles exactly the
@@ -64,6 +64,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   const supervisorSoft = parseSoft(opts.supervisorSoft ?? "0.8");
   const supervisorTurnsRemaining = parseTurnsRemaining(opts.supervisorTurnsRemaining ?? "15");
   const controller: TuiController = new TuiController({
+    ...(opts.verbose === undefined ? {} : { verbose: opts.verbose }),
     cwd: process.cwd(),
     model: opts.model,
     branch: () => currentGitBranch(process.cwd()),

@@ -63,14 +63,14 @@ export async function readFixtureMap(file: string) {
 }
 
 const supported = new Set<keyof ConfigValues>([
-  "provider", "model", "baseUrl", "contextWindow", "reasoningEffort", "providers", "roles",
+  "toolSummaries", "provider", "model", "baseUrl", "contextWindow", "reasoningEffort", "providers", "roles",
   "memory", "system", "supervise", "supervisorAbort", "supervisorSoft",
   "supervisorTurnsRemaining", "supervisorReview", "maxTurns", "maxTokens", "maxMinutes",
   "maxUsd", "priceIn", "priceOut", "priceCacheRead", "priceCacheWrite", "maxTokensPerTurn",
 ]);
 // Produced by the trusted config resolver, not accepted as settings by its strict file schema.
 const resolverMetadata = new Set(["profile", "trust", "packageSkillIndex", "extensionCwd", "trustedProjectRoot",
-  "modelExplicit", "maxTokensPerTurnExplicit", "providerOverride", "ingestOnEndExplicit", "defaultHookNotice"]);
+  "modelExplicit", "maxTokensPerTurnExplicit", "providerOverride", "ingestOnEndExplicit", "superviseExplicit", "checkpointsExplicit", "defaultHookNotice"]);
 
 /** A deliberately small supported profile, not a silently modified full-harness replay. */
 export function validateEvaluationProfile(values: ConfigValues): void {

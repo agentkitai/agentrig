@@ -61,9 +61,9 @@ describe("argv parsing", () => {
       expect(() => command.parseOptions(["--allow-command", value])).toThrow("invalid command argv prefix");
     }
   });
-  it("carries recommended checkpoints and the explicit undo target", async()=>{
+  it("keeps checkpoints out of raw argv defaults and parses the explicit undo target", async()=>{
     for (const argv of [["run","task"],[],["sessions","resume","s"]]) {
-      expect((await stub(buildProgram()).run(argv))?.opts.checkpoints).toBeUndefined(); // resolved by config, not argv
+      expect((await stub(buildProgram()).run(argv))?.opts.checkpoints).toBeUndefined(); // raw parser only; real config handler covered in recommended-defaults
     }
     expect((await stub(buildProgram()).run(["sessions","undo","s","--to-turn","2","--root","logs"]))?.opts).toMatchObject({toTurn:2,root:"logs"});
   });

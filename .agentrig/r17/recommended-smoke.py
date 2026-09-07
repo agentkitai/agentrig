@@ -1,13 +1,16 @@
 """R17b zero-config TUI acceptance; deterministic local transport, no live calls."""
-import http.server, threading, json, os, pty, subprocess, tempfile, time, select, pathlib, re
+import sys, http.server, threading, json, os, pty, subprocess, tempfile, time, select, pathlib, re
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 calls = 0
+ingest_calls = 0
+expanded = "--expanded" in sys.argv
 class Fake(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_): pass
     def do_POST(self):
-        global calls
+        global calls, ingest_calls
         request=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         auxiliary=not request.get('tools')
+        if auxiliary: ingest_calls+=1
         edit=not auxiliary and calls==0
         if not auxiliary: calls+=1
         delta={'tool_calls':[{'index':0,'id':'edit','type':'function','function':{'name':'write_file','arguments':json.dumps({'path':'a.ts','content':'const n: number = 1;\n'})}}]} if edit else {'content':'{"facts":[],"nothingDurable":true}' if auxiliary else '# Result\n\n**Ready**\n'}
@@ -20,6 +23,9 @@ threading.Thread(target=server.serve_forever,daemon=True).start()
 with tempfile.TemporaryDirectory(prefix='r17-recommended-') as root:
     home=pathlib.Path(root)/'home'; home.mkdir(); cwd=pathlib.Path(root)/'project'; cwd.mkdir()
     subprocess.run(['git','init','-q'],cwd=cwd,check=True)
+    (cwd/'tsconfig.json').write_text(json.dumps({'compilerOptions':{'noEmit':True}}))
+    if expanded:
+        (home/'.agentrig').mkdir(); (home/'.agentrig/config.json').write_text(json.dumps({'toolSummaries':False}))
     master,slave=pty.openpty()
     env={**os.environ,'HOME':str(home),'USERPROFILE':str(home),'XDG_CONFIG_HOME':str(home),'OPENAI_API_KEY':'local-fixture-only','TERM':'xterm-256color','FORCE_COLOR':'1'}
     env.pop('NO_COLOR',None); env.pop('CI',None)
@@ -52,10 +58,12 @@ with tempfile.TemporaryDirectory(prefix='r17-recommended-') as root:
     logs=list((cwd/'.agentrig/raw/sessions').glob('*.jsonl'))
     events=[json.loads(line) for log in logs for line in log.read_text().splitlines()]
     raw_markdown=any(e.get('type')=='message.append' and '# Result' in json.dumps(e.get('message')) for e in events)
-    evidence={'fixture':'local deterministic TUI; no config files or feature opt-ins','command':command,'session_ids':[p.stem for p in logs],
+    evidence={'fixture':'local deterministic TUI; toolSummaries:false in user config' if expanded else 'local deterministic TUI; no config files or feature opt-ins','command':command,'session_ids':[p.stem for p in logs],
+      'provider_requests':calls+ingest_calls,'ingest_requests':ingest_calls,'expanded_preference_applied':('hash=' in clean) if expanded else ('hash=' not in clean),
+      'permission_requests':sum(e.get('type')=='permission.request' for e in events),'main_responses':sum(e.get('type')=='model.response' for e in events),'auxiliary_usage':[e for e in events if e.get('type')=='auxiliary.usage'],
       'complete':complete,'raw_markdown_preserved':raw_markdown,'markdown_rendered': 'Result' in frame and 'Ready' in frame and '# Result' not in frame and '**Ready**' not in frame,
-      'diagnostics_line':'Diagnostics:' in clean,'checkpoint_created':any(e.get('type')=='checkpoint.created' for e in events), 'checkpoint_visible':'Checkpoint: turn' in frame,
-      'ingest_at_end':'memory: ingested' in clean,'config_absent':not (home/'.agentrig/config.json').exists() and not (cwd/'.agentrig/config.json').exists(),
+      'diagnostics_line':('diagnostics=unavailable' in clean) if expanded else ('Diagnostics:' in clean),'checkpoint_created':any(e.get('type')=='checkpoint.created' for e in events), 'checkpoint_visible':('checkpoint.created' in frame) if expanded else ('Checkpoint: turn' in frame),
+      'ingest_at_end':'memory: ingested' in clean,'config_expected':(home/'.agentrig/config.json').exists()==expanded and not (cwd/'.agentrig/config.json').exists(),
       'security':'explicit fixture write approval; diagnostic exec approval declined via n; no YOLO/sandbox/grant change', 'terminal_final_frame':frame}
     print(json.dumps(evidence,indent=2))
-    if not all(evidence[k] for k in ['complete','raw_markdown_preserved','markdown_rendered','diagnostics_line','checkpoint_created','checkpoint_visible','ingest_at_end','config_absent']): raise SystemExit(1)
+    if not all(evidence[k] for k in ['complete','raw_markdown_preserved','markdown_rendered','diagnostics_line','checkpoint_created','checkpoint_visible','ingest_at_end','config_expected','expanded_preference_applied']): raise SystemExit(1)

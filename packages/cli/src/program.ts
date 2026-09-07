@@ -248,7 +248,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--price-cache-write <usd>", "cache-write price per million tokens; overrides provider default")
       .option("--max-tokens-per-turn <n>", "max_tokens per model response", RUN_NUMERIC_DEFAULTS.maxTokensPerTurn)
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
-      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires supervise/checkpoints config enabled, --supervisor-abort and stopped external writers")
+      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires explicit supervise/checkpoints config, --supervisor-abort and stopped external writers")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", RUN_NUMERIC_DEFAULTS.supervisorSoft)
       .option(

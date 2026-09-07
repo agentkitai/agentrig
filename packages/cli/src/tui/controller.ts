@@ -150,6 +150,7 @@ function bashCommandPrefix(input: unknown): string | undefined {
 }
 
 export interface TuiControllerOptions {
+  verbose?: boolean;
   agent: Agent;
   permissionGrants?: PermissionGrantRegistry;
   cwd: string;
@@ -268,6 +269,7 @@ export class TuiController {
   private readonly maxLines: number;
 
   constructor(private readonly opts: TuiControllerOptions) {
+    this.state.verbose = opts.verbose ?? false;
     this.permissionGrants = opts.permissionGrants ?? new PermissionGrantRegistry();
     this.maxLines = opts.maxLines ?? 5_000;
     this.agent = opts.agent;

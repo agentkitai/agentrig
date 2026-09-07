@@ -264,7 +264,7 @@ export function resolveConfig<T extends Record<string, unknown>>(input: ResolveC
   const { defaults, user, project, env = {}, cli = {}, profile } = input;
   if (profile !== undefined) {
     const names = [...new Set([...Object.keys(user?.profiles ?? {}), ...Object.keys(project?.profiles ?? {})])].sort();
-    if (profile !== "recommended" && !names.includes(profile)) {
+    if (!names.includes(profile)) {
       throw new Error(
         `unknown config profile ${JSON.stringify(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.join(", ")}`,
       );
@@ -342,7 +342,7 @@ export async function loadRunConfig(
     supervise: true, checkpoints: true, ingestOnEnd: true, notifications: "bell", toolSummaries: true,
     diagnostics: DiagnosticsConfigSchema.parse([
       { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false"] },
-      { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "."] },
+      { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "--", "{path}"] },
     ]),
   };
   const resolved = resolveConfig({
@@ -351,8 +351,23 @@ export async function loadRunConfig(
     ...(project === undefined ? {} : { project }),
     ...(environment.AGENTRIG_MODEL === undefined ? {} : { env: { model: environment.AGENTRIG_MODEL } }),
     cli,
-    ...(profile === undefined ? {} : { profile }),
+    ...(profile === undefined || (recommended && profile === "recommended" && user?.profiles?.recommended === undefined && project?.profiles?.recommended === undefined) ? {} : { profile }),
   });
+  // Implicit checkers run only where their existing root-based contract applies. Never
+  // manufacture a failing tsc invocation for a JS project or a references-only root.
+  if (recommended && !configHas("diagnostics") && cli.diagnostics === undefined) {
+    let tsProject = false;
+    try {
+      const text = await readFile(join(cwd, "tsconfig.json"), "utf8");
+      // A references-only solution is not a compilable project for `tsc --noEmit`.
+      tsProject = !/"references"\s*:/.test(text);
+    } catch { /* no root TypeScript project: skip rather than report false diagnostics */ }
+    const pythonProject = await Promise.all(["ruff.toml", ".ruff.toml", "pyproject.toml"].map(async name => {
+      try { await readFile(join(cwd, name), "utf8"); return true; } catch { return false; }
+    }));
+    resolved.diagnostics = recommendedDefaults.diagnostics?.filter(check =>
+      check.parser === "tsc" ? tsProject : pythonProject.some(Boolean));
+  }
   let defaultHookNotice: string | undefined;
   if (recommended && resolved.sandbox !== undefined && resolved.sandbox !== "none") {
     // Do not launder explicit hook opt-ins into a successful enforcing-sandbox launch.
@@ -396,6 +411,8 @@ export async function loadRunConfig(
     ...(defaultHookNotice === undefined ? {} : { defaultHookNotice }),
     // Runtime option-source metadata: a shared default false is not a scheduled ingest opt-out.
     ingestOnEndExplicit: cli.ingestOnEnd !== undefined || configHas("ingestOnEnd"),
+    superviseExplicit: cli.supervise !== undefined || configHas("supervise"),
+    checkpointsExplicit: cli.checkpoints !== undefined || configHas("checkpoints"),
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and
     // emit a per-skill shadowing warning every run
     skills: [...new Set([...explicitSkills, ...discoveredSkills, ...generatedSkills])],

@@ -18,10 +18,11 @@ non-symlink UTF-8 files. No implicit environment/event lookup, expression expans
 payload-derived configuration, PR target, checkout or shell execution occurs.
 Even a task file is advisory data: the runtime receives an empty user task plus
 separately labelled advisory context, not fabricated fresh user approval.
-Effective `--json` and config `"toolSummaries": false` refuse in CI: ordinary raw/chat rendering bypasses
+Effective `--json` refuses in CI: ordinary raw/chat rendering bypasses
 the bounded redacted-report shape. Use ordinary `run` for those output modes.
 `json` is not a project-config field; unknown config keys already fail closed.
-Recommended defaults apply in CI too. Use an explicit profile with `ingestOnEnd: false`
+CI normalizes persistent `toolSummaries: false` to bounded summary output, not a refusal.
+Recommended defaults apply in CI too. Set `ingestOnEnd: false` in trusted config (base or a selected profile)
 when an auxiliary ingest is not wanted, and `diagnostics: []` when checker execution
 is not authorized; defaults never authorize those commands. See [migration](DEFAULTS.md).
 

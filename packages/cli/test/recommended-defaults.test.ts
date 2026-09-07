@@ -3,12 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { buildProgram } from '../src/program.js';
+import { validateAbortRestores } from '../src/run.js';
+import { resolveConfig } from '../src/config.js';
+import { ciRunOptions } from '../src/ci-run.js';
+import { validateEvaluationProfile } from '../src/evaluation-fixtures.js';
 import type { RunOptions } from '../src/run.js';
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); process.exitCode = 0; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function resolved(argv: string[] = [], config?: object, protocolNotice = false) {
+async function resolved(argv: string[] = [], config?: object, protocolNotice = false, projectFiles: Record<string, string> = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'recommended-'))); roots.push(root);
   const cwd = join(root, 'project'), home = join(root, 'home'); await mkdir(cwd); await mkdir(home);
+  for (const [name, text] of Object.entries(projectFiles)) await writeFile(join(cwd, name), text);
   if (config) { await mkdir(join(home, '.agentrig')); await writeFile(join(home, '.agentrig/config.json'), JSON.stringify(config)); }
   let opts: RunOptions | undefined;
   await buildProgram({ config: { cwd, home, env: {}, ...(protocolNotice ? { notice: () => {} } : {}) }, run: async (_task, value) => { opts = value; } }).parseAsync(['run', 'task', ...argv], { from: 'user' });
@@ -17,7 +22,7 @@ async function resolved(argv: string[] = [], config?: object, protocolNotice = f
 it('zero-config recommended profile enables existing conveniences without moving authority', async () => {
   const opts = await resolved();
   expect(opts).toMatchObject({ supervise: true, checkpoints: true, ingestOnEnd: true, memory: '.agentrig', notifications: 'bell' });
-  expect(opts.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ parser: 'tsc' }), expect.objectContaining({ parser: 'ruff-json' })]));
+  expect(opts.diagnostics).toEqual([]);
   expect(opts.yolo).not.toBe(true); expect(opts.allow).toEqual([]); expect(opts.sandbox).toBe("none");
   expect(opts.supervisorReview).not.toBe(true); expect(opts.supervisorAbort).not.toBe(true);
 });
@@ -56,4 +61,47 @@ it('a protocol adapter redacting arbitrary notices cannot hide the static omissi
   const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
   await resolved(['--sandbox', 'workspace-write'], undefined, true);
   expect(stderr.mock.calls.flat().join('\n')).toContain('recommended profile: omitted implicit checkpoints and session-end ingest');
+});
+
+it('implicit defaults cannot arm destructive abort restore; explicit user sources can', async () => {
+  const flags = ['--supervisor-abort', '--supervisor-abort-restores'];
+  expect(() => validateAbortRestores({ supervise: true, checkpoints: true, supervisorAbort: true, supervisorAbortRestores: true })).toThrow('explicit');
+  const implicit = await resolved(flags);
+  expect(() => validateAbortRestores(implicit)).toThrow('explicit');
+  const explicit = await resolved(flags, { supervise: true, checkpoints: true });
+  expect(() => validateAbortRestores(explicit)).not.toThrow();
+});
+it('shared resolver rejects an absent recommended profile', () => {
+  expect(() => resolveConfig({ defaults: {}, profile: 'recommended' })).toThrow('unknown config profile');
+});
+it('CI normalizes persistent expanded display without changing security', async () => {
+  const opts = await resolved([], { toolSummaries: false });
+  expect(ciRunOptions(opts)).toMatchObject({ verbose: false, toolSummaries: true, headless: true });
+  expect(() => ciRunOptions({ ...opts, json: true })).toThrow('CI refuses');
+});
+it.each([true, false])('evaluation accepts presentation-only toolSummaries=%s', value => {
+  expect(() => validateEvaluationProfile({ toolSummaries: value })).not.toThrow();
+});
+
+it.each([{args: ['tui']}, {args: ['sessions', 'resume', 'fixture']}])('real $args handler receives recommended checkpoints', async ({args}) => {
+  const root = await mkdtemp(join(tmpdir(), 'agentrig-entry-defaults-')); roots.push(root);
+  const cwd = join(root, 'project'), home = join(root, 'home');
+  await mkdir(cwd); await mkdir(home);
+  let received: {checkpoints?: boolean} | undefined;
+  await buildProgram({config: {cwd, home, env: {}}, tui: async opts => { received = opts; }, run: async (_task, opts) => { received = opts; }}).parseAsync(['node', 'agentrig', ...args]);
+  expect(received?.checkpoints).toBe(true);
+});
+
+it('implicit checkers skip config-less and reference-only roots and scope configured Python edits', async () => {
+  expect((await resolved()).diagnostics).toEqual([]);
+  expect((await resolved([], undefined, false, {'tsconfig.json': '{"references":[{"path":"./packages/a"}]}'})).diagnostics).toEqual([]);
+  expect((await resolved([], undefined, false, {'tsconfig.json': '{"compilerOptions":{"noEmit":true}}'})).diagnostics).toEqual([expect.objectContaining({parser: 'tsc'})]);
+  expect((await resolved([], undefined, false, {'pyproject.toml': '[project]\nname="fixture"'})).diagnostics).toEqual([expect.objectContaining({parser: 'ruff-json', args: ['check', '--output-format=json', '--', '{path}']})]);
+});
+it('one explicit restore prerequisite cannot borrow authority from the other implicit default', async () => {
+  const flags = ['--supervisor-abort', '--supervisor-abort-restores'];
+  for (const config of [{supervise: true}, {checkpoints: true}, {supervise: false, checkpoints: true}, {supervise: true, checkpoints: false}]) {
+    const opts = await resolved(flags, config);
+    expect(() => validateAbortRestores(opts)).toThrow();
+  }
 });

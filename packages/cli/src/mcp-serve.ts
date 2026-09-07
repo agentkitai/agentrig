@@ -133,7 +133,7 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
 }
 
 export async function startMcpServe(command: Command, flags: AcpFlags, dependencies: McpServeDependencies = {}): Promise<void> {
-  if (flags.json || flags.verbose) throw new Error("MCP stdout is protocol-only");
+  if (flags.json) throw new Error("MCP stdout is protocol-only");
   const cwd = await realpath(dependencies.config?.cwd ?? process.cwd());
   const loaded = await loadRunConfig(command, flags as unknown as Record<string, unknown>, { ...dependencies.config, cwd, interactive: false, notice });
   const opts = loaded as unknown as AcpFlags;

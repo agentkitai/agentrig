@@ -1,0 +1,320 @@
+[
+  {
+    "probe": "tui-start-wiring",
+    "path": "packages/cli/src/tui/start.tsx",
+    "old": "    ...(opts.verbose === undefined ? {} : { verbose: opts.verbose }),",
+    "new": "",
+    "command": [
+      "python3",
+      ".agentrig/r17/recommended-smoke.py",
+      "--expanded"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "{\n  \"fixture\": \"local deterministic TUI; toolSummaries:false in user config\",\n  \"command\": [\n    \"node\",\n    \"/home/amit/agentrig/.claude/worktrees/r17b-defaults/packages/cli/dist/index.js\",\n    \"--provider\",\n    \"openai\",\n    \"--model\",\n    \"gpt-4o\",\n    \"--base-url\",\n    \"http://127.0.0.1:39031\",\n    \"--allow\",\n    \"write_file\"\n  ],\n  \"session_ids\": [\n    \"e96f2d3d\"\n  ],\n  \"provider_requests\": 3,\n  \"ingest_requests\": 1,\n  \"expanded_preference_applied\": false,\n  \"permission_requests\": 2,\n  \"main_responses\": 2,\n  \"auxiliary_usage\": [],\n  \"complete\": true,\n  \"raw_markdown_preserved\": true,\n  \"markdown_rendered\": true,\n  \"diagnostics_line\": false,\n  \"checkpoint_created\": true,\n  \"checkpoint_visible\": false,\n  \"ingest_at_end\": true,\n  \"config_expected\": true,\n  \"security\": \"explicit fixture write approval; diagnostic exec approval declined via n; no YOLO/sandbox/grant change\",\n  \"terminal_final_frame\": \", or /help for commands\\r\\nWrite a TypeScript file then give a Markdown heading and bold result.\\r\\nProvider for turn 1: \\r\\n{\\\"entry\\\":\\\"default\\\",\\\"provider\\\":\\\"openai-compatible\\\",\\\"model\\\":\\\"gpt-4o\\\"} (previous \\r\\nselection unknown)\\r\\nCheckpoint: turn 1 saved\\r\\n\\u00b1 create a.ts\\r\\nDeclared permission: \\\"exec\\\" for \\\"core:diagnostics\\\".\\r\\nExec may change files and reach the network; effects are not established by \\r\\nargv.\\r\\ncwd: \\\"/var/tmp/r17-recommended-6l6rav9l/project\\\"\\r\\nDeclared paths: none; path effects unknown (not an empty effect set).\\r\\nNames, model prose and MCP read-only hints do not establish effects or \\r\\nauthority.\\r\\nStanding session answers cover ALL future \\\"core:diagnostics\\\" requests in this \\r\\nlive session, any resource/class/cwd. Children currently share that group. \\r\\nExplicit base rules still apply.\\r\\ndenied core:diagnostics\\r\\npermission deny \\\"core:diagnostics\\\" \\r\\n[\\\"diagnostic-a438b6c2-0201-47fc-8cc8-ff7ca0629322\\\"] \\u2014 approval handler \\r\\n(human/host)\\r\\n\\u2717 denied core:diagnostics\\r\\n\\u2713 write_file a.ts \\u00b7 254ms \\u00b7 ok\\r\\ndiff a.ts [observed before/after]\\r\\nsnapshots: before=complete, after=complete\\r\\n--- before\\r\\n+++ after\\r\\n@@ -1,0 +1,1 @@\\r\\n+const n: number = 1;\\r\\nDiagnostics: checker was not executed; 0 touched-file, 0 other-file, 0 omitted\\r\\nResult\\r\\n\\r\\nReady\\r\\nmemory: ingested 0 fact(s) into 1 page(s)\\r\\nmemory: auxiliary ingest: 1 call(s), 10 input / 2 output / 0 cache-read / 0 \\r\\ncache-write reported tokens; 0 call(s) with unknown total usage; cost unknown; \\r\\ncompleted; local writes completed\\r\\n! checkpoint seal failed: Error: undo unavailable: non-session changes after the\\r\\n final tool\\r\\ndone after 2 turn(s), 20 in / 4 out\\r\\n\\r\\n> \\r\\nasks:0 \\u00b7 ask(policy) grants:0 \\u00b7 sb:none \\u00b7 cost:unknown \\u00b7 sup:unavailable \\u00b7 idle\\u2026\"\n}\n"
+  },
+  {
+    "probe": "runtime-defaults",
+    "path": "packages/cli/src/config.ts",
+    "old": "const recommended = [",
+    "new": "const recommended = false && [",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-runtime.test.ts"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-runtime.test.ts (1 test | 1 failed) 525ms\n   \u00d7 fresh repository without config records default diagnostics, checkpoints and session-end ingest; Markdown is rendered without changing raw text 523ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-runtime.test.ts > fresh repository without config records default diagnostics, checkpoints and session-end ingest; Markdown is rendered without changing raw text\nAssertionError: expected false to be true // Object.is equality\n\n- Expected\n+ Received\n\n- true\n+ false\n\n \u276f packages/cli/test/recommended-runtime.test.ts:39:63\n     37|     const [session] = await store.list(); expect(session).toBeDefined(\u2026\n     38|     const events = await store.readAll(session!.id);\n     39|     expect(events.some(e => e.type === 'checkpoint.created')).toBe(tru\u2026\n       |                                                               ^\n     40|     expect(stdout + stderr).toContain('Checkpoint: turn');\n     41|     const diagnostic = events.find(e => e.type === 'tool.result' && e.\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed (1)\n   Start at  20:51:43\n   Duration  1.49s (transform 612ms, setup 16ms, import 867ms, tests 525ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "acp-presentation",
+    "path": "packages/cli/src/acp.ts",
+    "old": "if (flags.json)",
+    "new": "if (flags.json || flags.verbose)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-protocols.test.ts",
+      "-t",
+      "acp"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-protocols.test.ts (3 tests | 1 failed | 2 skipped) 7ms\n   \u00d7 'acp' ignores expanded chat preference while preserving protocol-only output 6ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-protocols.test.ts > 'acp' ignores expanded chat preference while preserving protocol-only output\nAssertionError: promise rejected \"Error: ACP stdout is protocol-only; use t\u2026\" instead of resolving\n \u276f packages/cli/test/recommended-protocols.test.ts:18:26\n     16|   try {\n     17|     const running = start(command, flags, {config:{cwd,home,env:{}},in\u2026\n     18|     await expect(running).resolves.toBeUndefined(); expect(text).toBe(\u2026\n       |                          ^\n     19|     await expect(start(command, {...flags,json:true}, {config:{cwd,hom\u2026\n     20|   } finally {input.destroy();output.destroy();await rm(root,{recursive\u2026\n\nCaused by: Error: ACP stdout is protocol-only; use the negotiated raw-event extension instead of --json\n \u276f startAcp packages/cli/src/acp.ts:51:42\n \u276f packages/cli/test/recommended-protocols.test.ts:17:21\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 skipped (3)\n   Start at  20:51:53\n   Duration  1.17s (transform 780ms, setup 15ms, import 1.08s, tests 7ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "mcp-presentation",
+    "path": "packages/cli/src/mcp-serve.ts",
+    "old": "if (flags.json)",
+    "new": "if (flags.json || flags.verbose)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-protocols.test.ts",
+      "-t",
+      "mcp-serve"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-protocols.test.ts (3 tests | 1 failed | 2 skipped) 7ms\n   \u00d7 'mcp-serve' ignores expanded chat preference while preserving protocol-only output 6ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-protocols.test.ts > 'mcp-serve' ignores expanded chat preference while preserving protocol-only output\nAssertionError: promise rejected \"Error: MCP stdout is protocol-only\" instead of resolving\n \u276f packages/cli/test/recommended-protocols.test.ts:18:26\n     16|   try {\n     17|     const running = start(command, flags, {config:{cwd,home,env:{}},in\u2026\n     18|     await expect(running).resolves.toBeUndefined(); expect(text).toBe(\u2026\n       |                          ^\n     19|     await expect(start(command, {...flags,json:true}, {config:{cwd,hom\u2026\n     20|   } finally {input.destroy();output.destroy();await rm(root,{recursive\u2026\n\nCaused by: Error: MCP stdout is protocol-only\n \u276f startMcpServe packages/cli/src/mcp-serve.ts:136:42\n \u276f packages/cli/test/recommended-protocols.test.ts:17:21\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 skipped (3)\n   Start at  20:51:55\n   Duration  1.21s (transform 817ms, setup 16ms, import 1.11s, tests 7ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "web-presentation",
+    "path": "packages/cli/src/web.ts",
+    "old": "if (flags.json)",
+    "new": "if (flags.json || flags.verbose)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-protocols.test.ts",
+      "-t",
+      "Web ignores"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-protocols.test.ts (3 tests | 1 failed | 2 skipped) 6ms\n   \u00d7 Web ignores expanded chat preference without relaxing literal-loopback validation 5ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-protocols.test.ts > Web ignores expanded chat preference without relaxing literal-loopback validation\nAssertionError: expected [Function] to throw error including 'literal' but got 'Web uses ACP updates; raw-event flags\u2026'\n\nExpected: \"literal\"\nReceived: \"Web uses ACP updates; raw-event flags are not supported\"\n\n \u276f packages/cli/test/recommended-protocols.test.ts:23:92\n     21| });\n     22| it('Web ignores expanded chat preference without relaxing literal-loop\u2026\n     23|   await expect(startWeb(new Command('web'), {root:'unused',verbose:tru\u2026\n       |                                                                                            ^\n     24|   await expect(startWeb(new Command('web'), {root:'unused',verbose:tru\u2026\n     25| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 skipped (3)\n   Start at  20:51:57\n   Duration  1.21s (transform 804ms, setup 14ms, import 1.12s, tests 6ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "precedence",
+    "path": "packages/cli/src/config.ts",
+    "old": "    ...cli,",
+    "new": "    ...cli,\n    ...withoutProfiles(project),",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/config.test.ts",
+      "-t",
+      "explicitly typed CLI flag beats project"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/config.test.ts (55 tests | 1 failed | 54 skipped) 6ms\n     \u00d7 an explicitly typed CLI flag beats project config (mutation: reversing project/CLI makes this fail) 5ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/config.test.ts > resolveConfig precedence (pure) > an explicitly typed CLI flag beats project config (mutation: reversing project/CLI makes this fail)\nAssertionError: expected 'project' to be 'cli' // Object.is equality\n\nExpected: \"cli\"\nReceived: \"project\"\n\n \u276f packages/cli/test/config.test.ts:120:28\n    118|       cli: { model: \"cli\" },\n    119|     });\n    120|     expect(resolved.model).toBe(\"cli\");\n       |                            ^\n    121|   });\n    122|\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 54 skipped (55)\n   Start at  20:51:58\n   Duration  1.48s (transform 916ms, setup 15ms, import 1.38s, tests 6ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "negative-cli",
+    "path": "packages/cli/src/config.ts",
+    "old": "    ...cli,",
+    "new": "    ...cli,\n    ...withoutProfiles(project),",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/config.test.ts",
+      "-t",
+      "explicit negative CLI"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/config.test.ts (55 tests | 1 failed | 54 skipped) 18ms\n     \u00d7 lets explicit negative CLI override trusted project config for surviving sandbox network flag 17ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/config.test.ts > both agent entry points use config > lets explicit negative CLI override trusted project config for surviving sandbox network flag\nAssertionError: expected true to be false // Object.is equality\n\n- Expected\n+ Received\n\n- false\n+ true\n\n \u276f packages/cli/test/config.test.ts:519:38\n    517|       \"node\", \"agentrig\", \"run\", \"test\", \"--no-sandbox-network\",\n    518|     ]);\n    519|     expect(received?.sandboxNetwork).toBe(false);\n       |                                      ^\n    520|   });\n    521|\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 54 skipped (55)\n   Start at  20:52:00\n   Duration  1.52s (transform 942ms, setup 14ms, import 1.42s, tests 18ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "scheduled-provenance",
+    "path": "packages/cli/src/config.ts",
+    "old": "ingestOnEndExplicit: cli.ingestOnEnd !== undefined || configHas(\"ingestOnEnd\"),",
+    "new": "ingestOnEndExplicit: false,",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/config.test.ts",
+      "-t",
+      "scheduled"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/config.test.ts (55 tests | 1 failed | 54 skipped) 16ms\n   \u00d7 tracks scheduled ingestion opt-out sources without mistaking a shared default false for consent 16ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/config.test.ts > tracks scheduled ingestion opt-out sources without mistaking a shared default false for consent\nAssertionError: expected { ingestOnEnd: false, \u2026(11) } to match object { ingestOnEnd: false, \u2026(1) }\n(10 matching properties omitted from actual)\n\n- Expected\n+ Received\n\n  {\n    \"ingestOnEnd\": false,\n-   \"ingestOnEndExplicit\": true,\n+   \"ingestOnEndExplicit\": false,\n  }\n\n \u276f packages/cli/test/config.test.ts:27:92\n     25|   expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, in\u2026\n     26|   await configAt(home, { ingestOnEnd: false });\n     27|   expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, in\u2026\n       |                                                                                            ^\n     28|   cmd.parseOptions([\"--ingest-on-end\"]);\n     29|   expect(await loadRunConfig(cmd, cmd.opts(), { cwd, home, env: {}, in\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 54 skipped (55)\n   Start at  20:52:02\n   Duration  1.48s (transform 902ms, setup 14ms, import 1.37s, tests 16ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "sandbox-omission",
+    "path": "packages/cli/src/config.ts",
+    "old": "if (recommended && resolved.sandbox !== undefined",
+    "new": "if (false && recommended && resolved.sandbox !== undefined",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "visibly omitted"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 2 failed | 15 skipped) 22ms\n   \u00d7 implicit host hooks are visibly omitted under read-only, explicit opt-ins are retained for the core refusal 16ms\n   \u00d7 implicit host hooks are visibly omitted under workspace-write, explicit opt-ins are retained for the core refusal 5ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 2 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > implicit host hooks are visibly omitted under read-only, explicit opt-ins are retained for the core refusal\n FAIL  packages/cli/test/recommended-defaults.test.ts > implicit host hooks are visibly omitted under workspace-write, explicit opt-ins are retained for the core refusal\nAssertionError: expected { provider: 'anthropic', \u2026(35) } to match object { checkpoints: false, \u2026(2) }\n(34 matching properties omitted from actual)\n\n- Expected\n+ Received\n\n  {\n-   \"checkpoints\": false,\n-   \"defaultHookNotice\": StringContaining \"omitted implicit\",\n-   \"ingestOnEnd\": false,\n+   \"checkpoints\": true,\n+   \"ingestOnEnd\": true,\n  }\n\n \u276f packages/cli/test/recommended-defaults.test.ts:36:50\n     34| it.each(['read-only', 'workspace-write'])('implicit host hooks are vis\u2026\n     35|   const notice = vi.spyOn(console, 'error').mockImplementation(() => {\u2026\n     36|   expect(await resolved(['--sandbox', sandbox])).toMatchObject({ check\u2026\n       |                                                  ^\n     37|   expect(notice.mock.calls.flat().join('\\n')).toContain('recommended p\u2026\n     38|   expect(await resolved(['--sandbox', sandbox], { checkpoints: true, i\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  2 failed | 15 skipped (17)\n   Start at  20:52:04\n   Duration  1.47s (transform 893ms, setup 16ms, import 1.36s, tests 22ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "restore-sources",
+    "path": "packages/cli/src/run.ts",
+    "old": "if (opts.superviseExplicit !== true || opts.checkpointsExplicit !== true)",
+    "new": "if (false)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "implicit defaults cannot arm"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 16 skipped) 5ms\n   \u00d7 implicit defaults cannot arm destructive abort restore; explicit user sources can 4ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > implicit defaults cannot arm destructive abort restore; explicit user sources can\nAssertionError: expected [Function] to throw an error\n\n- Expected:\nnull\n\n+ Received:\nundefined\n\n \u276f packages/cli/test/recommended-defaults.test.ts:68:133\n     66| it('implicit defaults cannot arm destructive abort restore; explicit u\u2026\n     67|   const flags = ['--supervisor-abort', '--supervisor-abort-restores'];\n     68|   expect(() => validateAbortRestores({ supervise: true, checkpoints: t\u2026\n       |                                                                                                                                     ^\n     69|   const implicit = await resolved(flags);\n     70|   expect(() => validateAbortRestores(implicit)).toThrow('explicit');\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 16 skipped (17)\n   Start at  20:52:06\n   Duration  1.44s (transform 885ms, setup 14ms, import 1.34s, tests 5ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "retention",
+    "path": "packages/core/src/checkpointer.ts",
+    "old": "refs.slice(2)",
+    "new": "refs.slice(refs.length)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/core/test/checkpointer.test.ts",
+      "-t",
+      "sealing retains"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/core/test/checkpointer.test.ts (39 tests | 1 failed | 38 skipped) 612ms\n   \u00d7 sealing retains only the last two turn refs and preserves last retained undo 612ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/core/test/checkpointer.test.ts > sealing retains only the last two turn refs and preserves last retained undo\nAssertionError: expected [ 'refs/agentrig/retention/1', \u2026(5) ] to deeply equal [ 'refs/agentrig/retention/4', \u2026(2) ]\n\n- Expected\n+ Received\n\n  [\n+   \"refs/agentrig/retention/1\",\n+   \"refs/agentrig/retention/2\",\n+   \"refs/agentrig/retention/3\",\n    \"refs/agentrig/retention/4\",\n    \"refs/agentrig/retention/5\",\n    \"refs/agentrig/retention/sealed/6\",\n  ]\n\n \u276f packages/core/test/checkpointer.test.ts:842:16\n    840|   const events = await collect(session); await session.done;\n    841|   const refs = (await git(\"for-each-ref\", \"--format=%(refname)\", \"refs\u2026\n    842|   expect(refs).toEqual([\"refs/agentrig/retention/4\", \"refs/agentrig/re\u2026\n       |                ^\n    843|   expect(await git(\"rev-parse\", \"HEAD\")).toBe(branch);\n    844|   expect(events.filter(e => e.type === \"checkpoint.created\")).toHaveLe\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 38 skipped (39)\n   Start at  20:52:08\n   Duration  1.26s (transform 403ms, setup 15ms, import 562ms, tests 612ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "tui-preference",
+    "path": "packages/cli/src/tui/controller.ts",
+    "old": "this.state.verbose = opts.verbose ?? false;",
+    "new": "this.state.verbose = false;",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/tui.test.ts",
+      "-t",
+      "initializes expanded"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/tui.test.ts (97 tests | 1 failed | 96 skipped) 8ms\n   \u00d7 initializes expanded tool display from persistent preference and permits session toggling 7ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/tui.test.ts > initializes expanded tool display from persistent preference and permits session toggling\nAssertionError: expected false to be true // Object.is equality\n\n- Expected\n+ Received\n\n- true\n+ false\n\n \u276f packages/cli/test/tui.test.ts:1464:36\n    1462| it(\"initializes expanded tool display from persistent preference and p\u2026\n    1463|   const controller = makeController([[stop(\"end_turn\")]], { verbose: t\u2026\n    1464|   expect(controller.state.verbose).toBe(true);\n       |                                    ^\n    1465|   const normal = makeController([[stop(\"end_turn\")]]);\n    1466|   expect(normal.state.verbose).toBe(false);\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 96 skipped (97)\n   Start at  20:52:10\n   Duration  996ms (transform 687ms, setup 14ms, import 894ms, tests 8ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "diagnostic-scope",
+    "path": "packages/core/src/diagnostics.ts",
+    "old": "arg === \"{path}\" ? receipt.changed.path : arg",
+    "new": "arg",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/core/test/post-edit-diagnostics.test.ts",
+      "-t",
+      "exact diagnostic path"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/core/test/post-edit-diagnostics.test.ts (27 tests | 1 failed | 26 skipped) 59ms\n   \u00d7 expands the exact diagnostic path placeholder before exec permission without shell interpolation 58ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/core/test/post-edit-diagnostics.test.ts > expands the exact diagnostic path placeholder before exec permission without shell interpolation\nAssertionError: expected { executable: '/usr/bin/node', \u2026(1) } to match object { args: [ '-e', \u2026(3) ] }\n(1 matching property omitted from actual)\n\n- Expected\n+ Received\n\n  {\n    \"args\": [\n      \"-e\",\n      \"console.log('[]')\",\n      \"--\",\n-     \"/var/tmp/agentrig-diagnostics-y4LRkS/space ; name.py\",\n+     \"{path}\",\n    ],\n  }\n\n \u276f packages/core/test/post-edit-diagnostics.test.ts:235:64\n    233|   const { events } = await run(f);\n    234|   const invocation = events.find(e => e.type === \"tool.call\" && e.inte\u2026\n    235|   expect(invocation?.type === \"tool.call\" && invocation.input).toMatch\u2026\n       |                                                                ^\n    236|   expect(diagnosticResult(events).diagnostics?.status).toBe(\"reported\"\u2026\n    237| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 26 skipped (27)\n   Start at  20:52:11\n   Duration  745ms (transform 443ms, setup 23ms, import 586ms, tests 59ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "diagnostic-root",
+    "path": "packages/cli/src/config.ts",
+    "old": "check.parser === \"tsc\" ? tsProject : pythonProject.some(Boolean)",
+    "new": "true",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "implicit checkers"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\nstderr | packages/cli/test/recommended-defaults.test.ts > implicit checkers skip config-less and reference-only roots and scope configured Python edits\nProject \"/var/tmp/recommended-O6Fgre/project\" is not trusted; skipping project instructions and .agentrig/config.json. Use --trust to load them for this run.\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 16 skipped) 16ms\n   \u00d7 implicit checkers skip config-less and reference-only roots and scope configured Python edits 15ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > implicit checkers skip config-less and reference-only roots and scope configured Python edits\nAssertionError: expected [ { parser: 'tsc', \u2026(5) }, \u2026(1) ] to deeply equal []\n\n- Expected\n+ Received\n\n- []\n+ [\n+   {\n+     \"args\": [\n+       \"--noEmit\",\n+       \"--pretty\",\n+       \"false\",\n+     ],\n+     \"executable\": \"tsc\",\n+     \"extensions\": [\n+       \".ts\",\n+       \".tsx\",\n+       \".mts\",\n+       \".cts\",\n+     ],\n+     \"maxOutputBytes\": 65536,\n+     \"parser\": \"tsc\",\n+     \"timeoutMs\": 10000,\n+   },\n+   {\n+     \"args\": [\n+       \"check\",\n+       \"--output-format=json\",\n+       \"--\",\n+       \"{path}\",\n+     ],\n+     \"executable\": \"ruff\",\n+     \"extensions\": [\n+       \".py\",\n+       \".pyi\",\n+     ],\n+     \"maxOutputBytes\": 65536,\n+     \"parser\": \"ruff-json\",\n+     \"timeoutMs\": 10000,\n+   },\n+ ]\n\n \u276f packages/cli/test/recommended-defaults.test.ts:96:42\n     94|\n     95| it('implicit checkers skip config-less and reference-only roots and sc\u2026\n     96|   expect((await resolved()).diagnostics).toEqual([]);\n       |                                          ^\n     97|   expect((await resolved([], undefined, false, {'tsconfig.json': '{\"re\u2026\n     98|   expect((await resolved([], undefined, false, {'tsconfig.json': '{\"co\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 16 skipped (17)\n   Start at  20:52:13\n   Duration  1.50s (transform 918ms, setup 14ms, import 1.39s, tests 16ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "profile-scope",
+    "path": "packages/cli/src/config.ts",
+    "old": "if (!names.includes(profile))",
+    "new": "if (profile !== \"recommended\" && !names.includes(profile))",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "shared resolver"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 16 skipped) 5ms\n   \u00d7 shared resolver rejects an absent recommended profile 4ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > shared resolver rejects an absent recommended profile\nAssertionError: expected [Function] to throw an error\n\n- Expected:\nnull\n\n+ Received:\nundefined\n\n \u276f packages/cli/test/recommended-defaults.test.ts:75:73\n     73| });\n     74| it('shared resolver rejects an absent recommended profile', () => {\n     75|   expect(() => resolveConfig({ defaults: {}, profile: 'recommended' })\u2026\n       |                                                                         ^\n     76| });\n     77| it('CI normalizes persistent expanded display without changing securit\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 16 skipped (17)\n   Start at  20:52:15\n   Duration  1.45s (transform 892ms, setup 14ms, import 1.35s, tests 5ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "ci-presentation",
+    "path": "packages/cli/src/ci-run.ts",
+    "old": "if (options.json === true)",
+    "new": "if (options.json === true || options.verbose === true)",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "CI normalizes"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\nstderr | packages/cli/test/recommended-defaults.test.ts > CI normalizes persistent expanded display without changing security\nProject \"/var/tmp/recommended-jkSnvA/project\" is not trusted; skipping project instructions and .agentrig/config.json. Use --trust to load them for this run.\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 16 skipped) 16ms\n   \u00d7 CI normalizes persistent expanded display without changing security 15ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > CI normalizes persistent expanded display without changing security\nError: CI refuses --json; use the bounded report or ordinary run for raw/chat output. No provider work was started.\n \u276f ciRunOptions packages/cli/src/ci-run.ts:67:11\n     65| export function ciRunOptions(options: RunOptions): RunOptions {\n     66|   if (options.json === true || options.verbose === true)\n     67|     throw new CiRefusal(\"CI refuses --json; use the bounded report or \u2026\n       |           ^\n     68|   if (skipsPermissions(options) || options.resume !== undefined || opt\u2026\n     69|     throw new CiRefusal(\"CI refuses effective YOLO/skip-permissions, r\u2026\n \u276f packages/cli/test/recommended-defaults.test.ts:79:10\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 16 skipped (17)\n   Start at  20:52:17\n   Duration  1.45s (transform 886ms, setup 15ms, import 1.34s, tests 16ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "evaluation-presentation",
+    "path": "packages/cli/src/evaluation-fixtures.ts",
+    "old": "\"toolSummaries\", \"provider\",",
+    "new": "\"provider\",",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "evaluation accepts"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 15 skipped) 5ms\n   \u00d7 evaluation accepts presentation-only toolSummaries=true 4ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > evaluation accepts presentation-only toolSummaries=true\nAssertionError: expected [Function] to not throw an error but 'Error: evaluation profile does not su\u2026' was thrown\n\n- Expected:\nundefined\n\n+ Received:\n\"Error: evaluation profile does not support effective field: toolSummaries\"\n\n \u276f packages/cli/test/recommended-defaults.test.ts:83:73\n     81| });\n     82| it.each([true, false])('evaluation accepts presentation-only toolSumma\u2026\n     83|   expect(() => validateEvaluationProfile({ toolSummaries: value })).no\u2026\n       |                                                                         ^\n     84| });\n     85|\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 1 passed | 15 skipped (17)\n   Start at  20:52:19\n   Duration  1.42s (transform 879ms, setup 15ms, import 1.33s, tests 5ms, environment 0ms)\n\n"
+  },
+  {
+    "probe": "removed-flag",
+    "path": "packages/cli/src/program.ts",
+    "old": ".option(\"--supervisor-abort\",",
+    "new": ".option(\"--checkpoints\", \"mutant resurrected option\")\n    .option(\"--supervisor-abort\",",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts",
+      "-t",
+      "migrated"
+    ],
+    "exit": 1,
+    "killed": true,
+    "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (17 tests | 1 failed | 16 skipped) 9ms\n   \u00d7 migrated toggles are config-only and top-level help remains below forty options 8ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > migrated toggles are config-only and top-level help remains below forty options\nAssertionError: --checkpoints: expected true to be false // Object.is equality\n\n- Expected\n+ Received\n\n- false\n+ true\n\n \u276f packages/cli/test/recommended-defaults.test.ts:47:60\n     45|     expect(cmd.options.map(o => o.long)).not.toEqual(expect.arrayConta\u2026\n     46|     for (const flag of ['--supervise','--no-supervise','--checkpoints'\u2026\n     47|       expect(cmd.options.some(o => o.long === flag), flag).toBe(false);\n       |                                                            ^\n     48|   }\n     49| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 16 skipped (17)\n   Start at  20:52:20\n   Duration  1.41s (transform 885ms, setup 13ms, import 1.32s, tests 9ms, environment 0ms)\n\n"
+  }
+]
