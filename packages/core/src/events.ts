@@ -7,6 +7,7 @@ import { ShellOperationSchema } from "./shell-operation.js";
 import { PermissionClass, Decision } from "./permission-types.js";
 import { PermissionGrantEventSchema } from "./permission-grants.js";
 import { PermissionDecisionSourceSchema } from "./permission-attribution.js";
+import { ProviderSelectionInfoSchema } from "./provider-selection.js";
 export { PermissionClass, Decision } from "./permission-types.js";
 
 /**
@@ -201,6 +202,12 @@ export const EventPayload = z.discriminatedUnion("type", [
     minute: z.number().int().nonnegative().safe(),
   }),
   z.object({
+    type: z.literal("provider.switched"),
+    from: ProviderSelectionInfoSchema.optional(),
+    to: ProviderSelectionInfoSchema,
+    turn: z.number().int().positive(),
+  }),
+  z.object({
     type: z.literal("session.start"),
     task: z.string(),
     advisoryContext: AdvisoryPromptContextSchema.optional(),
@@ -357,6 +364,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("context.manifest"),
     turn: z.number().int().positive(),
+    providerSelection: ProviderSelectionInfoSchema.optional(),
     requestHash: z.string(),
     blocks: z.array(z.object({
       source: z.enum([

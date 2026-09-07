@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { type EventPayload, type HarnessEvent, Usage, parseEvent, serializeEvent } from "./events.js";
 import { advisoryPromptBlocks, MessageSchema, type ContentBlock, type Message } from "./messages.js";
+import { ProviderSelectionInfoSchema, type ProviderSelectionInfo } from "./provider-selection.js";
 
 export interface SessionRef {
   id: string;
@@ -26,6 +27,7 @@ export const SessionSnapshot = z.object({
   usage: Usage,
   usd: z.number().nonnegative().optional(),
   messages: z.array(MessageSchema),
+  providerSelection: ProviderSelectionInfoSchema.optional(),
   ts: z.number().int(),
 });
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>;
@@ -364,7 +366,9 @@ export class SessionStore {
     let cwd = "";
     let turns = 0;
     const usage: Usage = { input: 0, output: 0 };
+    let providerSelection: ProviderSelectionInfo | undefined;
     for (const event of events) {
+      if (event.type === "context.manifest" && event.providerSelection !== undefined) providerSelection = event.providerSelection;
       if (event.type === "session.start" || event.type === "session.resume") {
         // the latest task, as a written snapshot carries the task of the run that wrote it
         if (event.task !== "") task = event.task;
@@ -385,6 +389,7 @@ export class SessionStore {
       turns,
       usage,
       messages: messagesFromEvents(events),
+      ...(providerSelection === undefined ? {} : { providerSelection }),
       ts: this.now(),
     };
   }

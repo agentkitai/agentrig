@@ -6,6 +6,7 @@ export * from "./messages.js";
 export * from "./manifests.js";
 export * from "./agent-roles.js";
 export * from "./provider.js";
+export * from "./provider-selection.js";
 export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./session-export.js";

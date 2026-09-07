@@ -133,6 +133,7 @@ jobs:
       - run: pnpm exec vitest run packages/core/test/post-edit-diagnostics.test.ts packages/cli/test/post-edit-diagnostics.test.ts
       - run: pnpm exec vitest run packages/core/test/agent-roles.test.ts packages/cli/test/agent-roles.test.ts
       - run: pnpm exec vitest run packages/core/test/spend-ledger.test.ts packages/cli/test/spend-ledger.test.ts
+      - run: pnpm exec vitest run packages/core/test/provider-selection.test.ts packages/cli/test/provider-selection.test.ts
       # Real local HTTP/OAuth, exact catalogue consent, advisory prompt and ACP refusal controls.
       - run: pnpm exec vitest run packages/core/test/mcp-remote.test.ts packages/core/test/mcp-oauth.test.ts packages/cli/test/mcp-remote-runtime.test.ts packages/cli/test/mcp-login.test.ts packages/cli/test/acp-config.test.ts
       - run: pnpm exec vitest run packages/supervisor/test/diff-review.test.ts packages/cli/test/review.test.ts packages/cli/test/tui-visible.test.ts

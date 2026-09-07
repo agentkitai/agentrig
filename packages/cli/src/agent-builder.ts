@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { inspectPackages } from "./packages.js";
+import { providerSelectionControl, type ProviderSelectionControl } from "./provider-selection.js";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -284,13 +285,14 @@ export async function readMcpConfig(path: string): Promise<Array<McpServerConfig
 }
 
 export interface BuiltAgent {
+  selection?: ProviderSelectionControl;
   spend?: { ledger: SpendLedger; segment: string; capMicros?: number };
   closeTelemetry?(): Promise<void>;
   /** Same actual policy used by the runtime; read-only operator surfaces must not bypass denies. */
   permissions?: PermissionPolicy;
   agent: Agent;
   provider: ModelProvider;
-  /** Every role's provider (R3.5a); `provider` is `providers.main`. */
+  /** Fixed role routing (R3.5a); `provider` reads the current main selection. */
   providers: ProviderSet;
   /** The tools the agent was given. Exposed so the wiring can be asserted rather than assumed. */
   tools: AnyTool[];
@@ -500,10 +502,12 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   let nativeReady = nativeEntry === undefined;
   const providers = buildProviders(opts, { ...(extras.onNotice === undefined ? {} : { onNotice: extras.onNotice }),
     ...(nativeEntry === undefined ? {} : { prepare: (provider: ModelProvider, name: string) => {
-      if (name !== nativeEntry) return;
-      if (!(provider instanceof OpenAICompatibleProvider)) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+      if (!(provider instanceof OpenAICompatibleProvider)) {
+        if (name === nativeEntry) throw new Error("Native output currently requires the OpenAI-compatible adapter");
+        return;
+      }
       // Actual adapter validation and explicit opt-in precede the non-class accounting wrapper.
-      provider.capabilities.nativeOutputSchema = true; nativeReady = true;
+      provider.capabilities.nativeOutputSchema = true; if (name === nativeEntry) nativeReady = true;
     } }),
     ...(spend === undefined ? {} : { meter: (provider: ModelProvider) => meterProvider(provider, spend.ledger, {
       segment: spend.segment, ...(pricing === undefined ? {} : { pricing }), ...(capMicros === undefined ? {} : { capMicros }),
@@ -512,6 +516,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     }) }) });
   const provider = providers.main;
   if (!nativeReady) throw new Error("Native output requires validation of the actual OpenAI-compatible adapter before decoration");
+  const selection = providerSelectionControl(providers, resolveProviderEntries(opts), extras.outputContract?.mode === "native");
 
   let memoryIndex = "";
   let memoryToolset: AnyTool[] = [];
@@ -725,6 +730,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     (extras.onNotice ?? console.error)(`extension command /${command.name} shadows the skill slash command; skill tool remains available`);
   }
   const agent = createAgent({
+    providerSelection: selection.resolve,
     ...(spend === undefined ? {} : { spend }),
     ...(extras.outputContract === undefined ? {} : { outputContract: extras.outputContract }),
     ...(opts.otelEndpoint === undefined ? {} : { observeSession }),
@@ -755,6 +761,6 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
-  return { agent, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, provider, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  return { agent, selection: selection.control, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, get provider() { return selection.resolve().provider; }, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

@@ -1,6 +1,8 @@
 import { realpath } from "node:fs/promises";
 import { SpendCapError, assertSpendMeter, hasSpendMeter, type SpendLedger } from "./spend-ledger.js";
 import { bindSessionSpend, currentSpend, withSpendRun } from "./spend-runtime.js";
+import { resolveAgentProvider } from "./provider-selection-runtime.js";
+import type { ProviderSelection, ProviderSelectionInfo } from "./provider-selection.js";
 import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
@@ -81,6 +83,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Trusted host selection, sampled once per run; never supplied by model content or replay. */
+  providerSelection?: () => ProviderSelection;
   /** Trusted configured-estimate accounting; providers must be metered at construction. */
   spend?: { ledger: SpendLedger; capMicros?: number };
   /** Optional final-answer constraint, compiled by createOutputContract. Not inherited by children. */
@@ -281,14 +285,16 @@ export function createAgent(config: AgentConfig): Agent {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
   return { run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
-    const session = runSession(config, task, opts ?? {});
+    const selected = resolveAgentProvider(config);
+    const session = runSession(selected.config, task, opts ?? {}, selected.selection);
     bindSessionSpend(session);
     try { void Promise.resolve(config.observeSession?.(session)).catch(() => {}); } catch { /* observation is not execution authority */ }
     return session;
   }) };
 }
 
-function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {
+function runSession(config: AgentConfig, task: string, opts: RunOptions, selection?: ProviderSelectionInfo): Session {
+  let previousSelection: ProviderSelectionInfo | undefined;
   const advisoryContext = opts.advisoryContext === undefined ? undefined : AdvisoryPromptContextSchema.parse(opts.advisoryContext);
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
@@ -449,6 +455,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           usage: { ...totals },
           usd,
           messages: resumableMessages(),
+          ...(previousSelection === undefined ? {} : { providerSelection: previousSelection }),
           ts: now(),
         });
       } catch {
@@ -493,6 +500,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns, context: taskContext,
           ...(advisoryContext === undefined ? {} : { advisoryContext }) });
         messages = snap.messages;
+        previousSelection = snap.providerSelection;
         // A written snapshot is already resumable; a materialized one can end at a fork point in
         // the middle of a tool call, and the same synthesis makes it acceptable to the APIs.
         messages = resumableMessages();
@@ -801,8 +809,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         // Emitted only after the last request mutation and immediately before the provider call.
         // It contains hashes and accounting metadata, never prompt content.
+        provider.validateHistory?.(req.messages);
+        if (selection !== undefined && JSON.stringify(selection) !== JSON.stringify(previousSelection)) {
+          await emit({ type: "provider.switched", to: selection, turn: turns,
+            ...(previousSelection === undefined ? {} : { from: previousSelection }) });
+          previousSelection = selection;
+        }
+        // Imported receipts are history, not a selection for an unconfigured host.
+        if (selection === undefined) previousSelection = undefined;
         await emit(buildContextManifest({
           turn: turns,
+          ...(selection === undefined ? {} : { providerSelection: selection }),
           request: req,
           systemBlocks: requestSystemBlocks,
           evictedToolUseIds: eviction.evictedToolUseIds,
