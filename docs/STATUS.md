@@ -14,6 +14,16 @@ reason to weaken security. A saved status script alone is not unattended monitor
 See [train operations](TRAIN-OPERATIONS.md) and the [PTY protocol](TUI-SETTINGS.md#driving-the-tui-from-a-pty).
 R17b remains in progress in PR #234; no roadmap row is completed by this repair.
 
+The same outside-train repair encountered Windows CI failures: aggregate package
+scan timeout [#240](https://github.com/agentkitai/agentrig/issues/240), then a
+different maintenance-fixture deadline [#242](https://github.com/agentkitai/agentrig/issues/242)
+on the single unchanged rerun. Maintenance cases now use independent fixtures
+and at most two CLI launches per case, preserving each five-second command bound
+and fifteen-second case bound. Controlled 3.2-second startup delay fails the old
+combined case but passes all ten split scenarios; a six-second delay still fails
+at the command bound with SIGKILL and joined cleanup. Production behavior and
+assertions are not relaxed. The original Windows failures remain recorded.
+
 R17 skill-selection recovery (outside train, 2026-09-07): the user resolved
 [feel #229](https://github.com/agentkitai/agentrig/issues/229) by authorizing R17g
 as sequential package PRs; R17b–R17f remain one PR per row. Conductor `c1a25934`
