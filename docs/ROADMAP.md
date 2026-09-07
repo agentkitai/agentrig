@@ -1091,7 +1091,7 @@ concise and place detailed implementation history in dated notes as it is mainta
   capture (memory filing, write calibration, guardrails) and the coding-agent captures (prompt
   composition, hook authority, manifest failure modes, verification lanes).
 
-## Follow-ups / nice to haves — not active prerequisites
+## Follow-ups / nice to haves — active continuation queue
 
 - R15k optional polish: persistent audit of pre-session directory-completion metadata
   reads. Current completion explicitly uses configured read policy/one-time approval,
@@ -1099,8 +1099,11 @@ concise and place detailed implementation history in dated notes as it is mainta
 - R15k optional polish: display a brief busy hint for an ignored explicit clipboard
   gesture while a turn or completion is already active; do not queue hidden reads.
 
-These do not block the committed milestone sequence and do not recursively create new milestones.
-Address them after that sequence, unless new evidence demonstrates a safety or data-loss defect.
+The committed milestone sequence is complete. The user has authorized working through this entire
+queue in impact/dependency order, parallelizing independent items in worktrees and merging each PR
+with green CI. Finish one bounded batch and continue to the next; do not recursively create new
+milestones. Conditional future scenarios need their stated evidence, and live measurements still
+need an explicit budget; neither prevents continuing other actionable entries.
 
 - Improve repo-map breadth when the file list alone exceeds its byte cap (for example, directory
   summaries). Current truncation is explicit; the production 8 KiB budget is unchanged.
@@ -1370,7 +1373,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
-- R15h polish (turn-count validation done, PR#216): CLI/config/builder
+- R15h polish (turn-count validation done, PR #216): CLI/config/builder
   reject fractional subagent turn limits before provider construction, preserving positive
   safe integers and the default. [Contract](plans/subagent-integer-turn-limits.md).
   Clearer canonical role-directory refusal diagnostics remain queued; no limit is widened.

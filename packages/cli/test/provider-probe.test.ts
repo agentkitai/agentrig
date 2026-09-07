@@ -66,6 +66,7 @@ it("cache matches exact model/endpoint/tuning/credential, expires, and labels fa
   expect(providerProbeFingerprint(entry, { OPENAI_API_KEY: "other" })).not.toBe(key);
   const provider = buildProvider({ ...entry, model: "other", modelExplicit: true }, { env, conformanceCachePath: path });
   expect(provider.capabilities.conformance).toMatchObject({ source: "unverified-configured", sources: { tools: "unverified-configured" } });
+  expect("report" in provider.capabilities.conformance!).toBe(false);
 });
 it("bounded cache rejects malformed/oversized data and evicts oldest observations at 64 entries", async () => {
   const root = await temp(); const path = join(root, "cache.json");
