@@ -50,16 +50,21 @@ export type OrdinaryInputAction =
   | { type: "append"; text: string }
   | { type: "backspace" }
   | { type: "enter" }
+  | { type: "up" | "down" | "tab" | "newline" }
   | { type: "interrupt" }
   | { type: "escape" };
 
 /** Semantic replay for ordinary bytes sharing a raw chunk with a stripped protocol marker. */
 export function ordinaryInputActions(text: string): OrdinaryInputAction[] {
   const actions: OrdinaryInputAction[] = [];
-  for (const character of text) {
+  for (let offset = 0; offset < text.length; offset++) {
+    const sequence = /^(\u001b\[A|\u001bOA|\u001b\[B|\u001bOB|\u001b\[13;2u|\u001b\[27;2;13~)/.exec(text.slice(offset))?.[0];
+    if (sequence !== undefined) { actions.push({ type: sequence.endsWith("A") ? "up" : sequence.endsWith("B") ? "down" : "newline" }); offset += sequence.length - 1; continue; }
+    const character = text[offset]!;
     if (character === "\u0003") actions.push({ type: "interrupt" });
     else if (character === "\b" || character === "\u007f") actions.push({ type: "backspace" });
     else if (character === "\r") actions.push({ type: "enter" });
+    else if (character === "\t") actions.push({ type: "tab" });
     else if (character === "\u001b") actions.push({ type: "escape" });
     else actions.push({ type: "append", text: character });
   }

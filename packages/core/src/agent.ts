@@ -1,4 +1,6 @@
 import { realpath } from "node:fs/promises";
+import { SpendCapError, assertSpendMeter, hasSpendMeter, type SpendLedger } from "./spend-ledger.js";
+import { bindSessionSpend, currentSpend, withSpendRun } from "./spend-runtime.js";
 import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
@@ -79,6 +81,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Trusted configured-estimate accounting; providers must be metered at construction. */
+  spend?: { ledger: SpendLedger; capMicros?: number };
   /** Optional final-answer constraint, compiled by createOutputContract. Not inherited by children. */
   outputContract?: OutputContract;
   /** Trusted nonblocking observation only; failure never changes the run or event log. */
@@ -262,6 +266,7 @@ function estimateTokens(system: string, messages: Message[]): number {
 export { PLAN_TOOL, MAX_REPLAN_REFUSALS } from "./tool-execution.js";
 
 export function createAgent(config: AgentConfig): Agent {
+  if (config.spend?.capMicros !== undefined) assertSpendMeter(config.provider, config.spend.ledger, config.spend.capMicros);
   if (config.outputContract !== undefined) {
     assertOutputContract(config.outputContract);
     if (config.outputContract.mode === "native" && config.provider.capabilities.nativeOutputSchema !== true)
@@ -275,11 +280,12 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
-  return { run: (task, opts) => {
+  return { run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
     const session = runSession(config, task, opts ?? {});
+    bindSessionSpend(session);
     try { void Promise.resolve(config.observeSession?.(session)).catch(() => {}); } catch { /* observation is not execution authority */ }
     return session;
-  } };
+  }) };
 }
 
 function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {
@@ -317,6 +323,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
     if (payload.type === "plan.updated") { replan.reason = null; replan.refusals = 0; }
   });
   const { stream, gate, abortController, auxiliaryController, endController, emit, raceAbort, settleOrphans } = lifecycle;
+  const spend = currentSpend();
+  if (spend !== undefined) spend.session = id;
+  if (spend !== undefined) spend.onCap = async error => {
+    if (!lifecycle.isEnded()) await emit({ type: "budget.cap", reason: error.reason, segment: spend.segment });
+  };
+  if (spend !== undefined) spend.onUnavailable = async () => {
+    if (spend.unavailable) return;
+    spend.unavailable = true;
+    if (!lifecycle.isEnded()) await emit({ type: "error", message: "spend accounting unavailable; uncapped execution continues with unknown usage coverage", fatal: false });
+  };
   const flushDelegations = async () => {
     for (const change of principals.drain()) await emit({ type: "context.delegation", ...change });
   };
@@ -502,6 +518,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
       }
 
+      if (config.spend !== undefined && spend !== undefined && !hasSpendMeter(provider, config.spend.ledger, config.spend.capMicros)) {
+        try { await config.spend.ledger.gap(spend.segment, id); }
+        catch { await spend.onUnavailable?.(); }
+      }
+      if (config.spend?.capMicros !== undefined) {
+        try { await config.spend.ledger.check(config.spend.capMicros, abortController.signal); }
+        catch (error) {
+          if (abortController.signal.aborted) throw error;
+          const capError = error instanceof SpendCapError ? error : new SpendCapError("unavailable"); await spend?.onCap?.(capError); throw capError;
+        }
+      }
       for (const extension of config.extensions?.loaded ?? []) {
         const status = extensionStartup(extension);
         await emit({ type: "extension.loaded", name: extension.name, path: extension.path, surfaces: extension.surfaces,
@@ -1064,7 +1091,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         await saveSnapshot();
       }
     } catch (err) {
-      reason = "error";
+      reason = abortController.signal.aborted ? "aborted" : err instanceof SpendCapError ? "budget" : "error";
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", message, fatal: true }).catch(() => {});
     } finally {
@@ -1122,6 +1149,16 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         await emit({ type: "error", message: `permission audit failed: ${String(error)}`, fatal: true }).catch(() => {});
       }
       await flushExtensionFailures();
+      if (spend !== undefined && config.spend !== undefined) {
+        try {
+          if (spend.unavailable) await config.spend.ledger.gap(spend.segment, id, "accounting-unavailable");
+          await config.spend.ledger.end(spend.segment, id);
+        } catch {
+          const capped = config.spend.capMicros !== undefined;
+          if (capped && reason !== "aborted") reason = "error";
+          await emit({ type: "error", message: "spend ledger finalization failed; accounting uncertain and no durable completion receipt", fatal: capped }).catch(() => {});
+        }
+      }
       await lifecycle.finish(reason, releaseLock, releaseClaim);
     }
     return { id, reason, turns, usage: totals };

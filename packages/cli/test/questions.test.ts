@@ -16,6 +16,7 @@ import { TuiController } from "../src/tui/controller.js";
 import { App } from "../src/tui/app.js";
 import { questionPolicy } from "../src/question-policy.js";
 import { renderEvent } from "../src/render.js";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => { vi.useRealTimers(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -64,28 +65,33 @@ it("question queue cap, permission priority and shutdown settle every owned ques
   await controller.shutdown(); expect(await Promise.all(questions)).toEqual(Array(8).fill(null));
 });
 
-it("actual provider/controller question appears in an Ink frame and resumes with the human answer", async () => {
+it.each([0, 1200])("actual provider/controller question appears in an Ink frame and resumes with the human answer (startup %ims)", async startupMs => {
   const cwd = await root(); const requests: ModelRequest[] = [];
   const controller = new TuiController({ cwd, agent: { run() { throw new Error("not attached"); } } });
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
-    async *stream(req) { requests.push(req); if (requests.length === 1) { yield { type: "tool_use", id: "ask", name: "ask_user", input: question }; yield { type: "stop", reason: "tool_use" }; }
+    async *stream(req) { requests.push(req); if (requests.length === 1) { await new Promise(resolve => setTimeout(resolve, startupMs)); yield { type: "tool_use", id: "ask", name: "ask_user", input: question }; yield { type: "stop", reason: "tool_use" }; }
       else { yield { type: "text_delta", text: "format chosen" }; yield { type: "stop", reason: "end_turn" }; } } };
   const store = new SessionStore({ root: join(cwd, "logs") });
   controller.attach(createAgent({ provider, store, tools: [askUserTool()], systemPrompt: "fixture", repoMap: false,
     permissions: new RulePolicy([{ class: "read", decision: "allow" }]), onQuestion: controller.askQuestion }));
   const writes: string[] = [];
-  const stdout = Object.assign(new EventEmitter(), { columns: 90, rows: 24, isTTY: true, write: (s: string) => { writes.push(s); return true; } });
+  const stdout = Object.assign(new EventEmitter(), { columns: 90, rows: 24, isTTY: true, write: (s: string) => { writes.push(s); stdout.emit("frame"); return true; } });
+  const frames = { snapshot: () => controller.snapshot(), subscribe(listener: (state: ReturnType<TuiController["snapshot"]>) => void) {
+    const changed = () => listener(controller.snapshot()); stdout.on("frame", changed); changed();
+    return () => { stdout.off("frame", changed); };
+  } };
   const stdin = new Input();
   const ink = render(createElement(App, { controller }), { stdout: stdout as never, stdin: stdin as never, patchConsole: false, exitOnCtrlC: false });
   cleanups.push(async () => { ink.unmount(); await controller.shutdown(); });
   const running = controller.prompt("choose a format");
-  await vi.waitFor(() => expect(writes.join("")).toContain("2. JSON"));
+  await waitForTuiState(frames, running, "visible question options", () => writes.join("").includes("2. JSON"));
+  expect(writes.join("")).toContain("2. JSON");
   stdin.send("2", "\r"); await running;
   expect(requests).toHaveLength(2);
   expect(requests[1]!.messages.flatMap(m => m.content)).toContainEqual(expect.objectContaining({ type: "tool_result", trust: "user", content: expect.stringContaining("JSON") }));
   const events = await store.readAll(controller.snapshot().sessionId!);
   expect(events.filter(e => e.type.startsWith("question.")).map(renderEvent).join("\n")).toContain("source=human");
-});
+}, 10000);
 
 it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a local provider and records honest answer provenance", async mode => {
   const cwd = await root(); await mkdir(join(cwd, "home")); let calls = 0;

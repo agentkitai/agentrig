@@ -4,11 +4,13 @@ import {
   formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
+import { PromptHistory } from "./prompt-history.js";
 import { TuiController } from "./controller.js";
 import { interactiveDream } from "./dream.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
-import { SessionStore, liveChildren, summarizeSession } from "@agentkitai/agentrig-core";
+import { SessionStore, liveChildren, summarizeSession, withSessionSpend } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
+import { costLines } from "../usage.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
 import { undoSession } from "@agentkitai/agentrig-core";
 import { currentGitBranch } from "../git-branch.js";
@@ -63,7 +65,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
           // The same `supervisorOptions` the `run` command builds, rather than a second copy:
           // this entry point had NO supervisor at all, so `--supervise` was accepted and ignored.
           onSession: (session) =>
-            supervise(
+            withSessionSpend(session, () => supervise(
               session,
               supervisorOptions({
                 opts,
@@ -84,7 +86,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 onError: (where: string, err: Error) =>
                   controller.print(`supervisor ${where}: ${err.message}`, "error"),
               }),
-            ),
+            )),
         }
       : {}),
   });
@@ -132,6 +134,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
+  controller.setCost(session => built.spend === undefined ? Promise.resolve(["No trusted project spend ledger is active."]) : costLines(built.spend.ledger, session));
   if (warning !== null) controller.print(warning, "error");
   controller.setReview(async (args, signal) => {
     try {
@@ -177,6 +180,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     catch (error) { controller.print(`scheduled failure history unavailable: ${error instanceof Error ? error.message : String(error)}`, "error"); }
   }
   let acknowledge: Promise<void> | undefined;
+  const history = await PromptHistory.load(opts.trustedProjectRoot, text => controller.print(text, "system"));
   const onMounted = (): void => {
     if (reports === undefined || notice === undefined || notice.text === null || acknowledge !== undefined) return;
     acknowledge = reports.acknowledge(notice.through).catch(error => {
@@ -187,7 +191,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     await withBracketedPaste(process.stdout, async () => {
       // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
       // to useInput, so the abort handler in the view could never run.
-      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} />, {
+      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} history={history} />, {
         exitOnCtrlC: false,
       });
       // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this
@@ -196,6 +200,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
       await waitUntilExit();
     });
   } finally {
+    await history.close();
     await acknowledge;
     // The UI is gone but the session may still be running, or running its session_end hooks
     // (#88): keep answering SIGINT until shutdown has finished, so a ctrl-C here is a second

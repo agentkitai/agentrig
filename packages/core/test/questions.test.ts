@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { askUserTool, createAgent, messagesFromEvents, parallel, QUESTION_TIMEOUT_MS, RulePolicy, SessionStore,
@@ -9,12 +10,13 @@ import { askUserTool, createAgent, messagesFromEvents, parallel, QUESTION_TIMEOU
 const roots: string[] = [];
 afterEach(async () => { vi.useRealTimers(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const question = { prompt: "Which format?", options: ["Text", "JSON"] };
-async function fixture(onQuestion?: QuestionHandler, laterEffect = false, concurrent = false) {
+async function fixture(onQuestion?: QuestionHandler, laterEffect = false, concurrent = false, startupDelayMs = 0) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-questions-")); roots.push(root);
   const store = new SessionStore({ root: join(root, "logs") });
   const requests: ModelRequest[] = []; let effects = 0;
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 1_000_000 },
     async *stream(request) {
+      if (requests.length === 0 && startupDelayMs > 0) await delay(startupDelayMs);
       requests.push(structuredClone(request));
       if (requests.length === 1) {
         yield { type: "tool_use", id: "ask", name: "ask_user", input: question };
@@ -70,16 +72,27 @@ it("cancellation settles an unanswered handler and drops its late answer", async
   expect(signal!.aborted).toBe(true); expect(f.requests).toHaveLength(1);
 });
 
-it("the question deadline settles an uncooperative handler without a user", async () => {
+it.each([0, 1100])("the question deadline settles an uncooperative handler without a user (startup delay=%i)", async startupDelayMs => {
   let waiting = false;
-  const f = await fixture(async () => { waiting = true; return new Promise(() => {}); });
+  let ready!: () => void;
+  const handlerReady = new Promise<void>(resolve => { ready = resolve; });
+  const f = await fixture(async () => { waiting = true; ready(); return new Promise(() => {}); }, false, false, startupDelayMs);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const session = f.agent.run("choose", { cwd: f.root });
-  await vi.waitFor(() => expect(waiting).toBe(true));
-  await vi.advanceTimersByTimeAsync(QUESTION_TIMEOUT_MS);
-  expect((await session.done).reason).toBe("error");
-  expect((await f.store.readAll(session.id)).find(e => e.type === "question.answered")).toMatchObject({ outcome: "timeout" });
-});
+  const readiness = new AbortController();
+  try {
+    // Real startup I/O is not the question's simulated deadline. Begin advancing the fake
+    // clock only after the actual handler is waiting, with a separately bounded real wait.
+    await Promise.race([handlerReady, delay(4000, undefined, { signal: readiness.signal }).then(() => {
+      throw new Error("question handler did not become ready");
+    })]);
+    readiness.abort();
+    expect(waiting).toBe(true);
+    await vi.advanceTimersByTimeAsync(QUESTION_TIMEOUT_MS);
+    expect((await session.done).reason).toBe("error");
+    expect((await f.store.readAll(session.id)).find(e => e.type === "question.answered")).toMatchObject({ outcome: "timeout" });
+  } finally { readiness.abort(); session.control.abort(); vi.useRealTimers(); await session.done; }
+}, 10000);
 
 it.each([false, true])("a copied or name-forged question tool cannot receive the private handler or forge question events, forge=%s", async forge => {
   const f = await fixture(); let called = 0;
