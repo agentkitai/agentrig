@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionStore, SpendLedger } from "@agentkitai/agentrig-core";
+import { SessionStore, SpendLedger, sessionSpendSource } from "@agentkitai/agentrig-core";
 import { buildAgent, type BuiltAgent } from "../src/agent-builder.js";
 import { buildProgram } from "../src/program.js";
 import { TuiController } from "../src/tui/controller.js";
@@ -10,6 +10,8 @@ import { parseCommand } from "../src/tui/commands.js";
 import { readOutputContract } from "../src/output-schema.js";
 import { ProviderEntrySchema } from "../src/config.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
+import { mountNotifications } from "../src/tui/notifications.js";
+import { statusLine } from "../src/tui/status.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); process.exitCode = 0;
@@ -53,6 +55,37 @@ it("configured CLI switches reach actual next requests, preserve history and lea
     expect(events.filter(e => e.type === "context.manifest").map(e => e.providerSelection?.entry)).toEqual(["default", "second", "second"]);
     expect(JSON.stringify(events)).not.toContain("private-test-key");
   } finally { await f.controller.submit("/quit"); }
+});
+
+it("switching preserves mounted status accounting and does not invent notification transitions", async () => {
+  const fetch = vi.fn(async () => response()); vi.stubGlobal("fetch", fetch);
+  const f = await fixture(["--price-in", "1", "--price-out", "1"]);
+  f.controller.configureStatus(() => ({ posture: "ask", sandbox: "none" }));
+  const closeStatus = f.controller.mountStatus();
+  let now = 0; const bells: string[] = [];
+  const notifications = mountNotifications(f.controller, { notifications: "bell", notificationIdleSeconds: 1 }, {
+    stdin: { isTTY: true }, stdout: { isTTY: true, write: text => bells.push(text) }, now: () => now,
+  });
+  try {
+    await f.controller.submit("first");
+    const first = f.controller.statusSession()!; const source = sessionSpendSource(first)!;
+    await f.controller.submit("/model second"); await f.controller.submit("/effort high");
+    expect(f.controller.statusSession()).toBe(first);
+    expect(sessionSpendSource(f.controller.statusSession()!)!.segment).toBe(source.segment);
+    expect(f.controller.snapshot().model).toBe("second-model");
+    expect(statusLine(f.controller.snapshot())).toContain("sb:none");
+    expect(bells).toEqual([]); expect(fetch).toHaveBeenCalledTimes(1);
+    // A genuine idle permission transition still notifies through the shared controller.
+    now = 2000;
+    const ask = f.controller.ask({ tool: "read_file", class: "read", cwd: f.cwd, paths: [join(f.cwd, "a")], input: { path: "a" } });
+    await vi.waitFor(() => expect(bells).toEqual(["\u0007"]));
+    f.controller.answerPermission("deny"); expect(await ask).toBe("deny");
+    notifications.input();
+    await f.controller.submit("second");
+    expect(sessionSpendSource(f.controller.statusSession()!)!.segment).not.toBe(source.segment);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await f.controller.submit("/cost"); expect(fetch).toHaveBeenCalledTimes(2);
+  } finally { await notifications.close(); await closeStatus(); await f.controller.shutdown(); }
 });
 
 it("busy and invalid selections never change the committed adapter or dispatch extra requests", async () => {

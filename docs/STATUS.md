@@ -3,6 +3,11 @@
 Active backlog drain: **#205 → #207 → #194**. R15j #205 integrates merged #201
 main `8da21be`; #201 post-main is pending. R16g/R16h remain frozen; no new roadmap work.
 
+R15j integrated local gates pass: build/typecheck;133 focused selection/status/
+notification/diff/approval/Ink tests; required-Docker full3,142 passed + two existing
+skips /200 files (78.00s); actual Chromium1. New-head four-check CI remains pending.
+Original failed205 runs34075001809 and34075890518 remain historical failures.
+
 R16b #203 and readiness repair #208 are done on repaired main `18df259`, all-four
 CI34084903634 / structure34084903714 green.
 [R16b receipt](https://github.com/agentkitai/agentrig/pull/203#issuecomment-5565321833),
@@ -21,9 +26,8 @@ R15i is done (PR #202): main `9aca3915e98ca8331e1c25c8a7a0eeabe27a2066`,
 CI34072279360 and structure34072279370 all four green.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/202#issuecomment-5563729106).
 R15j implements next-run configured selection, preserving accounting and authority;
-no live model/catalogue discovery. [Contract](plans/R15j.md). R16f/R16g are independent
-read-only status/explicit maintenance work; their shared controller seams will be
-integrated from green main, not copied between unmerged worktrees.
+no live model/catalogue discovery. [Contract](plans/R15j.md). Delivered R16f status
+is integrated; R16g/R16h remain frozen while the existing PR backlog drains.
 R15j's one independent review approved the frozen implementation (actual 30 turns,
 requested 24); its bounded-name observation and author replay-label correction are
 fixed. Build/typecheck, full required-Docker (3,037 passed + two skips /190 files)
