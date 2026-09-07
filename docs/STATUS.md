@@ -2,6 +2,12 @@
 
 ### R16e in progress — opt-in idle TUI notifications
 
+Integrated #208 main `18df259`: documentation-only conflicts, original #203 failed
+post-main and repair review retained. Build/typecheck, 165 focused controls,
+required-Docker 3,123 plus two skips /198 files (76.57s), and real Chromium pass.
+Fresh #201 exact-head and repaired-main all-four gates remain required; no second
+review or new feature work.
+
 Backlog-drain integration includes merged #203 main `2181859` and delivered #204
 status. Build/typecheck, 123 focused plus 13 actual diff/approval controls, required
 Docker full 3,120 plus two skips /198 files (73.53s), and real Chromium pass.
