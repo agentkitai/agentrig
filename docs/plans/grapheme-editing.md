@@ -31,3 +31,8 @@ skips/209files92.56s; actual Chromium1passed2.97s. [Single independent review](g
 APPROVE,21reported/24requested turns; reviewer ran focused/structural tests, not
 build/typecheck. Minor held-key display latency is retained at roadmap END. No
 second broad review. Exact-head and post-main hosted outcomes belong on the PR.
+
+Integrated independently delivered skill casing PR#214/main dbc89c9; only STATUS
+conflicted, resolved with historical evidence retained and current delivery labels.
+No source overlap or second review. Final integrated gates are reported on
+[PR#215](https://github.com/agentkitai/agentrig/pull/215).

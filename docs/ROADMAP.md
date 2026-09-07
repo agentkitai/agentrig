@@ -1,8 +1,9 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Active follow-ups: grapheme-safe editing, nested skill filename spelling and
-fractional subagent-turn validation, in independent worktrees. Merge whichever
-reviewed item is ready on green current main; do not accumulate unrelated waits.
+Active delivery: grapheme PR#215 and turn-limit PR#216. Skill casing PR#214
+merged first as main dbc89c9; its post-main gate is pending at this checkpoint.
+Each PR holds its final hosted receipt. Merge whichever reviewed item is ready
+on green current main; no new lane until this batch drains.
 PR#212 and PR#213 are done; main300c5e2 passed all-four CI34098667334 /
 structure34098667328. [Slash delivery receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
 The previous queue checkpoints below are historical.
@@ -1296,8 +1297,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
   presentation of original evaluator attestations beside derived lane assessments. Neither
   path may infer independence from labels, erase failures, or create a second evaluation runner.
-- R5c polish: align nested skill filename casing with the loader's exact `SKILL.md` convention;
-  make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
+- R5c nested skill filename casing (in progress; [plan](plans/skill-filename-casing.md)):
+  refuse noncanonical nested markers before package publication/loading, matching exact `SKILL.md`.
+  Remaining independent polish: make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
   The review's root-alias precedence defect was fixed in R5c, not deferred here.
 - Child-grants test polish: skip diagnostic snapshot work after a readiness wait has settled;
   additionally name child-view identity in the sibling predicate. Existing assertions still
@@ -1371,7 +1373,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
-- R16d polish: grapheme-aware editing is implemented ([contract](plans/grapheme-editing.md)); retire a completion
+- R16d polish: grapheme-aware editing is done implementation, PR#215 ([contract](plans/grapheme-editing.md)); retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
   within R16d with actual Ink controls, not deferred. History is sensitive local

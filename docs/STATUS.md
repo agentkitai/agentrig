@@ -1,13 +1,28 @@
 # Status
 
-Active: independent grapheme-editing, nested skill casing and subagent-turn-count
-follow-ups. Previous PR#212/#213 are delivered, all-four green main300c5e2
+Active delivery: grapheme PR#215 and turn-limit PR#216. Skill casing PR#214
+merged first as main dbc89c9 after all-four exact-head CI; post-main CI34102581250 /
+structure34102581248 is pending at this checkpoint. Final hosted receipts are on
+[PR#214](https://github.com/agentkitai/agentrig/pull/214) and
+[PR#215](https://github.com/agentkitai/agentrig/pull/215). No new lane until this batch drains.
+Previous PR#212/#213 are delivered, all-four green main300c5e2
 (CI34098667334 / structure34098667328); [receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
 Grapheme deletion shares one helper between composer and unconfirmed scope input.
 Four actual prompt/scope tests failed before the fix; no normalization, policy or
 paste-decoder changes. [Contract](plans/grapheme-editing.md). Hosted gates follow.
 Prior checkpoints below retain the original sequence; independent ready items
 are no longer held behind an artificial merge order.
+
+Historical casing implementation checkpoint: shared package validation
+now refuses noncanonical nested `SKILL.md` spellings before publication/loading,
+while flat `.md` matching, core discovery and trust/path/byte limits remain unchanged.
+[Plan](plans/skill-filename-casing.md). Six fail-before controls reproduced accepted
+case variants; canonical install→trusted builder→core loading already passed.
+All 70 focused package/install/runtime/core-skill tests now pass. One Claude
+APPROVE (24 requested/8 reported) independently ran70 tests/typecheck. Build and
+typecheck pass; full required-Docker3,278 plus two existing skips /209files (92.80s)
+and real Chromium1 (2.52s) pass. Exact-head four-check hosted gates remain pending.
+Unrelated hardlink-source follow-up stays at roadmap END. Earlier status is historical.
 
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
