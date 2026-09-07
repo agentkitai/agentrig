@@ -50,7 +50,7 @@ export type OrdinaryInputAction =
   | { type: "append"; text: string }
   | { type: "backspace" }
   | { type: "enter" }
-  | { type: "up" | "down" | "tab" | "newline" }
+  | { type: "up" | "down" | "tab" | "newline" | "paste-image" }
   | { type: "interrupt" }
   | { type: "escape" };
 
@@ -65,6 +65,7 @@ export function ordinaryInputActions(text: string): OrdinaryInputAction[] {
     else if (character === "\b" || character === "\u007f") actions.push({ type: "backspace" });
     else if (character === "\r") actions.push({ type: "enter" });
     else if (character === "\t") actions.push({ type: "tab" });
+    else if (character === "\u0016") actions.push({ type: "paste-image" });
     else if (character === "\u001b") actions.push({ type: "escape" });
     else actions.push({ type: "append", text: character });
   }

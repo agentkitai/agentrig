@@ -5,6 +5,7 @@ import {
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
 import { PromptHistory } from "./prompt-history.js";
+import { completeAttachment, readClipboard } from "./attachments.js";
 import { TuiController } from "./controller.js";
 import { interactiveDream } from "./dream.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
@@ -134,6 +135,11 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
+  controller.setInputAttachments({
+    complete: (text, signal) => completeAttachment(text, { cwd: process.cwd(), sandbox: opts.sandbox,
+      permissions: built.permissions, ask: (req, signal) => controller.ask(req, {}, signal) },signal),
+    clipboard: signal => { if (opts.sandbox !== undefined && opts.sandbox !== "none") return Promise.reject(new Error("clipboard unavailable in enforcing sandbox")); return readClipboard(signal); },
+  });
   controller.setCost(session => built.spend === undefined ? Promise.resolve(["No trusted project spend ledger is active."]) : costLines(built.spend.ledger, session));
   if (warning !== null) controller.print(warning, "error");
   controller.setReview(async (args, signal) => {
