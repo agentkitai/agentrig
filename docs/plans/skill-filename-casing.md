@@ -28,3 +28,18 @@ tests pass. A real installed-file spelling change (via intermediate rename for
 case-insensitive hosts) is refused at inspection with the explicit same diagnostic,
 preserving the changed files. This does not claim authenticity or migrate legacy
 packages automatically. No core-loader broadening or filename normalization.
+
+## Independent review
+
+One Claude APPROVE,24 requested/8 reported turns. Actual70 focused tests and
+typecheck passed independently; no material findings. Original result and exact
+metadata retained in [review](skill-filename-casing-review.md). Operator README
+explicitly notes that legacy noncanonical bundles now refuse whole at inspection,
+including case-insensitive hosts where they might previously have loaded. No
+automatic migration or file deletion. No extra review round.
+
+Build/typecheck pass. Required-Docker full suite3,278 passed plus two existing
+skips /209files (92.80s); actual Chromium1passed (2.52s). Worker digest
+`sha256:f111ef59dce766519eb2ac455b554b01793aff0e9cd1d68d29b6d314d7db52e9`;
+checker digest `sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5`.
+Exact-head four hosted checks and any newer-green-main integration remain required.
