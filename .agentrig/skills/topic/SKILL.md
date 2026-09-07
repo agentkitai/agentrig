@@ -90,7 +90,8 @@ For each recorded row, in order:
    are stale and are ignored. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
-   - **Prepare.** One `bash` call, so every value it uses is assigned inside it before use:
+   - **Prepare.** One `bash` call for preparation, then one call per install. Every value
+     the preparation call uses is assigned inside it before use:
      `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName)`;
      `HEAD=$(gh pr view NN --json headRefOid --jq .headRefOid)`; then
      `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `echo "$WT"`, `git worktree add "$WT" "$HEAD"`,
@@ -114,8 +115,8 @@ For each recorded row, in order:
      the post-merge review SHA BEFORE installing dependencies. Run `cd <WT> && pnpm install`
      and `cd <CODEX_WT> && pnpm install` in separate calls, each with `timeoutMs` at least 600000;
      require both exit codes zero before launching reviewers. A failed install cannot hide the
-     recorded cleanup paths; join it before removing either tree. No aggregate install timeout
-     was doubled. `bash` has no cwd field and no shell state survives between calls: record all
+     recorded cleanup paths; join it before removing either tree.
+     `bash` has no cwd field and no shell state survives between calls: record all
      three absolute paths and REVHEAD like job ids, and substitute
      them literally into every later command. Never share mutable sources, build output or
      `node_modules` between the reviewers; worktrees are cooperative isolation, not an OS sandbox.

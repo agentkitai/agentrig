@@ -23,7 +23,12 @@ it("topic launches Codex in its own tree and temp root for full and delta passes
   expect(text).toContain("TMPDIR=<OUT>/claude-tmp claude -p");
   expect(text).not.toContain("cd <WT> && codex review");
   expect(text).toContain("m.length!==1||m[0]!==\"claude-opus-5\"");
-  expect(text).toContain('echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"');
+  expect(text).toContain('End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`');
+  expect(text).toContain("the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta)");
+  expect(text).toContain("REVHEAD=$NEW;");
+  expect(text).toContain("One `bash` call for preparation, then one call per install.");
+  expect(text.replace(/\s+/g, " ")).toContain("Record these paths and the post-merge review SHA BEFORE installing dependencies.");
+  expect(text).toContain("in separate calls, each with `timeoutMs` at least 600000");
   expect(text).toContain("Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's");
 });
 
