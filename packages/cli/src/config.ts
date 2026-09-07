@@ -6,6 +6,7 @@ import { z } from "zod";
 import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
+import { NotificationMode, NotificationIdleSeconds } from "./tui/notifications.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
 export type { ReasoningEffort } from "@agentkitai/agentrig-core";
@@ -89,6 +90,8 @@ const ConfigValuesSchema = z
     sandboxNetwork: z.boolean().optional(),
     checkpoints: z.boolean().optional(),
     diagnostics: DiagnosticsConfigSchema.optional(),
+    notifications: NotificationMode.optional(),
+    notificationIdleSeconds: NotificationIdleSeconds.optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),

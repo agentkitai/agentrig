@@ -3,6 +3,9 @@
 Active delivery blocker: **grant-transition readiness repair**. R16b #203 merged
 as2181859, but post-main Windows CI34082267021 failed an existing one-second
 permission-prompt wait. R16b is not yet done. [Repair contract](plans/grant-transition-readiness.md).
+Repair #208 merged as `18df259` after all four exact-head checks; repaired-main
+checks remain pending. Immediate-next #201 integrates that repair; neither row
+claims delivery before the repaired-main gate passes.
 Restore green main, then drain open PRs201→205→207→194 before any unsubmitted
 roadmap work. No new product milestone or repeated broad review.
 R16f #204 is done: main7fe3440 passed CI34080476921 and structure34080476920,
@@ -269,7 +272,7 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 | Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
 | User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
 | Headless CI / PR-bot mode (event in, comment out) | Claude Code Action, Codex GitHub integration | `run --json` only; no checkout-and-report shape | R15f |
-| Validated structured final output (`--output-schema`) | Codex | `--json` streams events; the final answer is prose | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
+| Validated structured final output (`--output-schema`) | Codex | explicit bounded schema validation and one guarded repair; raw logs preserved | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
 | User-defined agent roles with tool allowlists | Claude Code agent files, Goose recipes | validated local roles narrow runtime dispatch and delegable child grants | R15h *(done, PR #196)* |
 | Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i *(done, PR #202)* |
 | Mid-session model / effort switch | every TUI harness | R3.5 routes by role at session start only | R15j |
@@ -847,10 +850,10 @@ that model. None of them needs the alternate screen.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R16a *(done, PR #199 + repair #206; [contract](plans/R16a.md))* | Markdown rendering: assistant replies pass through a Markdown-to-ANSI renderer before they reach `Static` — headings, emphasis, lists, tables, fenced code with syntax highlighting for the common languages; the streaming viewport shows raw text and the final reply is re-rendered once. No wrapping decision moves out of `viewport.ts` | cli |
-| R16b (in progress) | Transcript diffs: captured bounded builtin before/after observations render as coloured unified diffs; unknown/truncated/high-complexity comparisons use explicit excerpts. Write asks share the renderer for labelled proposals beside R12b effects, without preapproval filesystem reads. [Contract](plans/R16b.md). | core + cli |
+| R16b (merged PR #203, post-main pending) | Transcript diffs: captured bounded builtin before/after observations render as coloured unified diffs; unknown/truncated/high-complexity comparisons use explicit excerpts. Write asks share the renderer for labelled proposals beside R12b effects, without preapproval filesystem reads. [Contract](plans/R16b.md). | core + cli |
 | R16c *(done, PR #198; [contract](plans/R16c.md), [display limits](TOOL-SUMMARIES.md))* | Tool-call summaries: each tool call renders as one line (tool, key argument, elapsed, outcome glyph) with reads collapsed into "read N files" runs; `/verbose` expands to the current raw event lines. Errors and denials never collapse | cli |
 | R16d *(done, [PR #200](https://github.com/agentkitai/agentrig/pull/200#issuecomment-5563937474); [contract](plans/R16d.md))* | Prompt history and completion: up/down recall earlier prompts (persisted per project in `.agentrig/history`, bounded, excluded from memory ingest); `/` completes slash commands and skill names; shift-enter or a trailing `\` inserts a newline for multi-line composition | cli |
-| R16e | Notifications: a terminal bell and, where available, a desktop notification on permission ask, supervisor escalation, `ask_user` (R15a) and session end while the terminal is unfocused or after a configurable idle; off by config, never on in headless `run` | cli |
+| R16e *(in progress; [contract](plans/R16e.md), [operator guide](NOTIFICATIONS.md))* | Notifications: a terminal bell and, where available, a desktop notification on permission ask, supervisor escalation, `ask_user` (R15a) and session end after configurable observed TUI input idle (no OS-focus inference); off by default/config, never on in headless `run` | cli |
 | R16f *(done, PR #204; [contract](plans/R16f.md), [display limits](STATUS-LINE.md))* | Status line: cost so far (from R15i's accounting when present, else token estimate), permission posture (`ask` / grants:N / yolo), sandbox mode, supervisor ladder level, queued-prompt count; still one truncated row, most useful segments first | cli |
 | R16g | In-TUI commands that exist only on the CLI today: `/compact` (force compaction now, with the manifest delta printed), `/clear` (new session, same config), `/doctor`, `/diff` (working tree vs the R4 checkpoint or HEAD) | cli |
 | R16h | Theme and keybindings: named light/dark themes selected by config or `NO_COLOR`; the five tone colours and the prompt/status colours come from the theme; a small keybinding table in config for the permission keys, history and abort. No runtime theme editor | cli |
@@ -974,7 +977,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 13 | R15d (done, PR #189) / R15e (done, PR #186) → R15f (done, PR #190) → R15g (done, PR #195) | Independent interop and review lanes; R15d follows completed R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h (done, PR #196) → R15i (done, PR #202) → R15j → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
 | 15 | R15l | Decision recorded after R10c; no build until then. |
-| 16 | R16a (done, PR #199 + repair #206) → R16b (in progress) → R16c (done, PR #198) → R16d (done, PR #200) → R16e → R16f (done, PR #204) → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
+| 16 | R16a (done, PR #199 + repair #206) → R16b (merged PR #203, post-main pending) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (in progress) → R16f (done, PR #204) → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
@@ -1298,6 +1301,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
   subagent turn flags consistently at CLI parsing. Current role spawning fails closed
   when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R16e polish: make the TUI headless option explicit in its type, move notification
+  schemas into a shared config-only module, and normalize tiny CLI help spacing.
+  The mounted runtime guard and actual headless CLI already remain silent.
 - R16d polish: grapheme-aware editing across both keyboard paths; retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed

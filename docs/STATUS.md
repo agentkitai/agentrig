@@ -1,5 +1,37 @@
 # Status
 
+### R16e in progress — opt-in idle TUI notifications
+
+Integrated #208 main `18df259`: documentation-only conflicts, original #203 failed
+post-main and repair review retained. Build/typecheck, 165 focused controls,
+required-Docker 3,123 plus two skips /198 files (76.57s), and real Chromium pass.
+Fresh #201 exact-head and repaired-main all-four gates remain required; no second
+review or new feature work.
+
+Backlog-drain integration includes merged #203 main `2181859` and delivered #204
+status. Build/typecheck, 123 focused plus 13 actual diff/approval controls, required
+Docker full 3,120 plus two skips /198 files (73.53s), and real Chromium pass.
+Both #203 post-main and #201 fresh exact-head all-four gates remain mandatory.
+Only documentation conflicted; no new source fixes or review rounds.
+
+Current integration includes repaired-green main `0b65aa1` (#206) and delivered
+Markdown/history. Frozen install/build/typecheck, 89 focused controls, full
+required-Docker 3,087 plus two skips /193 files (72.70s), and real Chromium pass.
+Fresh exact-head CI is pending; earlier checkpoints below retain their dates/bases.
+
+Independent row following delivered R15a, approved from green main `31193d6`;
+R15g and other TUI rows retain their own PRs and serialized merge gates.
+Default-off mounted-TTY observer uses actual prompt identities and input idle,
+not OS focus, model prose or event permissions. Fixed desktop arguments and a
+small shared owned-process helper preserve the review wrapper's prior behavior.
+[Contract](plans/R16e.md), [operator guide](NOTIFICATIONS.md). Author build/typecheck
+and full required-Docker suite pass 2,953 plus two skips /183 files. The single
+independent review approved with no material findings and independently passed
+the same full suite; it did not rerun build/typecheck. Integrated green R15g main
+`74699da` retains both CLI surfaces: build/typecheck, 55 combined focused tests,
+and full Docker 2,975 plus two skips /185 files pass. Exact-head/post-main gates
+remain pending.
+
 Active: **grant-transition readiness repair**, not a roadmap item. R16b #203
 merged2181859 after all four exact-head checks; post-main CI34082267021 failed
 Windows `tui.test.ts:236`, first prompt in the existing real new-transition test.
@@ -13,7 +45,9 @@ outer-timeout finding reproduced and fixed, both owned controllers joined before
 cleanup. Final170 focused tests, build/typecheck, required-Docker3,106 passed
 +2 existing skips /197files (75.64s), and actual Chromium1passed (2.36s).
 [Original review and disposition](plans/grant-transition-readiness-review.md).
-Exact repair-head and repaired-main CI remain pending; no completion claim yet.
+Repair #208 merged as `18df259` after all four exact-head checks. Repaired-main
+CI remains pending; #203/#208 are not yet delivered. Immediate-next #201 now
+integrates the repair without another review; its fresh checks are also required.
 
 R16f runtime-backed status line is **done**, PR #204: exact main7fe3440 passed
 all four checks CI34080476921/structure34080476920.
@@ -21,7 +55,7 @@ all four checks CI34080476921/structure34080476920.
 Original review, runtime identity and display bounds remain in the
 [contract](plans/R16f.md) and [operator guide](STATUS-LINE.md).
 
-Active row: **R16b captured transcript diffs**, single review approved; final integration/CI pending. R8d is done (PR #197, all four post-main checks green). R8c is done (PR #192); R15a is done (PR #188 + repair #191); R15d is done (PR #189); R15f is done (PR #190); R15e is done (PR #186).
+R16b captured transcript diffs #203 is merged at `2181859`; post-main CI `34082267021` and structure `34082267035` are pending. R8d is done (PR #197, all four post-main checks green). R8c is done (PR #192); R15a is done (PR #188 + repair #191); R15d is done (PR #189); R15f is done (PR #190); R15e is done (PR #186).
 
 R15i #202 is done: main `9aca3915e98ca8331e1c25c8a7a0eeabe27a2066`, CI `34072279360` and structure `34072279370` passed all four post-main gates. [Final receipt](https://github.com/agentkitai/agentrig/pull/202#issuecomment-5563729106). Earlier R15i validation checkpoints below are historical.
 
@@ -141,8 +175,12 @@ ordinary-budget repair has an actual tool-dispatch guard. Raw logs are preserved
 [Contract](plans/R15g.md), [operator limits and examples](STRUCTURED-OUTPUT.md).
 One independent review and its material fix are complete. Final integration with
 green reasoning/roles main `31193d6` passes build/typecheck and full Docker:
-2,958 tests plus two skips /184 files. Those historical checkpoints are closed: main `74699dac9fd6a1914e741e5f102cdb36d4bcfb04`, CI34065775803 and structure34065775875 passed all four checks.
+2,958 tests plus two skips /184 files. Final PR and post-main gates are closed:
+main `74699dac9fd6a1914e741e5f102cdb36d4bcfb04`, CI `34065775803` and
+scripted structure `34065775875` passed all four checks.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/195#issuecomment-5562920776).
+
+Active row: **R16e opt-in idle TUI notifications**, reviewed; final integration/CI pending.
 R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
 R10b PR #177 post-main CI `34040691166` passed all three platforms.
 R15c implementation and the single review's compaction fix pass 56 focused tests
