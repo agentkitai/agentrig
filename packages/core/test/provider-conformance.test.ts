@@ -44,6 +44,33 @@ it("pre-abort spends no calls and reports usage incomplete", async () => {
   const f = fixture(); const report = await probeProvider(f.provider, { signal: AbortSignal.abort() });
   expect(report.streams).toBe(0); expect(report.usageComplete).toBe(false); expect(f.requests).toEqual([]);
 });
+it.each(["error", "aborted"] as const)("%s report does not label configured capabilities observed", async mode => {
+  const f = fixture(mode === "error" ? "error" : "good");
+  const before = structuredClone(f.provider.capabilities);
+  const report = await probeProvider(f.provider, mode === "aborted" ? { signal: AbortSignal.abort() } : {});
+  applyProviderConformance(f.provider, report);
+  expect(f.provider.capabilities).toMatchObject(before);
+  expect(f.provider.capabilities.conformance).toEqual({ source: "unverified-configured",
+    sources: { tools: "unverified-configured", parallelTools: "unverified-configured", caching: "unverified-configured" }, report });
+  expect(f.provider.capabilities.conformance!.report).not.toBe(report);
+});
+it("summary reflects capability dimensions, not schema-only observations or report presence", async () => {
+  const f = fixture(); const report = await probeProvider(f.provider, { signal: AbortSignal.abort() });
+  report.promptedSchema = "observed"; report.cacheReporting = "observed";
+  applyProviderConformance(f.provider, report);
+  expect(f.provider.capabilities.conformance?.source).toBe("unverified-configured");
+  for (const key of ["tools", "parallelTools", "caching"] as const) {
+    for (const value of ["observed", "not-observed"] as const) {
+      const provider = fixture().provider;
+      applyProviderConformance(provider, { ...report, [key]: value });
+      expect(provider.capabilities.conformance?.source).toBe("observed");
+      expect(provider.capabilities.conformance?.sources[key]).toBe("observed");
+      expect(provider.capabilities[key]).toBe(value === "observed");
+      for (const other of ["tools", "parallelTools", "caching"] as const) if (other !== key)
+        expect(provider.capabilities.conformance?.sources[other]).toBe("unverified-configured");
+    }
+  }
+});
 it("deadline ends an uncooperative iterator without starting subsequent streams", async () => {
   const f = fixture(); const started = Promise.withResolvers<void>(); let signal: AbortSignal | undefined;
   f.provider.stream = (_req, s) => { signal = s; return { [Symbol.asyncIterator]() { return { next() { started.resolve(); return new Promise(() => {}); }, return() { return new Promise(() => {}); } }; } }; };

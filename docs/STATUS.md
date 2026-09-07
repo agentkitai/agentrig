@@ -1,6 +1,24 @@
 # Status
 
-Current follow-up: one-invocation `--no-sandbox-network` config override, on a fresh
+Current: continue through the entire END follow-up queue, with bounded independent
+worktrees and serialized merges; batch completion is not a stop condition.
+Network override #218 merged first as main8f741a800cfef739993a04b9c1a33d37548cfc48
+after all-four exact-head checks. Post-main CI34108756786 / structure34108756915
+are pending; final hosted receipt is on PR#218. Capability summary #217 integrates it.
+[Capability contract](plans/capability-evidence-summary.md). Four controls reproduced
+the overclaimed source label before correction. One Claude APPROVE26 reported/24
+requested; original [review](plans/capability-evidence-summary-review.md) retained.
+20 focused, build/typecheck, full pinned Docker3,309+2 skips and Chromium pass before
+integration. Original macOS CI failed an unrelated abort fixture's80ms startup race;
+read-only controlled delayed startup reproduces the missing precondition. Failure,
+diagnostic rerun and final integrated hosted results remain visible on PR#217.
+Repair that fixture next, preserving assertions and joining child cleanup.
+Prior #214–#216 are delivered on main5d91ce09686b634a35000afd2d3e20a57759cdc2,
+all-four post-main CI34104220683 / structure34104220637 green.
+[Final batch receipt](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
+Earlier checkpoints below are historical, not current pending work.
+
+Historical implementation checkpoint: one-invocation `--no-sandbox-network` config override, on a fresh
 branch from green main5d91ce09686b634a35000afd2d3e20a57759cdc2. All END follow-ups
 remain authorized work, with independent PRs and serialized green-main merges.
 No runtime permission or sandbox-policy changes. [Contract](plans/no-sandbox-network.md).

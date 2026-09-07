@@ -1091,7 +1091,26 @@ concise and place detailed implementation history in dated notes as it is mainta
   capture (memory filing, write calibration, guardrails) and the coding-agent captures (prompt
   composition, hook authority, manifest failure modes, verification lanes).
 
-## Follow-ups / nice to haves — not active prerequisites
+## Follow-ups / nice to haves — active continuation queue
+
+### Delivery progress
+
+Checked means merged with all four post-merge checks green. An unchecked delivery
+is not done yet. The detailed entries below retain remaining parts of composite items;
+completing one part does not close its unrelated follow-ups. This checklist is updated
+in each implementation PR; its linked PR holds the final post-merge receipt.
+
+- [x] Zero-retention compaction — [PR #212](https://github.com/agentkitai/agentrig/pull/212#issuecomment-5567364631).
+- [x] Automatic slash suggestions — [PR #213](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+- [x] Canonical nested skill filenames — [PR #214](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+- [x] Grapheme-safe backspace — [PR #215](https://github.com/agentkitai/agentrig/pull/215#issuecomment-5568164344).
+- [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
+- [ ] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218), merged; post-merge CI pending at this checkpoint.
+- [ ] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217), open; integrated tests pass, hosted gates pending.
+
+All other follow-up fragments below remain queued unless explicitly marked done.
+
+### Detailed follow-up queue
 
 - R15k optional polish: persistent audit of pre-session directory-completion metadata
   reads. Current completion explicitly uses configured read policy/one-time approval,
@@ -1099,8 +1118,11 @@ concise and place detailed implementation history in dated notes as it is mainta
 - R15k optional polish: display a brief busy hint for an ignored explicit clipboard
   gesture while a turn or completion is already active; do not queue hidden reads.
 
-These do not block the committed milestone sequence and do not recursively create new milestones.
-Address them after that sequence, unless new evidence demonstrates a safety or data-loss defect.
+The committed milestone sequence is complete. The user has authorized working through this entire
+queue in impact/dependency order, parallelizing independent items in worktrees and merging each PR
+with green CI. Finish one bounded batch and continue to the next; do not recursively create new
+milestones. Conditional future scenarios need their stated evidence, and live measurements still
+need an explicit budget; neither prevents continuing other actionable entries.
 
 - Improve repo-map breadth when the file list alone exceeds its byte cap (for example, directory
   summaries). Current truncation is explicit; the production 8 KiB budget is unchanged.
@@ -1285,9 +1307,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
   HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
   and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
-- R10d polish: distinguish a present but all-unknown report in the top-level capability evidence
-  source summary. Per-dimension sources already label unknown fallback unverified-configured;
-  consumers should use those rather than treating report presence as verified support.
+- R10d capability evidence summary (implemented; delivery gates pending): all-unknown reports
+  retain their report but label the summary unverified-configured. Observed means at least one
+  capability dimension has a non-unknown sample, not universal support; per-dimension sources
+  remain authoritative. [Contract](plans/capability-evidence-summary.md).
 - R5b defensive API follow-up: validate unsupported async/thenable implementations of the
   synchronously typed tool descriptor/probe/schema callbacks, including rejected promises and
   malformed return shapes. Current isolation covers synchronous callback throws and supported
@@ -1370,7 +1393,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
-- R15h polish (turn-count validation implemented, delivery pending): CLI/config/builder
+- R15h polish (turn-count validation done, PR #216): CLI/config/builder
   reject fractional subagent turn limits before provider construction, preserving positive
   safe integers and the default. [Contract](plans/subagent-integer-turn-limits.md).
   Clearer canonical role-directory refusal diagnostics remain queued; no limit is widened.
@@ -1430,3 +1453,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   resetting the code-unit-based quiet timer. Buffer contents remain correct, but
   the redraw may wait for release. Consider an explicit edit-gesture classification
   with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.
+- Abort-grace fixture repair (next): macOS PR#217 CI34107659557 missed the expected
+  orphan warning in subagent.test.ts because its fixed80ms abort assumes child startup.
+  A controlled150ms provider-start delay independently reproduces that precondition race;
+  the CI log does not establish the remote delay's cause. Wait for bounded real blocked-child
+  readiness, preserve100ms grace/warning/order checks, and release/join in finally instead
+  of sleeping for cleanup. Retain original failure evidence; no timeout inflation.

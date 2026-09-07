@@ -12,6 +12,7 @@ export const ProviderConformance = z.object({
 }).strict();
 export type ProviderConformance = z.infer<typeof ProviderConformance>;
 export interface ProviderCapabilityEvidence {
+  /** Observed means at least one capability dimension has a non-unknown sample, not all. */
   source: "observed" | "unverified-configured";
   sources: Record<"tools" | "parallelTools" | "caching", "observed" | "unverified-configured">;
   report?: ProviderConformance;
@@ -99,7 +100,8 @@ export async function probeProvider(provider: ModelProvider, options: { signal?:
 export function applyProviderConformance(provider: ModelProvider, report?: ProviderConformance): void {
   const sources = { tools: "unverified-configured", parallelTools: "unverified-configured", caching: "unverified-configured" } as ProviderCapabilityEvidence["sources"];
   for (const key of ["tools", "parallelTools", "caching"] as const) if (report !== undefined && report[key] !== "unknown") sources[key] = "observed";
-  provider.capabilities.conformance = report === undefined ? { source: "unverified-configured", sources } : { source: "observed", sources, report: structuredClone(report) };
+  const source = Object.values(sources).some(value => value === "observed") ? "observed" : "unverified-configured";
+  provider.capabilities.conformance = { source, sources, ...(report === undefined ? {} : { report: structuredClone(report) }) };
   if (report === undefined) return;
   for (const key of ["tools", "parallelTools", "caching"] as const) if (report[key] !== "unknown") provider.capabilities[key] = report[key] === "observed";
 }
