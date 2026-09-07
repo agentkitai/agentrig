@@ -1371,7 +1371,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
-- R16d polish: grapheme-aware editing is active ([contract](plans/grapheme-editing.md)); retire a completion
+- R16d polish: grapheme-aware editing is implemented ([contract](plans/grapheme-editing.md)); retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
   within R16d with actual Ink controls, not deferred. History is sensitive local
@@ -1420,3 +1420,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   prompts inert and the live frame bounded. Cover actual Ink typing, skill discovery,
   navigation, narrowing, dismissal and permission/paste controls in both input paths.
   [Contract and controls](plans/slash-suggestions.md); final hosted receipt on PR#213.
+- Grapheme-editing follow-up: held backspace across long ZWJ clusters can keep
+  resetting the code-unit-based quiet timer. Buffer contents remain correct, but
+  the redraw may wait for release. Consider an explicit edit-gesture classification
+  with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.

@@ -25,3 +25,9 @@ Final focused group72 tests/3files passed5.50s, including exact next-provider te
 unconfirmed scope/zero grants, protected answers and literal pasted DEL. Unit
 controls preserve prefix spelling and handle empty/incomplete-surrogate text.
 Build/typecheck pass. Full pinned-Docker, Chromium and hosted receipts follow.
+
+Final sourcee9870f9: required real pinned-Docker full3,288 passed plus two existing
+skips/209files92.56s; actual Chromium1passed2.97s. [Single independent review](grapheme-editing-review.md)
+APPROVE,21reported/24requested turns; reviewer ran focused/structural tests, not
+build/typecheck. Minor held-key display latency is retained at roadmap END. No
+second broad review. Exact-head and post-main hosted outcomes belong on the PR.
