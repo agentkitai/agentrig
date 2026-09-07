@@ -1,5 +1,14 @@
 # Status
 
+Active END follow-up: **R5c nested skill filename casing**. Shared package validation
+now refuses noncanonical nested `SKILL.md` spellings before publication/loading,
+while flat `.md` matching, core discovery and trust/path/byte limits remain unchanged.
+[Plan](plans/skill-filename-casing.md). Six fail-before controls reproduced accepted
+case variants; canonical install→trusted builder→core loading already passed.
+All 70 focused package/install/runtime/core-skill tests now pass. One review and
+build/typecheck/full required-Docker/Chromium/hosted gates remain pending.
+Unrelated hardlink-source follow-up stays at roadmap END. Earlier status is historical.
+
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
 structure34097862218 is pending. Slash suggestions PR#213 integrates that main.
