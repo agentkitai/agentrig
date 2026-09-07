@@ -21,7 +21,7 @@ export { Checkpointer, isCheckpointerHook, type CheckpointHookEvent, type Checkp
 export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";
 export * from "./spend-ledger.js";
-export { withSessionSpend } from "./spend-runtime.js";
+export { withSessionSpend, sessionSpendSource, type SessionSpendSource } from "./spend-runtime.js";
 export type { CompactOptions, CompactResult, CompactionSession } from "./manual-compaction.js";
 export * from "./turn-strategy.js";
 export * from "./compaction.js";

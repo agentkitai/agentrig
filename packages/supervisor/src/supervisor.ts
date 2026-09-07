@@ -383,6 +383,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   });
 
   return {
+    policySnapshot: () => detached ? null : opts.policy instanceof LadderPolicy ? opts.policy.snapshot() : null,
     detach: () => {
       detached = true;
       stop();

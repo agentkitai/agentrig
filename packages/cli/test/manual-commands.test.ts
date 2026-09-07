@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createElement } from "react";
 import { render } from "ink";
 import { afterEach, expect, it, vi } from "vitest";
-import { Checkpointer, createAgent, HarnessEvent, RulePolicy, SessionStore, writeFileTool, type ModelProvider } from "@agentkitai/agentrig-core";
+import { Checkpointer, createAgent, HarnessEvent, meterProvider, RulePolicy, sessionSpendSource, SpendLedger, SessionStore, writeFileTool, type ModelProvider } from "@agentkitai/agentrig-core";
 import { renderEvent } from "../src/render.js";
 import { TuiController } from "../src/tui/controller.js";
 import { App } from "../src/tui/app.js";
@@ -15,6 +15,8 @@ import { boundedManualLines, manualDiff, manualDoctor } from "../src/tui/manual.
 import { parseCommand, RESERVED_COMMAND_NAMES } from "../src/tui/commands.js";
 import { diagnosticConfigValues } from "../src/config.js";
 import { waitForTuiState } from "./tui-readiness.js";
+import { costLines } from "../src/usage.js";
+import { statusLine } from "../src/tui/status.js";
 
 const roots: string[] = []; const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const fn of cleanup.splice(0).reverse()) await fn(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -72,6 +74,54 @@ it("failed snapshot publication retains controller identity and the next real re
   await f.controller.submit("/compact"); expect(f.controller.snapshot().sessionId).toBe(parent);
   expect(f.controller.snapshot().lines.at(-1)?.text).toContain("unadopted");
   spy.mockRestore(); await f.controller.submit("continue"); expect(f.controller.snapshot().sessionId).toBe(parent);
+});
+
+it.each([false, true])("actual maintenance status uses the owned metered child while selection stays parent (abort=%s)", async abort => {
+  const cwd = await realpath(await root()); const store = new SessionStore({ root: join(cwd, "logs") });
+  const ledger = new SpendLedger(cwd); let release!: () => void; let entered!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const raw: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
+    async *stream(request) {
+      const summary = request.system.startsWith("You compress");
+      if (summary) { entered(); await held; }
+      yield { type: "text_delta", text: summary ? "Short summary." : "Detailed context. ".repeat(100) };
+      yield { type: "usage", usage: { input: 10, output: 10 } }; yield { type: "stop", reason: "end_turn" };
+    } };
+  const provider = meterProvider(raw, ledger, { segment: "construction-fallback", pricing: {
+    inputUsdPerMTok: 1, outputUsdPerMTok: 1, cacheReadUsdPerMTok: 0, cacheWriteUsdPerMTok: 0 } });
+  const agent = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "fixture", repoMap: false, spend: { ledger } });
+  const c = new TuiController({ cwd, agent, supervised: true }); cleanup.push(() => c.shutdown());
+  for (let i = 0; i < 7; i++) await c.submit(`task ${i} ${"history ".repeat(50)}`);
+  const parent = c.snapshot().sessionId!; const previous = c.statusSession()!;
+  const original = await readFile(store.pathFor(parent));
+  c.configureStatus(() => ({ posture: "ask", sandbox: "none" }));
+  const work = c.submit("/compact"); await ready;
+  const stop = c.mountStatus();
+  try {
+    const child = c.activeMaintenanceSession()!;
+    expect(child).toBeDefined(); expect(child.id).not.toBe(parent);
+    expect(c.snapshot().sessionId).toBe(parent);
+    expect(c.statusSession() === child).toBe(true);
+    const source = sessionSpendSource(c.statusSession()!)!;
+    expect(source.segment).not.toBe("construction-fallback");
+    expect(source.segment).not.toBe(sessionSpendSource(previous)!.segment);
+    await vi.waitFor(() => expect(c.snapshot().statusDetails?.accounting.state).toBe("reported"));
+    const accounting = c.snapshot().statusDetails!.accounting;
+    if (accounting.state !== "reported") throw new Error("missing actual report");
+    expect(accounting.snapshot.segment).toBe(source.segment);
+    expect(accounting.snapshot.report.calls).toBe(1);
+    expect(accounting.snapshot.report.completeCalls).toBe(0);
+    expect(statusLine(c.snapshot())).toContain("sup:unavailable");
+    expect((await costLines(ledger, parent, source)).join("\n")).toContain(`Current run segment ${source.segment}`);
+    if (abort) c.abort();
+    release(); await work;
+    expect(c.activeMaintenanceSession()).toBeUndefined();
+    expect(c.statusSession()).not.toBe(child);
+    expect(c.snapshot().sessionId === parent).toBe(abort);
+    expect(await readFile(store.pathFor(parent))).toEqual(original);
+    expect(c.snapshot().statusDetails?.accounting.state).toBe("unknown");
+  } finally { release(); await work; stop(); await c.shutdown(); }
 });
 
 it("replacing the agent during compaction cannot adopt the old agent's fork", async () => {
