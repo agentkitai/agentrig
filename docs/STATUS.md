@@ -1,5 +1,11 @@
 # Status
 
+Fifth pass, 2026-09-07: with every committed row done, ROADMAP gains R17 "feel and defaults"
+(dogfood mandate, defaults pass, feel budgets in CI, permission friction, visible and tuned
+supervisor/memory, then the follow-ups sweep). It sits at section 5 row 17, after R16 and
+before the follow-ups. The follow-ups currently being worked continue; R17a's dogfood gate
+applies from its own start. PLAN §9's F3 Windows CI job is struck as built.
+
 Current implementation: bounded abort-grace fixture readiness repair, from green
 main ebfd10f. No production changes. Original/delayed-start pair reproduces one
 missing-warning failure before correction; both pass after observing the blocked
