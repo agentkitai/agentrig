@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionStore, SpendLedger, createAgent, meterProvider, RulePolicy, readFileTool } from "@agentkitai/agentrig-core";
+import { SessionStore, SpendLedger, createAgent, meterProvider, RulePolicy, readFileTool, sessionSpendSource } from "@agentkitai/agentrig-core";
 import { buildProgram } from "../src/program.js";
 import { renderChatEvent, renderEvent } from "../src/render.js";
 import { costLines } from "../src/usage.js";
@@ -109,7 +109,7 @@ it("actual controller /cost renders the completed current run and performs no ne
   const agent = createAgent({ provider, store: new SessionStore({ root: f.logs }), tools: [readFileTool()], permissions: new RulePolicy([{ match: "read_file", decision: "allow" }]),
     systemPrompt: "", spend: { ledger }, maxTokensPerTurn: 10 });
   const controller = new TuiController({ cwd: f.cwd, model: "fixture", agent });
-  controller.setCost(session => costLines(ledger, session));
+  controller.setCost(session => costLines(ledger, session, controller.statusSession() === undefined ? undefined : sessionSpendSource(controller.statusSession()!)));
   await controller.submit("fixture"); await controller.submit("/cost");
   const text = JSON.stringify(controller.snapshot().lines);
   expect(text).toContain("Current run segment"); expect(text).toContain("$0.000020"); expect(text).toContain("Not an invoice");

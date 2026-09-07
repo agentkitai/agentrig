@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
+import { renderFileDiff } from "../file-diff.js";
 import { CommandPrefixSchema, PermissionGrantSchema, ShellOperationSchema, permissionGrantCoversRequest,
   type PermissionGrantRegistry, type PermissionGrantSpec, type PermissionRequest } from "@agentkitai/agentrig-core";
 
@@ -11,7 +12,7 @@ const ArgvDraft = z.object({ commandPrefix: CommandPrefixSchema, cwd: AbsolutePa
 export const separatePermissionConsent = (req: PermissionRequest): boolean => req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
 
 /** Summarize trusted declarations, never claim to have inferred program effects from text/names. */
-export function permissionEffectLines(req: PermissionRequest): string[] {
+export function permissionEffectLines(req: PermissionRequest, options: { color?: boolean } = {}): string[] {
   const lines = [`Declared permission: ${JSON.stringify(req.class)} for ${JSON.stringify(req.tool)}.`,
     req.class === "write" ? "Declared paths may change; undeclared effects are not established." :
     req.class === "exec" ? "Exec may change files and reach the network; effects are not established by argv." :
@@ -35,6 +36,7 @@ export function permissionEffectLines(req: PermissionRequest): string[] {
     ? `Literal argv: ${JSON.stringify(parsed.data.argv)}${parsed.data.background ? " (background; no narrow shell grant)" : ""}`
     : `Shell scope unavailable: ${JSON.stringify(parsed.data.reason)}`);
   lines.push("Names, model prose and MCP read-only hints do not establish effects or authority.");
+  if (req.class === "write" && req.fileDiff !== undefined) lines.push(...renderFileDiff(req.fileDiff, options).split("\n"));
   if (req.origin === "external-input-expansion") lines.push(`Fresh approval required: external/unknown input proposes first ${req.expansionSurface ?? req.class} dispatch${req.sourceOrigin === undefined ? "" : ` from ${JSON.stringify(req.sourceOrigin)}`}. Standing grants do not apply.`);
   if (!separatePermissionConsent(req)) lines.push(`Standing a/d covers ALL future ${JSON.stringify(req.tool)} requests in this live session, any resource/class/cwd. Children currently share that group. Explicit base rules still apply.`);
   return lines;

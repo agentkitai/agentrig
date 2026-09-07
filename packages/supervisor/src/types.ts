@@ -21,6 +21,8 @@ export interface Policy {
 
 export interface Detachable {
   detach(): void;
+  /** Observational only; null for detached or custom policies without known ladder state. */
+  policySnapshot?(): import("./policy.js").LadderSnapshot | null;
   /** Joins observation and any already-requested post-abort restore, including after detach. */
   done: Promise<void>;
 }
