@@ -13,6 +13,9 @@ live evaluation still requires an explicit spend budget. Each item gets one PR,
 bounded independent review, exact-head and post-main green CI; independent work
 may use separate worktrees, with serialized merges. No nested milestones.
 The implementation-complete checkpoint below predates this newly authorized pass.
+Delivery checkpoint above is recorded before hosted completion; final outcomes
+are on [compaction PR#212](https://github.com/agentkitai/agentrig/pull/212) and
+[slash suggestions PR#213](https://github.com/agentkitai/agentrig/pull/213).
 
 Final implementation: **R16h themes/keybindings**, [PR#211](https://github.com/agentkitai/agentrig/pull/211).
 Implementation rows below are complete; this is the pre-merge delivery checkpoint,
@@ -1233,10 +1236,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
   consider suppressing duplicate handler-source lines where the TUI already printed the answer.
   Preserve visible rule/grant reasons, honest handler attribution and independent consent.
-- Compaction zero-retention follow-up (in progress; [contract](plans/compaction-zero-retention.md)):
+- Compaction zero-retention follow-up (done implementation, PR#212; [contract](plans/compaction-zero-retention.md)):
   deliberately support `keepLastMessages: 0` as task plus advisory summary, and validate
   the count as a nonnegative safe integer. Preserve conservative ancestry and positive-tail
-  tool pairs. User-authorized END work; independent implementation, merge after slash suggestions.
+  tool pairs. Merged first as main1cdfe53; final post-main receipt is on PR#212.
 - R13c diagnostic polish: distinguish failed/aborted approval from explicit denial in auxiliary
   explanatory text while preserving the denied audit and no dispatch; optionally log a bounded
   host approval-handler failure detail. Revisit duplicate-request user-presence accounting only
@@ -1403,9 +1406,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   derive the collision count if new permission actions are introduced. If terminal
   OSC queries are ever added, distinguish split reply terminators from opted-in
   Ctrl+G input. No OSC queries/background detection are currently issued.
-- Automatic slash suggestions (active): typing `/` must immediately show loaded
+- Automatic slash suggestions (done implementation, PR#213): typing `/` immediately shows loaded
   skills and built-in commands, filter as the token changes, and let users reach
   matches beyond the old eight-name hint. Navigation and completion never execute
   a skill; explicit Enter still submits the typed command. Keep paste/protected
   prompts inert and the live frame bounded. Cover actual Ink typing, skill discovery,
   navigation, narrowing, dismissal and permission/paste controls in both input paths.
+  [Contract and controls](plans/slash-suggestions.md); final hosted receipt on PR#213.

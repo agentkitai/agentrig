@@ -3,6 +3,9 @@
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
 structure34097862218 is pending. Slash suggestions PR#213 integrates that main.
+This is the pre-delivery checkpoint; final hosted outcomes are recorded on
+[PR#212](https://github.com/agentkitai/agentrig/pull/212) and
+[PR#213](https://github.com/agentkitai/agentrig/pull/213), not inferred from labels.
 No new PRs until both are delivered. Independent green fixes need not wait behind
 an unrelated slower review; merges still require current-main and exact-head gates.
 Existing roadmap implementations are delivered; END follow-ups are now the work
