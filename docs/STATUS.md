@@ -1,5 +1,12 @@
 # Status
 
+Active: follow-up pass authorized2026-09-07. Automatic slash suggestions first;
+compaction zero-retention validation proceeds independently, merges second.
+Existing roadmap implementations are delivered; END follow-ups are now the work
+queue. The prior final delivery receipt is PR#211 comment5566809522, all-four
+post-main CI34094733668 / structure34094733642 green on main db2271b.
+Keep the previous checkpoints below as history, not the active queue.
+
 Final implementation: **R16h themes/keybindings**, integrated with delivered R16g.
 [PR#211](https://github.com/agentkitai/agentrig/pull/211) holds the final hosted
 delivery receipt. This is its pre-merge checkpoint; completed implementation does

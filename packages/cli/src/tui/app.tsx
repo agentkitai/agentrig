@@ -48,6 +48,14 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
   const historyRef = useRef<PromptHistory>(suppliedHistory ?? new PromptHistory());
   const recall = useRef(new PromptRecall());
   const completionHint = useRef("");
+  const slashActive = useRef(false);
+  const slashIndex = useRef(0);
+  const suggestions = (text: string) => {
+    const current = controller.snapshot();
+    if (!slashActive.current || current.pending !== null || current.question !== null || current.escalation !== null || !/^\/[^\s/]*$/.test(text)) return [];
+    const prefix = text.slice(1).toLowerCase();
+    return controller.completionCandidates().filter(candidate => candidate.name.toLowerCase().startsWith(prefix));
+  };
   // Startup notices are already in the initial controller snapshot. Never acknowledge them
   // before this actual React/Ink mount (a timer or queued controller line is not readiness).
   const mounted = useRef(false);
@@ -118,11 +126,18 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
     const composerAction = (action: OrdinaryInputAction): void => {
       const current = controller.snapshot();
       const protectedInput = questionAtInput !== null || current.question !== null || current.escalation !== null || current.pending !== null;
-      const edit = (text: string): void => { recall.current.reset(); completionHint.current = ""; buf.set(text); };
+      const edit = (text: string): void => { recall.current.reset(); completionHint.current = ""; slashActive.current = !protectedInput; slashIndex.current = 0; buf.set(text); };
+      const matches = protectedInput ? [] : suggestions(buf.value);
       if (action.type === "up" || action.type === "down") {
-        if (!protectedInput) { completionHint.current = ""; buf.set(recall.current.move(action.type === "up" ? -1 : 1, buf.value, historyRef.current.values())); }
+        if (matches.length) {
+          slashIndex.current = (slashIndex.current + (action.type === "up" ? -1 : 1) + matches.length) % matches.length;
+          buf.touch();
+        } else if (!protectedInput) { slashActive.current = false; completionHint.current = ""; buf.set(recall.current.move(action.type === "up" ? -1 : 1, buf.value, historyRef.current.values())); }
+      } else if (action.type === "escape") {
+        if (!protectedInput) { slashActive.current = false; completionHint.current = ""; buf.touch(); }
       } else if (action.type === "tab") {
         if (!protectedInput) {
+          if (matches.length) { edit(`/${matches[Math.min(slashIndex.current, matches.length - 1)]!.name} `); return; }
           const before = buf.value;
           if (/(^|\s)@[^\s"@]*$/.test(before)) {
             void controller.completeInput(before).then(result => {
@@ -145,6 +160,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
           const trailing = /\\+$/.exec(line)?.[0].length ?? 0;
           if (trailing % 2 === 1) { edit(line.slice(0, -1) + "\n"); return; }
           recall.current.reset(); completionHint.current = "";
+          slashActive.current = false;
           buf.set("", () => {
             historyRef.current.remember(line);
             void controller.submit(line).then(keepGoing => { if (!keepGoing) exit(); });
@@ -175,7 +191,8 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       else if (action.type === "escape" || pressed === permissionKeys.denyOnce) controller.answerPermission("deny");
     };
     const dispatchAction = (original: OrdinaryInputAction): void => {
-      const action = mapTuiAction(original, settings); if (action === undefined) return;
+      const action = (original.type === "up" || original.type === "down") && suggestions(buf.value).length
+        ? original : mapTuiAction(original, settings); if (action === undefined) return;
       if (action.type === "interrupt") {
         if (!controller.isIdle()) controller.abort();
         else exit();
@@ -189,6 +206,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       for (const segment of decoded.segments) {
         if (segment.text === "") continue;
         if (segment.pasted) {
+          slashActive.current = false;
           // The decoder normalises CRLF across chunks; every other payload byte is preserved.
           if (controller.snapshot().pending === null) { recall.current.reset(); completionHint.current = ""; buf.set(buf.value + segment.text); }
           continue;
@@ -241,6 +259,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
     }
 
     if (key.upArrow || key.downArrow || key.tab) { dispatchAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
+    if (key.escape) { composerAction({ type: "escape" }); return; }
     if (key.return && key.shift) { composerAction({ type: "newline" }); return; }
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as
@@ -270,6 +289,11 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
   // of what they had typed
   const columns = stdout?.columns || 80;
   const rows = liveRows(stdout?.rows);
+  const matches = suggestions(input);
+  const selected = Math.min(slashIndex.current, Math.max(0, matches.length - 1));
+  const menuRows = matches.length ? Math.min(4, matches.length, Math.max(0, rows - 1)) : 0;
+  const menuStart = menuRows ? Math.floor(selected / menuRows) * menuRows : 0;
+  const selectedCandidate = matches[selected];
 
   return (
     <PlainText.Provider value={plain}><Box flexDirection="column">
@@ -349,9 +373,16 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
             {state.status === "running" ? "· " : "> "}
           </Text>
           {/* less the two columns the prompt marker takes, or the line wraps one row further */}
-          <Text>{fitToRows(input, columns - 2, rows)}</Text>
+          <Text>{fitToRows(input, columns - 2, rows - menuRows)}</Text>
         </Box>
       )}
+
+      {menuRows > 0 ? <Box flexDirection="column">
+        {matches.slice(menuStart, menuStart + menuRows).map((candidate, offset) =>
+          <Text key={candidate.name} color={menuStart + offset === selected ? palette.prompt : palette.status} wrap="truncate-end">
+            {`${menuStart + offset === selected ? "›" : " "} /${candidate.name} [${candidate.kind}]`}
+          </Text>)}
+      </Box> : null}
 
       <Box>
         {/*
@@ -360,7 +391,8 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
           sized to hold
         */}
         <Text color={palette.status} dimColor wrap="truncate-end">
-          {state.pending === null && state.question === null && state.escalation === null && completionHint.current ? completionHint.current : statusLine(state, clock)}
+          {selectedCandidate ? `${selected + 1}/${matches.length} /${selectedCandidate.name} · ↑↓ choose · Tab fill · Enter run typed command`
+            : state.pending === null && state.question === null && state.escalation === null && completionHint.current ? completionHint.current : statusLine(state, clock)}
         </Text>
       </Box>
     </Box></PlainText.Provider>

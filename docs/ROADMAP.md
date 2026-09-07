@@ -1,5 +1,16 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+Active follow-up pass (2026-09-07): the user promoted the END backlog to active
+work, including automatic slash suggestions reported during actual use. Start
+with slash discovery, then the independent compaction zero-retention boundary;
+next prioritize user-visible correctness/diagnostics, deterministic tests and
+bounded performance work. Preserve every remaining END item until individually
+resolved; conditional future-platform work needs evidence of applicability, and
+live evaluation still requires an explicit spend budget. Each item gets one PR,
+bounded independent review, exact-head and post-main green CI; independent work
+may use separate worktrees, with serialized merges. No nested milestones.
+The implementation-complete checkpoint below predates this newly authorized pass.
+
 Final implementation: **R16h themes/keybindings**, [PR#211](https://github.com/agentkitai/agentrig/pull/211).
 Implementation rows below are complete; this is the pre-merge delivery checkpoint,
 not a claim that then-pending hosted checks passed. The PR records their final outcome.
@@ -1388,3 +1399,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   derive the collision count if new permission actions are introduced. If terminal
   OSC queries are ever added, distinguish split reply terminators from opted-in
   Ctrl+G input. No OSC queries/background detection are currently issued.
+- Automatic slash suggestions (active): typing `/` must immediately show loaded
+  skills and built-in commands, filter as the token changes, and let users reach
+  matches beyond the old eight-name hint. Navigation and completion never execute
+  a skill; explicit Enter still submits the typed command. Keep paste/protected
+  prompts inert and the live frame bounded. Cover actual Ink typing, skill discovery,
+  navigation, narrowing, dismissal and permission/paste controls in both input paths.
