@@ -1275,3 +1275,8 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   weakening live-prefix integrity checks; improve standalone-provider refusal wording
   to mention the trusted `dailyCap` config key as well as the CLI flag. No accounting
   recovery, automatic expiry or billing guarantee is implied.
+- R16f polish: distinguish an in-flight call with no usage snapshot from reported
+  zero tokens; distinguish detached custom-policy snapshots from unknown policies
+  if that lifecycle becomes observable; reference-count status observation only
+  if multiple simultaneous App mounts become supported. None changes accounting,
+  authorization, or the current single-App contract.
