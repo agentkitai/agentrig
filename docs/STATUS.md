@@ -2,6 +2,11 @@
 
 ### R16e in progress — opt-in idle TUI notifications
 
+Current integration includes repaired-green main `0b65aa1` (#206) and delivered
+Markdown/history. Frozen install/build/typecheck, 89 focused controls, full
+required-Docker 3,087 plus two skips /193 files (72.70s), and real Chromium pass.
+Fresh exact-head CI is pending; earlier checkpoints below retain their dates/bases.
+
 Independent row following delivered R15a, approved from green main `31193d6`;
 R15g and other TUI rows retain their own PRs and serialized merge gates.
 Default-off mounted-TTY observer uses actual prompt identities and input idle,
