@@ -5,7 +5,11 @@ worktrees and serialized merges; batch completion is not a stop condition.
 R16f no-usage status is active from green main ebfd10f. Three actual held-provider/
 settled-missing ledger/controller controls reproduced zero-looking absent usage.
 Additive report presence and footer wording only; accounting/permissions unchanged.
-[Contract](plans/pending-usage-status.md). Local/full/review/hosted gates pending.
+[Contract](plans/pending-usage-status.md).65 focused, build/typecheck, required
+pinned Docker full3,325+2 existing skips/209files81.48s and Chromium1 pass.
+One Claude APPROVE with two low notes,24 requested/16 reported; zero-call/legacy
+compatibility closures tested and [original review](plans/pending-usage-status-review.md)
+preserved. Hosted gates pending; no merge claimed.
 #217 done: all-four post-main CI34109938845 / structure34109938825 green,
 [receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
 #218 done: all-four post-main CI34108756786 / structure34108756915 green,
