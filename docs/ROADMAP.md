@@ -1105,8 +1105,9 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] Canonical nested skill filenames — [PR #214](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
 - [x] Grapheme-safe backspace — [PR #215](https://github.com/agentkitai/agentrig/pull/215#issuecomment-5568164344).
 - [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
-- [ ] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218), merged; post-merge CI pending at this checkpoint.
-- [ ] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217), open; integrated tests pass, hosted gates pending.
+- [x] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+- [x] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+- [ ] Generated-skill serializer session-count cap — [contract](plans/skill-session-count-cap.md), implementation ready; review/tests/delivery pending.
 
 All other follow-up fragments below remain queued unless explicitly marked done.
 
@@ -1238,8 +1239,9 @@ need an explicit budget; neither prevents continuing other actionable entries.
   with dialect-specific inert execution controls. Literal argv scopes intentionally do not
   attest executable identity, PATH, Git configuration/hooks or program effects; richer semantic
   effect explanations belong to committed R12b, not inferred read-only name heuristics.
-- R6b polish: mirror the loader's session-array count check explicitly in the serializer (the
-  current raw evidence loader already caps validated sessions at 128); improve the preserved
+- R6b serializer count guard (implemented, delivery pending; [contract](plans/skill-session-count-cap.md)):
+  explicitly refuse more than128 distinct session references, matching the loader format.
+  Remaining polish: improve the preserved
   empty-directory recovery hint and show model rejection beside a changed-digest refusal.
   Keep no-force-overwrite behavior, fresh evidence/effect checks and explicit human review.
 - R12a polish: consider a dedicated idle audit sink if durable receipts for resets immediately
@@ -1296,7 +1298,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
-- R11a follow-up (implemented, delivery gates pending): `--no-sandbox-network` overrides
+- R11a follow-up (done, PR #218): `--no-sandbox-network` overrides
   config true for one invocation on run/TUI/resume and MCP login, without config writes.
   Omission and explicit positive remain compatible; none-provider network metadata is inert,
   not a runtime policy or OS isolation. [Contract](plans/no-sandbox-network.md).
@@ -1307,7 +1309,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
 - R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
   HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
   and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
-- R10d capability evidence summary (implemented; delivery gates pending): all-unknown reports
+- R10d capability evidence summary (done, PR #217): all-unknown reports
   retain their report but label the summary unverified-configured. Observed means at least one
   capability dimension has a non-unknown sample, not universal support; per-dimension sources
   remain authoritative. [Contract](plans/capability-evidence-summary.md).

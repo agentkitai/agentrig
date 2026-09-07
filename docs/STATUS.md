@@ -1,5 +1,16 @@
 # Status
 
+Current batch: abort-grace fixture readiness, pending-usage display, and generated-skill
+serializer count boundary in independent worktrees. Continue the entire END queue after
+this batch; serialize exact-head/current-main/post-merge gates and merge ready PRs promptly.
+The visible ROADMAP Delivery progress checklist marks #217/#218 done. Main ebfd10f8dac970a6560e451c7ebe42d9878cacdf
+has all-four post-merge checks green (CI34109938845 / structure34109938825).
+[Final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+The serializer129-reference control fails before the guard;128 with duplicates passes
+the actual core parser. Ordinary evidence already has a128-session bound, so this is
+defensive format coverage, not a claimed production exploit. [Contract](plans/skill-session-count-cap.md).
+Review and validation gates follow. All earlier status paragraphs are historical checkpoints.
+
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
 Network override #218 merged first as main8f741a800cfef739993a04b9c1a33d37548cfc48
