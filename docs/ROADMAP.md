@@ -1,13 +1,17 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Active backlog drain: **#207 → #194**; R16g/R16h remain frozen. R15j #205
-merged as `08c64d072c4e5bd2fa341b37d61af67b37027e21`; post-main gates pending.
-R16e #201 is done on main `8da21be`, all-four CI34086055156 /
-structure34086055211 green. [Receipt](https://github.com/agentkitai/agentrig/pull/201#issuecomment-5565536470).
-Earlier checkpoints below retain their original failures and then-pending gates.
-
-Historical backlog checkpoint: **#205 → #207 → #194**. #201 merged as `8da21be`, post-main
-checks pending. R16b #203 and readiness repair #208 are done on repaired main
+Last open backlog PR: **#194 orchestration decision**. #207 is done on `82b2f27`,
+all-four CI34089126856 / structure34089126808 green.
+[Receipt](https://github.com/agentkitai/agentrig/pull/207#issuecomment-5565941414).
+#194 also integrates separately merged CI optimization #209, green main716f810
+(CI34089870734 / structure34089870726), without changing its configuration.
+#205 is done on main
+`08c64d0`, all-four CI34087753211 / structure34087753175 green.
+[Receipt](https://github.com/agentkitai/agentrig/pull/205#issuecomment-5565748630).
+#201 is done on main `8da21be`, all-four
+CI34086055156 / structure34086055211 green.
+[Receipt](https://github.com/agentkitai/agentrig/pull/201#issuecomment-5565536470).
+R16b #203 and readiness repair #208 are done on repaired main
 `18df259`, all-four CI34084903634 / structure34084903714 green.
 [R16b receipt](https://github.com/agentkitai/agentrig/pull/203#issuecomment-5565321833),
 [repair receipt](https://github.com/agentkitai/agentrig/pull/208#issuecomment-5565321674).
@@ -26,7 +30,7 @@ delivery. [Repair contract and original failures](plans/runtime-fixture-ci-bound
 [Repair receipt](https://github.com/agentkitai/agentrig/pull/206#issuecomment-5564569066),
 [R16a receipt](https://github.com/agentkitai/agentrig/pull/199#issuecomment-5564569218).
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is merged (PR #205, post-main pending); R15k is in progress; R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -35,7 +39,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Active gate repair | Existing new/fork/switch grant-transition prompt readiness | Delayed fail-before/pass-after controls retain grant assertions; exact-head and repaired-main all four checks green |
+| Done — PR #208 | Existing new/fork/switch grant-transition prompt readiness | Repaired main18df259 passed CI34084903634 / structure34084903714; original failure retained |
 | Done — PR #206 | Two existing multi-stage runtime fixture bounds and owned cleanup | Repaired main0b65aa1 passed Linux/macOS/Windows CI34078485717 and structure34078485698; original failures retained |
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
 | Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
@@ -283,8 +287,8 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 | User-defined agent roles with tool allowlists | Claude Code agent files, Goose recipes | validated local roles narrow runtime dispatch and delegable child grants | R15h *(done, PR #196)* |
 | Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i *(done, PR #202)* |
 | Mid-session model / effort switch | every TUI harness | R3.5 routes by role at session start only | R15j |
-| Image input and `@file` mentions in the TUI | Cline, Cursor, Claude Code | image `ContentBlock` exists in the schema; nothing puts one in | R15k *(in progress; [contract](plans/R15k.md))* |
-| Deterministic multi-agent orchestration script | Claude Code Workflow, AutoGen | R10c will give parallel subagents; no user-authored fan-out/verify/merge | R15l (decision row) |
+| Image input and `@file` mentions in the TUI | Cline, Cursor, Claude Code | image `ContentBlock` exists in the schema; nothing puts one in | R15k *(done, PR #207; [contract](plans/R15k.md))* |
+| User-authored orchestration | Claude Code Workflow, AutoGen | R10c ships isolated parallel candidates; ordinary trusted SDK composition is supported, no packaged workflow engine or automatic merge | R15l (decision recorded; delivery gates pending) |
 
 Carried follow-ups that ride along where they fit: **F3 Windows CI** (R2 forces it — the sandbox
 seam needs a per-platform no-op), **OTEL sink** (R8, same seam as RPC), **bracketed paste** (R1,
@@ -823,9 +827,9 @@ planner mode or a fusion service.*
 | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* | `run --output-schema <json-schema>`: the final assistant message is validated against the schema (provider structured output where supported, else a validating retry bounded by one extra turn); non-conforming output exits non-zero with the raw text preserved in the log | core + cli |
 | R15h *(done, [PR #196](https://github.com/agentkitai/agentrig/pull/196); [contract](plans/R15h.md))* | Agent role definitions: `.agentrig/agents/<name>.md` (front-matter validated by the R5e schema: `tools`, `model-role`, `delegable`, `max-turns`, body = system prompt). The subagent tool accepts `agent: <name>`; the child's grants are the R12d delegable view intersected with the role's allowlist. Roles never widen the parent's authority | core |
 | R15i *(done, PR #202; [contract](plans/R15i.md))* | Spend ledger: per-project `.agentrig/usage.jsonl` records call admission/settlement and session end with immutable configured rates; `/cost` and `agentrig usage --since`; `daily-cap` refuses unsupported, exhausted or uncertain configured-estimate admission and stops an R7 unattended run before further model dispatch, with a `budget.cap` event. Not invoice accounting; heartbeat permits this operational metadata, never task/wiki/report artifacts | core + cli |
-| R15j *(merged PR #205, post-main pending; [contract](plans/R15j.md))* | `/model <role-or-entry>` and `/effort <level>`: mid-session switch of the active provider entry within the configured R3.5 routing table; emits `provider.switched`; the context manifest records which turns ran under which entry | cli + core |
-| R15k *(in progress, PR #207; [contract](plans/R15k.md))* | TUI input: `@path` completion inserting a read-class file reference, and image paste/`@image.png` producing an image `ContentBlock`; both go through the R13b source seam for provenance | cli |
-| R15l | **Decision row, not a build row:** whether a user-authored orchestration script (fan out subagents, verify each, merge) is a thin layer over R10's strategy seam or stays renounced with workflow engines (renunciation 8). Decide after R10c ships with real parallel evidence; record the decision here either way | docs |
+| R15j *(done, PR #205; [contract](plans/R15j.md))* | `/model <role-or-entry>` and `/effort <level>`: mid-session switch of the active provider entry within the configured R3.5 routing table; emits `provider.switched`; the context manifest records which turns ran under which entry | cli + core |
+| R15k *(done, PR #207; [contract](plans/R15k.md))* | TUI input: `@path` completion inserting a read-class file reference, and image paste/`@image.png` producing an image `ContentBlock`; both go through the R13b source seam for provenance | cli |
+| R15l *(decision recorded, one review approved; PR gates pending; [decision](plans/R15l.md))* | **Thin trusted SDK composition is supported; no new runtime.** Users may compose bounded R10 fan-out, independently specified verification and serial separately authorized application. No packaged workflow engine/DSL/loader, automatic merge or retry policy. R10c proves cooperative isolation/order and guarded candidate handoff, not task quality or exactly-once integration. Renunciation 8 remains. | docs |
 
 Acceptance: R15a — the fake provider asks, the controller queue answers, the turn resumes; the
 headless default fails closed. R15b — an edit that introduces a type error returns the error in
@@ -837,6 +841,8 @@ R5d consent. R15e/f/g — golden-output tests against the fake provider; the CI 
 `bash` cannot run it even when the parent could (through a real spawn). R15i — a cap of one
 session refuses the second start. R15j — the manifest shows the switch turn. R15k — `@` on a
 path yields a `project`-labelled block; an image paste yields an `image` block with `user` trust.
+R15l — the decision, supported boundary and evidence are recorded consistently in
+its plan, ROADMAP, PLAN and STATUS; no new runtime is required.
 
 Renunciation, restated for this band: no LSP daemon or language index (R15b is a bounded checker
 call), no hosted CI runner (R15f is a documented action, nothing served), no second RPC protocol
@@ -913,6 +919,8 @@ feature list):
    durable execution). The event log plus R3/R4's side-effect-aware replay covers single-machine
    durability; adopting a distributed engine before there is a distributed workload is
    infrastructure cosplay.
+   R15l permits ordinary trusted user-authored SDK composition over R10; it does not
+   introduce a workflow loader, DAG scheduler, automatic merge or new durability guarantee.
 9. **No signed-extension PKI.** R5d pins and hashes and asks again on change, which is the
    consent property; a signature ecosystem with nobody to sign is ceremony. Revisit when
    extensions have third-party authors in practice.
@@ -939,9 +947,12 @@ feature list):
 
 ## 5. Sequencing and exit criteria
 
-The grant-transition readiness repair #208 is done on repaired green main18df259.
-Drain existing open PRs207→194 before unsubmitted roadmap items. Resolve only the next queued PR; serialize merges with both exact-head and
-current-main all-four gates green. [Bounded repair](plans/grant-transition-readiness.md).
+Finish last open #194 before unsubmitted roadmap items; #207 delivery is complete. Independent backlog
+preparation may run in parallel, including documentation-only #194; do not freeze
+independent work merely to serialize merges. Each PR integrates current main and
+passes all four exact-head checks before merge; current main must also be green.
+Repair2181859's failed grant-transition readiness gate is complete through #208.
+[Bounded repair and original failure](plans/grant-transition-readiness.md).
 
 The failed339f795 main gate is restored by the bounded #206
 [runtime-fixture repair](plans/runtime-fixture-ci-bound.md): repairedmain0b65aa1
@@ -981,8 +992,8 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | Repair (done) | H7a (#161) → H7b (#164) | Correctness defects (#116, #95) delivered with green post-merge CI. |
 | 12 | R15b (done, PR #185) → R15a (done, PR #188 + repair #191) → R15c (done, PR #193) | Interaction and observation quality; independent of each other, may run in parallel after R12d and R13c merge. |
 | 13 | R15d (done, PR #189) / R15e (done, PR #186) → R15f (done, PR #190) → R15g (done, PR #195) | Independent interop and review lanes; R15d follows completed R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
-| 14 | R15h (done, PR #196) → R15i (done, PR #202) → R15j (merged PR #205, post-main pending) → R15k (in progress, PR #207) | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
-| 15 | R15l | Decision recorded after R10c; no build until then. |
+| 14 | R15h (done, PR #196) → R15i (done, PR #202) → R15j (done, PR #205) → R15k (done, PR #207) | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
+| 15 | R15l (decision recorded; delivery gates pending) | R10c is delivered; ordinary trusted SDK composition is supported, external workflow engines remain renounced. Documentation-only and independent of the remaining R15 implementations. |
 | 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (done, PR #201) → R16f (done, PR #204) → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
@@ -1350,6 +1361,11 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - Fixture polish: extend abort/join ownership to the unrelated evidence-grading
   fixtures if they gain longer-lived children. The two demonstrated Windows
   outer-timeout failures are handled in the bounded repair, not deferred here.
+- R15l optional documentation: a runnable, trusted SDK composition example with
+  user-specified verification and serial authorized application; no loader, engine
+  or automatic merge. The decision does not depend on this example.
+- Historical plan polish: reconcile R10c's old "delivery gates pending" header with
+  its completed PR #181 receipt without erasing the original failure/fix history.
 - R16b optional display improvement: for files beyond the bounded captured prefix,
   show a captured window around the edit instead of head excerpts. Current output
   labels truncation/unknown contents and never claims an unseen complete patch.
