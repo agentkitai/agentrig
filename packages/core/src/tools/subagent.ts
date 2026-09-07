@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { abortGraceOf, usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
 import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
@@ -73,11 +74,17 @@ type Input = z.infer<typeof InputTypeSchema>;
  * itself only asks for `z.ZodType<any>`, so widening here (rather than casting at the call site)
  * is the narrowest fix.
  */
-function inputSchema(choices: SubagentProviderChoices | undefined): z.ZodTypeAny {
-  if (choices === undefined || choices.names.length === 0) return z.object(baseShape);
+function inputSchema(choices: SubagentProviderChoices | undefined, advertisedRoles?: readonly AgentRole[]): z.ZodTypeAny {
+  // Narrow only the model-facing catalogue. Runtime validation retains the name field
+  // so stale/forged role selections reach the fail-closed refusal, never a generic child.
+  const shape = advertisedRoles === undefined ? baseShape : advertisedRoles.length === 0
+    ? { task: baseShape.task, label: baseShape.label }
+    : { ...baseShape, agent: z.enum(advertisedRoles.map(role => role.name) as [string, ...string[]])
+      .optional().describe(baseShape.agent.description!) };
+  if (choices === undefined || choices.names.length === 0) return z.object(shape);
   const [first, ...rest] = choices.names as [string, ...string[]];
   return z.object({
-    ...baseShape,
+    ...shape,
     provider: z
       .enum([first, ...rest])
       .optional()
@@ -197,6 +204,8 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
   const maxTurns = Math.min(opts.maxTurns ?? 15, inherited?.maxTurns ?? Infinity);
   const maxChildren = opts.maxChildren ?? 8;
   const pools = new Map<string, Pool>();
+  const jsonSchema = zodToJsonSchema(inputSchema(opts.providerChoices, roles), { $refStrategy: "none" }) as Record<string, unknown>;
+  delete jsonSchema.$schema;
   const roleGuidance = (roles.length === 0
     ? "No local agent roles are configured."
     : `Local agent roles (constraints, not permissions): ${roles.map(role => role.name).join(", ")}.`) +
@@ -223,6 +232,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         ? " This worker uses a separate Git worktree and returns a retained patch candidate; inspect and apply it separately with authorized parent tools. No automatic parent edits."
         : "") + " " + roleGuidance,
     inputSchema: inputSchema(opts.providerChoices),
+    jsonSchema,
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
     permission: "exec",
