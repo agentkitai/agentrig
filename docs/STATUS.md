@@ -30,6 +30,10 @@ semantics; actual projection failed before and passes after. All 25 attachment
 controls pass. Post-fix build/typecheck, Docker full 3,078 plus two existing skips
 /194 files (70.32s), and Chromium (2.58s) pass. Original review retained;
 updated-main integration and exact-head four-check CI remain pending.
+Integrated repaired green main `0b65aa1`: frozen install/build/typecheck, 40 focused
+attachment/Markdown controls, required-Docker full 3,095 plus two existing skips
+/195 files (85.37s), and Chromium (2.65s) pass. Exact-head four-check CI remains
+pending; later queued main changes will be integrated before root merge.
 
 Historical repair checkpoint (now done via #206): **bounded runtime-fixture CI repair**. R16a #199 merged as339f795 after
 all four exact-head checks passed; post-main CI34075972025 failed Windows in the
