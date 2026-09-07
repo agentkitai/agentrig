@@ -9,17 +9,19 @@ import { askUserTool, createAgent, RulePolicy, SessionStore, type ModelProvider,
 import { TuiController } from "../src/tui/controller.js";
 import { ACP_LIMITS, acpTransport } from "../src/acp-transport.js";
 import { serveAcp } from "../src/acp-server.js";
+import { EventEmitter } from "node:events";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
-async function fixture(answer: (params: { question: { id: string } }) => Promise<unknown>, supported = true) {
+async function fixture(answer: (params: { question: { id: string } }) => Promise<unknown>, supported = true, startupMs = 0) {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-question-acp-"));
   const input = new PassThrough(); const output = new PassThrough(); const transport = acpTransport(input, output);
   const requests: ModelRequest[] = []; let controller!: TuiController;
   const server = serveAcp(transport.stream, { closeTransport: transport.close, reserveOutput: transport.reserve,
     createSession: async (_request, observe) => {
       const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
-        async *stream(req) { requests.push(req); if (requests.length === 1) { yield { type: "tool_use", id: "ask", name: "ask_user", input: { prompt: "Which format?", options: ["Text", "JSON"] } }; yield { type: "stop", reason: "tool_use" }; }
+        async *stream(req) { requests.push(req); if (requests.length === 1) { await new Promise(resolve => setTimeout(resolve, startupMs)); yield { type: "tool_use", id: "ask", name: "ask_user", input: { prompt: "Which format?", options: ["Text", "JSON"] } }; yield { type: "stop", reason: "tool_use" }; }
           else yield { type: "stop", reason: "end_turn" }; } };
       controller = new TuiController({ cwd, agent: { run() { throw new Error("not ready"); } }, onSession: observe });
       controller.attach(createAgent({ provider, store: new SessionStore({ root: join(cwd, "logs") }), repoMap: false,
@@ -56,11 +58,17 @@ it("malformed or mismatched replies cannot answer a question", async () => {
   await expect(f.prompt()).rejects.toThrow(); expect(f.requests).toHaveLength(1);
 });
 
-it("local unanswered settlement releases the ACP prompt but retains the unanswered SDK reply reservation", async () => {
+it.each([0, 1200])("local unanswered settlement releases the ACP prompt but retains the unanswered SDK reply reservation (startup %ims)", async startupMs => {
   let reply!: (value: unknown) => void; let id: string | undefined;
-  const f = await fixture(async params => { id = params.question.id; return new Promise(resolve => { reply = resolve; }); });
+  const readiness = new EventEmitter();
+  const f = await fixture(async params => { id = params.question.id; return new Promise(resolve => { reply = resolve; readiness.emit("ready"); }); }, true, startupMs);
   const running = f.prompt().catch(() => "refused");
-  await vi.waitFor(() => expect(id).toBeDefined());
+  const callbacks = { snapshot: () => f.controller.snapshot(), subscribe(listener: (state: ReturnType<TuiController["snapshot"]>) => void) {
+    const changed = () => listener(f.controller.snapshot()); readiness.on("ready", changed); changed();
+    return () => { readiness.off("ready", changed); };
+  } };
+  await waitForTuiState(callbacks, running, "peer question callback", () => id !== undefined);
+  expect(id).toBeDefined();
   f.controller.snapshot().question!.resolve(null);
   expect(await running).toBe("refused");
   expect(await f.peer.agent.request("_agentrig/state", { sessionId: f.sessionId })).toMatchObject({ running: false, pendingQuestion: null });
@@ -68,7 +76,7 @@ it("local unanswered settlement releases the ACP prompt but retains the unanswer
   reply({ id, reply: { source: "human", answer: { text: "too late" } } });
   await vi.waitFor(() => expect(f.transport.reservedBytes).toBe(0));
   expect(f.requests).toHaveLength(1);
-}, 5000);
+}, 10000);
 
 it("session cancellation joins a pending question whose peer never answers", async () => {
   let waiting = false;

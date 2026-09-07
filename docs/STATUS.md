@@ -102,6 +102,14 @@ controls fail before the narrow session-context attachment fix and pass afterwar
 Initial PR #202 head `9c07f45` passed all four checks; final integrated-head CI and
 root merge/post-main remain pending. No second independent review.
 
+Integrated `dea862e` then failed Windows [CI34070567044](https://github.com/agentkitai/agentrig/actions/runs/34070567044)
+at three existing question-startup readiness assertions; Linux/macOS/structure passed.
+Injected 1.1–1.2s startup delays reproduce all three failures. Test-only callback/frame
+readiness repairs retain original answer/permission/deadline/reservation assertions,
+with bounded waits and unchanged production timing. Build/typecheck and full required
+Docker now pass 3,022 plus two skips /188 files (66.15s); real Chromium passes one smoke.
+Fresh exact-head checks remain required; no blind rerun or second broad review.
+
 ### R15h done — local agent roles, PR #196
 
 Final main `31193d649880ade62d6b8ca1ec0525318727ea76` passed all four post-main
