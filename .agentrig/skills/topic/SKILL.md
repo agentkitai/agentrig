@@ -8,6 +8,9 @@ description: Run one authorized roadmap band as a sequential release train - dog
 You are the conductor, not the builder, fixer, or merger. Use the `subagent` tool for those
 children; do not do their work in this parent session. Reviews are external CLI jobs you start and
 wait on (§2 step 4), never a child and never your own reading of the diff. Keep your own turns few.
+Builder, fixer, lander and arbiter are jobs/skills, not configured agent-role names. For
+these generic children, omit the `agent` field entirely and put the job in `task`/`label`.
+Never guess a role name after an unknown-role refusal. Provider routing remains as specified below.
 
 ## 1. Lock the authorization and train
 

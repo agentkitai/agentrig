@@ -49,7 +49,7 @@ export interface SubagentChoice {
 }
 
 const baseShape = {
-  agent: AgentRoleName.optional().describe("optional local agent role from the advertised role catalogue; unknown roles are refused"),
+  agent: AgentRoleName.optional().describe("optional configured local agent role, not a job title or skill name; omit agent for a generic worker; unknown roles are refused"),
   task: z
     .string()
     .min(1)
@@ -197,6 +197,10 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
   const maxTurns = Math.min(opts.maxTurns ?? 15, inherited?.maxTurns ?? Infinity);
   const maxChildren = opts.maxChildren ?? 8;
   const pools = new Map<string, Pool>();
+  const roleGuidance = (roles.length === 0
+    ? "No local agent roles are configured."
+    : `Local agent roles (constraints, not permissions): ${roles.map(role => role.name).join(", ")}.`) +
+    ' For a generic worker, omit agent entirely; use task and optional label to describe its job. Example: {"task":"Inspect the assigned files","label":"reader"}. Skill names and job titles are not agent roles. Omit provider to use the configured child default.';
 
   const refuse = (display: string): ToolResult<unknown> => ({
     output: { refused: true },
@@ -217,14 +221,14 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       "job to an isolated worker (implement something, review something). The subagent sees none " +
       "of this conversation, so the task must stand alone." + (opts.isolation === "worktree"
         ? " This worker uses a separate Git worktree and returns a retained patch candidate; inspect and apply it separately with authorized parent tools. No automatic parent edits."
-        : "") + (roles.length === 0 ? "" : ` Local agent roles (constraints, not permissions): ${roles.map(role => role.name).join(", ")}.`),
+        : "") + " " + roleGuidance,
     inputSchema: inputSchema(opts.providerChoices),
     // a subagent can do anything its tools can do, so it is at least as privileged as `exec`;
     // claiming less would let a `--allow read` run arbitrary writes through a child
     permission: "exec",
     execute: async (input: Input, ctx: ToolContext): Promise<ToolResult<unknown>> => {
       const role = input.agent === undefined ? undefined : roles.find(candidate => candidate.name === input.agent);
-      if (input.agent !== undefined && role === undefined) return refuse("unknown or unavailable agent role; no child started");
+      if (input.agent !== undefined && role === undefined) return refuse(`unknown or unavailable agent role; no child started. ${roleGuidance}`);
       if (role !== undefined && input.provider !== undefined) return refuse("agent role and provider cannot both be selected");
       if (depth >= maxDepth) {
         return refuse(`subagents may not nest more than ${maxDepth} deep; do this task yourself`);

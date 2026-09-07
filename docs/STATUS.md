@@ -1,5 +1,24 @@
 # Status
 
+R17 outside-train recovery (2026-09-07): conductor `37b744e0` halted before
+R17b after six invalid named-role calls; zero children, PRs, or merges. Blocking
+[feel #225](https://github.com/agentkitai/agentrig/issues/225) is repaired outside
+the train by Codex: the subagent description and refusal now name available roles
+(including an explicit empty catalogue), distinguish roles from skills/job titles,
+and show a generic invocation omitting `agent` and `provider`. Unknown roles still
+fail closed. Fake-provider tests cover refusal followed by one successful generic
+child with a one-child pool, with and without configured roles.
+
+[Feel #224](https://github.com/agentkitai/agentrig/issues/224) was fixed locally
+outside the train: `/home/amit/.local/bin/agentrig` now invokes the existing built
+CLI with arguments preserved; a fresh login shell resolves it and `agentrig --help`
+succeeds. No profile, routing, permission, or sandbox settings changed.
+After review, green CI and merge, rebuild the CLI and restart with `/new` and the
+same authorized R17b–R17g prompt (R17a gate, R17f 12,000,000 reported tokens).
+Monitor canonical session events for child progress and terminal state; an idle
+TUI process is not evidence of a running train. The older stop entries below are
+historical. The recovery PR is built by Codex outside the train, not by agentrig.
+
 Current user authorization: finish and merge PR #222, then stop again. No further
 roadmap implementation is authorized in this pass. Integrating green main
 e793fd0ffcfdb89b139d7cdab0d18132ead750e4; #219 and #220 are fully delivered.
