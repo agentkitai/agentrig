@@ -54,8 +54,8 @@ with tempfile.TemporaryDirectory(prefix='r17-recommended-') as root:
     raw_markdown=any(e.get('type')=='message.append' and '# Result' in json.dumps(e.get('message')) for e in events)
     evidence={'fixture':'local deterministic TUI; no config files or feature opt-ins','command':command,'session_ids':[p.stem for p in logs],
       'complete':complete,'raw_markdown_preserved':raw_markdown,'markdown_rendered': 'Result' in frame and 'Ready' in frame and '# Result' not in frame and '**Ready**' not in frame,
-      'diagnostics_line':'Diagnostics:' in clean,'checkpoint_created':any(e.get('type')=='checkpoint.created' for e in events),
+      'diagnostics_line':'Diagnostics:' in clean,'checkpoint_created':any(e.get('type')=='checkpoint.created' for e in events), 'checkpoint_visible':'Checkpoint: turn' in frame,
       'ingest_at_end':'memory: ingested' in clean,'config_absent':not (home/'.agentrig/config.json').exists() and not (cwd/'.agentrig/config.json').exists(),
       'security':'explicit fixture write approval; diagnostic exec approval declined via n; no YOLO/sandbox/grant change', 'terminal_final_frame':frame}
     print(json.dumps(evidence,indent=2))
-    if not all(evidence[k] for k in ['complete','raw_markdown_preserved','markdown_rendered','diagnostics_line','checkpoint_created','ingest_at_end','config_absent']): raise SystemExit(1)
+    if not all(evidence[k] for k in ['complete','raw_markdown_preserved','markdown_rendered','diagnostics_line','checkpoint_created','checkpoint_visible','ingest_at_end','config_absent']): raise SystemExit(1)

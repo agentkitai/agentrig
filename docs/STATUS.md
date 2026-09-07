@@ -10,8 +10,8 @@ File AgentRig friction with the `feel` label before the next child starts.
 - **R17b implemented, awaiting independent review — builder agentrig, conductor
   8fbde1a3.** Existing single worktree/PR [#234](https://github.com/agentkitai/agentrig/pull/234);
   baseline-first history preserved. Three children: builder `7dbfad2b`, arbiter
-  `1bb8ec86`, continuation builder `b9109d9f`; prior human pauses **1**, no new
-  continuation halt. [Defaults/migration](DEFAULTS.md), [plan/evidence](plans/R17b.md).
+  `1bb8ec86`, continuation builder `b9109d9f`; human pauses **2** (prior **1** plus one
+  scoped permission wait in this continuation, feel #236). [Defaults/migration](DEFAULTS.md), [plan/evidence](plans/R17b.md).
   Every changed flag: `--supervise`, `--no-supervise`, `--checkpoints`,
   `--ingest-on-end`, `--no-ingest-on-end`, `--notifications <mode>`, `--verbose`.
   Security defaults (`ask`, sandbox, grants, fail-closed manifests) unchanged.
@@ -34,7 +34,11 @@ File AgentRig friction with the `feel` label before the next child starts.
   exception; new [#235](https://github.com/agentkitai/agentrig/issues/235) records
   ingest writes invalidating the terminal checkpoint ownership seal (checkpoint
   creation succeeds; undo can remain unavailable, and its safety guard is unchanged).
-  `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
+  Feel #236 (filed by the operator) records the 77-minute `attempt_log` approval
+  wait: canonical continuation events **790 ask → 791 allow**, with no bypass.
+  Feel #237 records a shared `/tmp/.agentrig` marker changing fixture trust roots;
+  validation uses clean `TMPDIR=/var/tmp` without deleting the marker or changing
+  product trust. `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
   4 skipped**). Exact-head CI is verified in the PR handoff record after push.
   Independent external reviews follow in the conductor; no reviews or merge by this child.
 

@@ -25,7 +25,8 @@ trust is still required; untrusted project configuration is not loaded.
 - **Notifications**: `notifications: "bell"`; the existing 30-second idle threshold
   and mounted TTY gating remain. Desktop notifications are not enabled implicitly.
 - **Git checkpoints**: `checkpoints: true`, active when the workspace is a Git
-  repository. Existing outside-repository warning/no-op and ownership refusals
+  repository, with a concise checkpoint-created notice in the default transcript.
+  Existing outside-repository warning/no-op and ownership refusals
   remain; no auto-init or relaxed restore checks.
 - **Session-end memory ingest**: `ingestOnEnd: true`, using existing `.agentrig`
   memory and the configured ingest role. This can make a separately accounted

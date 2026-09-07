@@ -35,6 +35,7 @@ it('fresh repository without config records default diagnostics, checkpoints and
     const [session] = await store.list(); expect(session).toBeDefined();
     const events = await store.readAll(session!.id);
     expect(events.some(e => e.type === 'checkpoint.created')).toBe(true);
+    expect(stdout + stderr).toContain('Checkpoint: turn');
     const diagnostic = events.find(e => e.type === 'tool.result' && e.diagnostics !== undefined);
     expect(diagnostic).toBeDefined(); expect(renderChatEvent(diagnostic!)).toContain('Diagnostics:');
     // The checker still needs exec approval; the default is NOT permission to execute it.
