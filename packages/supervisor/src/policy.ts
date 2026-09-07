@@ -4,6 +4,11 @@ import type { SupervisorState } from "./state.js";
 
 /** The rungs a signal type climbs. `run_reviewer` is M6's; it is listed so the ladder is whole. */
 export type Rung = "inject_guidance" | "force_replan" | "run_reviewer" | "run_grader" | "escalate" | "abort";
+export interface LadderSnapshot {
+  readonly exhausted: boolean;
+  /** Candidate before confidence/cooldown/progress/signature checks, not promised action. */
+  readonly next: ReadonlyArray<{ readonly signal: SignalType; readonly level: number; readonly rung: Rung | null }>;
+}
 
 export const DEFAULT_LADDER: Rung[] = ["inject_guidance", "force_replan", "run_reviewer", "run_grader", "escalate", "abort"];
 
@@ -76,6 +81,14 @@ export class LadderPolicy implements Policy {
   private issued = 0;
 
   private readonly rubric: string | undefined;
+
+  snapshot(): LadderSnapshot {
+    return { exhausted: this.issued >= this.maxInterventions,
+      next: [...this.level].map(([signal, level]) => ({ signal,
+        level: signal === "injection" ? 0 : Math.min(level, Math.max(0, this.rungs.length - 1)),
+        rung: signal === "injection" ? (this.rungs.includes("inject_guidance") ? "inject_guidance" : null)
+          : this.rungs[Math.min(level, this.rungs.length - 1)] ?? null })) };
+  }
 
   constructor(opts: LadderOptions = {}) {
     const caps = opts.capabilities ?? {};

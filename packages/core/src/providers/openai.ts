@@ -227,6 +227,7 @@ export async function* parseOpenAISse(body: AsyncIterable<Uint8Array | string>):
 
 export class OpenAICompatibleProvider implements ModelProvider {
   readonly id = "openai-compatible";
+  validateHistory(messages: ModelRequest["messages"]): void { validateThinkingHistory(messages); }
   readonly model: string;
   readonly capabilities: ModelProvider["capabilities"];
   private readonly apiKey: string | undefined;

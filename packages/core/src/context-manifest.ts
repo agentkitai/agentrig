@@ -60,6 +60,7 @@ export function renderSystemBlocks(blocks: readonly PromptBlock[]): string {
 
 export function buildContextManifest(options: {
   turn: number;
+  providerSelection?: ContextManifestEvent["providerSelection"];
   request: ModelRequest;
   systemBlocks: readonly PromptBlock[];
   evictedToolUseIds?: ReadonlySet<string>;
@@ -132,6 +133,7 @@ export function buildContextManifest(options: {
   return {
     type: "context.manifest",
     turn: options.turn,
+    ...(options.providerSelection === undefined ? {} : { providerSelection: options.providerSelection }),
     requestHash: contentHash(options.request),
     blocks,
   };

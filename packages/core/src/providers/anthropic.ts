@@ -221,6 +221,7 @@ export async function* parseAnthropicSse(body: AsyncIterable<Uint8Array | string
 
 export class AnthropicProvider implements ModelProvider {
   readonly id = "anthropic";
+  validateHistory(messages: ModelRequest["messages"]): void { validateThinkingHistory(messages, "anthropic"); }
   readonly model: string;
   readonly capabilities: ModelProvider["capabilities"];
   private readonly apiKey: string;

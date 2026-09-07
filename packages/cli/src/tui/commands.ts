@@ -17,6 +17,7 @@ export type TuiCommand =
   | { kind: "plan" }
   | { kind: "context" }
   | { kind: "cost" }
+  | { kind: "model" | "effort"; argument: string }
   | { kind: "verbose" }
   | { kind: "new" }
   | { kind: "permissions"; reset: boolean; revoke?: string; invalid?: boolean }
@@ -51,6 +52,8 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
+  { name: "model", args: "[role-or-entry]", summary: "inspect or select the configured main provider while idle" },
+  { name: "effort", args: "[level]", summary: "inspect or select the main adapter's effort for the next request" },
   { name: "verbose", summary: "append retained tool details and toggle future raw events (existing scrollback stays)" },
   { name: "permissions", args: "[reset | revoke <exact-id>]", summary: "inspect live grants, matched-decision counts, or revoke authority" },
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
@@ -114,6 +117,9 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "context" };
     case "cost":
       return { kind: "cost" };
+    case "model":
+    case "effort":
+      return { kind: name, argument: args };
     case "verbose":
     case "trace":
       return { kind: "verbose" };
@@ -158,6 +164,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "supervisor",
   "plan",
   "context",
+  "cost", "model", "effort",
   "verbose", "trace",
   "resume",
   "new",
