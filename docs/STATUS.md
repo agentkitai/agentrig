@@ -87,6 +87,11 @@ structure `34058784219` all green. [Final receipt](https://github.com/agentkitai
 
 ### R16b in progress — captured transcript diffs
 
+Integrated repaired green main0b65aa1: frozen install/build/typecheck,
+74focused tests, required-Docker3,088passed +2 skips /195files,83.89s,
+actual Chromium1passed,2.45s. No production conflicts or second review.
+Fresh exact-head and post-main gates required; #204 is ahead in the merge queue.
+
 Bounded builtin before/after event observations and shared diff rendering for
 completed edits and explicitly proposed permission excerpts. No preapproval read,
 no renderer filesystem reads, no new tool authority. [Contract](plans/R16b.md).
