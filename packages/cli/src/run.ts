@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import {
   createAgent,
+  withSessionSpend,
   builtinTools,
   defaultRules,
   RulePolicy,
@@ -466,7 +467,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   const supervisor =
     opts.supervise !== true
       ? null
-      : supervise(
+      : withSessionSpend(session, () => supervise(
           session,
           supervisorOptions({
             opts,
@@ -485,7 +486,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
               : {}),
             onError: (where, err) => printError(`supervisor ${where}: ${err.message}`),
           }),
-        );
+        ));
 
   let sigints = 0;
   const onSigint = (): void => {

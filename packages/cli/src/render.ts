@@ -79,6 +79,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "turn.end": return `${p} n=${e.n}`;
     case "turn.continued": return `${p} n=${e.n} from=${e.from} attempt=${e.attempt}/${e.maxAttempts} reason=${e.reason}`;
     case "model.request": return `${p} tokensIn=${e.tokensIn}`;
+    case "budget.cap": return `${p} configured-estimate cap ${e.reason} (not invoice accounting)`;
     case "model.delta": return `${p} ${JSON.stringify(e.text)}`;
     case "model.response": {
       const input = e.usage.input + (e.usage.cacheRead ?? 0) + (e.usage.cacheWrite ?? 0);
@@ -240,6 +241,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     }
     case "error":
       return `! ${oneLine(e.message, 200)}`;
+    case "budget.cap":
+      return `! Configured-estimate daily cap: ${e.reason}; not invoice accounting`;
     case "turn.continued":
       return `↻ Response truncated; continuing (${e.attempt}/${e.maxAttempts}, turn ${e.n})`;
     case "permission.decision":

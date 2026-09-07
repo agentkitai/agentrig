@@ -305,6 +305,8 @@ export class TuiController {
   setCommands(commands: Array<ExtensionCommand & { extension: string }>): void { this.extensionCommands = commands; }
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
+  private cost: ((session?: string) => Promise<string[]>) | undefined;
+  setCost(fn: (session?: string) => Promise<string[]>): void { this.cost = fn; }
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
   private dreamAbort: AbortController | undefined;
   private dreaming: Promise<void> | undefined;
@@ -739,6 +741,9 @@ export class TuiController {
         return true;
       case "memory":
         await this.delegate("memory", () => this.memory?.(cmd.query));
+        return true;
+      case "cost":
+        await this.delegate("cost", () => this.cost?.(this.state.sessionId ?? undefined));
         return true;
       case "dream": {
         if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }

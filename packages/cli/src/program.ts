@@ -24,6 +24,7 @@ import { withMaintenanceSignal } from "./maintenance.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 import { ScheduleStore } from "./schedule.js";
 import { ScheduleReports } from "./schedule-report.js";
+import { usageCommand } from "./usage.js";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -240,6 +241,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--max-tokens <n>", "token budget (input + cache read/write + output)")
       .option("--max-minutes <n>", "wall-clock budget in minutes")
       .option("--max-usd <n>", "USD budget; requires --price-in/--price-out")
+      .option("--daily-cap <usd>", "project configured-estimate daily admission cap (not an invoice guarantee)")
       .option("--price-in <usd>", "uncached input price in USD per million tokens")
       .option("--price-out <usd>", "output price in USD per million tokens")
       .option("--price-cache-read <usd>", "cache-read price per million tokens; overrides provider default")
@@ -434,6 +436,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   schedule.command("rm <id>").action(async (id: string) => { await (await scheduleStore()).remove(id); console.log(`removed schedule ${id}`); });
   withProviderOptions(schedule.command("tick"))
     .option("--execute", "explicitly execute due tasks; default is model-free preview")
+    .option("--daily-cap <usd>", "configured-estimate daily admission cap; requires configured pricing")
     .option("--trust", "trust canonical project for this tick only")
     .option("--json", "render executed session events as JSONL")
     .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
@@ -675,6 +678,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       }
     });
 
+  program.command("usage").description("Read recorded project cost estimates without models/config")
+    .option("--since <date>", "UTC date YYYY-MM-DD", new Date().toISOString().slice(0, 10))
+    .option("--json", "structured accounting report")
+    .action(async (opts: { since: string; json?: boolean }) => {
+      try { await usageCommand(process.cwd(), opts.since, opts.json === true); }
+      catch (error) { console.error(`usage: ${String(error)}`); process.exitCode = 1; }
+    });
   const sessions = program.command("sessions").description("Inspect session event logs");
 
   sessions.command("export <id>")
