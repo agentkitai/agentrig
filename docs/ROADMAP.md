@@ -1240,9 +1240,9 @@ need an explicit budget; neither prevents continuing other actionable entries.
   attest executable identity, PATH, Git configuration/hooks or program effects; richer semantic
   effect explanations belong to committed R12b, not inferred read-only name heuristics.
 - R6b serializer count guard (implemented, delivery pending; [contract](plans/skill-session-count-cap.md)):
-  explicitly refuse more than128 distinct session references, matching the loader format.
-  Remaining polish: improve the preserved
-  empty-directory recovery hint and show model rejection beside a changed-digest refusal.
+  explicitly refuse more than 128 distinct session references, matching the core skill parser's
+  metadata cap. Remaining polish: improve the preserved empty-directory recovery hint and
+  show model rejection beside a changed-digest refusal.
   Keep no-force-overwrite behavior, fresh evidence/effect checks and explicit human review.
 - R12a polish: consider a dedicated idle audit sink if durable receipts for resets immediately
   before process exit become necessary; current revocations are effective immediately and queued
