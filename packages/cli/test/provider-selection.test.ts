@@ -88,6 +88,34 @@ it("switching preserves mounted status accounting and does not invent notificati
   } finally { await notifications.close(); await closeStatus(); await f.controller.shutdown(); }
 });
 
+it("selected providers receive staged advisory images while preparation and selection remain mutually exclusive", async () => {
+  const requests: any[] = []; vi.stubGlobal("fetch", vi.fn(async (_url, init) => { requests.push(JSON.parse(init.body)); return response(); }));
+  const f = await fixture();
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const clipboard = vi.fn(async () => { await gate; return { kind: "clipboard" as const, data: png }; });
+  f.controller.setInputAttachments({ clipboard, complete: async text => ({ text, hint: "" }) });
+  try {
+    const preparing = f.controller.pasteImage();
+    await f.controller.submit("/model second");
+    expect(f.controller.snapshot().providerSelection?.entry).toBe("default");
+    release(); await preparing;
+    await f.controller.submit("/model second"); await f.controller.submit("/effort high");
+    await f.controller.submit("");
+    expect(requests).toHaveLength(1); expect(requests[0]).toMatchObject({ model: "second-model", reasoning_effort: "high" });
+    expect(JSON.stringify(requests[0].messages)).toContain(`data:image/png;base64,${png}`);
+    const id = f.controller.snapshot().sessionId!;
+    const events = await new SessionStore({ root: f.logs }).readAll(id);
+    expect(events.find(e => e.type === "session.start")).toMatchObject({ task: "", inputAttachments: true });
+    expect(events.find(e => e.type === "message.append" && e.message.content.some(b => b.type === "image"))).toMatchObject({ message: { content: expect.arrayContaining([expect.objectContaining({ type: "image", trust: "user", context: { principal: "platform", authority: "advisory" } })]) } });
+    f.controller.setProviderSelection({ current: () => ({ entry: "second", provider: "openai", model: "second-model" }), describe: () => [],
+      prepare: () => { void f.controller.pasteImage(); void f.controller.submit("@blocked.txt"); return () => ({ entry: "second", provider: "openai", model: "second-model" }); } });
+    await f.controller.submit("/model second");
+    expect(clipboard).toHaveBeenCalledTimes(1); expect(requests).toHaveLength(1);
+  } finally { release(); await f.controller.shutdown(); }
+});
+
 it("busy and invalid selections never change the committed adapter or dispatch extra requests", async () => {
   let entered!: () => void, release!: () => void; const started = new Promise<void>(r => { entered = r; }); const held = new Promise<void>(r => { release = r; });
   const fetch = vi.fn(async () => { entered(); await held; return response(); }); vi.stubGlobal("fetch", fetch);

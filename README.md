@@ -1,5 +1,9 @@
 # AgentRig
 
+TUI file/image input: `inspect @src/example.ts`, `@"file with spaces.txt"`, or
+Ctrl+V to stage a clipboard image. Reads remain permission-checked; see
+[attachment limits and privacy](docs/ATTACHMENTS.md).
+
 The [authenticated local reference web client](docs/WEB.md) uses the same ACP
 controller as the TUI, with explicit one-time permissions and structured questions.
 
