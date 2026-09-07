@@ -1,5 +1,18 @@
 # Status
 
+R17 monitored restart recovery (2026-09-07, outside train): conductor `c10db599`
+repeated invalid `agent: "builder"` calls despite #226's explicit guidance. The
+operator detected the recurrence from canonical events and aborted after 24 turns,
+before any child/PR/branch; [feel #227](https://github.com/agentkitai/agentrig/issues/227)
+records the failure. Codex's outside-train repair now narrows the model-facing tool
+schema to configured role names, omitting `agent` when none exist. Runtime validation
+still refuses stale/forged unknown names rather than silently creating a generic child.
+Fake-provider request tests fail before this change and cover both empty/configured
+catalogues and actual generic recovery. This is structural discovery guidance, not
+a guarantee that a model obeys its schema. Routing and security remain unchanged.
+After reviewed, tested, green-CI merge, restart the same authorized topic prompt and
+continue canonical-event monitoring. No R17 row is claimed complete by this repair.
+
 R17 outside-train recovery (2026-09-07): conductor `37b744e0` halted before
 R17b after six invalid named-role calls; zero children, PRs, or merges. Blocking
 [feel #225](https://github.com/agentkitai/agentrig/issues/225) is repaired outside

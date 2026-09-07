@@ -25,7 +25,7 @@ const probe = (name: string, calls: string[]): AnyTool => ({ name, description: 
 
 it.each([false, true])("advertises role availability and recovers an unknown role with a generic child (roles=%s)", async configured => {
   const cwd = await root(), store = new SessionStore({ root: join(cwd, "logs") });
-  const choices: unknown[] = [];
+  const choices: unknown[] = [], requests: ModelRequest[] = [];
   const tool = subagentTool({ roles: configured ? [role("reader", [])] : [], maxChildren: 1, createAgent,
     childConfig: choice => { choices.push(choice); return { provider: provider([]), tools: [],
       permissions: new RulePolicy([], "allow"), systemPrompt: "child", store, repoMap: false }; } });
@@ -34,7 +34,11 @@ it.each([false, true])("advertises role availability and recovers an unknown rol
   const events = await collect(createAgent({ provider: provider([
     call("subagent", { task: "inspect", agent: "builder" }),
     call("subagent", { task: "inspect" }),
-  ]), tools: [tool], permissions: new RulePolicy([], "allow"), systemPrompt: "parent", store, repoMap: false }).run("delegate", { cwd }));
+  ], requests), tools: [tool], permissions: new RulePolicy([], "allow"), systemPrompt: "parent", store, repoMap: false }).run("delegate", { cwd }));
+  const schema = requests[0]!.tools.find(t => t.name === "subagent")!.inputSchema as { properties: Record<string, { enum?: string[] }>; required: string[] };
+  if (configured) expect(schema.properties.agent?.enum).toEqual(["reader"]);
+  else expect(schema.properties).not.toHaveProperty("agent");
+  expect(schema.required).not.toContain("agent");
   const refused = events.find(e => e.type === "tool.result" && !e.ok);
   expect(refused).toMatchObject({ display: expect.stringContaining("omit agent") });
   expect(refused).toMatchObject({ display: expect.stringContaining(configured ? "reader" : "No local agent roles are configured") });
