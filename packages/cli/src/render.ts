@@ -1,5 +1,6 @@
 import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage, type PermissionDecisionSource } from "@agentkitai/agentrig-core";
 import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
+import { renderFileDiff } from "./file-diff.js";
 
 function permissionSource(source: PermissionDecisionSource): string {
   switch (source.kind) {
@@ -117,7 +118,8 @@ export function renderEvent(e: HarnessEvent): string {
     case "context.compact": return `${p} ${e.before} -> ${e.after}${e.estimate === undefined ? "" : ` transcript-only estimate; bytes ${e.estimate.beforeBytes} -> ${e.estimate.afterBytes}`}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
-    case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}`;
+    case "provider.switched": return `${p} turn=${e.turn} ${JSON.stringify(e.from ?? "unknown")} -> ${JSON.stringify(e.to)}`;
+    case "context.manifest": return `${p} turn=${e.turn} blocks=${e.blocks.length} request=${e.requestHash}${e.providerSelection === undefined ? "" : ` provider=${JSON.stringify(e.providerSelection)}`}`;
     case "context.repo_map": return `${p} files=${e.files} bytes=${e.bytes} truncated=${e.truncated} freshness=${e.freshness.slice(0, 12)}`;
     case "plan.updated": return `${p} ${e.items.map((i) => `${i.status}:${i.text}; ${renderPlanAcceptance(i.accept)}`).join(" | ")}`;
     case "extension.loaded": return `${p} ${e.name}${e.disabled === true ? " (disabled; not reactivated)" : ""} hooks=${e.surfaces.hooks.join(",")} tools=${e.surfaces.tools.join(",")} commands=${e.surfaces.commands.join(",")}`;
@@ -157,6 +159,7 @@ export function renderContextManifest(event: EventOf<"context.manifest">): strin
     `context turn ${event.turn} — ${event.blocks.length} blocks, ${totalBytes} bytes, ~${totalTokens} tokens`,
     `request hash ${event.requestHash}`,
   ];
+  if (event.providerSelection !== undefined) lines.push(`provider ${JSON.stringify(event.providerSelection)}`);
   for (const block of event.blocks) {
     const freshness = block.freshness === undefined ? "" : ` fresh=${block.freshness}`;
     lines.push(
@@ -200,6 +203,7 @@ function toolSummary(name: string, input: unknown): string {
  */
 export function renderChatEvent(e: HarnessEvent): string | null {
   switch (e.type) {
+    case "provider.switched": return `Provider for turn ${e.turn}: ${JSON.stringify(e.to)}${e.from === undefined ? " (previous selection unknown)" : ""}`;
     case "output.validated": return `Output ${e.valid ? "valid" : "invalid"} (${e.mode}, ${e.attempt}, ${e.category})`;
     case "question.asked": return `Question: ${e.question.prompt}`;
     case "question.answered": return `Question ${e.outcome}${e.reply === undefined ? "" : ` (${e.reply.source}): ${"text" in e.reply.answer ? oneLine(e.reply.answer.text) : `option ${e.reply.answer.option + 1}`}`}`;
@@ -209,8 +213,10 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `⚒ ${toolSummary(e.name, e.input)}`;
     case "tool.result":
       // a successful tool is noise; a failing one is the thing that explains the next turn
-      return e.diagnostics === undefined ? (e.ok ? null : `✗ ${oneLine(e.display)}`)
-        : `Diagnostics: ${e.diagnostics.reason}; ${e.diagnostics.entries.length} touched-file, ${e.diagnostics.otherFileCount} other-file, ${e.diagnostics.omitted} omitted`;
+      return [e.ok && e.fileDiff !== undefined ? renderFileDiff(e.fileDiff, { color: process.stdout.isTTY === true }) : null,
+        e.diagnostics === undefined ? (e.ok ? null : `✗ ${oneLine(e.display)}`)
+          : `Diagnostics: ${e.diagnostics.reason}; ${e.diagnostics.entries.length} touched-file, ${e.diagnostics.otherFileCount} other-file, ${e.diagnostics.omitted} omitted`]
+        .filter(value => value !== null).join("\n") || null;
     case "tool.result.patched":
       return `✎ ${e.by} rewrote what the model saw`;
     case "tool.denied":

@@ -46,6 +46,49 @@ async function conversation() {
   return { cwd, store, agent, controller, calls: () => calls };
 }
 
+it("attachment preparation excludes maintenance and /clear; maintenance excludes attachment callbacks", async () => {
+  const f = await conversation(); const parent = f.controller.snapshot().sessionId; const before = f.calls();
+  let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  const complete = vi.fn(async (text: string) => { await held; return { text, hint: "" }; });
+  const clipboard = vi.fn(async () => { throw new Error("must not run"); });
+  f.controller.setInputAttachments({ complete, clipboard });
+  const input = f.controller.completeInput("@file");
+  try {
+    expect(f.controller.isIdle()).toBe(false);
+    await f.controller.submit("/compact"); await f.controller.submit("/clear");
+    expect(f.controller.snapshot().sessionId).toBe(parent); expect(f.calls()).toBe(before);
+  } finally { release(); await input; }
+  let finish!: () => void; const gate = new Promise<void>(resolve => { finish = resolve; });
+  f.controller.setManualCommands({ doctor: async () => { await gate; return ["local only"]; } });
+  const work = f.controller.submit("/doctor");
+  try {
+    expect(f.controller.isIdle()).toBe(false);
+    expect(await f.controller.completeInput("@second")).toEqual({ text: "@second", hint: "" });
+    await f.controller.pasteImage();
+    expect(complete).toHaveBeenCalledTimes(1); expect(clipboard).not.toHaveBeenCalled();
+  } finally { finish(); await work; }
+  expect(f.controller.isIdle()).toBe(true);
+});
+
+it("provider selection and maintenance exclude reentrant callbacks in both directions", async () => {
+  const f = await conversation(); const parent = f.controller.snapshot().sessionId; const before = f.calls();
+  const selection = { entry: "fixture", provider: "fixture", model: "fixture" };
+  const overlaps: Promise<unknown>[] = [];
+  const complete = vi.fn(async (text: string) => ({ text, hint: "" }));
+  f.controller.setInputAttachments({ complete, clipboard: async () => { throw new Error("unused"); } });
+  const prepare = vi.fn(() => {
+    overlaps.push(f.controller.submit("/compact"), f.controller.submit("/clear"), f.controller.completeInput("@file"));
+    return () => selection;
+  });
+  f.controller.setProviderSelection({ current: () => selection, describe: () => [], prepare });
+  await f.controller.submit("/model fixture"); await Promise.all(overlaps);
+  expect(prepare).toHaveBeenCalledTimes(1); expect(complete).not.toHaveBeenCalled();
+  expect(f.calls()).toBe(before); expect(f.controller.snapshot().sessionId).toBe(parent);
+  f.controller.setManualCommands({ doctor: async () => { await f.controller.submit("/model fixture"); return ["local"]; } });
+  await f.controller.submit("/doctor"); expect(prepare).toHaveBeenCalledTimes(1);
+  expect(f.controller.isIdle()).toBe(true);
+});
+
 it.each([80, 120])("actual App /compact publishes a saved fork and renders its estimate at %i columns", async columns => {
   const f = await conversation(); const parent = f.controller.snapshot().sessionId!;
   const original = await readFile(f.store.pathFor(parent)); const writes: string[] = [];

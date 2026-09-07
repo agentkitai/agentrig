@@ -1,4 +1,5 @@
 export * from "./events.js";
+export { FileDiff } from "./file-diff-types.js";
 export * from "./questions.js";
 export { askUserTool } from "./question-runtime.js";
 export * from "./diagnostics-types.js";
@@ -6,6 +7,7 @@ export * from "./messages.js";
 export * from "./manifests.js";
 export * from "./agent-roles.js";
 export * from "./provider.js";
+export * from "./provider-selection.js";
 export * from "./tool.js";
 export * from "./session-store.js";
 export * from "./session-export.js";
@@ -41,3 +43,4 @@ export * from "./otel.js";
 export * from "./mcp/index.js";
 export type { AuxiliaryCall, AuxiliaryReport } from "./auxiliary.js";
 export { createOutputContract, parseOutputJson, OUTPUT_LIMITS, type OutputContract, type OutputMode } from "./output-schema.js";
+export { InputAttachmentsSchema, INPUT_LIMITS, imageHeader, clipboardBlock, type InputAttachment } from "./input-attachments.js";

@@ -31,7 +31,7 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
   error: "red",
 };
 
-export function App({ controller, onMounted, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; history?: PromptHistory }): JSX.Element {
+export function App({ controller, onMounted, onInput, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; onInput?: () => void; history?: PromptHistory }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [markdown] = useState(createMarkdownCache);
@@ -103,6 +103,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
   }, [buf, paste, state.activity]);
 
   useRawInput((raw, char, key) => {
+    onInput?.();
     // Use the synchronous controller state, not a React render from before this stdin batch.
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
     const previewAtInput = controller.snapshot().pending?.scope;
@@ -114,9 +115,19 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
       if (action.type === "up" || action.type === "down") {
         if (!protectedInput) { completionHint.current = ""; buf.set(recall.current.move(action.type === "up" ? -1 : 1, buf.value, historyRef.current.values())); }
       } else if (action.type === "tab") {
-        if (!protectedInput) { const result = completePrompt(buf.value, controller.completionNames()); recall.current.reset(); completionHint.current = result.hint; buf.set(result.text); }
+        if (!protectedInput) {
+          const before = buf.value;
+          if (/(^|\s)@[^\s"@]*$/.test(before)) {
+            void controller.completeInput(before).then(result => {
+              if (buf.value !== before || controller.snapshot().pending !== null || controller.snapshot().question !== null || controller.snapshot().escalation !== null) return;
+              recall.current.reset(); completionHint.current = result.hint; buf.set(result.text);
+            });
+          } else { const result = completePrompt(before, controller.completionNames()); recall.current.reset(); completionHint.current = result.hint; buf.set(result.text); }
+        }
       } else if (action.type === "newline") {
         if (!protectedInput) edit(buf.value + "\n");
+      } else if (action.type === "paste-image") {
+        if (!protectedInput) void controller.pasteImage();
       } else if (action.type === "backspace") edit(buf.value.slice(0, -1));
       else if (action.type === "append") edit(buf.value + action.text);
       else if (action.type === "enter") {
@@ -171,7 +182,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
         // key for the whole raw chunk, so replay the control bytes here after stripping the marker.
         for (const action of ordinaryInputActions(segment.text)) {
           if (action.type === "interrupt") {
-            if (state.status === "running" || state.reviewing) controller.abort();
+            if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
             else exit();
           } else if (controller.snapshot().pending !== null) {
             permissionAction(action);
@@ -190,10 +201,12 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
     if (decoded.released !== undefined) buf.set(buf.value + decoded.released);
 
     if (key.ctrl && char === "c") {
-      if (state.status === "running" || state.reviewing) controller.abort();
+      if (state.status === "running" || state.reviewing || controller.inputBusy()) controller.abort();
       else exit();
       return;
     }
+
+    if (raw === "\u0016") { void controller.pasteImage(); return; }
 
     // A terminal may coalesce supported Shift-Enter with printable bytes on either
     // side. Decode only those exact sequences; the remainder is literal paste-like
@@ -299,6 +312,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
               ? "y = approve these exact definitions, n / esc = deny (no standing grant)"
               : state.pending.req.origin === "external-input-expansion"
               ? "y = approve this first-use expansion once, n / esc = deny (no standing grant)"
+              : state.pending.permissionGrants === undefined ? "y = allow once, n / esc = deny (no standing grants for this request)"
               : "y = allow once, a = allow all session, s = scope, n / esc = deny, d = deny all session"}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>}

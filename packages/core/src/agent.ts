@@ -1,7 +1,10 @@
 import { realpath } from "node:fs/promises";
+import { InputAttachmentsSchema, attachmentReader, clipboardBlock, INPUT_LIMITS, type InputAttachment } from "./input-attachments.js";
 import { SpendCapError, assertSpendMeter, hasSpendMeter, type SpendLedger } from "./spend-ledger.js";
 import { bindSessionSpend, currentSpend, withSpendRun } from "./spend-runtime.js";
 import { compactSession, type CompactOptions, type CompactionSession } from "./manual-compaction.js";
+import { resolveAgentProvider } from "./provider-selection-runtime.js";
+import type { ProviderSelection, ProviderSelectionInfo } from "./provider-selection.js";
 import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
@@ -82,6 +85,8 @@ export interface PromptContext {
 }
 
 export interface AgentConfig {
+  /** Trusted host selection, sampled once per run; never supplied by model content or replay. */
+  providerSelection?: () => ProviderSelection;
   /** Trusted configured-estimate accounting; providers must be metered at construction. */
   spend?: { ledger: SpendLedger; capMicros?: number };
   /** Optional final-answer constraint, compiled by createOutputContract. Not inherited by children. */
@@ -213,6 +218,8 @@ export interface Session {
 }
 
 export interface RunOptions {
+  /** Explicit host input descriptors, not model-selected tool calls or instruction authority. */
+  attachments?: readonly InputAttachment[];
   cwd?: string;
   resume?: string;
   /** Bounded external/advisory data from a trusted transport; never fresh user authority. */
@@ -283,15 +290,18 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
-  return { compact: opts => compactSession(config, opts), run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
-    const session = runSession(config, task, opts ?? {});
+  return { compact: opts => compactSession(resolveAgentProvider(config).config, opts), run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
+    const selected = resolveAgentProvider(config);
+    const session = runSession(selected.config, task, opts ?? {}, selected.selection);
     bindSessionSpend(session);
     try { void Promise.resolve(config.observeSession?.(session)).catch(() => {}); } catch { /* observation is not execution authority */ }
     return session;
   }) };
 }
 
-function runSession(config: AgentConfig, task: string, opts: RunOptions): Session {
+function runSession(config: AgentConfig, task: string, opts: RunOptions, selection?: ProviderSelectionInfo): Session {
+  let previousSelection: ProviderSelectionInfo | undefined;
+  const attachments = opts.attachments === undefined ? [] : InputAttachmentsSchema.parse(opts.attachments);
   const advisoryContext = opts.advisoryContext === undefined ? undefined : AdvisoryPromptContextSchema.parse(opts.advisoryContext);
   const { store, provider } = config;
   const now = config.now ?? (() => Date.now());
@@ -452,6 +462,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
           usage: { ...totals },
           usd,
           messages: resumableMessages(),
+          ...(previousSelection === undefined ? {} : { providerSelection: previousSelection }),
           ts: now(),
         });
       } catch {
@@ -496,6 +507,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         await emit({ type: "session.resume", task, cwd, provider: provider.id, model: provider.model, turns, context: taskContext,
           ...(advisoryContext === undefined ? {} : { advisoryContext }) });
         messages = snap.messages;
+        previousSelection = snap.providerSelection;
         // A written snapshot is already resumable; a materialized one can end at a fork point in
         // the middle of a tool call, and the same synthesis makes it acceptable to the APIs.
         messages = resumableMessages();
@@ -504,6 +516,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
       } else {
         await emit({
           type: "session.start",
+          ...(attachments.length ? { inputAttachments: true as const } : {}),
           context: taskContext,
           task,
           ...(advisoryContext === undefined ? {} : { advisoryContext }),
@@ -515,6 +528,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (scheduled !== undefined) await emit({ type: "run.scheduled", entryId: scheduled.entryId, minute: scheduled.minute,
           ...(scheduled.source === undefined ? {} : { source: scheduled.source }) });
         messages = [{ role: "user", content: [{ type: "text", text: task, context: taskContext, ...(scheduled === undefined ? {} : { trust: "project" as const }) }] }];
+        if (task === "" && attachments.length) messages = [];
         if (advisoryContext?.length) {
           if (task === "") messages = [];
           messages.push({ role: "user", content: advisoryPromptBlocks(advisoryContext) });
@@ -546,6 +560,41 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         if (!principals.set(hookId, true)) throw new Error(`unknown or ambiguous hook instruction delegation: ${hookId}`);
       }
       await flushDelegations();
+
+      if (attachments.length) {
+        const blocks: ContentBlock[] = []; let textBytes = 0, imageBytes = 0;
+        for (const attachment of attachments) {
+          abortController.signal.throwIfAborted();
+          let block: ContentBlock | undefined, size = 0;
+          if (attachment.kind === "clipboard") {
+            if (config.sandbox !== undefined && config.sandbox.mode !== "none") throw new Error("clipboard attachments require a non-enforcing host session");
+            block = clipboardBlock(attachment.data); size = Buffer.byteLength(attachment.data,"base64");
+          } else {
+            const reader = attachmentReader((value, bytes) => { block = value; size = bytes; });
+            const result = await executeTool({ id: `input-${blocks.length}`, name: reader.name, input: { path: attachment.path } }, {
+              config, id, cwd, turns, toolsByName: new Map([[reader.name,reader]]), hasPlanTool: false, replan: { reason: null, refusals: 0 },
+              emit: payload => emit((payload.type === "tool.call" || payload.type === "tool.result" || payload.type === "tool.result.patched")
+                ? { ...payload, internal: { kind: "attachment", parentToolUseId: "user-input" } } : payload),
+              emitFromTool, hook: async (...args) => {
+                const result = await hook(...args);
+                if (result.patches.length || result.injects.length) throw new Error("attachment hook rewrites are unsupported; no attachment sent");
+                return result;
+              },
+              expansion, ...(grantSessionId === undefined ? {} : { grantSessionId }),
+              signal: abortController.signal, endSignal: endController.signal, raceAbort, now, isEnded: lifecycle.isEnded,
+            });
+            if (result.type !== "tool_result" || result.isError || block === undefined) throw new Error("file attachment refused; no attachment sent");
+            block = { ...block, trust: result.trust ?? "external", context: ADVISORY_CONTEXT };
+          }
+          if (block.type === "image") imageBytes += size; else textBytes += size;
+          if (imageBytes > INPUT_LIMITS.imageTotal || textBytes > INPUT_LIMITS.textTotal) throw new Error("aggregate attachment byte limit exceeded");
+          blocks.push({ type: "text", text: attachment.kind === "file" ? `Attached file ${JSON.stringify(attachment.path)}:` : "Explicit clipboard image:",
+            trust: block.trust ?? "external", context: ADVISORY_CONTEXT }, block);
+        }
+        abortController.signal.throwIfAborted();
+        const message: Message = { role: "user", content: blocks };
+        await emit({ type: "message.append", message }); messages.push(message);
+      }
 
       // user_prompt: a hook may refuse the task outright, rewrite it, or append to it
       {
@@ -804,8 +853,17 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions): Sessio
         }
         // Emitted only after the last request mutation and immediately before the provider call.
         // It contains hashes and accounting metadata, never prompt content.
+        provider.validateHistory?.(req.messages);
+        if (selection !== undefined && JSON.stringify(selection) !== JSON.stringify(previousSelection)) {
+          await emit({ type: "provider.switched", to: selection, turn: turns,
+            ...(previousSelection === undefined ? {} : { from: previousSelection }) });
+          previousSelection = selection;
+        }
+        // Imported receipts are history, not a selection for an unconfigured host.
+        if (selection === undefined) previousSelection = undefined;
         await emit(buildContextManifest({
           turn: turns,
+          ...(selection === undefined ? {} : { providerSelection: selection }),
           request: req,
           systemBlocks: requestSystemBlocks,
           evictedToolUseIds: eviction.evictedToolUseIds,

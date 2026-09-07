@@ -8,6 +8,7 @@ import {
   applyProviderConformance,
   type ModelProvider,
   type ReasoningEffort,
+  REASONING_EFFORTS,
   type StreamRetryInfo,
 } from "@agentkitai/agentrig-core";
 import { providerProbeCachePath, providerProbeFingerprint, readProviderProbe } from "./provider-probe-cache.js";
@@ -174,7 +175,7 @@ export interface ProviderSet {
   /** Every entry name, named ones in config order and `default` last — the spawn tool's menu. */
   names: string[];
   /** An entry by name, constructed on first use; throws for a name that is not an entry. */
-  get(name: string): ModelProvider;
+  get(name: string, effort?: ReasoningEffort): ModelProvider;
 }
 
 export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {}): ProviderSet {
@@ -182,22 +183,25 @@ export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {})
   const built = new Map<string, ModelProvider>();
   // From cache, or built and cached — unwrapped, so `get` and `forRole` can each name the failure
   // their own way without one wrapping the other's message.
-  const construct = (name: string): ModelProvider => {
-    let provider = built.get(name);
+  const construct = (name: string, effort?: ReasoningEffort): ModelProvider => {
+    const key = JSON.stringify([name, effort ?? null]);
+    let provider = built.get(key);
     if (provider === undefined) {
-      provider = buildEntry(name, entries[name]!, opts, hooks);
-      built.set(name, provider);
+      if (built.size >= 128) throw new Error("provider variant capacity exceeded (128)");
+      provider = buildEntry(name, { ...entries[name]!, ...(effort === undefined ? {} : { reasoningEffort: effort }) }, opts, hooks);
+      built.set(key, provider);
     }
     return provider;
   };
-  const get = (name: string): ModelProvider => {
+  const get = (name: string, effort?: ReasoningEffort): ModelProvider => {
+    if (effort !== undefined && !REASONING_EFFORTS.includes(effort)) throw new Error("unsupported effort setting");
     if (!Object.hasOwn(entries, name)) {
       throw new Error(`unknown provider entry ${JSON.stringify(name)}; defined entries: ${Object.keys(entries).sort().join(", ")}`);
     }
     try {
       // names the entry, so a spawn-time failure (a spawn choice built lazily, here) says which
       // entry broke rather than just "ANTHROPIC_API_KEY is not set"
-      return construct(name);
+      return construct(name, effort);
     } catch (err) {
       throw new Error(`provider entry ${JSON.stringify(name)}: ${(err as Error).message}`);
     }

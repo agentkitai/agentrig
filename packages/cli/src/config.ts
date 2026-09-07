@@ -6,6 +6,7 @@ import { z } from "zod";
 import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
+import { NotificationMode, NotificationIdleSeconds } from "./tui/notifications.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
 export type { ReasoningEffort } from "@agentkitai/agentrig-core";
@@ -26,12 +27,13 @@ export type ProviderKind = z.output<typeof ProviderKindSchema>;
 const reasoningEffortSetting = z.enum(REASONING_EFFORTS);
 // deliberately a number, not a numeric string like the settings above: the adapter needs a number
 const contextWindowSetting = z.number().int().positive();
+const providerModelName = z.string().min(1).max(128).regex(/^[^\u0000-\u001f\u007f]+$/u, "model names must be control-free");
 
 /** One named provider entry. Credentials never appear here; they come from the environment per kind. */
 export const ProviderEntrySchema = z
   .object({
     provider: ProviderKindSchema,
-    model: z.string().min(1),
+    model: providerModelName,
     baseUrl: z.string().url().optional(),
     contextWindow: contextWindowSetting.optional(),
     reasoningEffort: reasoningEffortSetting.optional(),
@@ -41,7 +43,7 @@ export type ProviderEntry = z.output<typeof ProviderEntrySchema>;
 
 export const ROLES = ["main", "supervisor", "memory", "subagents"] as const;
 export type Role = (typeof ROLES)[number];
-const roleName = z.string().min(1).optional();
+const roleName = z.string().min(1).max(128).optional();
 // Bound to `Role` at compile time (`satisfies Record<Role, typeof roleName>`): a fifth role added
 // to ROLES without a matching key here is a type error, not a silent gap.
 const RolesSchema = z
@@ -57,8 +59,8 @@ const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx
   for (const name of Object.keys(entries)) {
     if (name === "default") {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'the entry name "default" is reserved for the flat provider/model keys' });
-    } else if (!ENTRY_NAME.test(name)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: "entry names must match ^[a-z][a-z0-9-]*$" });
+    } else if (name.length > 128 || !ENTRY_NAME.test(name)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: "entry names must be at most 128 characters and match ^[a-z][a-z0-9-]*$" });
     }
   }
 });
@@ -71,7 +73,7 @@ const providersSetting = z.record(ProviderEntrySchema).superRefine((entries, ctx
 const ConfigValuesSchema = z
   .object({
     provider: ProviderKindSchema.optional(),
-    model: z.string().min(1).optional(),
+    model: providerModelName.optional(),
     baseUrl: z.string().url().optional(),
     contextWindow: contextWindowSetting.optional(),
     reasoningEffort: reasoningEffortSetting.optional(),
@@ -89,6 +91,8 @@ const ConfigValuesSchema = z
     sandboxNetwork: z.boolean().optional(),
     checkpoints: z.boolean().optional(),
     diagnostics: DiagnosticsConfigSchema.optional(),
+    notifications: NotificationMode.optional(),
+    notificationIdleSeconds: NotificationIdleSeconds.optional(),
     driftScope: stringList.optional(),
     driftContract: stringList.optional(),
     supervise: z.boolean().optional(),

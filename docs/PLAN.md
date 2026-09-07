@@ -131,6 +131,12 @@ See [R15b](plans/R15b.md) for parser, output, cancellation and cooperative write
 
 ### 2.4 Permissions
 
+R16b captures bounded actual builtin edit/write before/after observations in
+canonical tool results, distinct from labelled input-only permission proposals.
+The CLI shares one bounded diff renderer without rereading files; unknown or
+incomplete captures never claim a complete patch. Capture metadata is not model
+input or tool authority. See [R16b](plans/R16b.md).
+
 ```ts
 interface PermissionRequest { tool: string; input: unknown; class: PermissionClass; cwd: string;
                               paths?: string[]; origin?: string /* M7: a subagent's ask, routed to its parent */ }
@@ -268,6 +274,15 @@ strategy. Children get checked raw-baseline worktrees and return retained diff c
 the parent applies them only through separately authorized tools. Grants are not remapped,
 enforcing parent sandboxes refuse host Git preparation, and cwd isolation is cooperative.
 See [R10c](plans/R10c.md) for dirty/untracked coverage, retention caps and handoff limits.
+
+R15l records the orchestration boundary: ordinary trusted user-authored SDK scripts
+may compose these existing seams, bounded fan-out, independently specified checks
+and serial separately authorized candidate application. They remain host programs,
+not sandboxed model/config code; normal agent actions must use the runtime's
+permission pipeline, never bypass it by calling tool callbacks directly. No workflow
+engine/DSL/loader, automatic merge, exactly-once guarantee or new build row follows.
+Failed, incomplete or stale evidence stops integration and retains artifacts; even
+passing checks are evidence only for what they actually test. See [decision](plans/R15l.md).
 
 ### 2.7 Hooks
 
@@ -794,6 +809,10 @@ maintenance runs. Retained content/provenance and opaque reasoning remain intact
 The printed delta is a transcript-only UTF-8 byte/estimated-token comparison,
 excluding system/tools; the next ordinary request emits its real manifest.
 [Contract and controls](plans/R16g.md).
+R15k adds explicit TUI `@path` reads and Ctrl+V clipboard images, bounded metadata
+completion with one-time policy approval, and advisory source-labeled content
+through the normal core read pipeline. Canonical logs retain sensitive payloads;
+input history retains references only. See [attachments](ATTACHMENTS.md).
 
 R16d adds interactive-only prompt recall, slash-name completion and multiline
 composition without changing paste-safe quiet-point dispatch. Trusted projects

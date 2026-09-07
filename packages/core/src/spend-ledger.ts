@@ -266,8 +266,10 @@ export function meterProvider(provider: ModelProvider, ledger: SpendLedger, opti
     cacheWriteUsdPerMTok: options.pricing.cacheWriteUsdPerMTok ?? options.pricing.inputUsdPerMTok * (provider.capabilities.cacheWriteMultiplier ?? 1) });
   if (options.capMicros !== undefined && (!options.boundedProvider || pricing === null)) throw new SpendCapError("unsupported");
   const wrapped: ModelProvider = { id: provider.id, model: provider.model, capabilities: provider.capabilities,
+    ...(provider.validateHistory === undefined ? {} : { validateHistory: (messages) => provider.validateHistory!(messages) }),
     ...(provider.countTokens === undefined ? {} : { countTokens: provider.countTokens.bind(provider) }),
     async *stream(request, signal) {
+      provider.validateHistory?.(request.messages);
       const context = currentSpend();
       const active = context?.ledger === ledger ? context : undefined;
       const unavailable = async (): Promise<void> => {

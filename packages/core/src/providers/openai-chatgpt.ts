@@ -304,6 +304,7 @@ export async function* parseResponsesSse(
 
 export class OpenAIChatGPTProvider implements ModelProvider {
   readonly id = "openai-chatgpt";
+  validateHistory(messages: ModelRequest["messages"]): void { validateThinkingHistory(messages, "openai-responses"); }
   readonly model: string;
   readonly capabilities: ModelProvider["capabilities"];
   private readonly auth: OpenAIChatGPTAuth;

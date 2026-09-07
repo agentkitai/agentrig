@@ -36,6 +36,8 @@ it.each([true, false])("actual tsc observes changed file, error=%s, without a mo
   f.turns.push([call("edit_file", "edit", { path: "target.ts", oldText: "1", newText: broken ? '"bad"' : "2" }), { type: "stop", reason: "tool_use" }]);
   const { events, session } = await run(f);
   const result = diagnosticResult(events); expect(result.ok).toBe(true);
+  expect(result.fileDiff).toMatchObject({ scope: "observed", before: { text: "const x: number = 1;\n", status: "complete" },
+    after: { text: broken ? 'const x: number = "bad";\n' : "const x: number = 2;\n", status: "complete" } });
   expect(result.diagnostics?.status).toBe("reported");
   expect(result.diagnostics?.entries).toHaveLength(broken ? 1 : 0);
   if (broken) expect(result.diagnostics?.entries[0]).toMatchObject({ code: "TS2322", line: 1, message: expect.stringContaining("not assignable") });

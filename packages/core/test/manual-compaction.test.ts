@@ -43,6 +43,55 @@ async function fixture() {
   return { cwd, store, provider, config, agent, parent: parent!, requests, hooks, unchanged };
 }
 
+it("selected maintenance captures B once while pre_compact selects C; empty resume gains no authority", async () => {
+  const f = await fixture(); const calls = f.requests.length; let effects = 0; let bCalls = 0; let cCalls = 0; let selections = 0;
+  const b: ModelProvider = { ...f.provider, model: "B", async *stream(request) {
+    bCalls++; expect(request.system).toContain("You compress");
+    yield { type: "text_delta", text: "Advisory condensed history." };
+    yield { type: "usage", usage: { input: 10, output: 10 } }; yield { type: "stop", reason: "end_turn" };
+  } };
+  const c: ModelProvider = { ...f.provider, model: "C", async *stream() {
+    cCalls++; yield { type: "tool_use", id: "effect", name: "effect", input: {} }; yield { type: "stop", reason: "tool_use" };
+  } };
+  let chosen = b;
+  const agent = createAgent({ ...f.config, providerSelection: () => { selections++; return { entry: chosen.model, provider: chosen }; },
+    hooks: [{ point: "pre_compact", handler: async () => { chosen = c; return { action: "continue" }; } }],
+    budget: { maxTurns: 8 }, permissions: new RulePolicy([], "allow"),
+    tools: [{ name: "effect", description: "effect", permission: "exec", effects: "workspace", inputSchema: z.object({}),
+      async execute() { effects++; return { output: "bad", display: "bad" }; } }],
+  });
+  const work = await agent.compact!({ resume: f.parent }); const result = await work.result;
+  expect(result.compacted).toBe(true); expect(bCalls).toBe(1); expect(cCalls).toBe(0); expect(selections).toBe(1);
+  expect(f.requests).toHaveLength(calls);
+  const events = await f.store.readAll(result.id);
+  expect(events.find(e => e.type === "session.resume")).toMatchObject({ model: "B", maintenance: "compact", task: "", context: { authority: "advisory" } });
+  expect(events.some(e => e.type === "provider.switched" || e.type === "tool.call" || e.type === "model.request")).toBe(false);
+  await f.unchanged();
+  await agent.run("", { resume: result.id }).done;
+  expect(cCalls).toBe(1); expect(selections).toBe(2); expect(effects).toBe(0);
+  const resumed = await f.store.readAll(result.id);
+  expect(resumed.some(e => e.type === "tool.denied" && e.name === "effect")).toBe(true);
+  expect(resumed.filter(e => e.type === "session.resume").at(-1)).toMatchObject({ model: "C", task: "" });
+  await f.unchanged();
+});
+
+it.each(["unmetered", "native"] as const)("selected %s maintenance refuses before fork or fetch", async mode => {
+  const f = await fixture(); const ledger = new SpendLedger(f.cwd); const calls = f.requests.length;
+  const original = meterProvider({ ...f.provider, capabilities: { ...f.provider.capabilities, nativeOutputSchema: true } }, ledger,
+    { segment: "fallback", boundedProvider: true, capMicros: 1_000_000, pricing: { inputUsdPerMTok: 1, outputUsdPerMTok: 1 } });
+  const agent = createAgent({ ...f.config, provider: original, providerSelection: () => ({ entry: "B", provider: f.provider }),
+    ...(mode === "unmetered" ? { spend: { ledger, capMicros: 1_000_000 } } : {
+      outputContract: createOutputContract({ type: "object", properties: {}, required: [], additionalProperties: false }, "native"),
+    }),
+  });
+  await expect(Promise.resolve().then(async () => {
+    const unexpected = await agent.compact!({ resume: f.parent });
+    // Join even when a negative mutation incorrectly admits work, before fixture cleanup.
+    unexpected.control.abort(); await unexpected.result;
+  })).rejects.toThrow(mode === "native" ? "Native output" : "configured-estimate daily cap: unsupported");
+  expect(await f.store.list()).toHaveLength(1); expect(f.requests).toHaveLength(calls); await f.unchanged();
+});
+
 it("actual maintenance forks and persists one compaction without user/end hooks, then fresh resume and fork use it", async () => {
   const f = await fixture(); const previous = { ...f.hooks }; const beforeCalls = f.requests.length;
   const original = await f.store.readSnapshot(f.parent);

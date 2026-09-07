@@ -6,6 +6,7 @@ import { contentHash } from "../session-store.js";
 import { resolveIn } from "./shared.js";
 import { writeToolFile } from "./sandbox-write.js";
 import { diagnosticBuiltin, stampChanged } from "../diagnostics.js";
+import { captureFileBefore, diffBuiltin, stampFileDiff } from "../file-diff.js";
 
 const WriteFileInput = z.object({
   path: z.string().min(1).describe("File path, absolute or relative to the working directory"),
@@ -14,7 +15,7 @@ const WriteFileInput = z.object({
 type WriteFileInput = z.infer<typeof WriteFileInput>;
 
 export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: number }> {
-  return diagnosticBuiltin({
+  return diffBuiltin(diagnosticBuiltin({
     name: "write_file",
     sandbox: "compatible",
     description: "Create or overwrite a file with the given content. Parent directories are created.",
@@ -25,6 +26,7 @@ export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: num
     async execute(input, ctx): Promise<ToolResult<{ path: string; bytes: number }>> {
       const path = resolveIn(ctx.cwd, input.path);
       const existed = await stat(path).then(() => true, () => false);
+      const before = await captureFileBefore(path, ctx.signal);
       await writeToolFile(path, input.content, ctx.signal, true);
       const rel = relative(ctx.cwd, path) || path;
       ctx.emit({
@@ -38,8 +40,9 @@ export function writeFileTool(): Tool<WriteFileInput, { path: string; bytes: num
         output: { path: rel, bytes },
         display: `${existed ? "overwrote" : "created"} ${rel} (${bytes} bytes)`,
       };
+      stampFileDiff(result, ctx, rel, before, input.content);
       await stampChanged(result, ctx, path, input.content);
       return result;
     },
-  });
+  }), "write");
 }

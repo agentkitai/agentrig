@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FileDiff } from "./file-diff-types.js";
 import { QuestionSchema, QuestionReplySchema } from "./questions.js";
 import { AdvisoryPromptContextSchema, MessageSchema, InstructionContextSchema } from "./messages.js";
 import { DiagnosticsSchema, InternalToolSchema } from "./diagnostics-types.js";
@@ -7,6 +8,7 @@ import { ShellOperationSchema } from "./shell-operation.js";
 import { PermissionClass, Decision } from "./permission-types.js";
 import { PermissionGrantEventSchema } from "./permission-grants.js";
 import { PermissionDecisionSourceSchema } from "./permission-attribution.js";
+import { ProviderSelectionInfoSchema } from "./provider-selection.js";
 export { PermissionClass, Decision } from "./permission-types.js";
 
 /**
@@ -63,6 +65,8 @@ export const PermissionRequest = z.object({
   paths: z.array(z.string()).optional(),
   /** Derived by trusted tool wiring from final validated input, never copied from model metadata. */
   operation: ShellOperationSchema.optional(),
+  /** Builtin proposal from final validated input; no filesystem observation or authority. */
+  fileDiff: FileDiff.optional(),
   /**
    * M7: who is asking, when it is not the session the user is watching — a subagent routes its
    * asks through its parent's prompt, and answering "allow" for a child you cannot see is a
@@ -201,9 +205,17 @@ export const EventPayload = z.discriminatedUnion("type", [
     minute: z.number().int().nonnegative().safe(),
   }),
   z.object({
+    type: z.literal("provider.switched"),
+    from: ProviderSelectionInfoSchema.optional(),
+    to: ProviderSelectionInfoSchema,
+    turn: z.number().int().positive(),
+  }),
+  z.object({
     type: z.literal("session.start"),
     task: z.string(),
     advisoryContext: AdvisoryPromptContextSchema.optional(),
+    /** Attachment-only input has no synthetic empty user text message. */
+    inputAttachments: z.literal(true).optional(),
     context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),
@@ -281,6 +293,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     toolCallSeq: z.number().int().nonnegative().optional(),
     /** Internal foreground execution receipt captured before output hooks. Legacy absence is unknown. */
     commandOutcome: CommandOutcome.optional(),
+    /** Bounded builtin before/after observation, never returned model metadata. */
+    fileDiff: FileDiff.optional(),
     /** Complete textual output for a display-overflow artifact; its handle is this event's seq. */
     output: z.string().optional(),
     /** The tool stopped collecting or did not supply its full text; even an output artifact
@@ -359,6 +373,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("context.manifest"),
     turn: z.number().int().positive(),
+    providerSelection: ProviderSelectionInfoSchema.optional(),
     requestHash: z.string(),
     blocks: z.array(z.object({
       source: z.enum([
