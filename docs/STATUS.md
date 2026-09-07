@@ -8,10 +8,13 @@ count, observable token usage (never an invented estimate), and halts for each r
 File AgentRig friction with the `feel` label before the next child starts.
 
 - **R17b in progress — builder agentrig, conductor 8fbde1a3.** One child, one
-  isolated worktree; token usage unavailable; zero halts; feel
-  [#232](https://github.com/agentkitai/agentrig/issues/232). The first commit records
+  isolated worktree; token usage unavailable; one halt; feel
+  [#232](https://github.com/agentkitai/agentrig/issues/232) and blocking
+  [#233](https://github.com/agentkitai/agentrig/issues/233). The first commit records
   [R17a baseline](plans/R17-baseline.md) before any default changes. R17a has no PR
-  of its own. Defaults acceptance and PR/CI are not yet complete.
+  of its own. **DEVIATION REQUESTED**, not approved: [sandbox/hook proposal](plans/R17b-deviation-request.md).
+  No defaults changed; defaults acceptance remains incomplete. Baseline-only
+  draft PR awaits conductor arbitration; no external reviews or merge.
 
 
 R17 skill-selection recovery (outside train, 2026-09-07): the user resolved
