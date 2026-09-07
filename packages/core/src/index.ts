@@ -22,6 +22,7 @@ export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";
 export * from "./spend-ledger.js";
 export { withSessionSpend } from "./spend-runtime.js";
+export type { CompactOptions, CompactResult, CompactionSession } from "./manual-compaction.js";
 export * from "./turn-strategy.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";

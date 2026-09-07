@@ -12,7 +12,7 @@ import type {
   Skill,
   ExtensionCommand,
 } from "@agentkitai/agentrig-core";
-import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
+import { PermissionGrantRegistry, sanitizeLine } from "@agentkitai/agentrig-core";
 import { ToolSummaries } from "./tool-summaries.js";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
@@ -76,6 +76,8 @@ export interface TuiChild {
 }
 
 export interface TuiState {
+  selecting?: boolean;
+  maintenance?: "compact" | "doctor" | "diff" | undefined;
   reviewing?: boolean;
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
@@ -275,6 +277,21 @@ export class TuiController {
 
   setReview(fn: (args: string, signal: AbortSignal) => Promise<string[]>): void { this.review = fn; }
 
+  setManualCommands(fns: {
+    doctor: (signal: AbortSignal) => Promise<string[]>;
+    diff: (args: string, session: string | undefined, signal: AbortSignal) => Promise<string[]>;
+  }): void { this.manualCommands = fns; }
+
+  /** One guard for operations that require exclusive ownership of the conversation. */
+  isIdle(): boolean {
+    return !this.closing && this.session === null && this.state.status !== "running" &&
+      this.state.pending === null && this.state.queued === 0 && this.state.question === null &&
+      this.state.queuedQuestions === 0 && this.state.escalation === null &&
+      this.reviewAbort === undefined && this.dreamAbort === undefined && this.undoing === undefined &&
+      this.maintenanceAbort === undefined && this.startupAbort === undefined && this.state.selecting !== true;
+  }
+  activeMaintenanceSession(): Session | undefined { return this.maintenanceOwned; }
+
   /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
   forgetRestoredConversation(): void {
     this.resetGrants("conversation-restored");
@@ -313,6 +330,13 @@ export class TuiController {
   private review: TuiControllerOptions["onReview"];
   private reviewAbort: AbortController | undefined;
   private reviewing: Promise<void> | undefined;
+  private manualCommands: { doctor: (signal: AbortSignal) => Promise<string[]>;
+    diff: (args: string, session: string | undefined, signal: AbortSignal) => Promise<string[]> } | undefined;
+  private maintenanceAbort: AbortController | undefined;
+  private maintenanceOwned: Session | undefined;
+  private maintaining: Promise<void> | undefined;
+  private startupAbort: AbortController | undefined;
+  private starting: Promise<void> | undefined;
   private observer: { detach(): void; done: Promise<void> } | undefined;
   private closing = false;
   private closed = false;
@@ -625,6 +649,15 @@ export class TuiController {
 
   abort(): void {
     this.closeQuestions();
+    if (this.startupAbort !== undefined) {
+      this.startupAbort.abort(); this.print("cancelling conversation startup…", "system");
+      if (this.session === null) return;
+    }
+    if (this.maintenanceAbort !== undefined) {
+      this.maintenanceAbort.abort(); this.maintenanceOwned?.control.abort(); this.denyAllPending();
+      this.print("cancelling maintenance; waiting for owned work…", "system");
+      if (this.session === null) return;
+    }
     if (this.reviewAbort !== undefined) {
       this.reviewAbort.abort(); this.denyAllPending(); this.print("cancelling review…", "error");
       if (this.session === null) return;
@@ -660,7 +693,7 @@ export class TuiController {
     if (this.closed) return;
     this.closing = true;
     this.observer?.detach();
-    if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
+    if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined || this.maintenanceAbort !== undefined || this.startupAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
     // inside onAsk), and leaving it unsettled is a promise that can never resolve
     this.denyAllPending();
@@ -670,6 +703,8 @@ export class TuiController {
     await this.dreaming?.catch(() => {});
     await this.reviewing?.catch(() => {});
     await this.undoing?.catch(() => {});
+    await this.maintaining?.catch(() => {});
+    await this.starting?.catch(() => {});
     this.resetGrants("controller-closed");
     this.closed = true;
   }
@@ -686,7 +721,7 @@ export class TuiController {
 
   /** Transport prompt, deliberately not the slash-command interpreter. Joins the actual run. */
   async prompt(text: string, advisoryContext?: readonly string[]): Promise<void> {
-    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming) throw new Error("session is unavailable or busy");
+    if (!this.isIdle()) throw new Error("session is unavailable or busy");
     if (!text.trim() && !advisoryContext?.length) throw new Error("prompt is empty");
     await this.start(text, { cwd: this.opts.cwd,
       ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
@@ -694,13 +729,16 @@ export class TuiController {
   }
 
   private async run(cmd: TuiCommand): Promise<boolean> {
+    if ((this.maintenanceAbort !== undefined || this.startupAbort !== undefined || this.state.selecting === true) && !["abort", "quit", "help", "permissions"].includes(cmd.kind)) {
+      this.print("maintenance or provider selection is running — stop it before other work", "error"); return true;
+    }
     if (this.reviewAbort !== undefined && !["abort", "quit", "help", "permissions"].includes(cmd.kind)) {
       this.print("a review is running — stop it before starting other work", "error"); return true;
     }
     switch (cmd.kind) {
       case "quit":
         // stop the work before tearing the UI down, or the session runs on invisibly
-        if (this.session !== null || this.reviewAbort !== undefined) {
+        if (this.session !== null || this.reviewAbort !== undefined || this.maintenanceAbort !== undefined || this.startupAbort !== undefined) {
           this.print("stopping the running turn before exiting…", "system");
           await this.shutdown();
         }
@@ -744,6 +782,11 @@ export class TuiController {
         return true;
       case "cost":
         await this.delegate("cost", () => this.cost?.(this.state.sessionId ?? undefined));
+        return true;
+      case "compact":
+      case "doctor":
+      case "diff":
+        await this.runManual(cmd.kind, cmd.args);
         return true;
       case "dream": {
         if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
@@ -908,6 +951,7 @@ export class TuiController {
         await this.continueConversation(cmd.text);
         return true;
       case "new":
+        if (!this.isIdle()) { this.print("work or a prompt is active — stop it before /new or /clear", "error"); return true; }
         if (this.resetGrants("new-conversation") === undefined) return true;
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
@@ -926,7 +970,7 @@ export class TuiController {
    * turn runs: the log is still being appended and "the latest event" is a moving target.
    */
   private async forkConversation(at: string): Promise<void> {
-    if (this.state.status === "running") {
+    if (!this.isIdle()) {
       this.print("a turn is already running — /abort first, then /fork", "error");
       return;
     }
@@ -966,6 +1010,49 @@ export class TuiController {
     );
   }
 
+  private async runManual(kind: "compact" | "doctor" | "diff", args: string): Promise<void> {
+    if (!this.isIdle()) { this.print(`work or a prompt is active — stop it before /${kind}`, "error"); return; }
+    if (kind !== "diff" && args !== "") { this.print(`usage: /${kind}`, "error"); return; }
+    const parent = this.state.sessionId;
+    const agent = this.agent;
+    if (kind === "compact" && (parent === null || this.agent.compact === undefined)) {
+      this.print("no persisted conversation with manual compaction available", "error"); return;
+    }
+    const abort = new AbortController(); this.maintenanceAbort = abort;
+    this.maintaining = Promise.resolve().then(async () => {
+      try {
+        if (abort.signal.aborted || this.closing || this.agent !== agent) return;
+        if (kind === "compact") {
+          const work = await agent.compact!({ resume: parent!, cwd: this.opts.cwd, signal: abort.signal });
+          this.maintenanceOwned = work;
+          this.set({ maintenance: kind });
+          for await (const event of work.events) {
+            if (event.type === "budget.cap" || event.type === "error") this.print(renderEvent(event), "error");
+          }
+          const result = await work.result;
+          this.print(result.message, result.summary.reason === "done" ? "system" : "error");
+          if (result.compacted && !abort.signal.aborted && !this.closing && this.agent === agent && this.state.sessionId === parent &&
+            this.resetGrants("conversation-forked") !== undefined) {
+            this.resumable = true;
+            this.set({ sessionId: result.id, manifest: null, context: Math.ceil(result.afterBytes / 4) });
+            this.print(`Manifest delta (transcript-only estimate; system/tools excluded): ${result.beforeBytes} → ${result.afterBytes} bytes, ` +
+              `${Math.ceil(result.beforeBytes / 4)} → ${Math.ceil(result.afterBytes / 4)} estimated tokens. Continuing in ${result.id}; ${parent} unchanged.`, "system");
+          }
+        } else {
+          const lines = kind === "doctor" ? await this.manualCommands?.doctor(abort.signal)
+            : await this.manualCommands?.diff(args, parent ?? undefined, abort.signal);
+          if (lines === undefined) this.print(`/${kind} is not available in this session`, "error");
+          else if (!abort.signal.aborted && !this.closing) for (const line of lines) this.print(line, "system");
+        }
+      } catch (error) {
+        this.print(`/${kind} ${abort.signal.aborted ? "cancelled" : `failed: ${sanitizeLine(error instanceof Error ? error.message : String(error), 512)}`}`, "error");
+      }
+    });
+    this.set({ maintenance: kind });
+    try { await this.maintaining; }
+    finally { this.maintenanceAbort = undefined; this.maintenanceOwned = undefined; this.maintaining = undefined; this.set({ maintenance: undefined }); }
+  }
+
   /** Runs an injected side command, reporting rather than throwing into the render loop. */
   private async delegate(name: string, fn: () => Promise<string[]> | undefined): Promise<void> {
     try {
@@ -994,10 +1081,17 @@ export class TuiController {
   }
 
   private async start(task: string, opts: Pick<RunOptions, "cwd" | "resume" | "advisoryContext">): Promise<void> {
-    if (this.state.status === "running") {
+    if (!this.isIdle()) {
       this.print("a turn is already running — /abort first", "error");
       return;
     }
+    const abort = new AbortController(); this.startupAbort = abort;
+    const agent = this.agent;
+    const work = Promise.resolve().then(() => this.startReserved(task, opts, abort.signal, agent)); this.starting = work;
+    try { await work; } finally { this.startupAbort = undefined; this.starting = undefined; }
+  }
+
+  private async startReserved(task: string, opts: Pick<RunOptions, "cwd" | "resume" | "advisoryContext">, signal: AbortSignal, agent: Agent): Promise<void> {
     // Resuming a session other than the one on screen: its children are in ITS log, not in this
     // process's memory. Best effort — a log that cannot be read leaves the list empty, never stale.
     let children = this.state.children;
@@ -1012,13 +1106,18 @@ export class TuiController {
       }
     }
     let session: Session;
+    if (signal.aborted || this.closing || this.agent !== agent) return;
     try {
-      session = this.agent.run(task, opts);
+      session = agent.run(task, opts);
     } catch (err) {
       this.print(`could not start: ${err instanceof Error ? err.message : String(err)}`, "error");
       return;
     }
+    if (signal.aborted || this.closing || this.agent !== agent) {
+      session.control.abort(); await session.done.catch(() => {}); return;
+    }
     this.session = session;
+    this.startupAbort = undefined;
     try { this.permissionGrants.beginSession(session.id); }
     catch (error) {
       session.control.abort(); await session.done.catch(() => {}); this.session = null;

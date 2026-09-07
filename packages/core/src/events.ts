@@ -222,6 +222,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("session.resume"),
+    maintenance: z.literal("compact").optional(),
     task: z.string(),
     advisoryContext: AdvisoryPromptContextSchema.optional(),
     context: InstructionContextSchema.optional(),
@@ -343,6 +344,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   ...PermissionGrantEventSchema.options,
   z.object({
     type: z.literal("context.compact"),
+    estimate: z.object({ scope: z.literal("transcript"), beforeBytes: z.number().int().nonnegative(), afterBytes: z.number().int().nonnegative() }).optional(),
     before: z.number().int(),
     after: z.number().int(),
     /** Additive authoritative post-compaction state; absent on historical logs. */

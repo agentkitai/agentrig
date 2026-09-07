@@ -154,3 +154,4 @@ jobs:
       - run: pnpm exec vitest run packages/cli/test/tool-summaries.test.ts
       - run: pnpm exec vitest run packages/core/test/otel.test.ts packages/cli/test/otel.test.ts
       - run: pnpm exec vitest run packages/cli/test/web.test.ts
+      - run: pnpm exec vitest run packages/core/test/manual-compaction.test.ts packages/cli/test/manual-commands.test.ts packages/cli/test/manual-startup.test.ts

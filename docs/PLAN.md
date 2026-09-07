@@ -773,6 +773,28 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R16g adds idle-only manual TUI commands: `/clear` aliases `/new`; `/doctor` runs
+plain local diagnostics with provider probes disabled; `/diff [checkpoint [turn]]`
+captures protected tracked worktree changes against HEAD or a validated recorded
+checkpoint. Doctor and diff require sandbox `none`; no host-side sandbox bypass.
+Neither dispatches a model. Diagnostic filesystem probes are joined, not forcibly
+cancellable. Diff uses read permission, bounded Git output and identity rechecks;
+untracked files and binary contents are explicitly excluded.
+
+`/compact` invokes `Agent.compact({resume, cwd?, signal?})`, not a normal user turn.
+It creates a maintenance fork and adopts it only after canonical log/snapshot
+verification; the original history remains unchanged, and failed children remain
+unadopted diagnostic artifacts. One summary call, at most 1024 requested output
+tokens (or the smaller configured bound), 256 KiB streamed summary and at most
+60 seconds cooperative provider/hook deadline. Parent loading and filesystem
+publication are joined, not hard time/RSS containment. Existing total-token/USD
+caps refuse; configured project-estimate ledger admission stays active. No ordinary
+model loop, tools, supervisor, output repair, user-prompt/session-end hooks or memory
+maintenance runs. Retained content/provenance and opaque reasoning remain intact.
+The printed delta is a transcript-only UTF-8 byte/estimated-token comparison,
+excluding system/tools; the next ordinary request emits its real manifest.
+[Contract and controls](plans/R16g.md).
+
 R8d adds an authenticated, exact-loopback reference web page over the existing ACP
 server/controller. Fixed assets, bearer plus Host/Origin checks, bounded WebSocket
 queues and joined connection ownership are explicit; authentication is not project

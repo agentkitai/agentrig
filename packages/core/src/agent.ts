@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { SpendCapError, assertSpendMeter, hasSpendMeter, type SpendLedger } from "./spend-ledger.js";
 import { bindSessionSpend, currentSpend, withSpendRun } from "./spend-runtime.js";
+import { compactSession, type CompactOptions, type CompactionSession } from "./manual-compaction.js";
 import { AgentRoleToolNames } from "./manifests.js";
 import { extensionStartup, flushExtensionFailures, withExtensionRun } from "./extension-runtime.js";
 import { isAbsolute, relative, sep } from "node:path";
@@ -232,6 +233,8 @@ export interface RunOptions {
 }
 
 export interface Agent {
+  /** Explicit maintenance fork; never a fresh user turn or automatic conversation adoption. */
+  compact?(opts: CompactOptions): Promise<CompactionSession>;
   /**
    * `resume` continues an existing session from its snapshot: same id, same JSONL log
    * (seq continues), prior messages restored, `task` appended as a fresh user message.
@@ -280,7 +283,7 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
-  return { run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
+  return { compact: opts => compactSession(config, opts), run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
     const session = runSession(config, task, opts ?? {});
     bindSessionSpend(session);
     try { void Promise.resolve(config.observeSession?.(session)).catch(() => {}); } catch { /* observation is not execution authority */ }

@@ -6,6 +6,7 @@ import { buildRoleProvider, type ProviderOptions } from "./provider.js";
 import { buildPermissionPolicy } from "./run.js";
 import { reviewProcess, type ReviewProcess } from "./review-process.js";
 import { GitHubPr as Pr, gitHubRequest } from "./github-report.js";
+import { captureLocalDiff, LocalDiffRefusal } from "./local-diff.js";
 
 export interface ReviewOptions extends ProviderOptions {
   base?: string; pr?: string; comment?: boolean; sandbox?: string;
@@ -15,7 +16,7 @@ export interface ReviewOptions extends ProviderOptions {
 }
 class ReviewRefusal extends Error {}
 export function reviewFailure(error: unknown): string {
-  return error instanceof ReviewRefusal ? error.message : "diff review refused or failed; no validated result (check bounds, permissions, identity and provider configuration)";
+  return error instanceof ReviewRefusal || error instanceof LocalDiffRefusal ? error.message : "diff review refused or failed; no validated result (check bounds, permissions, identity and provider configuration)";
 }
 export interface ReviewDependencies {
   process?: ReviewProcess;
@@ -98,11 +99,6 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       return result;
     };
     const git = (args: string[]) => invoke("git", ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args]);
-    const revision = async (ref: string) => {
-      const sha = (await git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`])).trim();
-      if (!/^[a-f0-9]{40,64}$/.test(sha)) throw new Error("review requires an existing commit");
-      return sha;
-    };
     let patch: string, identity: string, coverage: string, repo: string | undefined;
     let verify: () => Promise<void>;
     if (options.pr !== undefined) {
@@ -116,24 +112,7 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       verify = async () => { if (JSON.stringify(await metadata()) !== JSON.stringify(first)) throw new Error("PR changed during review; result refused"); };
       await verify();
     } else {
-      const top = (await git(["rev-parse", "--show-toplevel"])).trim();
-      if (await realpath(top) !== root)
-        throw new ReviewRefusal("run local review from the canonical repository root; nested cwd cannot authorize parent-file reads");
-      // Worktree-to-index conversion can invoke clean/process filters even with textconv
-      // and external diff disabled. Refuse configured filters before asking Git for a diff.
-      const configNames = await git(["config", "--includes", "--null", "--name-only", "--list"]);
-      if (!configNames.endsWith("\0") || configNames.split("\0").slice(0, -1).some(name => !/^[A-Za-z][A-Za-z0-9-]*\.[^\x00-\x1f\x7f]{1,1000}$/.test(name)))
-        throw new ReviewRefusal("read-only review refuses unsupported Git configuration names; no diff or provider was run");
-      if (configNames.split("\0").some(name => /^filter\./i.test(name)))
-        throw new ReviewRefusal("read-only review refuses Git clean/process filter configuration; use a repository without configured filters. No diff filter or provider was run.");
-      const head = await revision("HEAD");
-      const base = options.base === undefined ? head : await revision(options.base);
-      const capture = () => git(["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-relative", "--no-color", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base, ...(options.base === undefined ? [] : [head]), "--"]);
-      patch = await capture();
-      identity = `${base}..${options.base === undefined ? "tracked-worktree" : head} HEAD:${head} sha256:${digest(patch)}`;
-      coverage = options.base === undefined ? "Tracked HEAD-to-worktree text changes only; untracked files excluded. No tests run." : "Resolved base-to-HEAD text changes only; worktree/untracked changes excluded. No tests run.";
-      verify = async () => { if (await revision("HEAD") !== head || await capture() !== patch) throw new Error("Git state changed during review; result refused"); };
-      await verify();
+      ({ patch, identity, coverage, verify } = await captureLocalDiff(root, git, options.base));
     }
     diffLocations(patch);
     if (!patch) return { identity, coverage, review: { summary: "No tracked text changes to review.", findings: [] }, commented: false };

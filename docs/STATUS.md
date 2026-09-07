@@ -1,5 +1,11 @@
 # Status
 
+Active: **R16g manual TUI commands** in an independent worktree. Explicit compacted
+forks, `/clear`, model-free `/doctor` and protected `/diff`; shared idle ownership
+and joined cancellation. [Contract](plans/R16g.md). Focused actual-core/Ink/startup/
+Git controls and three restored mutants pass; final integration, full validation,
+one independent Claude review and exact-head/post-main CI remain required.
+
 Active row: **R15i bounded project spend ledger**, integrated with all-four-green R16c main `130123ee`.
 
 R16c is done (PR #198), after delivered R8d (PR #197). Main `130123eeb866906025aaeca9b1b2a7217e82a87b` passed CI34069082872 and structure34069082855, all four checks.

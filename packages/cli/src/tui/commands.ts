@@ -17,6 +17,7 @@ export type TuiCommand =
   | { kind: "plan" }
   | { kind: "context" }
   | { kind: "cost" }
+  | { kind: "compact" | "doctor" | "diff"; args: string }
   | { kind: "verbose" }
   | { kind: "new" }
   | { kind: "permissions"; reset: boolean; revoke?: string; invalid?: boolean }
@@ -51,6 +52,10 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
+  { name: "compact", summary: "compact into a verified conversation fork while idle (costs tokens)" },
+  { name: "clear", summary: "alias of /new; same configuration, new conversation" },
+  { name: "doctor", summary: "local configuration diagnostics; no provider probe" },
+  { name: "diff", args: "[checkpoint [turn]]", summary: "bounded tracked worktree diff; no model call or edits" },
   { name: "verbose", summary: "append retained tool details and toggle future raw events (existing scrollback stays)" },
   { name: "permissions", args: "[reset | revoke <exact-id>]", summary: "inspect live grants, matched-decision counts, or revoke authority" },
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
@@ -114,12 +119,17 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "context" };
     case "cost":
       return { kind: "cost" };
+    case "compact":
+    case "doctor":
+    case "diff":
+      return { kind: name, args };
     case "verbose":
     case "trace":
       return { kind: "verbose" };
     case "resume":
       return { kind: "resume", id: args };
     case "new":
+    case "clear":
       return { kind: "new" };
     case "permissions": {
       if (args === "" || args === "reset") return { kind: "permissions", reset: args === "reset" };
@@ -158,6 +168,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "supervisor",
   "plan",
   "context",
+  "cost", "compact", "clear", "doctor", "diff",
   "verbose", "trace",
   "resume",
   "new",

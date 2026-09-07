@@ -29,6 +29,9 @@ import { withMaintenanceSignal } from "../maintenance.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
 import { reviewChanges, reviewArguments, renderReview, reviewFailure } from "../review.js";
+import { manualDoctor, manualDiff } from "./manual.js";
+import { buildPermissionPolicy } from "../run.js";
+import { diagnosticConfigValues } from "../config.js";
 
 export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean };
 
@@ -134,6 +137,15 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
   controller.setCost(session => built.spend === undefined ? Promise.resolve(["No trusted project spend ledger is active."]) : costLines(built.spend.ledger, session));
+  controller.setManualCommands({
+    doctor: signal => manualDoctor({ cwd: process.cwd(), cli: { ...diagnosticConfigValues(opts), probe: false } }, signal),
+    diff: (args, session, signal) => manualDiff(process.cwd(), args, signal, {
+      ...(opts.sandbox === undefined ? {} : { sandbox: opts.sandbox }),
+      policy: built.permissions ?? buildPermissionPolicy(opts), store: new SessionStore({ root: opts.root }),
+      ...(session === undefined ? {} : { session }),
+      ask: (request, signal) => controller.ask(request, { permissionGrants: controller.permissionGrants }, signal),
+    }),
+  });
   if (warning !== null) controller.print(warning, "error");
   controller.setReview(async (args, signal) => {
     try {
