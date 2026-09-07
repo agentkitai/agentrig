@@ -11,9 +11,11 @@ import type {
   Signal,
   Skill,
   ExtensionCommand,
+  InputAttachment,
   ProviderSelectionInfo,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
+import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
 import type { ProviderSelectionControl } from "../provider-selection.js";
 import { observeStatus } from "./status-snapshot.js";
@@ -198,6 +200,29 @@ export interface TuiControllerOptions {
 }
 
 export class TuiController {
+  private inputHandlers?: { complete(text: string, signal: AbortSignal): Promise<{ text: string; hint: string }>; clipboard(signal: AbortSignal): Promise<InputAttachment> };
+  private inputAbort: AbortController | undefined;
+  private inputWork: Promise<unknown> | undefined;
+  private stagedImages: InputAttachment[] = [];
+  setInputAttachments(handlers: NonNullable<TuiController["inputHandlers"]>): void { this.inputHandlers = handlers; }
+  inputBusy(): boolean { return this.inputAbort !== undefined; }
+  private inputAvailable(): boolean { return !this.closing && !this.state.selecting && this.state.status !== "running" && this.state.pending === null && this.state.question === null && this.state.escalation === null && !this.inputBusy(); }
+  async completeInput(text: string): Promise<{ text: string; hint: string }> {
+    if (!this.inputAvailable() || this.inputHandlers === undefined) return { text, hint: "" };
+    const abort = new AbortController(); this.inputAbort = abort;
+    const work = this.inputHandlers.complete(text,abort.signal); this.inputWork = work;
+    try { return await work; } catch (error) { this.print(`File completion refused: ${String(error).slice(0,256)}`,"error"); return { text, hint: "" }; }
+    finally { this.inputAbort = undefined; this.inputWork = undefined; }
+  }
+  async pasteImage(): Promise<void> {
+    if (!this.inputAvailable() || this.inputHandlers === undefined) return;
+    if (this.stagedImages.length >= 2) { this.print("At most two staged clipboard images (8 MiB aggregate).","error"); return; }
+    const abort = new AbortController(); this.inputAbort = abort;
+    const work = this.inputHandlers.clipboard(abort.signal); this.inputWork = work;
+    try { const attachment = await work; abort.signal.throwIfAborted(); this.stagedImages.push(attachment); this.print(`Clipboard image staged (${this.stagedImages.length}); submit a prompt to attach, /new to discard.`,"system"); }
+    catch { this.print("Clipboard image unavailable or refused; use @image.png instead.","error"); }
+    finally { this.inputAbort = undefined; this.inputWork = undefined; }
+  }
   private state: TuiState = {
     lines: [],
     status: "idle",
@@ -281,7 +306,7 @@ export class TuiController {
     const control = this.providerSelectionControl;
     if (control === undefined) { this.print(`/${kind} is not available in this session`, "error"); return; }
     if (!argument) { for (const line of kind === "model" ? control.describe() : [`Effort: ${control.current().effort ?? "configured default (unset)"}`]) this.print(line, "system"); return; }
-    if (this.closing || this.session !== null || this.state.status === "running" || this.undoing || this.dreaming || this.reviewAbort || this.state.selecting || this.state.pending || this.state.question || this.state.escalation) {
+    if (this.closing || this.session !== null || this.state.status === "running" || this.undoing || this.dreaming || this.reviewAbort || this.inputBusy() || this.state.selecting || this.state.pending || this.state.question || this.state.escalation) {
       this.print("provider selection requires idle work and no pending prompts", "error"); return;
     }
     const agent = this.agent, sessionId = this.state.sessionId;
@@ -501,7 +526,7 @@ export class TuiController {
       // calls sequentially today, so that is latent rather than live — but parallel tool
       // execution is an obvious near-term change, and a queue costs nothing now.
       if (this.state.pending === null) {
-        this.showPermissionEffects(req);
+        this.showPermissionEffects(req, registry !== undefined);
         this.set({ pending: entry });
       }
       else {
@@ -514,14 +539,15 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
-    if (next !== undefined) this.showPermissionEffects(next.req);
+    if (next !== undefined) this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
     this.set({ pending: next ?? null, queued: this.queue.length });
   }
 
-  private showPermissionEffects(req: PermissionRequest): void {
+  private showPermissionEffects(req: PermissionRequest, standing = true): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
-    for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) this.print(line, "system");
+    for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) if (standing || !line.startsWith("Standing ")) this.print(line, "system");
+    if (!standing) this.print("One-time approval only; this request does not consume or create standing grants.", "system");
   }
 
   /**
@@ -696,6 +722,7 @@ export class TuiController {
   }
 
   abort(): void {
+    if (this.inputAbort !== undefined) { this.inputAbort.abort(); this.denyAllPending(); this.print("cancelling input preparation…","system"); if (this.session === null) return; }
     this.closeQuestions();
     if (this.reviewAbort !== undefined) {
       this.reviewAbort.abort(); this.denyAllPending(); this.print("cancelling review…", "error");
@@ -731,6 +758,7 @@ export class TuiController {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closing = true;
+    this.inputAbort?.abort();
     const statusClosing = this.closeStatus?.(); this.closeStatus = undefined;
     this.observer?.detach();
     if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
@@ -739,6 +767,7 @@ export class TuiController {
     this.denyAllPending();
     this.state.escalation?.resolve(null, "closed");
     this.closeQuestions();
+    await this.inputWork?.catch(() => {}); this.stagedImages = [];
     await this.running?.catch(() => {});
     await this.dreaming?.catch(() => {});
     await this.reviewing?.catch(() => {});
@@ -752,10 +781,25 @@ export class TuiController {
   async submit(line: string): Promise<boolean> {
     if (this.closing) return false;
     if (this.undoing) { this.print("undo is running; wait for it to finish", "error"); return true; }
+    if (this.inputBusy()) { this.print("input preparation is running; wait or abort", "error"); return true; }
     const cmd = parseCommand(line);
+    if (this.state.selecting && cmd === null) return true;
+    if (cmd === null && this.stagedImages.length && this.inputHandlers !== undefined) {
+      const attachments = this.stagedImages.splice(0); await this.continueConversation("",attachments); return true;
+    }
     if (cmd === null) return true;
     if (this.state.selecting && !["help", "cost", "context", "quit", "abort", "permissions"].includes(cmd.kind)) {
       this.print("provider selection is in progress", "error"); return true;
+    }
+    if (cmd.kind === "task" && this.inputHandlers !== undefined) {
+      if (this.state.status === "running") { this.print("a turn is already running — /abort first","error"); return true; }
+      try {
+        const parsed = parseAttachments(cmd.text);
+        const attachments = [...parsed.attachments,...this.stagedImages];
+        if (attachments.length > 8) throw new Error("at most eight attachments");
+        this.stagedImages = []; this.print(cmd.text,"you");
+        await this.continueConversation(parsed.text,attachments); return true;
+      } catch (error) { this.print(`Attachment refused: ${String(error).slice(0,256)}`,"error"); return true; }
     }
     if (cmd.kind !== "task") this.print(line, "you");
     return this.run(cmd);
@@ -988,6 +1032,7 @@ export class TuiController {
         await this.continueConversation(cmd.text);
         return true;
       case "new":
+        this.stagedImages = [];
         if (this.resetGrants("new-conversation") === undefined) return true;
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
@@ -1066,14 +1111,15 @@ export class TuiController {
    * every prompt used to be its own session, and nothing the user said was ever in scope for
    * what they said next.
    */
-  private continueConversation(text: string): Promise<void> {
+  private continueConversation(text: string, attachments?: InputAttachment[]): Promise<void> {
     return this.start(text, {
       cwd: this.opts.cwd,
+      ...(attachments?.length ? { attachments } : {}),
       ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
     });
   }
 
-  private async start(task: string, opts: Pick<RunOptions, "cwd" | "resume" | "advisoryContext">): Promise<void> {
+  private async start(task: string, opts: Pick<RunOptions, "cwd" | "resume" | "advisoryContext" | "attachments">): Promise<void> {
     if (this.state.status === "running") {
       this.print("a turn is already running — /abort first", "error");
       return;

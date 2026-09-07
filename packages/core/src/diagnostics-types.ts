@@ -30,4 +30,4 @@ export const DiagnosticsSchema = z.object({
     code: z.string().max(64).optional(), message: z.string().max(1024) }).strict()).max(100),
 }).strict();
 export type Diagnostics = z.infer<typeof DiagnosticsSchema>;
-export const InternalToolSchema = z.object({ kind: z.literal("diagnostics"), parentToolUseId: z.string() }).strict();
+export const InternalToolSchema = z.object({ kind: z.enum(["diagnostics", "attachment"]), parentToolUseId: z.string() }).strict();

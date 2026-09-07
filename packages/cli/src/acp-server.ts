@@ -79,7 +79,7 @@ export function serveAcp(stream: Stream, options: AcpServerOptions) {
       if (event.type === "model.delta") payload = { sessionUpdate: "agent_message_chunk", content: { type: "text", text: event.text } };
       if (event.type === "model.response") entry.stop = event.stop;
       if (event.type === "tool.call") payload = { sessionUpdate: "tool_call", toolCallId: toolId(event.id),
-        title: event.internal === undefined ? event.name : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,
+        title: event.internal === undefined ? event.name : event.internal.kind === "attachment" ? `Input attachment: ${event.name}` : `Diagnostics for ${toolId(event.internal.parentToolUseId)}: ${event.name}`,
         kind: "other", status: "in_progress", rawInput: event.input };
       if (event.type === "tool.result") payload = { sessionUpdate: "tool_call_update", toolCallId: toolId(event.id), status: event.ok ? "completed" : "failed",
         content: [{ type: "content", content: { type: "text", text: bounded(event.display) } }] };

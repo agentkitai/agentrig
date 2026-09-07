@@ -571,7 +571,7 @@ export function messagesFromEvents(events: readonly HarnessEvent[]): Message[] {
 
     switch (event.type) {
       case "session.start":
-        if (event.task !== "" || !event.advisoryContext?.length) pushUserText(event.task, event.context);
+        if (event.task !== "" || (!event.advisoryContext?.length && !event.inputAttachments)) pushUserText(event.task, event.context);
         if (event.advisoryContext?.length) messages.push({ role: "user", content: advisoryPromptBlocks(event.advisoryContext) });
         break;
       case "session.resume":
