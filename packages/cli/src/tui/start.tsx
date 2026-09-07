@@ -114,6 +114,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   controller.attach(built.agent);
+  if (built.selection !== undefined) controller.setProviderSelection(built.selection);
   controller.configureStatus(() => ({ posture: skipsPermissions(opts) ? "yolo" : "ask", sandbox: opts.sandbox ?? "none" }));
   controller.setSkills(built.skills);
   controller.setCommands(built.commands ?? []);

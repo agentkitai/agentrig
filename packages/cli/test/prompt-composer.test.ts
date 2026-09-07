@@ -32,6 +32,18 @@ async function fixture(history = new PromptHistory()) {
   return {controller,input,writes,requests,history};
 }
 const lastPrompt = (requests: ModelRequest[]) => requests.at(-1)?.messages.filter(m=>m.role==="user").at(-1)?.content;
+it("actual Ink completes model selection without creating a model prompt", async () => {
+  const f = await fixture(); let entry = "first";
+  const info = () => ({ entry, provider: "fixture", model: entry });
+  f.controller.setProviderSelection({ current: info, describe: () => [], prepare: (_kind, value) => () => { entry = value; return info(); } });
+  expect(f.controller.completionNames()).toEqual(expect.arrayContaining(["model", "effort"]));
+  f.input.send("/mod", "\t");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("/model"));
+  expect(f.requests).toHaveLength(0);
+  f.input.send(" second", "\r");
+  await vi.waitFor(() => expect(f.controller.snapshot().providerSelection?.entry).toBe("second"));
+  expect(f.requests).toHaveLength(0);
+});
 it.each(["", "\u001b[201~"])("actual Ink recalls/restores draft and submits multiline only on final Enter (protocol=%j)", async prefix => {
   const history = new PromptHistory(); history.remember("old\nmultiline");
   const f = await fixture(history);

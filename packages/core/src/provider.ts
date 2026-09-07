@@ -50,6 +50,8 @@ export type ModelEvent =
   | { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string };
 
 export interface ModelProvider {
+  /** Local adapter replay validation, without fetching or modifying history. */
+  validateHistory?(messages: readonly Message[]): void;
   id: string;
   model: string;
   capabilities: {

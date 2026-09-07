@@ -11,9 +11,11 @@ import type {
   Signal,
   Skill,
   ExtensionCommand,
+  ProviderSelectionInfo,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { ToolSummaries } from "./tool-summaries.js";
+import type { ProviderSelectionControl } from "../provider-selection.js";
 import { observeStatus } from "./status-snapshot.js";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
@@ -78,6 +80,8 @@ export interface TuiChild {
 }
 
 export interface TuiState {
+  selecting?: boolean;
+  providerSelection?: ProviderSelectionInfo;
   statusDetails?: import("./status-snapshot.js").StatusDetails;
   reviewing?: boolean;
   lines: TuiLine[];
@@ -266,6 +270,31 @@ export class TuiController {
   /** The agent is assembled after the controller, because it needs the controller's `onAsk`. */
   attach(agent: Agent): void {
     this.agent = agent;
+  }
+
+  private providerSelectionControl: ProviderSelectionControl | undefined;
+  setProviderSelection(control: ProviderSelectionControl): void {
+    this.providerSelectionControl = control;
+    this.set({ providerSelection: control.current(), model: control.current().model });
+  }
+  private selectProvider(kind: "model" | "effort", argument: string): void {
+    const control = this.providerSelectionControl;
+    if (control === undefined) { this.print(`/${kind} is not available in this session`, "error"); return; }
+    if (!argument) { for (const line of kind === "model" ? control.describe() : [`Effort: ${control.current().effort ?? "configured default (unset)"}`]) this.print(line, "system"); return; }
+    if (this.closing || this.session !== null || this.state.status === "running" || this.undoing || this.dreaming || this.reviewAbort || this.state.selecting || this.state.pending || this.state.question || this.state.escalation) {
+      this.print("provider selection requires idle work and no pending prompts", "error"); return;
+    }
+    const agent = this.agent, sessionId = this.state.sessionId;
+    this.set({ selecting: true });
+    try {
+      if (argument.length > 256) throw new Error("selection argument exceeds 256 characters");
+      const commit = control.prepare(kind, argument);
+      if (this.closing || agent !== this.agent || sessionId !== this.state.sessionId) throw new Error("conversation changed before selection commit");
+      const selection = commit();
+      this.set({ providerSelection: selection, model: selection.model });
+      this.print(`Provider selected for the next request: ${JSON.stringify(selection)}`, "system");
+    } catch (error) { this.print(`/${kind} refused: ${error instanceof Error ? error.message : "selection unavailable"}`, "error"); }
+    finally { this.set({ selecting: false }); }
   }
 
   private observedStatusSession: Session | undefined;
@@ -725,13 +754,16 @@ export class TuiController {
     if (this.undoing) { this.print("undo is running; wait for it to finish", "error"); return true; }
     const cmd = parseCommand(line);
     if (cmd === null) return true;
+    if (this.state.selecting && !["help", "cost", "context", "quit", "abort", "permissions"].includes(cmd.kind)) {
+      this.print("provider selection is in progress", "error"); return true;
+    }
     if (cmd.kind !== "task") this.print(line, "you");
     return this.run(cmd);
   }
 
   /** Transport prompt, deliberately not the slash-command interpreter. Joins the actual run. */
   async prompt(text: string, advisoryContext?: readonly string[]): Promise<void> {
-    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming) throw new Error("session is unavailable or busy");
+    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming || this.state.selecting) throw new Error("session is unavailable or busy");
     if (!text.trim() && !advisoryContext?.length) throw new Error("prompt is empty");
     await this.start(text, { cwd: this.opts.cwd,
       ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
@@ -745,7 +777,7 @@ export class TuiController {
     switch (cmd.kind) {
       case "quit":
         // stop the work before tearing the UI down, or the session runs on invisibly
-        if (this.session !== null || this.reviewAbort !== undefined) {
+        if (this.session !== null || this.reviewAbort !== undefined || this.state.selecting) {
           this.print("stopping the running turn before exiting…", "system");
           await this.shutdown();
         }
@@ -790,6 +822,9 @@ export class TuiController {
       case "cost":
         await this.delegate("cost", () => this.cost?.(this.state.sessionId ?? undefined));
         return true;
+      case "model":
+      case "effort":
+        this.selectProvider(cmd.kind, cmd.argument); return true;
       case "dream": {
         if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
         const controller = new AbortController(); this.dreamAbort = controller;
