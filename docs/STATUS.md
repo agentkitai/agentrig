@@ -7,12 +7,21 @@ R17 checkpoint/ingest visibility repair (outside train, 2026-09-07): conductor
 snapshots from unavailable verified undo, and names session-end memory maintenance
 as a possible cause without asserting ownership of those writes. Real-Git/fake-provider
 tests cover completed ingest with tracked/untracked wiki files, an unrelated human
-edit during ingest, unchanged refusal/no restoration, and successful undo without ingest.
+edit during ingest, unchanged refusal/no restoration, and successful undo without ingest
+or with an ignored untracked wiki whose ingested bytes remain intact.
 No ingestion is skipped, exclusions widened, or ownership checks changed. This does
 **not** repair the integration limitation: R4b deliberately refuses to seal covered
 session-end changes. Issue #235 remains open for that capability decision, recorded
 at the end of the roadmap, not as a new blocking R17 subrow. No R17 row is completed
 by this diagnostic repair.
+
+Review follow-through distinguishes the new seal-time message from the unchanged
+explicit-undo refusal, asserts the latter exactly, and clarifies tracked/unignored
+wiki coverage. The ignored-untracked control also runs real ingest. An actual
+TypeScript 5.9.3 compiler check inferred `checkpoint.created` at the questioned
+`events.find` declaration and reported no test-file diagnostics; no speculative
+cast was added. Replaying the stored reason at the undo entry point remains an
+explicit follow-up, not a change to ownership or an implemented capability.
 
 R17 PTY/monitoring recovery (outside train, 2026-09-07): Codex documented the
 task/paste-versus-Enter protocol for [feel #232](https://github.com/agentkitai/agentrig/issues/232)

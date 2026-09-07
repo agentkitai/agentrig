@@ -1531,12 +1531,14 @@ need an explicit budget; neither prevents continuing other actionable entries.
   maintenance writes. Any integration must account for exact trusted writes, reject
   unrelated changes (including tracked wiki edits), and refuse uncertain/unjoined
   writers. Do not broaden exclusions, silently adopt hook changes, or skip ingestion.
+  Consider bounded replay of a recorded seal-refusal reason and retained checkpoint
+  references when explicit undo refuses; this diagnostic replay is not implemented.
   This is an end-of-roadmap follow-up, not an added R17 gate or subrow.
 - [ ] Fixture temporary-root ancestry isolation ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
   detect unexpected ancestor Git markers before fixtures grant trust or write state.
   Private controls disprove the original `.agentrig`-only explanation; the historical
   cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
-- [ ] Package-cap fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240)):
+- [ ] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
   investigate measured slow phases and ensure owned work settles before cleanup.
-  Preserve real aggregate-cap inputs/assertions; do not blindly increase deadlines,
+  Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.

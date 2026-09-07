@@ -420,7 +420,7 @@ export class Checkpointer implements Hook {
     if (!sameCheckpointState(owned,current)) throw new Error(
       "undo unavailable: non-session changes after the final tool. " +
       "Checkpoint snapshots remain, but undo has no verified ownership seal; " +
-      "session-end hooks such as memory ingest may change covered files. " +
+      "session-end hooks such as memory ingest may change covered files, including tracked or unignored wiki files. " +
       "Later changes were not adopted. See docs/plans/R4b.md for checkpoint coverage limits.",
     );
     const ref = `refs/agentrig/${ctx.sessionId}/sealed/${ctx.turn}`;
