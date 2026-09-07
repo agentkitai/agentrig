@@ -12,10 +12,13 @@ import type {
   Skill,
   ExtensionCommand,
   InputAttachment,
+  ProviderSelectionInfo,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
+import type { ProviderSelectionControl } from "../provider-selection.js";
+import { observeStatus } from "./status-snapshot.js";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
@@ -79,6 +82,9 @@ export interface TuiChild {
 }
 
 export interface TuiState {
+  selecting?: boolean;
+  providerSelection?: ProviderSelectionInfo;
+  statusDetails?: import("./status-snapshot.js").StatusDetails;
   reviewing?: boolean;
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
@@ -200,7 +206,7 @@ export class TuiController {
   private stagedImages: InputAttachment[] = [];
   setInputAttachments(handlers: NonNullable<TuiController["inputHandlers"]>): void { this.inputHandlers = handlers; }
   inputBusy(): boolean { return this.inputAbort !== undefined; }
-  private inputAvailable(): boolean { return !this.closing && this.state.status !== "running" && this.state.pending === null && this.state.question === null && this.state.escalation === null && !this.inputBusy(); }
+  private inputAvailable(): boolean { return !this.closing && !this.state.selecting && this.state.status !== "running" && this.state.pending === null && this.state.question === null && this.state.escalation === null && !this.inputBusy(); }
   async completeInput(text: string): Promise<{ text: string; hint: string }> {
     if (!this.inputAvailable() || this.inputHandlers === undefined) return { text, hint: "" };
     const abort = new AbortController(); this.inputAbort = abort;
@@ -291,6 +297,59 @@ export class TuiController {
     this.agent = agent;
   }
 
+  private providerSelectionControl: ProviderSelectionControl | undefined;
+  setProviderSelection(control: ProviderSelectionControl): void {
+    this.providerSelectionControl = control;
+    this.set({ providerSelection: control.current(), model: control.current().model });
+  }
+  private selectProvider(kind: "model" | "effort", argument: string): void {
+    const control = this.providerSelectionControl;
+    if (control === undefined) { this.print(`/${kind} is not available in this session`, "error"); return; }
+    if (!argument) { for (const line of kind === "model" ? control.describe() : [`Effort: ${control.current().effort ?? "configured default (unset)"}`]) this.print(line, "system"); return; }
+    if (this.closing || this.session !== null || this.state.status === "running" || this.undoing || this.dreaming || this.reviewAbort || this.inputBusy() || this.state.selecting || this.state.pending || this.state.question || this.state.escalation) {
+      this.print("provider selection requires idle work and no pending prompts", "error"); return;
+    }
+    const agent = this.agent, sessionId = this.state.sessionId;
+    this.set({ selecting: true });
+    try {
+      if (argument.length > 256) throw new Error("selection argument exceeds 256 characters");
+      const commit = control.prepare(kind, argument);
+      if (this.closing || agent !== this.agent || sessionId !== this.state.sessionId) throw new Error("conversation changed before selection commit");
+      const selection = commit();
+      this.set({ providerSelection: selection, model: selection.model });
+      this.print(`Provider selected for the next request: ${JSON.stringify(selection)}`, "system");
+    } catch (error) { this.print(`/${kind} refused: ${error instanceof Error ? error.message : "selection unavailable"}`, "error"); }
+    finally { this.set({ selecting: false }); }
+  }
+
+  private observedStatusSession: Session | undefined;
+  private statusConfiguration: (() => import("./status-snapshot.js").StatusConfiguration) | undefined;
+  private closeStatus: (() => Promise<void>) | undefined;
+  private statusClosing: Promise<void> | undefined;
+  /** Actual active run, distinct from selected conversation during maintenance. */
+  statusSession(): Session | undefined { return this.observedStatusSession; }
+  observeStatusSession(session: Session | undefined): void { this.observedStatusSession = session; this.set({}); }
+  configureStatus(get: () => import("./status-snapshot.js").StatusConfiguration): void { this.statusConfiguration = get; }
+  setStatusDetails(statusDetails: import("./status-snapshot.js").StatusDetails): void { this.set({ statusDetails }); }
+  statusSupervisor(): import("./status-snapshot.js").StatusDetails["supervisor"] {
+    if (this.opts.supervised !== true) return "off";
+    if (this.session === null || this.session !== this.observedStatusSession) return "unavailable";
+    const observer = this.observer as { policySnapshot?: () => import("@agentkitai/agentrig-supervisor").LadderSnapshot | null } | undefined;
+    try { return observer?.policySnapshot?.() ?? "unknown"; } catch { return "unknown"; }
+  }
+  /** No configuration means no polling, including every headless controller. */
+  mountStatus(): () => void {
+    if (this.statusConfiguration === undefined || this.closeStatus !== undefined) return () => {};
+    let cancelled = false;
+    const start = (): void => {
+      if (!cancelled && !this.closing && !this.closed && this.closeStatus === undefined)
+        this.closeStatus = observeStatus(this, this.statusConfiguration!);
+    };
+    if (this.statusClosing === undefined) start(); else void this.statusClosing.then(start);
+    return () => { cancelled = true; const close = this.closeStatus; this.closeStatus = undefined;
+      if (close !== undefined) this.statusClosing = close(); };
+  }
+
   setMemory(fn: (query: string) => Promise<string[]>): void {
     this.memory = fn;
   }
@@ -373,6 +432,8 @@ export class TuiController {
 
   private set(patch: Partial<TuiState>): void {
     if (this.closed) return;
+    if ("sessionId" in patch && patch.sessionId !== this.state.sessionId && patch.sessionId !== this.observedStatusSession?.id)
+      this.observedStatusSession = undefined;
     this.state = { ...this.state, ...patch };
     for (const fn of this.listeners) fn(this.state);
   }
@@ -485,7 +546,7 @@ export class TuiController {
   private showPermissionEffects(req: PermissionRequest, standing = true): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
-    for (const line of permissionEffectLines(req)) if (standing || !line.startsWith("Standing ")) this.print(line, "system");
+    for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) if (standing || !line.startsWith("Standing ")) this.print(line, "system");
     if (!standing) this.print("One-time approval only; this request does not consume or create standing grants.", "system");
   }
 
@@ -698,6 +759,7 @@ export class TuiController {
     if (this.closed) return;
     this.closing = true;
     this.inputAbort?.abort();
+    const statusClosing = this.closeStatus?.(); this.closeStatus = undefined;
     this.observer?.detach();
     if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
@@ -710,6 +772,7 @@ export class TuiController {
     await this.dreaming?.catch(() => {});
     await this.reviewing?.catch(() => {});
     await this.undoing?.catch(() => {});
+    await statusClosing; await this.statusClosing;
     this.resetGrants("controller-closed");
     this.closed = true;
   }
@@ -720,10 +783,14 @@ export class TuiController {
     if (this.undoing) { this.print("undo is running; wait for it to finish", "error"); return true; }
     if (this.inputBusy()) { this.print("input preparation is running; wait or abort", "error"); return true; }
     const cmd = parseCommand(line);
+    if (this.state.selecting && cmd === null) return true;
     if (cmd === null && this.stagedImages.length && this.inputHandlers !== undefined) {
       const attachments = this.stagedImages.splice(0); await this.continueConversation("",attachments); return true;
     }
     if (cmd === null) return true;
+    if (this.state.selecting && !["help", "cost", "context", "quit", "abort", "permissions"].includes(cmd.kind)) {
+      this.print("provider selection is in progress", "error"); return true;
+    }
     if (cmd.kind === "task" && this.inputHandlers !== undefined) {
       if (this.state.status === "running") { this.print("a turn is already running — /abort first","error"); return true; }
       try {
@@ -740,7 +807,7 @@ export class TuiController {
 
   /** Transport prompt, deliberately not the slash-command interpreter. Joins the actual run. */
   async prompt(text: string, advisoryContext?: readonly string[]): Promise<void> {
-    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming) throw new Error("session is unavailable or busy");
+    if (this.closing || this.state.status === "running" || this.undoing || this.dreaming || this.state.selecting) throw new Error("session is unavailable or busy");
     if (!text.trim() && !advisoryContext?.length) throw new Error("prompt is empty");
     await this.start(text, { cwd: this.opts.cwd,
       ...(this.state.sessionId !== null && this.resumable ? { resume: this.state.sessionId } : {}),
@@ -754,7 +821,7 @@ export class TuiController {
     switch (cmd.kind) {
       case "quit":
         // stop the work before tearing the UI down, or the session runs on invisibly
-        if (this.session !== null || this.reviewAbort !== undefined) {
+        if (this.session !== null || this.reviewAbort !== undefined || this.state.selecting) {
           this.print("stopping the running turn before exiting…", "system");
           await this.shutdown();
         }
@@ -799,6 +866,9 @@ export class TuiController {
       case "cost":
         await this.delegate("cost", () => this.cost?.(this.state.sessionId ?? undefined));
         return true;
+      case "model":
+      case "effort":
+        this.selectProvider(cmd.kind, cmd.argument); return true;
       case "dream": {
         if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
         const controller = new AbortController(); this.dreamAbort = controller;
@@ -1075,6 +1145,7 @@ export class TuiController {
       return;
     }
     this.session = session;
+    this.observeStatusSession(session);
     try { this.permissionGrants.beginSession(session.id); }
     catch (error) {
       session.control.abort(); await session.done.catch(() => {}); this.session = null;

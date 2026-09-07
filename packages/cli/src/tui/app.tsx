@@ -31,7 +31,7 @@ const TONE: Record<TuiState["lines"][number]["tone"], string> = {
   error: "red",
 };
 
-export function App({ controller, onMounted, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; history?: PromptHistory }): JSX.Element {
+export function App({ controller, onMounted, onInput, history: suppliedHistory }: { controller: TuiController; onMounted?: () => void; onInput?: () => void; history?: PromptHistory }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [markdown] = useState(createMarkdownCache);
@@ -44,6 +44,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
   // Startup notices are already in the initial controller snapshot. Never acknowledge them
   // before this actual React/Ink mount (a timer or queued controller line is not readiness).
   const mounted = useRef(false);
+  useEffect(() => controller.mountStatus(), [controller]);
   useEffect(() => { if (!mounted.current) { mounted.current = true; onMounted?.(); } }, [onMounted]);
   const deferredState = useRef<TuiState | null>(null);
   /**
@@ -102,6 +103,7 @@ export function App({ controller, onMounted, history: suppliedHistory }: { contr
   }, [buf, paste, state.activity]);
 
   useRawInput((raw, char, key) => {
+    onInput?.();
     // Use the synchronous controller state, not a React render from before this stdin batch.
     // A preview created by this same raw chunk cannot also be confirmed by trailing bytes.
     const previewAtInput = controller.snapshot().pending?.scope;
