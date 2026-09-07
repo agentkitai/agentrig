@@ -1299,7 +1299,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
   presentation of original evaluator attestations beside derived lane assessments. Neither
   path may infer independence from labels, erase failures, or create a second evaluation runner.
-- R5c nested skill filename casing (implemented, merged [PR#214](https://github.com/agentkitai/agentrig/pull/214), post-main pending; [plan](plans/skill-filename-casing.md)):
+- R5c nested skill filename casing (done, [PR#214 final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722); [plan](plans/skill-filename-casing.md)):
   refuse noncanonical nested markers before package publication/loading, matching exact `SKILL.md`.
   Remaining independent polish: make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
   The review's root-alias precedence defect was fixed in R5c, not deferred here.

@@ -35,3 +35,9 @@ changes merge without conflict; only STATUS needed additive historical-checkpoin
 resolution. Skill-casing validation/controls retained. #214 post-main pending at
 integration; #215/#216 remain independently eligible, not a fixed merge order.
 Combined local and exact-head hosted checks follow; no additional broad review.
+
+Final batch integration: #215 merged main f196709697b1832063ddee6288fdac004a2ee7d0,
+post-main CI34103360944 / structure34103361105 pending. #214 is now done on its
+all-four green post-main gate, receipt5568048722. No source conflicts or changes
+to reviewed turn validation; documentation preserves both histories. Combined
+role/package/config/grapheme controls and full Docker/Chromium gates follow.

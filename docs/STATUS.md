@@ -1,7 +1,8 @@
 # Status
 
 Current integration: #215 merged as main f196709697b1832063ddee6288fdac004a2ee7d0
-after all four exact-head checks; its post-main checks are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
+after all four exact-head checks; post-main CI34103360944 / structure34103361105
+are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
 #214 is done, all-four post-main CI34102581250 / structure34102581248 green;
 [final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
 #216 is the remaining PR in this batch; no new lane until it is delivered.
