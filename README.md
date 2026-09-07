@@ -1,5 +1,8 @@
 # AgentRig
 
+The [authenticated local reference web client](docs/WEB.md) uses the same ACP
+controller as the TUI, with explicit one-time permissions and structured questions.
+
 `agentrig doctor` stays offline/read-only. Explicit `agentrig doctor --probe` runs potentially
 billable bounded samples against the selected main provider, recording local configuration-bound
 observations used by advertised capabilities. Empirical tool/parallel/JSON/cache observations
@@ -76,6 +79,11 @@ Optional `--otel-endpoint <url>` exports bounded metadata-only OTLP/HTTP JSON tr
 It is off unless explicitly requested; see [telemetry privacy and limits](docs/OTEL.md).
 
 - `agentrig` — start the interactive TUI.
+- TUI composition: Up/Down recalls prompts, Tab completes `/commands` and loaded
+  skill names, and distinguishable Shift-Enter or Enter after an odd trailing `\`
+  inserts a newline. Trusted projects retain bounded sensitive text in
+  `.agentrig/history`; untrusted starts keep memory-only history. Approval,
+  question and escalation answers are excluded. See [history limits](docs/plans/R16d.md).
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
 - `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.

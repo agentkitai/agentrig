@@ -247,7 +247,7 @@ describe("TuiController", () => {
     }
     await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
     expect(c.permissionGrants.list()).toEqual([]); c.answerPermission("deny"); await next;
-    expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(1);
+    expect(text(c).match(/✓ needs_permission/g)).toHaveLength(1);
     const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
     expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
     expect(events.at(-1)?.type).toBe("session.end");
@@ -266,14 +266,14 @@ describe("TuiController", () => {
     const id = c.snapshot().sessionId; const live = c.permissionGrants.list();
     expect(live).toHaveLength(1); expect(live[0]!.id).not.toBe(task.id);
     await c.submit("continue"); expect(c.snapshot().pending).toBeNull(); expect(c.snapshot().sessionId).toBe(id);
-    expect(c.permissionGrants.list()).toEqual(live); expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(2);
+    expect(c.permissionGrants.list()).toEqual(live); expect(text(c).match(/✓ needs_permission/g)).toHaveLength(2);
   });
   it("a reset invalidates a pending remembered answer without creating new authority", async () => {
     const c = makeController([[{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")]]);
     const running = c.submit("first"); await vi.waitFor(() => expect(c.snapshot().pending).not.toBeNull());
     await c.submit("/permissions reset"); c.answerPermission("allow", true); await running;
     expect(c.permissionGrants.list()).toEqual([]); expect(text(c)).toContain("permission context changed");
-    expect(text(c)).not.toContain("⚒ needs_permission");
+    expect(text(c)).not.toContain("✓ needs_permission");
   });
   it("runs a task and reports how it finished with cached usage", async () => {
     const c = makeController([[usage(400_000, 12_345, 2_900_000), stop("end_turn")]]);
@@ -463,7 +463,7 @@ describe("TuiController", () => {
     expect(c.snapshot().pending).toBeNull();
     expect(text(c)).toContain("allowing needs_permission for the rest of this session");
     // the tool really did run all three times, unprompted after the first
-    expect(text(c).match(/⚒ needs_permission/g)).toHaveLength(3);
+    expect(text(c).match(/✓ needs_permission/g)).toHaveLength(3);
   });
 
   it("without remembering, it asks every time", async () => {

@@ -104,6 +104,7 @@ const ConfigValuesSchema = z
     maxTokens: positiveSetting.optional(),
     maxMinutes: positiveSetting.optional(),
     maxUsd: positiveSetting.optional(),
+    dailyCap: positiveSetting.refine(value => Number(value) <= 1_000_000 && Number(value) >= 0.000001, "must be from 0.000001 to 1000000 USD").optional(),
     priceIn: positiveSetting.optional(),
     priceOut: positiveSetting.optional(),
     priceCacheRead: positiveSetting.optional(),

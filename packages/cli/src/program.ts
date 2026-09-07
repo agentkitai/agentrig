@@ -16,6 +16,7 @@ import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
+import { startWeb, type WebDependencies, type WebFlags } from "./web.js";
 import { startMcpServe, type McpServeDependencies } from "./mcp-serve.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
@@ -23,6 +24,7 @@ import { withMaintenanceSignal } from "./maintenance.js";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 import { ScheduleStore } from "./schedule.js";
 import { ScheduleReports } from "./schedule-report.js";
+import { usageCommand } from "./usage.js";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -137,6 +139,7 @@ export interface ProgramDependencies {
   review?: ReviewDependencies;
   ci?: CiDependencies;
   acp?: AcpDependencies;
+  web?: WebDependencies;
   mcpServe?: McpServeDependencies;
 }
 
@@ -168,7 +171,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "mcp-serve"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -240,6 +243,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--max-tokens <n>", "token budget (input + cache read/write + output)")
       .option("--max-minutes <n>", "wall-clock budget in minutes")
       .option("--max-usd <n>", "USD budget; requires --price-in/--price-out")
+      .option("--daily-cap <usd>", "project configured-estimate daily admission cap (not an invoice guarantee)")
       .option("--price-in <usd>", "uncached input price in USD per million tokens")
       .option("--price-out <usd>", "output price in USD per million tokens")
       .option("--price-cache-read <usd>", "cache-read price per million tokens; overrides provider default")
@@ -399,6 +403,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       });
     });
 
+  withRunOptions(program.command("web").description("Serve the authenticated loopback ACP reference page"), HEADLESS_MAX_TURNS)
+    .option("--host <host>", "only the literal 127.0.0.1 is accepted", "127.0.0.1")
+    .option("--port <port>", "local TCP port; zero selects an ephemeral port", "0")
+    .action(async (flags: WebFlags, cmd: Command) => {
+      const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      await startWeb(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
+        ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.web,
+      });
+    });
+
   withRunOptions(program.command("mcp-serve").description("Serve four bounded MCP tools over stdio under configured permissions"), "20")
     .action(async (flags: AcpFlags, cmd: Command) => {
       const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
@@ -424,6 +438,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   schedule.command("rm <id>").action(async (id: string) => { await (await scheduleStore()).remove(id); console.log(`removed schedule ${id}`); });
   withProviderOptions(schedule.command("tick"))
     .option("--execute", "explicitly execute due tasks; default is model-free preview")
+    .option("--daily-cap <usd>", "configured-estimate daily admission cap; requires configured pricing")
     .option("--trust", "trust canonical project for this tick only")
     .option("--json", "render executed session events as JSONL")
     .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
@@ -665,6 +680,13 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       }
     });
 
+  program.command("usage").description("Read recorded project cost estimates without models/config")
+    .option("--since <date>", "UTC date YYYY-MM-DD", new Date().toISOString().slice(0, 10))
+    .option("--json", "structured accounting report")
+    .action(async (opts: { since: string; json?: boolean }) => {
+      try { await usageCommand(process.cwd(), opts.since, opts.json === true); }
+      catch (error) { console.error(`usage: ${String(error)}`); process.exitCode = 1; }
+    });
   const sessions = program.command("sessions").description("Inspect session event logs");
 
   sessions.command("export <id>")

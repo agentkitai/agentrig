@@ -13,10 +13,12 @@ import type {
   ExtensionCommand,
 } from "@agentkitai/agentrig-core";
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
+import { ToolSummaries } from "./tool-summaries.js";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
 import {
+  COMMANDS,
   RESERVED_COMMAND_NAMES,
   composeSkillInvocation,
   helpText,
@@ -300,10 +302,22 @@ export class TuiController {
   setSkills(skills: Skill[]): void {
     this.skills = skills;
   }
+  /** Names only: completion never loads or invokes a skill/extension. */
+  completionNames(): string[] {
+    const names = new Map(COMMANDS.map(command => [command.name.toLowerCase(), command.name]));
+    for (const skill of this.skills) {
+      const name = skill.name;
+      if (/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(name) && !RESERVED_COMMAND_NAMES.has(name.toLowerCase()) && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+      if (names.size >= 256) break;
+    }
+    return [...names.values()].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0);
+  }
   private extensionCommands: Array<ExtensionCommand & { extension: string }> = [];
   setCommands(commands: Array<ExtensionCommand & { extension: string }>): void { this.extensionCommands = commands; }
 
   private memory: ((query: string) => Promise<string[]>) | undefined;
+  private cost: ((session?: string) => Promise<string[]>) | undefined;
+  setCost(fn: (session?: string) => Promise<string[]>): void { this.cost = fn; }
   private dream: ((auto: boolean, signal: AbortSignal) => Promise<string[]>) | undefined;
   private dreamAbort: AbortController | undefined;
   private dreaming: Promise<void> | undefined;
@@ -313,6 +327,7 @@ export class TuiController {
   private observer: { detach(): void; done: Promise<void> } | undefined;
   private closing = false;
   private closed = false;
+  private toolSummaries = new ToolSummaries();
   private fork: ((parent: string, atSeq?: number) => Promise<{ id: string; atSeq: number }>) | undefined;
   private undo: ((id: string, toTurn?: number) => Promise<{restored:boolean;message:string}>) | undefined;
   private undoing: Promise<void> | undefined;
@@ -339,6 +354,9 @@ export class TuiController {
 
   print(text: string, tone: TuiLine["tone"] = "system"): void {
     if (this.closed) return;
+    // A side command/permission notice is also a visible boundary. Draining first preserves
+    // ordering without timers; flushReads clears its state before these recursive prints.
+    for (const line of this.toolSummaries.flushReads()) this.print(line.text, line.tone);
     const lines = [...this.state.lines, { key: this.nextKey++, text, tone }];
     // Append-only, ALWAYS. Ink's `Static` remembers how many items it has already written and
     // renders `items.slice(thatIndex)`. Dropping items off the front shifts every index, the
@@ -735,6 +753,9 @@ export class TuiController {
       case "memory":
         await this.delegate("memory", () => this.memory?.(cmd.query));
         return true;
+      case "cost":
+        await this.delegate("cost", () => this.cost?.(this.state.sessionId ?? undefined));
+        return true;
       case "dream": {
         if (this.dreamAbort !== undefined) { this.print("a dream is already running", "error"); return true; }
         const controller = new AbortController(); this.dreamAbort = controller;
@@ -776,11 +797,13 @@ export class TuiController {
         return true;
       case "verbose": {
         const verbose = !this.state.verbose;
+        if (verbose) for (const line of this.toolSummaries.expand()) this.print(line.text, line.tone);
+        else this.toolSummaries = new ToolSummaries();
         this.set({ verbose });
         this.print(
           verbose
             ? "verbose: showing the raw event trace as well as the conversation"
-            : "verbose: off — showing the conversation only",
+            : "verbose: off — compact tool summaries for future events; existing scrollback is unchanged",
           "system",
         );
         return true;
@@ -1038,6 +1061,7 @@ export class TuiController {
   private async drive(session: Session): Promise<void> {
     try {
       for await (const e of session.events) this.consume(e);
+      for (const line of this.toolSummaries.finish()) this.print(line.text, line.tone);
       const summary = await session.done;
       this.set({ turns: summary.turns });
       this.print(
@@ -1048,6 +1072,7 @@ export class TuiController {
     } catch (err) {
       this.print(`session failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
+      for (const line of this.toolSummaries.finish()) this.print(line.text, line.tone);
       const observer = this.observer;
       this.observer = undefined;
       observer?.detach();
@@ -1105,6 +1130,8 @@ export class TuiController {
   }
 
   private consume(e: HarnessEvent): void {
+    const compact = this.state.verbose ? { handled: false, lines: [] } : this.toolSummaries.push(e);
+    for (const line of compact.lines) this.print(line.text, line.tone);
     for (const line of this.auxiliary.push(e)) this.print(line, "system");
     this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
@@ -1162,6 +1189,7 @@ export class TuiController {
       this.print(renderEvent(e), e.type === "error" ? "error" : "event");
       return;
     }
+    if (compact.handled) return;
     const line = renderChatEvent(e);
     if (line !== null) this.print(line, e.type === "error" ? "error" : "event");
   }
