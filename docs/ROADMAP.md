@@ -1,11 +1,14 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Current follow-up integration: nested skill casing [PR#214](https://github.com/agentkitai/agentrig/pull/214)
-merged as main dbc89c9231bcce10cca5ee67de6cf0204008ce91 after all four exact-head
-checks; post-main pending. Independent #215 grapheme editing and #216 integer
-subagent turns may merge in either readiness order after that gate. No other new
-PRs in this queue. #212/#213 are delivered; their PRs hold final receipts.
-The following opening checkpoint is historical, not a current ordering restriction.
+Current delivery: turn-limit PR#216 integrates grapheme PR#215, merged as main
+f196709697b1832063ddee6288fdac004a2ee7d0 after all four exact-head checks; its
+post-main gate is pending. [Grapheme receipt](https://github.com/agentkitai/agentrig/pull/215).
+Skill casing #214 is done, all-four post-main CI34102581250 / structure34102581248
+green; [final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+No new lane until #216 completes. Each PR retains its original review/evidence.
+PR#212 and PR#213 are done; main300c5e2 passed all-four CI34098667334 /
+structure34098667328. [Slash delivery receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+The previous queue checkpoints below are historical.
 
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
 work, including automatic slash suggestions reported during actual use. Compaction
@@ -1373,7 +1376,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
-- R16d polish: grapheme-aware editing across both keyboard paths; retire a completion
+- R16d polish: grapheme-aware editing is done implementation, PR#215 ([contract](plans/grapheme-editing.md)); retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
   within R16d with actual Ink controls, not deferred. History is sensitive local
@@ -1422,3 +1425,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   prompts inert and the live frame bounded. Cover actual Ink typing, skill discovery,
   navigation, narrowing, dismissal and permission/paste controls in both input paths.
   [Contract and controls](plans/slash-suggestions.md); final hosted receipt on PR#213.
+- Grapheme-editing follow-up: held backspace across long ZWJ clusters can keep
+  resetting the code-unit-based quiet timer. Buffer contents remain correct, but
+  the redraw may wait for release. Consider an explicit edit-gesture classification
+  with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.

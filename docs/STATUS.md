@@ -1,9 +1,10 @@
 # Status
 
-Current integration: #214 merged as main dbc89c9231bcce10cca5ee67de6cf0204008ce91
-after all four exact-head checks; its post-main checks are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/214).
-#215 and #216 are independent; whichever is ready may merge after the current-main
-gate passes. No fixed ordering between them and no other new PRs in this queue.
+Current integration: #215 merged as main f196709697b1832063ddee6288fdac004a2ee7d0
+after all four exact-head checks; its post-main checks are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
+#214 is done, all-four post-main CI34102581250 / structure34102581248 green;
+[final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+#216 is the remaining PR in this batch; no new lane until it is delivered.
 The earlier implementation checkpoints below retain their historical test evidence.
 
 Active independent follow-up: reject fractional subagent turn limits before provider
@@ -17,7 +18,16 @@ reported26 turns; original result and limitations in the [receipt](plans/subagen
 Hosted exact-head and post-main gates remain pending.
 Base300c5e2 is the parent-confirmed green slash-suggestions delivery; earlier checkpoint
 text below is historical, not a prohibition on this authorized follow-up.
-Merged END follow-up: **R5c nested skill filename casing (#214)**. Shared package validation
+
+Previous PR#212/#213 are delivered, all-four green main300c5e2
+(CI34098667334 / structure34098667328); [receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+Grapheme deletion shares one helper between composer and unconfirmed scope input.
+Four actual prompt/scope tests failed before the fix; no normalization, policy or
+paste-decoder changes. [Contract](plans/grapheme-editing.md). Hosted gates follow.
+Prior checkpoints below retain the original sequence; independent ready items
+are no longer held behind an artificial merge order.
+
+Historical casing implementation checkpoint: shared package validation
 now refuses noncanonical nested `SKILL.md` spellings before publication/loading,
 while flat `.md` matching, core discovery and trust/path/byte limits remain unchanged.
 [Plan](plans/skill-filename-casing.md). Six fail-before controls reproduced accepted
