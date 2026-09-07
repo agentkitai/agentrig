@@ -1,5 +1,11 @@
 # Status
 
+Current integration: #214 merged as main dbc89c9231bcce10cca5ee67de6cf0204008ce91
+after all four exact-head checks; its post-main checks are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/214).
+#215 and #216 are independent; whichever is ready may merge after the current-main
+gate passes. No fixed ordering between them and no other new PRs in this queue.
+The earlier implementation checkpoints below retain their historical test evidence.
+
 Active independent follow-up: reject fractional subagent turn limits before provider
 construction. [Contract](plans/subagent-integer-turn-limits.md). Eight new controls
 fail before the correction; all61 focused CLI/config tests pass afterward, including
@@ -11,6 +17,16 @@ reported26 turns; original result and limitations in the [receipt](plans/subagen
 Hosted exact-head and post-main gates remain pending.
 Base300c5e2 is the parent-confirmed green slash-suggestions delivery; earlier checkpoint
 text below is historical, not a prohibition on this authorized follow-up.
+Merged END follow-up: **R5c nested skill filename casing (#214)**. Shared package validation
+now refuses noncanonical nested `SKILL.md` spellings before publication/loading,
+while flat `.md` matching, core discovery and trust/path/byte limits remain unchanged.
+[Plan](plans/skill-filename-casing.md). Six fail-before controls reproduced accepted
+case variants; canonical install→trusted builder→core loading already passed.
+All 70 focused package/install/runtime/core-skill tests now pass. One Claude
+APPROVE (24 requested/8 reported) independently ran70 tests/typecheck. Build and
+typecheck pass; full required-Docker3,278 plus two existing skips /209files (92.80s)
+and real Chromium1 (2.52s) pass. Exact-head four-check hosted gates remain pending.
+Unrelated hardlink-source follow-up stays at roadmap END. Earlier status is historical.
 
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /

@@ -1,5 +1,12 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+Current follow-up integration: nested skill casing [PR#214](https://github.com/agentkitai/agentrig/pull/214)
+merged as main dbc89c9231bcce10cca5ee67de6cf0204008ce91 after all four exact-head
+checks; post-main pending. Independent #215 grapheme editing and #216 integer
+subagent turns may merge in either readiness order after that gate. No other new
+PRs in this queue. #212/#213 are delivered; their PRs hold final receipts.
+The following opening checkpoint is historical, not a current ordering restriction.
+
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
 work, including automatic slash suggestions reported during actual use. Compaction
 PR#212 merged first on main1cdfe53; its post-main gate is pending. Slash discovery
@@ -1289,8 +1296,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
   presentation of original evaluator attestations beside derived lane assessments. Neither
   path may infer independence from labels, erase failures, or create a second evaluation runner.
-- R5c polish: align nested skill filename casing with the loader's exact `SKILL.md` convention;
-  make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
+- R5c nested skill filename casing (in progress; [plan](plans/skill-filename-casing.md)):
+  refuse noncanonical nested markers before package publication/loading, matching exact `SKILL.md`.
+  Remaining independent polish: make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
   The review's root-alias precedence defect was fixed in R5c, not deferred here.
 - Child-grants test polish: skip diagnostic snapshot work after a readiness wait has settled;
   additionally name child-view identity in the sibling predicate. Existing assertions still

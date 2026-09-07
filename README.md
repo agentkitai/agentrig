@@ -158,6 +158,10 @@ Local bundles install with `agentrig package add ./bundle --trust` (or a local n
 The mandatory `package.json` includes `{"name":"my-bundle","version":"1","agentrig":{"apiVersion":1}}`.
 Supported content is `extensions/`, `skills/`, `prompts/` and README/LICENSE files. Scripts,
 runtime dependencies and unsafe archive entries refuse; installation never runs bundled code.
+Nested skills must use exactly `skills/<name>/SKILL.md`; other marker casing refuses
+portably before installation/loading. Flat `skills/<name>.md` remains case-insensitive.
+Previously installed bundles with noncanonical nested markers now refuse inspection
+as a whole; fix the source and explicitly replace/reinstall, with no automatic migration.
 This is create-only under `.agentrig/packages/`: existing packages and edits are preserved.
 Trusted runs discover verified package extensions/skills; `--no-packages` or config
 `"packages": false` disables that discovery. `--trust` remains per-invocation, not a persisted
