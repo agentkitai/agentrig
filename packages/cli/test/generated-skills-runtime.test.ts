@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { expect, it, vi } from "vitest";
 import { parseSkill, SessionStore, type HarnessEvent, type ModelProvider } from "@agentkitai/agentrig-core";
 import { runDream, type FullDreamResult } from "@agentkitai/agentrig-memory";
@@ -45,15 +46,16 @@ it("manual hint reaches the assembled prompt without claiming activation or repl
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; denied loads never become usage evidence", async () => {
+it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; denied loads never become usage evidence (startup=%ims)", { timeout: 30_000 }, async (delayMs, { signal, onTestFinished }) => {
+  const work = (async () => {
   const f = await skillFixture();
   const home = await realpath(await mkdtemp(join(tmpdir(), "agentrig-generated-home-")));
   const dreams: FullDreamResult[] = [];
   try {
     await mkdir(join(home, ".agentrig"));
     await writeFile(join(home, ".agentrig/trust.json"), JSON.stringify({ projects: { [f.root]: true } }));
-    const preview = await runDream({ ...f, emitSkills: { root: f.skills }, structuralOnly: true }); dreams.push(preview);
-    const applied = await runDream({ ...f, emitSkills: { root: f.skills, apply: preview.skillEmission!.digest },
+    const preview = await runDream({ ...f, signal, emitSkills: { root: f.skills }, structuralOnly: true }); dreams.push(preview);
+    const applied = await runDream({ ...f, signal, emitSkills: { root: f.skills, apply: preview.skillEmission!.digest },
       provider: skillProvider(), limits: { maxCalls: 3 } }); dreams.push(applied);
     expect(applied.skillEmission!.status).toBe("applied");
     const name = applied.skillEmission!.proposals[0]!.name;
@@ -68,19 +70,21 @@ it("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; 
     expect(() => parseSkill(hinted.replace("metadata:\n", 'trigger: "ambiguous"\nmetadata:\n'), path)).toThrow(/one placement/);
     await writeFile(path, hinted);
     // A hand-added hint is an edit: regeneration must preserve it, never re-certify it.
-    const again = await runDream({ ...f, emitSkills: { root: f.skills }, structuralOnly: true }); dreams.push(again);
-    const reapply = await runDream({ ...f, emitSkills: { root: f.skills, apply: again.skillEmission!.digest },
+    const again = await runDream({ ...f, signal, emitSkills: { root: f.skills }, structuralOnly: true }); dreams.push(again);
+    const reapply = await runDream({ ...f, signal, emitSkills: { root: f.skills, apply: again.skillEmission!.digest },
       provider: skillProvider(), limits: { maxCalls: 3 } }); dreams.push(reapply);
     expect(reapply.skillEmission!.status).toBe("refused");
     expect(reapply.skillEmission!.preserved).toHaveLength(1);
     expect(await readFile(path, "utf8")).toBe(hinted);
     for (const mode of ["default", "enabled", "disabled", "denied", "unapproved", "explicit"] as const) {
+      signal.throwIfAborted();
       let turn = 0;
       const systems: string[] = [];
       selectedProvider = { id: "fixture", model: "selection", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
-        async *stream(request) {
+        async *stream(request, requestSignal) {
           systems.push(request.system);
           if (turn++ === 0) {
+            if (delayMs) await delay(delayMs, undefined, { signal: requestSignal });
             yield { type: "tool_use", id: "select", name: "skill", input: { name, generated: true } };
             yield { type: "stop", reason: "tool_use" };
           } else { yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" }; }
@@ -88,10 +92,21 @@ it("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; 
       const events: HarnessEvent[] = []; let loaded = false; let sessionId = "";
       const root = join(f.root, `selection-${mode}`);
       await buildProgram({ config: { cwd: f.root, home, env: {} }, run: async (_task, opts) => {
-        const built = await buildAgent(opts);
+        const built = await buildAgent(opts, { signal });
+        signal.throwIfAborted();
         loaded = built.skills.some(skill => skill.name === name && skill.generated === true);
         const session = built.agent.run("load the selected procedure", { cwd: f.root }); sessionId = session.id;
-        for await (const event of session.events) events.push(event); await session.done;
+        const abort = () => session.control.abort();
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        try {
+          for await (const event of session.events) events.push(event);
+          expect((await session.done).reason).toBe("done");
+        } finally {
+          signal.removeEventListener("abort", abort);
+          session.control.abort();
+          await session.done;
+        }
       } }).parseAsync(["run", "fixture", "--memory", f.root, "--root", root, "--no-repo-map", "--max-turns", "3",
         ...(mode === "unapproved" ? [] : ["--allow", "skill"]),
         ...(mode === "default" || mode === "explicit" ? [] : ["--generated-skills"]),
@@ -122,4 +137,8 @@ it("R6b emitted skill reaches actual CLI-built runtime only with chosen opt-in; 
     for (const result of dreams) await result.workspace.dispose();
     await rm(f.root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true });
   }
+  })();
+  // A timeout cancels the owned session; join the complete fixture before reuse.
+  onTestFinished(() => work.catch(() => {}), 30_000);
+  await work;
 });
