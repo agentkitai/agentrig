@@ -1091,7 +1091,12 @@ concise and place detailed implementation history in dated notes as it is mainta
   capture (memory filing, write calibration, guardrails) and the coding-agent captures (prompt
   composition, hook authority, manifest failure modes, verification lanes).
 
-## Follow-ups / nice to haves — active continuation queue
+## Follow-ups / nice to haves — pause after PR #219 and PR #220
+
+Latest user instruction: finish these two deliveries, then stop and wait for further
+instructions. PR #222 was already opened and is left unmerged; separate external
+proposal #221 is not part of this implementation batch. Earlier whole-queue authorization
+below is historical until the user resumes it.
 
 ### Delivery progress
 
@@ -1107,7 +1112,9 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
 - [x] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
 - [x] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
-- [ ] Generated-skill serializer session-count cap — [contract](plans/skill-session-count-cap.md), implementation ready; review/tests/delivery pending.
+- [ ] Abort-grace fixture observed readiness — [PR #219](https://github.com/agentkitai/agentrig/pull/219), merged; post-merge checks pending at this checkpoint ([contract](plans/abort-grace-readiness.md)).
+- [ ] Generated-skill serializer session-count cap — [PR #220](https://github.com/agentkitai/agentrig/pull/220), reviewed and locally tested; integration/delivery pending ([contract](plans/skill-session-count-cap.md)).
+- [ ] Pending-usage display — [PR #222](https://github.com/agentkitai/agentrig/pull/222), opened before pause; left unmerged for further instructions.
 
 All other follow-up fragments below remain queued unless explicitly marked done.
 
@@ -1119,9 +1126,9 @@ All other follow-up fragments below remain queued unless explicitly marked done.
 - R15k optional polish: display a brief busy hint for an ignored explicit clipboard
   gesture while a turn or completion is already active; do not queue hidden reads.
 
-The committed milestone sequence is complete. The user has authorized working through this entire
+The committed milestone sequence is complete. Previously the user authorized working through this entire
 queue in impact/dependency order, parallelizing independent items in worktrees and merging each PR
-with green CI. Finish one bounded batch and continue to the next; do not recursively create new
+with green CI. That continuation is now paused after #219/#220; do not recursively create new
 milestones. Conditional future scenarios need their stated evidence, and live measurements still
 need an explicit budget; neither prevents continuing other actionable entries.
 
@@ -1455,7 +1462,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
   resetting the code-unit-based quiet timer. Buffer contents remain correct, but
   the redraw may wait for release. Consider an explicit edit-gesture classification
   with held-key and framed-paste controls; do not loosen paste-safe draw guarantees.
-- Abort-grace fixture repair (next): macOS PR#217 CI34107659557 missed the expected
+- Abort-grace fixture repair (implemented; delivery pending): macOS PR#217 CI34107659557 missed the expected
   orphan warning in subagent.test.ts because its fixed80ms abort assumes child startup.
   A controlled150ms provider-start delay independently reproduces that precondition race;
   the CI log does not establish the remote delay's cause. Wait for bounded real blocked-child

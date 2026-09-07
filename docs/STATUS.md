@@ -1,15 +1,39 @@
 # Status
 
-Current batch: abort-grace fixture readiness, pending-usage display, and generated-skill
-serializer count boundary in independent worktrees. Continue the entire END queue after
-this batch; serialize exact-head/current-main/post-merge gates and merge ready PRs promptly.
+Current user instruction: finish PR #219 and PR #220, then STOP and wait for further
+instructions. Do not start more work. PR #222 (usage display, already opened) remains
+unmerged; separate external roadmap proposal #221 is untouched by this work.
+#219 merged as 2d13a2c0eae38bd358f6ab374725eb46beeeb10a after all-four exact-head
+checks. Post-main CI34111975404 / structure34111975426 pending at this checkpoint.
+#220 integrates that main and must pass combined local and exact-head checks before
+merge, followed by all-four post-main checks. Final receipts are on the two PRs.
+
+Historical serializer implementation checkpoint:
 The visible ROADMAP Delivery progress checklist marks #217/#218 done. Main ebfd10f8dac970a6560e451c7ebe42d9878cacdf
 has all-four post-merge checks green (CI34109938845 / structure34109938825).
 [Final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
 The serializer129-reference control fails before the guard;128 with duplicates passes
 the actual core parser. Ordinary evidence already has a128-session bound, so this is
 defensive format coverage, not a claimed production exploit. [Contract](plans/skill-session-count-cap.md).
-Review and validation gates follow. All earlier status paragraphs are historical checkpoints.
+One Claude APPROVE (23 reported /24 requested), 76 focused tests, build/typecheck,
+full pinned Docker3,318+2 skips and Chromium pass. Integration gates follow.
+All earlier status paragraphs are historical checkpoints, not continuation instructions.
+
+Historical implementation: bounded abort-grace fixture readiness repair, from green
+main ebfd10f. No production changes. Original/delayed-start pair reproduces one
+missing-warning failure before correction; both pass after observing the blocked
+child terminal-store gate. Exact100ms grace, nonfatal warning and ordering remain;
+finally releases the gate and joins the actual child. [Contract](plans/abort-grace-readiness.md).
+Single Claude APPROVE15reported/24requested, no material findings; original
+[receipt](plans/abort-grace-readiness-review.md) preserved. Build/typecheck,45focused,
+full pinnedDocker3318+2 skips/209files and realChromium pass. Hosted delivery pending.
+Entire END queue remains active;
+independent serializer and status-accounting follow-ups proceed in other worktrees.
+#217 and #218 are delivered with all-four post-main checks green:
+[217 receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445),
+[218 receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+
+Historical preceding checkpoint:
 
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
