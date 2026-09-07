@@ -2,7 +2,8 @@
 
 Current user instruction: finish PR #219 and PR #220, then STOP and wait for further
 instructions. Do not start more work. PR #222 (usage display, already opened) remains
-unmerged; separate external roadmap proposal #221 is untouched by this work.
+unmerged. External roadmap PR #221 merged separately as fd350d1d6dc71dab5846f355ddf4b8e6ed2b873a;
+its R17 additions are preserved, not started. #220 now integrates that updated main.
 #219 merged as 2d13a2c0eae38bd358f6ab374725eb46beeeb10a after all-four exact-head
 checks. Post-main CI34111975404 / structure34111975426 are all green;
 [final receipt](https://github.com/agentkitai/agentrig/pull/219#issuecomment-5569398357).
@@ -22,6 +23,13 @@ defensive format coverage, not a claimed production exploit. [Contract](plans/sk
 One Claude APPROVE (23 reported /24 requested), 76 focused tests, build/typecheck,
 full pinned Docker3,318+2 skips and Chromium pass. Integration gates follow.
 All earlier status paragraphs are historical checkpoints, not continuation instructions.
+
+Historical fifth-pass checkpoint, preserved from PR #221:
+Fifth pass, 2026-09-07: with every committed row done, ROADMAP gains R17 "feel and defaults"
+(dogfood mandate, defaults pass, feel budgets in CI, permission friction, visible and tuned
+supervisor/memory, then the follow-ups sweep). It sits at section 5 row 17, after R16 and
+before the follow-ups. The follow-ups currently being worked continue; R17a's dogfood gate
+applies from its own start. PLAN §9's F3 Windows CI job is struck as built.
 
 Historical implementation: bounded abort-grace fixture readiness repair, from green
 main ebfd10f. No production changes. Original/delayed-start pair reproduces one
