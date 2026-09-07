@@ -29,7 +29,7 @@ Do not implement, review, or fix anything in this session yourself.
 ## 2. Review, independently
 
 - Run the external review pass exactly as `topic` §2 step 4 prescribes: two external reviewers
-  (Claude Code pinned to `claude-opus-5`, and Codex) in parallel in one worktree you prepare, the
+  (Claude Code pinned to `claude-opus-5`, and Codex) in parallel in separate reviewer-owned worktrees you prepare, the
   model asserted from `modelUsage`, both reviews posted as PR comments, findings tagged and merged.
   Never review in this session and never pass the builder's report to either reviewer; the PR and
   the code are their only inputs.
