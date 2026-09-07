@@ -57,8 +57,31 @@ clean old-head success. Hosted run **34157135772** at the old head failed Ubuntu
 and macOS at recommended-defaults.test.ts:117; Windows passed. Structure passed
 separately. Neither independent reviewer reproduced the PTY/E1 receipts.
 
-Round-3 final clean-head gates and separate smoke receipts: pending execution.
-Exact final SHA/hosted status will be posted on PR #234, not guessed in advance.
+Clean candidate **47b4ecd464a3ef769a4e5753081c15c2ee5adf09**: `pnpm build`
+exit **0**, `pnpm test` exit **0** (**213 files, 3386 passed / 4 skipped, 3390
+collected**), `pnpm typecheck` exit **0**. Git status was empty before and after.
+The final receipt-only commit is rechecked with the same clean-tree trio before
+push; exact final SHA and exits are recorded in PR #234. Hosted status at receipt
+commit: **not yet pushed/not run**, not green; actual push-head status is in PR.
+
+Reproduced on that clean candidate (not by an independent reviewer):
+- `R17b-round3-smoke.json`: exit **0**, all acceptance booleans true. Fresh
+  zero-config PTY fixture, rendered Markdown, visible diagnostics line and
+  checkpoint, one ingest request. The diagnostic exec approval was explicitly
+  declined: this smoke is line visibility, not compiler-success evidence.
+- `R17b-round3-terminal.json`: exit **0**, cold prompt **390.84 ms**, first
+  streamed token **62.07 ms**, loopback fake provider only, one observation.
+- `R17b-round3-e1.json`: exit **1**, deliberately **not** a green E1 claim.
+  Six task checks PASS; A4/X4 remain BLOCKED pending manual adjudication, all
+  eight behavior checks PASS. Seven unavailable-checker tool errors across
+  A1–A3 are retained (same fixture PATH limitation as round 2). All eight sessions
+  ended done and all eight ingest reports completed. Prompts/turns: A1 4/4,
+  A2 4/4, A3 6/5, A4 2/5, X1–X4 2/4 each. This reproduces bounded fixture
+  observations, not live capability, all-E1-green, or working-compiler claims.
+  Real-compiler diagnostics coverage is proved separately by the regression
+  tests and fail-first probes, not this E1 fixture.
+
+No old smoke, terminal, E1 or mutation JSON receipt was overwritten.
 Independent delta review is the conductor's next gate, not this child's work.
 
 ## Accounting and feel
@@ -73,3 +96,8 @@ Prior feels include #251 (orphan worktree index.lock) and #252 (first Claude
 provenance failure). Prior external jobs: Claude job-6 rejected; sole
 claude-opus-5 retry job-8 passed; Codex job-7 passed. Their posted review URLs
 above are authoritative. No review was rerun by this child and no gate lowered.
+
+Current fixer main-model snapshot through canonical session event seq 688
+(57 model.response events): **337277 uncached input + 17980 output +
+1288576 cached input = 1643833** tokens. Auxiliary separate;
+this excludes later turns and is not a final session or row total.

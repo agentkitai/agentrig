@@ -24,8 +24,20 @@ Accounting: six known implementation/arbitration children, one historical halt
 auxiliary separate, never a row total. Prior feel issues remain below, including
 #251 orphan worktree index.lock and #252 initial Claude provenance failure
 (retry succeeded using sole claude-opus-5). No new AgentRig friction observed.
+Current fixer snapshot (session b12646c7 through event 688):
+337277 uncached input + 17980 output + 1288576 cached input =
+1643833 main-model tokens; auxiliary separate, later turns excluded.
 This is the final repair round, not a reset. Independent delta review remains
-required; residuals must be tracked, not waived. Final gate receipt pending.
+required; residuals must be tracked, not waived.
+
+Round-3 clean candidate 47b4ecd464a3ef769a4e5753081c15c2ee5adf09: build **0**,
+test **0** (213 files, **3386 passed / 4 skipped**, 3390 collected), typecheck **0**;
+final receipt-only head gets the same clean trio before push (exact SHA/exits in
+PR #234). Hosted at receipt commit: **not yet pushed/not run**, not green; final
+hosted snapshot is recorded on the PR. PTY smoke and latency scripts exit **0**;
+E1 reproduction exits **1**, six PASS/two manual BLOCKED, all behavior checks PASS,
+seven unavailable-checker results retained. No all-E1-green or reviewer-reproduction
+claim. Full bounded observations and separate new receipts: R17b-round3.md.
 
 ### Historical round-2 record (superseded where corrected above)
 
