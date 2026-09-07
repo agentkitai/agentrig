@@ -1112,7 +1112,7 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] Integer subagent turn limits — [PR #216](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
 - [x] One-run sandbox-network disable override — [PR #218](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
 - [x] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
-- [ ] Abort-grace fixture observed readiness — [PR #219](https://github.com/agentkitai/agentrig/pull/219), merged; post-merge checks pending at this checkpoint ([contract](plans/abort-grace-readiness.md)).
+- [x] Abort-grace fixture observed readiness — [PR #219 final receipt](https://github.com/agentkitai/agentrig/pull/219#issuecomment-5569398357) ([contract](plans/abort-grace-readiness.md)).
 - [ ] Generated-skill serializer session-count cap — [PR #220](https://github.com/agentkitai/agentrig/pull/220), reviewed and locally tested; integration/delivery pending ([contract](plans/skill-session-count-cap.md)).
 - [ ] Pending-usage display — [PR #222](https://github.com/agentkitai/agentrig/pull/222), opened before pause; left unmerged for further instructions.
 

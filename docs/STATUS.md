@@ -4,9 +4,13 @@ Current user instruction: finish PR #219 and PR #220, then STOP and wait for fur
 instructions. Do not start more work. PR #222 (usage display, already opened) remains
 unmerged; separate external roadmap proposal #221 is untouched by this work.
 #219 merged as 2d13a2c0eae38bd358f6ab374725eb46beeeb10a after all-four exact-head
-checks. Post-main CI34111975404 / structure34111975426 pending at this checkpoint.
+checks. Post-main CI34111975404 / structure34111975426 are all green;
+[final receipt](https://github.com/agentkitai/agentrig/pull/219#issuecomment-5569398357).
 #220 integrates that main and must pass combined local and exact-head checks before
-merge, followed by all-four post-main checks. Final receipts are on the two PRs.
+merge, followed by all-four post-main checks. Integrated build/typecheck, full pinned
+Docker 3,319 passed plus two skips /209 files (81.42s) and Chromium1/2.45s pass.
+Final receipts are on the two PRs; this last implementation checkpoint predates #220's
+merge, so its final delivered status must be read from the linked PR receipt.
 
 Historical serializer implementation checkpoint:
 The visible ROADMAP Delivery progress checklist marks #217/#218 done. Main ebfd10f8dac970a6560e451c7ebe42d9878cacdf
