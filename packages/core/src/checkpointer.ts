@@ -433,9 +433,9 @@ export class Checkpointer implements Hook {
       .map(line => line.split(" "))
       .filter((parts): parts is [string,string,string] => parts.length === 3 && parts[2] === "" && /^\d+$/.test(parts[0]!.slice(prefix.length)))
       .sort((a,b) => Number(b[0].slice(prefix.length)) - Number(a[0].slice(prefix.length)));
-    const transaction = ["start", "option no-deref", `create ${ref} ${commit}`,
+    const transaction = ["start", `create ${ref} ${commit}`,
       ...refs.slice(2).map(([oldRef, oid]) => `delete ${oldRef} ${oid}`), "prepare", "commit", ""].join("\n");
-    await git(lease.repo,["update-ref","--stdin"],undefined,ctx.signal,Buffer.from(transaction));
+    await git(lease.repo,["update-ref","--no-deref","--stdin"],undefined,ctx.signal,Buffer.from(transaction));
     await ctx.emitCheckpoint?.({type:"checkpoint.sealed",turn:ctx.turn,ref,commit,repo:lease.repo,excludes:ctx.checkpointExcludes??[],...owned});
 
   }
