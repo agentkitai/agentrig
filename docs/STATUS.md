@@ -34,6 +34,8 @@ four-child evidence-grading fixture's five-second outer timeout and EBUSY cleanu
 Repair #206's delayed-child control, bounded outer allowance and joined cleanup
 are integrated unchanged alongside its generated-skills repair. Neither original
 failed PR run is rerun; a new exact-head gate follows combined validation.
+Repaired-main integration validation: focused35, build/typecheck, full required-Docker
+3,088 passed + two skips /194 files (87.29s), actual Chromium1. Fresh PR gates pending.
 
 Historical repair checkpoint: **bounded runtime-fixture CI repair**. R16a #199 merged as339f795 after
 all four exact-head checks passed; post-main CI34075972025 failed Windows in the
