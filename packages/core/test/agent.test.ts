@@ -1274,6 +1274,25 @@ describe("compaction in the loop", () => {
     expect(turn3[2]!.content[0]).toMatchObject({ type: "tool_use", id: "t2" });
     expect(turn3[3]!.content[0]).toMatchObject({ type: "tool_result", toolUseId: "t2" });
   });
+
+  it("zero-retention compaction reaches the next model request and replays exactly without orphan pairs", async () => {
+    const provider = new FakeProvider([
+      [{ type: "tool_use", id: "zero", name: "echo", input: { text: "long result ".repeat(100) } }, usage(80_000, 5), stop("tool_use")],
+      [{ type: "text_delta", text: "SUMMARY" }, usage(50, 5), stop("end_turn")],
+      [{ type: "text_delta", text: "done" }, usage(100, 5), stop("end_turn")],
+    ]);
+    const config = makeConfig(provider, { compaction: summarizeOlderTurns({ keepLastMessages: 0 }) });
+    const session = createAgent(config).run("task", { cwd: root });
+    const events = await collect(session);
+    expect((await session.done).reason).toBe("done");
+    const compacted = provider.requests[2]!.messages;
+    expect(compacted).toHaveLength(2);
+    expect(compacted[0]!.content[0]).toMatchObject({ text: "task" });
+    expect(compacted[1]!.content[0]).toMatchObject({ text: expect.stringContaining("SUMMARY"), trust: "external", context: { authority: "advisory" } });
+    expect(compacted.flatMap(m => m.content).some(b => b.type === "tool_use" || b.type === "tool_result")).toBe(false);
+    expect(events.filter(e => e.type === "context.compact")).toHaveLength(1);
+    expect(await config.store.materializeMessages(session.id)).toEqual((await config.store.readSnapshot(session.id))!.messages);
+  });
 });
 
 describe("tool-result eviction in the loop", () => {
