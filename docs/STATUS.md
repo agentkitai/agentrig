@@ -26,6 +26,15 @@ Integrated green R8d main `c59a446` without source conflicts. Frozen install,
 build/typecheck pass; Docker full passes 3,005 plus two skips /188 files (68.18s),
 and real Chromium ACP smoke passes. New exact-head all-four CI is pending; later
 queued main changes must be integrated before root merge.
+
+First integrated CI `34068326674` passed Linux/macOS/structure but Windows failed
+two existing scoped-approval tests waiting one second for the next `onAsk` after
+two real shell calls. Paired 1.1-second provider-delay controls reproduce the exact
+failure. The fixture now uses existing four-second subscribed readiness for the
+exact outside command, preserving all original grant/output/audit/count assertions.
+No production changes; remote slow stage remains unproven. Build/typecheck,
+56 focused tests, Docker full 3,007 plus two skips /188 files (64.15s), and Chromium
+smoke pass. Original failed CI is retained; new exact-head checks remain pending.
 R9c PR #183 is done: main `3b7564a`, CI `34047589688` and structure `34047589697` green.
 R10b PR #177 post-main CI `34040691166` passed all three platforms.
 R15b PR #185 is done: main `74c5073`, CI `34048869709` and structure `34048869702` green.
