@@ -26,6 +26,23 @@ the same full suite; it did not rerun build/typecheck. Integrated green R15g mai
 and full Docker 2,975 plus two skips /185 files pass. Exact-head/post-main gates
 remain pending.
 
+Active: **grant-transition readiness repair**, not a roadmap item. R16b #203
+merged2181859 after all four exact-head checks; post-main CI34082267021 failed
+Windows `tui.test.ts:236`, first prompt in the existing real new-transition test.
+Other160 tests in that group and Linux/macOS/structure passed. R16b delivery is
+blocked, not done. [Failure and repair controls](plans/grant-transition-readiness.md).
+Hold #201's merge until repaired main is green; then drain201→205→207→194.
+No further unsubmitted roadmap work or parallel PR-refresh churn.
+
+Repair review closure: one Claude REQUEST_CHANGES,24 requested/28 reported turns;
+outer-timeout finding reproduced and fixed, both owned controllers joined before
+cleanup. Final170 focused tests, build/typecheck, required-Docker3,106 passed
++2 existing skips /197files (75.64s), and actual Chromium1passed (2.36s).
+[Original review and disposition](plans/grant-transition-readiness-review.md).
+Repair #208 merged as `18df259` after all four exact-head checks. Repaired-main
+CI remains pending; #203/#208 are not yet delivered. Immediate-next #201 now
+integrates the repair without another review; its fresh checks are also required.
+
 R16f runtime-backed status line is **done**, PR #204: exact main7fe3440 passed
 all four checks CI34080476921/structure34080476920.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/204#issuecomment-5564785990).
