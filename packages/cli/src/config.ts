@@ -338,10 +338,14 @@ export async function loadRunConfig(
   const configHas = (key: keyof ConfigValues): boolean =>
     user?.[key] !== undefined || selected(user)?.[key] !== undefined || project?.[key] !== undefined || selected(project)?.[key] !== undefined;
   const recommended = ["run", "tui", "resume", "acp", "web", "mcp-serve", "tick"].includes(cmd.name());
+  if (!recommended && profile === "recommended" && !selected(user) && !selected(project)) {
+    const note = `note: recommended run defaults do not apply to \`${cmd.name()}\`; using this command's baseline config`;
+    if (options.notice) options.notice(note); else console.error(note);
+  }
   const recommendedDefaults: ConfigValues = {
     supervise: true, checkpoints: true, ingestOnEnd: true, notifications: "bell", toolSummaries: true,
     diagnostics: DiagnosticsConfigSchema.parse([
-      { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false"] },
+      { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false", "--listFiles"] },
       { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "--", "{path}"] },
     ]),
   };

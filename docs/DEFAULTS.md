@@ -6,6 +6,10 @@ lowest-precedence layer. `--profile recommended` names that same baseline; named
 user/project profiles overlay it. Existing user config, trusted project config,
 selected profiles and explicit retained CLI flags keep their precedence. Project
 trust is still required; untrusted project configuration is not loaded.
+On profile-aware non-run commands (for example `review` and `doctor`), the built-in
+`recommended` name retains that command's baseline and emits a note that run
+defaults do not apply. A user-defined profile with that name still overlays
+normally.
 
 ## What is on
 
@@ -13,12 +17,17 @@ trust is still required; untrusted project configuration is not loaded.
   plain/expanded view is still available. The line-oriented `run` transcript and
   immutable messages retain their raw Markdown; rendering never rewrites history.
 - **Post-edit diagnostics**: existing `tsc` parser for `.ts`, `.tsx`, `.mts`, `.cts`
-  (`tsc --noEmit --pretty false`) and existing Ruff JSON parser for `.py`, `.pyi`
+  (`tsc --noEmit --pretty false --listFiles`) and existing Ruff JSON parser for `.py`, `.pyi`
   (`ruff check --output-format=json -- {path}`, for roots with `pyproject.toml`,
   `ruff.toml` or `.ruff.toml`). These use installed executables on PATH;
   no package installation, checker discovery, new parser or approval bypass.
   TypeScript remains enabled without a root tsconfig, including references-only
   roots and JSONC; absent project/unsupported output is incomplete, not clean.
+  The compiler's file list must include the touched file before this default
+  checker can report completed coverage. References-only solutions and excluded
+  files are incomplete even when tsc exits zero; this does not build references.
+  Custom tsc checker arrays without `--listFiles` retain their existing output
+  semantics and do not gain this coverage check.
   A checker still needs the existing exec permission and sandbox. Missing tools,
   denied execution and unsupported output are visibly unavailable/incomplete,
   never a fabricated clean result. Other extensions have no invented checker.
@@ -96,10 +105,11 @@ Transport selection and one explicit write approval are fixture inputs, not
 feature opt-ins. It checks checkpoint creation, an honest post-edit diagnostics
 line (exec remains denied unattended), completed session-end ingest and raw
 Markdown preservation; the existing TUI Markdown renderer is asserted separately.
-The companion `.agentrig/r17/recommended-smoke.py` runs the real TUI in a PTY,
+The committed `docs/plans/R17b-repair-smoke.py` runs the real TUI in a PTY,
 declines project trust and diagnostic exec approval, and checks its final rendered
-frame plus canonical session events. The observed result is in
-[`plans/R17b-smoke.json`](plans/R17b-smoke.json). Both fixtures use a local
+frame plus canonical session events. Round-3 reproduction commands and receipts are in
+[`plans/R17b-round3.md`](plans/R17b-round3.md); old smoke receipts are historical,
+not independently reproduced reviewer evidence. Both fixtures use a local
 deterministic provider, not a live-provider claim. Existing Markdown/frame,
 prompt-history, notification, summary and thinking
 replay suites continue to cover their already-default paths.
@@ -113,6 +123,10 @@ or relax that safety check. #232 is the prior declaration-only plan-check fricti
 
 ## Checkpoint retention and destructive restore
 
-In one atomic Git ref transaction before publishing the terminal ownership seal, the last **two mutating-turn refs** remain as undo targets; older turn refs are deleted using compare-and-delete, never by rewriting session JSONL. Immutable checkpoint events for pruned turns remain historical receipts; attempting to undo or `/diff checkpoint <turn>` a pruned target reports "pruned or missing" before writing. A pruning failure leaves all refs unchanged and emits no sealed event. Retained targets keep the existing ownership, quiescence, index and HEAD guards. Sealed refs are kept. Interrupted/unsealed sessions keep all refs to avoid discarding recovery data; sessions and sealed refs therefore still grow over time. This is not global garbage collection and does not add a prune command.
+In one atomic Git ref transaction before publishing the terminal ownership seal, the last **two mutating-turn refs** remain as undo targets; older turn refs are deleted using compare-and-delete, never by rewriting session JSONL. Immutable checkpoint events for pruned turns remain historical receipts; attempting to undo or `/diff checkpoint <turn>` a pruned target reports "pruned or missing" before writing. A pruning failure leaves all refs unchanged and emits no sealed event. Retained targets keep the existing ownership, quiescence, index and HEAD guards. Sealed refs are kept. Sessions interrupted before the seal transaction keep all turn refs. If the
+transaction commits but the subsequent sealed-event append fails, older turn refs
+have already been pruned although the log is unsealed; undo refuses without the
+seal event. This is not an all-refs recovery guarantee for that failure window.
+Sessions and sealed refs therefore still grow over time. This is not global garbage collection and does not add a prune command.
 
 `supervisorAbortRestores` requires explicit trusted-config or CLI sources for both `supervise` and `checkpoints`, as well as explicit abort/restore flags and the existing sandbox-none/quiescence conditions. The implicit recommended layer never supplies destructive-restore authority. Resolver provenance markers cannot be set in config.

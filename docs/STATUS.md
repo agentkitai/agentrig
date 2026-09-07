@@ -1,5 +1,34 @@
 # Status
 
+## R17b final repair round 3/3 — builder agentrig, conductor 2aa2f739
+
+Repair session **b12646c7**, sixth known implementation/arbitration child; zero
+spawned children. Existing single worktree, branch feat/r17b-defaults, PR #234.
+Old head `e5b8044f86b9edbcc7ada95e2c7dde8db6e9d715`; current main is already
+an ancestor. No rebase, new arbiter, second exception, review or merge by child.
+All prior authorization, sandbox RECORD, human #248 resolution and session
+history below remain in force. Prior sessions: builders 7dbfad2b, b9109d9f;
+arbiter 1bb8ec86; fixers 12b8dd75, 633e8e44; conductors 8fbde1a3, 38c4612d,
+2aa2f739. See [round-3 receipts](plans/R17b-round3.md).
+
+**Historical evidence correction:** round-2's local 213-file/3379-passed/4-skipped
+trio and auxiliary receipts are dirty-tree-only, not reproducible from clean old
+head. Hosted run 34157135772 failed Ubuntu and macOS at
+recommended-defaults.test.ts:117; Windows passed and structure passed separately.
+Neither reviewer reproduced the retained PTY/E1 receipts. They are not current
+clean-head or independent-review evidence.
+
+Accounting: six known implementation/arbitration children, one historical halt
+(#248, human resolved), no new halt. Historical round-2 main-model snapshot is
+247595 uncached input + 15526 output + 938752 cached input = 1201873 tokens;
+auxiliary separate, never a row total. Prior feel issues remain below, including
+#251 orphan worktree index.lock and #252 initial Claude provenance failure
+(retry succeeded using sole claude-opus-5). No new AgentRig friction observed.
+This is the final repair round, not a reset. Independent delta review remains
+required; residuals must be tracked, not waived. Final gate receipt pending.
+
+### Historical round-2 record (superseded where corrected above)
+
 ## R17b repair round 2/3 — builder agentrig, conductor 2aa2f739
 
 Prior halt feel #248 is resolved by the human outside the train: restore diagnostics

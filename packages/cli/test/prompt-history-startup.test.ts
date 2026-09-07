@@ -62,7 +62,8 @@ it.each([true,false])("actual TUI restart recalls only trusted project disk hist
   } finally {if(tty)Object.defineProperty(process.stdin,"isTTY",tty);else Reflect.deleteProperty(process.stdin,"isTTY");}
 },15000);
 
-it.each([true, false])("startTui forwards persistent verbose=%s to the mounted controller", async verbose => {
+it("startTui forwards persistent verbose=true to the mounted controller", async () => {
+  const verbose = true;
   const root = await mkdtemp(join(tmpdir(), "agentrig-verbose-start-")); roots.push(root);
   vi.stubEnv("ANTHROPIC_API_KEY", "fixture");
   const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");

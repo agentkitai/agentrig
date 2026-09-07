@@ -843,7 +843,7 @@ it("sealing retains only the last two turn refs and preserves last retained undo
   expect(await git("rev-parse", "HEAD")).toBe(branch);
   expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(5);
   const store = new SessionStore({root: join(root, ".agentrig", "sessions")});
-  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two sealed turn refs are retained");
+  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained");
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 5");
   await undoSession(store, session.id, {cwd: root, toTurn: 4});
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 3");

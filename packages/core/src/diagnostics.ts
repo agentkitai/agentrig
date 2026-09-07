@@ -1,5 +1,5 @@
 import { open, realpath } from "node:fs/promises";
-import { extname, resolve } from "node:path";
+import { extname, isAbsolute, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -97,6 +97,10 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
   if (observed.incomplete || !observed.sameCommand) return { ...report, status: "incomplete", reason: observed.sameCommand ? observed.reason : "checker command changed by hook" };
   const entries: Array<{ path: string; line: number; column?: number; code?: string; message: string }> = [];
   let unknown = false;
+  // --listFiles is compiler-observed coverage, not a guessed tsconfig traversal.
+  // A solution can exit zero without compiling any referenced source files.
+  const checksCoverage = checker.parser === "tsc" && checker.args.includes("--listFiles");
+  let touchedFileListed = false;
   if (checker.parser === "ruff-json") {
     try { for (const d of Ruff.parse(JSON.parse(observed.text))) entries.push({ path: d.filename, line: d.location.row,
       column: d.location.column, ...(d.code === null ? {} : { code: d.code }), message: d.message }); }
@@ -105,7 +109,13 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
     if (line.length > 8192) { unknown = true; continue; }
     const match = checker.parser === "tsc" ? /^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/.exec(line)
       : /^(.+?):(\d+)(?::(\d+))?: (.+)$/.exec(line);
-    if (match === null) { unknown = true; continue; }
+    if (match === null) {
+      if (checksCoverage && isAbsolute(line)) {
+        try { if (await realpath(line) === changed.path) touchedFileListed = true; }
+        catch { unknown = true; }
+      } else unknown = true;
+      continue;
+    }
     const n = Number(match[2]), col = match[3] === undefined ? undefined : Number(match[3]);
     if (!Number.isSafeInteger(n) || n < 1 || (col !== undefined && (!Number.isSafeInteger(col) || col < 1))) { unknown = true; continue; }
     entries.push({ path: match[1]!, line: n, ...(col === undefined ? {} : { column: col }),
@@ -122,7 +132,9 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
     size += bytes; report.entries.push(bounded);
     if (entry.message.length > 1024 || (entry.code?.length ?? 0) > 64) unknown = true;
   }
-  if (unknown || report.omitted > 0 || (observed.exitCode !== 0 && entries.length === 0)) {
+  if (checksCoverage && !touchedFileListed) {
+    report.status = "incomplete"; report.reason = "checker did not establish touched-file coverage";
+  } else if (unknown || report.omitted > 0 || (observed.exitCode !== 0 && entries.length === 0)) {
     report.status = "incomplete"; report.reason = "unrecognized, omitted or unexplained checker output";
   } else { report.status = "reported"; report.reason = report.otherFileCount > 0 ? "checker also reported other-file diagnostics"
     : report.entries.length > 0 ? "checker reported touched-file diagnostics" : "no diagnostics reported (not proof of correctness)"; }

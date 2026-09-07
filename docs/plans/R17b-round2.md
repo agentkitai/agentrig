@@ -1,5 +1,14 @@
 # R17b repair round 2 of 3 — PR #234
 
+> **Historical correction — round 3, agentrig session b12646c7:** the local
+> 213-file/3379-passed/4-skipped trio and round-2 auxiliary receipts below are
+> dirty-implementation-tree-only, not reproducible clean-old-head evidence.
+> Clean e5b8044f86b9edbcc7ada95e2c7dde8db6e9d715 fails the recommended-review
+> test on Ubuntu and macOS (hosted run 34157135772); Windows passed. Neither
+> independent reviewer reproduced the PTY/E1 receipts. Keep this history, but
+> use R17b-round3.md for new evidence; no old receipt is replaced.
+
+
 Builder **agentrig**, conductor **2aa2f739**. Adopted
 `bf66779439f3e077c3d2f5b7a6c1a22a56c8bb1f` in the existing single worktree;
 merged `origin/main` `8c23c70369a539422d0782894fad71cad17341f0` (never rebased).

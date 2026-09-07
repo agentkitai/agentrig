@@ -335,7 +335,7 @@ it.each([false, true])("checkpoint diff validates its recorded run and refuses a
   expect(output).toContain("-checkpoint-before"); expect(output).toContain("+checkpoint-after"); expect(calls).toBe(2);
   if (checkpoint?.type !== "checkpoint.created") throw Error("missing checkpoint");
   await git(["update-ref", "-d", checkpoint.ref]);
-  await expect(manualDiff(cwd, "checkpoint", new AbortController().signal, options)).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing)");
+  await expect(manualDiff(cwd, "checkpoint", new AbortController().signal, options)).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained");
   await git(["update-ref", checkpoint.ref, "HEAD"]);
   await expect(manualDiff(cwd, "checkpoint", new AbortController().signal, options)).rejects.toThrow("changed");
 }, 30_000);

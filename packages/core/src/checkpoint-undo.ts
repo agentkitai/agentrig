@@ -99,7 +99,7 @@ export async function undoSession(store: SessionStore, sessionId: string, option
     await checkpointer.guard(ctx);
     for (const event of [checkpoint,seal]) {
       const retained = (await git(repo,["for-each-ref","--format=%(refname)",event.ref],undefined,signal)).stdout.split("\n").includes(event.ref);
-      if (!retained) throw new Error(`checkpoint turn ${event.turn} is unavailable (pruned or missing); only the last two sealed turn refs are retained`);
+      if (!retained) throw new Error(`checkpoint turn ${event.turn} is unavailable (pruned or missing); only the last two mutating-turn refs are retained`);
       const symbolic = await git(repo,["symbolic-ref","-q",event.ref],undefined,signal).then(()=>true).catch(error=>{if(error.code===1)return false;throw error;});
       if (symbolic || (await git(repo,["rev-parse","--verify",event.ref],undefined,signal)).stdout.trim()!==event.commit ||
         (await git(repo,["rev-parse",`${event.commit}^{tree}`],undefined,signal)).stdout.trim()!==event.tree) throw new Error("checkpoint ref/object changed");

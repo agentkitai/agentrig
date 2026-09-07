@@ -22,7 +22,7 @@ async function resolved(argv: string[] = [], config?: object, protocolNotice = f
 it('zero-config recommended profile enables existing conveniences without moving authority', async () => {
   const opts = await resolved();
   expect(opts).toMatchObject({ supervise: true, checkpoints: true, ingestOnEnd: true, memory: '.agentrig', notifications: 'bell' });
-  expect(opts.diagnostics).toEqual([expect.objectContaining({parser: "tsc"})]);
+  expect(opts.diagnostics).toEqual([expect.objectContaining({parser: "tsc", args: ["--noEmit", "--pretty", "false", "--listFiles"]})]);
   expect(opts.yolo).not.toBe(true); expect(opts.allow).toEqual([]); expect(opts.sandbox).toBe("none");
   expect(opts.supervisorReview).not.toBe(true); expect(opts.supervisorAbort).not.toBe(true);
 });
@@ -110,8 +110,27 @@ it('review accepts the built-in recommended baseline without enabling run hooks'
   const root = await mkdtemp(join(tmpdir(), 'recommended-review-')); roots.push(root);
   const errors: string[] = [];
   const spy = vi.spyOn(console, "error").mockImplementation((...args) => {errors.push(args.join(" "));});
-  await buildProgram({config: {cwd: root, home: root, env: {}}}).parseAsync(['review', '--profile', 'recommended'], {from:'user'});
+  const provider = vi.fn(() => { throw new Error("provider must not be constructed"); });
+  const reviewProcess = vi.fn(async () => { throw new Error("process must not run"); });
+  await buildProgram({config: {cwd: root, home: root, env: {}}, review: {provider, process: reviewProcess}}).parseAsync(['review', '--profile', 'recommended', '--comment'], {from:'user'});
+  expect(provider).not.toHaveBeenCalled();
+  expect(reviewProcess).not.toHaveBeenCalled();
   spy.mockRestore(); process.exitCode = 0;
   expect(errors.join("\n")).not.toContain("unknown config profile");
   expect(errors.join("\n")).toContain("diff review refused or failed");
+});
+
+it('profile-ignorant commands explicitly note that recommended is ignored', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  await buildProgram().parseAsync(['sessions', 'ls', '--profile', 'recommended'], {from: 'user'});
+  expect(errors.mock.calls.flat().join('\n')).toContain('note: --profile is ignored by `ls`');
+});
+it('recommended on a config-aware non-run command notes that run defaults do not apply', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'recommended-note-')); roots.push(root);
+  const notices: string[] = [];
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  await buildProgram({config: {cwd: root, home: root, env: {}, notice: note => notices.push(note)}})
+    .parseAsync(['review', '--profile', 'recommended', '--comment'], {from:'user'});
+  expect(notices.join('\n')).toContain('recommended run defaults do not apply to `review`');
+  expect(errors.mock.calls.flat().join('\n')).not.toContain('unknown config profile');
 });

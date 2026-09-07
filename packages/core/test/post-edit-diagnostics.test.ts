@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -248,3 +248,31 @@ it.each([false, true])('real root TypeScript checker reports edited-file errors=
   if (erroneous) expect(result.entries[0]?.code).toBe('TS2322');
   expect(result.exitCode).toBe(erroneous ? 2 : 0);
 }, 20_000);
+
+// Real compiler, fake model: root solutions do not compile their referenced children.
+it.each(['references-only', 'jsonc-references', 'mixed', 'excluded', 'missing', 'clean'])
+  ('default-style tsc proves touched-file coverage: %s', async kind => {
+    const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+    const f = await fixture([{parser: 'tsc', extensions: ['.ts'], executable: process.execPath,
+      args: [compiler, '--noEmit', '--pretty', 'false', '--listFiles'], timeoutMs: 20000}]);
+    await mkdir(join(f.cwd, 'child'));
+    await writeFile(join(f.cwd, 'child/tsconfig.json'), JSON.stringify({compilerOptions: {composite: true}, include: ['*.ts']}));
+    await writeFile(join(f.cwd, 'other.ts'), 'export const other = 1;');
+    await mkdir(join(f.cwd, 'reference'));
+    await writeFile(join(f.cwd, 'reference/tsconfig.json'), '{"compilerOptions": {"composite": true}, "files": ["index.ts"]}');
+    await writeFile(join(f.cwd, 'reference/index.ts'), 'export const unrelated = 1;');
+    const refs = {files: [], references: [{path: './child'}]};
+    const config = kind === 'mixed' ? {compilerOptions: {skipLibCheck: true}, include: ['child/*.ts'], references: [{path: './reference'}]}
+      : kind === 'excluded' ? {files: ['other.ts']} : kind === 'clean' ? {include: ['child/*.ts']} : refs;
+    if (kind !== 'missing') await writeFile(join(f.cwd, 'tsconfig.json'), kind === 'jsonc-references'
+      ? '{ // real references, not text matching\n "files": [], "references": [{"path": "./child"}], }' : JSON.stringify(config));
+    f.turns.push([call('write_file', 'edit', {path: 'child/target.ts', content: kind === 'clean' ? 'export const x: number = 2;' : 'export const x: number = "bad";'}), {type: 'stop', reason: 'tool_use'}]);
+    const {events} = await run(f);
+    const report = diagnosticResult(events).diagnostics;
+    expect(report?.status).toBe(kind === 'mixed' || kind === 'clean' ? 'reported' : 'incomplete');
+    if (kind === 'mixed') expect(report?.entries).toEqual([expect.objectContaining({code: 'TS2322'})]);
+    if (['references-only', 'jsonc-references', 'excluded'].includes(kind)) {
+      expect(report?.exitCode).toBe(0);
+      expect(report?.reason).toContain('did not establish touched-file coverage');
+    }
+  }, 30000);
