@@ -66,6 +66,13 @@ import { openBackend } from "./memory.js";
 import { buildPermissionPolicy, defaultSystemPrompt, positiveNumber } from "./run.js";
 import { RESERVED_COMMAND_NAMES } from "./tui/commands.js";
 import { acquireOtel, validateOtel } from "./otel.js";
+import { SubagentTurnLimitSchema } from "./config.js";
+
+function subagentTurnLimit(value = "15"): number {
+  const parsed = SubagentTurnLimitSchema.safeParse(value);
+  if (!parsed.success) throw new Error("--subagent-max-turns must be a positive safe integer");
+  return Number(parsed.data);
+}
 
 function promptBlocks(options: {
   system: string;
@@ -417,7 +424,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
   return {
     createAgent,
     ...(w.agentRoles === undefined ? {} : { roles: w.agentRoles, modelRoles: { ...w.providers.roleNames } }),
-    maxTurns: positiveNumber("--subagent-max-turns", w.opts.subagentMaxTurns ?? "15"),
+    maxTurns: subagentTurnLimit(w.opts.subagentMaxTurns),
     childBudget,
     ...(w.pricing === undefined ? {} : { pricing: w.pricing }),
     maxChildren,
@@ -481,6 +488,7 @@ export function heartbeatBuildOptions<T extends AgentBuildOptions>(opts: T): T {
 }
 
 export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = {}): Promise<BuiltAgent> {
+  subagentTurnLimit(opts.subagentMaxTurns); // Fail before discovery, provider construction or dispatch.
   validateOtel(opts);
   if (opts.mcpConfig !== undefined && opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
     throw new Error("MCP servers start in the host process outside the tool sandbox; remote HTTP requires explicit --sandbox-network and network permission; stdio requires --sandbox none");

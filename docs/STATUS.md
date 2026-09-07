@@ -1,10 +1,25 @@
 # Status
 
-Active delivery: grapheme PR#215 and turn-limit PR#216. Skill casing PR#214
-merged first as main dbc89c9 after all-four exact-head CI; post-main CI34102581250 /
-structure34102581248 is pending at this checkpoint. Final hosted receipts are on
-[PR#214](https://github.com/agentkitai/agentrig/pull/214) and
-[PR#215](https://github.com/agentkitai/agentrig/pull/215). No new lane until this batch drains.
+Current integration: #215 merged as main f196709697b1832063ddee6288fdac004a2ee7d0
+after all four exact-head checks; post-main CI34103360944 / structure34103361105
+are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).
+#214 is done, all-four post-main CI34102581250 / structure34102581248 green;
+[final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+#216 is the remaining PR in this batch; no new lane until it is delivered.
+The earlier implementation checkpoints below retain their historical test evidence.
+
+Active independent follow-up: reject fractional subagent turn limits before provider
+construction. [Contract](plans/subagent-integer-turn-limits.md). Eight new controls
+fail before the correction; all61 focused CLI/config tests pass afterward, including
+actual role spawning with omitted/default,2 and2.0 limits. Other numeric settings and
+role-directory diagnostics are unchanged. Build/typecheck,95 focused tests,
+required pinned Docker full3,280 passed+2 existing skips/209 files (93.36s), and
+Chromium1 pass. One independent review APPROVE/no material findings, requested24/
+reported26 turns; original result and limitations in the [receipt](plans/subagent-integer-turn-limits-review.md).
+Hosted exact-head and post-main gates remain pending.
+Base300c5e2 is the parent-confirmed green slash-suggestions delivery; earlier checkpoint
+text below is historical, not a prohibition on this authorized follow-up.
+
 Previous PR#212/#213 are delivered, all-four green main300c5e2
 (CI34098667334 / structure34098667328); [receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
 Grapheme deletion shares one helper between composer and unconfirmed scope input.

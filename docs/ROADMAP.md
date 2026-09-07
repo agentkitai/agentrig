@@ -1,9 +1,11 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Active delivery: grapheme PR#215 and turn-limit PR#216. Skill casing PR#214
-merged first as main dbc89c9; its post-main gate is pending at this checkpoint.
-Each PR holds its final hosted receipt. Merge whichever reviewed item is ready
-on green current main; no new lane until this batch drains.
+Current delivery: turn-limit PR#216 integrates grapheme PR#215, merged as main
+f196709697b1832063ddee6288fdac004a2ee7d0 after all four exact-head checks; its
+post-main gate is pending. [Grapheme receipt](https://github.com/agentkitai/agentrig/pull/215).
+Skill casing #214 is done, all-four post-main CI34102581250 / structure34102581248
+green; [final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722).
+No new lane until #216 completes. Each PR retains its original review/evidence.
 PR#212 and PR#213 are done; main300c5e2 passed all-four CI34098667334 /
 structure34098667328. [Slash delivery receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
 The previous queue checkpoints below are historical.
@@ -1297,7 +1299,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   dedicated BLOCKED report instead of the existing auxiliary error/no-grade path, and improve
   presentation of original evaluator attestations beside derived lane assessments. Neither
   path may infer independence from labels, erase failures, or create a second evaluation runner.
-- R5c nested skill filename casing (in progress; [plan](plans/skill-filename-casing.md)):
+- R5c nested skill filename casing (done, [PR#214 final receipt](https://github.com/agentkitai/agentrig/pull/214#issuecomment-5568048722); [plan](plans/skill-filename-casing.md)):
   refuse noncanonical nested markers before package publication/loading, matching exact `SKILL.md`.
   Remaining independent polish: make the deliberate hardlink-source refusal more prominent for pnpm-linked source trees.
   The review's root-alias precedence defect was fixed in R5c, not deferred here.
@@ -1367,9 +1369,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
-- R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
-  subagent turn flags consistently at CLI parsing. Current role spawning fails closed
-  when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R15h polish (turn-count validation implemented, delivery pending): CLI/config/builder
+  reject fractional subagent turn limits before provider construction, preserving positive
+  safe integers and the default. [Contract](plans/subagent-integer-turn-limits.md).
+  Clearer canonical role-directory refusal diagnostics remain queued; no limit is widened.
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
