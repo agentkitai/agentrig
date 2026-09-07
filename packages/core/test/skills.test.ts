@@ -214,6 +214,20 @@ describe("what reaches the system prompt is untrusted input", () => {
 });
 
 describe("skillsInjection", () => {
+  it("does not assign the first catalogue skill to an unrelated task", () => {
+    const arbiter = parseSkill("---\ndescription: Judge proposed deviations; never builds.\n---\nJudge only.", "/x/arbiter.md");
+    const dogfood = parseSkill("---\ndescription: Build the assigned roadmap row.\n---\nBuild it.", "/x/dogfood.md");
+    for (const entries of [[arbiter, dogfood], [dogfood, arbiter]]) {
+      const text = skillsInjection(entries);
+      expect(text).toContain("Select the skill matching the task, not the first entry");
+      expect(text).toContain("a catalogue entry does not assign your role");
+      expect(text).not.toContain('skill({"name":"arbiter"})');
+      expect(text).not.toContain('skill({"name":"dogfood"})');
+      expect(text).toContain("- arbiter:");
+      expect(text).toContain("- dogfood:");
+    }
+  });
+
   it("is one line per skill — the body is NOT in the prompt", async () => {
     await skill("a.md", "---\ndescription: does a thing\n---\n" + "BODY ".repeat(500));
     const found = await discoverSkills({ roots: [dir] });

@@ -1,5 +1,21 @@
 # Status
 
+R17 skill-selection recovery (outside train, 2026-09-07): the user resolved
+[feel #229](https://github.com/agentkitai/agentrig/issues/229) by authorizing R17g
+as sequential package PRs; R17b–R17f remain one PR per row. Conductor `c1a25934`
+timed out its clarification before any child; `3a98263d` restarted with the explicit
+exception and successfully spawned builder `ddadeef7`. That child loaded arbiter
+and refused implementation; no worktree or PR was produced. Conductor filed
+[feel #230](https://github.com/agentkitai/agentrig/issues/230) and stopped.
+The catalogue's concrete first-entry "First call" example named arbiter. Codex's
+outside-train repair removes that accidental role-selection cue, instructing callers
+to select by the task rather than catalogue order. Descriptions/triggers, byte caps,
+on-demand loading, remote advisory status and skill authorization remain unchanged.
+Tests cover both arbiter/dogfood orders and actual CLI generated/manual catalogues.
+This fixes the misleading cue, not a guarantee of model obedience. After review,
+tests and green exact/post-merge CI, restart the clarified authorization with the
+same R17f 12,000,000-token allowance and canonical-event/permission monitoring.
+
 R17 monitored restart recovery (2026-09-07, outside train): conductor `c10db599`
 repeated invalid `agent: "builder"` calls despite #226's explicit guidance. The
 operator detected the recurrence from canonical events and aborted after 24 turns,

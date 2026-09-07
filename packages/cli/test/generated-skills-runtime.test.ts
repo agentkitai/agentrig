@@ -39,7 +39,8 @@ it("manual hint reaches the assembled prompt without claiming activation or repl
         "--root", join(root, `logs-${custom}`), ...(custom ? ["--system", "Custom system instructions"] : [])], { from: "user" });
       expect(systems).toHaveLength(1);
       expect(systems[0]).toContain('[trigger: When inspecting fixtures]');
-      expect(systems[0]).toContain('skill({"name":"manual"})');
+      expect(systems[0]).toContain("- manual:");
+      expect(systems[0]).toContain("Select the skill matching the task");
       expect(systems[0]!.includes("stop at the first matching case")).toBe(!custom);
       if (custom) expect(systems[0]).toContain("Custom system instructions");
     }
@@ -122,8 +123,9 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
         expect(system).toContain("within configured budgets");
         if (!["default", "disabled"].includes(mode)) {
           expect(system).toContain('[trigger: When reviewing a release check tests]');
-          expect(system).toContain(`skill(${JSON.stringify({ name })})`);
-        } else expect(system).not.toContain("First call for a covered task");
+          expect(system).toContain(`- ${name}:`);
+          expect(system).toContain("Select the skill matching the task");
+        } else expect(system).not.toContain("Select the skill matching the task");
       }
       const used = events.filter(event => event.type === "skill.used");
       if (mode === "enabled" || mode === "explicit") {
