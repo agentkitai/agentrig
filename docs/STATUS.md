@@ -1,12 +1,24 @@
 # Status
 
-Active: **R16a final-answer Markdown presentation**, PR #199. One Claude
+Active: **bounded runtime-fixture CI repair**. R16a #199 merged as339f795 after
+all four exact-head checks passed; post-main CI34075972025 failed Windows in the
+existing generated-skills runtime fixture at5,009ms. Linux/macOS/structure passed.
+R16a delivery remains blocked, not done. The repair also covers the existing
+evidence-grading outer timeout observed on #205; no product deadline changes.
+[Original failures and frozen repair contract](plans/runtime-fixture-ci-bound.md).
+Feature merges pause until exact-head and repaired-main all-four checks pass.
+Repair local verification: build/typecheck, required-Docker3,070passed +2 existing
+skips /192files and actual Chromium pass. One static-only Claude APPROVE, no
+material finding:24requested/25reported plus sole tools-disabled summary1/1.
+[Original review and verification limits](plans/runtime-fixture-ci-bound-review.md).
+
+Historical R16a implementation: **final-answer Markdown presentation**, PR #199. One Claude
 REQUEST_CHANGES review (24 requested /20 reported turns); nested-block separation
 fixed with three fail-before/pass-after controls. [Original review](plans/R16a-review.md),
 [contract](plans/R16a.md). Current integration uses green main93452df (#200);
 frozen install/build/typecheck and required-Docker full pass **3,068 tests plus
 two existing skips /192 files, 69.23s**, plus real Chromium smoke (one, 2.47s).
-Final exact-head and post-main four-check CI gates remain pending.
+Exact-head gates passed; post-main Windows failed as recorded above.
 
 R16d is done: main93452df95a731a38bd46badb78953d13a7c8f272 passed all four
 post-main checks CI34073899219 and structure34073899121.
