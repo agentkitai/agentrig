@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -28,6 +28,23 @@ vi.mock("../src/agent-builder.js",async importOriginal=>{
 import { startTui } from "../src/tui/start.js";
 const roots:string[]=[];
 afterEach(async()=>{vi.restoreAllMocks();vi.unstubAllEnvs();harness.calls=[];for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
+it.each(["", "\u001b[201~"])("real startup discovers configured skills and shows them on slash without Tab (%j)",async prefix=>{
+  const root=await mkdtemp(join(tmpdir(),"agentrig-slash-start-"));roots.push(root);
+  const skills=join(root,"skills");await mkdir(skills);
+  await writeFile(join(skills,"zebra-startup.md"),"---\nname: zebra-startup\ndescription: fixture skill\n---\nBODY_NOT_EXECUTED");
+  vi.stubEnv("ANTHROPIC_API_KEY","fixture");
+  const fetch=vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("no network expected"));
+  const tty=Object.getOwnPropertyDescriptor(process.stdin,"isTTY");Object.defineProperty(process.stdin,"isTTY",{value:true,configurable:true});
+  try {
+    harness.exercise=async(c,history,input,writes)=>{
+      input.send(prefix+"/");await vi.waitFor(()=>expect(writes.join("")).toContain("/zebra-startup [skill]"));
+      expect(c.snapshot().sessionId).toBeNull();expect(history.values()).toEqual([]);expect(harness.calls).toEqual([]);
+      input.send(prefix+"\t");await vi.waitFor(()=>expect(writes.join("")).toContain("> /zebra-startup"));
+      expect(harness.calls).toEqual([]);expect(fetch).not.toHaveBeenCalled();
+    };
+    await startTui({root:join(root,"logs"),skills:[skills],provider:"anthropic",model:"fake",repoMap:false,maxTurns:"2",maxTokensPerTurn:"100"});
+  } finally {if(tty)Object.defineProperty(process.stdin,"isTTY",tty);else Reflect.deleteProperty(process.stdin,"isTTY");}
+});
 it.each([true,false])("actual TUI restart recalls only trusted project disk history (trusted=%s)",async trusted=>{
   const root=await mkdtemp(join(tmpdir(),"agentrig-history-start-"));roots.push(root);vi.stubEnv("ANTHROPIC_API_KEY","fixture");
   const tty=Object.getOwnPropertyDescriptor(process.stdin,"isTTY");Object.defineProperty(process.stdin,"isTTY",{value:true,configurable:true});

@@ -18,20 +18,108 @@ class Input extends EventEmitter {
 }
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
-async function fixture(history = new PromptHistory()) {
+async function fixture(history = new PromptHistory(), columns = 80, rows = 24) {
   const cwd = await mkdtemp(join(tmpdir(), "agentrig-composer-")); cleanups.push(() => rm(cwd, {recursive:true,force:true}));
   const requests: ModelRequest[] = []; const controller = new TuiController({cwd,agent:{run(){throw Error("unattached");}}});
   controller.attach(createAgent({provider:{id:"fixture",model:"fixture",capabilities:{tools:false,parallelTools:false,caching:false,contextWindow:100000},
     async *stream(req) { requests.push(req); yield {type:"text_delta",text:"reply"}; yield {type:"stop",reason:"end_turn"}; }},
     store:new SessionStore({root:join(cwd,"logs")}),tools:[],systemPrompt:"fixture",repoMap:false,permissions:new RulePolicy([])}));
-  const input = new Input(); const writes: string[] = [];
-  const output = Object.assign(new EventEmitter(), {columns:80,rows:24,isTTY:true,write:(text:string)=>{writes.push(text);return true;}});
+  const input = new Input(); const writes: string[] = [], unreadAtWrite: number[] = [];
+  const output = Object.assign(new EventEmitter(), {columns,rows,isTTY:true,write:(text:string)=>{writes.push(text);unreadAtWrite.push(input.chunks.length);return true;}});
   let mounted!: () => void; const ready = new Promise<void>(resolve => {mounted=resolve;});
   const ink = render(createElement(App,{controller,history,onMounted:mounted}), {stdin:input as never,stdout:output as never,patchConsole:false,exitOnCtrlC:false});
   cleanups.push(async()=>{ink.unmount();await controller.shutdown();await history.close();}); await ready;
-  return {controller,input,writes,requests,history};
+  return {controller,input,writes,requests,history,unreadAtWrite};
 }
 const lastPrompt = (requests: ModelRequest[]) => requests.at(-1)?.messages.filter(m=>m.role==="user").at(-1)?.content;
+it.each(["", "\u001b[201~"])("suggestion selection redraws even when the wall clock does not advance (%j)", async prefix => {
+  const now=vi.spyOn(Date,"now").mockReturnValue(42);
+  try {
+    const f=await fixture();f.controller.setSkills([{name:"ClockA",body:"a"},{name:"ClockB",body:"b"}] as Skill[]);
+    f.input.send(prefix+"/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("› /ClockA [skill]"));
+    f.writes.length=0;f.input.send(prefix+"\u001b[B");
+    await vi.waitFor(()=>expect(f.writes.join("")).toContain("› /ClockB [skill]"));
+    expect(f.requests).toEqual([]);
+  } finally {now.mockRestore();}
+});
+it.each(["", "\u001b[201~"])("typing slash automatically discovers skills and navigates beyond eight without execution (%j)", async prefix => {
+  const f = await fixture();
+  f.controller.setSkills(Array.from({length:12}, (_,i) => ({name:`zskill${String(i).padStart(2,"0")}`,body:"not executed"})) as Skill[]);
+  f.input.send(prefix+"/");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("/zskill00 [skill]"));
+  expect(f.requests).toHaveLength(0); expect(f.history.values()).toEqual([]);
+  for (let i=0;i<10;i++) f.input.send(prefix+"\u001b[B");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("› /zskill10 [skill]"));
+  f.input.send(prefix+"\t");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("> /zskill10"));
+  f.input.send("argument");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("> /zskill10 argument"));
+  expect(f.requests).toHaveLength(0); expect(f.history.values()).toEqual([]);
+});
+it.each(["", "\u001b[201~"])("slash suggestions filter and close on arguments without changing typed Enter semantics (%j)", async prefix => {
+  const f = await fixture(); f.controller.setSkills([{name:"ZebraSkill",body:"never run"}] as Skill[]);
+  f.input.send(prefix+"/"); await vi.waitFor(() => expect(f.writes.join("")).toContain("/ZebraSkill [skill]"));
+  f.writes.length=0; f.input.send(prefix+"he");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("/help [command]"));
+  expect(f.writes.join("")).not.toContain("/ZebraSkill [skill]");
+  f.writes.length=0; f.input.send(prefix+"lp ");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("> /help"));
+  expect(f.writes.join("")).not.toContain("[command]");
+  f.input.send(prefix+"\r");
+  await vi.waitFor(() => expect(f.controller.snapshot().lines.some(line=>line.text.includes("/skills"))).toBe(true));
+  expect(f.requests).toHaveLength(0);
+});
+it("pasted slash and protected prompts do not open or act on suggestions", async () => {
+  const f = await fixture(); f.controller.setSkills([{name:"SkillCanary",body:"never run"}] as Skill[]);
+  f.input.send("\u001b[200~/\u001b[201~");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("> /"));
+  expect(f.writes.join("")).not.toContain("[skill]");
+  f.input.send("\u007f", "/"); await vi.waitFor(() => expect(f.writes.join("")).toContain("[skill]"));
+  f.writes.length=0;
+  const permission=f.controller.ask({tool:"effect",class:"exec",input:{},cwd:process.cwd()});
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("allow once"));
+  expect(f.writes.at(-1)).not.toContain("[skill]");
+  f.input.send("/", "\t", "\u001b[B"); expect(f.controller.snapshot().pending).not.toBeNull();
+  f.input.send("n"); expect(await permission).toBe("deny"); expect(f.requests).toHaveLength(0);
+});
+it.each(["", "\u001b[201~"])("slash text remains an answer, not a menu, in question and supervisor prompts (%j)", async prefix => {
+  const f=await fixture();f.controller.setSkills([{name:"SkillCanary",body:"never run"}] as Skill[]);
+  const question=f.controller.askQuestion({id:"00000000-0000-4000-8000-000000000001",sessionId:"fixture",toolUseId:"question",prompt:"QuestionCanary",options:["one"]},new AbortController().signal);
+  f.input.send(prefix+"/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("answer: /"));
+  expect(f.writes.join("")).not.toContain("[skill]");
+  f.input.send(prefix+"\t",prefix+"\u001b[B",prefix+"\r");
+  expect(await question).toMatchObject({answer:{text:"/"}});
+  f.writes.length=0;const escalation=f.controller.askSupervisor("GuidanceCanary");
+  f.input.send(prefix+"/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("answer: /"));
+  expect(f.writes.join("")).not.toContain("[skill]");
+  f.input.send(prefix+"\t",prefix+"\u001b[B",prefix+"\r");expect(await escalation).toBe("answered");
+  expect(f.history.values()).toEqual([]);expect(f.requests).toEqual([]);
+});
+it.each([[80,8],[80,12],[80,24],[120,8],[120,12],[120,24]])("slash list or tiny-terminal status fallback shares the frame budget at %sx%s without mid-input writes", async (columns, rows) => {
+  const f = await fixture(new PromptHistory(), columns, rows);
+  f.controller.setSkills(Array.from({length:20},(_,i)=>({name:`Skill${String(i).padStart(2,"0")}`+"x".repeat(80),body:"never run"})) as Skill[]);
+  f.controller.print(Array.from({length:300},(_,i)=>`SCROLLBACK_${i}`).join("\n"),"event");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("SCROLLBACK_299"));
+  f.writes.length=0; f.unreadAtWrite.length=0;
+  f.input.send("/");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("/Skill00"));
+  f.input.send(...Array.from({length:15},()=>"\u001b[B"));
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("/Skill15"));
+  expect(f.writes.join("")).not.toContain("\u001b[2J");
+  expect(f.writes.join("")).not.toContain("SCROLLBACK_");
+  expect(f.unreadAtWrite.every(count=>count===0)).toBe(true);
+  expect(f.requests).toHaveLength(0);
+});
+it("decoded Escape dismisses suggestions at the next safe terminal draw",async()=>{
+  const f=await fixture();f.controller.setSkills([{name:"EscapeSkill",body:"never run"}] as Skill[]);
+  f.input.send("/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("[skill]"));
+  f.writes.length=0;
+  // The second Escape releases the first but leaves a possible marker prefix.
+  // Tab disproves that prefix and gives the existing decoder a safe draw point.
+  f.input.send("\u001b","\u001b","\t");
+  await vi.waitFor(()=>expect(f.writes.length).toBeGreaterThan(0));
+  expect(f.writes.join("")).not.toContain("[skill]");expect(f.requests).toEqual([]);
+});
 it("actual Ink completes model selection without creating a model prompt", async () => {
   const f = await fixture(); let entry = "first";
   const info = () => ({ entry, provider: "fixture", model: entry });

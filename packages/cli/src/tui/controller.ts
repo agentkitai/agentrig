@@ -413,6 +413,11 @@ export class TuiController {
     }
     return [...names.values()].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0);
   }
+  /** Same bounded, validated catalogue; loaded skills lead interactive discovery. */
+  completionCandidates(): Array<{ name: string; kind: "skill" | "command" }> {
+    return this.completionNames().map(name => ({ name, kind: RESERVED_COMMAND_NAMES.has(name.toLowerCase()) ? "command" as const : "skill" as const }))
+      .sort((a, b) => a.kind === b.kind ? 0 : a.kind === "skill" ? -1 : 1);
+  }
   private extensionCommands: Array<ExtensionCommand & { extension: string }> = [];
   setCommands(commands: Array<ExtensionCommand & { extension: string }>): void { this.extensionCommands = commands; }
 

@@ -1,8 +1,9 @@
 # Compaction zero-retention follow-up
 
 Existing roadmap END item, independently assigned from green main `db2271b`.
-No new milestone hierarchy. Automatic slash suggestions remain a separate PR;
-root serializes that merge and green main before this item integrates and merges.
+No new milestone hierarchy. Delivered independently first as PR#212, main1cdfe53;
+slash suggestions then integrate it. The initial planned reverse order was
+unnecessary and corrected. [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/212).
 
 The public option counts retained tail messages; the first task is independently
 always retained. Deliberately support `keepLastMessages: 0`: summarize every later

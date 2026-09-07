@@ -1,8 +1,19 @@
 # Status
 
-Active END follow-up: **compaction zero retention**, independently implemented
-beside automatic slash suggestions under the user's follow-up authorization.
-Root merges slash suggestions first, then this item after updated green main.
+Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
+main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
+structure34097862218 is pending. Slash suggestions PR#213 integrates that main.
+This is the pre-delivery checkpoint; final hosted outcomes are recorded on
+[PR#212](https://github.com/agentkitai/agentrig/pull/212) and
+[PR#213](https://github.com/agentkitai/agentrig/pull/213), not inferred from labels.
+No new PRs until both are delivered. Independent green fixes need not wait behind
+an unrelated slower review; merges still require current-main and exact-head gates.
+Existing roadmap implementations are delivered; END follow-ups are now the work
+queue. The prior final delivery receipt is PR#211 comment5566809522, all-four
+post-main CI34094733668 / structure34094733642 green on main db2271b.
+Keep the previous checkpoints below as history, not the active queue.
+
+Compaction implementation checkpoint:
 [Contract](plans/compaction-zero-retention.md). Zero now retains the task plus
 conservative advisory summary; positive-count tool-pair widening is unchanged.
 Nine fail-before controls are restored; all 152 focused compaction/runtime/
@@ -10,7 +21,7 @@ provenance/thinking/manual tests pass. Build/typecheck, required-Docker full
 3,252 plus two existing skips /209 files (84.19s), and Chromium (2.86s) pass.
 One Claude APPROVE (24 requested /21 reported turns; typecheck executed, four test
 attempts denied); original review and limits retained. Hosted four-check gates
-and updated-main integration after slash suggestions remain pending.
+were pending at the original checkpoint; PR#212 has now merged first as above.
 Earlier implementation checkpoints below remain historical.
 
 Final implementation: **R16h themes/keybindings**, integrated with delivered R16g.

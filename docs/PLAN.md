@@ -824,6 +824,10 @@ composition without changing paste-safe quiet-point dispatch. Trusted projects
 retain bounded `.agentrig/history` outside raw/ingest inputs; untrusted launches
 remain memory-only. Approval/question/escalation input is excluded. See
 [R16d](plans/R16d.md) for privacy, storage limits and terminal compatibility.
+The slash-discovery follow-up adds an automatic bounded menu while typing the
+initial `/token`: skills first, arrow selection, Tab fill, explicit Enter execution.
+It shares the composer row budget and remains inactive for framed pasted content
+and protected answers. See [slash suggestions](plans/slash-suggestions.md).
 R8d adds an authenticated, exact-loopback reference web page over the existing ACP
 server/controller. Fixed assets, bearer plus Host/Origin checks, bounded WebSocket
 queues and joined connection ownership are explicit; authentication is not project
