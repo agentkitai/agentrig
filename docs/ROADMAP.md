@@ -1374,3 +1374,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16b optional display improvement: for files beyond the bounded captured prefix,
   show a captured window around the edit instead of head excerpts. Current output
   labels truncation/unknown contents and never claims an unseen complete patch.
+- R16h polish: friendly diagnostics for invalid direct SDK startup settings;
+  derive the collision count if new permission actions are introduced. If terminal
+  OSC queries are ever added, distinguish split reply terminators from opted-in
+  Ctrl+G input. No OSC queries/background detection are currently issued.

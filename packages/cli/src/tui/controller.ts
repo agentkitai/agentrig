@@ -494,7 +494,7 @@ export class TuiController {
         resolve: (d, remember, scope) => {
           if (settled) return;
           if (req.origin === "external-input-expansion" && remember === true) {
-          this.print("Fresh approval requires a one-time answer; standing answers cannot approve this boundary.", "system");
+            this.print("Fresh approval requires a one-time answer; standing answers cannot approve this boundary.", "system");
             return;
           }
           settled = true;
