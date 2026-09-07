@@ -23,6 +23,10 @@ Run this in a session that shares no context with the run that wrote the PR.
   names (merged with `origin/main` on a full pass, unmerged on a delta pass), with dependencies
   installed. Do not trust that — confirm with `git log -1`, `git status --porcelain` (clean) and
   `ls node_modules` before §3, and say so in your verdict.
+- The tree must belong exclusively to this reviewer, not a parallel reviewer or the author.
+  Build/test outputs and mutation probes write files: a read-only plan session or shared mutable
+  tree cannot perform this review. Report the blocked check rather than waiving it. Never change
+  permission settings, invoke a bypass, spawn children or auxiliary models to work around it.
 - `git fetch origin main <branch>`, then `git worktree add <tmpdir> origin/<branch>` — never
   review in a working tree that has your own or anyone else's edits.
 - Merge `origin/main` into the worktree. A conflict is a finding in itself (report which files);
@@ -70,6 +74,9 @@ Run this in a session that shares no context with the run that wrote the PR.
   run 2-4 mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
   `pnpm exec vitest run <file>`, restore, and only then run the next mutant — never overlap runs
   in one worktree. A surviving mutant on a security line is a finding even when every test passes.
+- Restore exact original bytes even when the check fails, and join its subprocesses before the
+  next mutant. Record the original HEAD and verify unchanged HEAD plus clean tracked/index state
+  at the end. Do not discard unfamiliar edits; an unrestored mutation is an incomplete review.
 - Where the PR claims "verified fail-first" or "mutant killed", re-run at least one of those
   claims yourself.
 
@@ -87,4 +94,6 @@ Run this in a session that shares no context with the run that wrote the PR.
   human, or to the `topic` conductor executing the human's already-authorized fixed band; landing is
   a separate flow under the `land` skill either way. The reviewer never treats its own verdict as
   merge authorization.
-- Remove the worktree when done. Leave the main working tree exactly as you found it.
+- When a conductor supplied the tree, leave its cleanup to the conductor after reporting the
+  restored/joined state. Otherwise remove your own worktree when done. Leave the main working
+  tree and every sibling reviewer tree exactly as you found them.
