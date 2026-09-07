@@ -4,7 +4,11 @@ Active independent follow-up: reject fractional subagent turn limits before prov
 construction. [Contract](plans/subagent-integer-turn-limits.md). Eight new controls
 fail before the correction; all61 focused CLI/config tests pass afterward, including
 actual role spawning with omitted/default,2 and2.0 limits. Other numeric settings and
-role-directory diagnostics are unchanged. Build/review/full/hosted gates pending.
+role-directory diagnostics are unchanged. Build/typecheck,95 focused tests,
+required pinned Docker full3,280 passed+2 existing skips/209 files (93.36s), and
+Chromium1 pass. One independent review APPROVE/no material findings, requested24/
+reported26 turns; original result and limitations in the [receipt](plans/subagent-integer-turn-limits-review.md).
+Hosted exact-head and post-main gates remain pending.
 Base300c5e2 is the parent-confirmed green slash-suggestions delivery; earlier checkpoint
 text below is historical, not a prohibition on this authorized follow-up.
 

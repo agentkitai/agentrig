@@ -20,3 +20,12 @@ exact-head CI gates. Root alone merges; no live model calls.
 Before correction: eight new CLI/config/direct-builder controls fail, while all
 three real local-provider role-run controls pass. After shared schema and early
 builder validation:61 CLI/config tests pass. Existing role runtime is unchanged.
+
+Final local gates: build/typecheck;95 focused CLI/config/runtime/wiring controls;
+required pinned real-Docker full3,280 passed+2 existing skips across209 files
+(93.36s); actual Chromium1. One independent [review](subagent-integer-turn-limits-review.md)
+approved with no material findings, requested24/reported26 turns and one denied git
+command disclosed. Author verified the reviewer fallback source matched the base.
+No source changes after the frozen review. Invalid explicitly supplied limits also
+refuse when subagents are disabled; no rounding or raw-value echo. Exact-head CI
+and root-only merge/post-main gates remain required.
