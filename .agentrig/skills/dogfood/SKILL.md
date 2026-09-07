@@ -117,7 +117,7 @@ state before accepting verdicts. The conductor owns removal of both trees after 
 
 - `codex review` over the full diff against `origin/main`.
 - A `claude` review of the same diff, pinned to Opus and given the tools to VERIFY, not just read:
-  `claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --output-format json --no-session-persistence "…"`.
+  `cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' --output-format json --no-session-persistence "…"`.
   Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
   review spend independent of whatever model the main session happens to be running. Without
   `--allowedTools` including Bash the reviewer cannot run vitest or probe built output, and its
@@ -126,6 +126,8 @@ state before accepting verdicts. The conductor owns removal of both trees after 
   prompting; unlike plan mode it permits the authorized tests and mutations. Never use a
   permission bypass, change permission settings, or relax required checks after a denial.
   Bash is not a filesystem sandbox: confine work to the owned review tree and temporary root.
+  Direct push/merge denials are defense in depth, not containment against scripts, alternate
+  spellings or shared Git metadata; private-fixture Git operations remain available for tests.
   Require no children/auxiliary models and assert sole `claude-opus-5` modelUsage using topic's
   extraction command before accepting the result; record the complete reviewed SHA.
 

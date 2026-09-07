@@ -93,7 +93,7 @@ For each recorded row, in order:
    - **Prepare.** One `bash` call, so every value it uses is assigned inside it before use:
      `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName)`;
      `HEAD=$(gh pr view NN --json headRefOid --jq .headRefOid)`; then
-     `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `git worktree add "$WT" "$HEAD"`,
+     `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `echo "$WT"`, `git worktree add "$WT" "$HEAD"`,
      `git -C "$WT" branch -f review-base-NN origin/main` (create it inside the worktree so
      `git -C "$WT"` sees it); assert
      `[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ] || stop the pass (the worktree is not at the
@@ -103,15 +103,20 @@ For each recorded row, in order:
      `review-base-NN` before stopping). A pass that stopped before both reviews completed is not a
      pass: the pass after a conflict-stopped one is a full pass on the new head, never a delta.
      `WT` belongs exclusively to Claude. Create Codex's independent tree at the same resulting
-     commit: `CODEX_WT=$(mktemp -d)`; `git worktree add --detach "$CODEX_WT" "$(git -C "$WT" rev-parse HEAD)"`.
+     commit: `REVHEAD=$(git -C "$WT" rev-parse HEAD)`; `CODEX_WT=$(mktemp -d)`;
+     `echo "$CODEX_WT" "$REVHEAD"`; `git worktree add --detach "$CODEX_WT" "$REVHEAD"`.
      Assert both trees have the same HEAD and are clean before launching either reviewer.
-     Then `(cd "$WT" && pnpm install)` and `(cd "$CODEX_WT" && pnpm install)` (pass a `timeoutMs` of at least 600000 to this `bash` call —
-     dogfood §8's warning about foreground commands a timeout can kill applies). `OUT=$(mktemp -d)`
+     `OUT=$(mktemp -d)`
      holds every output file; never write review artifacts inside either tree. Create independent
      temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
      command-local `TMPDIR` below, never change the operator's global environment.
-     End the command with `echo "$WT" "$CODEX_WT" "$OUT"`. `bash` has no cwd field and no shell
-     state survives between calls: record all three absolute paths like job ids, and substitute
+     End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`. Record these paths and
+     the post-merge review SHA BEFORE installing dependencies. Run `cd <WT> && pnpm install`
+     and `cd <CODEX_WT> && pnpm install` in separate calls, each with `timeoutMs` at least 600000;
+     require both exit codes zero before launching reviewers. A failed install cannot hide the
+     recorded cleanup paths; join it before removing either tree. No aggregate install timeout
+     was doubled. `bash` has no cwd field and no shell state survives between calls: record all
+     three absolute paths and REVHEAD like job ids, and substitute
      them literally into every later command. Never share mutable sources, build output or
      `node_modules` between the reviewers; worktrees are cooperative isolation, not an OS sandbox.
    - **Claude job** — `bash` with `background: true`:
@@ -119,6 +124,7 @@ For each recorded row, in order:
      cd <WT> && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
          -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_PID \
        TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' \
+         --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' \
          --output-format json --no-session-persistence \
          "Review PR #NN at head SHA HEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, merged with origin/main, with dependencies installed: skip section 2 and verify that state yourself. Run the required checks and mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
          < /dev/null > "<OUT>/claude.json"
@@ -131,6 +137,10 @@ For each recorded row, in order:
      not `plan` (which forbids required mutations) or a permission bypass. Bash is already an
      execution allowance, not a filesystem sandbox. Restrict work to the reviewer-owned tree and
      temporary root; do not change AgentRig's ask/sandbox/grant defaults or relax a denied check.
+     Direct `git push`/`gh pr merge` denials reinforce the existing no-push/no-merge boundary;
+     they are defense in depth, not containment against alternate spellings, scripts or shared
+     Git metadata. Private-fixture Git operations remain available for required tests. Treat
+     cooperative confinement as a limitation, never a claim that tool patterns sandbox Bash.
    - **Codex job** — `bash` with `background: true`:
      ```
      cd <CODEX_WT> && TMPDIR=<OUT>/codex-tmp codex review --base review-base-NN > "<OUT>/codex.md" 2> "<OUT>/codex.err"
@@ -156,7 +166,7 @@ For each recorded row, in order:
      A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
      are dead), never a review to use.
    - **Provenance.** Join both jobs and their subprocesses, then confirm both reviewer trees have
-     their recorded pre-job HEADs and clean tracked/index state. Any unrestored mutant, changed
+     the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
      cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only
@@ -170,7 +180,7 @@ For each recorded row, in order:
      record both comment URLs — they stand in for reviewer session ids. A body over 60,000
      characters is split into numbered comments `(1/2)`, `(2/2)`. Then
      `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`.
-   - **Combine.** Strip the `<WT>/` prefix from every Codex file:line so findings are
+   - **Combine.** Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's, if present, so findings are
      repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
      and the same scenario), and sort the union under step 5. Claude's review must also name
      `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
@@ -217,15 +227,15 @@ converging, or when something needs a human. Per row, at most THREE repair round
   fresh separate reviewer-owned worktrees and an output directory. One `bash` call re-derives everything it needs, since
   nothing from §2 step 4's shell — `$BRANCH` included — survives into this call:
   `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName); NEW=<NEW>; OLD=<OLD>;
-  git fetch origin main "$BRANCH"; WT=$(mktemp -d); OUT=$(mktemp -d);
+  git fetch origin main "$BRANCH"; WT=$(mktemp -d); OUT=$(mktemp -d); echo "$WT" "$OUT";
   git worktree add "$WT" "$NEW"; git -C "$WT" branch -f review-base-NN "$OLD";
   [ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at NEW;
   remove the worktree and `review-base-NN` before stopping);
-  CODEX_WT=$(mktemp -d); git worktree add --detach "$CODEX_WT" "$NEW";
-  (cd "$WT" && pnpm install); (cd "$CODEX_WT" && pnpm install);
-  mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"` (pass a `timeoutMs` of at least 600000 to this `bash` call — dogfood
-  §8's warning about foreground commands a timeout can kill applies). End the command with
-  `echo "$WT" "$CODEX_WT" "$OUT"` and substitute all paths literally as in §2 step 4,
+  CODEX_WT=$(mktemp -d); echo "$CODEX_WT"; git worktree add --detach "$CODEX_WT" "$NEW";
+  REVHEAD=$NEW; mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`.
+  End the command with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`, record the paths/SHA,
+  then install dependencies in two separate calls with the same per-install timeout and
+  exit-code requirements as §2 step 4. Substitute all paths literally as in §2 step 4,
   using `<WT>` only for Claude and `<CODEX_WT>` only for Codex, with their own TMPDIRs. Assert
   both trees are clean at NEW before launch; apply the same restore/join/provenance checks and
   two-tree cleanup as the full pass. `<NEW>` and `<OLD>` above are the literal old/new

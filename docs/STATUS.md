@@ -13,6 +13,16 @@ A private actual Claude CLI probe (`be2b32da-8a3a-4444-b723-7530587f9c35`, sole
 an assertion-killed mutant, restored original bytes and reran: exits 0/1/0, no
 permission denials. This proves the installed CLI launch mode in that fixture,
 not future provider availability, OS sandboxing or completion of any R17 row.
+Independent review caught stale contract pins and ship's one-tree wording, the old
+Codex path prefix, missing recorded post-merge review SHA, dependency-install path
+visibility and standalone command context. These are corrected without removing
+gate assertions; each install retains its own 600-second minimum call allowance.
+Direct push/merge command denials add defense in depth, not script or shared-Git
+containment. A second private CLI control (`0ed5d7e4-84e1-4108-8687-0a642a2cdbaf`)
+observed an explicit harmless command denial and preserved allowed mutation checks
+at exits 0/1/0. A private divergent-Git fixture verified the recorded post-merge
+SHA, separate trees and restoration without touching a sibling's bytes. Neither
+probe claims an end-to-end hosted train run.
 
 R17 checkpoint/ingest visibility repair (outside train, 2026-09-07): conductor
 `8fbde1a3`, continuation builder `b9109d9f`, reported
