@@ -1002,23 +1002,22 @@ export class TuiController {
         return;
       }
     }
-    let forked: { id: string; atSeq: number };
-    try {
-      forked = await this.fork(parent, atSeq);
-    } catch (err) {
-      this.print(`/fork failed: ${err instanceof Error ? err.message : String(err)}`, "error");
-      return;
-    }
-    // The child inherits the parent's conversation up to the fork point, so its plan and signals
-    // are still the ones on screen; only the identity changes. Resumable even when the parent was
-    // not: a fork resumes from its materialized tree, not from a snapshot.
-    if (this.resetGrants("conversation-forked") === undefined) return;
-    this.resumable = true;
-    this.set({ sessionId: forked.id });
-    this.print(
-      `forked ${parent} at seq ${forked.atSeq} → ${forked.id}; this conversation continues in ${forked.id}, ${parent} is untouched`,
-      "system",
-    );
+    const fork = this.fork; const agent = this.agent;
+    const abort = new AbortController(); this.startupAbort = abort;
+    const work = Promise.resolve().then(async () => {
+      if (abort.signal.aborted || this.closing || this.agent !== agent) return;
+      let forked: { id: string; atSeq: number };
+      try { forked = await fork(parent, atSeq); }
+      catch (err) { this.print(`/fork failed: ${err instanceof Error ? err.message : String(err)}`, "error"); return; }
+      // Filesystem work is joined; cancellation leaves any new child unadopted.
+      if (abort.signal.aborted || this.closing || this.agent !== agent || this.state.sessionId !== parent) return;
+      if (this.resetGrants("conversation-forked") === undefined) return;
+      this.resumable = true;
+      this.set({ sessionId: forked.id });
+      this.print(`forked ${parent} at seq ${forked.atSeq} → ${forked.id}; this conversation continues in ${forked.id}, ${parent} is untouched`, "system");
+    });
+    this.starting = work;
+    try { await work; } finally { this.startupAbort = undefined; this.starting = undefined; }
   }
 
   private async runManual(kind: "compact" | "doctor" | "diff", args: string): Promise<void> {

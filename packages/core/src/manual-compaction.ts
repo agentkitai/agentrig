@@ -55,6 +55,8 @@ export function compactSession(config: AgentConfig, options: CompactOptions): Pr
       const cwd = await realpath(options.cwd ?? snapshot.cwd);
       if (cwd !== await realpath(snapshot.cwd)) throw new Error("manual compaction cwd differs from the saved conversation");
       const beforeBytes = transcriptBytes(snapshot.messages);
+      if (!isDeepStrictEqual(snapshot.messages, await store.materializeMessages(parent)))
+        throw new Error("parent snapshot does not match its canonical conversation; no compaction was started");
       options.signal?.throwIfAborted();
       const id = await store.fork(parent, last.seq);
       releaseClaim = store.claim(id);

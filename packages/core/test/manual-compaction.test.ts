@@ -132,6 +132,14 @@ it("a held parent lock refuses without another fork", async () => {
   expect(await f.store.list()).toHaveLength(1); await f.unchanged();
 });
 
+it("a stale parent snapshot refuses before forking or sending summary context", async () => {
+  const f = await fixture(); const calls = f.requests.length; const snapshot = (await f.store.readSnapshot(f.parent))!;
+  vi.spyOn(f.store, "readSnapshot").mockResolvedValue({ ...snapshot, messages: [] });
+  const attempt = async () => { const work = await f.agent.compact!({ resume: f.parent }); await work.result; };
+  await expect(attempt()).rejects.toThrow("snapshot does not match");
+  expect(f.requests).toHaveLength(calls); expect(await f.store.list()).toHaveLength(1); await f.unchanged();
+});
+
 it("missing summary usage remains uncertain and prevents the next capped dispatch", async () => {
   const f = await fixture(); const ledger = new SpendLedger(f.cwd); let calls = 0;
   const capMicros = 1_000_000;

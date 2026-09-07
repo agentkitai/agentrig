@@ -135,6 +135,22 @@ it("asynchronous resume preparation reserves ownership and abort prevents a late
   c.abort(); release(); await resume; expect(run).not.toHaveBeenCalled(); expect(c.isIdle()).toBe(true);
 });
 
+it("fork preparation blocks compaction and clear, and abort prevents late fork adoption", async () => {
+  const f = await conversation(); const parent = f.controller.snapshot().sessionId;
+  let ready!: () => void; let release!: () => void;
+  const entered = new Promise<void>(resolve => { ready = resolve; });
+  f.controller.setSessions({ tree: async () => [], fork: async () => {
+    ready(); await new Promise<void>(resolve => { release = resolve; }); return { id: "unadopted", atSeq: 1 };
+  } });
+  const fork = f.controller.submit("/fork"); await entered;
+  try {
+    await f.controller.submit("/compact"); await f.controller.submit("/clear");
+    expect(f.calls()).toBe(7); expect(f.controller.snapshot().sessionId).toBe(parent);
+    f.controller.abort();
+  } finally { release(); await fork; }
+  expect(f.controller.snapshot().sessionId).toBe(parent);
+});
+
 it("plain doctor never constructs a provider, even if probe was requested upstream", async () => {
   const cwd = await root(); const home = await root(); const factory = vi.fn(() => { throw new Error("must not construct"); });
   const output = await manualDoctor({ cwd, home, env: {}, cli: { probe: true, provider: "openai", model: "fixture", repoMap: false }, probeFactory: factory }, new AbortController().signal);
