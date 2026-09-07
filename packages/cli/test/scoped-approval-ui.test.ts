@@ -9,6 +9,7 @@ import { describeShellOperation, resolveShell, SessionStore, type ModelEvent, ty
 import { buildAgent } from "../src/agent-builder.ts";
 import { App } from "../src/tui/app.tsx";
 import { TuiController } from "../src/tui/controller.ts";
+import { waitForTuiState } from "./tui-readiness.ts";
 
 class Stdin extends EventEmitter {
   isTTY = true; chunks: string[] = [];
@@ -30,18 +31,25 @@ async function mount() {
   return { cwd, controller, stdin, writes };
 }
 const shell = resolveShell();
-it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").each(["ordinary", "protocol"])("%s input creates an audited narrow grant in the actual CLI/runtime and refuses the next outside command", async mode => {
+it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").each([
+  { mode: "ordinary", delayedThirdCall: false }, { mode: "protocol", delayedThirdCall: false },
+  { mode: "ordinary", delayedThirdCall: true }, { mode: "protocol", delayedThirdCall: true },
+])("$mode input creates an audited narrow grant in the actual CLI/runtime and refuses the next outside command (delayed=$delayedThirdCall)", async ({ mode, delayedThirdCall }) => {
   const h = await mount(); vi.stubEnv("ANTHROPIC_API_KEY", "inert-test-key"); let asks = 0;
   const built = await buildAgent({ root: h.cwd, provider: "anthropic", model: "fake", shell: shell.path, maxTurns: "5", maxTokensPerTurn: "100" }, {
     permissionGrants: h.controller.permissionGrants, onAsk: req => { asks++; return h.controller.ask(req); },
   });
   const commands = ["printf '%s' first", "printf '%s' 'second; literal'", "printf '%s' third; printf '%s' outside"];
   vi.spyOn(built.provider, "stream").mockImplementation(async function* (): AsyncIterable<ModelEvent> {
+    // A supported asynchronous provider can reach the next approval after the old
+    // 1s polling budget. Both real authorized shell calls have completed by here.
+    if (delayedThirdCall && commands.length === 1) await new Promise(resolve => setTimeout(resolve, 1100));
     const command = commands.shift(); if (command !== undefined) yield { type: "tool_use", id: `t${commands.length}`, name: "bash", input: { command } };
     yield { type: "stop", reason: command === undefined ? "end_turn" : "tool_use" };
   });
   h.controller.attach(built.agent); const run = h.controller.submit("exercise scoped approval");
-  await vi.waitFor(() => expect(h.controller.snapshot().pending).not.toBeNull());
+  await waitForTuiState(h.controller, run, "initial scoped shell approval", state =>
+    state.pending?.req.tool === "bash" && (state.pending.req.input as { command?: unknown }).command === "printf '%s' first");
   const send = (text: string) => h.stdin.send(mode === "protocol" ? `\u001b[201~${text}` : text);
   send("s"); await vi.waitFor(() => expect(h.controller.snapshot().pending?.scope).toBeDefined());
   const old = h.controller.snapshot().pending!.scope!.text;
@@ -54,7 +62,11 @@ it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").ea
   expect(h.controller.snapshot().lines.some(l => l.text.includes('"commandPrefix":["printf","%s"]') && l.text.includes(`"cwd":${JSON.stringify(h.cwd)}`) && l.text.includes('"resource":"*"'))).toBe(true);
   expect(h.writes.join("")).toContain('"commandPrefix":["printf","%s"]');
   expect(h.controller.permissionGrants.list()).toEqual([]); expect(asks).toBe(1);
-  send("y"); await vi.waitFor(() => expect(asks).toBe(2));
+  send("y");
+  await waitForTuiState(h.controller, run, "outside command after two scoped shell executions", state =>
+    state.pending?.req.tool === "bash" && state.pending.req.operation?.status === "unsupported" &&
+    (state.pending.req.input as { command?: unknown }).command === "printf '%s' third; printf '%s' outside");
+  expect(asks).toBe(2);
   expect(h.controller.permissionGrants.list()[0]?.operation.commandPrefix).toEqual(["printf", "%s"]);
   expect(h.controller.snapshot().pending?.req.operation?.status).toBe("unsupported"); send("n"); await run;
   expect(h.controller.snapshot().lines.some(l => l.text.includes("first"))).toBe(true);
@@ -64,7 +76,7 @@ it.skipIf(describeShellOperation("printf x", shell.path).status !== "parsed").ea
   expect(events.filter(e => e.type === "tool.result").map(e => e.type === "tool.result" && e.display)).toEqual(["first", "second; literal"]);
   expect(events.findIndex(e => e.type === "permission.granted")).toBeLessThan(events.findIndex(e => e.type === "tool.call"));
   expect(events.filter(e => e.type === "tool.denied")).toHaveLength(1);
-});
+}, 10_000);
 
 it.each(["ordinary", "protocol"])("%s keys retain y/a/n/d and reject scoped separate consent", async mode => {
   const h = await mount(); const req: PermissionRequest = { tool: "file_tool", class: "write", input: {}, cwd: h.cwd, paths: ["a"] };
