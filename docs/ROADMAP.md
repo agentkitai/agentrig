@@ -1275,3 +1275,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   weakening live-prefix integrity checks; improve standalone-provider refusal wording
   to mention the trusted `dailyCap` config key as well as the CLI flag. No accounting
   recovery, automatic expiry or billing guarantee is implied.
+- R15j polish: coalesce explicit effort equal to the configured default into one
+  cached adapter, and reduce duplicate local history validation while retaining
+  pre-admission refusal for direct auxiliary calls. Existing bounds remain enforced.

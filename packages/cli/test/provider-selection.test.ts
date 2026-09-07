@@ -8,6 +8,8 @@ import { buildProgram } from "../src/program.js";
 import { TuiController } from "../src/tui/controller.js";
 import { parseCommand } from "../src/tui/commands.js";
 import { readOutputContract } from "../src/output-schema.js";
+import { ProviderEntrySchema } from "../src/config.js";
+import { renderChatEvent, renderEvent } from "../src/render.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); process.exitCode = 0;
@@ -20,7 +22,7 @@ async function fixture(extra: string[] = []) {
   await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ root: logs, repoMap: false, packages: false,
     extensionDiscovery: false, skillDiscovery: false, contextWindow: 10,
     providers: { second: { provider: "openai", model: "second-model", reasoningEffort: "low", contextWindow: 10 },
-      foreign: { provider: "anthropic", model: "foreign-model" } } }));
+      foreign: { provider: "anthropic", model: "foreign-model" }, main: { provider: "openai", model: "ambiguous-name" } } }));
   vi.spyOn(process, "cwd").mockReturnValue(cwd); vi.stubEnv("OPENAI_API_KEY", "private-test-key"); vi.stubEnv("ANTHROPIC_API_KEY", "private-other-key");
   vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
   let built!: BuiltAgent;
@@ -60,7 +62,7 @@ it("busy and invalid selections never change the committed adapter or dispatch e
   try {
     await started; await f.controller.submit("/model second"); expect(f.built.provider.model).toBe("first-model");
     release(); await running;
-    for (const command of ["/model nonexistent", "/effort impossible", `/model ${"x".repeat(300)}`]) await f.controller.submit(command);
+    for (const command of ["/model nonexistent", "/model main", "/effort impossible", `/model ${"x".repeat(300)}`]) await f.controller.submit(command);
     expect(f.built.provider.model).toBe("first-model"); expect(fetch).toHaveBeenCalledTimes(1); expect(f.controller.snapshot().selecting).toBe(false);
     expect(parseCommand("/model second")).toEqual({ kind: "model", argument: "second" });
   } finally { release(); await running; await f.controller.submit("/quit"); }
@@ -98,4 +100,19 @@ it("a reentrant close invalidates prepared selection and clears its reservation"
     prepare: () => { void f.controller.submit("/quit"); return () => { committed = true; return { entry: "second", provider: "openai", model: "second-model" }; }; } });
   await f.controller.submit("/model second");
   expect(committed).toBe(false); expect(f.controller.snapshot().selecting).toBe(false);
+});
+
+it("bounded configured model names refuse before runtime or any fetch", async () => {
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  expect(ProviderEntrySchema.safeParse({ provider: "openai", model: "m".repeat(129) }).success).toBe(false);
+  await expect(fixture(["--model", "m".repeat(129)])).rejects.toThrow("provider selection names");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("renders the canonical switch without inventing a previous selection", () => {
+  const event = { type: "provider.switched" as const, sessionId: "s", seq: 2, ts: 0, turn: 3,
+    to: { entry: "second", provider: "openai", model: "fixture", effort: "high" as const } };
+  expect(renderEvent(event)).toContain("turn=3"); expect(renderEvent(event)).toContain('"effort":"high"');
+  expect(renderChatEvent(event)).toContain("previous selection unknown");
+  expect(renderChatEvent({ ...event, from: { ...event.to, entry: "first" } })).not.toContain("unknown");
 });

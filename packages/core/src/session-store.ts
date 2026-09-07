@@ -368,7 +368,7 @@ export class SessionStore {
     const usage: Usage = { input: 0, output: 0 };
     let providerSelection: ProviderSelectionInfo | undefined;
     for (const event of events) {
-      if (event.type === "context.manifest" && event.providerSelection !== undefined) providerSelection = event.providerSelection;
+      if (event.type === "context.manifest") providerSelection = event.providerSelection;
       if (event.type === "session.start" || event.type === "session.resume") {
         // the latest task, as a written snapshot carries the task of the run that wrote it
         if (event.task !== "") task = event.task;

@@ -7,11 +7,23 @@ export interface ProviderSelectionControl {
   /** Preparation never dispatches. Commit is separate so the controller can recheck its lifecycle. */
   prepare(kind: "model" | "effort", argument: string): () => ProviderSelectionInfo;
 }
+export function validateProviderSelectionTable(table: ResolvedEntries): void {
+  // A trusted injected builder can supply the concrete adapter without flat options.
+  // Validate provided names here; the actual adapter is still checked below.
+  for (const [entry, value] of Object.entries(table.entries)) selectionInfo({ entry,
+    provider: value.provider ?? "unknown", model: value.model ?? "unknown" });
+}
+function selectionInfo(value: unknown): ProviderSelectionInfo {
+  const parsed = ProviderSelectionInfoSchema.safeParse(value);
+  if (!parsed.success) throw new Error("provider selection names must be nonempty, control-free and at most 128 characters");
+  return parsed.data;
+}
 export function providerSelectionControl(providers: ProviderSet, table: ResolvedEntries, native: boolean) {
   let selected: ProviderSelection = { provider: providers.main, entry: table.roleNames.main,
     ...(table.entries[table.roleNames.main]?.reasoningEffort === undefined ? {} : { effort: table.entries[table.roleNames.main]!.reasoningEffort }) };
-  const info = (value: ProviderSelection): ProviderSelectionInfo => ProviderSelectionInfoSchema.parse({ entry: value.entry,
+  const info = (value: ProviderSelection): ProviderSelectionInfo => selectionInfo({ entry: value.entry,
     provider: value.provider.id, model: value.provider.model, ...(value.effort === undefined ? {} : { effort: value.effort }) });
+  info(selected); // Fail in the protected builder boundary, never late at TUI attachment.
   const control: ProviderSelectionControl = {
     current: () => info(selected),
     describe: () => [`Current provider: ${JSON.stringify(info(selected))}`,

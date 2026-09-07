@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { inspectPackages } from "./packages.js";
-import { providerSelectionControl, type ProviderSelectionControl } from "./provider-selection.js";
+import { providerSelectionControl, validateProviderSelectionTable, type ProviderSelectionControl } from "./provider-selection.js";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import {
@@ -481,6 +481,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (opts.mcpConfig !== undefined && opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
     throw new Error("MCP servers start in the host process outside the tool sandbox; remote HTTP requires explicit --sandbox-network and network permission; stdio requires --sandbox none");
   opts = heartbeatBuildOptions(opts);
+  validateProviderSelectionTable(resolveProviderEntries(opts));
   const installed = opts.packages === false || opts.trustedProjectRoot === undefined
     ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);
   for (const error of installed.errors) (extras.onNotice ?? console.error)(`package discovery: ${error}`);

@@ -9,6 +9,10 @@ R15j implements next-run configured selection, preserving accounting and authori
 no live model/catalogue discovery. [Contract](plans/R15j.md). R16f/R16g are independent
 read-only status/explicit maintenance work; their shared controller seams will be
 integrated from green main, not copied between unmerged worktrees.
+R15j's one independent review approved the frozen implementation (actual 30 turns,
+requested 24); its bounded-name observation and author replay-label correction are
+fixed. Build/typecheck, full required-Docker (3,037 passed + two skips /190 files)
+and real Chromium pass. Exact integrated-head CI and delivery remain pending.
 
 R16c is done (PR #198), after delivered R8d (PR #197). Main `130123eeb866906025aaeca9b1b2a7217e82a87b` passed CI34069082872 and structure34069082855, all four checks.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/198#issuecomment-5563369403).

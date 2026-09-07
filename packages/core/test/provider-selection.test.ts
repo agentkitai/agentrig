@@ -105,3 +105,13 @@ it.each(["external", "role", "deny"] as const)("switching cannot widen retained 
   const events = await f.store.readAll(run.id); expect(events.filter(e => e.type === "provider.switched")).toHaveLength(2);
   if (restriction === "external") expect(events.some(e => e.type === "permission.expansion" && e.decision === "deny")).toBe(true);
 });
+
+it("legacy resumed dispatch clears inherited selection in both snapshot and fork materialization", async () => {
+  const f = await fixture(), provider = done("selected", []);
+  const config = { provider, store: f.store, tools: [], systemPrompt: "", permissions: new RulePolicy([]) };
+  const first = createAgent({ ...config, providerSelection: () => ({ provider, entry: "selected" }) }).run("first", { cwd: f.root }); await first.done;
+  await createAgent(config).run("legacy", { resume: first.id }).done;
+  expect((await f.store.readSnapshot(first.id))?.providerSelection).toBeUndefined();
+  const events = await f.store.readAll(first.id), fork = await f.store.fork(first.id, events.at(-1)!.seq);
+  expect((await f.store.materializeSnapshot(fork))?.providerSelection).toBeUndefined();
+});
