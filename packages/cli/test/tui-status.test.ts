@@ -50,6 +50,17 @@ describe("statusLine", () => {
     expect(statusLine(base)).toBe("no session · idle · /help");
   });
 
+  it.each([undefined, 0, 1])("usage snapshot presence %s distinguishes legacy/absent usage from zero", usageSnapshots => {
+    const line = statusLine({ ...base, statusDetails: { posture: "ask", sandbox: "none", grants: 0, auditBlocked: false,
+      prompts: 0, supervisor: "off", accounting: { state: "reported", stale: true, snapshot: { segment: "fixture", unavailable: false,
+        report: { since: "2000-01-01", coverageStarted: 1, calls: 1, completeCalls: 0, estimatedMicros: 0, reservedMicros: 0,
+          unknownCalls: 1, unresolvedCalls: 1, unknownSegments: 0, overrun: false,
+          ...(usageSnapshots === undefined ? {} : { usageSnapshots }),
+          reportedUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } } } } });
+    expect(line).toContain(usageSnapshots === 1 ? "run tokens:0/0/0/0 cost:? stale" : "run tokens:unreported cost:? stale");
+    expect(line).not.toContain("run~$0");
+  });
+
   it("shows everything it knows, in a stable order", () => {
     expect(
       statusLine({

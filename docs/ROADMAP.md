@@ -1,6 +1,15 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Current delivery: turn-limit PR#216 integrates grapheme PR#215, merged as main
+Current: continue the entire END follow-up queue with bounded independent PRs and
+serialized exact-head/current-main/post-main gates. Prior batches do not end the queue.
+
+- [x] #217 capability evidence summary — green main ebfd10f,
+  [final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+- [x] #218 network override — all-four post-main green,
+  [final receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+- [ ] R16f no-usage status — [contract](plans/pending-usage-status.md); current implementation.
+
+Historical delivery checkpoint: turn-limit PR#216 integrates grapheme PR#215, merged as main
 f196709697b1832063ddee6288fdac004a2ee7d0 after all four exact-head checks; its
 post-main gate is pending. [Grapheme receipt](https://github.com/agentkitai/agentrig/pull/215).
 Skill casing #214 is done, all-four post-main CI34102581250 / structure34102581248
@@ -1296,10 +1305,11 @@ need an explicit budget; neither prevents continuing other actionable entries.
   one-off 5-second timeout in PR #161 CI 34027283321 (same-head diagnostic rerun passed).
   Preserve assertions and coverage; prefer controlled workers or independently scoped paired
   setups over blind timeout inflation. Runner contention remains a hypothesis, not a finding.
-- R11a follow-up (implemented, delivery gates pending): `--no-sandbox-network` overrides
+- [x] R11a follow-up (done #218): `--no-sandbox-network` overrides
   config true for one invocation on run/TUI/resume and MCP login, without config writes.
   Omission and explicit positive remain compatible; none-provider network metadata is inert,
   not a runtime policy or OS isolation. [Contract](plans/no-sandbox-network.md).
+  [All-four post-main receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
 - R14b polish: consider a separate unknown-command-attempt budget when non-shell custom/MCP
   command fields crowd out genuine receipts; preserve visible incompleteness and latest unknowns.
   Add sandbox-mode receipt passthrough fixtures if wrappers evolve. The ledger is reducer-owned,
@@ -1307,10 +1317,11 @@ need an explicit budget; neither prevents continuing other actionable entries.
 - R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
   HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
   and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
-- R10d capability evidence summary (implemented; delivery gates pending): all-unknown reports
+- [x] R10d capability evidence summary (done #217): all-unknown reports
   retain their report but label the summary unverified-configured. Observed means at least one
   capability dimension has a non-unknown sample, not universal support; per-dimension sources
   remain authoritative. [Contract](plans/capability-evidence-summary.md).
+  [All-four post-main receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
 - R5b defensive API follow-up: validate unsupported async/thenable implementations of the
   synchronously typed tool descriptor/probe/schema callbacks, including rejected promises and
   malformed return shapes. Current isolation covers synchronous callback throws and supported
@@ -1418,8 +1429,10 @@ need an explicit budget; neither prevents continuing other actionable entries.
 - R15j polish: coalesce explicit effort equal to the configured default into one
   cached adapter, and reduce duplicate local history validation while retaining
   pre-admission refusal for direct auxiliary calls. Existing bounds remain enforced.
-- R16f polish: distinguish an in-flight call with no usage snapshot from reported
-  zero tokens; distinguish detached custom-policy snapshots from unknown policies
+- [ ] R16f no-usage status (implemented, delivery gates pending): distinguish absent
+  usage snapshots from reported zero without changing accounting or authority.
+  [Contract](plans/pending-usage-status.md).
+- R16f remaining polish: distinguish detached custom-policy snapshots from unknown policies
   if that lifecycle becomes observable; reference-count status observation only
   if multiple simultaneous App mounts become supported. None changes accounting,
   authorization, or the current single-App contract.

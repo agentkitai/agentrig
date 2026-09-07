@@ -37,9 +37,10 @@ it("does not reprice historical segments and separates disjoint cache counts", a
   const events: ModelEvent[] = [{ type: "usage", usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } }, { type: "stop", reason: "end_turn" }];
   await consume(meterProvider(fixture(events), ledger, { segment: "old", pricing: { ...pricing, cacheReadUsdPerMTok: 2, cacheWriteUsdPerMTok: 3 } }));
   await consume(meterProvider(fixture(events), ledger, { segment: "resume", pricing: { inputUsdPerMTok: 10, outputUsdPerMTok: 10 } }));
-  expect(await ledger.report("2000-01-01")).toMatchObject({ calls: 2, estimatedMicros: 121,
+  expect(await ledger.report("2000-01-01")).toMatchObject({ calls: 2, usageSnapshots: 2, estimatedMicros: 121,
     reportedUsage: { input: 2, output: 4, cacheRead: 6, cacheWrite: 8 } });
-  expect(await ledger.report("2000-01-01", "old")).toMatchObject({ calls: 1, estimatedMicros: 21 });
+  expect(await ledger.report("2000-01-01", "old")).toMatchObject({ calls: 1, usageSnapshots: 1, estimatedMicros: 21 });
+  expect(await ledger.report("9999-01-01")).toMatchObject({ calls: 0, usageSnapshots: 0 });
 });
 
 it("missing usage blocks a new segment even after UTC midnight", async () => {

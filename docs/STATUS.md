@@ -2,6 +2,16 @@
 
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
+R16f no-usage status is active from green main ebfd10f. Three actual held-provider/
+settled-missing ledger/controller controls reproduced zero-looking absent usage.
+Additive report presence and footer wording only; accounting/permissions unchanged.
+[Contract](plans/pending-usage-status.md). Local/full/review/hosted gates pending.
+#217 done: all-four post-main CI34109938845 / structure34109938825 green,
+[receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+#218 done: all-four post-main CI34108756786 / structure34108756915 green,
+[receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+The prior pending integration text below is historical.
+
 Network override #218 merged first as main8f741a800cfef739993a04b9c1a33d37548cfc48
 after all-four exact-head checks. Post-main CI34108756786 / structure34108756915
 are pending; final hosted receipt is on PR#218. Capability summary #217 integrates it.

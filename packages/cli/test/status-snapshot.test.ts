@@ -24,8 +24,67 @@ async function fixture(priced = true) {
   const agent = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "fixture", repoMap: false, spend: { ledger } });
   const controller = new TuiController({ cwd, agent });
   controller.configureStatus(() => ({ posture: "ask", sandbox: "none" }));
-  return { cwd, ledger, store, agent, controller };
+  return { cwd, ledger, store, agent, controller, raw };
 }
+
+it.each([false, true])("held actual App distinguishes no usage from explicit reported zero (priced=%s)", async priced => {
+  const f = await fixture(priced);
+  let release!: () => void, entered = false;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  f.raw.stream = async function* () {
+    entered = true; await held;
+    yield { type: "usage", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, reported: true };
+    yield { type: "stop", reason: "end_turn" };
+  };
+  const running = f.controller.submit("inert pending observation");
+  let app: ReturnType<typeof render> | undefined;
+  const writes: string[] = [];
+  try {
+    await vi.waitFor(() => expect(entered).toBe(true), { timeout: 4000 });
+    const stdout = Object.assign(new EventEmitter(), { columns: 180, rows: 30, isTTY: true, write: (s: string) => { writes.push(s); return true; } });
+    const stdin = Object.assign(new EventEmitter(), { isTTY: true, setEncoding() {}, setRawMode() {}, ref() {}, unref() {}, read: () => null });
+    const before = await f.ledger.records();
+    app = render(createElement(App, { controller: f.controller }), { stdout: stdout as never, stdin: stdin as never, patchConsole: false, exitOnCtrlC: false });
+    await vi.waitFor(() => expect(f.controller.snapshot().statusDetails?.accounting.state).toBe("reported"), { timeout: 4000 });
+    expect(statusLine(f.controller.snapshot())).toContain("run tokens:unreported cost:?");
+    expect(statusLine(f.controller.snapshot())).not.toContain("tokens:0/0/0/0");
+    await vi.waitFor(() => expect(writes.join("")).toContain("tokens:unreported"), { timeout: 4000 });
+    expect(await f.ledger.records()).toEqual(before); // observation did not settle, admit or mutate authority
+    release(); await running;
+    const source = sessionSpendSource(f.controller.statusSession()!)!;
+    const final = await readRunSpend(source);
+    expect(final.report).toMatchObject({ calls: 1, usageSnapshots: 1, reportedUsage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
+    const now = Date.now(); vi.spyOn(Date, "now").mockReturnValue(now + 6000);
+    writes.length = 0; f.controller.print("refresh settled observation");
+    const expected = priced ? "run~$0.000000" : "run tokens:0/0/0/0 cost:?";
+    await vi.waitFor(() => expect(statusLine(f.controller.snapshot())).toContain(expected), { timeout: 4000 });
+    await vi.waitFor(() => expect(writes.join("")).toContain(expected), { timeout: 4000 });
+    expect((await readRunSpend(source)).report).toEqual(final.report);
+  } finally { release(); await running; app?.unmount(); await f.controller.shutdown(); }
+});
+
+it("settled missing usage stays unreported rather than zero, and mixed priced/pending remains uncertain", async () => {
+  const f = await fixture();
+  f.raw.stream = async function* () { yield { type: "stop", reason: "end_turn" }; };
+  await f.controller.submit("missing usage");
+  const stop = f.controller.mountStatus();
+  try {
+    await vi.waitFor(() => expect(f.controller.snapshot().statusDetails?.accounting.state).toBe("reported"));
+    expect(statusLine(f.controller.snapshot())).toContain("run tokens:unreported cost:?");
+    const source = sessionSpendSource(f.controller.statusSession()!)!;
+    const rates = { inputUsdPerMTok: 1, outputUsdPerMTok: 1, cacheReadUsdPerMTok: 1, cacheWriteUsdPerMTok: 1 };
+    const complete = await f.ledger.admit({ segment: source.segment, provider: "fixture", model: "fixture", reserve: 20, rates });
+    await f.ledger.settle(complete, { input: 2, output: 3 }, true);
+    const pending = await f.ledger.admit({ segment: source.segment, provider: "fixture", model: "fixture", reserve: 10, rates });
+    const now = Date.now(); vi.spyOn(Date, "now").mockReturnValue(now + 6000);
+    f.controller.print("refresh mixed report");
+    await vi.waitFor(() => expect(statusLine(f.controller.snapshot())).toContain("run~$0.000005+?"));
+    expect(statusLine(f.controller.snapshot())).toContain("reserved~$");
+    const report = (await readRunSpend(source)).report;
+    expect(report).toMatchObject({ calls: 3, usageSnapshots: 1, completeCalls: 1, unresolvedCalls: 2 });
+    await f.ledger.settle(pending, null, false);
+  } finally { stop(); await f.controller.shutdown(); }
+});
 
 it.each([32, 80, 120])("actual App at %s columns displays live grant create/revoke and bounded prioritized footer", async columns => {
   const f = await fixture(); const writes: string[] = [];
