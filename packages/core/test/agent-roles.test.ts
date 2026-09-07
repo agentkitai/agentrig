@@ -23,6 +23,25 @@ async function collect(session: ReturnType<ReturnType<typeof createAgent>["run"]
 const probe = (name: string, calls: string[]): AnyTool => ({ name, description: "fixture", permission: "read", effects: "read-only",
   inputSchema: z.object({}), execute: async () => { calls.push(name); return { display: name, output: name }; } });
 
+it.each([false, true])("advertises role availability and recovers an unknown role with a generic child (roles=%s)", async configured => {
+  const cwd = await root(), store = new SessionStore({ root: join(cwd, "logs") });
+  const choices: unknown[] = [];
+  const tool = subagentTool({ roles: configured ? [role("reader", [])] : [], maxChildren: 1, createAgent,
+    childConfig: choice => { choices.push(choice); return { provider: provider([]), tools: [],
+      permissions: new RulePolicy([], "allow"), systemPrompt: "child", store, repoMap: false }; } });
+  expect(tool.description).toContain(configured ? "reader" : "No local agent roles are configured");
+  expect(tool.description).toContain("omit agent");
+  const events = await collect(createAgent({ provider: provider([
+    call("subagent", { task: "inspect", agent: "builder" }),
+    call("subagent", { task: "inspect" }),
+  ]), tools: [tool], permissions: new RulePolicy([], "allow"), systemPrompt: "parent", store, repoMap: false }).run("delegate", { cwd }));
+  const refused = events.find(e => e.type === "tool.result" && !e.ok);
+  expect(refused).toMatchObject({ display: expect.stringContaining("omit agent") });
+  expect(refused).toMatchObject({ display: expect.stringContaining(configured ? "reader" : "No local agent roles are configured") });
+  expect(events.filter(e => e.type === "subagent.spawn")).toHaveLength(1);
+  expect(choices).toEqual([undefined]);
+});
+
 it("validates role fields without loosening the skill frontmatter dialect", () => {
   expect(parseAgentRoleFrontmatter('---\nschema: 1\ntools: ["read_file"]\n---\nInspect only.').fields)
     .toEqual({ schema: "1", tools: ["read_file"], "model-role": "subagents", delegable: false });
