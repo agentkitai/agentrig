@@ -18,9 +18,12 @@ non-symlink UTF-8 files. No implicit environment/event lookup, expression expans
 payload-derived configuration, PR target, checkout or shell execution occurs.
 Even a task file is advisory data: the runtime receives an empty user task plus
 separately labelled advisory context, not fabricated fresh user approval.
-Effective `--json` and `--verbose` refuse in CI: ordinary raw/chat rendering bypasses
+Effective `--json` and config `"toolSummaries": false` refuse in CI: ordinary raw/chat rendering bypasses
 the bounded redacted-report shape. Use ordinary `run` for those output modes.
-These flags are not project-config fields; unknown config keys already fail closed.
+`json` is not a project-config field; unknown config keys already fail closed.
+Recommended defaults apply in CI too. Use an explicit profile with `ingestOnEnd: false`
+when an auxiliary ingest is not wanted, and `diagnostics: []` when checker execution
+is not authorized; defaults never authorize those commands. See [migration](DEFAULTS.md).
 
 CI clamps configured execution to **20 turns, five minutes and 50,000 main-model
 tokens**; smaller values win. Existing priced USD/per-response validation applies.

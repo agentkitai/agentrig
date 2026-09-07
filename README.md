@@ -1,3 +1,5 @@
+> **Defaults migration:** normal CLI sessions now use the recommended profile. See [every changed flag and the security-preserving sandbox exception](docs/DEFAULTS.md).
+
 # AgentRig
 
 TUI file/image input: `inspect @src/example.ts`, `@"file with spaces.txt"`, or
@@ -93,7 +95,7 @@ It is off unless explicitly requested; see [telemetry privacy and limits](docs/O
   and [slash suggestions](docs/plans/slash-suggestions.md).
   Backspace removes one complete grapheme (including emoji/combining sequences)
   in prompts and scope editing, without normalizing retained text.
-- `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
+- `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or set `"toolSummaries": false` in config for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
 - `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.
 - `agentrig memory init|ls|show|search|promote|lint|ingest` — create, inspect, search, maintain, or populate the Markdown wiki.
@@ -127,11 +129,11 @@ Automatic interrupted-install recovery is deferred; this command only discards t
 
 These flags are available on both `run` and the interactive TUI (and on `sessions resume`):
 
-- **Memory:** `--memory <dir>` injects a wiki index and enables its read/search tools. `--ingest-on-end` distils the completed session into that wiki. `--dream-on-end` runs a due dream in report-only mode; `--dream-every-sessions <n>` and `--dream-every-hours <n>` set its cadence, while `--dream-structural-only` skips the model-backed pass.
+- **Memory:** `--memory <dir>` injects a wiki index and enables its read/search tools. Session-end ingest now defaults on (`"ingestOnEnd": false` opts out in config), subject to the [sandbox exception](docs/DEFAULTS.md). `--dream-on-end` runs a due dream in report-only mode; `--dream-every-sessions <n>` and `--dream-every-hours <n>` set its cadence, while `--dream-structural-only` skips the model-backed pass.
 - **Promotion:** `agentrig memory promote <path>` previews runtime-backed claim evidence. Review the excerpts, then add `--confirm` to publish the checked artifact. Citations alone cannot authorize promotion; unsupported paraphrases remain ineligible under the conservative initial gate. See [H4](docs/plans/H4.md).
 - **Memory writes:** replacement tools require `if_version` from `memory_read`; omitted/null creates only. Conflicts return current content and its version for an intentional merge/retry. See [H5](docs/plans/H5.md) for cooperative locking and the remaining maintenance work.
 - **Budgets:** the interactive TUI defaults to 50 turns; non-interactive `run` and `sessions resume` default to 300 so unattended PR work has enough headroom. `--max-turns <n>` and config/profile values override either default.
-- **Supervisor:** `--supervise` attaches heuristic detectors and the escalating policy ladder, which tops out at escalation by default. `--supervisor-abort` opts into its final abort rung; `--supervisor-no-abort` remains a compatibility no-op. `--supervisor-soft <fraction>` sets the proportional soft budget threshold; `--supervisor-turns-remaining <n>` also warns when the fixed turn wrap-up window is reached (15 by default). `--supervisor-review` enables the token-using trajectory reviewer and rubric grader rungs.
+- **Supervisor:** The recommended profile attaches heuristic detectors and the escalating policy ladder (`"supervise": false` opts out in config), which tops out at escalation by default. `--supervisor-abort` opts into its final abort rung; `--supervisor-no-abort` remains a compatibility no-op. `--supervisor-soft <fraction>` sets the proportional soft budget threshold; `--supervisor-turns-remaining <n>` also warns when the fixed turn wrap-up window is reached (15 by default). `--supervisor-review` enables the token-using trajectory reviewer and rubric grader rungs.
 - **Auxiliary work:** reviewer/grader calls are bounded and cancelled when main work ends. Their usage is recorded separately from main-model tokens; unfinished or unreported usage is marked unknown, not free. See [H5d](docs/plans/H5-auxiliary-lifecycle.md) for SDK limits and cancellation guarantees.
 - **Skills:** repeat `--skills <dir>` to discover Markdown skills from multiple roots. Earlier directories shadow later ones; equal-directory duplicate names (case-insensitive) reject both. Only the compact catalogue is injected, and the agent loads a selected skill on demand. Plain Markdown remains supported; present frontmatter must validate as the [flat v1 format](docs/plans/R5e.md), otherwise the entire skill is rejected. Unsupported permission fields such as `allowed-tools` never silently disappear.
   Optional `trigger: When reviewing a release` adds an inert bounded [routing hint](docs/plans/R6g.md); generated-v1 metadata uses the string `agentrig-trigger` instead. A catalogue example shows a real listed skill's first call. Hints never grant permissions or attest benefit; hand-added hints remain human edits during regeneration.
@@ -217,7 +219,7 @@ only independently established broker/policy/launcher refusals trigger sandbox-d
 See [H7b](docs/plans/H7b.md) for this conservative evidence boundary.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
 tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
-`--yolo`; headless runs deny that escalation. Host hooks, including `--ingest-on-end` and
+`--yolo`; headless runs deny that escalation. Host hooks, including explicit `"ingestOnEnd": true` and
 `--dream-on-end`, and stdio MCP startup are refused with an enforcing sandbox selected. Remote
 MCP uses trusted host HTTP, not OS-contained execution, and requires explicit `--sandbox-network`
 as well as network permission. Use

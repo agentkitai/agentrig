@@ -263,7 +263,7 @@ export interface SupervisorWiring {
 export function validateAbortRestores(opts: SupervisorFlags): void {
   if (opts.supervisorAbortRestores !== true) return;
   if (opts.supervise !== true || opts.supervisorAbort !== true || opts.checkpoints !== true || (opts.sandbox !== undefined && opts.sandbox !== "none")) {
-    throw new Error("--supervisor-abort-restores requires --supervise --supervisor-abort --checkpoints and --sandbox none; stop external writers first");
+    throw new Error("--supervisor-abort-restores requires supervise/checkpoints config enabled, --supervisor-abort and --sandbox none; stop external writers first");
   }
 }
 
@@ -414,7 +414,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   void dreamEveryHours;
 
   if (opts.memory === undefined && (opts.ingestOnEnd === true || opts.dreamOnEnd === true)) {
-    printError("--ingest-on-end/--dream-on-end need --memory; no session_end hook was registered");
+    printError("ingestOnEnd config / --dream-on-end need --memory; no session_end hook was registered");
   }
 
   // said before the agent starts, not after: the point of the warning is to be readable while

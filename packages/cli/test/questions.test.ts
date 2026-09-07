@@ -105,12 +105,15 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   cleanups.push(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
   const address = server.address(); if (address === null || typeof address === "string") throw new Error("no address");
+  // Isolate main-loop assertions from the recommended session-end auxiliary call.
+  await mkdir(join(cwd, ".agentrig"), { recursive: true });
+  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
   const answerFile = join(cwd, "answers.json");
   await writeFile(answerFile, JSON.stringify({ version: 1, answers: [{ question, answer: { text: "literal fixture" } }] }));
   if (mode === "acp") {
     const child = spawn(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "acp",
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
-      "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
+      "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
     { cwd, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), OPENAI_API_KEY: "local-fixture" }, stdio: ["pipe", "pipe", "pipe"] });
     let stderr = ""; child.stderr.on("data", chunk => { stderr += String(chunk); });
     const closed = once(child, "close"); let questions = 0;
@@ -127,7 +130,7 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
   const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
     execFile(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "choose a format", "--headless", "--json",
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
-      "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
+      "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       ...(mode === "fail" ? [] : ["--answer-policy", mode === "file" ? `file:${answerFile}` : mode])],
     { cwd, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), OPENAI_API_KEY: "local-fixture" }, timeout: 20_000, maxBuffer: 1_048_576 },
     (error, stdout, stderr) => { if (error && typeof error.code !== "number") reject(error); else resolve({ code: error?.code ?? 0, stdout, stderr }); });

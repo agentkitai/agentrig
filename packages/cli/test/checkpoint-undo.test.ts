@@ -95,7 +95,7 @@ it("requires explicit supervisor, abort and checkpoint opt-ins before restoratio
   const valid={supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true};
   expect(parseConfigText("fixture",JSON.stringify(valid))).toMatchObject(valid);
   expect(()=>validateAbortRestores(valid)).not.toThrow();
-  for(const key of ["supervise","supervisorAbort","checkpoints"])expect(()=>validateAbortRestores({...valid,[key]:false})).toThrow("requires --supervise");
+  for(const key of ["supervise","supervisorAbort","checkpoints"])expect(()=>validateAbortRestores({...valid,[key]:false})).toThrow("requires supervise/checkpoints config enabled");
   expect(()=>validateAbortRestores({...valid,sandbox:"workspace-write"})).toThrow("--sandbox none");
   expect(()=>validateAbortRestores({})).not.toThrow();
 });

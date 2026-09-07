@@ -95,6 +95,7 @@ const ConfigValuesSchema = z
     checkpoints: z.boolean().optional(),
     diagnostics: DiagnosticsConfigSchema.optional(),
     notifications: NotificationMode.optional(),
+    toolSummaries: z.boolean().optional(),
     tui: TuiSettingsSchema.optional(),
     notificationIdleSeconds: NotificationIdleSeconds.optional(),
     driftScope: stringList.optional(),
@@ -263,7 +264,7 @@ export function resolveConfig<T extends Record<string, unknown>>(input: ResolveC
   const { defaults, user, project, env = {}, cli = {}, profile } = input;
   if (profile !== undefined) {
     const names = [...new Set([...Object.keys(user?.profiles ?? {}), ...Object.keys(project?.profiles ?? {})])].sort();
-    if (!names.includes(profile)) {
+    if (profile !== "recommended" && !names.includes(profile)) {
       throw new Error(
         `unknown config profile ${JSON.stringify(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.join(", ")}`,
       );
@@ -336,14 +337,36 @@ export async function loadRunConfig(
     profile === undefined ? undefined : file?.profiles?.[profile];
   const configHas = (key: keyof ConfigValues): boolean =>
     user?.[key] !== undefined || selected(user)?.[key] !== undefined || project?.[key] !== undefined || selected(project)?.[key] !== undefined;
+  const recommended = ["run", "tui", "resume", "acp", "web", "mcp-serve", "tick"].includes(cmd.name());
+  const recommendedDefaults: ConfigValues = {
+    supervise: true, checkpoints: true, ingestOnEnd: true, notifications: "bell", toolSummaries: true,
+    diagnostics: DiagnosticsConfigSchema.parse([
+      { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false"] },
+      { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "."] },
+    ]),
+  };
   const resolved = resolveConfig({
-    defaults,
+    defaults: { ...defaults, ...(recommended ? recommendedDefaults : {}) },
     ...(user === undefined ? {} : { user }),
     ...(project === undefined ? {} : { project }),
     ...(environment.AGENTRIG_MODEL === undefined ? {} : { env: { model: environment.AGENTRIG_MODEL } }),
     cli,
     ...(profile === undefined ? {} : { profile }),
   });
+  let defaultHookNotice: string | undefined;
+  if (recommended && resolved.sandbox !== undefined && resolved.sandbox !== "none") {
+    // Do not launder explicit hook opt-ins into a successful enforcing-sandbox launch.
+    const omitted: string[] = [];
+    if (!configHas("checkpoints") && cli.checkpoints === undefined) { resolved.checkpoints = false; omitted.push("checkpoints"); }
+    if (!configHas("ingestOnEnd") && cli.ingestOnEnd === undefined) { resolved.ingestOnEnd = false; omitted.push("session-end ingest"); }
+    if (omitted.length) {
+      defaultHookNotice = `recommended profile: omitted implicit ${omitted.join(" and ")} under enforcing sandbox ${resolved.sandbox}; explicit hook opt-ins retain the fail-closed startup error.`;
+      // Protocol adapters redact arbitrary integration messages. This fixed profile notice
+      // must still reach operator stderr (never protocol stdout), as well as a mounted UI.
+      console.error(defaultHookNotice);
+      options.notice?.(defaultHookNotice);
+    }
+  }
   // Issue #61: conventional skill directories are appended AFTER any explicit dirs, so explicit
   // ones shadow discovered ones (`discoverSkills` is first-root-wins, and a missing directory is
   // silently skipped there). Project skills are repo-controlled text that lands verbatim in the
@@ -369,6 +392,8 @@ export async function loadRunConfig(
   ];
   return {
     ...resolved,
+    ...(recommended ? { verbose: resolved.toolSummaries === false } : {}),
+    ...(defaultHookNotice === undefined ? {} : { defaultHookNotice }),
     // Runtime option-source metadata: a shared default false is not a scheduled ingest opt-out.
     ingestOnEndExplicit: cli.ingestOnEnd !== undefined || configHas("ingestOnEnd"),
     // deduped: an explicit dir naming a conventional one would otherwise be scanned twice and

@@ -17,6 +17,9 @@ afterEach(async () => { process.exitCode = 0; vi.restoreAllMocks(); await Promis
 async function fixture() { const root = await mkdtemp(join(tmpdir(), "agentrig-ci-")); roots.push(root); await mkdir(join(root, "home")); await writeFile(join(root, "task.txt"), "Inspect the task safely."); return root; }
 function options(root: string): RunOptions { return { root: join(root, "logs"), provider: "openai", model: "fixture", maxTurns: "20", maxTokensPerTurn: "1000", supervisorSoft: "0.8", supervisorTurnsRemaining: "15", dreamEverySessions: "10", dreamEveryHours: "24" }; }
 async function actual(root: string, args: string[], delta: Record<string, unknown> | ((n: number) => Record<string, unknown>), finish = "stop", usage = true, stall = false) {
+  // Isolate main-loop assertions from the recommended session-end auxiliary call.
+  await mkdir(join(root, ".agentrig"), { recursive: true });
+  await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ ...JSON.parse(await readFile(join(root, ".agentrig/config.json"), "utf8").catch(() => "{}")), ingestOnEnd: false }));
   const bodies: unknown[] = [];
   const server = createServer(async (request, response) => {
     let input = ""; for await (const chunk of request) input += chunk; bodies.push(JSON.parse(input));
@@ -29,7 +32,7 @@ async function actual(root: string, args: string[], delta: Record<string, unknow
   const address = server.address(); if (!address || typeof address === "string") throw new Error("no fixture listener");
   try {
     const command = [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--ci", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
-      "--root", join(root, "logs"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery", ...args];
+      "--root", join(root, "logs"), "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery", ...args];
     try { const output = await exec(process.execPath, command, { cwd: root, timeout: 15_000, env: { ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-key" } }); return { code: 0, bodies, ...output }; }
     catch (error) { const e = error as Error & { code?: number; stdout?: string; stderr?: string }; if (typeof e.code !== "number") throw error; return { code: e.code, bodies, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }; }
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
@@ -137,7 +140,7 @@ it("bounds file bytes/depth/selectors and preserves smaller configured limits", 
   expect(() => ciRunOptions({ ...options(root), yolo: true })).toThrow();
   expect(() => ciRunOptions({ ...options(root), json: true })).toThrow();
   expect(() => ciRunOptions({ ...options(root), verbose: true })).toThrow();
-  // These output flags are not file-config fields: do not silently introduce a config bypass.
+  // Raw output flags remain runtime-only fields: do not silently introduce a config bypass.
   for (const flag of ["json", "verbose"]) expect(() => parseConfigText("fixture", JSON.stringify({ profiles: { ci: { [flag]: true } } }))).toThrow("Unrecognized setting");
   await writeFile(event, " ".repeat(262_145)); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();
   await writeFile(event, JSON.stringify({ issue: { body: { command: "do not coerce" } } })); await expect(readCiTask({ eventFile: event, eventField: "issue.body" })).rejects.toThrow();

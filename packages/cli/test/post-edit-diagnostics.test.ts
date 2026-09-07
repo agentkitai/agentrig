@@ -21,7 +21,7 @@ it("actual configured CLI/adapter edit returns tsc diagnostics, logs/render/expo
   await writeFile(join(cwd, "target.ts"), "const x: number = 1;\n");
   const diagnostics = [{ parser: "tsc", extensions: [".ts"], executable: process.execPath,
     args: [compiler, "--noEmit", "--pretty", "false", "--skipLibCheck", "--noResolve", "--lib", "es2022", "target.ts"] }];
-  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ root: logs, diagnostics,
+  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false, root: logs, diagnostics,
     repoMap: false, packages: false, extensionDiscovery: false, skillDiscovery: false }));
   vi.spyOn(process, "cwd").mockReturnValue(cwd);
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential"); vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");

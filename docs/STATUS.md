@@ -7,14 +7,36 @@ or names the blocking `feel` issue if AgentRig could not build it. Record child
 count, observable token usage (never an invented estimate), and halts for each row.
 File AgentRig friction with the `feel` label before the next child starts.
 
-- **R17b in progress — builder agentrig, conductor 8fbde1a3.** One child, one
-  isolated worktree; token usage unavailable; one halt; feel
-  [#232](https://github.com/agentkitai/agentrig/issues/232) and blocking
-  [#233](https://github.com/agentkitai/agentrig/issues/233). The first commit records
-  [R17a baseline](plans/R17-baseline.md) before any default changes. R17a has no PR
-  of its own. **DEVIATION REQUESTED**, not approved: [sandbox/hook proposal](plans/R17b-deviation-request.md).
-  No defaults changed; defaults acceptance remains incomplete. Baseline-only
-  draft PR awaits conductor arbitration; no external reviews or merge.
+- **R17b implemented, awaiting independent review — builder agentrig, conductor
+  8fbde1a3.** Existing single worktree/PR [#234](https://github.com/agentkitai/agentrig/pull/234);
+  baseline-first history preserved. Three children: builder `7dbfad2b`, arbiter
+  `1bb8ec86`, continuation builder `b9109d9f`; prior human pauses **1**, no new
+  continuation halt. [Defaults/migration](DEFAULTS.md), [plan/evidence](plans/R17b.md).
+  Every changed flag: `--supervise`, `--no-supervise`, `--checkpoints`,
+  `--ingest-on-end`, `--no-ingest-on-end`, `--notifications <mode>`, `--verbose`.
+  Security defaults (`ask`, sandbox, grants, fail-closed manifests) unchanged.
+  The **only approved deviation** is arbiter `1bb8ec86`'s host-hook exception:
+  implicit checkpoint/ingest only with absent/none sandbox, visible omission under
+  enforcing sandboxes, explicit opt-ins retain the core fail-closed startup error.
+  ROADMAP has exactly its authorized phrase replacement; acceptance/renunciation unchanged.
+  Fail-first config tests and defaults-disabled real-CLI mutation fail as expected;
+  real CLI and PTY smoke cover diagnostics, rendered Markdown, checkpoint event and
+  completed ingest without config. Root help remains **2 options (<40)**.
+  Observable tokens from canonical `model.response.usage` events, separate fields
+  (not billing estimates): builder `7dbfad2b`: **550715 input / 24997 output /
+  2032256 cache-read** (72 responses); arbiter `1bb8ec86`: **107642 / 2239 / 113536**
+  (10 responses); continuation `b9109d9f` partial snapshot: **708390 / 26320 /
+  1939712** (72 responses, through event sequence 865). Conductor separately:
+  **184729 / 4892 / 340864** (18 responses); continuation/future review totals are
+  not complete and no unseen usage is estimated.
+  Feel [#232](https://github.com/agentkitai/agentrig/issues/232) remains documented;
+  [#233](https://github.com/agentkitai/agentrig/issues/233) is handled by the approved
+  exception; new [#235](https://github.com/agentkitai/agentrig/issues/235) records
+  ingest writes invalidating the terminal checkpoint ownership seal (checkpoint
+  creation succeeds; undo can remain unavailable, and its safety guard is unchanged).
+  `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
+  4 skipped**). Exact-head CI is verified in the PR handoff record after push.
+  Independent external reviews follow in the conductor; no reviews or merge by this child.
 
 
 R17 skill-selection recovery (outside train, 2026-09-07): the user resolved

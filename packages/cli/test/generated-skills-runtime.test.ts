@@ -31,7 +31,7 @@ it("manual hint reaches the assembled prompt without claiming activation or repl
           yield { type: "text_delta", text: "No load requested" }; yield { type: "stop", reason: "end_turn" };
         } };
       await buildProgram({ config: { cwd: root, home: root, env: {} }, run: async (_task, opts) => {
-        const built = await buildAgent(opts);
+        const built = await buildAgent({ ...opts, ingestOnEnd: false });
         const session = built.agent.run("Inspect", { cwd: root }); const events: HarnessEvent[] = [];
         for await (const event of session.events) events.push(event); await session.done;
         expect(events.some(event => event.type === "skill.used")).toBe(false);
@@ -93,7 +93,7 @@ it.for([0, 900])("R6b emitted skill reaches actual CLI-built runtime only with c
       const events: HarnessEvent[] = []; let loaded = false; let sessionId = "";
       const root = join(f.root, `selection-${mode}`);
       await buildProgram({ config: { cwd: f.root, home, env: {} }, run: async (_task, opts) => {
-        const built = await buildAgent(opts, { signal });
+        const built = await buildAgent({ ...opts, ingestOnEnd: false }, { signal });
         signal.throwIfAborted();
         loaded = built.skills.some(skill => skill.name === name && skill.generated === true);
         const session = built.agent.run("load the selected procedure", { cwd: f.root }); sessionId = session.id;

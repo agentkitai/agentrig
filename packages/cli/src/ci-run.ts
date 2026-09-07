@@ -64,7 +64,7 @@ function ceiling(value: string | undefined, maximum: number, integer: boolean): 
 }
 export function ciRunOptions(options: RunOptions): RunOptions {
   if (options.json === true || options.verbose === true)
-    throw new CiRefusal("CI refuses --json/--verbose; use the bounded report or ordinary run for raw/chat output. No provider work was started.");
+    throw new CiRefusal("CI refuses --json / toolSummaries:false; use the bounded report or ordinary run for raw/chat output. No provider work was started.");
   if (skipsPermissions(options) || options.resume !== undefined || options.scheduled !== undefined || options.heartbeat !== undefined)
     throw new CiRefusal("CI refuses effective YOLO/skip-permissions, resume and scheduled/heartbeat modes. No provider work was started.");
   const result = { ...options, headless: true, maxTurns: ceiling(options.maxTurns, CI_LIMITS.turns, true),

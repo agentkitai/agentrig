@@ -21,7 +21,7 @@ async function fixture(extra: string[] = []) {
   const cwd = join(root, "project"), home = join(root, "home"), logs = join(root, "logs");
   await mkdir(join(cwd, ".agentrig"), { recursive: true }); await mkdir(home);
   await writeFile(join(cwd, "schema.json"), JSON.stringify({ type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false }));
-  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ root: logs, repoMap: false, packages: false,
+  await writeFile(join(cwd, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false, root: logs, repoMap: false, packages: false,
     extensionDiscovery: false, skillDiscovery: false, contextWindow: 10,
     providers: { second: { provider: "openai", model: "second-model", reasoningEffort: "low", contextWindow: 10 },
       foreign: { provider: "anthropic", model: "foreign-model" }, main: { provider: "openai", model: "ambiguous-name" } } }));

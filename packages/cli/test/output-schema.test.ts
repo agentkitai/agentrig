@@ -20,6 +20,9 @@ async function fixture() {
   await writeFile(join(root, "task.txt"), "Produce an answer."); return root;
 }
 async function actual(root: string, deltas: Record<string, unknown>[], args: string[] = []) {
+  // Isolate main-loop assertions from the recommended session-end auxiliary call.
+  await mkdir(join(root, ".agentrig"), { recursive: true });
+  await writeFile(join(root, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
   const bodies: any[] = [];
   const server = createServer(async (request, response) => {
     let input = ""; for await (const chunk of request) input += chunk; bodies.push(JSON.parse(input));
@@ -31,7 +34,7 @@ async function actual(root: string, deltas: Record<string, unknown>[], args: str
   if (!address || typeof address === "string") throw new Error("fixture listener missing");
   try {
     const argv = [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "run", "--provider", "openai", "--model", "fixture",
-      "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "logs"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
+      "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(root, "logs"), "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       "--output-schema", "schema.json", ...(args.includes("--ci") ? [] : ["--headless", "Produce an answer."]), ...args];
     try { return { code: 0, bodies, ...await exec(process.execPath, argv, { cwd: root, timeout: 15_000,
       env: { ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"), OPENAI_API_KEY: "fixture-key" } }) }; }
