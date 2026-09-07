@@ -68,7 +68,7 @@ delivery. [Repair contract and original failures](plans/runtime-fixture-ci-bound
 [Repair receipt](https://github.com/agentkitai/agentrig/pull/206#issuecomment-5564569066),
 [R16a receipt](https://github.com/agentkitai/agentrig/pull/199#issuecomment-5564569218).
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R15l is done (PR #194); R16g is done (PR #210); R16h implementation is done (PR #211; delivery checkpoint above); R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+**Revision: 2026-09-06 (fourth pass added H7, R15 and R16; fifth pass 2026-09-07 added R17 feel and defaults, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R15l is done (PR #194); R16g is done (PR #210); R16h implementation is done (PR #211; delivery checkpoint above); R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -103,6 +103,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 | Done | R7–R11 and R14 remainder | Item-level PRs, acceptance evidence and delivery receipts are recorded below |
 | Done | R15: post-plan gaps against current harnesses, plus the H7 repair of issues #116 and #95 | All item-level implementations and the bounded orchestration decision are delivered; receipts below |
 | Done implementation; PR #211 delivery receipt | R16: TUI polish within the Static-scrollback model | Section 5 orders R16 after R15's first group; the alternate-screen renunciation stays |
+| Committed *(fifth pass, 2026-09-07)* | R17: feel and defaults — dogfood mandate, defaults pass, feel budgets, permission friction, visible and tuned supervisor/memory | Section 5 orders R17 before the follow-ups sweep; each row has a measured acceptance check |
 
 Existing R identifiers remain stable for issue and PR references. E1–E3 pull the minimum
 measurement work from R9/R14 forward; H5 pulls R6f forward. All remaining milestone rows are
@@ -927,6 +928,46 @@ R8d web client or an ACP editor (R8a), not in Ink.
 
 ---
 
+### R17 — Feel and defaults *(fifth pass)*
+
+*Evidence: with every committed row done, the honest question on 2026-09-07 was whether AgentRig
+now feels as smooth as Claude Code, Codex or pi. It does not, and the follow-ups list will not
+change that. Of the 80 PRs from #135 to #211, 34 carry "bounded", "opt-in", "explicit",
+"advisory" or "fail-closed" in the title and most of the rest behave that way; the CLI parses
+171 options; the default run is still the bare loop with every good thing behind a flag. No row
+was ever gated on a person using it for a day: the M-era exit criterion, "the harness is used to
+build the next milestone", lapsed once the R band started, and R15/R16 were built with another
+harness. Nothing measures time to first token, startup, or permission prompts per task. E3, the
+only outcome measurement, has supervisor-on at 14 PASS against 16 for plain and memory-on at 18,
+so the differentiators are currently invisible cost. Peers feel smooth because their defaults are
+strong and their feel numbers were fought over; this band does the same, in measured rows.*
+
+| Row | Deliverable | Package |
+|---|---|---|
+| R17a | **Dogfood mandate**: from this row on, work on AgentRig runs through AgentRig. The goal loop runs `agentrig` (TUI, `run --ci`, or ACP) as the driver for every subsequent row, and each friction it meets is filed as an issue labelled `feel` before the next row starts. STATUS records, per row, which harness built it; a row built elsewhere names the blocking issue. This restores the PLAN §6 exit criterion as a delivery gate | docs + .agentrig |
+| R17b | **Defaults pass**: one recommended profile becomes the zero-config default: Markdown rendering, post-edit diagnostics, prompt history, notifications, Git checkpoints when the workspace is a repository, session-end memory ingest, supervisor heuristics, tool summaries, thinking preserved. Every flag that only toggles one of these becomes a config key with the default on; the CLI keeps `--profile` and a small explicit set. Security defaults (`ask`, sandbox, grants, fail-closed manifests) do not move. A migration note lists each flag that changed meaning | cli + core |
+| R17c | **Feel budgets in CI**: measured on the fake provider and asserted like the viewport height: cold start to prompt under 400 ms, first streamed token within one tick of provider first byte, permission prompts per E1 task, turns to done per E1 task, TUI frame cost per event. A regression fails the build; the numbers print in `agentrig doctor` | cli + core + .github |
+| R17d | **Permission friction**: measure prompts per E1 task under the R17b defaults, then reduce them without widening authority: read-class tools inside the trusted root auto-allow; the first `bash` ask offers the exact argv-prefix grant (R12b) as the default key; repeated identical asks within a session collapse into one scoped decision. Target and result recorded; the injection fixture suite (R13e) must stay green | core + cli |
+| R17e | **Visible supervisor and memory**: each intervention and each recall renders as one transcript line the user can read (what it noticed, what it did, what it cost); `/why` on the last turn explains any injected guidance; memory recall shows the page and the claim, not a count. Nothing is added to the model prompt that is not also visible | cli + supervisor + memory |
+| R17f | **Tune or default off**: rerun the E3 matrix under the R17b/R17d defaults and the visible interventions. If supervisor-on does not beat plain on independent outcomes, its LLM-backed ladder steps default off and only the free heuristics stay; if memory-on does not, ingest stays on and injection defaults off. Either way the result and the default are recorded, and E3's limitations still apply | supervisor + memory + docs |
+| R17g | **Follow-ups sweep**: after R17a–R17f, the follow-ups list at the end of this document is worked as one batch PR per package, each bullet either done or explicitly declined with a reason, and the list is reset. It is last because none of it changes feel | all |
+
+Acceptance: R17a — STATUS names `agentrig` as the builder for every R17b+ row, or the `feel`
+issue that blocked it. R17b — a fresh clone with no config runs a task and the transcript shows
+rendered Markdown, a diagnostics line after an edit, a checkpoint event, and an ingest at session
+end; `agentrig --help` lists fewer than 40 top-level options. R17c — a deliberately slowed startup
+fixture fails the budget test (mutation). R17d — prompts per E1 task fall from the recorded
+baseline, and every R13e fixture still asserts its non-behaviour. R17e — a fixture intervention
+appears as a transcript line and `/why` names it. R17f — the matrix is rerun once under an
+agreed budget and the resulting defaults are the ones shipped. R17g — the follow-ups section is
+empty or contains only declined items with reasons.
+
+Renunciation: no new capability in this band. Every row makes something that exists default,
+measured, visible or cheaper. Security defaults move only toward less prompting for
+already-authorised operations, never toward wider authority.
+
+---
+
 ## 4. What AgentRig deliberately does not copy
 
 Written down so future sessions don't "helpfully" build them (pi's lesson: renunciations are a
@@ -1037,6 +1078,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 14 | R15h (done, PR #196) → R15i (done, PR #202) → R15j (done, PR #205) → R15k (done, PR #207) | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
 | 15 | R15l (done, PR #194) | R10c is delivered; ordinary trusted SDK composition is supported, external workflow engines remain renounced. Documentation-only and independent of the remaining R15 implementations. |
 | 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (done, PR #201) → R16f (done, PR #204) → R16g (done, PR #210) → R16h (done implementation, PR #211) | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
+| 17 | R17a → R17b → R17c → R17d → R17e → R17f → R17g | Feel and defaults after every capability row: the dogfood gate first so the rest is built under it; measurement before tuning; the follow-ups sweep last because it does not change feel. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
