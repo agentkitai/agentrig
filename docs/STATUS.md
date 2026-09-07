@@ -8,6 +8,13 @@ blocked, not done. [Failure and repair controls](plans/grant-transition-readines
 Hold #201's merge until repaired main is green; then drain201→205→207→194.
 No further unsubmitted roadmap work or parallel PR-refresh churn.
 
+Repair review closure: one Claude REQUEST_CHANGES,24 requested/28 reported turns;
+outer-timeout finding reproduced and fixed, both owned controllers joined before
+cleanup. Final170 focused tests, build/typecheck, required-Docker3,106 passed
++2 existing skips /197files (75.64s), and actual Chromium1passed (2.36s).
+[Original review and disposition](plans/grant-transition-readiness-review.md).
+Exact repair-head and repaired-main CI remain pending; no completion claim yet.
+
 R16f runtime-backed status line is **done**, PR #204: exact main7fe3440 passed
 all four checks CI34080476921/structure34080476920.
 [Final receipt](https://github.com/agentkitai/agentrig/pull/204#issuecomment-5564785990).

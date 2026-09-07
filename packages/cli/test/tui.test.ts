@@ -114,7 +114,7 @@ class FakeProvider implements ModelProvider {
   constructor(private readonly turns: Array<ModelEvent[] | Error>, private readonly startupMs = 0) {}
   async *stream(req: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
     this.requests.push(structuredClone(req));
-    if (this.requests.length === 1 && this.startupMs > 0) await delay(this.startupMs, undefined, { signal });
+    if ([1, 3].includes(this.requests.length) && this.startupMs > 0) await delay(this.startupMs, undefined, { signal });
     const turn = this.turns.shift() ?? [{ type: "stop" as const, reason: "end_turn" as const }];
     if (turn instanceof Error) throw turn;
     yield* turn;
@@ -137,10 +137,15 @@ const askingTool = (): AnyTool => ({
 });
 
 let root: string;
+const ownedTransitionControllers: TuiController[] = [];
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "agentrig-tui-"));
 });
 afterEach(async () => {
+  // Also joins on an outer Vitest timeout, before any owned cwd can be removed.
+  const controllers = ownedTransitionControllers.splice(0);
+  for (const controller of controllers) controller.abort();
+  await Promise.all(controllers.map(controller => controller.shutdown()));
   await rm(root, { recursive: true, force: true });
 });
 
@@ -228,7 +233,7 @@ const text = (c: TuiController): string => c.snapshot().lines.map((l) => l.text)
 const last = (c: TuiController): string => c.snapshot().lines.at(-1)?.text ?? "";
 
 describe("TuiController", () => {
-  it.each(["new", "fork", "switch"].flatMap(transition => [0, 1100].map(startupMs => ({ transition, startupMs }))))(
+  it.each(["new", "fork", "switch"].flatMap(transition => [0, 2600].map(startupMs => ({ transition, startupMs }))))(
     "revokes session grants across the real $transition transition (startup=$startupMs ms)", async ({ transition, startupMs }) => {
     const calls: ModelEvent[][] = [
       [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],
@@ -236,6 +241,8 @@ describe("TuiController", () => {
     ];
     const store = new SessionStore({ root });
     const c = makeControllerWith(new FakeProvider(calls, startupMs), { onFork: (parent, atSeq) => forkSessionAt(store, parent, atSeq) });
+    ownedTransitionControllers.push(c);
+    let other: TuiController | undefined;
     try {
       const first = c.submit("first task");
       await waitForTuiState(c, first, "first grant prompt", state => state.pending?.req.tool === "needs_permission");
@@ -244,7 +251,7 @@ describe("TuiController", () => {
       expect(oldGrant.resource).toBe("*"); expect(oldGrant.duration).toEqual({ kind: "session", id: oldId });
       let next: Promise<boolean>;
       if (transition === "switch") {
-        const other = makeController([]); await other.submit("other session");
+        other = makeController([]); ownedTransitionControllers.push(other); await other.submit("other session");
         next = c.submit(`/resume ${other.snapshot().sessionId!}`);
       } else {
         await c.submit(transition === "new" ? "/new" : "/fork");
@@ -257,8 +264,8 @@ describe("TuiController", () => {
       const events = (await store.readPrefix(c.snapshot().sessionId!)).events;
       expect(events).toContainEqual(expect.objectContaining({ type: "permission.revoked", grantId: oldGrant.id }));
       expect(events.at(-1)?.type).toBe("session.end");
-    } finally { await c.shutdown(); }
-  });
+    } finally { await c.shutdown(); await other?.shutdown(); }
+  }, 20_000); // Two bounded prompt phases plus real runtime/fork/log I/O.
   it("same-session continuation retains live session grants but not task grants", async () => {
     const provider = new FakeProvider([
       [{ type: "tool_use", id: "first", name: "needs_permission", input: {} }, stop("tool_use")], [stop("end_turn")],

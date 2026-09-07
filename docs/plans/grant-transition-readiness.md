@@ -34,3 +34,19 @@ global test timing changed. After correction,170tests across the TUI, readiness,
 grant runtime/core and render suites pass (5files,5.98s), including all six
 baseline/delayed transition cases. Build/typecheck pass. Full required-Docker,
 Chromium, single bounded review and delivery gates pending.
+
+Pre-review full required-Docker passed3,106 +2existing skips /197files,74.69s;
+actual Chromium1passed,2.46s. One [Claude review](grant-transition-readiness-review.md)
+requested changes:24requested/28reported turns, independently170unique focused
+tests passed, no Windows/build/typecheck/full-Docker execution claimed. Original
+verdict and its arithmetic/command-availability caveats are retained verbatim.
+
+Review closure: the final delayed variants wait2.6s at each actual prompt stage.
+Under the original5s outer bound they fail at5005/5002/5002ms (all three zero-delay
+baselines pass). Scope expands only to an explicit20s bound on this same fixture,
+not global timing, and joins both owned controllers before root cleanup, including
+outer-timeout afterEach cleanup. Both existing4s prompt waits remain fail-closed.
+No production changes or second review. Final local verification passes:
+170 focused tests /5files (18.32s), build/typecheck, required-Docker3,106 passed
++2 existing skips /197files (75.64s), and actual Chromium1passed (2.36s).
+Exact-head and repaired-main delivery gates remain pending.
