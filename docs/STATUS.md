@@ -18,6 +18,8 @@ no renderer filesystem reads, no new tool authority. [Contract](plans/R16b.md).
 Build/typecheck/full required-Docker pass: 2,976 tests plus two skips /187 files.
 One independent review approved (13 reported turns, 219 independently passing
 focused tests and typecheck); final integration/PR CI/post-main gates remain.
+Integrated green R8d main `c59a446`: build/typecheck, full Docker 2,994 tests plus
+two skips /188 files and actual Chromium smoke pass. Final exact-head CI pending.
 
 ### R15g done — bounded final-output schema validation
 
