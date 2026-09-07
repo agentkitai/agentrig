@@ -47,7 +47,7 @@ async function conversation(onSummary?: (signal: AbortSignal) => Promise<void>) 
   return { cwd, store, agent, controller, calls: () => calls };
 }
 
-it.each(["\u0003", "\u001b[201~\u0003"])("actual App Ctrl+C %j aborts owned compaction without exiting", async key => {
+it.each(["\u0003", "\u001b[201~\u0003", "\u0007", "\u001b[201~\u0007"])("actual App interrupt %j aborts owned compaction without exiting", async key => {
   let entered!: () => void; let cancelled!: () => void;
   const ready = new Promise<void>(resolve => { entered = resolve; });
   const aborted = new Promise<void>(resolve => { cancelled = resolve; });
@@ -60,7 +60,7 @@ it.each(["\u0003", "\u001b[201~\u0003"])("actual App Ctrl+C %j aborts owned comp
   const parent = f.controller.snapshot().sessionId; const input = new Input();
   const stdout = Object.assign(new EventEmitter(), { columns: 80, rows: 24, isTTY: true, write: () => true });
   let mounted!: () => void; const mount = new Promise<void>(resolve => { mounted = resolve; });
-  const ink = render(createElement(App, { controller: f.controller, onMounted: mounted }),
+  const ink = render(createElement(App, { controller: f.controller, onMounted: mounted, settings: { keybindings: { abort: "ctrl-g" } } }),
     { stdout: stdout as never, stdin: input as never, patchConsole: false, exitOnCtrlC: false });
   const exited = ink.waitUntilExit().then(() => "exit");
   const work = f.controller.submit("/compact");

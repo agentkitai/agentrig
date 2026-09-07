@@ -38,7 +38,7 @@ export function permissionEffectLines(req: PermissionRequest, options: { color?:
   lines.push("Names, model prose and MCP read-only hints do not establish effects or authority.");
   if (req.class === "write" && req.fileDiff !== undefined) lines.push(...renderFileDiff(req.fileDiff, options).split("\n"));
   if (req.origin === "external-input-expansion") lines.push(`Fresh approval required: external/unknown input proposes first ${req.expansionSurface ?? req.class} dispatch${req.sourceOrigin === undefined ? "" : ` from ${JSON.stringify(req.sourceOrigin)}`}. Standing grants do not apply.`);
-  if (!separatePermissionConsent(req)) lines.push(`Standing a/d covers ALL future ${JSON.stringify(req.tool)} requests in this live session, any resource/class/cwd. Children currently share that group. Explicit base rules still apply.`);
+  if (!separatePermissionConsent(req)) lines.push(`Standing session answers cover ALL future ${JSON.stringify(req.tool)} requests in this live session, any resource/class/cwd. Children currently share that group. Explicit base rules still apply.`);
   return lines;
 }
 

@@ -788,6 +788,11 @@ own cursor over a replayed buffer, so a slow detector delays interventions and n
 
 ## 5. `cli`
 
+R16h adds startup-captured strict `tui` settings: fixed dark/light palettes and
+bounded permission/history/abort keys. NO_COLOR overrides TUI styling; fixed
+Ctrl+C/Escape and paste/protected-prompt guards remain. No runtime editor or
+arbitrary terminal code. See [TUI settings](TUI-SETTINGS.md).
+
 R16g adds idle-only manual TUI commands: `/clear` aliases `/new`; `/doctor` runs
 plain local diagnostics with provider probes disabled; `/diff [checkpoint [turn]]`
 captures protected tracked worktree changes against HEAD or a validated recorded

@@ -4,6 +4,7 @@ import {
   formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
+import { TuiSettingsSchema } from "./settings.js";
 import { PromptHistory } from "./prompt-history.js";
 import { completeAttachment, readClipboard } from "./attachments.js";
 import { TuiController } from "./controller.js";
@@ -52,6 +53,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   let built;
+  // Capture validated settings before any asynchronous provider/startup work.
+  const settings = TuiSettingsSchema.parse(opts.tui ?? {});
   NotificationMode.parse(opts.notifications ?? "off");
   NotificationIdleSeconds.parse(opts.notificationIdleSeconds ?? 30);
   validateAbortRestores(opts);
@@ -217,7 +220,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
     await withBracketedPaste(process.stdout, async () => {
       // exitOnCtrlC must be OFF: with it on, Ink unmounts on ctrl-C *and refuses to dispatch it*
       // to useInput, so the abort handler in the view could never run.
-      const { unmount, waitUntilExit } = render(<App controller={controller} onMounted={onMounted} history={history} onInput={() => notifications?.input()} />, {
+      const { unmount, waitUntilExit } = render(<App controller={controller} settings={settings} onMounted={onMounted} history={history} onInput={() => notifications?.input()} />, {
         exitOnCtrlC: false,
       });
       // An OS SIGINT is not the raw ctrl-c byte handled by App. Make it a real teardown so this

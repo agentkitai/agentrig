@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import type { TuiSettings } from "./tui/settings.js";
 import { inspectPackages } from "./packages.js";
 import { providerSelectionControl, validateProviderSelectionTable, type ProviderSelectionControl } from "./provider-selection.js";
 import { homedir } from "node:os";
@@ -135,6 +136,7 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  tui?: TuiSettings;
   notifications?: "off" | "bell" | "desktop" | "both";
   notificationIdleSeconds?: number;
   /** Explicit CLI activation only; never loaded from config or environment. */

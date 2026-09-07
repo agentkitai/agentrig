@@ -518,7 +518,7 @@ export class TuiController {
         resolve: (d, remember, scope) => {
           if (settled) return;
           if (req.origin === "external-input-expansion" && remember === true) {
-            this.print("Fresh approval requires y or n; standing answers cannot approve this boundary.", "system");
+            this.print("Fresh approval requires a one-time answer; standing answers cannot approve this boundary.", "system");
             return;
           }
           settled = true;
@@ -723,7 +723,7 @@ export class TuiController {
   private describeStanding(): string {
     const grants = this.permissionGrants.inspect();
     if (grants.length === 0) {
-      return "nothing has a standing answer — every request is asked. `a` at a prompt makes one standing.";
+      return "nothing has a standing answer — every request is asked. Use the displayed session-allow key at a prompt to make one standing.";
     }
     const now = Date.now();
     const lines = grants.map(({ grant, matchedDecisions, countSaturated, auditBlocked }) =>

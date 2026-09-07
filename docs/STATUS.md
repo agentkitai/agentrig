@@ -1,18 +1,21 @@
 # Status
 
-Backlog drained: **R15l #194 is done** on main `8fe6f29`, all-four post-main
+Final implementation: **R16h themes/keybindings**, integrated with delivered R16g.
+[PR#211](https://github.com/agentkitai/agentrig/pull/211) holds the final hosted
+delivery receipt. This is its pre-merge checkpoint; completed implementation does
+not imply then-pending checks passed.
+R16g PR#210 is done on main98eb403, all-four post-main CI34093472579 /
+structure34093472588 green.
+[Receipt](https://github.com/agentkitai/agentrig/pull/210#issuecomment-5566491322).
+R16h build/typecheck,3,242 full tests plus two existing skips, real Chromium and
+one static-only Claude approval are complete. Exact-head/post-main hosted gates
+follow on its implementation PR; that PR holds the final delivery receipt.
+No committed implementation remains afterward; optional polish stays at roadmap END.
+Backlog drained; R15l #194 is done on main8fe6f29, all-four
 CI34091238822 / structure34091238830 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/194#issuecomment-5566147772).
-Active **R16g manual commands**; root owns independent parallel **R16h themes**.
-R16g integrates all delivered backlog features: one sampled selected provider with
-ledger/native guards, shared attachment/maintenance/selection ownership, and real
-Ctrl+C cancellation in both App input paths. Discriminating controls failed before
-each integration fix and pass afterward. Original static-only review is retained;
-final full and hosted gates remain required.
-Final source `3610cbf`: build/typecheck, 167 combined focused controls, full
-required-Docker 3,214 plus two existing skips /206 files (79.09s), and real
-Chromium one (2.44s) pass. Fresh exact-head hosted gates follow; not yet delivered.
-#207 is done on `82b2f27`,
+[R16h contract and evidence](plans/R16h.md).
+Earlier backlog checkpoints below are historical. #207 is done on `82b2f27`,
 all-four CI34089126856 / structure34089126808 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/207#issuecomment-5565941414).
 #194 integrates separately merged CI optimization #209, green main716f810
@@ -23,7 +26,7 @@ all-four CI34089126856 / structure34089126808 green.
 `8da21be`, all-four CI34086055156 / structure34086055211 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/201#issuecomment-5565536470).
 Only merges are serialized; independent existing PR preparation may run in
-parallel. The R16g/R16h freeze is released after the completed backlog drain.
+parallel. The prior R16g/R16h backlog freeze is lifted.
 Earlier integration checkpoints below retain their historical pending gates.
 
 Historical attachment integration checkpoint:
@@ -380,15 +383,12 @@ workers, 39 seconds). The single bounded review approved and independently passe
 all 15 evaluation tests plus typecheck; original findings are retained in the plan.
 Repair exact-head CI `34039760450` and repaired-main post-CI are green; the original failed run remains failed.
 
-Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R15l is done (PR #194); R16g is active; R16h is independent parallel; R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
+Active implementation queue: **R5c is done (PR #170, post-merge CI green); R14d and R10a are done (PRs #172/#174, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is done (PR #205, all-four post-main green); R15k is done (PR #207, all-four post-main green); R15l is done (PR #194); R16g is done (PR #210); R16h implementation is done (PR #211; delivery checkpoint above); R16b is done (PR #203 + repair #208); R16e is done (PR #201, all four post-main green); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R9a is done (PR #175, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done with green post-merge CI (PR #161); R12d is done with green post-merge CI (PR #163); R12c is done with green post-merge CI (PR #158); R12b is done with green post-merge CI (PR #155); R6g is done with green post-merge CI (PR #153); R13d is done with green post-merge CI (PR #154); R13c and R5a are done with green post-merge CI (PRs #159/#157); R12a is done with green post-merge CI (PR #152). R6c is done with green post-merge CI (PR #151); R13b is done with green post-merge CI (PR #150). R6b, R12e, R5d, R5e, R6a, R13a and R13f are done with green post-merge CI.** The remaining roadmap is committed scope, ordered by impact and dependencies in ROADMAP §5. R6d–R6f, R4a–R4c, H1–H6 and E1–E3 are complete; supporting PRs and limits are recorded below. R3.5 is complete (R3.5a, R3.5b). R3 is complete (R3a–R3d); R2 is complete (R2a–R2d); R1 is complete (R1a–R1e); R1.5a–R1.5f are complete. These are implementation records; the H band tracks newly identified gaps.
 The original milestones M0 through M7 remain complete, including M2.5's live provider validation.
 
 ## Current priorities — revised 2026-09-06
 
-### R15l done — PR #194, all four post-main gates green
-
-Delivered on `8fe6f29`; CI34091238822 / structure34091238830 passed.
-Earlier review/integration checkpoints below are historical, not current gates.
+### R15l done — PR #194; historical decision and verification checkpoints
 
 Refreshed on repaired green main0b65aa1; only documentation conflicts, original
 review unchanged.212local links resolve; build/typecheck and7structure tests pass
