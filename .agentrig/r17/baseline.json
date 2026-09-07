@@ -1,0 +1,89 @@
+{
+  "terminal": {
+    "cold_start_to_prompt_ms": 403.70015398366377,
+    "first_streamed_token_ms": 59.72243403084576
+  },
+  "topLevelHelpOptions": 2,
+  "tasks": [
+    {
+      "task": "A1",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "090cfe1f",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "A2",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "d64af74b",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "A3",
+      "permissionPrompts": 3,
+      "turnsToDone": 5,
+      "sessionId": "f6104f4e",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "A4",
+      "permissionPrompts": 2,
+      "turnsToDone": 5,
+      "sessionId": "3e27eec0",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "BLOCKED",
+      "manual": "PENDING"
+    },
+    {
+      "task": "X1",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "564e164f",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "X2",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "e3e74474",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "X3",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "d1aa5c23",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "PASS",
+      "manual": "NOT_REQUIRED"
+    },
+    {
+      "task": "X4",
+      "permissionPrompts": 2,
+      "turnsToDone": 4,
+      "sessionId": "dfa238bd",
+      "reason": "done",
+      "behavior": "PASS",
+      "outcome": "BLOCKED",
+      "manual": "PENDING"
+    }
+  ]
+}

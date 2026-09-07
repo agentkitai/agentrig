@@ -1,5 +1,19 @@
 # Status
 
+## R17 builder gate
+
+Every R17 PR body and STATUS entry names **builder agentrig, conductor 8fbde1a3**,
+or names the blocking `feel` issue if AgentRig could not build it. Record child
+count, observable token usage (never an invented estimate), and halts for each row.
+File AgentRig friction with the `feel` label before the next child starts.
+
+- **R17b in progress — builder agentrig, conductor 8fbde1a3.** One child, one
+  isolated worktree; token usage unavailable; zero halts; feel
+  [#232](https://github.com/agentkitai/agentrig/issues/232). The first commit records
+  [R17a baseline](plans/R17-baseline.md) before any default changes. R17a has no PR
+  of its own. Defaults acceptance and PR/CI are not yet complete.
+
+
 R17 skill-selection recovery (outside train, 2026-09-07): the user resolved
 [feel #229](https://github.com/agentkitai/agentrig/issues/229) by authorizing R17g
 as sequential package PRs; R17b–R17f remain one PR per row. Conductor `c1a25934`
