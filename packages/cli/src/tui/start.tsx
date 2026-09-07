@@ -8,7 +8,7 @@ import { PromptHistory } from "./prompt-history.js";
 import { TuiController } from "./controller.js";
 import { interactiveDream } from "./dream.js";
 import { withBracketedPaste } from "./bracketed-paste-mode.js";
-import { SessionStore, liveChildren, summarizeSession, withSessionSpend } from "@agentkitai/agentrig-core";
+import { SessionStore, liveChildren, summarizeSession, withSessionSpend, sessionSpendSource } from "@agentkitai/agentrig-core";
 import { buildAgent, type AgentBuildOptions } from "../agent-builder.js";
 import { costLines } from "../usage.js";
 import { forkSessionAt, renderChildren, renderSessionTree } from "../sessions.js";
@@ -25,7 +25,7 @@ import {
   type SupervisorFlags,
 } from "../run.js";
 import { parseBudget } from "../agent-builder.js";
-import { askInteractively } from "../run.js";
+import { askInteractively, skipsPermissions } from "../run.js";
 import { withMaintenanceSignal } from "../maintenance.js";
 import { supervise } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
@@ -111,6 +111,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
 
   controller.attach(built.agent);
+  controller.configureStatus(() => ({ posture: skipsPermissions(opts) ? "yolo" : "ask", sandbox: opts.sandbox ?? "none" }));
   controller.setSkills(built.skills);
   controller.setCommands(built.commands ?? []);
   {
@@ -134,7 +135,8 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   }
   // in the frame rather than on stderr: stderr would be overwritten by the first render
   const warning = permissionWarning(opts, process.cwd());
-  controller.setCost(session => built.spend === undefined ? Promise.resolve(["No trusted project spend ledger is active."]) : costLines(built.spend.ledger, session));
+  controller.setCost(session => built.spend === undefined ? Promise.resolve(["No trusted project spend ledger is active."]) :
+    costLines(built.spend.ledger, session, controller.statusSession() === undefined ? undefined : sessionSpendSource(controller.statusSession()!)));
   if (warning !== null) controller.print(warning, "error");
   controller.setReview(async (args, signal) => {
     try {

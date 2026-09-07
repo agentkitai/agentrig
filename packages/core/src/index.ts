@@ -22,7 +22,7 @@ export { Checkpointer, isCheckpointerHook, type CheckpointHookEvent, type Checkp
 export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";
 export * from "./spend-ledger.js";
-export { withSessionSpend } from "./spend-runtime.js";
+export { withSessionSpend, sessionSpendSource, type SessionSpendSource } from "./spend-runtime.js";
 export * from "./turn-strategy.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";
