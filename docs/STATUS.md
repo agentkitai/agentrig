@@ -1,5 +1,62 @@
 # Status
 
+Current user authorization: finish and merge PR #222, then stop again. No further
+roadmap implementation is authorized in this pass. Integrating green main
+e793fd0ffcfdb89b139d7cdab0d18132ead750e4; #219 and #220 are fully delivered.
+[Final #220 receipt](https://github.com/agentkitai/agentrig/pull/220#issuecomment-5569761339),
+all-four post-main CI34114715742 / structure34114715682 green.
+#222's original Claude review and addressed findings remain valid: no source conflict
+or production change during integration. Updated build/typecheck, full pinned-Docker,
+Chromium and exact-head CI precede merge; final post-main receipt will be on PR #222.
+All paragraphs below are historical checkpoints, not current continuation instructions.
+
+Current user instruction: finish PR #219 and PR #220, then STOP and wait for further
+instructions. Do not start more work. PR #222 (usage display, already opened) remains
+unmerged. External roadmap PR #221 merged separately as fd350d1d6dc71dab5846f355ddf4b8e6ed2b873a;
+its R17 additions are preserved, not started. #220 now integrates that updated main.
+#219 merged as 2d13a2c0eae38bd358f6ab374725eb46beeeb10a after all-four exact-head
+checks. Post-main CI34111975404 / structure34111975426 are all green;
+[final receipt](https://github.com/agentkitai/agentrig/pull/219#issuecomment-5569398357).
+#220 integrates that main and must pass combined local and exact-head checks before
+merge, followed by all-four post-main checks. Integrated build/typecheck, full pinned
+Docker 3,319 passed plus two skips /209 files (81.42s) and Chromium1/2.45s pass.
+Final receipts are on the two PRs; this last implementation checkpoint predates #220's
+merge, so its final delivered status must be read from the linked PR receipt.
+
+Historical serializer implementation checkpoint:
+The visible ROADMAP Delivery progress checklist marks #217/#218 done. Main ebfd10f8dac970a6560e451c7ebe42d9878cacdf
+has all-four post-merge checks green (CI34109938845 / structure34109938825).
+[Final receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
+The serializer129-reference control fails before the guard;128 with duplicates passes
+the actual core parser. Ordinary evidence already has a128-session bound, so this is
+defensive format coverage, not a claimed production exploit. [Contract](plans/skill-session-count-cap.md).
+One Claude APPROVE (23 reported /24 requested), 76 focused tests, build/typecheck,
+full pinned Docker3,318+2 skips and Chromium pass. Integration gates follow.
+All earlier status paragraphs are historical checkpoints, not continuation instructions.
+
+Historical fifth-pass checkpoint, preserved from PR #221:
+Fifth pass, 2026-09-07: with every committed row done, ROADMAP gains R17 "feel and defaults"
+(dogfood mandate, defaults pass, feel budgets in CI, permission friction, visible and tuned
+supervisor/memory, then the follow-ups sweep). It sits at section 5 row 17, after R16 and
+before the follow-ups. The follow-ups currently being worked continue; R17a's dogfood gate
+applies from its own start. PLAN §9's F3 Windows CI job is struck as built.
+
+Historical implementation: bounded abort-grace fixture readiness repair, from green
+main ebfd10f. No production changes. Original/delayed-start pair reproduces one
+missing-warning failure before correction; both pass after observing the blocked
+child terminal-store gate. Exact100ms grace, nonfatal warning and ordering remain;
+finally releases the gate and joins the actual child. [Contract](plans/abort-grace-readiness.md).
+Single Claude APPROVE15reported/24requested, no material findings; original
+[receipt](plans/abort-grace-readiness-review.md) preserved. Build/typecheck,45focused,
+full pinnedDocker3318+2 skips/209files and realChromium pass. Hosted delivery pending.
+Entire END queue remains active;
+independent serializer and status-accounting follow-ups proceed in other worktrees.
+#217 and #218 are delivered with all-four post-main checks green:
+[217 receipt](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445),
+[218 receipt](https://github.com/agentkitai/agentrig/pull/218#issuecomment-5568955192).
+
+Historical preceding checkpoint:
+
 Current: continue through the entire END follow-up queue, with bounded independent
 worktrees and serialized merges; batch completion is not a stop condition.
 R16f no-usage status is active from green main ebfd10f. Three actual held-provider/

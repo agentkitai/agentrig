@@ -5,6 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import { discoverSkills, parseSkill, parseSkillFrontmatter } from "@agentkitai/agentrig-core";
 import { runDream, type FullDreamResult } from "@agentkitai/agentrig-memory";
 import { skillFixture, skillProvider } from "./fixtures/skill-emission.ts";
+import { serializeProcedureSkill } from "../src/dream/skills.js";
 
 const roots: string[] = []; const results: FullDreamResult[] = [];
 afterEach(async () => {
@@ -47,6 +48,21 @@ it.each(["single", "fork", "copied"])("%s evidence cannot emit a procedure", asy
   const f = await fixture(mode); const result = await dream(f);
   expect(result.skillEmission!.proposals).toEqual([]);
   expect((await dream(f, result.skillEmission!.digest)).skillEmission!.status).toBe("refused");
+});
+
+it("serializer accepts 128 distinct sessions after deduplication but refuses 129 even below the byte cap", async () => {
+  const f = await fixture();
+  const preview = await dream(f, undefined, undefined, { structuralOnly: true });
+  const candidate = preview.report.procedures!.candidates[0]!;
+  const sources = Array.from({ length: 128 }, (_, i) => `session:s${i}`);
+  // Synthetic metadata boundary input to the pure internal serializer, not publication authority.
+  const withSources = (publicationSources: string[]) => ({ ...candidate, artifact: { ...candidate.artifact, publicationSources } });
+  const valid = serializeProcedureSkill(withSources([...sources, ...sources]), f.skills, "fixture");
+  expect(JSON.parse(parseSkillFrontmatter(valid.text).fields.metadata!["agentrig-sessions"]!)).toEqual([...sources].sort());
+  expect(parseSkill(valid.text, valid.path).name).toBe(valid.name);
+  expect(JSON.stringify([...sources, "session:extra"]).length).toBeLessThan(8192);
+  expect(() => serializeProcedureSkill(withSources([...sources, "session:extra"]), f.skills, "fixture")).toThrow("skill provenance limit exceeded");
+  expect(await readdir(f.skills).catch(() => [])).toEqual([]);
 });
 
 it.each(["unsafe", "rewrite", "nonrepeatable", "timeout"])("fresh %s review cannot reuse a previous digest as authorization", async fault => {

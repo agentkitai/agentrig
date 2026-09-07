@@ -26,14 +26,17 @@ export interface SkillEmissionReport {
   preserved: Array<{ path: string; reason: string }>;
 }
 
-/** Serializer intentionally independent of core runtime; CLI tests verify the shared format. */
-function proposal(candidate: ProcedureDetection["candidates"][number], root: string, dream: string): SkillProposal {
+/** Internal pure serializer, not an evidence validator or publication API.
+ * Intentionally independent of core runtime; CLI tests verify the shared format. */
+export function serializeProcedureSkill(candidate: ProcedureDetection["candidates"][number], root: string, dream: string): SkillProposal {
   const artifact = candidate.artifact;
+  const sessions = [...new Set(artifact.publicationSources)].sort();
+  if (sessions.length > 128) throw new Error("skill provenance limit exceeded");
   const slug = basename(artifact.from, ".md").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48).replace(/-+$/, "") || "procedure";
   const name = `${slug}-${hash(artifact.from).slice(0, 12)}`;
   const metadata: Record<string, string> = {
     "agentrig-schema": "1", "agentrig-generated": "true",
-    "agentrig-sessions": JSON.stringify([...new Set(artifact.publicationSources)].sort()),
+    "agentrig-sessions": JSON.stringify(sessions),
     "agentrig-page": artifact.from, "agentrig-dream": dream,
     "agentrig-evidence": hash(JSON.stringify({ evidence: artifact.evidence, claims: artifact.claims })), locked: "false",
   };
@@ -149,7 +152,7 @@ export async function prepareProcedureSkills(pages: WikiPage[], raw: RawStore, o
   let receipts: PromotionGuardrailIndex | undefined;
   const procedures = context.provider === undefined ? { candidates, rejected: [] } :
     await refineProcedureCandidates(candidates, context.provider, run, value => { receipts = value; });
-  const proposals = procedures.candidates.map(candidate => proposal(candidate, opts.root, context.dream));
+  const proposals = procedures.candidates.map(candidate => serializeProcedureSkill(candidate, opts.root, context.dream));
   const emission: SkillEmissionReport = { digest: reviewDigest(proposals), proposals, status: "preview", written: [], preserved: [] };
   if (opts.apply !== undefined) {
     let reason: string | undefined;
