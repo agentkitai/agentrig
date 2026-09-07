@@ -17,6 +17,7 @@ export type TuiCommand =
   | { kind: "plan" }
   | { kind: "context" }
   | { kind: "cost" }
+  | { kind: "compact" | "doctor" | "diff"; args: string }
   | { kind: "model" | "effort"; argument: string }
   | { kind: "verbose" }
   | { kind: "new" }
@@ -52,6 +53,10 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
+  { name: "compact", summary: "compact into a verified conversation fork while idle (costs tokens)" },
+  { name: "clear", summary: "alias of /new; same configuration, new conversation" },
+  { name: "doctor", summary: "local configuration diagnostics; no provider probe" },
+  { name: "diff", args: "[checkpoint [turn]]", summary: "bounded tracked worktree diff; no model call or edits" },
   { name: "model", args: "[role-or-entry]", summary: "inspect or select the configured main provider while idle" },
   { name: "effort", args: "[level]", summary: "inspect or select the main adapter's effort for the next request" },
   { name: "verbose", summary: "append retained tool details and toggle future raw events (existing scrollback stays)" },
@@ -117,6 +122,10 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "context" };
     case "cost":
       return { kind: "cost" };
+    case "compact":
+    case "doctor":
+    case "diff":
+      return { kind: name, args };
     case "model":
     case "effort":
       return { kind: name, argument: args };
@@ -126,6 +135,7 @@ export function parseCommand(line: string): TuiCommand | null {
     case "resume":
       return { kind: "resume", id: args };
     case "new":
+    case "clear":
       return { kind: "new" };
     case "permissions": {
       if (args === "" || args === "reset") return { kind: "permissions", reset: args === "reset" };
@@ -164,7 +174,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "supervisor",
   "plan",
   "context",
-  "cost", "model", "effort",
+  "cost", "compact", "clear", "doctor", "diff", "model", "effort",
   "verbose", "trace",
   "resume",
   "new",
