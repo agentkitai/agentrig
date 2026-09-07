@@ -16,6 +16,7 @@ import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
 import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
+import { startWeb, type WebDependencies, type WebFlags } from "./web.js";
 import { startMcpServe, type McpServeDependencies } from "./mcp-serve.js";
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
@@ -138,6 +139,7 @@ export interface ProgramDependencies {
   review?: ReviewDependencies;
   ci?: CiDependencies;
   acp?: AcpDependencies;
+  web?: WebDependencies;
   mcpServe?: McpServeDependencies;
 }
 
@@ -169,7 +171,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    */
   program.option("--profile <name>", "named config profile to overlay (may precede the subcommand)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
-  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "mcp-serve"]);
+  const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
     // A profile aimed at a command that never consults config is accepted so aliases keep
     // working, but never silently: an ignored flag the user typed deserves a note (the same
@@ -396,6 +398,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
       await startAcp(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
         ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.acp,
+      });
+    });
+
+  withRunOptions(program.command("web").description("Serve the authenticated loopback ACP reference page"), HEADLESS_MAX_TURNS)
+    .option("--host <host>", "only the literal 127.0.0.1 is accepted", "127.0.0.1")
+    .option("--port <port>", "local TCP port; zero selects an ephemeral port", "0")
+    .action(async (flags: WebFlags, cmd: Command) => {
+      const profile = (cmd.optsWithGlobals() as { profile?: string }).profile;
+      await startWeb(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
+        ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.web,
       });
     });
 

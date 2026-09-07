@@ -43,6 +43,12 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Install Chromium for the local reference client smoke
+        if: runner.os == 'Linux'
+        run: pnpm --filter @agentkitai/agentrig-cli exec playwright install --with-deps chromium
+      - name: Real Chromium ACP reference client
+        if: runner.os == 'Linux'
+        run: pnpm exec vitest run --config vitest.web.config.ts
 
   windows-sandbox-none:
     runs-on: windows-latest
@@ -145,4 +151,6 @@ jobs:
 
       - run: pnpm exec vitest run packages/cli/test/mcp-serve.test.ts packages/cli/test/mcp-serve-runtime.test.ts packages/cli/test/mcp-serve-cli.test.ts
       - run: pnpm exec vitest run packages/core/test/thinking.test.ts packages/cli/test/thinking.test.ts packages/core/test/openai-chatgpt.test.ts packages/core/test/anthropic.test.ts packages/core/test/compaction.test.ts
+      - run: pnpm exec vitest run packages/cli/test/tool-summaries.test.ts
       - run: pnpm exec vitest run packages/core/test/otel.test.ts packages/cli/test/otel.test.ts
+      - run: pnpm exec vitest run packages/cli/test/web.test.ts

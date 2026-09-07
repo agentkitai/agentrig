@@ -51,7 +51,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
   { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
-  { name: "verbose", summary: "toggle the raw event trace (off by default: you get the conversation)" },
+  { name: "verbose", summary: "append retained tool details and toggle future raw events (existing scrollback stays)" },
   { name: "permissions", args: "[reset | revoke <exact-id>]", summary: "inspect live grants, matched-decision counts, or revoke authority" },
   { name: "skills", summary: "list loaded skills; /<skill-name> [task...] runs one" },
   { name: "resume", args: "<id>", summary: "continue a previous session" },
