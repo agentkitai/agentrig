@@ -417,7 +417,12 @@ export class Checkpointer implements Hook {
     if (!owned || !lease) return;
     await this.guard(ctx);
     const current = await checkpointState(lease.repo,ctx);
-    if (!sameCheckpointState(owned,current)) throw new Error("undo unavailable: non-session changes after the final tool");
+    if (!sameCheckpointState(owned,current)) throw new Error(
+      "undo unavailable: non-session changes after the final tool. " +
+      "Checkpoint snapshots remain, but undo has no verified ownership seal; " +
+      "session-end hooks such as memory ingest may change covered files, including tracked or unignored wiki files. " +
+      "Later changes were not adopted. See docs/plans/R4b.md for checkpoint coverage limits.",
+    );
     const ref = `refs/agentrig/${ctx.sessionId}/sealed/${ctx.turn}`;
     const env = {...gitEnvironment(),GIT_AUTHOR_NAME:"AgentRig",GIT_AUTHOR_EMAIL:"checkpoint@agentrig.invalid",GIT_COMMITTER_NAME:"AgentRig",GIT_COMMITTER_EMAIL:"checkpoint@agentrig.invalid"};
     const commit = (await git(lease.repo,["commit-tree",owned.tree,"-m",`AgentRig ownership ${ctx.sessionId}`],env,ctx.signal)).stdout.trim();

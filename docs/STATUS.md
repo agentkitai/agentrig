@@ -1,5 +1,17 @@
 # Status
 
+## R17b repair round 2/3 — builder agentrig, conductor 2aa2f739
+
+Prior halt feel #248 is resolved by the human outside the train: restore diagnostics
+under the existing acceptance, not a new exception; no second arbiter. This is
+round 2 of the three-round cap, preserving completed round 1 and the sandbox
+approval by 1bb8ec86. Previous conductors: 8fbde1a3, 38c4612d. Prior children:
+7dbfad2b, 1bb8ec86, b9109d9f, 12b8dd75. This continuation is child 5 (builder
+agentrig); it spawns zero children. Current child token/session telemetry is not
+available in this tool surface; prior partial snapshots remain below, not totals.
+One prior halt (#248); historical friction and accounting are preserved.
+
+
 ## R17 builder gate
 
 Every R17 PR body and STATUS entry names **builder agentrig, conductor 8fbde1a3**,
@@ -58,6 +70,38 @@ File AgentRig friction with the `feel` label before the next child starts.
   product trust. `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
   4 skipped**). Exact-head CI is verified in the PR handoff record after push.
   Independent external reviews follow in the conductor; no reviews or merge by this child.
+R17 checkpoint/ingest visibility repair (outside train, 2026-09-07): conductor
+`8fbde1a3`, continuation builder `b9109d9f`, reported
+[feel #235](https://github.com/agentkitai/agentrig/issues/235) from nested fixture
+`2eda835f`. Codex's outside-train diagnostic repair distinguishes retained checkpoint
+snapshots from unavailable verified undo, and names session-end memory maintenance
+as a possible cause without asserting ownership of those writes. Real-Git/fake-provider
+tests cover completed ingest with tracked/untracked wiki files, an unrelated human
+edit during ingest, unchanged refusal/no restoration, and successful undo without ingest
+or with an ignored untracked wiki whose ingested bytes remain intact.
+No ingestion is skipped, exclusions widened, or ownership checks changed. This does
+**not** repair the integration limitation: R4b deliberately refuses to seal covered
+session-end changes. Issue #235 remains open for that capability decision, recorded
+at the end of the roadmap, not as a new blocking R17 subrow. No R17 row is completed
+by this diagnostic repair.
+
+Review follow-through distinguishes the new seal-time message from the unchanged
+explicit-undo refusal, asserts the latter exactly, and clarifies tracked/unignored
+wiki coverage. The ignored-untracked control also runs real ingest. An actual
+TypeScript 5.9.3 compiler check inferred `checkpoint.created` at the questioned
+`events.find` declaration and reported no test-file diagnostics; no speculative
+cast was added. Replaying the stored reason at the undo entry point remains an
+explicit follow-up, not a change to ownership or an implemented capability.
+
+The subscription-capacity halt ([feel #246](https://github.com/agentkitai/agentrig/issues/246))
+interrupted the train and outside repair before landing. The diagnostic branch was
+preserved unpushed at `5267c04b482242fa24ac1042570a4bff44edf568`. After the user
+reported a quota reset and authorized resumption, Codex resumed this outside-train
+repair; that authorization is not itself proof of provider recovery or train progress.
+The completed Claude delta review reported convergence; Codex identified that
+`toThrow(string)` only checks a substring, so the refusal assertion now compares
+the error's message property exactly. Prior review evidence and limitations remain
+applicable; neither an interrupted review nor green CI replaces the remaining gates.
 
 R17 PTY/monitoring recovery (outside train, 2026-09-07): Codex documented the
 task/paste-versus-Enter protocol for [feel #232](https://github.com/agentkitai/agentrig/issues/232)
