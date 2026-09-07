@@ -20,7 +20,9 @@ File AgentRig friction with the `feel` label before the next child starts.
   Per-response accounting is committed in `plans/R17b-repair-accounting.json`.
   Merged moved main `7841b88` without rebasing. Green local trio: 212 files,
   3,366 passed / 4 skipped; CLI-workspace runtime probe 1 passed. Hosted exact-head
-  CI is recorded in the PR after push.
+  CI is recorded in the PR after push. New workflow feel #245 records the
+  workspace-relative Vitest include friction (session 12b8dd75, call seq 1055,
+  result seq 1080); successful explicit-root invocation is recorded, not waived.
 
 - **R17b implemented, awaiting independent review — builder agentrig, conductor
   8fbde1a3.** Existing single worktree/PR [#234](https://github.com/agentkitai/agentrig/pull/234);

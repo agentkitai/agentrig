@@ -77,9 +77,9 @@ for (const [id, task] of Object.entries(tasks)) {
  observer?.detach();await observer?.done;
  await built.closeTelemetry?.();await new Promise(r=>server.close(r));
  const checked=await check(prep.receiptPath);
- const row={task:id,permissionPrompts:asks,turnsToDone:events.filter(e=>e.type==='turn.start').length,sessionEnd:events.at(-1)?.type,reason:events.at(-1)?.reason,sessionId:session.id,ingestCalls,ingestReport,implicitDiagnosticCheckers:opts.diagnostics,checkpointCount:events.filter(e=>e.type==='checkpoint.created').length,toolErrors:events.filter(e=>e.type==='tool.end'&&e.result?.isError),check:checked};
+ const row={task:id,permissionPrompts:asks,turnsToDone:events.filter(e=>e.type==='turn.start').length,sessionEnd:events.at(-1)?.type,reason:events.at(-1)?.reason,sessionId:session.id,ingestCalls,ingestReport,implicitDiagnosticCheckers:opts.diagnostics,checkpointCount:events.filter(e=>e.type==='checkpoint.created').length,toolErrors:events.filter(e=>e.type==='tool.result'&&e.ok===false),check:checked};
  results.push(row); console.log(JSON.stringify(row));
 }
 await writeFile(join(root,'docs/plans/R17b-repair-e1.json'),JSON.stringify(results.map(({check,...row})=>({...row,check:{outcome:check.outcome,behavior:check.behavior}})),null,2)+'\n');
 await writeFile(join(temp,'results.json'),JSON.stringify(results,null,2)); console.log('ARTIFACTS '+temp);
-if(results.some(r=>r.ingestReport?.outcome!=='completed'||r.ingestCalls<1||r.reason!=='done'||!['PASS','BLOCKED'].includes(r.check.outcome)||r.check.behavior!=='PASS')) process.exitCode=1;
+if(results.some(r=>r.toolErrors.length>0||r.ingestReport?.outcome!=='completed'||r.ingestCalls<1||r.reason!=='done'||!['PASS','BLOCKED'].includes(r.check.outcome)||r.check.behavior!=='PASS')) process.exitCode=1;

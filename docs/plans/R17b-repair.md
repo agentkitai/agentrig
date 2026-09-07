@@ -122,3 +122,10 @@ Recompute each total by summing `responses[].usage` by field. The first three
 child sessions are terminal; repair/conductor snapshots are partial, not final
 or billable totals. No transcript or credentials are exported. Exact-head hosted
 CI and final SHA are in the PR receipt; the local receipt is not substituted for CI.
+
+The post-default E1 extractor uses actual `tool.result` / `ok:false` events, not
+the historical baseline script's nonexistent `tool.end` discriminator. Rechecking
+all eight retained replay logs found zero failed tool results (3 successful tool
+results per task, except 4 for A3/A4); the new runner also fails on any such error.
+The original baseline script/history is intentionally not rewritten. The separate
+workspace-runner friction is feel #245 (session 12b8dd75, call 1055 / result 1080).
