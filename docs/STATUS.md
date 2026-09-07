@@ -1,5 +1,15 @@
 # Status
 
+Current: continue through the entire END follow-up queue, with bounded independent
+worktrees and serialized merges; batch completion is not a stop condition.
+Capability evidence summary and the independent sandbox-network override are active.
+[Capability contract](plans/capability-evidence-summary.md). Four controls reproduced
+the overclaimed source label before correction; review and delivery gates follow.
+Prior #214–#216 are delivered on main5d91ce09686b634a35000afd2d3e20a57759cdc2,
+all-four post-main CI34104220683 / structure34104220637 green.
+[Final batch receipt](https://github.com/agentkitai/agentrig/pull/216#issuecomment-5568316748).
+Earlier checkpoints below are historical, not current pending work.
+
 Current integration: #215 merged as main f196709697b1832063ddee6288fdac004a2ee7d0
 after all four exact-head checks; post-main CI34103360944 / structure34103361105
 are pending. [Receipt](https://github.com/agentkitai/agentrig/pull/215).

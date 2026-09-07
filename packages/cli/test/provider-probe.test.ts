@@ -103,6 +103,12 @@ it("probe adapter transient retries are disabled: local 500 is one transport per
   expect(requests).toBe(2); requests = 0; probePhase = true;
   const result = await diagnose({ ...f.opts, cli: { provider: "openai", model: "fixture", baseUrl, probe: true } });
   expect(requests).toBe(4); expect(result.lines.join("\n")).toContain("tools=unknown"); expect(result.lines.join("\n")).toContain("complete=false"); expect(result.lines.join("\n")).not.toContain("SECRET");
+  const cached = buildProvider({ provider: "openai", model: "fixture", modelExplicit: true, baseUrl }, { env: {}, conformanceCachePath: providerProbeCachePath(f.home) });
+  expect(cached.capabilities).toMatchObject({ tools: ordinary.capabilities.tools, parallelTools: ordinary.capabilities.parallelTools,
+    caching: ordinary.capabilities.caching, conformance: { source: "unverified-configured",
+      sources: { tools: "unverified-configured", parallelTools: "unverified-configured", caching: "unverified-configured" },
+      report: { tools: "unknown", parallelTools: "unknown", caching: "unknown", streams: 4, usageComplete: false } } });
+  expect(requests).toBe(4); // consuming a failed probe's report never starts another probe
 });
 it("only the resolved main entry is probed and credential changes during the sample prevent caching", async () => {
   const f = await fixture(); await mkdir(join(f.home, ".agentrig"), { recursive: true });

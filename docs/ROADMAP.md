@@ -1284,9 +1284,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R11b polish: distinguish 300/304 from redirect errors; improve literal `<` handling in lexical
   HTML extraction without claiming browser rendering. Document trusted host/global dispatcher
   and opt-in environment proxy effects separately from the tool's no-cookie/no-auth-header policy.
-- R10d polish: distinguish a present but all-unknown report in the top-level capability evidence
-  source summary. Per-dimension sources already label unknown fallback unverified-configured;
-  consumers should use those rather than treating report presence as verified support.
+- R10d capability evidence summary (implemented; delivery gates pending): all-unknown reports
+  retain their report but label the summary unverified-configured. Observed means at least one
+  capability dimension has a non-unknown sample, not universal support; per-dimension sources
+  remain authoritative. [Contract](plans/capability-evidence-summary.md).
 - R5b defensive API follow-up: validate unsupported async/thenable implementations of the
   synchronously typed tool descriptor/probe/schema callbacks, including rejected promises and
   malformed return shapes. Current isolation covers synchronous callback throws and supported
@@ -1369,7 +1370,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15c optional compatibility: explicit Anthropic thinking configuration and a
   budget-approved live replay check; no automatic thinking/model setting is enabled
   by preserving returned blocks, and disabled-thinking replay behavior is unverified.
-- R15h polish (turn-count validation implemented, delivery pending): CLI/config/builder
+- R15h polish (turn-count validation done, PR#216): CLI/config/builder
   reject fractional subagent turn limits before provider construction, preserving positive
   safe integers and the default. [Contract](plans/subagent-integer-turn-limits.md).
   Clearer canonical role-directory refusal diagnostics remain queued; no limit is widened.
