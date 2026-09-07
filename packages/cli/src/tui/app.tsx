@@ -13,6 +13,7 @@ import { useRawInput } from "./raw-input.js";
 import { createMarkdownCache } from "./markdown.js";
 import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js";
 import { mapTuiAction, resolveTuiSettings, type TuiSettings } from "./settings.js";
+import { removeLastGrapheme } from "./graphemes.js";
 
 /**
  * Layout only. Every decision lives in `TuiController`, so there is nothing in here a test needs
@@ -154,7 +155,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
         if (!protectedInput) edit(buf.value + "\n");
       } else if (action.type === "paste-image") {
         if (!protectedInput) void controller.pasteImage();
-      } else if (action.type === "backspace") edit(buf.value.slice(0, -1));
+      } else if (action.type === "backspace") edit(removeLastGrapheme(buf.value));
       else if (action.type === "append") edit(buf.value + action.text);
       else if (action.type === "enter") {
         const line = buf.value;
@@ -184,7 +185,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
           else if (pressed === permissionKeys.editScope) controller.editPermissionScope(pending.scope.text);
           else if (pressed === permissionKeys.denyOnce) controller.cancelPermissionScope();
         } else if (action.type === "enter") controller.previewPermissionScope();
-        else if (action.type === "backspace") controller.editPermissionScope(pending.scope.text.slice(0, -1));
+        else if (action.type === "backspace") controller.editPermissionScope(removeLastGrapheme(pending.scope.text));
         else if (action.type === "append") controller.editPermissionScope(pending.scope.text + action.text);
         return;
       }

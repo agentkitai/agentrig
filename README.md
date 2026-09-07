@@ -91,6 +91,8 @@ It is off unless explicitly requested; see [telemetry privacy and limits](docs/O
   `.agentrig/history`; untrusted starts keep memory-only history. Approval,
   question and escalation answers are excluded. See [history limits](docs/plans/R16d.md)
   and [slash suggestions](docs/plans/slash-suggestions.md).
+  Backspace removes one complete grapheme (including emoji/combining sequences)
+  in prompts and scope editing, without normalizing retained text.
 - `agentrig run <task>` — run one task non-interactively; add `--headless` to guarantee that permission prompts resolve to deny, `--json` for raw event JSONL, or `--verbose` for the full trace.
 - `agentrig login <provider>` — authenticate a subscription provider. The implemented login provider is `openai-chatgpt`.
 - `agentrig sessions ls` / `show <id>` / `resume <id> [task...]` — inspect, replay, or continue stored sessions. `run --resume <id>` is the other resume form.

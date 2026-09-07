@@ -1,5 +1,12 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+Active follow-ups: grapheme-safe editing, nested skill filename spelling and
+fractional subagent-turn validation, in independent worktrees. Merge whichever
+reviewed item is ready on green current main; do not accumulate unrelated waits.
+PR#212 and PR#213 are done; main300c5e2 passed all-four CI34098667334 /
+structure34098667328. [Slash delivery receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+The previous queue checkpoints below are historical.
+
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
 work, including automatic slash suggestions reported during actual use. Compaction
 PR#212 merged first on main1cdfe53; its post-main gate is pending. Slash discovery
@@ -1364,7 +1371,7 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R16e polish: make the TUI headless option explicit in its type, move notification
   schemas into a shared config-only module, and normalize tiny CLI help spacing.
   The mounted runtime guard and actual headless CLI already remain silent.
-- R16d polish: grapheme-aware editing across both keyboard paths; retire a completion
+- R16d polish: grapheme-aware editing is active ([contract](plans/grapheme-editing.md)); retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
   within R16d with actual Ink controls, not deferred. History is sensitive local

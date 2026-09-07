@@ -1,5 +1,14 @@
 # Status
 
+Active: independent grapheme-editing, nested skill casing and subagent-turn-count
+follow-ups. Previous PR#212/#213 are delivered, all-four green main300c5e2
+(CI34098667334 / structure34098667328); [receipt](https://github.com/agentkitai/agentrig/pull/213#issuecomment-5567492528).
+Grapheme deletion shares one helper between composer and unconfirmed scope input.
+Four actual prompt/scope tests failed before the fix; no normalization, policy or
+paste-decoder changes. [Contract](plans/grapheme-editing.md). Hosted gates follow.
+Prior checkpoints below retain the original sequence; independent ready items
+are no longer held behind an artificial merge order.
+
 Active: follow-up pass authorized2026-09-07. Compaction PR#212 merged first as
 main1cdfe53 after all four exact-head checks passed; post-main CI34097862173 /
 structure34097862218 is pending. Slash suggestions PR#213 integrates that main.

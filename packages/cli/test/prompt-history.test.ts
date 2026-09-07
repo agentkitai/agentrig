@@ -5,6 +5,13 @@ import { afterEach, expect, it } from "vitest";
 import { FileMemoryStore, ingestSession, withMemoryLock } from "@agentkitai/agentrig-memory";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
 import { PromptHistory, PromptRecall, completePrompt, HISTORY_LIMITS } from "../src/tui/prompt-history.js";
+import { removeLastGrapheme } from "../src/tui/graphemes.js";
+
+it.each([["", ""], ["a", ""], ["abc", "ab"], ["e\u0301x", "e\u0301"], ["kept😀", "kept"],
+  ["kept👩🏽‍💻", "kept"], ["kept🇮🇱", "kept"], ["kept\r\n", "kept"], ["kept\n", "kept"],
+  ["kept\ud83d", "kept"], ["kept\udc00", "kept"]])("removes only the final grapheme from %j", (text, expected) => {
+  expect(removeLastGrapheme(text!)).toBe(expected);
+});
 
 const roots: string[] = [];
 async function root() { const path = await mkdtemp(join(tmpdir(), "agentrig-history-")); roots.push(path); return path; }
