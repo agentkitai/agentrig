@@ -56,8 +56,9 @@ long input is truncated behind a `…(N more)` marker, not painted in full.
 Separate PTY writes alone are insufficient: the OS may coalesce adjacent writes.
 For bracketed paste, finish `ESC[200~…ESC[201~`, observe the input repaint, then
 send Enter outside the paste. Do not use pasted text to answer permission prompts:
-it is discarded, not saved as a task. The scope editor is different: its input
-edits the scope JSON. Wait until protected prompts are resolved before pasting a task.
+it is discarded, not saved as a task. Bracketed paste is discarded in the scope
+editor too; only ordinary unframed bytes edit its scope JSON. Wait until protected
+prompts are resolved before pasting a task.
 
 Use a bounded wait and fail the fixture if the expected repaint or submission
 never arrives. R17b's `.agentrig/r17/terminal-baseline.py` fixture, in
