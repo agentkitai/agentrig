@@ -36,4 +36,3 @@ Chromium checks are separate from the independent checks below.
 - `controller.ts:283`: a null snapshot from a detached observer maps to "unknown", while the contract says detached is "unavailable". Unreachable in practice because the observer is cleared before the session ends.
 - `status.ts:11`: a priced run whose only call is still in flight renders `run tokens:0/0/0/0 cost:?`. The zeros are the absence of a usage snapshot, not reported tokens. Reproduced with the probe above using `calls:1, completeCalls:0, reportedUsage all zero`.
 - `controller.ts:286`: a second concurrent `mountStatus` returns a no-op cleanup, so the first mounter's unmount stops observation for both. Ink has one App, so this is theoretical.
-
