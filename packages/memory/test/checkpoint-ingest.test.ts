@@ -48,6 +48,7 @@ it.each(["untracked wiki", "tracked wiki", "concurrent tracked wiki edit", "no i
     }
     const store = new SessionStore({ root: join(dir, "raw", "sessions") });
     const maintenance: string[] = [];
+    const failures: Error[] = [];
     let turn = 0;
     const session = createAgent({
       provider: provider(async function* () {
@@ -73,6 +74,7 @@ it.each(["untracked wiki", "tracked wiki", "concurrent tracked wiki edit", "no i
           yield { type: "stop", reason: "end_turn" };
         }),
         onDone: text => maintenance.push(text),
+        onError: error => failures.push(error),
       })])],
     }).run("write task.txt", { cwd: root });
     const events: HarnessEvent[] = [];
@@ -85,12 +87,16 @@ it.each(["untracked wiki", "tracked wiki", "concurrent tracked wiki edit", "no i
       expect(await readFile(join(root, "task.txt"), "utf8")).toBe("before task\n");
       return;
     }
+    expect(failures).toEqual([]);
     expect(maintenance.some(text => text.startsWith("ingested "))).toBe(true);
     expect(events.some(event => event.type === "checkpoint.sealed")).toBe(false);
     const refusal = events.find(event => event.type === "error" && event.message.startsWith("checkpoint seal failed:"));
     expect(refusal).toMatchObject({ fatal: false });
     expect(refusal?.type === "error" ? refusal.message : "").toContain("Checkpoint snapshots remain, but undo has no verified ownership seal");
     expect(refusal?.type === "error" ? refusal.message : "").toContain("session-end hooks such as memory ingest may change covered files");
+    const checkpoint = events.find(event => event.type === "checkpoint.created")!;
+    expect((await execFile("git", ["rev-parse", "--verify", checkpoint.ref], { cwd: root })).stdout.trim()).toBe(checkpoint.commit);
+    expect((await execFile("git", ["show", `${checkpoint.ref}:task.txt`], { cwd: root })).stdout).toBe("before task\n");
     const index = await readFile(join(dir, "wiki", "index.md"), "utf8");
     const raw = await readFile(join(store.root, `${session.id}.jsonl`), "utf8");
     await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow("no verified ownership seal");

@@ -140,6 +140,7 @@ export const windowsCoverage = [
   "packages/core/test/turn-strategy.test.ts",
   "packages/core/test/web-fetch.test.ts",
   "packages/memory/test/backend.test.ts",
+  "packages/memory/test/checkpoint-ingest.test.ts",
   "packages/memory/test/dream-apply.test.ts",
   "packages/memory/test/dream-lifecycle.test.ts",
   "packages/memory/test/dream-metadata.test.ts",
