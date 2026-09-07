@@ -3,11 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createAgent, bashTool, updatePlanTool, SessionStore, RulePolicy, HarnessEvent,
-  type EventPayload, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
+  type EventPayload, type ModelEvent, type ModelProvider, type ModelRequest, type Session } from "@agentkitai/agentrig-core";
 import { RubricGrader, reportEvidence, MAX_EVIDENCE_EVENTS, attach, type GradeInput, type GradeOutput } from "@agentkitai/agentrig-supervisor";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const ownedSessions: Session[] = [];
+afterEach(async () => {
+  // A test timeout must not remove the cwd while its real shell children still run.
+  const sessions = ownedSessions.splice(0);
+  for (const session of sessions) session.control.abort();
+  await Promise.all(sessions.map(session => session.done));
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+});
 const item = { id: "tests", text: "check behavior", accept: "node check.cjs exits 0", status: "done" as const };
 function model(turns: ModelEvent[][]): ModelProvider & { requests: ModelRequest[] } {
   const requests: ModelRequest[] = [];
@@ -22,19 +29,22 @@ async function grade(events: HarnessEvent[], pass = true) {
   const result = await new RubricGrader({ provider }).grade({ rubric: "the change works", artifacts: [], trajectory: events });
   return { provider, result };
 }
-async function actualSession(finalCode: number) {
+async function actualSession(finalCode: number, childDelayMs = 0) {
   const root = await mkdtemp(join(tmpdir(), "agentrig-evidence-grading-")); roots.push(root);
-  await writeFile(join(root, "check.cjs"), `const fs=require('node:fs'); const second=fs.existsSync('ran'); fs.writeFileSync('ran','yes'); console.log('ALL PASSED'); process.exit(second ? ${finalCode} : 0);`);
+  const exit = `process.exit(second ? ${finalCode} : 0)`;
+  await writeFile(join(root, "check.cjs"), `const fs=require('node:fs'); const second=fs.existsSync('ran'); fs.writeFileSync('ran','yes'); console.log('ALL PASSED'); ${childDelayMs === 0 ? exit : `setTimeout(() => ${exit}, ${childDelayMs})`};`);
   const call = (name: string, input: unknown): ModelEvent[] => [{ type: "tool_use", id: "reused", name, input }, { type: "stop", reason: "tool_use" }];
   const provider = model([call("update_plan", { items: [item] }), call("bash", { command: "node check.cjs" }),
     call("bash", { command: "node check.cjs" }), [{ type: "text_delta", text: "Everything is complete and passes." }, { type: "stop", reason: "end_turn" }]]);
   const store = new SessionStore({ root: join(root, "logs") });
   const session = createAgent({ provider, store, tools: [updatePlanTool(), bashTool()], systemPrompt: "fixture", repoMap: false,
     permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]) }).run("verify", { cwd: root });
-  await session.done; return store.readAll(session.id);
+  ownedSessions.push(session);
+  expect((await session.done).reason).toBe("done");
+  return store.readAll(session.id);
 }
-it("actual passing/failing final runs discriminate despite identical optimistic fake grader and completion narration", async () => {
-  const good = await actualSession(0); const bad = await actualSession(1);
+it.each([0, 1400])("actual passing/failing final runs discriminate despite identical optimistic fake grader and completion narration (child delay=%i)", async childDelayMs => {
+  const good = await actualSession(0, childDelayMs); const bad = await actualSession(1, childDelayMs);
   const passing = await grade(good); const failing = await grade(bad);
   expect(passing.result).toEqual({ pass: true, gaps: [] });
   expect(failing.result.pass).toBe(false);
@@ -44,7 +54,7 @@ it("actual passing/failing final runs discriminate despite identical optimistic 
   const prompt = JSON.stringify(failing.provider.requests[0]!.messages);
   expect(prompt).toContain("latest exit mismatch"); expect(prompt).toContain("result#");
   expect((await grade(good, false)).result).toEqual({ pass: false, gaps: ["behavior still wrong"] });
-});
+}, 30_000); // Four real child launches plus runtime/logging; not a product latency contract.
 
 it("actual attach retains declared failure beyond its 400-event trajectory window", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentrig-evidence-tail-")); roots.push(root);

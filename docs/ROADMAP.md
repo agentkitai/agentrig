@@ -1,5 +1,10 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+Active delivery gate: **bounded runtime-fixture CI repair**. R16a #199 merged as
+339f795, but its post-main Windows check failed an existing five-second runtime
+fixture; R16a is not yet done. Feature merges wait for repaired main to pass all
+four checks. [Repair contract and original failures](plans/runtime-fixture-ci-bound.md).
+
 **Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R16a is in progress; R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
@@ -9,6 +14,7 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
+| Active gate repair | Two existing multi-stage runtime fixture bounds and owned cleanup | Original delayed controls fail at five seconds; preserve all semantic assertions and actual runtimes, then pass exact-head and repaired-main Linux/macOS/Windows/structure |
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
 | Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
@@ -828,7 +834,7 @@ that model. None of them needs the alternate screen.*
 
 | Row | Deliverable | Package |
 |---|---|---|
-| R16a *(in progress; [contract](plans/R16a.md))* | Markdown rendering: assistant replies pass through a Markdown-to-ANSI renderer before they reach `Static` — headings, emphasis, lists, tables, fenced code with syntax highlighting for the common languages; the streaming viewport shows raw text and the final reply is re-rendered once. No wrapping decision moves out of `viewport.ts` | cli |
+| R16a *(merged #199; delivery blocked on fixture CI repair; [contract](plans/R16a.md))* | Markdown rendering: assistant replies pass through a Markdown-to-ANSI renderer before they reach `Static` — headings, emphasis, lists, tables, fenced code with syntax highlighting for the common languages; the streaming viewport shows raw text and the final reply is re-rendered once. No wrapping decision moves out of `viewport.ts` | cli |
 | R16b | Transcript diffs: a completed `edit_file` / `write_file` result renders as a bounded coloured unified diff (added/removed lines, context, per-file cap with an elision line), computed from the tool's before/after in the event, never re-read from disk. The same renderer serves the permission prompt for write-class asks beside R12b's effect lines | cli |
 | R16c *(done, PR #198; [contract](plans/R16c.md), [display limits](TOOL-SUMMARIES.md))* | Tool-call summaries: each tool call renders as one line (tool, key argument, elapsed, outcome glyph) with reads collapsed into "read N files" runs; `/verbose` expands to the current raw event lines. Errors and denials never collapse | cli |
 | R16d *(done, PR #200; [contract](plans/R16d.md))* | Prompt history and completion: up/down recall earlier prompts (persisted per project in `.agentrig/history`, bounded, excluded from memory ingest); `/` completes slash commands and skill names; shift-enter or a trailing `\` inserts a newline for multi-line composition | cli |
@@ -910,6 +916,10 @@ feature list):
 ---
 
 ## 5. Sequencing and exit criteria
+
+Current prerequisite: restore the failed 339f795 main gate with the bounded
+[runtime-fixture repair](plans/runtime-fixture-ci-bound.md), then resume feature
+integration and serial merges. This is a repair, not another product milestone.
 
 The completed foundation is R1 → R1.5 → R2 → R3 → R3.5, R13e's fixtures, H1–H6, E1–E3,
 R4a–R4c and R6d–R6f. R6e closed in PR #140 with green exact-head and post-merge CI.
