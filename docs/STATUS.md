@@ -1,6 +1,6 @@
 # Status
 
-Active row: **R15j configured provider/effort switching**, based on all-four-green R15i main `9aca391`.
+Active row: **R15j configured provider/effort switching**, integrated with all-four-green R16d main `93452df`.
 
 R15i is done (PR #202): main `9aca3915e98ca8331e1c25c8a7a0eeabe27a2066`,
 CI34072279360 and structure34072279370 all four green.
@@ -13,6 +13,9 @@ R15j's one independent review approved the frozen implementation (actual 30 turn
 requested 24); its bounded-name observation and author replay-label correction are
 fixed. Build/typecheck, full required-Docker (3,037 passed + two skips /190 files)
 and real Chromium pass. Exact integrated-head CI and delivery remain pending.
+After R16d integration: build/typecheck, 32 focused controls including actual Ink
+completion, full required-Docker (3,069 passed + two skips /193 files, 70.75s) and
+real Chromium pass. Original review remains the single frozen review; no repeat.
 
 ### R16d done — PR #200; all four post-main checks green
 
