@@ -1,4 +1,5 @@
 export * from "./events.js";
+export { FileDiff } from "./file-diff-types.js";
 export * from "./questions.js";
 export { askUserTool } from "./question-runtime.js";
 export * from "./diagnostics-types.js";
@@ -22,7 +23,7 @@ export { Checkpointer, isCheckpointerHook, type CheckpointHookEvent, type Checkp
 export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";
 export * from "./spend-ledger.js";
-export { withSessionSpend } from "./spend-runtime.js";
+export { withSessionSpend, sessionSpendSource, type SessionSpendSource } from "./spend-runtime.js";
 export * from "./turn-strategy.js";
 export * from "./compaction.js";
 export * from "./tool-result-eviction.js";

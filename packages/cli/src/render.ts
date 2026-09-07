@@ -1,5 +1,6 @@
 import { safeSliceEnd, type AuxiliaryReport, type EventOf, type HarnessEvent, type Intervention, type Usage, type PermissionDecisionSource } from "@agentkitai/agentrig-core";
 import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
+import { renderFileDiff } from "./file-diff.js";
 
 function permissionSource(source: PermissionDecisionSource): string {
   switch (source.kind) {
@@ -212,8 +213,10 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `⚒ ${toolSummary(e.name, e.input)}`;
     case "tool.result":
       // a successful tool is noise; a failing one is the thing that explains the next turn
-      return e.diagnostics === undefined ? (e.ok ? null : `✗ ${oneLine(e.display)}`)
-        : `Diagnostics: ${e.diagnostics.reason}; ${e.diagnostics.entries.length} touched-file, ${e.diagnostics.otherFileCount} other-file, ${e.diagnostics.omitted} omitted`;
+      return [e.ok && e.fileDiff !== undefined ? renderFileDiff(e.fileDiff, { color: process.stdout.isTTY === true }) : null,
+        e.diagnostics === undefined ? (e.ok ? null : `✗ ${oneLine(e.display)}`)
+          : `Diagnostics: ${e.diagnostics.reason}; ${e.diagnostics.entries.length} touched-file, ${e.diagnostics.otherFileCount} other-file, ${e.diagnostics.omitted} omitted`]
+        .filter(value => value !== null).join("\n") || null;
     case "tool.result.patched":
       return `✎ ${e.by} rewrote what the model saw`;
     case "tool.denied":

@@ -16,6 +16,7 @@ import type {
 import { PermissionGrantRegistry } from "@agentkitai/agentrig-core";
 import { ToolSummaries } from "./tool-summaries.js";
 import type { ProviderSelectionControl } from "../provider-selection.js";
+import { observeStatus } from "./status-snapshot.js";
 import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
@@ -81,6 +82,7 @@ export interface TuiChild {
 export interface TuiState {
   selecting?: boolean;
   providerSelection?: ProviderSelectionInfo;
+  statusDetails?: import("./status-snapshot.js").StatusDetails;
   reviewing?: boolean;
   lines: TuiLine[];
   status: "idle" | "running" | "ended";
@@ -295,6 +297,34 @@ export class TuiController {
     finally { this.set({ selecting: false }); }
   }
 
+  private observedStatusSession: Session | undefined;
+  private statusConfiguration: (() => import("./status-snapshot.js").StatusConfiguration) | undefined;
+  private closeStatus: (() => Promise<void>) | undefined;
+  private statusClosing: Promise<void> | undefined;
+  /** Actual active run, distinct from selected conversation during maintenance. */
+  statusSession(): Session | undefined { return this.observedStatusSession; }
+  observeStatusSession(session: Session | undefined): void { this.observedStatusSession = session; this.set({}); }
+  configureStatus(get: () => import("./status-snapshot.js").StatusConfiguration): void { this.statusConfiguration = get; }
+  setStatusDetails(statusDetails: import("./status-snapshot.js").StatusDetails): void { this.set({ statusDetails }); }
+  statusSupervisor(): import("./status-snapshot.js").StatusDetails["supervisor"] {
+    if (this.opts.supervised !== true) return "off";
+    if (this.session === null || this.session !== this.observedStatusSession) return "unavailable";
+    const observer = this.observer as { policySnapshot?: () => import("@agentkitai/agentrig-supervisor").LadderSnapshot | null } | undefined;
+    try { return observer?.policySnapshot?.() ?? "unknown"; } catch { return "unknown"; }
+  }
+  /** No configuration means no polling, including every headless controller. */
+  mountStatus(): () => void {
+    if (this.statusConfiguration === undefined || this.closeStatus !== undefined) return () => {};
+    let cancelled = false;
+    const start = (): void => {
+      if (!cancelled && !this.closing && !this.closed && this.closeStatus === undefined)
+        this.closeStatus = observeStatus(this, this.statusConfiguration!);
+    };
+    if (this.statusClosing === undefined) start(); else void this.statusClosing.then(start);
+    return () => { cancelled = true; const close = this.closeStatus; this.closeStatus = undefined;
+      if (close !== undefined) this.statusClosing = close(); };
+  }
+
   setMemory(fn: (query: string) => Promise<string[]>): void {
     this.memory = fn;
   }
@@ -377,6 +407,8 @@ export class TuiController {
 
   private set(patch: Partial<TuiState>): void {
     if (this.closed) return;
+    if ("sessionId" in patch && patch.sessionId !== this.state.sessionId && patch.sessionId !== this.observedStatusSession?.id)
+      this.observedStatusSession = undefined;
     this.state = { ...this.state, ...patch };
     for (const fn of this.listeners) fn(this.state);
   }
@@ -489,7 +521,7 @@ export class TuiController {
   private showPermissionEffects(req: PermissionRequest): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
-    for (const line of permissionEffectLines(req)) this.print(line, "system");
+    for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) this.print(line, "system");
   }
 
   /**
@@ -699,6 +731,7 @@ export class TuiController {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closing = true;
+    const statusClosing = this.closeStatus?.(); this.closeStatus = undefined;
     this.observer?.detach();
     if (this.session !== null || this.dreamAbort !== undefined || this.reviewAbort !== undefined) this.abort();
     // unconditionally: a request can be outstanding with no session running (the loop is blocked
@@ -710,6 +743,7 @@ export class TuiController {
     await this.dreaming?.catch(() => {});
     await this.reviewing?.catch(() => {});
     await this.undoing?.catch(() => {});
+    await statusClosing; await this.statusClosing;
     this.resetGrants("controller-closed");
     this.closed = true;
   }
@@ -1065,6 +1099,7 @@ export class TuiController {
       return;
     }
     this.session = session;
+    this.observeStatusSession(session);
     try { this.permissionGrants.beginSession(session.id); }
     catch (error) {
       session.control.abort(); await session.done.catch(() => {}); this.session = null;

@@ -1,6 +1,26 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is in progress; R16a is done (PR #199, restored by #206, all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
+Active backlog drain: **#205 → #207 → #194**. #201 merged as `8da21be`, post-main
+checks pending. R16b #203 and readiness repair #208 are done on repaired main
+`18df259`, all-four CI34084903634 / structure34084903714 green.
+[R16b receipt](https://github.com/agentkitai/agentrig/pull/203#issuecomment-5565321833),
+[repair receipt](https://github.com/agentkitai/agentrig/pull/208#issuecomment-5565321674).
+Original #203 post-main Windows CI34082267021 remains failed; its one-second
+permission-prompt wait was repaired separately. [Contract](plans/grant-transition-readiness.md).
+Drain open PRs before unsubmitted roadmap work; R16g/R16h remain frozen. No new
+product milestone or repeated broad review.
+R16f #204 is done: main7fe3440 passed CI34080476921 and structure34080476920,
+all four checks. [Receipt](https://github.com/agentkitai/agentrig/pull/204#issuecomment-5564785990).
+Completed delivery repair: **PR #206**; **R16a #199 is done**. Repaired main
+`0b65aa18c0f8629ee86186ccb0d7a1570fe51f3c` passed all four post-main checks,
+CI `34078485717` and structure `34078485698`. Original failure history: #199 merged as
+339f795, but its post-main Windows check failed an existing five-second runtime
+fixture. That failed run remains failed; the subsequent repaired-main gate restores
+delivery. [Repair contract and original failures](plans/runtime-fixture-ci-bound.md).
+[Repair receipt](https://github.com/agentkitai/agentrig/pull/206#issuecomment-5564569066),
+[R16a receipt](https://github.com/agentkitai/agentrig/pull/199#issuecomment-5564569218).
+
+**Revision: 2026-09-06 (fourth pass added: H7 repair row, R15 post-plan band and R16 TUI polish, section 3, ordered in section 5). Committed vision; R5c is done (PR #170, post-merge CI green); R14d is done (PR #172, post-merge CI green); R9a is done (PR #175, post-merge CI green); R10b is done (PR #177, post-main CI green); R7a is done (PR #176, restored by repair #178 with repaired-main CI green); R7b is done (PR #179, exact-head and post-main CI green); R7c is done (PR #182, post-main CI 34045706663 green); R9b is done (PR #180, post-main CI 34044946044 green); R8a is done (PR #184, all four post-main checks green); R15b is done (PR #185, all four post-main checks green); R8b is done (PR #187, all four post-main checks green); R8c is done (PR #192, all four post-main checks green); R15c is done (PR #193, all four post-main checks green); R15h is done (PR #196, all four post-main checks green); R15i is done (PR #202, all four post-main checks green); R15j is in progress; R16b is done (PR #203 + repair #208); R16e is merged (PR #201, post-main pending); R16f is done (PR #204, all four post-main checks green); R16a is done (PR #199, restored by repair #206 with all four repaired-main checks green); R16d is done (PR #200, all four post-main checks green); R8d is done (PR #197, all four post-main checks green); R16c is done (PR #198, all four post-main checks green); R15g is done (PR #195, all four post-main checks green); R15f is done (PR #190, all four post-main checks green); R15d is done (PR #189, all four post-main checks green); R15a is done (PR #188 + repair #191, all four repaired-main checks green); R15e is done (PR #186, all four post-main checks green); R9c is done (PR #183, CI and scripted-structure post-main green); R10c is done (PR #181, post-main CI 34044235154 green); R10a is done (PR #174, post-merge CI green); R10d and readiness repair are done (PRs #171/#173, repaired-main post-merge CI green); R14c and R11b are done with green post-merge CI (PRs #169/#168); R5b is done with green post-merge CI (PR #167); R14b is done with green post-merge CI (PR #165); R11a is done with green post-merge CI (PR #166); H7b is done with green post-merge CI (PR #164); R14a is done with green post-merge CI (PR #162); H7a is done (PR #161); R5a and R13c are done (PRs #157/#159); R12d is done (PR #163); R12c is done (PR #158); R12b is done (PR #155); R6g is done with green post-merge CI (PR #153); R12a is done (PR #152). R5d/R5e, R6a/R6b/R6c, R12e and R13a/R13b/R13f are done through PR #151. R4a–R4c, H1–H6, E1–E3 and R6d–R6f are complete.** E3's exact-head and post-merge CI passed; its results remain exploratory. See [results and limitations](E3-RESULTS.md). The code review found gaps in sandbox enforcement,
 memory coverage and promotion provenance, plus repository-map pollution from nested worktrees.
 The immediate objective is to make the existing harness dependable and establish whether its
 supervisor and memory improve real task outcomes. The remaining roadmap is committed product
@@ -9,7 +29,8 @@ benefit claims; inconclusive results do not veto implementation of the vision.
 
 | Priority | Work | Exit condition |
 |---|---|---|
-| Active gate repair | Two existing multi-stage runtime fixture bounds and owned cleanup | Original delayed controls fail at five seconds; preserve all semantic assertions and actual runtimes, then pass exact-head and repaired-main Linux/macOS/Windows/structure |
+| Active gate repair | Existing new/fork/switch grant-transition prompt readiness | Delayed fail-before/pass-after controls retain grant assertions; exact-head and repaired-main all four checks green |
+| Done — PR #206 | Two existing multi-stage runtime fixture bounds and owned cleanup | Repaired main0b65aa1 passed Linux/macOS/Windows CI34078485717 and structure34078485698; original failures retained |
 | Done — PR #173 | Child-grants test readiness | Repaired main063cac6 passed all three platforms in CI34035704275; restores R10d gate without erasing initial failure |
 | Done — PR #174 | R10a sequential strategy | Exact-head and post-main CI 34037504297 all three platforms green; existing full-byte baselines unchanged |
 | Complete | H1–H5 and E1–E3: hardening, frozen tasks, reporting and exploratory comparison | PRs #118–#134 merged with exact-head and post-merge three-platform CI; utility remains inconclusive |
@@ -252,9 +273,9 @@ Protocol — after R6 closed; each row was checked against `packages/*/src`, not
 | Remote MCP: Streamable HTTP transport, OAuth, resources and prompts | MCP spec 2025-06, Codex, Claude Code | stdio client, `tools/*` only | R15d |
 | User-invocable review of a diff, branch or PR | Codex `review`, Claude Code `/code-review` | reviewer runs only on supervisor escalation | R15e |
 | Headless CI / PR-bot mode (event in, comment out) | Claude Code Action, Codex GitHub integration | `run --json` only; no checkout-and-report shape | R15f |
-| Validated structured final output (`--output-schema`) | Codex | `--json` streams events; the final answer is prose | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
+| Validated structured final output (`--output-schema`) | Codex | explicit bounded schema validation and one guarded repair; raw logs preserved | R15g *(done, PR #195; [contract](plans/R15g.md), [supported schema/mode limits](STRUCTURED-OUTPUT.md))* |
 | User-defined agent roles with tool allowlists | Claude Code agent files, Goose recipes | validated local roles narrow runtime dispatch and delegable child grants | R15h *(done, PR #196)* |
-| Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i |
+| Cross-session spend ledger and daily cap | Claude Code `/cost`, Codex usage limits | budget detector is per session | R15i *(done, PR #202)* |
 | Mid-session model / effort switch | every TUI harness | R3.5 routes by role at session start only | R15j |
 | Image input and `@file` mentions in the TUI | Cline, Cursor, Claude Code | image `ContentBlock` exists in the schema; nothing puts one in | R15k |
 | Deterministic multi-agent orchestration script | Claude Code Workflow, AutoGen | R10c will give parallel subagents; no user-authored fan-out/verify/merge | R15l (decision row) |
@@ -619,7 +640,7 @@ it to transports.*
 | R8a *(done, PR #184; [contract](plans/R8a.md))* | `agentrig acp`: speak the Agent Client Protocol (ACP, JSON-RPC over stdio, the editor↔agent standard Zed, Gemini CLI, Goose and OpenCode already implement) instead of a bespoke NDJSON protocol — session/new, prompt, permission requests and streamed content map onto the existing `TuiController`; AgentRig-specific requests (`state`, event stream, supervisor/memory) ride as documented extension methods; the mapping is zod-schema'd and versioned; one page of docs and a scripted client. Renunciation: no second bespoke protocol beside ACP | cli |
 | R8b *(done, PR #187; [contract](plans/R8b.md))* | `agentrig mcp-serve`: an MCP server (reusing the M7c stdio JSON-RPC plumbing in reverse) exposing `run_task`, `list_sessions`, `read_session`, `memory_search`; permission posture is the *configured* one — serving never implies yolo | cli |
 | R8c *(done, PR #192; [contract](plans/R8c.md))* | OTEL sink (carried follow-up): an optional event-stream subscriber mapping `HarnessEvent`s to OTLP spans (session→trace, turn→span, tool→child span), behind `--otel-endpoint`; no dependency added when unused | core (subscriber) + cli |
-| R8d *(done, PR #197; [contract](plans/R8d.md))* | Reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Define and test client authentication and Origin/Host validation before exposing it; loopback binding alone is not the authorization contract. Refuse non-loopback binding | cli |
+| R8d *(done, PR #197; [contract](plans/R8d.md))* | Reference web client: one static page on `127.0.0.1`, speaking R8a over a WebSocket bridge to the same controller as the TUI. Exact bearer/Origin/Host validation, bounded transport and actual Chromium controls; all four post-main checks green. Refuse non-loopback binding | cli |
 
 Acceptance: an RPC round-trip test drives a full permission-ask cycle over pipes; the MCP server
 answers `tools/list` and executes `run_task` against the fake provider; OTEL mapping is tested
@@ -830,11 +851,11 @@ that model. None of them needs the alternate screen.*
 | Row | Deliverable | Package |
 |---|---|---|
 | R16a *(done, PR #199 + repair #206; [contract](plans/R16a.md))* | Markdown rendering: assistant replies pass through a Markdown-to-ANSI renderer before they reach `Static` — headings, emphasis, lists, tables, fenced code with syntax highlighting for the common languages; the streaming viewport shows raw text and the final reply is re-rendered once. No wrapping decision moves out of `viewport.ts` | cli |
-| R16b | Transcript diffs: a completed `edit_file` / `write_file` result renders as a bounded coloured unified diff (added/removed lines, context, per-file cap with an elision line), computed from the tool's before/after in the event, never re-read from disk. The same renderer serves the permission prompt for write-class asks beside R12b's effect lines | cli |
+| R16b (done, PR #203 + repair #208) | Transcript diffs: captured bounded builtin before/after observations render as coloured unified diffs; unknown/truncated/high-complexity comparisons use explicit excerpts. Write asks share the renderer for labelled proposals beside R12b effects, without preapproval filesystem reads. [Contract](plans/R16b.md). | core + cli |
 | R16c *(done, PR #198; [contract](plans/R16c.md), [display limits](TOOL-SUMMARIES.md))* | Tool-call summaries: each tool call renders as one line (tool, key argument, elapsed, outcome glyph) with reads collapsed into "read N files" runs; `/verbose` expands to the current raw event lines. Errors and denials never collapse | cli |
-| R16d *(done, PR #200; [contract](plans/R16d.md))* | Prompt history and completion: up/down recall earlier prompts (persisted per project in `.agentrig/history`, bounded, excluded from memory ingest); `/` completes slash commands and skill names; shift-enter or a trailing `\` inserts a newline for multi-line composition | cli |
-| R16e | Notifications: a terminal bell and, where available, a desktop notification on permission ask, supervisor escalation, `ask_user` (R15a) and session end while the terminal is unfocused or after a configurable idle; off by config, never on in headless `run` | cli |
-| R16f | Status line: cost so far (from R15i's accounting when present, else token estimate), permission posture (`ask` / grants:N / yolo), sandbox mode, supervisor ladder level, queued-prompt count; still one truncated row, most useful segments first | cli |
+| R16d *(done, [PR #200](https://github.com/agentkitai/agentrig/pull/200#issuecomment-5563937474); [contract](plans/R16d.md))* | Prompt history and completion: up/down recall earlier prompts (persisted per project in `.agentrig/history`, bounded, excluded from memory ingest); `/` completes slash commands and skill names; shift-enter or a trailing `\` inserts a newline for multi-line composition | cli |
+| R16e *(merged PR #201, post-main pending; [contract](plans/R16e.md), [operator guide](NOTIFICATIONS.md))* | Notifications: a terminal bell and, where available, a desktop notification on permission ask, supervisor escalation, `ask_user` (R15a) and session end after configurable observed TUI input idle (no OS-focus inference); off by default/config, never on in headless `run` | cli |
+| R16f *(done, PR #204; [contract](plans/R16f.md), [display limits](STATUS-LINE.md))* | Status line: cost so far (from R15i's accounting when present, else token estimate), permission posture (`ask` / grants:N / yolo), sandbox mode, supervisor ladder level, queued-prompt count; still one truncated row, most useful segments first | cli |
 | R16g | In-TUI commands that exist only on the CLI today: `/compact` (force compaction now, with the manifest delta printed), `/clear` (new session, same config), `/doctor`, `/diff` (working tree vs the R4 checkpoint or HEAD) | cli |
 | R16h | Theme and keybindings: named light/dark themes selected by config or `NO_COLOR`; the five tone colours and the prompt/status colours come from the theme; a small keybinding table in config for the permission keys, history and abort. No runtime theme editor | cli |
 
@@ -912,9 +933,14 @@ feature list):
 
 ## 5. Sequencing and exit criteria
 
-Current prerequisite: restore the failed 339f795 main gate with the bounded
-[runtime-fixture repair](plans/runtime-fixture-ci-bound.md), then resume feature
-integration and serial merges. This is a repair, not another product milestone.
+Current delivery prerequisite: repair2181859's failed grant-transition readiness
+check, then drain existing open PRs201→205→207→194 before unsubmitted roadmap
+items. Resolve only the next queued PR; serialize merges with both exact-head and
+current-main all-four gates green. [Bounded repair](plans/grant-transition-readiness.md).
+
+The failed339f795 main gate is restored by the bounded #206
+[runtime-fixture repair](plans/runtime-fixture-ci-bound.md): repairedmain0b65aa1
+passed all four checks. Feature integration and serial merges resume.
 
 The completed foundation is R1 → R1.5 → R2 → R3 → R3.5, R13e's fixtures, H1–H6, E1–E3,
 R4a–R4c and R6d–R6f. R6e closed in PR #140 with green exact-head and post-merge CI.
@@ -952,7 +978,7 @@ parallel in separate Git worktrees; dependent rows wait for their prerequisites 
 | 13 | R15d (done, PR #189) / R15e (done, PR #186) → R15f (done, PR #190) → R15g (done, PR #195) | Independent interop and review lanes; R15d follows completed R11a (`net` class) and R5d; R15f follows R12c (grant inspection) so the CI posture is auditable. |
 | 14 | R15h (done, PR #196) → R15i (done, PR #202) → R15j (in progress) → R15k | Roles after R12d delegation; ledger before R7 unattended runs are enabled by default; TUI conveniences last. |
 | 15 | R15l | Decision recorded after R10c; no build until then. |
-| 16 | R16a (done, PR #199 + repair #206) → R16b → R16c (done, PR #198) → R16d (done, PR #200) → R16e → R16f → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
+| 16 | R16a (done, PR #199 + repair #206) → R16b (done, PR #203 + repair #208) → R16c (done, PR #198) → R16d (done, PR #200) → R16e (merged PR #201, post-main pending) → R16f (done, PR #204) → R16g → R16h | TUI polish after R15's first group: R16b uses R12b effect lines, R16e waits for R15a, R16f uses R15i when present. R16a/c/d are independent and may run in parallel. |
 
 R6a has started independently after R5e merged: its memory-hardening dependencies are complete
 and procedure detection does not depend on MCP pinning or extension loading. This parallel start
@@ -1276,6 +1302,9 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15h polish: clearer canonical role-directory refusal diagnostics; reject fractional
   subagent turn flags consistently at CLI parsing. Current role spawning fails closed
   when its effective inherited turn limit is not a positive integer; no limit is widened.
+- R16e polish: make the TUI headless option explicit in its type, move notification
+  schemas into a shared config-only module, and normalize tiny CLI help spacing.
+  The mounted runtime guard and actual headless CLI already remain silent.
 - R16d polish: grapheme-aware editing across both keyboard paths; retire a completion
   hint when unrelated status changes arrive; optionally normalize hand-edited blank
   or duplicate history entries on load. Coalesced supported Shift-Enter is fixed
@@ -1294,6 +1323,11 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R15j polish: coalesce explicit effort equal to the configured default into one
   cached adapter, and reduce duplicate local history validation while retaining
   pre-admission refusal for direct auxiliary calls. Existing bounds remain enforced.
+- R16f polish: distinguish an in-flight call with no usage snapshot from reported
+  zero tokens; distinguish detached custom-policy snapshots from unknown policies
+  if that lifecycle becomes observable; reference-count status observation only
+  if multiple simultaneous App mounts become supported. None changes accounting,
+  authorization, or the current single-App contract.
 - R16a polish: heading-level visual cues and restoring the surrounding assistant
   tone after inline SGR resets (coordinate with R16h themes). Consider a bounded way
   to inspect oversized replies beyond the literal display prefix; original logs
@@ -1301,3 +1335,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - Fixture polish: extend abort/join ownership to the unrelated evidence-grading
   fixtures if they gain longer-lived children. The two demonstrated Windows
   outer-timeout failures are handled in the bounded repair, not deferred here.
+- R16b optional display improvement: for files beyond the bounded captured prefix,
+  show a captured window around the edit instead of head excerpts. Current output
+  labels truncation/unknown contents and never claims an unseen complete patch.

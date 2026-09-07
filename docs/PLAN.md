@@ -131,6 +131,12 @@ See [R15b](plans/R15b.md) for parser, output, cancellation and cooperative write
 
 ### 2.4 Permissions
 
+R16b captures bounded actual builtin edit/write before/after observations in
+canonical tool results, distinct from labelled input-only permission proposals.
+The CLI shares one bounded diff renderer without rereading files; unknown or
+incomplete captures never claim a complete patch. Capture metadata is not model
+input or tool authority. See [R16b](plans/R16b.md).
+
 ```ts
 interface PermissionRequest { tool: string; input: unknown; class: PermissionClass; cwd: string;
                               paths?: string[]; origin?: string /* M7: a subagent's ask, routed to its parent */ }
