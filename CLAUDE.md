@@ -9,6 +9,8 @@ merges and verify green post-merge CI before the next merge. Do not pull depende
 
 ## Commands
 
+For live release-train monitoring and child consent, read [train operations](docs/TRAIN-OPERATIONS.md).
+
 ```
 pnpm install          # pnpm 11; build scripts are allowlisted in pnpm-workspace.yaml
 pnpm build            # tsc per package, topological order
