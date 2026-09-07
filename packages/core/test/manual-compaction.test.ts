@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -10,7 +10,8 @@ import { createAgent, createOutputContract, RulePolicy, SessionStore, SpendLedge
 const roots: string[] = [];
 afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
-  const cwd = await mkdtemp(join(tmpdir(), "agentrig-manual-compact-")); roots.push(cwd);
+  const temporary = await mkdtemp(join(tmpdir(), "agentrig-manual-compact-")); roots.push(temporary);
+  const cwd = await realpath(temporary);
   const store = new SessionStore({ root: join(cwd, "logs") });
   const requests: ModelRequest[] = [];
   const hooks = { user: 0, end: 0, compact: 0 };
@@ -122,6 +123,11 @@ it("actual capped compaction refuses before provider dispatch and records a cano
   expect(f.requests).toHaveLength(calls);
   const events = await f.store.readAll(work.id);
   expect(events.filter(e => e.type === "budget.cap")).toHaveLength(1);
+  const late = [];
+  for await (const event of work.events) late.push(event);
+  expect(late.map(event => event.type)).toEqual(events.slice(1).map(event => event.type));
+  expect(late.some(event => event.type === "session.resume")).toBe(true);
+  expect(late.some(event => event.type === "budget.cap")).toBe(true);
   expect(events.at(-1)?.type).toBe("session.end"); await f.unchanged();
 });
 

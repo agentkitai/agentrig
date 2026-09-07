@@ -844,7 +844,8 @@ edit renders the cap plus an elision line. R16c — a five-read fixture collapse
 `/verbose` restores five. R16d — history survives restart and never appears in a wiki page after
 ingest. R16e — the bell byte is emitted on ask in the fake-TTY test and absent under headless
 `run`. R16f — the status line names the active grant count and changes when a grant is revoked.
-R16g — `/compact` produces a `compaction` event and the manifest reports the reduction. R16h —
+R16g — `/compact` persists `context.compact` in a verified fork and prints a
+transcript-only byte/token estimate delta; the next real request emits its manifest. R16h —
 `NO_COLOR` yields a frame with no SGR sequences. Mutation: removing the elision cap fails the
 large-diff test; removing the headless guard fails the bell test.
 
@@ -1286,3 +1287,6 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
   weakening live-prefix integrity checks; improve standalone-provider refusal wording
   to mention the trusted `dailyCap` config key as well as the CLI flag. No accounting
   recovery, automatic expiry or billing guarantee is implied.
+- R16g polish: give bounded `/diff` capture refusal a command-specific size diagnostic;
+  current shared subprocess refusal is safe but intentionally generic. No automatic
+  retry, expanded capture, extra provider call or new milestone is implied.

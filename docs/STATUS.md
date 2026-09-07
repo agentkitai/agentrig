@@ -3,8 +3,14 @@
 Active: **R16g manual TUI commands** in an independent worktree. Explicit compacted
 forks, `/clear`, model-free `/doctor` and protected `/diff`; shared idle ownership
 and joined cancellation. [Contract](plans/R16g.md). Focused actual-core/Ink/startup/
-Git controls and three restored mutants pass; final integration, full validation,
-one independent Claude review and exact-head/post-main CI remain required.
+Git controls and three restored mutants pass. One Claude review: APPROVE, static
+only (25 reported turns plus sole one-turn tools-disabled summary); no independent
+test execution claimed. Its open seal-binding question produced an author-confirmed
+cross-resume defect, fixed with a failing-before/passing-after actual-checkpointer
+test. [Original review](plans/R16g-review.md). Aliased-temp ledger fixture correction
+also reproduces/passes. Final post-fix build/typecheck and required-Docker full:
+**3,090 passed plus two skips /194 files, 68.28s**, real Chromium one (2.37s).
+Final queue integration and exact-head/post-main CI remain.
 
 R16d is done: main93452df95a731a38bd46badb78953d13a7c8f272 passed all four
 post-main checks CI34073899219 and structure34073899121.

@@ -181,7 +181,7 @@ it("actual protected Git diff is read-only, excludes untracked data, and refuses
   await expect(manualDiff(cwd, "", new AbortController().signal, options)).rejects.toThrow("filter");
 }, 10000);
 
-it("checkpoint diff validates an actual recorded checkpoint and refuses a moved ref", async () => {
+it.each([false, true])("checkpoint diff validates its recorded run and refuses a moved ref (unsealed=%s)", async unsealed => {
   const cwd = await root(); const exec = promisify(execFile);
   const git = (args: string[]) => exec("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "-c", "core.autocrlf=false", ...args], { cwd });
   await git(["init", "-q"]); await git(["config", "user.name", "Fixture"]); await git(["config", "user.email", "fixture@example.test"]);
@@ -189,16 +189,26 @@ it("checkpoint diff validates an actual recorded checkpoint and refuses a moved 
   const store = new SessionStore({ root: join(cwd, ".agentrig", "sessions") }); let calls = 0;
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
     async *stream() {
-      if (calls++ === 0) { yield { type: "tool_use", id: "write", name: "write_file", input: { path: "a.txt", content: "checkpoint-after\n" } }; yield { type: "stop", reason: "tool_use" }; }
+      if (calls++ % 2 === 0) { yield { type: "tool_use", id: "write", name: "write_file", input: { path: "a.txt", content: "checkpoint-after\n" } }; yield { type: "stop", reason: "tool_use" }; }
       else yield { type: "stop", reason: "end_turn" };
     } };
   const policy = new RulePolicy([{ class: "read", decision: "allow" }, { class: "write", decision: "allow" }]);
-  const session = createAgent({ provider, store, permissions: policy, tools: [writeFileTool()], hooks: [new Checkpointer()], systemPrompt: "fixture", repoMap: false }).run("write", { cwd });
+  const checkpointer = new Checkpointer();
+  if (unsealed) vi.spyOn(checkpointer, "seal").mockRejectedValueOnce(new Error("fixture ownership uncertainty"));
+  const agent = createAgent({ provider, store, permissions: policy, tools: [writeFileTool()], hooks: [checkpointer], systemPrompt: "fixture", repoMap: false });
+  const session = agent.run("write", { cwd });
   expect((await session.done).reason).toBe("done");
   const events = await store.readAll(session.id);
   const checkpoint = events.find(event => event.type === "checkpoint.created");
   expect(checkpoint?.type).toBe("checkpoint.created");
   const options = { policy, store, session: session.id };
+  if (unsealed) {
+    expect(events.some(event => event.type === "checkpoint.sealed")).toBe(false);
+    await agent.run("write again", { cwd, resume: session.id }).done;
+    expect((await store.readAll(session.id)).filter(event => event.type === "checkpoint.sealed")).toHaveLength(1);
+    await expect(manualDiff(cwd, "checkpoint 1", new AbortController().signal, options)).rejects.toThrow("unverified");
+    return;
+  }
   const output = (await manualDiff(cwd, "checkpoint", new AbortController().signal, options)).join("\n");
   expect(output).toContain("-checkpoint-before"); expect(output).toContain("+checkpoint-after"); expect(calls).toBe(2);
   if (checkpoint?.type !== "checkpoint.created") throw Error("missing checkpoint");

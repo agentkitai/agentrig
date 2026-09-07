@@ -67,7 +67,13 @@ export async function manualDiff(cwd: string, args: string, signal: AbortSignal,
     const checkpoint = events.filter(event => event.type === "checkpoint.created" && (turn === undefined || event.turn === Number(turn))).at(-1);
     if (checkpoint?.type !== "checkpoint.created" || checkpoint.ref !== `refs/agentrig/${checkpoint.sessionId}/${checkpoint.turn}`)
       throw new Error("no matching recorded checkpoint");
-    const seal = events.find(event => event.type === "checkpoint.sealed" && event.sessionId === checkpoint.sessionId && event.seq > checkpoint.seq);
+    const after = events.slice(events.indexOf(checkpoint) + 1);
+    const boundary = after.findIndex(event => event.sessionId === checkpoint.sessionId &&
+      (event.type === "session.end" || event.type === "session.start" || event.type === "session.resume"));
+    if (boundary < 0 || after[boundary]?.type !== "session.end") throw new Error("checkpoint run is unverified");
+    const seal = after.slice(0, boundary).find(event => event.type === "checkpoint.sealed" &&
+      event.sessionId === checkpoint.sessionId && event.seq > checkpoint.seq && event.turn >= checkpoint.turn &&
+      event.ref === `refs/agentrig/${checkpoint.sessionId}/sealed/${event.turn}`);
     if (seal?.type !== "checkpoint.sealed" || await realpath(seal.repo) !== root) throw new Error("checkpoint repository is unverified");
     const verify = async () => {
       const ref = (await git(["for-each-ref", "--format=%(symref) %(objectname)", checkpoint.ref])).trimEnd();
