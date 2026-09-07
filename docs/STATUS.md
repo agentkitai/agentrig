@@ -17,9 +17,15 @@ Earlier R16d checkpoints below are historical.
 Real TUI startup/core/provider fixtures cover file and clipboard input without
 accessing any real clipboard, provider, authentication or network. Pre-session
 completion has one-time configured-policy authorization and no standing grants;
-actual payload reads use the canonical core pipeline. Review/full/CI gates pending.
+actual payload reads use the canonical core pipeline. Single Claude review approved
+with one material fix (24 requested /35 reported turns; 23 tests/typecheck executed).
+The empty initial Anthropic text placeholder is fixed with matching runtime/replay
+semantics; actual projection failed before and passes after. All 25 attachment
+controls pass. Post-fix build/typecheck, Docker full 3,078 plus two existing skips
+/194 files (70.32s), and Chromium (2.58s) pass. Original review retained;
+updated-main integration and exact-head four-check CI remain pending.
 
-Active: **R16d prompt history/completion** in its independent worktree; R16a has a separate owner/PR; R16c is done (PR #198); R8d is done (PR #197). R15h is done (PR #196), main `31193d6`, all
+Historical R16d active checkpoint (superseded by the done receipt above): **R16d prompt history/completion** in its independent worktree; R16a has a separate owner/PR; R16c is done (PR #198); R8d is done (PR #197). R15h is done (PR #196), main `31193d6`, all
 four post-main checks green (CI34064151052 / structure34064151009).
 [R15h receipt](https://github.com/agentkitai/agentrig/pull/196#issuecomment-5562704055).
 

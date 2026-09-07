@@ -1007,6 +1007,8 @@ concise and place detailed implementation history in dated notes as it is mainta
 - R15k optional polish: persistent audit of pre-session directory-completion metadata
   reads. Current completion explicitly uses configured read policy/one-time approval,
   not canonical tool receipts or standing-grant consumption. Payload reads are audited.
+- R15k optional polish: display a brief busy hint for an ignored explicit clipboard
+  gesture while a turn or completion is already active; do not queue hidden reads.
 
 These do not block the committed milestone sequence and do not recursively create new milestones.
 Address them after that sequence, unless new evidence demonstrates a safety or data-loss defect.

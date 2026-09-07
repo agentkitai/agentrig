@@ -204,6 +204,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     type: z.literal("session.start"),
     task: z.string(),
     advisoryContext: AdvisoryPromptContextSchema.optional(),
+    /** Attachment-only input has no synthetic empty user text message. */
+    inputAttachments: z.literal(true).optional(),
     context: InstructionContextSchema.optional(),
     cwd: z.string(),
     provider: z.string(),

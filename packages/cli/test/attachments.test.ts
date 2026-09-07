@@ -42,6 +42,10 @@ it("cancels and joins an actual inert helper without accepting late bytes",async
   const abort=new AbortController(); const work=readClipboard(abort.signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]});
   abort.abort();await expect(work).rejects.toThrow("cancelled");
 });
+it("a missing owned helper settles with a bounded refusal rather than leaving input busy",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"agentrig-missing-helper-"));roots.push(root);
+  await expect(readClipboard(new AbortController().signal,{command:join(root,"no-such-helper"),args:[]})).rejects.toThrow("unavailable");
+});
 it("bounds the actual helper deadline and awaits process close",async()=>{
   vi.useFakeTimers({toFake:["setTimeout","clearTimeout"]});
   const work=readClipboard(new AbortController().signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]});
