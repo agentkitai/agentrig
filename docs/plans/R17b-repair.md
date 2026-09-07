@@ -4,7 +4,7 @@ Builder **agentrig**, conductor **8fbde1a3**, repair child **12b8dd75** (child 4
 `7dbfad2b`, `1bb8ec86`, `b9109d9f`, `12b8dd75`). Old head
 `33cf281fa2e6d36d07537dee9940e2e635cd816d`; baseline-first commit `cf3ed28`
 is retained. This is a repair, not independent approval. Both delta reviewers
-still have to review the pushed final head. No merge and no new arbitration.
+still have to review the pushed final head. No PR merge and no new arbitration.
 The sandbox exception in PR **Deviations** is unchanged.
 
 Source findings: [Claude 1–13](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5573922615)
@@ -25,7 +25,7 @@ and [Codex P2](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5573
 | Claude 9, vacuous recommendation test | Raw parsing test is explicitly named raw parsing, not a default-resolution claim. Real `buildProgram` handlers assert resolved checkpoints for run, TUI and resume. Defaults-disabled real-CLI mutant fails the runtime regression. |
 | Claude 10, missing negative override coverage | Restore a real handler precedence regression for surviving `--no-sandbox-network` overriding trusted positive config. Mutation replacing explicit CLI precedence with project values fails it. Retain the separate config-false regression. |
 | Claude 11, blanket trust in fixtures | Remove all blanket `--trust` insertions from the five cited fixtures. Put harness-owned `ingestOnEnd:false` in separate, isolated user HOME config, outside the simulated checkout. Keep explicit project-trust scenarios only where the original test is testing project trust. Original main-loop request/permission assertions remain. |
-| Claude 12, runtime fixture cwd | Resolve the built CLI entry with `new URL('../dist/index.js', import.meta.url)`, independent of process cwd. Run from both repository root and CLI package root. |
+| Claude 12, runtime fixture cwd | Resolve the built CLI entry with `new URL('../dist/index.js', import.meta.url)`, independent of process cwd. Run from repository root and a CLI-workspace invocation with the repository Vitest root (the shared include glob is repository-relative). |
 | Claude 13, migrated-flag help | Abort-restore error/help no longer tell operators to type removed flags; they require explicit config sources. Tests assert removed options absent and restored guidance. |
 
 ## Real probes, not code-reading substitutes
@@ -86,7 +86,7 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm typecheck
 TMPDIR=/var/tmp pnpm test
-TMPDIR=/var/tmp pnpm --filter @agentkitai/agentrig-cli exec vitest run test/recommended-runtime.test.ts
+TMPDIR=/var/tmp pnpm --filter @agentkitai/agentrig-cli exec vitest run --root ../.. packages/cli/test/recommended-runtime.test.ts
 TMPDIR=/var/tmp python3 .agentrig/r17/terminal-baseline.py
 TMPDIR=/var/tmp python3 .agentrig/r17/recommended-smoke.py
 TMPDIR=/var/tmp python3 .agentrig/r17/recommended-smoke.py --expanded
@@ -100,3 +100,25 @@ All scripts use local credential-free fake HTTP, not live model credentials.
 The E1 script installs the existing pinned A task dependencies offline; it does
 not mutate the current checkout. Linux PTY metrics do not assert macOS/Windows
 performance. CI is checked on the actual pushed head separately in the PR.
+
+
+## Local verification receipt
+
+After merging moved `origin/main` (`7841b88`) without rebasing, `pnpm build`,
+`TMPDIR=/var/tmp pnpm test` and `pnpm typecheck` each exited 0: 212 files,
+3,366 passed / 4 skipped. The CLI-workspace command above exited 0 (1 test).
+The first workspace attempt omitted `--root ../..` and exited 1 with “No test
+files found”; the repository-relative Vitest include glob, not the CLI binary
+path, caused that invocation failure. The successful command is recorded above.
+E1 replay exited 0 after correcting its fixture-only auxiliary-call discriminator
+and allowing the existing chunked ingest to make more than one call. All 18
+mutants exited 1 with the expected assertion failure; restored sources passed.
+The merged main commit supplies its own unrelated PTY/maintenance repairs; they
+are not attributed to R17b and were not rebuilt as new train work.
+
+Available canonical usage is retained as per-response seq/usage-only snapshots
+in `R17b-repair-accounting.json`, separate from fake acceptance-fixture usage.
+Recompute each total by summing `responses[].usage` by field. The first three
+child sessions are terminal; repair/conductor snapshots are partial, not final
+or billable totals. No transcript or credentials are exported. Exact-head hosted
+CI and final SHA are in the PR receipt; the local receipt is not substituted for CI.
