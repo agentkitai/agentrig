@@ -94,6 +94,14 @@ author UTC/async-context/cancellation and native-output integration controls als
 failed before and pass after correction. [Original review](plans/R15i-review.md).
 Exact-head four-check CI and root merge/post-main gates remain pending.
 
+Final queue integration with green R8d/R16c main `130123ee` passes build/typecheck,
+61 focused controls, required digest-pinned Docker (3,019 passed, two skips /188
+files, 65.34s), and real Chromium (one smoke). Actual web capped requests and
+summary-independent `/cost` are covered. ACP auxiliary attribution/missing cap-event
+controls fail before the narrow session-context attachment fix and pass afterward.
+Initial PR #202 head `9c07f45` passed all four checks; final integrated-head CI and
+root merge/post-main remain pending. No second independent review.
+
 ### R15h done — local agent roles, PR #196
 
 Final main `31193d649880ade62d6b8ca1ec0525318727ea76` passed all four post-main

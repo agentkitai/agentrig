@@ -34,14 +34,16 @@ Scope note: this review covers configured-estimate admission behaviour only, as 
 
 ## Author disposition
 
-Material lock-contention finding is being reproduced and corrected with bounded
-retry and cancellation-aware admission, preserving durable uncertainty on genuine
-failure. Privacy-safe parser errors and nonmutating report reads are small related
-fixes. Prefix/fold caching remains optional END polish.
+Material lock-contention finding was reproduced and corrected: the held-lock
+settlement control failed before bounded retry and passed afterward. Admission
+honors cancellation and genuine failure retains durable uncertainty. Privacy-safe
+parser errors and nonmutating report reads were also corrected. Prefix/fold caching
+remains optional END polish.
 
 Separate author-found findings, not findings attributed to this review: mixed SDK
-agents must not mutate a parent accounting context; a still-live prior-day
-reservation must block new-day admission until settled. Exact controls and final
-validation will be recorded in the implementation plan. The original favorable
+agents no longer mutate a parent accounting context; a still-live prior-day
+reservation blocks new-day admission until settled. Both controls failed before
+and passed after their corrections. Exact controls and validation are recorded in
+the implementation plan, including later native-output/cancellation and ACP
+integration controls. The original favorable
 midnight statement above is retained verbatim, not silently amended.
-

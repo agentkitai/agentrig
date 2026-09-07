@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import type { McpServerConfig, RemoteMcpConfig, Session } from "@agentkitai/agentrig-core";
+import { withSessionSpend } from "@agentkitai/agentrig-core";
 import type { NewSessionRequest } from "@agentclientprotocol/sdk";
 import { unionRetrieve } from "@agentkitai/agentrig-memory";
 import { supervise } from "@agentkitai/agentrig-supervisor";
@@ -78,11 +79,12 @@ export async function startAcp(command: Command, flags: AcpFlags, dependencies: 
         onSession: (session: Session) => {
           observe(session);
           if (!opts.supervise || built === undefined) return;
-          return supervise(session, supervisorOptions({ opts, task: "", budget: budget.budget,
-            ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }), memoryIndex: built.memoryIndex,
-            provider: built.provider, reviewProvider: built.providers.supervisor, restoreCheckpoint: checkpointRestorer(opts.root),
+          const active = built;
+          return withSessionSpend(session, () => supervise(session, supervisorOptions({ opts, task: "", budget: budget.budget,
+            ...(budget.pricing === undefined ? {} : { pricing: budget.pricing }), memoryIndex: active.memoryIndex,
+            provider: active.provider, reviewProvider: active.providers.supervisor, restoreCheckpoint: checkpointRestorer(opts.root),
             onRestore: result => { if (result.restored) controller.forgetRestoredConversation(); }, soft, turnsRemaining,
-            onError: notice }));
+            onError: notice })));
         } });
       try {
         built = await (dependencies.build ?? buildAgent)(opts, { permissionGrants: controller.permissionGrants,
