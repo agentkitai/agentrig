@@ -1,8 +1,10 @@
 # AgentRig roadmap — reliability and measured benefit first
 
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
-work, including automatic slash suggestions reported during actual use. Start
-with slash discovery, then the independent compaction zero-retention boundary;
+work, including automatic slash suggestions reported during actual use. Compaction
+PR#212 merged first on main1cdfe53; its post-main gate is pending. Slash discovery
+PR#213 integrates next. No new PRs until both are delivered. Independent fixes
+merge when ready, not behind artificial dependencies; current-main gates still apply.
 next: R16d grapheme-safe backspace, R5c nested `SKILL.md` spelling, and R15h
 fractional subagent-turn refusal, followed by other user-visible correctness,
 deterministic tests and bounded performance work. Preserve every END item until individually
@@ -1231,9 +1233,10 @@ Address them after that sequence, unless new evidence demonstrates a safety or d
 - R12c polish: correlate the unchanged sandbox/MCP separate-consent handler decision events;
   consider suppressing duplicate handler-source lines where the TUI already printed the answer.
   Preserve visible rule/grant reasons, honest handler attribution and independent consent.
-- Compaction option polish found during R13c fixtures: validate or deliberately support
-  `keepLastMessages: 0`; the current built-in boundary scan assumes a retained last message.
-  Preserve conservative summary ancestry and keep this separate from permission guard delivery.
+- Compaction zero-retention follow-up (in progress; [contract](plans/compaction-zero-retention.md)):
+  deliberately support `keepLastMessages: 0` as task plus advisory summary, and validate
+  the count as a nonnegative safe integer. Preserve conservative ancestry and positive-tail
+  tool pairs. User-authorized END work; independent implementation, merge after slash suggestions.
 - R13c diagnostic polish: distinguish failed/aborted approval from explicit denial in auxiliary
   explanatory text while preserving the denied audit and no dispatch; optionally log a bounded
   host approval-handler failure detail. Revisit duplicate-request user-presence accounting only

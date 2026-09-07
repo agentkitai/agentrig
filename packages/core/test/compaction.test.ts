@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   summarizeOlderTurns,
+  compactWithProvenance,
   type Message,
   type ModelEvent,
   type ModelProvider,
@@ -31,6 +32,34 @@ const turn = (n: number): Message[] => [
 ];
 
 describe("summarizeOlderTurns", () => {
+  it("zero retention summarizes all later messages and conservatively preserves nested ancestry", async () => {
+    const task = user("task");
+    const messages: Message[] = [task, ...turn(1), { role: "user", content: [{ type: "tool_result", toolUseId: "nested", trust: "user", content: [{ type: "text", text: "external", trust: "external" }] }] }];
+    const before = structuredClone(messages), provider = summaryProvider();
+    const strategy = summarizeOlderTurns({ keepLastMessages: 0 });
+    const once = await compactWithProvenance(strategy, messages, provider, new AbortController().signal);
+    expect(once).toHaveLength(2); expect(once[0]).toEqual(task);
+    expect(once[1]!.content[0]).toMatchObject({ type: "text", trust: "external", context: { principal: "platform", authority: "advisory" } });
+    expect(provider.requests[0]!.messages[0]!.content[0]).toMatchObject({ trust: "external", text: expect.stringContaining("out 1") });
+    const twice = await compactWithProvenance(strategy, [...once, user("new")], provider, new AbortController().signal);
+    expect(twice[1]!.content[0]!.trust).toBe("external"); expect(messages).toEqual(before);
+  });
+
+  it("zero retention leaves empty and task-only histories unchanged without summary calls", async () => {
+    const provider = summaryProvider(), strategy = summarizeOlderTurns({ keepLastMessages: 0 });
+    for (const messages of [[], [user("task")]]) expect(await strategy.compact(messages, provider)).toBe(messages);
+    expect(provider.requests).toHaveLength(0);
+  });
+
+  it("zero retention keeps real history when the summary is empty", async () => {
+    const messages = [user("task"), ...turn(1)];
+    expect(await summarizeOlderTurns({ keepLastMessages: 0 }).compact(messages, summaryProvider(" "))).toBe(messages);
+  });
+
+  it.each([-1, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1])("rejects invalid retained-message count %s at construction", keepLastMessages => {
+    expect(() => summarizeOlderTurns({ keepLastMessages })).toThrow("keepLastMessages must be a nonnegative safe integer");
+  });
+
   it("compacts past the threshold fraction of the window", () => {
     const s = summarizeOlderTurns();
     expect(s.shouldCompact({ tokens: 699, window: 1000 })).toBe(false);
