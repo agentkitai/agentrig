@@ -151,6 +151,10 @@ The original milestones M0 through M7 remain complete, including M2.5's live pro
 
 ### R15l decision recorded — independent documentation row, delivery gates pending
 
+Refreshed on repaired green main0b65aa1; only documentation conflicts, original
+review unchanged.212local links resolve; build/typecheck and7structure tests pass
+(one existing skip). Fresh exact-head and post-main gates still required.
+
 Started from green main `887fef8` while R8c/R15c await their integration gates.
 R10c is the completed prerequisite; this does not pull dependent runtime work forward.
 Ordinary trusted user-authored SDK composition is supported, with bounded fan-out,
