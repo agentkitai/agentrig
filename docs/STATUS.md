@@ -9,6 +9,9 @@ ledger/native guards, shared attachment/maintenance/selection ownership, and rea
 Ctrl+C cancellation in both App input paths. Discriminating controls failed before
 each integration fix and pass afterward. Original static-only review is retained;
 final full and hosted gates remain required.
+Final source `3610cbf`: build/typecheck, 167 combined focused controls, full
+required-Docker 3,214 plus two existing skips /206 files (79.09s), and real
+Chromium one (2.44s) pass. Fresh exact-head hosted gates follow; not yet delivered.
 #207 is done on `82b2f27`,
 all-four CI34089126856 / structure34089126808 green.
 [Receipt](https://github.com/agentkitai/agentrig/pull/207#issuecomment-5565941414).
