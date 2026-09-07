@@ -177,7 +177,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
     const dispatchAction = (original: OrdinaryInputAction): void => {
       const action = mapTuiAction(original, settings); if (action === undefined) return;
       if (action.type === "interrupt") {
-        if (controller.snapshot().status === "running" || controller.snapshot().reviewing || controller.inputBusy()) controller.abort();
+        if (!controller.isIdle()) controller.abort();
         else exit();
       } else if (controller.snapshot().pending !== null) permissionAction(action);
       else composerAction(action);

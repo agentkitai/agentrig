@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { InputAttachmentsSchema, attachmentReader, clipboardBlock, INPUT_LIMITS, type InputAttachment } from "./input-attachments.js";
 import { SpendCapError, assertSpendMeter, hasSpendMeter, type SpendLedger } from "./spend-ledger.js";
 import { bindSessionSpend, currentSpend, withSpendRun } from "./spend-runtime.js";
+import { compactSession, type CompactOptions, type CompactionSession } from "./manual-compaction.js";
 import { resolveAgentProvider } from "./provider-selection-runtime.js";
 import type { ProviderSelection, ProviderSelectionInfo } from "./provider-selection.js";
 import { AgentRoleToolNames } from "./manifests.js";
@@ -239,6 +240,8 @@ export interface RunOptions {
 }
 
 export interface Agent {
+  /** Explicit maintenance fork; never a fresh user turn or automatic conversation adoption. */
+  compact?(opts: CompactOptions): Promise<CompactionSession>;
   /**
    * `resume` continues an existing session from its snapshot: same id, same JSONL log
    * (seq continues), prior messages restored, `task` appended as a fresh user message.
@@ -287,7 +290,7 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }
-  return { run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
+  return { compact: opts => compactSession(resolveAgentProvider(config).config, opts), run: (task, opts) => withSpendRun(config.spend?.ledger, () => {
     const selected = resolveAgentProvider(config);
     const session = runSession(selected.config, task, opts ?? {}, selected.selection);
     bindSessionSpend(session);

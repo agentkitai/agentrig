@@ -69,7 +69,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.start":
       return `${p} ${e.provider}/${e.model} cwd=${e.cwd}${e.parent === undefined ? "" : ` parent=${e.parent}`} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
-    case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
+    case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.maintenance === undefined ? "" : ` maintenance=${e.maintenance}`}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "output.validated": return `${p} ${e.mode} ${e.attempt} valid=${e.valid} category=${e.category} schema=${e.digest}`;
@@ -115,7 +115,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "permission.expansion": return `${p} ${e.decision} first ${e.surface}: ${e.name}${e.sourceOrigin === undefined ? "" : ` from ${e.sourceOrigin}`}`;
     case "permission.granted": return `${p} ${e.grant.id} ${e.grant.decision} ${e.grant.operation.tool} ${JSON.stringify(e.grant.resource)} ${e.grant.duration.kind}=${e.grant.duration.id}`;
     case "permission.revoked": return `${p} ${e.grantId} ${e.reason}`;
-    case "context.compact": return `${p} ${e.before} -> ${e.after}`;
+    case "context.compact": return `${p} ${e.before} -> ${e.after}${e.estimate === undefined ? "" : ` transcript-only estimate; bytes ${e.estimate.beforeBytes} -> ${e.estimate.afterBytes}`}`;
     case "context.evicted": return `${p} count=${e.count} saved=${e.bytesSaved} bytes`;
     case "context.loaded": return `${p} ${e.path} ${e.bytes} bytes`;
     case "provider.switched": return `${p} turn=${e.turn} ${JSON.stringify(e.from ?? "unknown")} -> ${JSON.stringify(e.to)}`;

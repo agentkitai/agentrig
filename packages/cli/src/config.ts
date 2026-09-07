@@ -148,6 +148,10 @@ const ConfigFileSchema = ConfigValuesSchema.extend({
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
 
 const CONFIG_KEYS = new Set(Object.keys(ConfigValuesSchema.shape));
+/** Revalidate resolved launch values for read-only diagnostics, excluding runtime-only flags. */
+export function diagnosticConfigValues(values: object): ConfigValues {
+  return ConfigValuesSchema.parse(Object.fromEntries(Object.entries(values).filter(([key, value]) => CONFIG_KEYS.has(key) && value !== undefined)));
+}
 const CREDENTIAL_KEY = /^(?:api[-_]?key|token|access[-_]?token|refresh[-_]?token|auth[-_]?token|secret|client[-_]?secret|password|credential|credentials|private[-_]?key)$/i;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
