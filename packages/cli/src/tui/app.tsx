@@ -45,6 +45,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
   const [state, setState] = useState<TuiState>(controller.snapshot());
   const [input, setInput] = useState("");
   const [clock, setClock] = useState(Date.now());
+  const [, setDrawVersion] = useState(0);
   const historyRef = useRef<PromptHistory>(suppliedHistory ?? new PromptHistory());
   const recall = useRef(new PromptRecall());
   const completionHint = useRef("");
@@ -76,6 +77,9 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
   const buffer = useRef<InputBuffer | null>(null);
   buffer.current ??= new InputBuffer((next) => {
     setInput(next);
+    // Navigation can change only refs. Redraw at the same safe quiet point even
+    // when input is unchanged and the wall clock repeats or moves backwards.
+    setDrawVersion(version => version + 1);
     // Controller events and clock ticks share the input quiet point. React batches these updates,
     // producing one paste-safe render with the freshest state once terminal input has completed.
     if (deferredState.current !== null) {
@@ -259,7 +263,6 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
     }
 
     if (key.upArrow || key.downArrow || key.tab) { dispatchAction({ type: key.upArrow ? "up" : key.downArrow ? "down" : "tab" }); return; }
-    if (key.escape) { composerAction({ type: "escape" }); return; }
     if (key.return && key.shift) { composerAction({ type: "newline" }); return; }
     if (key.return) {
       // queued rather than run now: a bare carriage return can be drained in the same batch as

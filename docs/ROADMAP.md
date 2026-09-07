@@ -3,8 +3,9 @@
 Active follow-up pass (2026-09-07): the user promoted the END backlog to active
 work, including automatic slash suggestions reported during actual use. Start
 with slash discovery, then the independent compaction zero-retention boundary;
-next prioritize user-visible correctness/diagnostics, deterministic tests and
-bounded performance work. Preserve every remaining END item until individually
+next: R16d grapheme-safe backspace, R5c nested `SKILL.md` spelling, and R15h
+fractional subagent-turn refusal, followed by other user-visible correctness,
+deterministic tests and bounded performance work. Preserve every END item until individually
 resolved; conditional future-platform work needs evidence of applicability, and
 live evaluation still requires an explicit spend budget. Each item gets one PR,
 bounded independent review, exact-head and post-main green CI; independent work

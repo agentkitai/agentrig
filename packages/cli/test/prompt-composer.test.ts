@@ -32,6 +32,16 @@ async function fixture(history = new PromptHistory(), columns = 80, rows = 24) {
   return {controller,input,writes,requests,history,unreadAtWrite};
 }
 const lastPrompt = (requests: ModelRequest[]) => requests.at(-1)?.messages.filter(m=>m.role==="user").at(-1)?.content;
+it.each(["", "\u001b[201~"])("suggestion selection redraws even when the wall clock does not advance (%j)", async prefix => {
+  const now=vi.spyOn(Date,"now").mockReturnValue(42);
+  try {
+    const f=await fixture();f.controller.setSkills([{name:"ClockA",body:"a"},{name:"ClockB",body:"b"}] as Skill[]);
+    f.input.send(prefix+"/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("› /ClockA [skill]"));
+    f.writes.length=0;f.input.send(prefix+"\u001b[B");
+    await vi.waitFor(()=>expect(f.writes.join("")).toContain("› /ClockB [skill]"));
+    expect(f.requests).toEqual([]);
+  } finally {now.mockRestore();}
+});
 it.each(["", "\u001b[201~"])("typing slash automatically discovers skills and navigates beyond eight without execution (%j)", async prefix => {
   const f = await fixture();
   f.controller.setSkills(Array.from({length:12}, (_,i) => ({name:`zskill${String(i).padStart(2,"0")}`,body:"not executed"})) as Skill[]);
@@ -85,7 +95,7 @@ it.each(["", "\u001b[201~"])("slash text remains an answer, not a menu, in quest
   f.input.send(prefix+"\t",prefix+"\u001b[B",prefix+"\r");expect(await escalation).toBe("answered");
   expect(f.history.values()).toEqual([]);expect(f.requests).toEqual([]);
 });
-it.each([[80,8],[80,12],[80,24],[120,8],[120,12],[120,24]])("slash menu shares the frame budget at %sx%s without mid-input writes", async (columns, rows) => {
+it.each([[80,8],[80,12],[80,24],[120,8],[120,12],[120,24]])("slash list or tiny-terminal status fallback shares the frame budget at %sx%s without mid-input writes", async (columns, rows) => {
   const f = await fixture(new PromptHistory(), columns, rows);
   f.controller.setSkills(Array.from({length:20},(_,i)=>({name:`Skill${String(i).padStart(2,"0")}`+"x".repeat(80),body:"never run"})) as Skill[]);
   f.controller.print(Array.from({length:300},(_,i)=>`SCROLLBACK_${i}`).join("\n"),"event");
@@ -99,6 +109,16 @@ it.each([[80,8],[80,12],[80,24],[120,8],[120,12],[120,24]])("slash menu shares t
   expect(f.writes.join("")).not.toContain("SCROLLBACK_");
   expect(f.unreadAtWrite.every(count=>count===0)).toBe(true);
   expect(f.requests).toHaveLength(0);
+});
+it("decoded Escape dismisses suggestions at the next safe terminal draw",async()=>{
+  const f=await fixture();f.controller.setSkills([{name:"EscapeSkill",body:"never run"}] as Skill[]);
+  f.input.send("/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("[skill]"));
+  f.writes.length=0;
+  // The second Escape releases the first but leaves a possible marker prefix.
+  // Tab disproves that prefix and gives the existing decoder a safe draw point.
+  f.input.send("\u001b","\u001b","\t");
+  await vi.waitFor(()=>expect(f.writes.length).toBeGreaterThan(0));
+  expect(f.writes.join("")).not.toContain("[skill]");expect(f.requests).toEqual([]);
 });
 it("actual Ink completes model selection without creating a model prompt", async () => {
   const f = await fixture(); let entry = "first";

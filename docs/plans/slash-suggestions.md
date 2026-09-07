@@ -45,3 +45,11 @@ verified by appending an argument); permission notices precede the pending promp
 configured skill directories are an array. Escape remains constrained by split
 terminal framing, not a new timing-based decoder. A fresh-worktree typecheck
 required the normal build first; no dependency or runtime fix was inferred.
+
+Frozen8041f81 full required digest-pinned Docker:3,257 passed plus two existing
+skips /209 files,82.80s; real Chromium one passed,2.49s. The [single review](slash-suggestions-review.md)
+returned approval with unreachable-code removal and two notes, static only,
+26 reported turns including the sole summary. Removed that branch; the clock
+note was reproduced as two failing actual-Ink cases and fixed with an explicit
+quiet-point render revision. Tiny-terminal fallback and deferred Escape behavior
+are labelled honestly. Final post-fix validation and hosted receipts follow.
