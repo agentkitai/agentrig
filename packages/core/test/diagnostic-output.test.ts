@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { JobRegistry } from "@agentkitai/agentrig-core";
-import { TscDiagnosticOutput, TSC_LINE_BYTES, TSC_METADATA_BYTES } from "../src/diagnostic-output.js";
+import { TscDiagnosticOutput, TSC_LINE_BYTES, TSC_METADATA_BYTES, TSC_METADATA_INITIAL_BYTES } from "../src/diagnostic-output.js";
 import { defaultKillTree } from "../src/tools/bash.js";
 
 const roots: string[] = [];
@@ -60,6 +60,51 @@ it("metadata has its own finite byte bound independent of the diagnostic allowan
   for (let i = 0; i < count; i++) sink.write(line, "stdout");
   expect(sink.text).toBe("");
   expect(() => sink.write(line, "stdout")).toThrow("checker coverage metadata exceeded bound");
+});
+
+// A synthetic absolute line that is never canonicalized: these probe allocation, not coverage.
+const filler = (bytes: number) => Buffer.from("/" + "p".repeat(bytes - 2) + "\n");
+
+it("no coverage listing allocates nothing, and the first line allocates one line bound, not the cap", async () => {
+  const { sink } = await fixture();
+  expect(sink.metadataCapacity).toBe(0);
+  sink.write(Buffer.from("target.ts(1,1): error TS1234: not metadata\n"), "stdout");
+  expect(sink.metadataCapacity).toBe(0);
+  sink.write(filler(64), "stdout");
+  expect(sink.metadataCapacity).toBe(TSC_METADATA_INITIAL_BYTES);
+});
+
+it("coverage retention doubles on demand instead of jumping to the cap", async () => {
+  const { sink } = await fixture();
+  const observed = new Set<number>();
+  const line = filler(1024);
+  for (let written = 0; written < TSC_METADATA_INITIAL_BYTES * 8; written += line.length) {
+    sink.write(line, "stdout");
+    observed.add(sink.metadataCapacity);
+  }
+  expect([...observed]).toEqual([8192, 16384, 32768, 65536]);
+  expect(sink.metadataCapacity).toBeLessThan(TSC_METADATA_BYTES);
+});
+
+it("growth stops exactly at the cap and the next line still fails closed", async () => {
+  const { sink } = await fixture(4096);
+  const line = filler(4096);
+  for (let i = 0; i < TSC_METADATA_BYTES / line.length; i++) sink.write(line, "stdout");
+  expect(sink.metadataCapacity).toBe(TSC_METADATA_BYTES);
+  expect(() => sink.write(line, "stdout")).toThrow("checker coverage metadata exceeded bound");
+  expect(sink.metadataCapacity).toBe(TSC_METADATA_BYTES);
+});
+
+it("a witness listed before the buffer grows is retained across every reallocation", async () => {
+  const { path, sink } = await fixture();
+  const line = Buffer.from(path + "\n");
+  sink.write(line, "stdout");
+  expect(sink.metadataCapacity).toBe(TSC_METADATA_INITIAL_BYTES);
+  while (sink.metadataCapacity < TSC_METADATA_INITIAL_BYTES * 4) sink.write(line, "stdout");
+  expect(sink.metadataCapacity).toBe(TSC_METADATA_INITIAL_BYTES * 4);
+  await sink.end();
+  expect(sink.touchedFileListed).toBe(true);
+  expect(sink.metadataCapacity).toBe(0);
 });
 
 it.each([false, true])("overlong complete/partial lines fail with terminated=%s", async terminated => {
