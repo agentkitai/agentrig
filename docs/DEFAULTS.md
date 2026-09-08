@@ -26,6 +26,10 @@ normally.
   The compiler's file list must include the touched file before this default
   checker can report completed coverage. References-only solutions and excluded
   files are incomplete even when tsc exits zero; this does not build references.
+  Coverage metadata has a separate finite 4 MiB allowance and 8192-byte line bound;
+  diagnostic text retains its configured cap (default 65536 bytes). Any overflow
+  or incomplete observation fails closed. See the human-approved
+  [bounded metadata amendment](plans/R17b-outside-diagnostics.md).
   Custom tsc checker arrays without `--listFiles` retain their existing output
   semantics and do not gain this coverage check.
   A checker still needs the existing exec permission and sandbox. Missing tools,

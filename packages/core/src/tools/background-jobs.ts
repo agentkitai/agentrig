@@ -27,6 +27,8 @@ interface JobSpawnOptions {
   /** Trusted bounded foreground consumers may request a smaller buffer and stop on overflow. */
   maxUnreadBytes?: number;
   killOnOverflow?: boolean;
+  /** Internal bounded foreground sink; owns its byte limits. Completion joins any final processing. */
+  outputConsumer?: { write(chunk: Buffer, stream: "stdout" | "stderr"): void; end(): Promise<void> };
   command: string;
   args?: readonly string[];
   shellPath?: string;
@@ -63,6 +65,8 @@ interface JobRecord {
   exitCode: number | null;
   /** Why the process never really ran (ENOENT shell and friends); status reports it as an error. */
   spawnError?: string;
+  /** A trusted foreground sink failed; never classify partial output as complete. */
+  outputError?: string;
   killGroup: () => void;
   /** Resolves when the pipes close; `wait` races it against its deadline. */
   done: Promise<void>;
@@ -162,8 +166,16 @@ export class JobRegistry {
         if (opts.killOnOverflow) killGroup();
       }
     };
-    child.stdout.on("data", append);
-    child.stderr.on("data", append);
+    const consume = (chunk: Buffer, stream: "stdout" | "stderr"): void => {
+      if (record.outputError !== undefined) return; // Drain after failure while the owned group is killed.
+      try { opts.outputConsumer!.write(chunk, stream); }
+      catch (error) {
+        record.outputError ??= error instanceof Error ? error.message : "checker output consumer failed";
+        killGroup();
+      }
+    };
+    child.stdout.on("data", opts.outputConsumer ? (chunk: Buffer) => consume(chunk, "stdout") : append);
+    child.stderr.on("data", opts.outputConsumer ? (chunk: Buffer) => consume(chunk, "stderr") : append);
     // a background child must never crash the harness — but a swallowed spawn failure looked
     // exactly like a clean silent exit, so the reason is kept and surfaced by status
     child.on("error", (err) => {
@@ -181,15 +193,25 @@ export class JobRegistry {
         // same grace-then-sever as the foreground path: a daemonized grandchild holding the
         // pipes must not keep the job "running" forever
         setTimeout(() => {
+          if (opts.outputConsumer && (!child.stdout.readableEnded || !child.stderr.readableEnded)) {
+            record.outputError ??= "checker output pipes did not close completely";
+          }
           child.stdout.destroy();
           child.stderr.destroy();
         }, 200).unref();
       });
       child.on("close", () => {
-        record.exited = true;
-        record.exitCode = code;
-        record.detachAbort();
-        res();
+        const finish = (): void => {
+          record.exited = true;
+          record.exitCode = code;
+          record.detachAbort();
+          res();
+        };
+        if (opts.outputConsumer && record.outputError === undefined) {
+          void Promise.resolve().then(() => opts.outputConsumer!.end()).catch(error => {
+            record.outputError ??= error instanceof Error ? error.message : "checker output consumer failed";
+          }).finally(finish);
+        } else finish();
       });
     });
 

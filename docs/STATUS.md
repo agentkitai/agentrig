@@ -1,5 +1,35 @@
 # Status
 
+## R17b outside-train repair candidate — implementation complete; delivery gates pending
+
+Builder **Codex, outside AgentRig**; original halted conductor **2aa2f739**,
+blocking feel **#254**, existing PR **#234**. This section supersedes the historical
+HALTED/uncommitted administrative snapshots below without erasing their evidence.
+The human explicitly approved a separate bounded coverage-metadata allowance:
+“ok... resolve it and continue. do not stop all the time for nonsense.” The exact
+proposal, approval links, contract amendment and limitations are recorded in
+[the outside repair plan](plans/R17b-outside-diagnostics.md).
+
+The 48-line halt handoff was committed as `45b78ba`; green main `da5236a`, including
+#255's isolated executable-review instructions, was merged without rebase in
+`49f88d738cf09a344712e2200171bf62deffdf5e`. No fourth in-train round, new arbiter,
+cap reset or changed security defaults. Prior conductors and all original receipts
+below remain historical, not claims that this outside repair was built by AgentRig.
+
+#256/#257 are repaired in this candidate with separate finite 4 MiB metadata,
+unchanged diagnostic cap, 8192-byte line bounds and actual large-program broken,
+clean and excluded controls. Related #258 avoids redundant post-witness realpath
+while still rejecting unknown paths; #259's inaccurate helper-provenance sentence
+is corrected. Nine named guard mutants were killed and restored; the restored
+focused suite passed **78/78**, exit 0. No paid provider calls were made.
+
+R17b's roadmap completion marker denotes implementation on this branch, **not a
+landed row**. Final exact clean-head build/full test/typecheck and default-PATH smoke
+receipts, independent external reviews, exact-head CI and post-merge CI remain
+delivery gates. The operator will post their actual results to PR #234; no earlier
+dirty candidate or historical review is relabelled as final evidence. The train
+has not resumed and later rows have not started under this receipt.
+
 
 ---
 ## HALTED — final repair round 3/3 exhausted (administrative handoff)
