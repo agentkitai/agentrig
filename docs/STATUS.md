@@ -42,6 +42,93 @@ closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
 
+## Outside-train END follow-up batch: compiler diagnostics #263 and #264
+
+Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
+the open END backlog while the operator lands the preceding checkpoint batch. It is **not** an
+agentrig-built row, R17d completion, or the start of the R17g sweep. AgentRig orchestration is
+stopped. The branch is `fix/followups-compiler-diagnostics`, based on main `4320a83` (the PR #273
+merge). It does **not** contain the `fix/followups-checkpoint-cleanup` batch (#265/#266/#272),
+which is still in the operator's review queue; both branches append a section here, so this file
+is the expected merge conflict. The batch is exactly
+[#263](https://github.com/agentkitai/agentrig/issues/263) and
+[#264](https://github.com/agentkitai/agentrig/issues/264); no other open issue was touched, none
+was commented on or closed, and no new issue was filed. The builder session id is not recorded
+here because this non-interactive run's transcript was not locatable — that is a missing
+identifier, not a claim that some other session did the work.
+
+**#263** — `diagnosticReport` no longer throws away the touched-file diagnostics the bounded sink
+already parsed when the run is incomplete. An overlong metadata line or a listed path that
+disappears between compilation and the sink's join still fails closed, but the errors captured
+before that failure now reach the report. Such a report stays `incomplete`, and when it carries
+retained entries its reason says so explicitly — `"<cause> (partial diagnostics retained; coverage
+not established)"` — so unknown coverage cannot be read as complete coverage. The two pre-existing
+fail-closed exits are now separate and unchanged in effect: output attributed to a hook-substituted
+command is never parsed, and a cancelled turn returns without canonicalizing anything. Finite
+metadata and diagnostic bounds, fatal UTF-8 handling, the timeout path, the `--listFiles` coverage
+requirement and the refusal of unverifiable listed paths are untouched.
+
+**#264** — the first metadata line no longer allocates and zero-fills the whole 4 MiB cap.
+Retention starts at one line bound (8 KiB) and doubles on demand, copying what is already held,
+and never passes the existing `TSC_METADATA_BYTES`. The byte accounting and its overflow refusal
+are unchanged; the growth request is derived from that same accounting, so it cannot exceed the
+cap. Measured with the real sink over real `tsc --listFiles` output, 200 runs each, allocation
+counted by instrumenting `Buffer.alloc`:
+
+| listing | before peak | after peak | before total | after total | before | after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `packages/core`, 53,506 B / 452 paths | 4,194,304 B | 65,536 B | 4,194,304 B | 122,880 B | 0.46 ms | 0.29 ms |
+| `packages/cli`, 96,227 B / 836 paths | 4,194,304 B | 131,072 B | 4,194,304 B | 253,952 B | 0.66 ms | 0.49 ms |
+| synthetic 2,097,295 B / 12,935 paths | 4,194,304 B | 4,194,304 B | 4,194,304 B | 8,380,416 B | 7.40 ms | 8.23 ms |
+
+The near-cap row is a real regression and is reported as one: a listing that approaches the cap
+keeps the same peak, allocates about twice as much in total because of the doublings and their
+copies, and runs slightly slower. **No speedup is claimed.** The sub-millisecond differences on
+the ordinary rows are noise against the compiler run they accompany; the change is about peak and
+total allocation per checked edit, not latency.
+
+Fail-first: eleven new test cases, of which seven were written first and failed against the
+pre-change code — three #264 growth assertions reporting the 4,194,304 B allocation where 8,192 /
+122,880 was expected, two #263 unit assertions showing `entries: []` where the parsed error was
+expected, and the two real-child controls (disappearing path, overlong metadata line) reporting
+the unqualified reason. One existing case, the `diagnostic overflow` runtime-guard row, was
+updated and also failed first, for eight failing cases in total before the change. The remaining
+four new cases — #263 cancellation, hook-substituted command and nothing-parsed, and the #264
+cap-boundary growth case — assert behaviour that already held; they are mutation guards, not
+fail-first regressions, and are recorded as such.
+
+Twelve mutants were applied one at a time and restored byte-for-byte from the committed head;
+eleven were killed by the two focused test files (71 tests): dropping the incomplete-forces-
+incomplete branch (9 failures); parsing hook-substituted command output (3); removing the
+cancellation early return (1); dropping the `--listFiles` coverage requirement (5); dropping the
+unknown-coverage qualifier from retained reports (5); removing the metadata cap refusal (3); not
+copying the retained listing on growth (4); reverting growth to unconditional full-cap allocation
+(3); not releasing the coverage buffer after the join (1); swallowing an unverifiable coverage
+path (4); and removing the overlong-line refusal (2). The twelfth — deleting the `Math.min` clamp
+in the growth step — **survives by construction and is left in place deliberately**: both
+constants are powers of two, so the clamp cannot fire today and only matters if either is changed
+later. It is documented in the code as such rather than presented as tested.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck` were run separately and each exited **0**,
+with **3479 passed / 4 skipped in 222 files**, under a private `TMPDIR` rather than a shared
+`/tmp` root. Both changed test files are already in the Windows CI include list, so the new
+regressions run there.
+
+Full-suite flakiness was observed and controlled rather than retried away. One branch run failed
+six cases across `cli/test/ci-run`, `cli/test/output-schema`, `cli/test/spend-ledger` and
+`core/test/checkpointer`; all four files then passed in isolation (76/76) and the full suite passed
+on the next two runs. Three full-suite runs on the **unmodified base `4320a83`** flaked at the same
+rate, failing once on `core/test/extensions.test.ts`. Every affected test spawns a real CLI
+subprocess against a temporary fixture root and none constructs a diagnostics checker, so this is
+the pre-existing fixture-interference family already recorded at roadmap END
+([#240](https://github.com/agentkitai/agentrig/issues/240) /
+[#244](https://github.com/agentkitai/agentrig/issues/244) /
+[#271](https://github.com/agentkitai/agentrig/issues/271)), not a regression from this batch and
+not a claim that those issues are fixed.
+
+Independent review, exact-head CI and post-merge CI remain required and are not claimed here;
+these are local implementation and test results only, and neither issue is closed by them.
+
 ## Outside-train feel #250 recovery: preserve optional tool arguments
 
 Builder of this narrow repair: **Codex/operator outside the train**, under the standing

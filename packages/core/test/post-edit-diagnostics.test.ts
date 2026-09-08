@@ -6,8 +6,9 @@ import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
-import { builtinTools, createAgent, DiagnosticsConfigSchema, HarnessEvent, messagesFromEvents, parallel, RulePolicy, SessionStore, summarizeOlderTurns, outsideSandbox, Checkpointer, undoSession,
+import { builtinTools, contentHash, createAgent, DiagnosticCheckerSchema, DiagnosticsConfigSchema, HarnessEvent, messagesFromEvents, parallel, RulePolicy, SessionStore, summarizeOlderTurns, outsideSandbox, Checkpointer, undoSession,
   type AgentConfig, type DiagnosticsConfig, type ModelEvent, type ModelProvider, type ModelRequest } from "@agentkitai/agentrig-core";
+import { diagnosticReport } from "../src/diagnostics.js";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -204,13 +205,84 @@ it.each(['diagnostic overflow', 'metadata overflow', 'unknown after witness', 's
     const {events} = await run(f), report = diagnosticResult(events).diagnostics!;
     expect(diagnosticResult(events).ok).toBe(true);
     expect(report.status).toBe(kind === 'changed file' ? 'changed' : kind === 'exec denied' ? 'unavailable' : 'incomplete');
-    const reasons = {'diagnostic overflow': 'checker output exceeded bound', 'metadata overflow': 'checker coverage metadata exceeded bound',
+    // #263: only the overflow case captured real touched-file lines before failing; it keeps them
+    // and says so, while every other guard still reports its own cause with nothing parsed.
+    expect(report.entries.length > 0).toBe(kind === 'diagnostic overflow');
+    const reasons = {'diagnostic overflow': 'checker output exceeded bound (partial diagnostics retained; coverage not established)',
+      'metadata overflow': 'checker coverage metadata exceeded bound',
       'unknown after witness': 'checker coverage path could not be verified', 'stderr witness': 'checker did not establish touched-file coverage',
       timeout: 'checker timed out', 'changed file': 'changed-file bytes could not be verified', 'changed argv': 'checker command changed by hook',
       'exec denied': 'checker was not executed'};
     expect(report.reason).toBe(reasons[kind]);
     if (kind !== 'changed file') expect(await readFile(join(f.cwd, 'target.ts'), 'utf8')).toBe('export const x=1;');
     if (kind === 'exec denied') await expect(readFile(join(f.cwd, 'checker-ran'))).rejects.toMatchObject({code: 'ENOENT'});
+  }, 10000);
+
+// #263: the sink can fail after real touched-file errors are already captured. These drive
+// diagnosticReport directly so every fail-closed branch is reachable without racing a process.
+type Observed = NonNullable<Parameters<typeof diagnosticReport>[4]>;
+const coverageChecker = DiagnosticCheckerSchema.parse({ parser: "tsc", extensions: [".ts"],
+  executable: process.execPath, args: ["tsc", "--noEmit", "--listFiles"] });
+async function partialReport(over: Partial<Observed>) {
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), "agentrig-partial-"))); roots.push(cwd);
+  const text = "export const x = 1;\n";
+  await writeFile(join(cwd, "target.ts"), text);
+  const changed = { path: join(cwd, "target.ts"), contentHash: contentHash(text) };
+  const observed: Observed = { text: `${changed.path}(1,1): error TS2322: captured before the sink failed\n`,
+    exitCode: 2, incomplete: true, aborted: false, sameCommand: true, touchedFileListed: false,
+    reason: "checker coverage path could not be verified", ...over };
+  return diagnosticReport(changed, coverageChecker, cwd, "call-1", observed);
+}
+const retained = { line: 1, column: 1, code: "TS2322", message: "captured before the sink failed" };
+
+it("keeps touched-file diagnostics parsed before an incomplete run, marked as unestablished coverage", async () => {
+  const report = await partialReport({});
+  expect(report).toMatchObject({ status: "incomplete", otherFileCount: 0, omitted: 0 });
+  expect(report.entries).toEqual([retained]);
+  expect(report.reason).toBe("checker coverage path could not be verified (partial diagnostics retained; coverage not established)");
+});
+
+it("an incomplete run cannot be reported as complete even with a witness and a clean exit", async () => {
+  const report = await partialReport({ touchedFileListed: true, exitCode: 0, reason: "checker timed out" });
+  expect(report.status).toBe("incomplete");
+  expect(report.entries).toEqual([retained]);
+  expect(report.reason).toBe("checker timed out (partial diagnostics retained; coverage not established)");
+});
+
+it("an incomplete run with nothing parsed keeps its original reason unqualified", async () => {
+  const report = await partialReport({ text: "", exitCode: null, reason: "checker ended without exit status" });
+  expect(report).toMatchObject({ status: "incomplete", reason: "checker ended without exit status", entries: [] });
+});
+
+it("a cancelled turn reports its own reason and canonicalizes nothing", async () => {
+  const report = await partialReport({ aborted: true, reason: "checker aborted" });
+  expect(report).toMatchObject({ status: "incomplete", reason: "checker aborted", entries: [], otherFileCount: 0 });
+});
+
+it("output attributed to a hook-substituted command is never parsed into diagnostics", async () => {
+  const report = await partialReport({ sameCommand: false, incomplete: false, touchedFileListed: true, exitCode: 0 });
+  expect(report).toMatchObject({ status: "incomplete", reason: "checker command changed by hook", entries: [], otherFileCount: 0 });
+});
+
+it.each(["disappearing path", "overlong metadata line"] as const)(
+  "a real checker keeps its touched-file errors when coverage metadata becomes unknown: %s", async kind => {
+    const emit = 'const fs=require("fs"),path=require("path");const p=path.resolve("target.ts");'
+      + 'fs.writeSync(1, p+"(1,1): error TS2322: real error\\n");';
+    const body = kind === "disappearing path"
+      // Listed, canonicalizable while the checker runs, gone by the time the sink joins.
+      ? 'const g=path.resolve("gone.ts");fs.writeFileSync(g,"export const g=1;\\n");'
+        + 'fs.writeSync(1, p+"\\n"+g+"\\n");fs.unlinkSync(g);process.exit(2);'
+      : 'fs.writeSync(1, "/"+"x".repeat(9000)+"\\n");process.exit(2);';
+    const config = scripted(emit + body);
+    config[0]!.args.push("--", "--listFiles");
+    const f = await fixture(config);
+    f.turns.push([call("write_file", "edit", { path: "target.ts", content: "export const x=1;" }), { type: "stop", reason: "tool_use" }]);
+    const { events } = await run(f), report = diagnosticResult(events).diagnostics!;
+    expect(diagnosticResult(events).ok).toBe(true);
+    expect(report.status).toBe("incomplete");
+    expect(report.reason).toBe(`${kind === "disappearing path" ? "checker coverage path could not be verified" : "checker output line exceeded bound"} (partial diagnostics retained; coverage not established)`);
+    expect(report.entries).toEqual([{ line: 1, column: 1, code: "TS2322", message: "real error" }]);
+    expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("export const x=1;");
   }, 10000);
 
 it("a denied edit never starts its otherwise allowed checker", async () => {
