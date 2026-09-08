@@ -33,7 +33,8 @@ retention, post-hook memory visibility and supervisor self-event detection. Auxi
 longer invents a call count. Seven regression assertions fail against original `c14322d` and pass
 against the repair (four focused files, 81 tests). Original-head operator build/typecheck/full suite
 also passed independently; final repaired build/typecheck/full suite each exit 0. A focused delta
-review closes these findings without restarting general reviews. **R17e is not delivered**: it stays unmarked in ROADMAP until its PR is reviewed and
+review closes these findings without restarting general reviews. Delivery is tracked by
+[PR #289](https://github.com/agentkitai/agentrig/pull/289); its ROADMAP done marker takes effect only when reviewed and
 merged with green exact-head and post-merge CI verified by root.
 
 ## Issue sweep completion record — 2026-09-08

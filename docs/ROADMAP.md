@@ -3,8 +3,9 @@
 ## Current delivery — R17e, then R17f and R17g
 
 Roadmap work has resumed under the user's latest authorization. R17e makes supervisor guidance
-and memory recall visible and adds `/why`; implementation and review repairs are in progress,
-not yet delivered. R17f's measured-default decision follows, then R17g's package follow-up batches.
+and memory recall visible and adds `/why`, delivered by [PR #289](https://github.com/agentkitai/agentrig/pull/289).
+Its done marker takes effect on the reviewed, green merge, not from the branch or an open PR.
+R17f's measured-default decision follows, then R17g's package follow-up batches.
 Use bounded reviews, focused repair checks and sequential green-CI merges. Historical pause and
 pending-delivery notes below are not current instructions. [Current status](STATUS.md).
 
@@ -986,7 +987,7 @@ strong and their feel numbers were fought over; this band does the same, in meas
 | R17b *(done — PR #234)* | **Defaults pass** (the first PR of the band; its first commit carries R17a's artifacts): one recommended profile becomes the zero-config default: Markdown rendering, post-edit diagnostics, prompt history, notifications, Git checkpoints when the workspace is a repository, session-end memory ingest (these two implicit defaults apply only with sandbox absent/none; enforcing sandboxes visibly omit them, while explicit hook opt-ins retain the existing fail-closed error), supervisor heuristics, tool summaries, thinking preserved. Every flag that only toggles one of these becomes a config key with the default on; the CLI keeps `--profile` and a small explicit set. Security defaults (`ask`, sandbox, grants, fail-closed manifests) do not move. A migration note lists each flag that changed meaning | cli + core |
 | R17c *(done)* | **Feel budgets in CI**: measured on the fake provider and asserted like the viewport height: cold start to prompt under 400 ms, first streamed token within one tick of provider first byte, permission prompts per E1 task, turns to done per E1 task, TUI frame cost per event. A regression fails the build; the numbers print in `agentrig doctor` | cli + core + .github |
 | R17d *(done)* | **Permission friction**: measure prompts per E1 task under the R17b defaults, then reduce them without widening authority: read-class tools inside the trusted root auto-allow; the first `bash` ask offers the exact argv-prefix grant (R12b) as the default key; repeated identical asks within a session collapse into one scoped decision. Target and result recorded; the injection fixture suite (R13e) must stay green | core + cli |
-| R17e | **Visible supervisor and memory**: each intervention and each recall renders as one transcript line the user can read (what it noticed, what it did, what it cost); `/why` on the last turn explains any injected guidance; memory recall shows the page and the claim, not a count. Nothing is added to the model prompt that is not also visible | cli + supervisor + memory |
+| R17e *(done via PR #289; effective on green merge)* | **Visible supervisor and memory**: each intervention and each recall renders as one transcript line the user can read (what it noticed, what it did, what it cost); `/why` on the last turn explains any injected guidance; memory recall shows the page and the claim, not a count. Nothing is added to the model prompt that is not also visible | cli + supervisor + memory |
 | R17f | **Tune or default off**: rerun the E3 matrix under the R17b/R17d defaults and the visible interventions. If supervisor-on does not beat plain on independent outcomes, its LLM-backed ladder steps default off and only the free heuristics stay; if memory-on does not, ingest stays on and injection defaults off. Either way the result and the default are recorded, and E3's limitations still apply | supervisor + memory + docs |
 | R17g | **Follow-ups sweep**: after R17a–R17f, the follow-ups list at the end of this document is worked as one batch PR per package, each bullet either done or explicitly declined with a reason, and the list is reset. It is last because none of it changes feel | all |
 
