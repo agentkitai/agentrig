@@ -1,0 +1,98 @@
+// Isolated real Agent -> SessionStore -> TuiController -> App/Ink stream and frame probe.
+// No fake timers, mocked append, debug renderer or render-to-string replacement.
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Writable, PassThrough } from 'node:stream';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const req = createRequire(join(root, 'packages/cli/package.json'));
+const { createElement } = await import(pathToFileURL(req.resolve('react')).href);
+const { render } = await import(pathToFileURL(req.resolve('ink')).href);
+const { createAgent, RulePolicy, defaultRules, SessionStore } = await import('../../core/dist/index.js');
+const { TuiController } = await import('../dist/tui/controller.js');
+const { App } = await import('../dist/tui/app.js');
+const home = await mkdtemp(join(tmpdir(), 'r17c-stream-'));
+let tick = 0, active = true, timer, firstByte, firstEvent, firstVisible;
+function count() { if (active) { tick++; timer = setImmediate(count); } }
+timer = setImmediate(count);
+const delivered = new Map(), frames = [];
+let writeId = 0;
+const marker = i => `BYTE_${String(i).padStart(2, '0')}`;
+const provider = {
+  id: 'fake', model: 'feel-reference',
+  capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
+  async *stream() {
+    for (let i = 0; i < 16; i++) {
+      firstByte ??= { ms: performance.now(), tick };
+      yield { type: 'text_delta', text: `${marker(i)} ` };
+      // Let each event produce an actual frame instead of measuring a coalesced final answer.
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    yield { type: 'stop', reason: 'end_turn' };
+  },
+};
+const agent = createAgent({ provider, store: new SessionStore({ root: home }), tools: [], permissions: new RulePolicy(defaultRules), systemPrompt: 'test', repoMap: false });
+const run = agent.run.bind(agent);
+agent.run = (...args) => {
+  const session = run(...args);
+  void (async () => {
+    for await (const event of session.events) {
+      if (event.type === 'model.delta') {
+        const start = { ms: performance.now(), tick, cpu: process.cpuUsage() };
+        firstEvent ??= start;
+        delivered.set(event.text.trim(), start);
+      }
+    }
+  })();
+  return session;
+};
+const controller = new TuiController({ agent, cwd: home });
+for (let i = 0; i < 2000; i++) controller.print(`historical tool result ${i}`, 'event');
+const stdout = new Writable({ write(chunk, _encoding, callback) {
+  const text = String(chunk);
+  const frameId = ++writeId;
+  for (const [key, start] of delivered) {
+    if (!text.includes(key)) continue;
+    const end = { ms: performance.now(), tick };
+    const cpu = process.cpuUsage(start.cpu);
+    firstVisible ??= end;
+    frames.push({ frameId, event: 'model.delta', marker: key, cpuMs: (cpu.user + cpu.system) / 1000, latencyMs: end.ms - start.ms });
+    delivered.delete(key);
+  }
+  callback();
+} });
+Object.assign(stdout, { isTTY: true, columns: 120, rows: 32 });
+const stdin = new PassThrough();
+Object.assign(stdin, { isTTY: true, setRawMode() {}, ref() {}, unref() {} });
+let mounted;
+const mount = new Promise(resolve => { mounted = resolve; });
+const ui = render(createElement(App, { controller, onMounted: mounted }), { stdout, stdin, stderr: stdout, exitOnCtrlC: false, patchConsole: false });
+try {
+  await mount;
+  await new Promise(resolve => setTimeout(resolve, 80));
+  await controller.submit('return the streaming markers');
+  const deadline = performance.now() + 5000;
+  while (frames.length < 16 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(firstByte && firstEvent && firstVisible, 'first byte must traverse the actual persisted and rendered stream');
+  const result = {
+    firstByteToEventMs: firstEvent.ms - firstByte.ms,
+    firstByteToEventTicks: firstEvent.tick - firstByte.tick,
+    firstByteToVisibleMs: firstVisible.ms - firstByte.ms,
+    firstByteToVisibleTicks: firstVisible.tick - firstByte.tick,
+    frameCount: new Set(frames.map(frame => frame.frameId)).size,
+    maxFrameCpuMs: Math.max(...frames.map(frame => frame.cpuMs)),
+    meanFrameCpuMs: frames.reduce((sum, frame) => sum + frame.cpuMs, 0) / frames.length,
+    frames,
+  };
+  console.log(JSON.stringify(result));
+  assert.equal(result.frameCount, 16, 'every streamed event must produce a measured real frame');
+  assert.ok(result.firstByteToEventTicks <= 1, 'first byte -> canonical model.delta exceeded one event-loop tick');
+  assert.ok(result.firstByteToVisibleTicks <= 1, 'first byte -> rendered stream exceeded one event-loop tick');
+  assert.ok(result.maxFrameCpuMs < 16, 'TUI frame CPU cost per streamed event exceeded 16 ms');
+} finally {
+  active = false; clearImmediate(timer); ui.unmount(); await controller.shutdown();
+  await rm(home, { recursive: true, force: true });
+}

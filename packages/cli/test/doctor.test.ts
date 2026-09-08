@@ -584,3 +584,17 @@ describe("doctor read-only guarantee", () => {
     await expect(access(trustPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
+
+it("prints all five measured feel references through ordinary doctor without probing a provider", async () => {
+  const f = fixture();
+  const result = await diagnose(f.options);
+  const text = result.lines.join("\n");
+  expect(text).toContain("feel:startup");
+  expect(text).toContain("feel:first-byte");
+  expect(text).toContain("feel:frame");
+  expect(text).toContain("not a measurement of this machine or a live provider");
+  for (const task of ["A1", "A2", "A3", "A4", "X1", "X2", "X3", "X4"]) {
+    expect(text).toContain(`feel:E1:${task}`);
+  }
+  expect(text).not.toContain("probe:usage");
+});

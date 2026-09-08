@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { appendFileSync, createReadStream } from "node:fs";
 import { appendFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
@@ -203,8 +203,15 @@ export class SessionStore {
   async append(sessionId: string, payload: EventPayload): Promise<HarnessEvent> {
     const seq = await this.nextSeq(sessionId);
     const event = { ...payload, seq, sessionId, ts: this.now() } as HarnessEvent;
-    await mkdir(this.root, { recursive: true });
-    await appendFile(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+    if (payload.type === "model.delta" && seq > 0) {
+      // A live stream has already created its log. Persist this small delta before publishing
+      // it, without additional event-loop turns for mkdir/open/write/close. Never publish a
+      // token before its append succeeds; all other events retain the asynchronous path.
+      appendFileSync(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+    } else {
+      await mkdir(this.root, { recursive: true });
+      await appendFile(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+    }
     this.seqs.set(sessionId, seq + 1);
     return event;
   }

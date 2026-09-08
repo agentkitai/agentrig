@@ -41,6 +41,18 @@ jobs:
           echo "AGENTRIG_EVAL_CHECKER_IMAGE=$(docker image inspect --format '{{.Id}}' agentrig-r9b-checker)" >> "$GITHUB_ENV"
           echo "AGENTRIG_EVAL_REQUIRE_DOCKER=1" >> "$GITHUB_ENV"
       - run: pnpm build
+      # A dedicated, idle phase: cold-process wall time is not measured under parallel Vitest load.
+      # E1 uses the full-history pins above and dependencies from the frozen root install offline.
+      - name: Fake-provider feel budgets and real startup mutation
+        if: runner.os == 'Linux'
+        run: pnpm feel:check
+      - name: Retain measured feel numbers
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: feel-budgets
+          path: packages/cli/dist/feel-results.json
+          if-no-files-found: warn
       - run: pnpm typecheck
       - run: pnpm test
       - name: Install Chromium for the local reference client smoke

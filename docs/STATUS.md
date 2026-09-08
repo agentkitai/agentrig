@@ -1,7 +1,40 @@
 # Status
 
-Current roadmap row: **R17b** — implementation complete on PR #234, delivery
-pending; next **R17c**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17c** — implementation complete, independent review and
+PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
+
+## R17c — measured feel budgets (current continuation)
+
+Builder **agentrig**, conductor **100108d7**. Fresh branch/worktree for R17c only;
+R17b's implementation worktree is untouched. This row has **one implementation
+child**, **zero nested children**, **zero new halts**, **zero repair rounds** so far.
+Child session id and token usage are not tool-observable here; the conductor must
+record its tool-reported accounting. These continuation counts do not replace
+any historical R17b totals, halted conductors, external reviews or outside repairs.
+
+[Plan and measurement boundaries](plans/R17c.md): a real bundled CLI cold-start
+budget (<400 ms), real first-byte-to-persisted-and-rendered-stream tick budget,
+measured CPU cost for 16 actual event frames, and all eight pinned E1 reference
+prompt/turn budgets now fail CI on regression. Doctor prints the measured reference
+with its environment/date and ceilings, explicitly not local-machine telemetry.
+The real CLI startup mutant (450 ms inserted delay) fails the same PTY budget test.
+No permission, grant, sandbox or model-capability expansion is included.
+
+R17b is now merged at `9372a6b9a8ada563b292c989003c8238c7aa5c1e`; independently
+verified exact-merge **CI34191054274** and **structure34191054280** are green.
+Land child **80014b20** reported **zero new halts/repair rounds**
+([receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579880355)).
+Original builder **agentrig** and all historical conductor/session attribution
+remain intact below; the #254 repair remains explicitly **outside the train**.
+The sole sandbox arbitration, human #248/#254 resolutions and PR234 review records
+are preserved, not re-arbitrated or reset.
+
+Authorized non-blocking END core-test followups **#265/#266** now accompany
+**#263/#264** for the R17g core batch; none is a new acceptance gate. Conductor
+feel issues **#267/#268** predate this spawn. No additional agentrig-harness friction
+has been encountered by this child; row-code fixture failures were repaired here.
+Earlier pending/halted snapshots below are retained historical records, superseded
+only by the current continuation and the linked R17b landing receipt.
 
 ## Outside review completed; Windows fixture repaired, final gates pending
 

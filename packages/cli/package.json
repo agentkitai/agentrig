@@ -19,7 +19,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "demo": "tsx src/demo.ts"
   },
@@ -48,6 +48,7 @@
     "@modelcontextprotocol/client": "2.0.0",
     "@types/react": "^18.3.31",
     "@types/ws": "8.18.1",
+    "esbuild": "0.28.2",
     "ink-testing-library": "^4.0.0",
     "playwright": "1.63.0",
     "tsx": "^4.19.0"
