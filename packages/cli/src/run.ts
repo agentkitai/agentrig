@@ -20,7 +20,7 @@ import {
   type SessionSummary,
   type HarnessEvent,
 } from "@agentkitai/agentrig-core";
-import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
+import { AssistantText, AuxiliaryText, MemoryContextText, RecallText, formatUsage, renderChatEvent, renderEvent } from "./render.js";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.js";
 import { buildAgent, heartbeatBuildOptions, parseBudget, type AgentBuildOptions, type AgentExtras } from "./agent-builder.js";
 import { withMaintenanceSignal } from "./maintenance.js";
@@ -505,6 +505,10 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
   try {
     const assistant = new AssistantText();
     const auxiliary = new AuxiliaryText();
+    // R17e: the same visibility the TUI gets — a recall names its page and claim, and the memory
+    // index announces itself when it enters the prompt.
+    const recall = new RecallText();
+    const memoryContext = new MemoryContextText();
     for await (const e of session.events) {
       scheduledUsage?.observe(e);
       dependencies.observe?.(e);
@@ -524,6 +528,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
       const reply = assistant.push(e);
       if (reply !== null) printOutput(reply);
       if (e.type === "model.delta") continue;
+      for (const line of [...memoryContext.push(e), ...recall.push(e)]) printOutput(line);
 
       if (opts.verbose === true) {
         printOutput(renderEvent(e));

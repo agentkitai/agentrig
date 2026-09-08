@@ -15,14 +15,16 @@ import type {
   InputAttachment,
   ProviderSelectionInfo,
 } from "@agentkitai/agentrig-core";
-import { PermissionGrantRegistry, sanitizeLine } from "@agentkitai/agentrig-core";
+import { GuidanceLog, PermissionGrantRegistry, sanitizeLine } from "@agentkitai/agentrig-core";
+import { MEMORY_RECALL_TOOLS } from "@agentkitai/agentrig-memory";
 import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
 import type { ProviderSelectionControl } from "../provider-selection.js";
 import { observeStatus } from "./status-snapshot.js";
 import { defaultPermissionScopeAvailable, initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
-import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
+import { AssistantText, AuxiliaryText, MemoryContextText, RecallText, formatUsage, renderChatEvent, renderContextManifest,
+  renderEvent, renderPlanAcceptance, renderWhy } from "../render.js";
 import {
   COMMANDS,
   RESERVED_COMMAND_NAMES,
@@ -188,6 +190,11 @@ export interface TuiControllerOptions {
   /** Whether a supervisor is attached; `/supervisor` says so rather than promising an empty list. */
   supervised?: boolean;
   /**
+   * The memory index this process injected into the system prompt, so `/why` can check it against
+   * the hash the request manifest recorded instead of re-reading the wiki, which may have moved on.
+   */
+  memoryIndex?: string;
+  /**
    * Attaches an observer to each session as it starts. Sessions are created in here, so the
    * supervisor cannot be attached from outside — which is why `--supervise` was accepted by the
    * TUI and silently did nothing: every detector, the whole ladder, the reviewer and the grader
@@ -257,6 +264,16 @@ export class TuiController {
   private listeners = new Set<(s: TuiState) => void>();
   private readonly assistant = new AssistantText();
   private readonly auxiliary = new AuxiliaryText();
+  /**
+   * R17e. What was actually injected into the last turn, for `/why`. A bounded fold rather than a
+   * retained event array, and reset at every conversation boundary — `/new`, a resume and a fork
+   * each start a run whose guidance is its own, so none of them may show the previous run's turn.
+   */
+  private guidance = new GuidanceLog();
+  private recall = new RecallText();
+  private memoryContext = new MemoryContextText();
+  /** Set once the agent is built; `/why` verifies it against the manifest hash before quoting it. */
+  private memoryIndexText: string | undefined;
   /** Same live core registry is passed to the agent; persisted events never restore authority. */
   readonly permissionGrants: PermissionGrantRegistry;
   /**
@@ -288,6 +305,7 @@ export class TuiController {
     this.tree = opts.onTree;
     this.children = opts.onChildren;
     this.spawned = opts.onSpawned;
+    this.memoryIndexText = opts.memoryIndex === "" ? undefined : opts.memoryIndex;
     if (opts.model !== undefined) this.state = { ...this.state, model: opts.model };
     this.refreshBranch();
   }
@@ -386,6 +404,18 @@ export class TuiController {
       this.maintenanceAbort === undefined && this.startupAbort === undefined && this.state.selecting !== true && !this.inputBusy();
   }
   activeMaintenanceSession(): Session | undefined { return this.maintenanceOwned; }
+
+  /** The index the built agent injects into the system prompt, for `/why`'s hash check. */
+  setMemoryIndex(index: string): void {
+    this.memoryIndexText = index === "" ? undefined : index;
+  }
+
+  /** Drops what `/why` would answer with, at a boundary where the previous run is no longer this one. */
+  private resetGuidance(): void {
+    this.guidance = new GuidanceLog();
+    this.recall = new RecallText();
+    this.memoryContext = new MemoryContextText();
+  }
 
   /** Both manual and supervisor undo must stop automatic continuation from reverted claims. */
   forgetRestoredConversation(): void {
@@ -942,6 +972,15 @@ export class TuiController {
           "system",
         );
         return true;
+      case "why":
+        // Local inspection only: a fold over events this process already received. No provider
+        // call, no file read, and it answers after the last turn has ended just as well as during.
+        this.print(
+          renderWhy(this.guidance.explainLast({ recallTools: MEMORY_RECALL_TOOLS }),
+            this.memoryIndexText === undefined ? {} : { memoryIndex: this.memoryIndexText }),
+          "system",
+        );
+        return true;
       case "supervisor":
         this.print(
           this.opts.supervised !== true
@@ -1137,6 +1176,8 @@ export class TuiController {
         this.resumable = false;
         // context is per-conversation and the next session starts empty; the model persists
         this.set({ sessionId: null, plan: [], signals: [], children: [], turns: 0, context: null });
+        // `/why` must not answer for a conversation the user has just left behind.
+        this.resetGuidance();
         this.print("starting fresh — the next task begins a new session", "system");
         await this.refreshSkills();
         return true;
@@ -1444,6 +1485,11 @@ export class TuiController {
     const compact = this.state.verbose ? { handled: false, lines: [] } : this.toolSummaries.push(e);
     for (const line of compact.lines) this.print(line.text, line.tone);
     for (const line of this.auxiliary.push(e)) this.print(line, "system");
+    // R17e: a recall says which page and which claim, and the memory index announces itself when
+    // it enters the prompt. Both are folds over events, so the verbose trace shows them too.
+    for (const line of this.recall.push(e)) this.print(line, "event");
+    for (const line of this.memoryContext.push(e)) this.print(line, "event");
+    this.guidance.push(e);
     this.trackActivity(e);
     if (e.type === "plan.updated") this.set({ plan: e.items });
     if (e.type === "context.manifest") this.set({ manifest: e });

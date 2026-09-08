@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { HarnessEvent, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
+import { HarnessEvent, Intervention, InterventionType, SupervisorRecord, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("round-trips a supervisor outcome and keeps its rung enum in step with the intervention union", () => {
+    const raw = {
+      seq: 9, sessionId: "s", ts: 1, type: "supervisor.outcome", id: "abc", intervention: "inject_guidance",
+      outcome: "queued", detail: "queued for the next turn boundary",
+      cost: { modelCalls: "none", injected: { bytes: 12, hash: "0123456789abcdef" } },
+    };
+    const event = HarnessEvent.parse(raw);
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    // an observer may write it, and only in these shapes
+    expect(SupervisorRecord.safeParse({ type: "supervisor.outcome", id: "abc", intervention: "abort", outcome: "applied", cost: { modelCalls: "none" } }).success).toBe(true);
+    expect(SupervisorRecord.safeParse({ type: "tool.call", id: "x", name: "bash", input: {}, inputHash: "h" }).success).toBe(false);
+    expect(HarnessEvent.safeParse({ ...raw, outcome: "done" }).success).toBe(false);
+    expect(HarnessEvent.safeParse({ ...raw, intervention: "invented_rung" }).success).toBe(false);
+    // a digest that is not the documented convention is refused rather than silently displayed
+    expect(HarnessEvent.safeParse({ ...raw, cost: { modelCalls: "none", injected: { bytes: 12, hash: "nothex" } } }).success).toBe(false);
+    expect(InterventionType.options).toEqual(Intervention.options.map((option) => option.shape.type.value));
+  });
+
+  it("round-trips an intervention's decision id and what it noticed, and still accepts legacy records", () => {
+    const raw = {
+      seq: 3, sessionId: "s", ts: 1, type: "supervisor.intervention",
+      intervention: { type: "inject_guidance", message: "stop" }, id: "abc",
+      noticed: [{ type: "loop", confidence: 0.9, evidence: ["same input"], window: [1, 2] }],
+    };
+    const event = HarnessEvent.parse(raw);
+    expect(parseEvent(serializeEvent(event))).toEqual(event);
+    const { id: _id, noticed: _noticed, ...legacy } = raw;
+    expect(HarnessEvent.safeParse(legacy).success).toBe(true);
+    expect(HarnessEvent.safeParse({ ...raw, noticed: [{ type: "loop", confidence: 1.4, evidence: [], window: [1, 2] }] }).success).toBe(false);
+  });
+
   it("round-trips bounded instruction delegation audit records, distinct from tool grants", () => {
     for (const action of ["delegated", "revoked"]) {
       const event = HarnessEvent.parse({ seq: 1, sessionId: "s", ts: 1,

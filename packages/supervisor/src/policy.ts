@@ -78,6 +78,8 @@ export class LadderPolicy implements Policy {
   /** Full serialized signatures avoid hash collisions between distinct loops. */
   private readonly expiredEscalations = new Set<string>();
   private readonly pendingEscalations = new Map<Intervention, string>();
+  /** The signal each built intervention came from (R17e), keyed by the object handed to the observer. */
+  private readonly causes = new WeakMap<Intervention, Signal>();
   private issued = 0;
 
   private readonly rubric: string | undefined;
@@ -139,6 +141,7 @@ export class LadderPolicy implements Policy {
         this.pendingEscalations.set(intervention, signature);
       }
 
+      this.causes.set(intervention, s);
       out.push(intervention);
       this.issued += 1;
       this.lastTurn.set(s.type, state.turns);
@@ -146,6 +149,11 @@ export class LadderPolicy implements Policy {
       this.level.set(s.type, (this.level.get(s.type) ?? 0) + 1);
     }
     return out;
+  }
+
+  /** The exact signal this intervention was built from; undefined for anything not built here. */
+  cause(intervention: Intervention): Signal | undefined {
+    return this.causes.get(intervention);
   }
 
   onEscalationOutcome(intervention: Intervention, outcome: EscalationOutcome): void {

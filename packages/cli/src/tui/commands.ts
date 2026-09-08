@@ -16,6 +16,7 @@ export type TuiCommand =
   | { kind: "supervisor" }
   | { kind: "plan" }
   | { kind: "context" }
+  | { kind: "why" }
   | { kind: "cost" }
   | { kind: "compact" | "doctor" | "diff"; args: string }
   | { kind: "model" | "effort"; argument: string }
@@ -52,6 +53,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: "supervisor", summary: "show what the supervisor has signalled this session" },
   { name: "plan", summary: "show the agent's current plan" },
   { name: "context", summary: "show the latest prompt manifest" },
+  { name: "why", summary: "explain the guidance and memory actually injected into the last turn" },
   { name: "cost", summary: "show recorded project/current-run estimates and unknown coverage" },
   { name: "compact", summary: "compact into a verified conversation fork while idle (costs tokens)" },
   { name: "clear", summary: "alias of /new; same configuration, new conversation" },
@@ -120,6 +122,8 @@ export function parseCommand(line: string): TuiCommand | null {
       return { kind: "plan" };
     case "context":
       return { kind: "context" };
+    case "why":
+      return { kind: "why" };
     case "cost":
       return { kind: "cost" };
     case "compact":
@@ -174,6 +178,7 @@ export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "supervisor",
   "plan",
   "context",
+  "why",
   "cost", "compact", "clear", "doctor", "diff", "model", "effort",
   "verbose", "trace",
   "resume",

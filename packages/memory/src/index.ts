@@ -13,6 +13,7 @@ export * from "./lock.js";
 export * from "./maintenance.js";
 export * from "./scan.js";
 export * from "./search.js";
+export * from "./recall.js";
 export * from "./raw.js";
 export * from "./pins.js";
 export * from "./ingest.js";
