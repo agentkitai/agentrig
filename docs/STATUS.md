@@ -3,7 +3,8 @@
 ## Outside-train existing issue #249: pinned archive transport
 
 Builder: **Codex/operator outside AgentRig**, on `fix/followups-export-transport`, based on
-merged main `cc457c7`. The user authorized all existing issues through reviewed, green merges.
+merged main `cc457c7`, now integrated with compiler PR #282 (`efd20a8`). The user authorized
+all existing issues through reviewed, green merges.
 The evaluator previously supplied the complete Git archive through `execFileSync`'s input pipe.
 It now writes those same pinned bytes to a private, exclusively created regular file and passes
 its path to the real tar extractor. This removes the input-pipe EPIPE path; it does **not** prove
@@ -18,7 +19,14 @@ retains BLOCKED and the empty receipt and verifies transport cleanup. Mutants sw
 failure and omitting archive removal are both killed; joined and restored. All 16 evaluator tests
 pass after restoration. Initial whole-file execution before building had three missing-dist
 errors (test prerequisite, not a product failure); after build, full build/test/typecheck each
-exit **0**, **3475 passed / 4 skipped / 222 files**. Reviews/hosted CI/merge remain operator gates.
+exit **0**, **3475 passed / 4 skipped / 222 files**. After main `efd20a8` integration, the full trio
+again exits **0**, **3488 passed / 4 skipped / 222 files**. Reviews/hosted CI/merge remain operator gates.
+
+Compiler PR **#282** merged at `efd20a8`, closing #263/#264 after independent review and green
+exact-head CI **34252558955** / structure **34252558941**. Its reviewer execution limitations are
+preserved on the PR; no claim that every independent full-suite attempt passed. Post-merge CI
+is being verified before this batch can merge. Nine of the original 17 issues are now closed;
+the remaining eight have prepared implementations or active Claude builders, not extra PRs.
 
 Predecessor probe PR **#281** merged as `cc457c7`, closing #277/#278/#279; post-merge CI
 **34251674801** and structure **34251674739** passed first attempt on all platforms.
