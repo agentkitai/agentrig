@@ -1,5 +1,17 @@
 # Status
 
+Second Windows recovery under reopened#244: postmerge286 CI34262745133/job102184507170
+failed the10s cap fixture again and real npm packing hit its unchanged45s owned-process timeout.
+The earlier recursion reduction was insufficient to establish reliableWindows execution.
+Operator correction restores the aggregate fixture's **original30s** allowance (the10s reduction
+in284 was based on local timings, not a product latency contract) while retaining the lower-I/O
+fixture, real2000cap and assertions. Windows now runs npm-runtime first, cap tests second, then
+the bulk suite: separate single-worker invocations preserve every test and remove that preceding
+fixture load. Npm45s/outer60s, owned-tree cleanup, productlimits and all consent checks stayunchanged.
+No claim that a particular host scheduler/antivirus caused the failures. PR287 is also the recovery
+for failedmain; original285/286 postmerge failures remainfailed. Exactrepairedhead and repaired
+postmergegreen must precede the final267 delivery. #244 remainsopen until that recovery lands.
+
 Issue sweep checkpoint: **15 of17 initial issues closed; none added**. #244 landed via
 PR#286 at`68c639a`, reviewed5212ac2, exact-headCI34261951608/structure34261951673 allgreen.
 It also recovers285's postmergeWindows aggregate fixture failure; originalfailedreceipt retained.

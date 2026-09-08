@@ -84,9 +84,12 @@ jobs:
       # F3 is the Windows no-op seam proof, not a claim that POSIX process integration tests run on
       # Windows. The include list lives in vitest.windows.config.ts: one boot, parallel workers.
       # A step per file cost ~6s of vitest startup each on this runner, eighty times over.
+      # Run npm packing before the metadata-heavy cap fixture and bulk Windows suite. Separate
+      # single-worker invocations make that order explicit; no tests or npm deadline are changed.
+      # Both fixtures intermittently timed out at the end of the old job; the host cause is unknown.
+      - run: pnpm exec vitest run packages/cli/test/packages-runtime.test.ts --maxWorkers=1
+      - run: pnpm exec vitest run packages/cli/test/packages.test.ts --maxWorkers=1
       - run: pnpm exec vitest run --config vitest.windows.config.ts
       - run: pnpm exec vitest run packages/core/test/subagent.test.ts -t 'keeps what an aborted child said'
       # Repeat the original real-process regression after its full-suite execution above.
       - run: pnpm exec vitest run packages/memory/test/ingest-persistence.test.ts -t 'conserves shared facts'
-      # Keep the 1,000-file/two-install cap fixture separate from actual npm packing.
-      - run: pnpm exec vitest run packages/cli/test/packages.test.ts packages/cli/test/packages-runtime.test.ts --maxWorkers=1
