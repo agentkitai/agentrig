@@ -1,6 +1,6 @@
 // Explicit evaluator tool, not a product CLI. Only exports trusted, pinned repository trees.
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, writeFile, realpath, lstat, open } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, realpath, lstat, open, rm, rmdir } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +24,19 @@ export async function prepare(id, source, destination) {
   const receiptHandle = await open(receiptPath, 'wx', 0o600);
   try {
     await mkdir(dest); // exclusive: never reuse an existing workspace, even if empty
-    execFileSync('tar', ['-xf', '-', '-C', dest], { input: archive, timeout: 60_000, maxBuffer: 1024 * 1024 });
+    // A pipe-fed extractor may finish before Node has written the archive's trailing blocks,
+    // producing EPIPE even after extraction. A private regular file removes that transport race;
+    // nonzero tar exits still block publication. The pinned bytes and time/output bounds stay put.
+    const transport = await mkdtemp(join(parent, '.agentrig-eval-archive-'));
+    const archivePath = join(transport, 'tree.tar');
+    try {
+      await writeFile(archivePath, archive, { flag: 'wx', mode: 0o600 });
+      execFileSync('tar', ['-xf', archivePath, '-C', dest], { timeout: 60_000, maxBuffer: 1024 * 1024 });
+    } finally {
+      // Only these owned transport artifacts are removed; failed destinations/receipts remain.
+      await rm(archivePath, { force: true });
+      await rmdir(transport);
+    }
     if (task.seed) {
       const [path, before, after] = task.seed;
       const file = join(dest, path);
