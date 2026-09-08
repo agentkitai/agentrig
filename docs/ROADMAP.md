@@ -1557,3 +1557,6 @@ need an explicit budget; neither prevents continuing other actionable entries.
   cover setup failure without leaking fake timers; include in the R17g core package batch, not a new R17 gate.
 - [ ] Preserve the primary assertion when fixture cleanup also fails ([core-test residual #266](https://github.com/agentkitai/agentrig/issues/266)):
   retain both errors with primary failure precedence; include in the R17g core package batch, not a new R17 gate.
+- [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
+  preexisting reviewer first-run failure, followed by passing isolated/full runs;
+  include with END test followups, not a new R17 gate or parent code workaround.

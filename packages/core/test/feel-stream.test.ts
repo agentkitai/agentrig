@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rename, rm, symlink } from "node:fs/promises";
 import * as fs from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -154,7 +154,13 @@ it.each([true, false])("overlapping claim and lock close only after both owners 
   } finally { spy.mockRestore(); release(); await unlock(); await rm(root, { recursive: true, force: true }); }
 });
 
-it.skipIf(process.platform === "win32")("rejects a FIFO with an attached reader without leaking session bytes or consuming seq", async () => {
+// Probe once without creating a FIFO. A nonzero usage exit still means the tool
+// exists; only ENOENT is an optional-tool skip, not permission or runtime failures.
+const fifoProbe = process.platform === "win32" ? undefined : spawnSync("mkfifo", [], { stdio: "ignore" });
+if (fifoProbe?.error && (fifoProbe.error as NodeJS.ErrnoException).code !== "ENOENT") throw fifoProbe.error;
+const hasMkfifo = process.platform !== "win32" && !fifoProbe?.error;
+
+it.skipIf(!hasMkfifo)("rejects a FIFO with an attached reader without leaking session bytes or consuming seq", async () => {
   const root = await mkdtemp(join(tmpdir(), "feel-fifo-"));
   const store = new SessionStore({ root });
   const id = store.create(), path = store.pathFor(id);

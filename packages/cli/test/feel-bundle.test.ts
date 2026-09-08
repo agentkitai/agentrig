@@ -46,3 +46,13 @@ it.skipIf(process.platform === "win32")("builds via absolute symlink paths with 
     await expect(readFile(join(temp, "dist/index.js"))).rejects.toThrow(/ENOENT/);
   } finally { await rm(temp, { recursive: true, force: true }); }
 }, 30_000);
+
+it("imports without building when argv names a nonexistent entrypoint", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "feel-bundle-import-"));
+  try {
+    await promisify(execFile)(process.execPath, ["--input-type=module", "-e",
+      `await import(${JSON.stringify(new URL("../scripts/bundle.mjs", import.meta.url).href)})`, "no-such-file",
+    ], { cwd: temp });
+    await expect(readFile(join(temp, "dist/index.js"))).rejects.toThrow(/ENOENT/);
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});

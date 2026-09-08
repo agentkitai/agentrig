@@ -20,4 +20,6 @@ export const cliBundleOptions = {
   external: ['yoga-layout', 'react-devtools-core', 'typescript'],
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
 };
-if (process.argv[1] && (await realpath(fileURLToPath(import.meta.url))) === (await realpath(process.argv[1]))) await build(cliBundleOptions);
+// Importers may supply an absent or nonexistent argv entry; neither is main.
+const invoked = process.argv[1] ? await realpath(process.argv[1]).catch(() => null) : null;
+if (invoked && invoked === await realpath(fileURLToPath(import.meta.url))) await build(cliBundleOptions);

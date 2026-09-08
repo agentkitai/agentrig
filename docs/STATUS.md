@@ -1,7 +1,26 @@
 # Status
 
-Current roadmap row: **R17c** — external review repair round **2/3** complete, independent delta review
+Current roadmap row: **R17c** — external review repair round **3/3** complete, independent delta review
 and PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
+
+## R17c final delta repair round 3
+
+Builder **agentrig**, conductor **100108d7**; same R17c branch/worktree,
+no nested children, merge, or child-run external reviews. All three new LOW
+findings from [the round-2 delta review](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5581960155)
+are fixed: nonexistent argv paths import without building; the FIFO regression
+probes optional `mkfifo` once and skips only when absent (or on Windows), while
+still killing the exact regular-file-guard mutant on capable POSIX hosts; the
+vacuous post-schema frame assertion is removed and the raw sample-count assertion
+has an explanatory message. No budget, security, schema or acceptance changes.
+Separate build/test/typecheck exits **0/0/0**, local suite **3436 passed / 4 skipped**
+in **219 files**; real feel:prepare/check exits **0/0**, startup mutant killed,
+compiled entry bytes restored. Reproduction and boundaries: [R17c plan](plans/R17c.md).
+Independent third-round delta review remains the parent's next step; no premature
+residual filing. The other review's subprocess/FIFO environment limitation is
+not a passing suite. Historical accounting stays host-only; completed known totals
+and the explicitly nonterminal round-2 snapshot in PR269 are retained, not extended
+with invented final usage. Parent captures this child's id and terminal accounting.
 
 ## R17c delta repair round 2
 
@@ -56,9 +75,12 @@ remain intact below; the #254 repair remains explicitly **outside the train**.
 The sole sandbox arbitration, human #248/#254 resolutions and PR234 review records
 are preserved, not re-arbitrated or reset.
 
-Authorized non-blocking END core-test followups **#265/#266** now accompany
+Authorized non-blocking END core-test followups **#265/#266/#271** now accompany
 **#263/#264** for the R17g core batch; none is a new acceptance gate. Conductor
-feel issues **#267/#268** predate this spawn. No additional agentrig-harness friction
+feel issues **#267/#268/#270/#271** predate this final repair spawn.
+[#271](https://github.com/agentkitai/agentrig/issues/271) records preexisting shared-`/tmp`
+test interference from the reviewer's first failed run (subsequent isolated/full
+runs passed); it is an END followup, not a new gate or parent code workaround. No additional agentrig-harness friction
 has been encountered by this child; row-code fixture failures were repaired here.
 Earlier pending/halted snapshots below are retained historical records, superseded
 only by the current continuation and the linked R17b landing receipt.
