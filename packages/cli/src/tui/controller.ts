@@ -573,22 +573,22 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
+    // Disclose effects before publishing an answerable prompt, even when audit is slow.
+    if (next !== undefined) this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
     this.set({ pending: next ?? null, queued: this.queue.length });
     if (next === undefined) return;
     // Concurrent dispatches can queue before the first explicit scoped approval.
     // Recheck only the request's own live registry, never cache allow-once consent.
     // Audit append must complete before usage accounting and scoped authority consumption.
     const consume = (): void => {
-      if (this.state.pending?.resolve !== next.resolve) return; // cancelled while awaiting audit
+      if (this.state.pending?.resolve !== next.resolve || this.state.pending.scope !== undefined) return;
       const authorization = next.permissionGrants?.authorize(next.req, true);
       const standing = (authorization?.auditBlocked || authorization?.viewExpired) ? "ask" : authorization?.decision ?? "ask";
       if (standing !== "ask") next.resolve(standing, false);
-      else this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
     };
     if (next.flushPermissionGrants === undefined) consume();
     else void next.flushPermissionGrants().then(consume).catch(() => {
       // Failed append is not human denial: retain the prompt, and never count a match.
-      if (this.state.pending?.resolve === next.resolve) this.showPermissionEffects(next.req, true);
     });
   }
 

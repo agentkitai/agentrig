@@ -7,14 +7,22 @@ The original implementation attribution below is unchanged. Queued approvals now
 flush grant audit events before consuming scoped authority and counting matches;
 regressions cover queued child confinement, pending/failed audit and cancellation.
 The operator completed the existing sandbox-consent fixture's explicit audit step.
-Local build, full tests (**3465 passed, 4 skipped, 222 files**) and typecheck passed,
+Local build, full tests (**3468 passed, 4 skipped, 222 files**) and typecheck passed,
 including two added real-dispatch audit-callback tests. Operator mutation checks
 killed audit-flush omission, parent-registry substitution and Enter-binding removal.
-The unchanged benchmark reruns retain supplemental25 prompts and historical17;
+The unchanged benchmark reruns retain supplemental 25 prompts and historical 17;
 A4/X4 manual assessment remains BLOCKED. The ROADMAP done marker records completed
 implementation; landing remains pending below.
 These are local repair results, not final independent review or new-head CI.
-PR #273 remains unmerged pending those checks. No later roadmap row is completed.
+Independent review, exact-head CI and post-merge CI receipts are recorded on
+[PR #273](https://github.com/agentkitai/agentrig/pull/273); all are required for
+landing. No later roadmap row is completed by this change.
+The second repair normalizes Windows fixture paths and discloses queued effects
+before publishing an answerable prompt. Audit completion leaves an open scope
+editor untouched. Three new regressions cover these races and direct-ask durable
+audit/counting; removing each corresponding guard is killed by the focused suite.
+The done marker is committed on the feature branch as required by the land skill;
+main does not advance until the reviewed, green head is merged.
 The background-review/checkpoint incompatibility and foreground review timeout
 were observed in conductor **11dfb0d6**; no security settings were changed and no
 duplicate issue was opened. Claude's completed review explicitly did not run the

@@ -1172,7 +1172,7 @@ All other follow-up fragments below remain queued unless explicitly marked done.
 
 - Review scheduling compatibility: conductor11dfb0d6 observed that the topic
   skill's background review commands conflict with checkpoint protection, while
-  foreground commands are capped at600000ms. Keep security protections unchanged;
+  foreground commands are capped at 600000ms. Keep security protections unchanged;
   reconcile the workflow and execution limits in the existing review-workflow
   maintenance batch. No new cosmetic issue or nested roadmap item is required.
 
