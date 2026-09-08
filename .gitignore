@@ -6,3 +6,6 @@ dist/
 !/.agentrig/skills/**
 .env
 .DS_Store
+
+# Disposable compiled ESM regression fixtures, including interrupted-child debris.
+/packages/cli/.feel-bundle-*/

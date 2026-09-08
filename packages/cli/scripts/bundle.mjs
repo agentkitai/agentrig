@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { realpath } from 'node:fs/promises';
 
 // Keep the SDK/declarations emitted by tsc; replace only the cold CLI entry. One
 // React/Ink graph is bundled once; lazy modules remain split (including optional
@@ -19,4 +20,4 @@ export const cliBundleOptions = {
   external: ['yoga-layout', 'react-devtools-core', 'typescript'],
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
 };
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await build(cliBundleOptions);
+if (process.argv[1] && (await realpath(fileURLToPath(import.meta.url))) === (await realpath(process.argv[1]))) await build(cliBundleOptions);

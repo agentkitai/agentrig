@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, readFile, rename, rm, symlink } from "node:fs/promises";
 import * as fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -151,4 +152,26 @@ it.each([true, false])("overlapping claim and lock close only after both owners 
     if (lockFirst) release(); else await unlock();
     expect(() => fs.fstatSync(fd as number)).toThrow();
   } finally { spy.mockRestore(); release(); await unlock(); await rm(root, { recursive: true, force: true }); }
+});
+
+it.skipIf(process.platform === "win32")("rejects a FIFO with an attached reader without leaking session bytes or consuming seq", async () => {
+  const root = await mkdtemp(join(tmpdir(), "feel-fifo-"));
+  const store = new SessionStore({ root });
+  const id = store.create(), path = store.pathFor(id);
+  let reader: number | undefined;
+  try {
+    execFileSync("mkfifo", [path]);
+    // Without the reader open(O_WRONLY|O_NONBLOCK) rejects ENXIO before isFile runs.
+    reader = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    await expect(store.append(id, { type: "model.delta", text: "private session bytes" }))
+      .rejects.toThrow("session log must be a regular file");
+    expect(fs.readSync(reader, Buffer.alloc(4096), 0, 4096, null)).toBe(0);
+    fs.closeSync(reader); reader = undefined;
+    await rm(path);
+    expect(await store.append(id, { type: "model.delta", text: "regular retry" })).toMatchObject({ seq: 0 });
+    expect(await readFile(path, "utf8")).not.toContain("private session bytes");
+  } finally {
+    if (reader !== undefined) fs.closeSync(reader);
+    await rm(root, { recursive: true, force: true });
+  }
 });

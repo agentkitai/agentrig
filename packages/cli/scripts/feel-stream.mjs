@@ -1,6 +1,6 @@
 // Isolated real Agent -> SessionStore -> TuiController -> App/Ink stream and frame probe.
 // No fake timers, mocked append, debug renderer or render-to-string replacement.
-import { distinctFrameCount, waitForDistinctFrames } from './feel-frame-samples.mjs';
+import { distinctFrameCount, waitForDistinctFrames, selectFrameSamples } from './feel-frame-samples.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,9 @@ let tick = 0, active = true, timer, firstByte, firstEvent, firstVisible;
 function count() { if (active) { tick++; timer = setImmediate(count); } }
 timer = setImmediate(count);
 const delivered = new Map(), frames = [];
+// Regression-only fixture: force a drained producer overshoot instead of relying
+// on runner timing to leave two extra writes pending at the sixteen-write boundary.
+const observedTarget = process.argv.includes('--overshoot-fixture') ? 18 : 16;
 let writeId = 0;
 const marker = i => `BYTE_${String(i).padStart(2, '0')}`;
 const provider = {
@@ -29,7 +32,7 @@ const provider = {
     // Ink may coalesce adjacent events. Keep producing real markers until sixteen
     // actual writes have been observed; never pad the measurement with duplicates.
     const deadline = performance.now() + 5000;
-    for (let i = 0; distinctFrameCount(frames) < 16 && performance.now() < deadline; i++) {
+    for (let i = 0; distinctFrameCount(frames) < observedTarget && performance.now() < deadline; i++) {
       firstByte ??= { ms: performance.now(), tick };
       yield { type: 'text_delta', text: `${marker(i)} ` };
       // Let each event produce an actual frame instead of measuring a coalesced final answer.
@@ -83,18 +86,20 @@ try {
   await mount;
   await new Promise(resolve => setTimeout(resolve, 80));
   await controller.submit('return the streaming markers');
-  await waitForDistinctFrames(frames);
+  await waitForDistinctFrames(frames, { target: observedTarget });
   assert.ok(firstByte && firstEvent && firstVisible, 'first byte must traverse the actual persisted and rendered stream');
+  const samples = selectFrameSamples(frames);
   const result = {
     firstByteToEventMs: firstEvent.ms - firstByte.ms,
     firstByteToEventTicks: firstEvent.tick - firstByte.tick,
     firstByteToVisibleMs: firstVisible.ms - firstByte.ms,
     firstByteToVisibleTicks: firstVisible.tick - firstByte.tick,
-    frameCount: distinctFrameCount(frames),
-    sampledEvents: frames.length,
-    maxFrameCpuMs: Math.max(...frames.map(frame => frame.cpuMs)),
-    meanFrameCpuMs: frames.reduce((sum, frame) => sum + frame.cpuMs, 0) / frames.length,
-    frames,
+    frameCount: distinctFrameCount(samples),
+    observedFrameCount: distinctFrameCount(frames),
+    sampledEvents: samples.length,
+    maxFrameCpuMs: Math.max(...samples.map(frame => frame.cpuMs)),
+    meanFrameCpuMs: samples.reduce((sum, frame) => sum + frame.cpuMs, 0) / samples.length,
+    frames: samples,
   };
   console.log(JSON.stringify(result));
   assert.equal(result.frameCount, 16, 'must measure sixteen distinct real streamed writes, even with coalescing');

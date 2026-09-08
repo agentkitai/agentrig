@@ -1,7 +1,23 @@
 # Status
 
-Current roadmap row: **R17c** — external review repair round **1/3** complete, independent delta review
+Current roadmap row: **R17c** — external review repair round **2/3** complete, independent delta review
 and PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
+
+## R17c delta repair round 2
+
+All four newly reported delta findings are fixed, without changing budgets, the
+sixteen-write schema, acceptance, or security authority. Disposable compiled-bundle
+fixtures are ignored even when their child is terminated. A POSIX FIFO-with-reader
+regression kills deletion of the regular-file descriptor guard and verifies no
+session-byte leakage or sequence consumption. Stream reports select the first
+sixteen distinct writes (including every coalesced event in them), so a lagged
+15→17 arrival no longer fails an exact-count assertion. The bundle entrypoint
+compares real paths, covering absolute symlink invocation and
+`--preserve-symlinks-main` without triggering a build on import. Fail-first and
+restored-control evidence, exact-head checks, and executable feel preparation /
+measurement / artifact recipes are recorded on PR #269. Prior review limitations
+remain limitations, not independent execution claims; host accounting is not
+publicly accessible. R17c remains the row; R17d is next after the train's gate.
 
 ## R17c — measured feel budgets (current continuation)
 
