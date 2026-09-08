@@ -1543,10 +1543,21 @@ need an explicit budget; neither prevents continuing other actionable entries.
   detect unexpected ancestor Git markers before fixtures grant trust or write state.
   Private controls disprove the original `.agentrig`-only explanation; the historical
   cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
-- [ ] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
+- [x] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
+  Implemented by **Claude Code outside the train** on `fix/followups-ci-fixtures`, test files only.
+  The aggregate-cap fixture replaces thousands of copied files with counted empty directories to
+  reach the unchanged 2000-entry default; the first local cases measured 597ms/27ms without a
+  quantitative phase-speedup claim. The byte case now makes the later package fit 100MiB alone
+  but exceed the shared budget; a per-package-reset mutant fails. Both installs, both attachment fixtures and
+  both external-expansion cases stay real, and every deadline is unchanged or lower. Owned work is
+  now registered and joined before any fixture is removed, so a body that misses its deadline cannot
+  leave live staging for `rm` to trip over. Separately, `packages/supervisor/test/attach.test.ts`
+  decided a real escalation timeout by whether a 50 ms timer beat a finite fake session, which is the
+  macOS strand recorded on #244; the ordering is now a readiness handshake rather than a race.
+  Completion reaches main with the reviewed, green PR merge.
 - [x] Pinned evaluator archive transport ([feel #249](https://github.com/agentkitai/agentrig/issues/249)):
   replace pipe-fed tar input with an owned private regular file, keeping extraction errors,
   exact pinned bytes, exclusive destination/receipt creation and existing bounds. Implemented
@@ -1597,7 +1608,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
   include with END test followups, not a new R17 gate or parent code workaround.
 
 - [x] Historical review evidence [#261](https://github.com/agentkitai/agentrig/issues/261): independent exact-head build/test/typecheck reproduced and publicly recorded; original Codex limitation retained, not rewritten. [Verification receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
-- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct Windows timeouts remain open.
+- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's fixture strands landed separately in PR #284, with its late-permission shutdown repair still pending.
 - [x] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275),
   timeout errors now name the operation and distinguish a per-call limit from the overall run
   budget. Defaults and partial-usage accounting are unchanged; the original 30s message does not
