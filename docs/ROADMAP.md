@@ -1543,10 +1543,21 @@ need an explicit budget; neither prevents continuing other actionable entries.
   detect unexpected ancestor Git markers before fixtures grant trust or write state.
   Private controls disprove the original `.agentrig`-only explanation; the historical
   cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
-- [ ] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
+- [x] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
+  Implemented by **Claude Code outside the train** on `fix/followups-ci-fixtures`, test files only.
+  The measured phases were the setup, not the assertions: the aggregate-cap fixture spent 3.15 s of
+  its 3.15 s installing and rescanning two thousand real files to reach the real 2000-entry default,
+  which now costs 0.60 s by spending the shared budget on entries the walk already counts, and a
+  second case reaches the real 100 MiB default in 27 ms. Both installs, both attachment fixtures and
+  both external-expansion cases stay real, and every deadline is unchanged or lower. Owned work is
+  now registered and joined before any fixture is removed, so a body that misses its deadline cannot
+  leave live staging for `rm` to trip over. Separately, `packages/supervisor/test/attach.test.ts`
+  decided a real escalation timeout by whether a 50 ms timer beat a finite fake session, which is the
+  macOS strand recorded on #244; the ordering is now a readiness handshake rather than a race.
+  Completion reaches main with the reviewed, green PR merge.
 - [ ] External-review operational guidance regression coverage ([feel #253](https://github.com/agentkitai/agentrig/issues/253)):
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
@@ -1580,6 +1591,6 @@ need an explicit budget; neither prevents continuing other actionable entries.
   include with END test followups, not a new R17 gate or parent code workaround.
 
 - [x] Historical review evidence [#261](https://github.com/agentkitai/agentrig/issues/261): independent exact-head build/test/typecheck reproduced and publicly recorded; original Codex limitation retained, not rewritten. [Verification receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
-- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct Windows timeouts remain open.
+- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct attachment/external-expansion timeouts and its macOS escalation strand are addressed separately in the CI fixture item above, pending that batch's merge.
 - [ ] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275), clarify per-call versus overall timeout. A 30s message alone does not establish that the entire 300s budget expired.
 - [x] PR276 probe followups: [#277](https://github.com/agentkitai/agentrig/issues/277) stop evidence asserted; [#278](https://github.com/agentkitai/agentrig/issues/278) natural failure exit flushes pending output while remaining fail-fast; [#279](https://github.com/agentkitai/agentrig/issues/279) independent four-of-five fail-first receipt recorded alongside staged history. Implemented in the separately authorized existing-issue sweep, not another PR276 repair cycle. Completion reaches main with the reviewed, green batch merge.

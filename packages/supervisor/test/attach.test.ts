@@ -31,6 +31,15 @@ import {
   type Reviewer,
 } from "@agentkitai/agentrig-supervisor";
 
+/**
+ * Holds a finite fake session open until the fixture is done with it. `attach` ends the observer's
+ * lifetime on `session.done`, so a session that runs out of turns mid-intervention cancels the
+ * observer instead of letting it finish — which silently rewrites a real escalation *timeout* into
+ * a plain "detached" close. `until` is awaited at the turn the session would otherwise end on, and
+ * `done()` is asked from then on, so the fixture decides the ordering instead of a clock.
+ */
+interface SessionHold { until: Promise<void>; done: () => boolean }
+
 /** Repeats the same tool call forever, which is exactly what `loop` exists to catch. No network. */
 class LoopingProvider implements ModelProvider {
   readonly id = "fake";
@@ -38,13 +47,21 @@ class LoopingProvider implements ModelProvider {
   readonly capabilities = { tools: true, parallelTools: true, caching: false, contextWindow: 100_000 };
   readonly systems: string[] = [];
   turns = 0;
-  constructor(private readonly limit = 50) {}
+  constructor(private readonly limit = 50, private readonly hold?: SessionHold) {}
   async *stream(req: ModelRequest, _signal: AbortSignal): AsyncIterable<ModelEvent> {
     this.systems.push(JSON.stringify(req.messages));
     this.turns += 1;
     if (this.turns > this.limit) {
-      yield { type: "stop", reason: "end_turn" };
-      return;
+      if (this.hold === undefined) {
+        yield { type: "stop", reason: "end_turn" };
+        return;
+      }
+      await this.hold.until;
+      if (this.hold.done()) {
+        yield { type: "stop", reason: "end_turn" };
+        return;
+      }
+      // otherwise keep looping; the session's own `maxTurns` stays the hard ceiling
     }
     yield { type: "tool_use", id: `t${this.turns}`, name: "spin", input: { same: "input" } };
     yield { type: "usage", usage: { input: 10, output: 5 } };
@@ -455,16 +472,39 @@ describe("review regressions", () => {
     // handler hangs, withTimeout rejects, and the attach loop must map that ObserverTimeoutError
     // to "expired" — in the TUI this race (prompt timeout vs escalate timeout, both 60s) decides
     // whether a real unanswered escalation suppresses re-asks at all.
+    //
+    // Which of the 50ms timer and the 25-turn session finished first used to decide that: when the
+    // session won, `attach` aborted the observer's lifetime and the same expiry was reported as a
+    // detached close with no timeout diagnostic at all. Locally the diagnostic landed at 85ms
+    // against a session that ended at 124ms — 39ms of margin, which macOS CI lost. Nothing below
+    // waits on a clock any more. The session is held at the turn it would
+    // have ended on until the real timeout has been reported, and then until the observer has
+    // recorded a further signal — which is the "degrades the recurring signature" half of the
+    // contract. `maxTurns` stays the ceiling, so a regression fails on an assertion, not a hang.
     const errors: string[] = [];
-    const session = run(new LoopingProvider(25), 30);
+    const expired = Promise.withResolvers<void>();
+    let sawExpiry = false;
+    let degraded = false;
+    const provider = new LoopingProvider(25, { until: expired.promise, done: () => degraded });
+    const session = run(provider, 30);
     const sup = supervise(session, {
       loop: { repeats: 3 },
       ladder: { cooldownTurns: 0 },
       onEscalate: () => new Promise<never>(() => {}), // never answers
       escalateTimeoutMs: 50,
-      onError: (where, err) => errors.push(`${where}: ${err.message}`),
+      onError: (where, err) => {
+        errors.push(`${where}: ${err.message}`);
+        if (err.message.includes("did not answer within")) { sawExpiry = true; expired.resolve(); }
+      },
     });
-    const events = await drain(session);
+    // An observer that stops on its own releases the hold too, so "it never reported anything"
+    // fails on the assertions below rather than wedging this test.
+    void sup.done.then(() => expired.resolve(), () => expired.resolve());
+    const events: HarnessEvent[] = [];
+    for await (const event of session.events) {
+      events.push(event);
+      if (sawExpiry && event.type === "supervisor.signal") degraded = true;
+    }
     await sup.done;
     await session.done;
 
