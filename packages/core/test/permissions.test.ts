@@ -58,3 +58,17 @@ describe("RulePolicy", () => {
     expect(await policy.decide(req("bash", "exec"))).toBe("ask");
   });
 });
+
+// R17d preserves the R17b trusted-read defaults, rather than allowing tools by name.
+describe("R17d trusted read authority control", () => {
+  it("auto-allows declared reads inside the root without allowing exec or outside reads", async () => {
+    const policy = new RulePolicy(defaultRules);
+    for (const tool of ["read_file", "glob", "grep"]) {
+      expect(await policy.decide(req(tool, "read", ["src/file.ts"]))).toBe("allow");
+      expect(await policy.decide(req(tool, "read", ["../outside"]))).toBe("ask");
+      expect(await policy.decide(req(tool, "exec", ["src/file.ts"]))).toBe("ask");
+    }
+    const deny = new RulePolicy([{ tool: "read_file", decision: "deny" }, ...defaultRules]);
+    expect(await deny.decide(req("read_file", "read", ["src/file.ts"]))).toBe("deny");
+  });
+});

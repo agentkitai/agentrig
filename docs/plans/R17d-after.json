@@ -1,0 +1,1045 @@
+{
+  "freezeCommit": "770df83",
+  "traceSha256": "fdab4af1496bbcabb439e11e00662e22b92281a9a3d9a9bf469d04cbd62935dd",
+  "benchmarkExit": 0,
+  "tasks": [
+    {
+      "task": "A1",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "7cf5e540",
+      "grants": [
+        {
+          "id": "ed45998d-a263-4f15-a1e5-82a694162b15",
+          "subject": "b783569c-94a5-4cd2-9a2b-94cf139fb5c0",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/A1"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "7cf5e540"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873134434
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "A1",
+        "runId": "7632459c-5339-4039-a787-446e1cc4a8aa",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A1\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:12:20\n   Duration  278ms (transform 313ms, setup 28ms, import 369ms, tests 17ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A1\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:12:20\n   Duration  257ms (transform 145ms, setup 14ms, import 169ms, tests 3ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A1",
+          "runId": "7632459c-5339-4039-a787-446e1cc4a8aa",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A1"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A1"
+            ],
+            "observation": "Actual A1 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Quoted/comma/whitespace aliases round-trip through parse and serialize."
+          }
+        }
+      }
+    },
+    {
+      "task": "A2",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "7ef465c2",
+      "grants": [
+        {
+          "id": "6cd8fb3d-2ea4-4cbe-8210-30255d06cf7c",
+          "subject": "e8f7c9d5-adc8-40e1-a935-c6977ae14c00",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/A2"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "7ef465c2"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873141596
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "A2",
+        "runId": "d1886f9f-1073-40bb-bc71-788d78998b21",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A2\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:12:27\n   Duration  279ms (transform 315ms, setup 26ms, import 367ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A2\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:12:27\n   Duration  257ms (transform 147ms, setup 15ms, import 170ms, tests 2ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A2",
+          "runId": "d1886f9f-1073-40bb-bc71-788d78998b21",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A2"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A2"
+            ],
+            "observation": "Actual A2 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Stopword-only query returns no hits; duplicate retrieval paths coalesce."
+          }
+        }
+      }
+    },
+    {
+      "task": "A3",
+      "permissionPrompts": 4,
+      "turnsToDone": 7,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "4eec8157",
+      "grants": [
+        {
+          "id": "4d6f2cc0-e7ff-4d20-b84e-4999ff5dee0f",
+          "subject": "29bb9f47-09d6-4747-b172-507be5b5c47d",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/A3"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "4eec8157"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873148863
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "A3",
+        "runId": "3dd5cc59-bcaa-4489-abc2-5d8220abc81d",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A3\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:12:34\n   Duration  288ms (transform 330ms, setup 30ms, import 380ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A3\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:12:34\n   Duration  273ms (transform 162ms, setup 14ms, import 187ms, tests 2ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A3",
+          "runId": "3dd5cc59-bcaa-4489-abc2-5d8220abc81d",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A3"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A3"
+            ],
+            "observation": "Actual A3 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Empty/non-link text produces no links; reverse module dependency is rejected."
+          }
+        }
+      }
+    },
+    {
+      "task": "A4",
+      "permissionPrompts": 3,
+      "turnsToDone": 7,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "4b31a7a5",
+      "grants": [
+        {
+          "id": "2b2bd935-d98d-4205-8ad0-b5225c58dbbf",
+          "subject": "6cdd05f1-a6ba-4d49-b801-f7970e0d6248",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/A4"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "4b31a7a5"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873156222
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "A4",
+        "runId": "37ca6019-1047-49f7-8b76-ad521297fff0",
+        "outcome": "BLOCKED",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "NOT_REQUIRED",
+        "scope": "PASS",
+        "manual": "PENDING",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-hgf5Bi/A4\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:12:41\n   Duration  280ms (transform 320ms, setup 29ms, import 370ms, tests 17ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+        ],
+        "verification": {
+          "task": "A4",
+          "runId": "37ca6019-1047-49f7-8b76-ad521297fff0",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A4"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "golden",
+            "references": [
+              "eval/check.mjs:behavior:A4"
+            ],
+            "humanReview": "required",
+            "observation": "Structured A4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+          }
+        }
+      }
+    },
+    {
+      "task": "X1",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "0c1dd310",
+      "grants": [
+        {
+          "id": "7ecfb8c2-cc2e-4718-829b-c864cd0259c4",
+          "subject": "06dc6edc-c6c9-483d-99a1-a9247d3edf6e",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/X1"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "0c1dd310"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873162165
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "X1",
+        "runId": "4f1e7e46-e5de-4ac8-9678-796a15a2a3f9",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X1",
+          "runId": "4f1e7e46-e5de-4ac8-9678-796a15a2a3f9",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X1"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X1"
+            ],
+            "observation": "Actual X1 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Whitespace, nonfinite values and nonprimitive coercions are rejected."
+          }
+        }
+      }
+    },
+    {
+      "task": "X2",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "b22d4ddb",
+      "grants": [
+        {
+          "id": "a3d39522-0016-4c05-9d59-4eea43a08524",
+          "subject": "db3f809d-c332-4b32-997c-90e6dfa5a972",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/X2"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "b22d4ddb"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873162462
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "X2",
+        "runId": "ee55e6fe-97e8-45d9-ad2d-2b2c469eec73",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X2",
+          "runId": "ee55e6fe-97e8-45d9-ad2d-2b2c469eec73",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X2"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X2"
+            ],
+            "observation": "Actual X2 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Numeric strings and boxed numbers are rejected by the strict surface."
+          }
+        }
+      }
+    },
+    {
+      "task": "X3",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "c4f0affc",
+      "grants": [
+        {
+          "id": "01924ed4-30db-4685-b825-2817a72b1afb",
+          "subject": "b1f5a689-0a01-4d57-b631-3c496b92d915",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/X3"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "c4f0affc"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873162770
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "X3",
+        "runId": "e51e0f70-a7c7-48a7-b7b8-76dbf8f1c1d3",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X3",
+          "runId": "e51e0f70-a7c7-48a7-b7b8-76dbf8f1c1d3",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X3"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X3"
+            ],
+            "observation": "Actual X3 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Whitespace/nonprimitive values are classified other rather than number."
+          }
+        }
+      }
+    },
+    {
+      "task": "X4",
+      "permissionPrompts": 3,
+      "turnsToDone": 6,
+      "sessionEnd": "session.end",
+      "reason": "done",
+      "sessionId": "b18897ae",
+      "grants": [
+        {
+          "id": "fbaf5ac1-d65d-4e39-b870-5edd71b561ee",
+          "subject": "df7bc49e-53b4-492c-b72b-e7dec64c7b6a",
+          "operation": {
+            "tool": "bash",
+            "class": "exec",
+            "commandPrefix": [
+              "git",
+              "status",
+              "--short"
+            ]
+          },
+          "resource": "*",
+          "constraints": {
+            "cwd": "/tmp/r17-e1-hgf5Bi/X4"
+          },
+          "duration": {
+            "kind": "session",
+            "id": "b18897ae"
+          },
+          "delegable": true,
+          "decision": "allow",
+          "createdAt": 1788873163072
+        }
+      ],
+      "toolErrors": [],
+      "check": {
+        "task": "X4",
+        "runId": "e0f514d1-1336-4b94-837c-ebe601253d6a",
+        "outcome": "BLOCKED",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "NOT_REQUIRED",
+        "scope": "PASS",
+        "manual": "PENDING",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+        ],
+        "verification": {
+          "task": "X4",
+          "runId": "e0f514d1-1336-4b94-837c-ebe601253d6a",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X4"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "golden",
+            "references": [
+              "eval/check.mjs:behavior:X4"
+            ],
+            "humanReview": "required",
+            "observation": "Structured X4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+          }
+        }
+      }
+    }
+  ],
+  "historicalControl": {
+    "runnerSha256": "14fa46fd553e673acb2e623f10fe2590ed98b6b94c67274a9d13bf0fe7141093",
+    "exit": 0,
+    "tasks": [
+      {
+        "task": "A1",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "3a04ac30",
+        "toolErrors": [],
+        "check": {
+          "task": "A1",
+          "runId": "66d9b481-23c2-4175-bac1-271cbdf9cec7",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "Scope: 4 of 5 workspace projects\n",
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A1\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:21:17\n   Duration  288ms (transform 328ms, setup 28ms, import 383ms, tests 17ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "\n RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A1\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:21:18\n   Duration  263ms (transform 149ms, setup 14ms, import 174ms, tests 3ms, environment 0ms)\n\n"
+          ],
+          "verification": {
+            "task": "A1",
+            "runId": "66d9b481-23c2-4175-bac1-271cbdf9cec7",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:A1"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:A1"
+              ],
+              "observation": "Actual A1 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Quoted/comma/whitespace aliases round-trip through parse and serialize."
+            }
+          }
+        }
+      },
+      {
+        "task": "A2",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "d0afd547",
+        "toolErrors": [],
+        "check": {
+          "task": "A2",
+          "runId": "565b678d-5495-428d-9cd9-6764f2eb4398",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "Scope: 4 of 5 workspace projects\n",
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A2\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:21:25\n   Duration  299ms (transform 348ms, setup 27ms, import 403ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "\n RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A2\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:21:25\n   Duration  268ms (transform 154ms, setup 16ms, import 179ms, tests 2ms, environment 0ms)\n\n"
+          ],
+          "verification": {
+            "task": "A2",
+            "runId": "565b678d-5495-428d-9cd9-6764f2eb4398",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:A2"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:A2"
+              ],
+              "observation": "Actual A2 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Stopword-only query returns no hits; duplicate retrieval paths coalesce."
+            }
+          }
+        }
+      },
+      {
+        "task": "A3",
+        "permissionPrompts": 3,
+        "turnsToDone": 5,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "6d6da7a1",
+        "toolErrors": [],
+        "check": {
+          "task": "A3",
+          "runId": "3f3641df-a1e3-4d2f-8c46-5cd98f878bb3",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "Scope: 4 of 5 workspace projects\n",
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A3\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:21:32\n   Duration  290ms (transform 333ms, setup 28ms, import 384ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "\n RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A3\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:21:33\n   Duration  260ms (transform 151ms, setup 14ms, import 174ms, tests 2ms, environment 0ms)\n\n"
+          ],
+          "verification": {
+            "task": "A3",
+            "runId": "3f3641df-a1e3-4d2f-8c46-5cd98f878bb3",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:A3"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:A3"
+              ],
+              "observation": "Actual A3 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Empty/non-link text produces no links; reverse module dependency is rejected."
+            }
+          }
+        }
+      },
+      {
+        "task": "A4",
+        "permissionPrompts": 2,
+        "turnsToDone": 5,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "44de5b4e",
+        "toolErrors": [],
+        "check": {
+          "task": "A4",
+          "runId": "feb47b4a-cade-4ab9-a3f6-acd26b06e911",
+          "outcome": "BLOCKED",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "NOT_REQUIRED",
+          "scope": "PASS",
+          "manual": "PENDING",
+          "evidence": [
+            "Scope: 4 of 5 workspace projects\n",
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: RUN  v4.1.11 /tmp/r17-e1-bHOZxR/A4\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  16:21:39\n   Duration  286ms (transform 325ms, setup 29ms, import 375ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+          ],
+          "verification": {
+            "task": "A4",
+            "runId": "feb47b4a-cade-4ab9-a3f6-acd26b06e911",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:A4"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "golden",
+              "references": [
+                "eval/check.mjs:behavior:A4"
+              ],
+              "humanReview": "required",
+              "observation": "Structured A4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+            }
+          }
+        }
+      },
+      {
+        "task": "X1",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "5480f73f",
+        "toolErrors": [],
+        "check": {
+          "task": "X1",
+          "runId": "4c4aa380-ec13-4c9d-916f-00a33f1898f2",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            ""
+          ],
+          "verification": {
+            "task": "X1",
+            "runId": "4c4aa380-ec13-4c9d-916f-00a33f1898f2",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:X1"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:X1"
+              ],
+              "observation": "Actual X1 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Whitespace, nonfinite values and nonprimitive coercions are rejected."
+            }
+          }
+        }
+      },
+      {
+        "task": "X2",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "fae6c76c",
+        "toolErrors": [],
+        "check": {
+          "task": "X2",
+          "runId": "3518dc4a-0ec5-46e1-94ca-e5b44f8f8827",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            ""
+          ],
+          "verification": {
+            "task": "X2",
+            "runId": "3518dc4a-0ec5-46e1-94ca-e5b44f8f8827",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:X2"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:X2"
+              ],
+              "observation": "Actual X2 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Numeric strings and boxed numbers are rejected by the strict surface."
+            }
+          }
+        }
+      },
+      {
+        "task": "X3",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "a74f2bd1",
+        "toolErrors": [],
+        "check": {
+          "task": "X3",
+          "runId": "314d23d8-b018-49f9-8f03-7ff1710fecf1",
+          "outcome": "PASS",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "PASS",
+          "scope": "PASS",
+          "manual": "NOT_REQUIRED",
+          "evidence": [
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            ""
+          ],
+          "verification": {
+            "task": "X3",
+            "runId": "314d23d8-b018-49f9-8f03-7ff1710fecf1",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:X3"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "surface",
+              "references": [
+                "eval/check.mjs:behavior:X3"
+              ],
+              "observation": "Actual X3 task surface completed evaluator-owned assertions.",
+              "negativeProbe": "Whitespace/nonprimitive values are classified other rather than number."
+            }
+          }
+        }
+      },
+      {
+        "task": "X4",
+        "permissionPrompts": 2,
+        "turnsToDone": 4,
+        "sessionEnd": "session.end",
+        "reason": "done",
+        "sessionId": "792f25fb",
+        "toolErrors": [],
+        "check": {
+          "task": "X4",
+          "runId": "2219adff-7fd5-4d81-b2ff-2176e7668aa6",
+          "outcome": "BLOCKED",
+          "behavior": "PASS",
+          "regression": "PASS",
+          "submittedTests": "NOT_REQUIRED",
+          "scope": "PASS",
+          "manual": "PENDING",
+          "evidence": [
+            "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+            "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+          ],
+          "verification": {
+            "task": "X4",
+            "runId": "2219adff-7fd5-4d81-b2ff-2176e7668aa6",
+            "evaluator": {
+              "id": "agentrig-evalset-v1",
+              "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+            },
+            "regression": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "pinned-regression",
+              "references": [
+                "eval/check.mjs:regression:X4"
+              ],
+              "observation": "Pinned regression worker completed its assertions."
+            },
+            "behavior": {
+              "verdict": "PASS",
+              "complete": true,
+              "basis": "golden",
+              "references": [
+                "eval/check.mjs:behavior:X4"
+              ],
+              "humanReview": "required",
+              "observation": "Structured X4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+            }
+          }
+        }
+      }
+    ]
+  }
+}
