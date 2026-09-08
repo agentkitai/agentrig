@@ -220,7 +220,7 @@ async function twoInstalled() {
   const before = await inspectPackages(f.projectRoot);
   expect(before.errors).toEqual([]);
   expect(before.packages.map(pkg => pkg.name)).toEqual([early!.name, late!.name]);
-  return { f, early: early!, late: late! };
+  return { f, early: early!, late: late!, earlyBytes: before.packages[0]!.bytes, lateBytes: before.packages[1]!.bytes };
 }
 
 it("does not expose an earlier verified package when the aggregate scan exhausts its entry cap", async () => {
@@ -242,11 +242,15 @@ it("does not expose an earlier verified package when the aggregate scan exhausts
 }, 10_000);
 
 it("does not expose an earlier verified package when the aggregate scan exhausts its byte cap", async () => {
-  const { f, late } = await twoInstalled();
-  // The byte budget is charged from `lstat` before the file is opened, which is what makes it a
-  // budget rather than a post-mortem. A file the exact size of the whole default allowance is
-  // refused only because the earlier package already spent part of it, and is never read.
-  await truncate(join(late.destination, "prompts", "review.md"), PACKAGE_LIMITS.bytes);
+  const { f, late, earlyBytes, lateBytes } = await twoInstalled();
+  // The later package fits exactly on its own, including its manifest and other files. Only the
+  // earlier package's consumption pushes the combined scan over the unchanged default budget.
+  const prompt = join(late.destination, "prompts", "review.md");
+  const oldSize = (await readFile(prompt)).length;
+  const newSize = PACKAGE_LIMITS.bytes - lateBytes + oldSize;
+  expect(lateBytes - oldSize + newSize).toBe(PACKAGE_LIMITS.bytes);
+  expect(earlyBytes).toBeGreaterThan(0);
+  await truncate(prompt, newSize);
   const result = await inspectPackages(f.projectRoot);
   expect(result.packages).toEqual([]);
   expect(result.errors.join()).toContain("aggregate package discovery byte limit exceeded");

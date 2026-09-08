@@ -16,8 +16,8 @@ const roots: string[] = [];
 const sessions: Session[] = [];
 function owned(session: Session): Session { sessions.push(session); return session; }
 afterEach(async () => {
-  vi.restoreAllMocks(); vi.unstubAllEnvs();
   for (const session of sessions.splice(0)) { session.control.abort(); await session.done.catch(() => undefined); }
+  vi.restoreAllMocks(); vi.unstubAllEnvs();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 

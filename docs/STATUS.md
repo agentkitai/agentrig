@@ -82,8 +82,11 @@ directories included — and charges bytes from `lstat` before opening anything.
 defaults are now reached without the copying: two small real installs, then the later one padded
 with empty prompt directories to land exactly one entry past `PACKAGE_LIMITS.entries`, under a
 single parent that keeps every `readdir` inside the per-package guard so it is the aggregate that
-fires. A second case reaches the real `PACKAGE_LIMITS.bytes` default with one file sized at the
-whole allowance, refused only because the earlier package already spent part of it, and never read.
+fires. A second case sizes the later package's prompt so that the entire later package fits the
+real `PACKAGE_LIMITS.bytes` allowance exactly, including its other files. The earlier package's
+nonzero bytes therefore cause the shared-budget refusal before the large prompt is read.
+Independent Codex review caught that the original whole-allowance prompt already overflowed alone;
+the corrected case kills a mutant resetting the byte budget for every package (restored afterward).
 The new cases measured **597 ms and 27 ms** locally, and the 30 s override drops to 10 s and the default 5 s. Both cases
 now assert the precondition they depend on — that both packages *are* listed before the budget is
 exhausted — so "does not expose an earlier verified package" is load-bearing rather than assumed.
@@ -137,6 +140,15 @@ flake, and CI's single-worker `packages.test.ts` + `packages-runtime.test.ts` st
 configured. This claims **no hosted CI result**. Windows and macOS per-operation latency is not
 reproducible here, so no historical failure is claimed to be reproduced or root-caused; the
 checkpoint `EBUSY` strand of #244 was recovered separately by PR #269/#280 and is untouched.
+
+Operator review repair also keeps provider mocks installed until owned sessions finish teardown.
+Independent Claude session **39987907-da64-45e8-b37f-5497a2fdddd0** approved the pre-repair
+integrated head with **3491 passed / 4 skipped / 222 files**, build/typecheck green, and four
+killed/restored mutants. Codex's actual shared-byte coverage finding is corrected above.
+The attachment-startup readiness strand landed separately in **PR #283**, merge `f38b40b`,
+after green exact-head CI34256456887 and structure34256456860; its narrow independent review
+and controlled 1200ms delay evidence are on that PR. No historical runner timing is inferred.
+
 ## Outside-train END follow-up batch: compiler diagnostics #263 and #264
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work

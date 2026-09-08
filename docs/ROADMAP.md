@@ -1548,10 +1548,10 @@ need an explicit budget; neither prevents continuing other actionable entries.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
   Implemented by **Claude Code outside the train** on `fix/followups-ci-fixtures`, test files only.
-  The measured phases were the setup, not the assertions: the aggregate-cap fixture spent 3.15 s of
-  its 3.15 s installing and rescanning two thousand real files to reach the real 2000-entry default,
-  which now costs 0.60 s by spending the shared budget on entries the walk already counts, and a
-  second case reaches the real 100 MiB default in 27 ms. Both installs, both attachment fixtures and
+  The aggregate-cap fixture replaces thousands of copied files with counted empty directories to
+  reach the unchanged 2000-entry default; the first local cases measured 597ms/27ms without a
+  quantitative phase-speedup claim. The byte case now makes the later package fit 100MiB alone
+  but exceed the shared budget; a per-package-reset mutant fails. Both installs, both attachment fixtures and
   both external-expansion cases stay real, and every deadline is unchanged or lower. Owned work is
   now registered and joined before any fixture is removed, so a body that misses its deadline cannot
   leave live staging for `rm` to trip over. Separately, `packages/supervisor/test/attach.test.ts`
