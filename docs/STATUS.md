@@ -100,6 +100,60 @@ Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3481 pas
 copies. The operator changed the symlink control to a directory symlink (Windows junction),
 preserving refusal of linked skill roots, and added this CLI file to Windows CI. The portable
 fixture plus core skills and child wiring pass **60 tests** locally. Hosted results remain pending.
+
+### Repair pass over the Codex review of `46d56b1` (Claude, outside the train)
+
+Repair builder: **Claude Code, outside the train** — one bounded correction pass over the row
+above, not a new row and not a second review loop. The original build and its attribution (builder
+session **bda6d697-ff44-4f7f-ad40-d201aeb15616**) stand unchanged. No push, PR, GitHub write, new
+issue, child, auxiliary model or live call happened here, and nothing below claims a hosted CI
+result or a merge.
+
+**P1 — a refresh could activate package content a restart refuses.** Startup admits an installed
+package's skill root only after `inspectPackages` has verified that bundle's recorded digest, its
+recorded file list and the link restrictions. The rescan then re-read those same directories with
+the plain skill loader, which checks none of that: editing an installed skill after startup, or
+dropping an unrecorded one beside it, was activated by `/new` on a path where restarting the
+process refuses it. `agent-builder.ts` now revalidates before `catalogue.replace`, requiring every
+already-admitted bundle to still be present with an identical signature (name, version, directory,
+skill roots, extensions, file count, bytes). A mismatch throws before anything is swapped, so the
+previous generation stays in force and the refusal is printed like any other refused rescan. A
+package installed or replaced since startup is deliberately **not** picked up: which roots a
+session reads is a configuration-time trust decision, and a refresh does not make new ones.
+
+**P2 — coverage corrections.** The configured-roots test started with no skills at all, so
+`refreshSkills` was `undefined` and its `/new` refreshed nothing — it could not have caught a
+refresh that discovered an unconfigured root. It now starts with a configured skill, changes that
+body, and requires the same `/new` to pick the change up while an unconfigured `.agentrig/skills`
+root stays out of completion, `/skills` and the composed turn. A new deferred-rescan control holds
+the real refresh open mid-flight and pins the promised contract: a prompt submitted while the scan
+runs starts no model request, another slash command is refused, `/abort` does not tear the scan in
+half, `shutdown()` does not return until it settles, and completion names agree with the settled
+generation afterwards. That is a contract guard, not a reproduced race. The add/delete/rename test
+now asserts completion as well as the loader.
+
+The zero-startup-skills restart limitation is unchanged and is **not** reclassified. #267 and its
+operator comment describe an already-loaded skill going stale after a repository change; no
+tool-advertisement feature was invented in this repair, and nothing here claims a first-ever skill
+activates dynamically.
+
+Fail-first: with the P1 source change reverted, the new tamper regression fails on the actual
+defect — `/new` printed `skills reloaded: updated deploy, audit`, having activated the tampered
+package body. The file's five other tests pass with and without that change, which is what a
+contract guard should do. Three mutants, each run to process exit before its bytes were restored:
+collapsing the package signature to the name alone (the uninstall-and-replace case fails);
+revalidating after `catalogue.replace` rather than before (the tamper case fails, the generation
+having already moved); and dropping `startupAbort` from `isIdle()` (the deferred-rescan control
+fails, a turn starting mid-scan). `git status` after restoration shows only the two intended files
+modified.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck`, run separately with real exits, are
+**0/0/0** with **3497 passed / 4 skipped** in **223** files under a private
+`TMPDIR=/tmp/agentrig-claude-skill-repair.hCsyJE/tmpdir` outside the repository. The operator's
+Windows-portable junction control and the Windows coverage entry for this file are preserved; the
+new package regression uses the `addPackage`/`inspectPackages` path Windows CI already exercises
+in its own single-worker step. Hosted CI, independent review and the merge remain the operator's.
+
 ## Outside-train END follow-up batch: compiler diagnostics #263 and #264
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work

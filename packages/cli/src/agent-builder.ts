@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import type { TuiSettings } from "./tui/settings.js";
-import { inspectPackages } from "./packages.js";
+import { inspectPackages, type InstalledPackage } from "./packages.js";
 import { providerSelectionControl, validateProviderSelectionTable, type ProviderSelectionControl } from "./provider-selection.js";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -316,9 +316,11 @@ export interface BuiltAgent {
   /**
    * Rescans the configured roots and installs the result as one generation (issue #267), so a
    * fresh conversation, the model's `skill` tool, the system-prompt listing and the next children
-   * all move together. Present only when this session already has a skill surface: with no skills
-   * at startup there is no `skill` tool and no catalogue block, and conjuring either mid-process
-   * would change the tool list the model was advertised, so a first skill still needs a restart.
+   * all move together. Installed-package roots are re-inspected first, so a refresh can never
+   * admit bundle content a restart would refuse. Present only when this session already has a
+   * skill surface: with no skills at startup there is no `skill` tool and no catalogue block, and
+   * conjuring either mid-process would change the tool list the model was advertised, so a first
+   * skill still needs a restart.
    */
   refreshSkills?: () => Promise<SkillCatalogUpdate>;
   commands?: Array<ExtensionCommand & { extension: string }>;
@@ -716,6 +718,31 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
         rootPrecedence,
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
+  // The package roots above are in `skillRoots` only because `inspectPackages` had just verified
+  // each bundle's recorded digest, file list and link restrictions. A rescan reads those same
+  // directories with the plain skill loader, which knows none of that — so without repeating the
+  // inspection, editing an installed skill (or dropping an unrecorded one beside it) after startup
+  // would be activated by `/new` on a path where restarting the process refuses it.
+  //
+  // Re-inspection must still admit exactly these bundles, byte for byte. A package installed or
+  // replaced since startup is deliberately NOT picked up: which roots this session reads is a
+  // configuration-time trust decision, and a refresh is not the place to make a new one.
+  const admittedPackages = packageRoots.length === 0
+    ? []
+    : installed.packages.filter(pkg => pkg.skills.some(path => packageRoots.includes(path)));
+  const packageSignature = (pkg: InstalledPackage): string =>
+    JSON.stringify([pkg.name, pkg.version, pkg.directory, pkg.skills, pkg.extensions, pkg.files, pkg.bytes]);
+  const revalidatePackages = async (): Promise<void> => {
+    const trusted = opts.trustedProjectRoot;
+    if (admittedPackages.length === 0 || trusted === undefined) return;
+    const current = await inspectPackages(trusted);
+    const signatures = new Set(current.packages.map(packageSignature));
+    for (const pkg of admittedPackages) {
+      if (!signatures.has(packageSignature(pkg))) {
+        throw new Error(`installed package ${pkg.name} no longer passes its integrity check; restart to re-admit it`);
+      }
+    }
+  };
   const catalogue = new SkillCatalog(await scanSkills(), mcpSkills);
   const skills = [...catalogue.current().skills];
 
@@ -800,7 +827,12 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
   // A refused scan throws out of `replace` with the catalogue untouched, so the caller reports a
   // failure over a session that is still whole rather than one half-moved to a new generation.
-  const refreshSkills = skills.length === 0 ? undefined : async (): Promise<SkillCatalogUpdate> => catalogue.replace(await scanSkills());
+  // Package integrity is revalidated BEFORE the scan, for the same reason: a refusal has to happen
+  // while the previous generation is still the only one anybody has seen.
+  const refreshSkills = skills.length === 0 ? undefined : async (): Promise<SkillCatalogUpdate> => {
+    await revalidatePackages();
+    return catalogue.replace(await scanSkills());
+  };
   return { agent, selection: selection.control, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, get provider() { return selection.resolve().provider; }, providers, tools, skills, ...(refreshSkills === undefined ? {} : { refreshSkills }), commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }

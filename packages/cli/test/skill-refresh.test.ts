@@ -1,9 +1,11 @@
 import { mkdir, mkdtemp, realpath, rm, rename, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ModelEvent, ModelProvider, ModelRequest } from "@agentkitai/agentrig-core";
-import type { TuiController } from "../src/tui/controller.js";
+import { TuiController } from "../src/tui/controller.js";
+import { addPackage } from "../src/packages.js";
 
 /**
  * Issue #267: the skill catalogue was read once, at startup. An edited `SKILL.md` therefore kept
@@ -37,7 +39,7 @@ vi.mock("../src/provider.ts", async importOriginal => {
   return { ...actual, buildProviders: () => ({ main: provider, memory: provider, supervisor: provider, subagents: provider,
     names: ["fixture"], roleNames: { main: "fixture", memory: "fixture", supervisor: "fixture", subagents: "fixture" }, get: () => provider }) };
 });
-import { startTui } from "../src/tui/start.js";
+import { startTui, type TuiOptions } from "../src/tui/start.js";
 
 const roots: string[] = [];
 const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
@@ -56,12 +58,36 @@ async function fixture(): Promise<{ root: string; skills: string }> {
   return { root, skills };
 }
 
+/**
+ * Installs a real package bundle into the fixture project, the same way `agentrig package add`
+ * does: the install record `inspectPackages` checks at startup is written by the actual installer,
+ * not by the test.
+ */
+async function installPackage(root: string, options: { body: string; version?: string }): Promise<string> {
+  const source = await mkdtemp(join(root, "bundle-"));
+  await writeFile(join(source, "package.json"),
+    JSON.stringify({ name: "fixture", version: options.version ?? "1", agentrig: { apiVersion: 1 } }), "utf8");
+  await mkdir(join(source, "skills"));
+  await writeFile(join(source, "skills", "audit.md"), `---\nname: audit\ndescription: package audit\n---\n${options.body}`, "utf8");
+  const installed = await addPackage({ projectRoot: root, source });
+  await rm(source, { recursive: true, force: true });
+  return installed.destination;
+}
+
 /** Runs the real startup, then the caller's script against the controller it mounted. */
-async function session(f: { root: string; skills?: string }, exercise: (controller: TuiController) => Promise<void>): Promise<void> {
+async function session(f: { root: string; skills?: string }, exercise: (controller: TuiController) => Promise<void>,
+  overrides: Partial<TuiOptions> = {}): Promise<void> {
   harness.exercise = exercise;
   await startTui({ root: join(f.root, "logs"), provider: "fixture", model: "fixture", repoMap: false,
     maxTurns: "5", maxTokensPerTurn: "1000", skillDiscovery: false, packages: false, allow: ["skill"],
-    ...(f.skills === undefined ? {} : { skills: [f.skills] }) });
+    ...(f.skills === undefined ? {} : { skills: [f.skills] }), ...overrides });
+}
+
+/** A promise the test settles by hand, so a rescan can be observed while it is still in flight. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
 }
 
 const text = (controller: TuiController): string => controller.snapshot().lines.map(line => line.text).join("\n");
@@ -130,6 +156,14 @@ it("add, delete and rename take effect together, and the loader's guards still a
     const reloaded = text(controller);
     expect(reloaded).toContain("added inspect, release");
     expect(reloaded).toContain("removed deploy, stale");
+    // completion is one of the four consumers, and it is the one nothing else in this file would
+    // notice: a rename that reached the loader but not the completion list still offers /deploy
+    const names = controller.completionCandidates();
+    expect(names).toContainEqual({ name: "inspect", kind: "skill" });
+    expect(names).toContainEqual({ name: "release", kind: "skill" });
+    expect(names.map(candidate => candidate.name)).not.toContain("deploy");
+    expect(names.map(candidate => candidate.name)).not.toContain("stale");
+    expect(names.map(candidate => candidate.name)).not.toContain("linked");
 
     await controller.submit("/inspect it");
     expect(newest(0)).toContain("INSPECT BODY");
@@ -162,15 +196,138 @@ it("a refused rescan is reported and leaves the loaded catalogue in force", asyn
 
 it("a rescan reaches only the roots this session was configured with", async () => {
   // an untrusted project contributes no skill root at all (config resolution, issue #61), and a
-  // refresh must not become a second discovery that finds one
+  // refresh must not become a second discovery that finds one. The session starts WITH a
+  // configured skill on purpose: a refresh that never runs would pass this by doing nothing, so
+  // the same `/new` has to be seen picking the configured edit up while leaving the other root
+  // alone.
   const f = await fixture();
-  await session({ root: f.root }, async controller => {
+  await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nCONFIGURED OLD", "utf8");
+  await session(f, async controller => {
     await mkdir(join(f.root, ".agentrig", "skills"), { recursive: true });
-    await writeFile(join(f.root, ".agentrig", "skills", "deploy.md"), "---\ndescription: d\n---\nUNCONFIGURED BODY", "utf8");
+    await writeFile(join(f.root, ".agentrig", "skills", "unconfigured.md"), "---\ndescription: u\n---\nUNCONFIGURED BODY", "utf8");
+    await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nCONFIGURED NEW", "utf8");
+
     await controller.submit("/new");
-    expect(text(controller)).not.toContain("skills reloaded");
+    expect(text(controller)).toContain("skills reloaded: updated deploy");
+    expect(controller.completionCandidates().map(candidate => candidate.name)).not.toContain("unconfigured");
     await controller.submit("/skills");
-    expect(text(controller)).toContain("no skills loaded");
+    const printed = text(controller);
+    expect(printed).toContain("/deploy");
+    expect(printed).not.toContain("/unconfigured");
+
+    await controller.submit("/deploy it");
+    expect(newest(0)).toContain("CONFIGURED NEW");
+    expect(newest(0)).not.toContain("UNCONFIGURED BODY");
+    await controller.submit("/unconfigured it");
+    expect(text(controller)).toContain("unknown command /unconfigured");
+    expect(requests).toHaveLength(1);
     await controller.shutdown();
+  });
+});
+
+it("an installed package edited after startup is refused, and the whole generation stays put", async () => {
+  const f = await fixture();
+  await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nOLD BODY", "utf8");
+  const installed = await installPackage(f.root, { body: "PACKAGE BODY" });
+  const record = join(installed, "skills", "audit.md");
+  const recorded = "---\nname: audit\ndescription: package audit\n---\nPACKAGE BODY";
+  await session(f, async controller => {
+    await controller.submit("/audit it");
+    expect(newest(0)).toContain("PACKAGE BODY");
+
+    // exactly what a restart refuses: the installed bytes no longer match the install record
+    await writeFile(record, "---\nname: audit\ndescription: package audit\n---\nTAMPERED BODY", "utf8");
+    await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nNEW BODY", "utf8");
+    await controller.submit("/new");
+    let printed = text(controller);
+    expect(printed).toContain("skill catalogue refresh failed: installed package fixture no longer passes its integrity check");
+    expect(printed).not.toContain("skills reloaded");
+
+    // all-or-nothing: neither the tampered package body nor the legitimate configured-root edit
+    // landed, because the refusal happened before anything was swapped
+    await controller.submit("/audit it");
+    expect(newest(1)).toContain("PACKAGE BODY");
+    expect(newest(1)).not.toContain("TAMPERED BODY");
+    await controller.submit("/deploy it");
+    expect(newest(2)).toContain("OLD BODY");
+    expect(newest(2)).not.toContain("NEW BODY");
+
+    // the positive control: restoring the recorded bytes makes the very same `/new` succeed, so
+    // the guard is a check and not a blanket refusal of every refresh in a packaged project
+    await writeFile(record, recorded, "utf8");
+    await controller.submit("/new");
+    expect(text(controller)).toContain("skills reloaded: updated deploy");
+    await controller.submit("/deploy it");
+    expect(newest(3)).toContain("NEW BODY");
+    await controller.submit("/audit it");
+    expect(newest(4)).toContain("PACKAGE BODY");
+
+    // an unrecorded file dropped beside a recorded one is the other half of the same hole: the
+    // plain skill loader would happily read it, the install record does not list it
+    await writeFile(join(installed, "skills", "extra.md"), "---\nname: extra\ndescription: e\n---\nEXTRA BODY", "utf8");
+    await controller.submit("/new");
+    expect(text(controller)).toContain("skill catalogue refresh failed: installed package fixture");
+    await controller.submit("/extra it");
+    expect(text(controller)).toContain("unknown command /extra");
+    await rm(join(installed, "skills", "extra.md"));
+
+    // and a package uninstalled and replaced under the same name is new content, not the bundle
+    // this session was admitted with — a refresh is not where that trust decision gets remade
+    await rm(installed, { recursive: true, force: true });
+    await installPackage(f.root, { body: "REPLACEMENT BODY", version: "2" });
+    await controller.submit("/new");
+    printed = text(controller);
+    expect(printed).toContain("skill catalogue refresh failed: installed package fixture");
+    await controller.submit("/audit it");
+    expect(newest(5)).toContain("PACKAGE BODY");
+    expect(newest(5)).not.toContain("REPLACEMENT BODY");
+    expect(requests).toHaveLength(6);
+    await controller.shutdown();
+  }, { packages: true, skillDiscovery: true, trustedProjectRoot: f.root });
+});
+
+it("a rescan in flight defers other work, is joined by shutdown, and settles as one generation", async () => {
+  const f = await fixture();
+  await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nOLD BODY", "utf8");
+  const gate = deferred(); const entered = deferred();
+  // The real refresh, held open — not a stand-in. Wrapping what `startTui` installs keeps the
+  // catalogue, the `skill` tool and the slash surface the production ones, so what settles at the
+  // end is a real generation rather than something the test made up.
+  const install = TuiController.prototype.setSkillRefresh;
+  vi.spyOn(TuiController.prototype, "setSkillRefresh").mockImplementation(function (this: TuiController, refresh) {
+    install.call(this, async () => { entered.resolve(); await gate.promise; return refresh(); });
+  });
+  await session(f, async controller => {
+    await controller.submit("/deploy now");
+    expect(newest(0)).toContain("OLD BODY");
+    await rename(join(f.skills, "deploy.md"), join(f.skills, "release.md"));
+
+    const refreshing = controller.submit("/new");
+    await entered.promise;
+
+    // a prompt submitted while the scan runs must not start a turn: it would compose from one
+    // generation and call tools built from another
+    await controller.submit("do work now");
+    expect(text(controller)).toContain("a turn is already running");
+    await controller.submit("/skills");
+    expect(text(controller)).toContain("maintenance or provider selection is running");
+    expect(requests).toHaveLength(1);
+    // nothing is half-applied while it is in flight, either
+    expect(controller.completionCandidates().map(candidate => candidate.name)).toContain("deploy");
+    expect(controller.completionCandidates().map(candidate => candidate.name)).not.toContain("release");
+
+    // `/abort` does not tear the scan in half, and shutdown does not return before it settles
+    controller.abort();
+    expect(text(controller)).toContain("cancelling conversation startup");
+    const closing = controller.shutdown();
+    expect(await Promise.race([closing.then(() => "closed"), delay(50, "pending")])).toBe("pending");
+    gate.resolve();
+    await closing; await refreshing;
+
+    expect(text(controller)).toContain("skills reloaded: added release; removed deploy");
+    const names = controller.completionCandidates().map(candidate => candidate.name);
+    expect(names).toContain("release");
+    expect(names).not.toContain("deploy");
+    expect(requests).toHaveLength(1);
   });
 });
