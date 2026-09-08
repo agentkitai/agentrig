@@ -1,5 +1,16 @@
 # Status
 
+PR #285 first-head CI34259124799 failed the new workspace-output assertion on all platforms:
+the child passed its two tests, but ANSI formatting interrupted the human-summary regex.
+Windows also exposed an 8.3-versus-canonical physical-path expectation in the junction control.
+Operator repair uses the real child's JSON reporter (success, exactly2passed/0failed, one exact
+file) under color-on/off settings, and compares physical ancestry against `realpath` on Windows.
+The JSON assertion fails with the old verbose reporter and passes with JSON; no count/file check,
+product behavior or deadline is weakened. The earlier local color attempt did not reproduce
+colored output in this shell and is not claimed as fail-first evidence. Hosted logs establish
+the ANSI failure; this repair avoids parsing presentation entirely. Both changed files pass13
+focused tests. Predecessor284 postmerge34258920447/34258920455 is allgreen.
+
 Existing-issue delivery checkpoint: **PR #283** merged at`f38b40b`, closed#249, with exact-head
 CI34256456887/structure34256456860 and postmerge34257770832/34257770852 allgreen. **PR #284**
 merged at`4916cf1`, closed#240, exact-headCI34258136965/structure34258137005 allgreen;

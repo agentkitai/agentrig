@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, rm, readFile, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,6 +108,6 @@ it("checks physical ancestry when the effective temporary directory is a symlink
       { env: { ...process.env, TMPDIR: alias, TEMP: alias, TMP: alias }, timeout: 60_000 },
     ).then(() => undefined, (error: { code: number; stderr: string }) => error);
     expect(failure?.code).toBe(1);
-    expect(failure?.stderr).toContain(join(physical, ".git"));
+    expect(failure?.stderr).toContain(join(await realpath(physical), ".git"));
   } finally { await rm(base, { recursive: true, force: true }); }
 }, 70_000);
