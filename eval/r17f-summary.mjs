@@ -4,6 +4,8 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { summarize, spread } from './summarize-live.mjs';
 
+export const PRIMARY_TASKS = ['A1', 'A2', 'A3', 'X1', 'X2', 'X3'];
+
 export function summarizeR17f(results, checks = {}) {
   const all = summarize(results); // validates identities, duplicate slots and numeric bounds
   const byOrdinal = new Map(results.completed.map(row => [Number(row.key.slice(0, 3)), row]));
@@ -18,14 +20,16 @@ export function summarizeR17f(results, checks = {}) {
   const comparisons = [];
   for (const factor of ['supervisor', 'memory']) for (const otherOn of [false, true]) {
     const other = factor === 'supervisor' ? 'memory' : 'supervisor';
-    const off = balanced.filter(row => !row[factor] && row[other] === otherOn);
-    const on = balanced.filter(row => row[factor] && row[other] === otherOn);
+    const allOff = balanced.filter(row => !row[factor] && row[other] === otherOn);
+    const allOn = balanced.filter(row => row[factor] && row[other] === otherOn);
+    const off = allOff.filter(row => PRIMARY_TASKS.includes(row.task));
+    const on = allOn.filter(row => PRIMARY_TASKS.includes(row.task));
     const delta = on.filter(row => row.outcome === 'PASS').length - off.filter(row => row.outcome === 'PASS').length;
     const tokens = ratio(on, off, 'reportedTokens'), latency = ratio(on, off, 'wallMs');
-    const lanesKnown = [...on, ...off].every(row => ['regression', 'scope'].every(lane =>
+    const lanesKnown = [...allOn, ...allOff].every(row => ['regression', 'scope'].every(lane =>
       checks[row.key]?.[lane] === 'PASS' || checks[row.key]?.[lane] === 'FAIL'));
-    const newFailures = on.some(row => {
-      const paired = off.find(base => base.task === row.task && base.repeat === row.repeat);
+    const newFailures = allOn.some(row => {
+      const paired = allOff.find(base => base.task === row.task && base.repeat === row.repeat);
       return ['regression', 'scope'].some(lane => checks[row.key]?.[lane] === 'FAIL'
         && checks[paired?.key]?.[lane] !== 'FAIL');
     });
@@ -36,9 +40,11 @@ export function summarizeR17f(results, checks = {}) {
         && results.ledger.unknownCalls === 0 && tokens !== null && tokens <= 1.25 && latency !== null && latency <= 1.25 });
   }
   return { all, balancedCount, balancedRounds: balancedCount / 32, partialRerun: balancedCount !== 96,
+    primaryTasks: PRIMARY_TASKS,
+    proseObservations: balanced.filter(row => !PRIMARY_TASKS.includes(row.task)),
     partialObservations: results.completed.filter(row => Number(row.key.slice(0, 3)) > balancedCount),
     balancedGroups: summarize({ ...results, completed: balanced }).groups, comparisons,
-    interpretation: 'Numerical thresholds alone do not prove benefit. Report interactions, actual intervention/retrieval use and the frozen E3 limitations; unknown or pending evidence cannot establish a win.' };
+    interpretation: 'Primary utility compares the six automatically decidable tasks only. A4/X4 prose gates remain separate and unmodified; their independent regression/scope failures still veto a win. Numerical thresholds do not prove general benefit or replace missing prose assessments. Report interactions, actual intervention/retrieval use and frozen E3 limitations.' };
 }
 
 export async function readR17fSummary(root) {

@@ -25,7 +25,11 @@ export class R17fBudget extends EvaluationBudget {
   record(event) {
     const next = this.writes.then(() => appendFile(join(this.output, 'progress.jsonl'),
       `${JSON.stringify({ at: Date.now(), ...event })}\n`));
-    this.writes = next;
+    // The caller sees the failure and scheduling stays stopped, but joining the
+    // journal must not prevent best-effort results/calls publication in finally.
+    this.writes = next.catch(() => {
+      this.stopped ??= 'evaluation stopped: progress journal write failed';
+    });
     return next;
   }
 

@@ -47,6 +47,15 @@ answers/diffs, separate session timing and balanced-prefix analysis. Two additio
 mutants fail as expected and are restored. Docker positive/negative/isolation controls pass
 without models. One Claude and one Codex independent review follow; no live E3 tokens spent yet.
 
+Both independent general reviews are complete. Their four substantive findings were grouped
+and repaired: failed cleanliness verification, wedged permission preview, poisoned progress
+journal/finalization, and an impossible numerical gate caused by mandatory pending prose checks.
+Before collection, primary utility is explicitly the six automatically decidable tasks, while
+all96attempts still run and every task retains its original checks; A4/X4 remain separately
+reported. Build/typecheck/full suite now pass **3591 / 4 skipped / 231 files**;22focused cases
+cover these boundaries and selected LLM-arm accounting. A single focused delta check remains
+before spending. [Review record](reviews/R17f-PREPARATION.md). Live E3 tokens remain0.
+
 ## Previous — R17e: visible supervisor and memory (2026-09-08)
 
 Correction to the record below, which was written while #267 was still open and is now stale as a

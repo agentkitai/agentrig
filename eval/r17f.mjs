@@ -12,6 +12,7 @@ import { loadRunConfig } from '../packages/cli/dist/config.js';
 import { buildPermissionPolicy } from '../packages/cli/dist/run.js';
 import { R17fBudget } from './r17f-budget.mjs';
 import { captureEvidence } from './r17f-evidence.mjs';
+import { PRIMARY_TASKS } from './r17f-summary.mjs';
 import { evaluationTransport, prepareEvaluationWorkspace, verifyEvaluationSource } from '../packages/cli/dist/evaluation-transport.js';
 import { prepareEvaluationDependencies } from '../packages/cli/dist/evaluation-preparation.js';
 import { evaluationMemory } from '../packages/cli/dist/evaluation-memory.js';
@@ -85,11 +86,11 @@ export function bounded(provider, timeoutMs = REQUEST_TIMEOUT_MS) {
  * default scoped grant, otherwise allow once. Never allow-all, never a standing tool answer.
  * Serialized so a parallel tool batch cannot answer another request's open prompt.
  */
-export function presetApprovals(controller, grants) {
+export function presetApprovals(controller, grants, signal) {
   const prompts = [];
   let queue = Promise.resolve();
   const ask = async (req, context) => {
-    const answer = controller.ask(req, context);
+    const answer = controller.ask(req, context, signal);
     const pending = controller.snapshot().pending;
     const mine = pending !== null && pending.req === req;
     let offered = false;
@@ -97,7 +98,10 @@ export function presetApprovals(controller, grants) {
       controller.startDefaultPermissionScope();
       offered = controller.snapshot().pending?.scope?.preview === true;
       if (offered) controller.confirmPermissionScope();
-      else controller.answerPermission('allow');
+      else {
+        controller.cancelPermissionScope();
+        controller.answerPermission('allow');
+      }
     }
     const decision = await answer;
     prompts.push({ tool: req.tool, class: req.class, origin: req.origin ?? null,
@@ -141,7 +145,8 @@ export async function run(settings, dependencies = {}) {
   try {
     const revision = await transport.command('git', ['rev-parse', 'HEAD'], { cwd: repo, timeout: 10_000 });
     const dirty = await transport.command('git', ['status', '--porcelain'], { cwd: repo, timeout: 10_000 });
-    if (revision.code !== 0 || !/^[a-f0-9]{40}$/.test(revision.stdout.trim())) throw new Error('cannot identify the frozen evaluator revision');
+    if (revision.code !== 0 || revision.infrastructure || !/^[a-f0-9]{40}$/.test(revision.stdout.trim())) throw new Error('cannot identify the frozen evaluator revision');
+    if (dirty.code !== 0 || dirty.infrastructure) throw new Error('cannot verify the frozen evaluator is clean');
     if (dirty.stdout.trim() !== '') throw new Error('commit the frozen R17f evaluator before live runs');
     const home = join(output, 'config-home'), profileCwd = join(output, 'config-cwd');
     await mkdir(home); await mkdir(profileCwd);
@@ -170,6 +175,11 @@ export async function run(settings, dependencies = {}) {
         note: 'Reported-token scheduling caps. An in-flight backend response can overshoot them; this is not a remote billing guarantee.' },
       schedule: { planned: slots.length, of: all.length, slots, rounds: settings.rounds, balancedBlock: 32,
         order: 'E3 Latin square, fixed before results; no outcome-driven retries or reordering' },
+      analysis: { primaryTasks: PRIMARY_TASKS, primaryPairsPerComparisonAtFullMatrix: 18,
+        minimumAdditionalPasses: 2, maximumMedianTokenRatio: 1.25, maximumMedianSessionLatencyRatio: 1.25,
+        regressionAndScopeVeto: 'all eight tasks, including prose tasks',
+        proseTasks: ['A4', 'X4'], proseAssessment: 'separate unmodified automatic outcomes; no invented human judgment',
+        partial: 'largest complete 32-slot prefix; retain every partial-block observation separately' },
       controls: ['shell-only task tools plus update_plan, and memory_search/memory_read when memory is on',
         'frozen retrieval only: no held-out ingest, dream, learning or corpus edit',
         'no subagents, MCP, external memory backend or compaction',
@@ -212,7 +222,8 @@ export async function run(settings, dependencies = {}) {
       grants.beginSession(receipt.runId);
       const controller = new TuiController({ cwd: receipt.workspace, permissionGrants: grants,
         build: () => { throw new Error('the R17f evaluator never submits TUI tasks'); } });
-      const approvals = presetApprovals(controller, grants);
+      const approvals = presetApprovals(controller, grants,
+        AbortSignal.any([ledger.controller.signal, AbortSignal.timeout(HANG_GUARD_MS)]));
       const permissions = buildPermissionPolicy({ extra: memory === undefined ? []
         : [{ tool: 'memory_search', decision: 'allow' }, { tool: 'memory_read', decision: 'allow' }] });
       const transcript = transcriber(), guidance = new GuidanceLog();
@@ -258,14 +269,14 @@ export async function run(settings, dependencies = {}) {
     blocked = error.message;
     console.error(`BLOCKED ${blocked}`);
   } finally {
-    await ledger.writes;
-    // Same shape `eval/summarize-live.mjs` already reads, so the existing balanced-subset summary
-    // and its not-run accounting apply unchanged.
-    await saveEvaluationArtifact(join(output, 'results.json'), {
-      ledger: { startedAt: ledger.startedAt, tokens: ledger.tokens, unknownCalls: ledger.unknownCalls, blocked },
-      planned: schedule().length, completed });
-    await saveEvaluationArtifact(join(output, 'calls.json'), ledger.calls);
-    ledger.close();
+    try {
+      await ledger.writes;
+      // Preserve the E3-compatible all-slot record; R17f's primary subset is derived separately.
+      await saveEvaluationArtifact(join(output, 'results.json'), {
+        ledger: { startedAt: ledger.startedAt, tokens: ledger.tokens, unknownCalls: ledger.unknownCalls, blocked },
+        planned: schedule().length, completed });
+      await saveEvaluationArtifact(join(output, 'calls.json'), ledger.calls);
+    } finally { ledger.close(); }
     if (blocked !== null) process.exitCode = 2;
   }
   return { completed, blocked, tokens: ledger.tokens, unknownCalls: ledger.unknownCalls };

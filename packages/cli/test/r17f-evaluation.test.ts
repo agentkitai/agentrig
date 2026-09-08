@@ -1,9 +1,9 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, realpath, rm, readFile, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, readFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PermissionGrantRegistry, type ModelProvider, type PermissionRequest } from "@agentkitai/agentrig-core";
+import { PermissionGrantRegistry, describeShellOperation, type ModelProvider, type PermissionRequest } from "@agentkitai/agentrig-core";
 import { TuiController } from "../src/tui/controller.js";
 import { evaluationTransport, type EvaluationTransport } from "../src/evaluation-transport.js";
 
@@ -21,7 +21,7 @@ const runner = await import(new URL("../../../eval/r17f.mjs", import.meta.url).h
   measuredProfile(cwd: string, home: string, load?: unknown): Promise<Record<string, unknown>>;
   armProfile(profile: object, arm: string): { profile: Record<string, unknown>; overrides: Record<string, unknown> };
   bounded(provider: ModelProvider, timeoutMs?: number): ModelProvider;
-  presetApprovals(controller: TuiController, grants: PermissionGrantRegistry): {
+  presetApprovals(controller: TuiController, grants: PermissionGrantRegistry, signal?: AbortSignal): {
     prompts: Array<Record<string, unknown>>;
     ask(req: PermissionRequest, context?: unknown): Promise<"allow" | "deny">;
   };
@@ -228,6 +228,33 @@ it("bounds every provider request and stops the batch on unknown usage", async (
   expect(runner.HANG_GUARD_MS).toBe(5 * 60_000 + 90_000);
 });
 
+it("allows once when a parsed command is too large for a scoped-grant preview", async () => {
+  const cwd = await temp("agentrig-r17f-preview-"), grants = new PermissionGrantRegistry();
+  grants.beginSession("preview-fixture");
+  const controller = new TuiController({ cwd, permissionGrants: grants, build: () => { throw new Error("unused"); } });
+  const command = Array(128).fill("x".repeat(127)).join(" ");
+  const operation = describeShellOperation(command, "/bin/sh");
+  expect(operation.status).toBe("parsed");
+  const answer = runner.presetApprovals(controller, grants).ask({ tool: "bash", class: "exec", cwd,
+    input: { command }, operation });
+  const result = await Promise.race([answer, new Promise(resolve => setTimeout(() => resolve("wedged"), 100))]);
+  controller.cancelPermissionScope(); controller.answerPermission("deny");
+  expect(result).toBe("allow");
+  expect(grants.list()).toHaveLength(0);
+});
+
+it("passes the measurement abort signal into permission prompts", async () => {
+  const cwd = await temp("agentrig-r17f-abort-"), grants = new PermissionGrantRegistry();
+  grants.beginSession("aborted-fixture");
+  const controller = new TuiController({ cwd, permissionGrants: grants, build: () => { throw new Error("unused"); } });
+  const signal = AbortSignal.abort();
+  const result = await runner.presetApprovals(controller, grants, signal).ask({ tool: "bash", class: "exec", cwd,
+    input: { command: "git status" }, operation: describeShellOperation("git status", "/bin/sh") });
+  expect(result).toBe("deny");
+  expect(controller.snapshot().pending).toBeNull();
+  expect(grants.list()).toHaveLength(0);
+});
+
 it("runs the preregistered slots on a fake provider with real defaults, permissions and R17e lines", async () => {
   const { root, transport, settings: input } = await prepared();
   // Slots 17-20 are X1's four configurations in repetition one, in their frozen order.
@@ -335,8 +362,8 @@ it("refuses an uncommitted evaluator, an unfrozen corpus and a reused evidence r
   await expect(runner.run({ ...input, output: join(root, "dirty") }, { transport, slots: [] })).rejects.toThrow(/EEXIST/);
 }, 120_000);
 
-it("puts R17e's supervisor lines and /why into the evidence, or records that nothing was noticed", async () => {
-  const { root, transport, settings: input } = await prepared();
+it.each(["heuristics", "heuristics+llm"])("puts R17e supervisor lines and /why into the evidence with %s", async arm => {
+  const { root, transport, settings: input } = await prepared({ arm });
   // Slot 19 is X1 supervisor-on, memory-off in repetition one.
   const result = await runner.run(input, { transport, slots: [18], provider: () => idling(12) });
   expect(result.blocked).toBeNull();
@@ -355,6 +382,10 @@ it("puts R17e's supervisor lines and /why into the evidence, or records that not
   const why = JSON.parse(await readFile(join(directory, "why.json"), "utf8"));
   expect(why.rendered).toMatch(/supervisor|guidance|turn/i);
   expect(why.authority).toMatch(/not a provider call/);
+  const auxiliary = JSON.parse(await readFile(join(directory, "auxiliary.json"), "utf8"));
+  expect(auxiliary.supervisorReportsUnpaired).toBeUndefined();
+  if (arm === "heuristics+llm") expect(auxiliary.snapshots.length).toBeGreaterThan(0);
+  else expect(auxiliary.snapshots).toHaveLength(0);
 }, 180_000);
 
 it("stops the matrix if the frozen corpus changes between attempts, keeping the attempts already collected", async () => {
@@ -371,3 +402,39 @@ it("stops the matrix if the frozen corpus changes between attempts, keeping the 
   expect(result.blocked).toMatch(/digest mismatch/);
   expect(result.completed).toHaveLength(1);
 }, 180_000);
+
+it("refuses a failed cleanliness check even when its stdout is empty", async () => {
+  const { root, transport, settings: input } = await prepared();
+  for (const [index, failure] of [{ code: 128, infrastructure: false }, { code: 0, infrastructure: true }].entries()) {
+    let preflight = false;
+    const failing: EvaluationTransport = { ...transport,
+      preflight: async () => { preflight = true; },
+      async command(program, args, options) {
+        if (program === "git" && options?.cwd === repo && args[0] === "status")
+          return { ...failure, stdout: "", stderr: "failed status check", error: "unavailable" };
+        return transport.command(program, args, options);
+      } };
+    const result = await runner.run({ ...input, output: join(root, `failed-status-${index}`) }, { transport: failing, slots: [] });
+    expect(result.blocked).toMatch(/cannot verify.*clean/);
+    expect(preflight).toBe(false);
+  }
+}, 120_000);
+
+it("keeps final results and call accounting when a progress append fails", async () => {
+  const { root, transport, settings: input } = await prepared();
+  const failing: EvaluationTransport = { ...transport, async worker(options, args, signal, timeout) {
+    const result = await transport.worker(options, args, signal, timeout);
+    if (options.checkerReceipt !== undefined) {
+      const journal = join(root, "evidence", "progress.jsonl");
+      await rename(journal, `${journal}.retained`);
+      await mkdir(journal); // deterministic append failure, while other final evidence remains writable
+    }
+    return result;
+  } };
+  const result = await runner.run(input, { transport: failing, slots: [16], provider: () => scripted() });
+  expect(result.blocked).toMatch(/EISDIR/);
+  const saved = JSON.parse(await readFile(join(root, "evidence", "results.json"), "utf8"));
+  expect(saved.ledger.tokens).toBe(result.tokens);
+  expect(saved.ledger.blocked).toMatch(/EISDIR/);
+  expect(JSON.parse(await readFile(join(root, "evidence", "calls.json"), "utf8"))).toHaveLength(4);
+}, 120_000);

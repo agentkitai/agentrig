@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelProvider } from "@agentkitai/agentrig-core";
@@ -7,7 +7,9 @@ import { EvaluationBudget } from "../src/evaluation-budget.js";
 import { evaluationTransport, type EvaluationTransport } from "../src/evaluation-transport.js";
 
 const { R17fBudget } = await import(new URL("../../../eval/r17f-budget.mjs", import.meta.url).href) as {
-  R17fBudget: new (tokens: number, minutes: number, output: string) => EvaluationBudget & { headroom: number; writes: Promise<void> };
+  R17fBudget: new (tokens: number, minutes: number, output: string) => EvaluationBudget & {
+    headroom: number; writes: Promise<void>; record(event: unknown): Promise<void>;
+  };
 };
 const { captureEvidence } = await import(new URL("../../../eval/r17f-evidence.mjs", import.meta.url).href) as {
   captureEvidence: (...args: unknown[]) => Promise<{ captured: string[]; skipped: unknown[]; complete: boolean }>;
@@ -59,6 +61,19 @@ it("retains a failed call as unknown and stops further scheduling", async () => 
   } finally { await ledger.writes; ledger.close(); }
 });
 
+it("stops scheduling after a journal failure but does not poison finalization or later receipts", async () => {
+  const root = await temp(), ledger = new R17fBudget(100, 1, root);
+  try {
+    await mkdir(join(root, "progress.jsonl"));
+    await expect(ledger.record({ phase: "failed-write" })).rejects.toThrow();
+    await rmdir(join(root, "progress.jsonl"));
+    await ledger.record({ phase: "recovery-receipt" });
+    await ledger.writes;
+    expect(() => ledger.guard()).toThrow(/journal/);
+    expect(await readFile(join(root, "progress.jsonl"), "utf8")).toContain("recovery-receipt");
+  } finally { await ledger.writes.catch(() => {}); ledger.close(); }
+});
+
 it("captures submitted bytes and diff, refuses symlink parents, and records omissions", async () => {
   const root = await temp(), workspace = join(root, "workspace"), directory = join(root, "evidence");
   await mkdir(workspace); await mkdir(directory);
@@ -92,10 +107,25 @@ it("compares only complete balanced blocks, retaining partial failures and pendi
   expect(summary.partialRerun).toBe(true);
   expect(summary.partialObservations).toHaveLength(3);
   expect(summary.comparisons.find(row => row.factor === "memory" && !row.otherOn))
-    .toMatchObject({ additionalPasses: 8, numericalThresholdMet: true });
+    .toMatchObject({ additionalPasses: 6, numericalThresholdMet: true });
   completed.find(row => row.memory && !row.supervisor)!.outcome = "BLOCKED";
   expect(summarizeR17f(results, checks).comparisons.find(row => row.factor === "memory" && !row.otherOn)?.numericalThresholdMet).toBe(false);
   completed.splice(5, 1); // a gap before the first block cannot be disguised as a balanced subset
   expect(summarizeR17f(results, checks).balancedCount).toBe(0);
   expect(summarizeR17f(results, checks).partialObservations).toHaveLength(34);
+});
+
+it("can detect an automatic-task win without inventing pending prose judgments", () => {
+  const completed = schedule().map((row, index) => ({ ...row,
+    key: `${String(index + 1).padStart(3, "0")}-${row.task}-s${+row.supervisor}m${+row.memory}-r${row.repeat}`,
+    outcome: ["A4", "X4"].includes(row.task) ? "BLOCKED" : row.supervisor ? "PASS" : "FAIL",
+    reportedTokens: 100, wallMs: 100 }));
+  const checks = Object.fromEntries(completed.map(row => [row.key, { regression: "PASS", scope: "PASS" }]));
+  const results = { planned: 96, ledger: { startedAt: 1, tokens: 9600, unknownCalls: 0, blocked: null }, completed };
+  expect(summarizeR17f(results, checks).comparisons.find(row => row.factor === "supervisor" && !row.otherOn))
+    .toMatchObject({ additionalPasses: 18, numericalThresholdMet: true });
+  // Automatically verified scope failures on a prose task still veto a win.
+  const failed = completed.find(row => row.task === "X4" && row.supervisor && !row.memory)!;
+  checks[failed.key]!.scope = "FAIL";
+  expect(summarizeR17f(results, checks).comparisons.find(row => row.factor === "supervisor" && !row.otherOn)?.numericalThresholdMet).toBe(false);
 });
