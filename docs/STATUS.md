@@ -1,7 +1,28 @@
 # Status
 
-Current roadmap row: **R17c** — external review repair round **3/3** complete, independent delta review
-and PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17c** — targeted outside-train checkpoint cleanup recovery after
+the round-3 Windows CI halt; independent delta review and green exact-head CI pending.
+Next **R17d**, only after exact-head and post-merge CI are green.
+
+## R17c checkpoint cancellation recovery
+
+Builder of the R17c row remains **agentrig**, conductor **100108d7**. This narrow
+recovery was implemented by **Codex outside the train**, explicitly authorized by
+the human after the halt; it is not a fourth general train repair round.
+Windows attempts 1 and 2 on `16203be` failed the checkpoint-timeout fixture with
+`EBUSY` directory cleanup; the operator stopped the train and cancelled its extra
+retry. Evidence and the halt are retained in [feel #244](https://github.com/agentkitai/agentrig/issues/244)
+and [PR #269](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5582974488).
+
+Checkpoint Git calls now settle only after subprocess `close`, not the earlier
+abort callback. Existing session-end attempt joining therefore retains ownership
+until Git and its stdio close, before temporary-directory cleanup. Literal argv,
+Git timeout/kill signal, output bounds, and fail-closed write denial are unchanged.
+Four deterministic callback-before-close regressions failed against the old helper
+and pass with the fix: abort, spawn failure, success, and checkpoint end-session
+ownership. They are included in Windows CI. All 44 checkpoint tests pass locally;
+build/test/typecheck exit **0/0/0**, with **3440 passed / 4 skipped** in 220 files.
+Exact-head Windows CI and independent review must still complete before landing.
 
 ## R17c final delta repair round 3
 

@@ -101,6 +101,7 @@ export const windowsCoverage = [
   "packages/core/test/anthropic.test.ts",
   "packages/core/test/auxiliary-usage.test.ts",
   "packages/core/test/checkpointer.test.ts",
+  "packages/core/test/checkpointer-process.test.ts",
   "packages/core/test/child-grants.test.ts",
   "packages/core/test/command-outcome.test.ts",
   "packages/core/test/compaction.test.ts",
