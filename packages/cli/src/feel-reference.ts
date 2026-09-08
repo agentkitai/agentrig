@@ -1,17 +1,17 @@
 // Measured by pnpm feel:check --record; not fabricated local-machine telemetry.
 export const feelReference = {
-  "measuredAt": "2026-09-08T06:23:39.451Z",
+  "measuredAt": "2026-09-08T06:32:35.317Z",
   "platform": "linux/x64",
   "node": "v24.12.0",
-  "coldStartMs": 192.19538394827396,
+  "coldStartMs": 146.71951299533248,
   "stream": {
-    "firstByteToEventMs": 0.7110509999999977,
+    "firstByteToEventMs": 0.7457870000000071,
     "firstByteToEventTicks": 0,
-    "firstByteToVisibleMs": 1.9585250000000087,
+    "firstByteToVisibleMs": 2.1291439999999966,
     "firstByteToVisibleTicks": 0,
     "frameCount": 16,
-    "maxFrameCpuMs": 2.059,
-    "meanFrameCpuMs": 0.911625
+    "maxFrameCpuMs": 2.199,
+    "meanFrameCpuMs": 0.9154999999999999
   },
   "tasks": [
     {
@@ -20,7 +20,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "248ed1a7",
+      "sessionId": "72d26c60",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -32,7 +32,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "2223041a",
+      "sessionId": "10042a15",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -44,7 +44,7 @@ export const feelReference = {
       "turnsToDone": 5,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "b61be573",
+      "sessionId": "56f42faa",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -56,7 +56,7 @@ export const feelReference = {
       "turnsToDone": 5,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "f563cca5",
+      "sessionId": "ac9f9aae",
       "check": {
         "behavior": "PASS",
         "outcome": "BLOCKED"
@@ -68,7 +68,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "7527029e",
+      "sessionId": "d81078c0",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -80,7 +80,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "08d5a0a8",
+      "sessionId": "d5c00bed",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -92,7 +92,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "068be28a",
+      "sessionId": "b938c9ae",
       "check": {
         "behavior": "PASS",
         "outcome": "PASS"
@@ -104,7 +104,7 @@ export const feelReference = {
       "turnsToDone": 4,
       "reason": "done",
       "sessionEnd": "session.end",
-      "sessionId": "0e05034c",
+      "sessionId": "8a80ce1f",
       "check": {
         "behavior": "PASS",
         "outcome": "BLOCKED"
