@@ -965,8 +965,7 @@ Acceptance: R17a — STATUS names `agentrig` as the builder for every R17 PR, or
 issue that blocked it. R17b — a fresh clone with no config runs a task and the transcript shows
 rendered Markdown, a diagnostics line after an edit, a checkpoint event, and an ingest at session
 end; `agentrig --help` lists fewer than 40 top-level options. R17c — a deliberately slowed startup
-fixture fails the budget test (mutation). R17d — prompts per E1 task fall from the recorded
-baseline, and every R13e fixture still asserts its non-behaviour. R17e — a fixture intervention
+fixture fails the budget test (mutation). R17d — Preserve the historical E1 benchmark as an unchanged control. Before implementation, freeze supplemental E1 traces exercising bash grants and repeated requests. Require at least one fewer prompt per task afterward, with identical traces and response policy, unchanged authority, and all R13e security fixtures passing. R17e — a fixture intervention
 appears as a transcript line and `/why` names it. R17f — the matrix is rerun once under an
 agreed budget and the resulting defaults are the ones shipped. R17g — the follow-ups section is
 empty or contains only declined items with reasons.
@@ -1560,3 +1559,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
 - [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
   preexisting reviewer first-run failure, followed by passing isolated/full runs;
   include with END test followups, not a new R17 gate or parent code workaround.
+
+- [ ] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) joins #244 for later-turn cleanup; R17g disposition, not R17d gating.
+- [ ] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275), clarify per-call versus overall timeout. A 30s message alone does not establish that the entire 300s budget expired.
+- [ ] PR276 LOW residuals for R17g disposition, not new gates: [#277](https://github.com/agentkitai/agentrig/issues/277) probe stop evidence; [#278](https://github.com/agentkitai/agentrig/issues/278) flush diagnostic failure output; [#279](https://github.com/agentkitai/agentrig/issues/279) clarify independently reproduced fail-first count. No fourth PR276 repair here.
