@@ -26,8 +26,19 @@ may receive under-specified arguments. Permission gates are unchanged; this repa
 adds no local MCP JSON Schema validator. Previous backend normalization for MCP
 schemas is an inference, not something the child-routing probe measured.
 Live backend acceptance rests on the single operator-reported probe above; no raw
-response artifact is attached. The [retained probe](plans/feel250-provider-omission-probe.mjs)
-now permits manual reproduction after `pnpm build`, with explicit `--live` consent
+response artifact is attached. It ran on **gpt-6-astra**, low effort, on 2026-09-08.
+The original executed `/tmp/r17-provider-omission-probe.mjs` still existed and is now
+archived byte-for-byte as [inert source evidence](plans/feel250-original-probe.mjs.txt),
+SHA-256 `b5594b0f71df37b2724e7fe02308ef7fa0c4621a50bd806b24413b790ec2416e`,
+verified against that original file. Do not execute the historical archive: it has
+the original host-specific import and no opt-in guard.
+The [portable reproduction](plans/feel250-provider-omission-probe.mjs) is derived
+afterward, not the exact executed artifact: it adds the opt-in guard, relative import,
+explicit removal of the repaired strict default for the control, configurable model
+and error reporting. `FEEL250_MODEL` can select an available model; the default is
+the original gpt-6-astra, and each output records the selection. A different model
+or future backend is a new observation, not reproduction of the historical result.
+The script permits manual reproduction after `pnpm build`, with explicit `--live` consent
 for two inert subscription calls; without it, only usage is printed. It executes
 no tools and is not run live in CI. The two-call/90-second-per-call controls are
 operational bounds, not a hard token cap: this backend rejects `max_output_tokens`,
@@ -44,8 +55,16 @@ Three request assertions failed before the fix (including the real subagent sche
 and the actual mocked-fetch body); all **105** targeted provider/subagent/role/grant
 tests pass after it. Removing `strict: false` again kills the same three assertions;
 restoring it passes all **21** adapter tests. Build/test/typecheck exit **0/0/0**;
-the full suite has **3441 passed / 4 skipped** in **220** files.
+the full suite has **3446 passed / 4 skipped** in **221** files.
 Independent review and exact-head/post-merge CI remain pending.
+
+Final repair round 3 preserves accumulated usage, calls, and both stream/capture
+errors even when the cloned body rejects. Offline subprocess tests use an inert
+provider stub: default/help never import it, failures print JSON then exit nonzero,
+and a successful replay preserves the two distinct wire controls and selected model.
+Before the fix, three of the first four tests failed (help status and lost error
+records); afterward all five tests pass. No live calls were made in these tests.
+The subprocess regressions are also included in the Windows CI seam suite.
 
 Exact focused command: `pnpm exec vitest run packages/core/test/openai-chatgpt.test.ts packages/core/test/subagent.test.ts packages/core/test/agent-roles.test.ts packages/core/test/permission-grants.test.ts`.
 
