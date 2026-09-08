@@ -108,6 +108,42 @@ async function collect(session: ReturnType<ReturnType<typeof createAgent>["run"]
 }
 
 describe("core grant enforcement and audit", () => {
+  it.each([false, true])("provides a same-call durable audit callback before scoped consumption (append fails: %s)", async fails => {
+    const store = await fixture(); const r = new PermissionGrantRegistry(); const executed: string[] = [];
+    const append = store.append.bind(store); let audited = false; let asked = false;
+    vi.spyOn(store, "append").mockImplementation(async (id, event) => {
+      if (event.type === "permission.granted" && fails) throw new Error("audit unavailable");
+      const appended = await append(id, event);
+      if (event.type === "permission.granted") audited = true;
+      return appended;
+    });
+    const agent = createAgent({ provider: new Provider(["git status"]), tools: [tool(executed)],
+      permissions: new RulePolicy([]), permissionGrants: r, store, systemPrompt: "test",
+      onAsk: async (req, context) => {
+        asked = true;
+        expect(context?.permissionGrants).toBe(r);
+        expect(context?.flushPermissionGrants).toBeTypeOf("function");
+        r.grant(spec(r));
+        expect(r.authorize(req, true)).toMatchObject({ auditBlocked: true });
+        if (fails) {
+          await expect(context!.flushPermissionGrants!()).rejects.toThrow("audit unavailable");
+          expect(audited).toBe(false);
+          expect(r.authorize(req, true)).toMatchObject({ auditBlocked: true });
+          return "deny";
+        }
+        await context!.flushPermissionGrants!();
+        expect(audited).toBe(true);
+        expect(executed).toEqual([]);
+        return r.authorize(req, true).decision;
+      } });
+    const { summary, events } = await collect(agent.run("run", { cwd: store.root }));
+    expect(asked).toBe(true);
+    expect(summary.reason, JSON.stringify(events.filter(e => e.type === "error"))).toBe(fails ? "error" : "done");
+    expect(executed).toEqual(fails ? [] : ["git status"]);
+    expect(r.inspect()[0]?.matchedDecisions).toBe(fails ? 0 : 1);
+    if (!fails) expect(events.findIndex(e => e.type === "permission.granted"))
+      .toBeLessThan(events.findIndex(e => e.type === "tool.call"));
+  });
   it("audits grants queued during an asynchronous base policy before using them", async () => {
     const store = await fixture(); const r = new PermissionGrantRegistry(); const executed: string[] = [];
     const session = createAgent({ provider: new Provider(["git status"]), tools: [tool(executed)],
