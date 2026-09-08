@@ -122,6 +122,8 @@ normalization. TESTING now records the full suite's build prerequisite and verif
 filters, and scopes sandbox observations to the actual probed paths. The #237 completion marker
 means its explicitly scoped diagnostic/preflight resolution is implemented, not that historical
 causation was proved or that a preflight prevents later filesystem changes.
+After integration with merged main `efd20a8`, the operator's full build/test/typecheck each
+exit **0**, **3502 passed / 4 skipped / 224 files**; focused new/changed guidance tests pass19.
 ## Outside-train END follow-up batch: compiler diagnostics #263 and #264
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
