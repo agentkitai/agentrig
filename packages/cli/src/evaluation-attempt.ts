@@ -50,6 +50,8 @@ export interface EvaluationAttemptOptions {
   /** Final advisory grade. Disable to keep an unrelated auxiliary model call out of every cell. */
   advisory?: boolean;
   observe?: (event: HarnessEvent) => void;
+  /** Trusted measurement callback after session/observer settlement, before independent checks. */
+  onSessionSettled?: (timing: { startedAt: number; settledAt: number }) => Promise<void>;
 }
 
 /** One ordinary core session; E1 checks, E2 accounting and M6 assessment remain separate. */
@@ -152,6 +154,8 @@ export async function runEvaluationAttempt(options: EvaluationAttemptOptions) {
     ledger.controller.signal.removeEventListener("abort", abort);
   }
 
+  const sessionSettledAt = Date.now();
+  await options.onSessionSettled?.({ startedAt, settledAt: sessionSettledAt });
   const checkReceipt = join(directory, "checker-receipt.json");
   const { receiptPath: _receiptPath, ...portable } = receipt;
   await saveEvaluationArtifact(checkReceipt, { ...portable, workspace: "/workspace" });
@@ -218,5 +222,5 @@ export async function runEvaluationAttempt(options: EvaluationAttemptOptions) {
   await saveEvaluationArtifact(join(directory, "manifest.json"), manifest);
   const report = await readEvaluationReport(join(directory, "manifest.json"));
   await saveEvaluationArtifact(join(directory, "report.json"), report);
-  return { report, advisory, events };
+  return { report, advisory, events, sessionTiming: { startedAt, settledAt: sessionSettledAt } };
 }

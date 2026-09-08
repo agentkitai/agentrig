@@ -248,6 +248,13 @@ it("runs the preregistered slots on a fake provider with real defaults, permissi
     const directory = join(root, "evidence", key);
     const report = JSON.parse(await readFile(join(directory, "report.json"), "utf8"));
     expect(report.outcome).toBe("PASS"); // independent E1 checks, not the model's own claim
+    const timing = JSON.parse(await readFile(join(directory, "session-timing.json"), "utf8"));
+    const orchestration = JSON.parse(await readFile(join(directory, "orchestration-timing.json"), "utf8"));
+    expect(timing.settledAt).toBeGreaterThanOrEqual(timing.startedAt);
+    expect(orchestration.primarySessionTiming).toEqual(timing);
+    expect(orchestration.settledAt).toBeGreaterThanOrEqual(timing.settledAt);
+    expect(await readFile(join(directory, "artifacts", "eval-test-fix.js"), "utf8"))
+      .toContain("assert.equal");
     const memoryOn = key.includes("m1");
     expect(report.configuration.memory).toBe(memoryOn);
     expect(report.configuration.supervisor).toBe(key.includes("s1"));
@@ -285,6 +292,16 @@ it("runs the preregistered slots on a fake provider with real defaults, permissi
 
   // results.json is the shape the existing balanced-subset summary already reads.
   const results = JSON.parse(await readFile(join(root, "evidence", "results.json"), "utf8"));
+  const progress = (await readFile(join(root, "evidence", "progress.jsonl"), "utf8"))
+    .trim().split("\n").map(line => JSON.parse(line));
+  expect(progress.filter(row => row.phase === "call-start")).toHaveLength(16);
+  expect(progress.filter(row => row.phase === "call-settled")).toHaveLength(16);
+  expect(progress.filter(row => row.phase === "attempt-settled")).toHaveLength(4);
+  for (const key of keys) {
+    const timing = JSON.parse(await readFile(join(root, "evidence", key, "session-timing.json"), "utf8"));
+    expect(results.completed.find((row: { key: string }) => row.key === key).wallMs)
+      .toBe(timing.settledAt - timing.startedAt);
+  }
   const summarized = summary.summarize(results);
   expect(summarized.groups.map(group => group.completed)).toEqual([1, 1, 1, 1]);
   expect(summarized.groups.map(group => group.notRun)).toEqual([23, 23, 23, 23]);

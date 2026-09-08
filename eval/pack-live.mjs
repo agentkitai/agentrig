@@ -41,6 +41,9 @@ export async function pack(root, destination) {
     }
   }
   await take('protocol.json'); await take('results.json'); await take('corpus.json', true);
+  // R17f adds provider/phase receipts outside slot directories. Preserve them when present;
+  // old E3 bundles have none and retain their existing file set.
+  await take('calls.json', true); await take('progress.jsonl', true); await take('attempts.jsonl', true);
   const results = JSON.parse(Buffer.from(files['results.json'].base64, 'base64').toString());
   const protocol = z.object({ revision: z.string().regex(/^[a-f0-9]{40}$/) }).passthrough().parse(JSON.parse(Buffer.from(files['protocol.json'].base64, 'base64').toString()));
   const summary = summarize(results);

@@ -10,7 +10,8 @@ import { OpenAIChatGPTProvider, OpenAIChatGPTAuth, PermissionGrantRegistry, Guid
 import { FileMemoryStore, indexInjection, MEMORY_RECALL_TOOLS } from '../packages/memory/dist/index.js';
 import { loadRunConfig } from '../packages/cli/dist/config.js';
 import { buildPermissionPolicy } from '../packages/cli/dist/run.js';
-import { EvaluationBudget } from '../packages/cli/dist/evaluation-budget.js';
+import { R17fBudget } from './r17f-budget.mjs';
+import { captureEvidence } from './r17f-evidence.mjs';
 import { evaluationTransport, prepareEvaluationWorkspace, verifyEvaluationSource } from '../packages/cli/dist/evaluation-transport.js';
 import { prepareEvaluationDependencies } from '../packages/cli/dist/evaluation-preparation.js';
 import { evaluationMemory } from '../packages/cli/dist/evaluation-memory.js';
@@ -134,7 +135,7 @@ export async function run(settings, dependencies = {}) {
   const transport = dependencies.transport ?? evaluationTransport();
   const makeProvider = dependencies.provider ?? (() => bounded(new OpenAIChatGPTProvider({
     ...E3_MODEL, auth: dependencies.auth ?? new OpenAIChatGPTAuth(), retry: { maxRetries: 0 } })));
-  const ledger = new EvaluationBudget(settings.totalTokens, settings.maxMinutes);
+  const ledger = new R17fBudget(settings.totalTokens, settings.maxMinutes, output);
   const completed = [];
   let blocked = null;
   try {
@@ -165,13 +166,14 @@ export async function run(settings, dependencies = {}) {
       corpus: { sha256: corpus.sha256, files: corpus.files, bytes: corpus.bytes, origin: 'recovered from the published E3 evidence archive; no new training or ingest' },
       budget: { perAttempt: BUDGET, hangGuardMs: HANG_GUARD_MS, requestTimeoutMs: REQUEST_TIMEOUT_MS,
         totalTokens: settings.totalTokens, maxMinutes: settings.maxMinutes,
+        perInflightCallAdmissionHeadroom: ledger.headroom,
         note: 'Reported-token scheduling caps. An in-flight backend response can overshoot them; this is not a remote billing guarantee.' },
       schedule: { planned: slots.length, of: all.length, slots, rounds: settings.rounds, balancedBlock: 32,
         order: 'E3 Latin square, fixed before results; no outcome-driven retries or reordering' },
       controls: ['shell-only task tools plus update_plan, and memory_search/memory_read when memory is on',
         'frozen retrieval only: no held-out ingest, dream, learning or corpus edit',
         'no subagents, MCP, external memory backend or compaction',
-        'no built-in file tools, so post-edit diagnostics, checkpoints and session-end ingest never fire in this surface',
+        'minimal evaluator does not install diagnostic, checkpoint or session-end ingest hooks; their resolved defaults are recorded but not exercised',
         'independent E1 checks in a separate checker image decide every outcome'],
       limitations: ['This is not an interactive usability comparison; a shell-only worker cannot measure TUI rendering, prompt history, notifications or /why as a person would use them.',
         'Automatic A4/X4 human gates stay BLOCKED unless a separately attributed authorized assessment is supplied; no humanVerdict is written here.',
@@ -186,6 +188,8 @@ export async function run(settings, dependencies = {}) {
       const key = attemptKey(ordinal, config);
       const directory = join(output, key);
       await mkdir(directory);
+      await ledger.record({ phase: 'attempt-start', key, tokens: ledger.tokens });
+      console.log(`START ${key} totalTokens=${ledger.tokens}`);
       const startedAt = Date.now(), before = ledger.tokens;
       const task = await transport.task(config.task);
       const receipt = await prepareEvaluationWorkspace(transport, config.task, config.task.startsWith('A') ? repo : settings.source,
@@ -225,7 +229,13 @@ export async function run(settings, dependencies = {}) {
         permissions, permissionGrants: grants, onAsk: approvals.ask,
         fileChanges: true, hangGuardMs: HANG_GUARD_MS, advisory: false,
         observe: event => { transcript.push(event); guidance.push(event); },
+        onSessionSettled: async timing => {
+          await saveEvaluationArtifact(join(directory, 'session-timing.json'), timing);
+          await ledger.record({ phase: 'checker-start', key, tokens: ledger.tokens, sessionTiming: timing });
+        },
       });
+      await ledger.record({ phase: 'capture-start', key, tokens: ledger.tokens });
+      await captureEvidence(transport, { image: settings.worker, workspace: receipt.workspace }, receipt, task, directory);
       await writeFile(join(directory, 'transcript.txt'), `${transcript.lines.join('\n')}\n`, { flag: 'wx' });
       await saveEvaluationArtifact(join(directory, 'why.json'), {
         rendered: renderWhy(guidance.explainLast({ recallTools: MEMORY_RECALL_TOOLS }), index === '' ? {} : { memoryIndex: index }),
@@ -235,15 +245,20 @@ export async function run(settings, dependencies = {}) {
         prompts: approvals.prompts, grants: grants.list(), controllerLines: controller.snapshot().lines.map(line => line.text) });
       const row = { key, task: config.task, repeat: config.repeat, position: config.position,
         supervisor: config.supervisor, memory: config.memory, outcome: attempt.report.outcome,
-        reportedTokens: ledger.tokens - before, wallMs: Date.now() - startedAt };
+        reportedTokens: ledger.tokens - before, wallMs: attempt.sessionTiming.settledAt - attempt.sessionTiming.startedAt };
+      await saveEvaluationArtifact(join(directory, 'orchestration-timing.json'), {
+        startedAt, settledAt: Date.now(), primarySessionTiming: attempt.sessionTiming,
+        evidence: 'End-to-end includes preparation, independent checker and artifact capture; results.wallMs excludes those and measures session plus joined observer settlement.' });
       completed.push(row);
       await appendFile(join(output, 'attempts.jsonl'), `${JSON.stringify(row)}\n`);
+      await ledger.record({ phase: 'attempt-settled', key, outcome: row.outcome, tokens: ledger.tokens });
       console.log(`DONE ${key} ${JSON.stringify(row)} totalTokens=${ledger.tokens}`);
     }
   } catch (error) {
     blocked = error.message;
     console.error(`BLOCKED ${blocked}`);
   } finally {
+    await ledger.writes;
     // Same shape `eval/summarize-live.mjs` already reads, so the existing balanced-subset summary
     // and its not-run accounting apply unchanged.
     await saveEvaluationArtifact(join(output, 'results.json'), {
