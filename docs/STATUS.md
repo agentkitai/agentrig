@@ -28,6 +28,22 @@ preserved on the PR; no claim that every independent full-suite attempt passed. 
 is being verified before this batch can merge. Nine of the original 17 issues are now closed;
 the remaining eight have prepared implementations or active Claude builders, not extra PRs.
 
+PR **#283** first head `df42e5e` passed Linux/macOS and the archive regressions, but Windows
+CI **34254410881**, job **102156476024**, failed the unchanged protocol attachment-startup
+test waiting for `input_file` (2469 passed / 15 skipped / 1 failed). The operator repaired this
+under existing #244, in this delivery PR, without rerunning the old head. A controlled 1200ms
+delay before the image permission prompt reproduces the one-second `waitFor` default's failure;
+it does not prove the historical runner's exact delay. Prompt waits now use the same explicit
+five-second readiness allowance already used after submission; the entire case remains bounded
+by its unchanged **15 seconds**. No permission, privacy, image provenance or history assertion
+was removed, and no product timeout changed. The fixture now shuts down its controller before
+unmount/cleanup and refuses a delayed mock prompt after closing. The initial injected failure
+exposed a teardown hang; with joined cleanup it reports the original missing-prompt assertion
+in 1.5s. With the readiness fix all three ordinary/protocol/delayed cases pass in 2.2s locally.
+Full repaired build/test/typecheck each exit **0**, **3489 passed / 4 skipped / 222 files**.
+The original archive reviews remain valid; this test-only repair receives a bounded delta check,
+not another general review of the already-reviewed archive implementation.
+
 Predecessor probe PR **#281** merged as `cc457c7`, closing #277/#278/#279; post-merge CI
 **34251674801** and structure **34251674739** passed first attempt on all platforms.
 [Landing receipt](https://github.com/agentkitai/agentrig/pull/281#issuecomment-5588626177).
