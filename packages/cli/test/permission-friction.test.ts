@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PermissionGrantRegistry, describeShellOperation, type Agent, type PermissionRequest } from "@agentkitai/agentrig-core";
+import { z } from "zod";
+import { createAgent, PermissionGrantRegistry, SessionStore, describeShellOperation,
+  type Agent, type AnyTool, type Decision, type ModelEvent, type ModelProvider,
+  type PermissionPolicy, type PermissionRequest } from "@agentkitai/agentrig-core";
 import { TuiController } from "../src/tui/controller.ts";
 
 const req: PermissionRequest = { tool: "bash", class: "exec", cwd: resolve("permission-friction-fixture"), input: { command: "git status --short" }, operation: describeShellOperation("git status --short", "/bin/sh") };
@@ -9,6 +14,8 @@ function setup() {
   const c = new TuiController({ cwd: req.cwd, permissionGrants: grants, agent: {} as Agent });
   return { c, grants };
 }
+const roots: string[] = [];
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 describe("R17d permission friction", () => {
   it("direct asks require durable audit and count a consumed grant exactly once", async () => {
@@ -205,6 +212,67 @@ describe("R17d permission friction", () => {
     await grants.flush(async () => {});
     expect(grants.inspect()[0]?.matchedDecisions).toBe(0);
     expect(c.snapshot().pending).toBeNull();
+  });
+
+  it("denies a real ask core issues after the shutdown sweep, and shutdown still joins", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "agentrig-late-ask-")); roots.push(cwd);
+    const grants = new PermissionGrantRegistry();
+    const c = new TuiController({ cwd, permissionGrants: grants, agent: { run() { throw new Error("not attached"); } } as never });
+    let turns = 0;
+    const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
+      async *stream(): AsyncIterable<ModelEvent> {
+        if (turns++ === 0) { yield { type: "tool_use", id: "t0", name: "probe", input: {} }; yield { type: "stop", reason: "tool_use" }; return; }
+        yield { type: "text_delta", text: "done" }; yield { type: "stop", reason: "end_turn" };
+      } };
+    let executions = 0;
+    const tool: AnyTool = { name: "probe", description: "inert test tool", permission: "exec", inputSchema: z.object({}),
+      execute: async () => { executions++; return { output: "inert", display: "inert" }; } };
+    let reachedPolicy!: () => void; const evaluating = new Promise<void>(r => { reachedPolicy = r; });
+    let releasePolicy!: () => void; const held = new Promise<void>(r => { releasePolicy = r; });
+    // Core's pre-ask abort check happens before it evaluates the policy and flushes grant audit,
+    // and the `onAsk` that follows is not raced against the signal. Holding the policy here puts
+    // that ask on the far side of the deny sweep shutdown has already run.
+    const permissions: PermissionPolicy = { decide: async () => { reachedPolicy(); await held; return "ask"; } };
+    let late!: Promise<Exclude<Decision, "ask">>; let reachedAsk!: () => void;
+    const asked = new Promise<void>(r => { reachedAsk = r; });
+    c.attach(createAgent({ provider, tools: [tool], permissions, permissionGrants: grants, store: new SessionStore({ root: join(cwd, "logs") }),
+      systemPrompt: "inert", repoMap: false, onAsk: (request, context) => { late = c.ask(request, context); reachedAsk(); return late; } }));
+    const running = c.submit("probe once");
+    await evaluating;
+    expect(c.snapshot().pending).toBeNull();
+    let closed = false; const shutdown = c.shutdown().then(() => { closed = true; });
+    expect(closed).toBe(false);
+    releasePolicy(); await asked;
+    expect(c.snapshot().pending).toBeNull();
+    expect(c.snapshot().queued).toBe(0);
+    expect(await late).toBe("deny");
+    await shutdown; await running;
+    expect(closed).toBe(true); expect(executions).toBe(0);
+  });
+
+  it("refuses a late direct ask while closing and once closed, consuming no standing grant", async () => {
+    const { c } = setup();
+    const standing = new PermissionGrantRegistry(); standing.beginSession("late-ask");
+    standing.remember(req, "allow"); await standing.flush(async () => {});
+    expect(await c.ask(req, { permissionGrants: standing })).toBe("allow");
+    expect(standing.inspect()[0]?.matchedDecisions).toBe(1);
+    let ready!: () => void; const entered = new Promise<void>(r => { ready = r; });
+    let finish!: () => void; const working = new Promise<void>(r => { finish = r; });
+    c.setManualCommands({ doctor: async () => { ready(); await working; return []; }, diff: async () => [] });
+    const doctor = c.submit("/doctor"); await entered;
+    let closed = false; const shutdown = c.shutdown().then(() => { closed = true; });
+    const closing = c.ask(req, { permissionGrants: standing });
+    expect(c.snapshot().pending).toBeNull();
+    expect(standing.inspect()[0]?.matchedDecisions).toBe(1);
+    expect(await closing).toBe("deny");
+    expect(closed).toBe(false);
+    finish(); await shutdown; await doctor;
+    const fresh = new PermissionGrantRegistry();
+    const late = c.ask(req, { permissionGrants: fresh });
+    expect(fresh.context.sessionId).toBeUndefined();
+    expect(c.snapshot().pending).toBeNull();
+    expect(await late).toBe("deny");
+    expect(fresh.list()).toEqual([]); expect(standing.inspect()[0]?.matchedDecisions).toBe(1);
   });
 
   it("does not collapse across parent and child registries or after abort", async () => {

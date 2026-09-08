@@ -1547,6 +1547,15 @@ need an explicit budget; neither prevents continuing other actionable entries.
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
+  One product defect found under this scope is repaired: `TuiController.ask` had no
+  `closing`/`closed` guard, so a permission ask arriving after `shutdown`'s single deny sweep —
+  core's `onAsk` is not raced against the abort — registered a prompt nobody could answer and the
+  shutdown join never returned. Implemented by **Claude Code outside the train** on
+  `fix/followups-permission-shutdown`: one fail-closed refusal before any grant lookup or
+  registration, with a real-agent reproduction, closing/closed regressions, and the #249
+  fixture-only late-deny workaround removed now that the product handles it. Bounds, deadlines and
+  the answered permission paths are unchanged. The Windows fixture timeouts and the rest of this
+  row stay open; completion reaches main through the reviewed green PR.
 - [x] Pinned evaluator archive transport ([feel #249](https://github.com/agentkitai/agentrig/issues/249)):
   replace pipe-fed tar input with an owned private regular file, keeping extraction errors,
   exact pinned bytes, exclusive destination/receipt creation and existing bounds. Implemented
