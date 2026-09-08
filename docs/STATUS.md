@@ -1,5 +1,53 @@
 # Status
 
+## Outside-train existing issue #249: pinned archive transport
+
+Builder: **Codex/operator outside AgentRig**, on `fix/followups-export-transport`, based on
+merged main `cc457c7`, now integrated with compiler PR #282 (`efd20a8`). The user authorized
+all existing issues through reviewed, green merges.
+The evaluator previously supplied the complete Git archive through `execFileSync`'s input pipe.
+It now writes those same pinned bytes to a private, exclusively created regular file and passes
+its path to the real tar extractor. This removes the input-pipe EPIPE path; it does **not** prove
+why the historical macOS extractor closed its input. No extraction error is swallowed, no retry,
+timeout increase, security change or live-provider invocation is introduced. Owned transport
+files are removed after the joined extractor; failed workspaces/receipts remain inspectable.
+
+The existing real pinned-export regression now injects EPIPE only for pipe-fed tar while letting
+file-fed tar run normally: it fails against old code and passes after the change. Dirty-source,
+exclusive-reuse, real extraction and receipt checks remain. A new extraction-failure control
+retains BLOCKED and the empty receipt and verifies transport cleanup. Mutants swallowing tar's
+failure and omitting archive removal are both killed; joined and restored. All 16 evaluator tests
+pass after restoration. Initial whole-file execution before building had three missing-dist
+errors (test prerequisite, not a product failure); after build, full build/test/typecheck each
+exit **0**, **3475 passed / 4 skipped / 222 files**. After main `efd20a8` integration, the full trio
+again exits **0**, **3488 passed / 4 skipped / 222 files**. Reviews/hosted CI/merge remain operator gates.
+
+Compiler PR **#282** merged at `efd20a8`, closing #263/#264 after independent review and green
+exact-head CI **34252558955** / structure **34252558941**. Its reviewer execution limitations are
+preserved on the PR; no claim that every independent full-suite attempt passed. Post-merge CI
+is being verified before this batch can merge. Nine of the original 17 issues are now closed;
+the remaining eight have prepared implementations or active Claude builders, not extra PRs.
+
+PR **#283** first head `df42e5e` passed Linux/macOS and the archive regressions, but Windows
+CI **34254410881**, job **102156476024**, failed the unchanged protocol attachment-startup
+test waiting for `input_file` (2469 passed / 15 skipped / 1 failed). The operator repaired this
+under existing #244, in this delivery PR, without rerunning the old head. A controlled 1200ms
+delay before the image permission prompt reproduces the one-second `waitFor` default's failure;
+it does not prove the historical runner's exact delay. Prompt waits now use the same explicit
+five-second readiness allowance already used after submission; the entire case remains bounded
+by its unchanged **15 seconds**. No permission, privacy, image provenance or history assertion
+was removed, and no product timeout changed. The fixture now shuts down its controller before
+unmount/cleanup and refuses a delayed mock prompt after closing. The initial injected failure
+exposed a teardown hang; with joined cleanup it reports the original missing-prompt assertion
+in 1.5s. With the readiness fix all three ordinary/protocol/delayed cases pass in 2.2s locally.
+Full repaired build/test/typecheck each exit **0**, **3489 passed / 4 skipped / 222 files**.
+The original archive reviews remain valid; this test-only repair receives a bounded delta check,
+not another general review of the already-reviewed archive implementation.
+
+Predecessor probe PR **#281** merged as `cc457c7`, closing #277/#278/#279; post-merge CI
+**34251674801** and structure **34251674739** passed first attempt on all platforms.
+[Landing receipt](https://github.com/agentkitai/agentrig/pull/281#issuecomment-5588626177).
+
 Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
 **#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
 Administrative evidence issue **#261** is also closed: independent Claude Code
