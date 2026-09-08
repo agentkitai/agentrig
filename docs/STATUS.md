@@ -1,5 +1,14 @@
 # Status
 
+Outside-train #267 review completion: independent Claude **d45c5e92-7b73-4c73-8ed0-8222b75be3c8**
+approved9ad314f with full3497/4/223 and build/typecheckgreen; three mutants killed, one optional
+zero-startup-skills coverage mutant survived and is disclosed in the PR review, not called green.
+The already documented restart requirement stays unchanged. Codex caught the same-size package
+identity gap; outside-train Claude repair **8dc7dcc5-5db8-4980-a26c-0bfdeb3d5aea** at15d6484
+adds the already-validated content digest to admission identity. Its real same-version/equal-size
+replacement regression fails before the correction and kills digest omission afterward;
+full3498/4/223 and build/typecheckgreen, focused44passed. No extra discovery roots or permissions.
+
 ## Outside-train existing issue #249: pinned archive transport
 
 Builder: **Codex/operator outside AgentRig**, on `fix/followups-export-transport`, based on
