@@ -3,6 +3,7 @@ import {
   OpenAIChatGPTAuth,
   OpenAIChatGPTProvider,
   parseResponsesSse,
+  subagentTool,
   toResponsesRequest,
   type ChatGPTTokens,
   type ModelEvent,
@@ -28,6 +29,27 @@ const baseReq: ModelRequest = {
 };
 
 describe("toResponsesRequest", () => {
+  it("preserves optional routing fields in the real subagent schema on the Responses wire", () => {
+    const tool = subagentTool({
+      createAgent: () => { throw new Error("schema-only test must not create an agent"); },
+      childConfig: () => { throw new Error("schema-only test must not configure a child"); },
+      providerChoices: { names: ["cloud", "local"], default: "local", main: "cloud" },
+    });
+    const schema = structuredClone(tool.jsonSchema!);
+    const body = toResponsesRequest({ ...baseReq, tools: [{
+      name: tool.name, description: tool.description, inputSchema: tool.jsonSchema!,
+    }] }, "gpt-5.6-sol");
+    expect(body.tools).toEqual([{
+      type: "function", name: tool.name, description: tool.description,
+      parameters: schema, strict: false,
+    }]);
+    expect(tool.jsonSchema).toEqual(schema);
+    expect(schema.required).toEqual(["task"]);
+    expect(tool.inputSchema.safeParse({ task: "inspect" }).success).toBe(true);
+    expect(tool.inputSchema.safeParse({ task: "inspect", provider: "unknown" }).success).toBe(false);
+    expect(tool.inputSchema.safeParse({ task: "inspect", provider: null }).success).toBe(false);
+  });
+
   it("maps to Responses API shape: instructions, flat tools, function_call items", () => {
     const body = toResponsesRequest(baseReq, "gpt-5.6-sol") as Record<string, unknown>;
     expect(body.model).toBe("gpt-5.6-sol");
@@ -36,7 +58,7 @@ describe("toResponsesRequest", () => {
     // this backend answers `HTTP 400 Unsupported parameter: max_output_tokens` (verified live);
     // sending it made every request fail before a single token was generated
     expect(body).not.toHaveProperty("max_output_tokens");
-    expect(body.tools).toEqual([{ type: "function", name: "bash", description: "run", parameters: { type: "object" } }]);
+    expect(body.tools).toEqual([{ type: "function", name: "bash", description: "run", parameters: { type: "object" }, strict: false }]);
     expect(body.input).toEqual([
       { type: "message", role: "user", content: [{ type: "input_text", text: "run ls" }] },
       { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },
@@ -156,6 +178,9 @@ describe("OpenAIChatGPTProvider.stream", () => {
     const events = await collect(provider.stream(baseReq, new AbortController().signal));
 
     expect(captured!.url).toBe("https://chatgpt.com/backend-api/codex/responses");
+    expect(JSON.parse(captured!.init.body as string).tools).toEqual([{
+      type: "function", name: "bash", description: "run", parameters: { type: "object" }, strict: false,
+    }]);
     const headers = captured!.init.headers as Record<string, string>;
     expect(headers.authorization).toMatch(/^Bearer /);
     // AgentRig identifies itself; it must not claim to be another vendor's client

@@ -1,8 +1,78 @@
 # Status
 
-Current roadmap row: **R17c** — targeted outside-train checkpoint cleanup recovery after
-the round-3 Windows CI halt; independent delta review and green exact-head CI pending.
-Next **R17d**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17d**, incomplete. Draft [PR #273](https://github.com/agentkitai/agentrig/pull/273)
+retains its evidence and the human-approved supplemental benchmark correction.
+Conductor **ed60c956** halted on [feel #250](https://github.com/agentkitai/agentrig/issues/250);
+the blocking provider-schema repair below must pass review and CI before the train resumes.
+
+## Outside-train feel #250 recovery: preserve optional tool arguments
+
+Builder of this narrow repair: **Codex/operator outside the train**, under the standing
+human instruction to fix the blocking issue after a halt, record outside attribution,
+and restart. It is not an agentrig-built row, R17d completion, or an early R17g sweep.
+The agentrig conductor remains **ed60c956**; its interrupted R17d PR is adopted on restart.
+
+A bounded two-call, **317-token** subscription probe, with no tool execution,
+[confirmed](https://github.com/agentkitai/agentrig/issues/250#issuecomment-5584543686)
+that omitted function `strict` was normalized to `true`, making optional `provider`
+mandatory. Explicit `strict: false` retained only `task` as required and allowed the
+requested omission. The Responses adapter now explicitly sends `strict: false`
+for function tools while preserving their schemas. Runtime input validation,
+provider choices, role refusals, permissions, grants and sandboxing are unchanged.
+This restores optionality for every function tool on this provider, not just child
+routing. Schema-backed builtins retain local field validation; MCP tools have no
+harness-side field-level validation. A server that does not validate its own inputs
+may receive under-specified arguments. Permission gates are unchanged; this repair
+adds no local MCP JSON Schema validator. Previous backend normalization for MCP
+schemas is an inference, not something the child-routing probe measured.
+Live backend acceptance rests on the single operator-reported probe above; no raw
+response artifact is attached. It ran on **gpt-6-astra**, low effort, on 2026-09-08.
+The original executed `/tmp/r17-provider-omission-probe.mjs` still existed and is now
+archived byte-for-byte as [inert source evidence](plans/feel250-original-probe.mjs.txt),
+SHA-256 `b5594b0f71df37b2724e7fe02308ef7fa0c4621a50bd806b24413b790ec2416e`,
+verified against that original file. Do not execute the historical archive: it has
+the original host-specific import and no opt-in guard.
+The [portable reproduction](plans/feel250-provider-omission-probe.mjs) is derived
+afterward, not the exact executed artifact: it adds the opt-in guard, relative import,
+explicit removal of the repaired strict default for the control, configurable model
+and error reporting. `FEEL250_MODEL` can select an available model; the default is
+the original gpt-6-astra, and each output records the selection. A different model
+or future backend is a new observation, not reproduction of the historical result.
+The script permits manual reproduction after `pnpm build`, with explicit `--live` consent
+for two inert subscription calls; without it, only usage is printed. It executes
+no tools and is not run live in CI. The two-call/90-second-per-call controls are
+operational bounds, not a hard token cap: this backend rejects `max_output_tokens`,
+so the script's 128-token request hint is not binding. Usage is outside E3.
+Retention is the delta review's additional
+evidence requirement; round 1 had used the full review's permitted disclosure option.
+No further live calls were made for this repair. The original 317 tokens remain
+historical evidence, not a cap or prediction for a future rerun.
+Mocked-fetch tests verify the outgoing payload, not live backend acceptance or
+future compatibility. Feel #250 remains open until a real resumed conductor omits
+the provider field; removing the wire requirement does not guarantee model compliance.
+
+Three request assertions failed before the fix (including the real subagent schema
+and the actual mocked-fetch body); all **105** targeted provider/subagent/role/grant
+tests pass after it. Removing `strict: false` again kills the same three assertions;
+restoring it passes all **21** adapter tests. Build/test/typecheck exit **0/0/0**;
+the full suite has **3446 passed / 4 skipped** in **221** files.
+Independent review and exact-head/post-merge CI remain pending.
+
+Final repair round 3 preserves accumulated usage, calls, and both stream/capture
+errors even when the cloned body rejects. Offline subprocess tests use an inert
+provider stub: default/help never import it, failures print JSON then exit nonzero,
+and a successful replay preserves the two distinct wire controls and selected model.
+Before the fix, three of the first four tests failed (help status and lost error
+records); afterward all five tests pass. No live calls were made in these tests.
+The subprocess regressions are also included in the Windows CI seam suite.
+
+Exact focused command: `pnpm exec vitest run packages/core/test/openai-chatgpt.test.ts packages/core/test/subagent.test.ts packages/core/test/agent-roles.test.ts packages/core/test/permission-grants.test.ts`.
+
+R17c [PR #269](https://github.com/agentkitai/agentrig/pull/269) landed at
+`e74018c707a5715ef20ec5686210a092b8d909ab`; exact-head CI **34214005131** and
+post-merge CI **34215842021** plus structure checks are green
+([landing receipt](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5583828105)).
+Earlier pending R17c entries below are historical, superseded by this receipt.
 
 ## R17c checkpoint cancellation recovery
 
