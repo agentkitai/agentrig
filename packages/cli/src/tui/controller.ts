@@ -55,6 +55,7 @@ export interface TuiLine {
 export interface PendingPermission {
   req: PermissionRequest;
   permissionGrants?: PermissionGrantRegistry;
+  flushPermissionGrants?: () => Promise<void>;
   scope?: { kind: ScopeKind; text: string; preview: boolean; error?: string };
   /** `remember` applies the answer to every later request for the same tool this session. */
   resolve: (d: Exclude<Decision, "ask">, remember: boolean, scope?: { kind: ScopeKind; text: string }) => void;
@@ -503,7 +504,8 @@ export class TuiController {
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
       if (registry !== undefined && registry.context.sessionId === undefined) registry.beginSession("interactive-prompt");
       const revision = registry?.revision;
-      const standing = sandboxEscalation ? "ask" : registry?.decide(req) ?? "ask";
+      const authorization = sandboxEscalation ? undefined : registry?.authorize(req, true);
+      const standing = (authorization?.auditBlocked || authorization?.viewExpired) ? "ask" : authorization?.decision ?? "ask";
       if (standing !== "ask") {
         resolve(standing);
         return;
@@ -521,6 +523,7 @@ export class TuiController {
       };
       const entry: PendingPermission = {
         req,
+        ...(context?.flushPermissionGrants === undefined ? {} : { flushPermissionGrants: context.flushPermissionGrants }),
         ...(registry === undefined ? {} : { permissionGrants: registry }),
         resolve: (d, remember, scope) => {
           if (settled) return;
@@ -574,10 +577,19 @@ export class TuiController {
     if (next === undefined) return;
     // Concurrent dispatches can queue before the first explicit scoped approval.
     // Recheck only the request's own live registry, never cache allow-once consent.
-    // decide retains resource, cwd, subject, expiry and separate-consent fences.
-    const standing = next.permissionGrants?.decide(next.req) ?? "ask";
-    if (standing !== "ask") next.resolve(standing, false);
-    else this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
+    // Audit append must complete before usage accounting and scoped authority consumption.
+    const consume = (): void => {
+      if (this.state.pending?.resolve !== next.resolve) return; // cancelled while awaiting audit
+      const authorization = next.permissionGrants?.authorize(next.req, true);
+      const standing = (authorization?.auditBlocked || authorization?.viewExpired) ? "ask" : authorization?.decision ?? "ask";
+      if (standing !== "ask") next.resolve(standing, false);
+      else this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
+    };
+    if (next.flushPermissionGrants === undefined) consume();
+    else void next.flushPermissionGrants().then(consume).catch(() => {
+      // Failed append is not human denial: retain the prompt, and never count a match.
+      if (this.state.pending?.resolve === next.resolve) this.showPermissionEffects(next.req, true);
+    });
   }
 
   private showPermissionEffects(req: PermissionRequest, standing = true): void {

@@ -1,5 +1,20 @@
 # Status
 
+PR #273 review repair: **agentrig** conductor **11dfb0d6**, repair child
+**75fb2099**, followed by **Codex/operator outside-train completion** after the
+operator stopped the orchestration on the human's delivery-feedback request.
+The original implementation attribution below is unchanged. Queued approvals now
+flush grant audit events before consuming scoped authority and counting matches;
+regressions cover queued child confinement, pending/failed audit and cancellation.
+The operator completed the existing sandbox-consent fixture's explicit audit step.
+Local build, full tests (**3463 passed, 4 skipped, 222 files**) and typecheck passed.
+These are local repair results, not final independent review or new-head CI.
+PR #273 remains unmerged pending those checks. No later roadmap row is completed.
+The background-review/checkpoint incompatibility and foreground review timeout
+were observed in conductor **11dfb0d6**; no security settings were changed and no
+duplicate issue was opened. Claude's completed review explicitly did not run the
+full suite; the operator's passing run does not erase that evidence limitation.
+
 Current roadmap row: **R17d**, implementation continuation by **agentrig**, conductor **96c179ab**, adopting draft PR #273 and its same branch. Predecessor conductor **a4decdf9**, builder **b97650ae**, arbiter **a769b04f** (historical REJECT/needs-human). The human approved the exact supplemental benchmark acceptance; [feel #274](https://github.com/agentkitai/agentrig/issues/274) is resolved outside the train, not an arbiter APPROVE. Historical E1 stays an unchanged control; A4/X4 manual verdicts remain BLOCKED/unknown. R17e/f/g are not implemented here.
 
 R17d implementation result on PR #273: pre-product freeze **770df83**; identical supplemental traces **33 → 25** prompts, exactly **1 fewer/task**. Historical E1 control unchanged (**2/task, A3 3**), A4/X4 manual still **BLOCKED/unknown**. Existing R12b full-argv/exact-cwd scoped grant is offered on Enter with separate confirmation; queued covered requests consume that explicit scoped decision, never one-time consent. Trusted read defaults unchanged, R13e green. Local build/test/typecheck each exit **0** (3458 passed, 4 skipped); see [R17d evidence](plans/R17d.md). Awaiting exact-head CI and independent review; not landed, R17e/f/g untouched. This child spawned zero children/reviewers and spent no E3; true child ID/tokens are parent-accounted, unavailable here.
