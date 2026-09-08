@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "clean": "pnpm -r exec rm -rf dist",
     "demo": "pnpm --filter @agentkitai/agentrig-cli run demo",
-    "feel:check": "node packages/cli/scripts/feel-budgets.mjs"
+    "feel:check": "node packages/cli/scripts/feel-budgets.mjs",
+    "feel:prepare": "node packages/cli/scripts/feel-prepare.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

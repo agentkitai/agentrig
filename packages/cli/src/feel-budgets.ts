@@ -59,6 +59,6 @@ export function formatFeelBudgets(input: unknown): string[] {
     `info feel:first-byte — event ${report.stream.firstByteToEventTicks} ticks / ${report.stream.firstByteToEventMs.toFixed(3)} ms; visible stream ${report.stream.firstByteToVisibleTicks} ticks / ${report.stream.firstByteToVisibleMs.toFixed(3)} ms; budget <= ${FEEL_LIMITS.firstByteTicks} event-loop tick`,
     `info feel:frame — ${report.stream.meanFrameCpuMs.toFixed(3)} ms mean / ${report.stream.maxFrameCpuMs.toFixed(3)} ms max CPU per streamed event (${report.stream.frameCount} actual TUI frames, 2000-line scrollback); max budget < ${FEEL_LIMITS.frameCpuMs} ms`,
     ...report.tasks.map(task => `info feel:E1:${task.task} — ${task.permissionPrompts} permission prompts / ${task.turnsToDone} turns to done; budgets <= ${E1_FEEL_LIMITS[task.task].prompts} / ${E1_FEEL_LIMITS[task.task].turns}; behavior ${task.check.behavior}, evaluator ${task.check.outcome}`),
-    "info feel:reproduce — pnpm feel:check; CI measures fresh values and fails on regression; E1 scripted reference traces are not autonomous model outcomes",
+    "info feel:reproduce — pnpm feel:prepare (dependency setup), then pnpm feel:check; CI measures fresh values and fails on regression; E1 scripted reference traces are not autonomous model outcomes",
   ];
 }

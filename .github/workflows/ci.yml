@@ -27,6 +27,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Prepare pinned E1 dependency content and policy metadata
+        if: runner.os == 'Linux'
+        run: pnpm feel:prepare
       # The integration test never pulls. CI supplies its predeclared local fixture so the Ubuntu
       # leg must report a live Docker pass, while hosts without Docker skip loudly.
       - if: runner.os == 'Linux'
@@ -42,7 +45,7 @@ jobs:
           echo "AGENTRIG_EVAL_REQUIRE_DOCKER=1" >> "$GITHUB_ENV"
       - run: pnpm build
       # A dedicated, idle phase: cold-process wall time is not measured under parallel Vitest load.
-      # E1 uses the full-history pins above and dependencies from the frozen root install offline.
+      # E1 uses full-history pins and the explicitly prepared content/policy metadata offline.
       - name: Fake-provider feel budgets and real startup mutation
         if: runner.os == 'Linux'
         run: pnpm feel:check
