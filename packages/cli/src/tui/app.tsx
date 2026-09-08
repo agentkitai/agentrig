@@ -13,6 +13,7 @@ import { useRawInput } from "./raw-input.js";
 import { createMarkdownCache } from "./markdown.js";
 import { PromptHistory, PromptRecall, completePrompt } from "./prompt-history.js";
 import { mapTuiAction, resolveTuiSettings, type TuiSettings } from "./settings.js";
+import { defaultPermissionScopeAvailable } from "./permission-prompt.js";
 import { removeLastGrapheme } from "./graphemes.js";
 
 /**
@@ -189,7 +190,8 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
         else if (action.type === "append") controller.editPermissionScope(pending.scope.text + action.text);
         return;
       }
-      if (pressed === permissionKeys.scope) controller.startPermissionScope();
+      if (action.type === "enter") controller.startDefaultPermissionScope();
+      else if (pressed === permissionKeys.scope) controller.startPermissionScope();
       else if (pressed === permissionKeys.allowOnce) controller.answerPermission("allow");
       else if (pressed === permissionKeys.allowSession) controller.answerPermission("allow", true);
       else if (pressed === permissionKeys.denySession) controller.answerPermission("deny", true);
@@ -351,7 +353,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
               : state.pending.req.origin === "external-input-expansion"
               ? `${permissionKeys.allowOnce} = approve this first-use expansion once, ${permissionKeys.denyOnce} / esc = deny (no standing grant)`
               : state.pending.permissionGrants === undefined ? `${permissionKeys.allowOnce} = allow once, ${permissionKeys.denyOnce} / esc = deny (no standing grants for this request)`
-              : `${permissionKeys.allowOnce} = allow once, ${permissionKeys.allowSession} = allow all session, ${permissionKeys.scope} = scope, ${permissionKeys.denyOnce} / esc = deny, ${permissionKeys.denySession} = deny all session`}
+              : `${defaultPermissionScopeAvailable(state.pending.req) ? "Enter = preview exact argv scope, " : ""}${permissionKeys.allowOnce} = allow once, ${permissionKeys.allowSession} = allow all session, ${permissionKeys.scope} = scope, ${permissionKeys.denyOnce} / esc = deny, ${permissionKeys.denySession} = deny all session`}
             {state.queued > 0 ? ` · ${state.queued} more waiting` : ""}
           </Text>}
         </Box>

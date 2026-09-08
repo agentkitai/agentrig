@@ -19,7 +19,7 @@ import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
 import type { ProviderSelectionControl } from "../provider-selection.js";
 import { observeStatus } from "./status-snapshot.js";
-import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
+import { defaultPermissionScopeAvailable, initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
 import {
@@ -570,14 +570,21 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
-    if (next !== undefined) this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
     this.set({ pending: next ?? null, queued: this.queue.length });
+    if (next === undefined) return;
+    // Concurrent dispatches can queue before the first explicit scoped approval.
+    // Recheck only the request's own live registry, never cache allow-once consent.
+    // decide retains resource, cwd, subject, expiry and separate-consent fences.
+    const standing = next.permissionGrants?.decide(next.req) ?? "ask";
+    if (standing !== "ask") next.resolve(standing, false);
+    else this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
   }
 
   private showPermissionEffects(req: PermissionRequest, standing = true): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
     for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) if (standing || !line.startsWith("Standing ")) this.print(line, "system");
+    if (standing && defaultPermissionScopeAvailable(req)) this.print("Enter: preview the exact argv-prefix session grant at this cwd; the displayed confirmation key then confirms. The allow-once key alone still allows once.", "system");
     if (!standing) this.print("One-time approval only; this request does not consume or create standing grants.", "system");
   }
 
@@ -589,6 +596,14 @@ export class TuiController {
   answerPermission(d: Exclude<Decision, "ask">, remember = false): void {
     if (this.state.pending?.scope !== undefined) return;
     this.state.pending?.resolve(d, remember);
+  }
+
+  /** Enter offers the existing R12b exact draft, never installs it implicitly. */
+  startDefaultPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending === null || pending.scope !== undefined || pending.permissionGrants === undefined || !defaultPermissionScopeAvailable(pending.req)) return;
+    this.startPermissionScope();
+    this.previewPermissionScope();
   }
 
   startPermissionScope(): void {

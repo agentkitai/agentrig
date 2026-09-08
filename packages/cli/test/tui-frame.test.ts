@@ -7,6 +7,7 @@ import { render } from "ink";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createAgent,
+  describeShellOperation,
   defaultRules,
   RulePolicy,
   SessionStore,
@@ -187,6 +188,25 @@ describe("the test harness itself", () => {
 });
 
 describe("the live frame", () => {
+  it("R17d Enter previews exact bash scope and requires separate confirmation", async () => {
+    const h = mount(0);
+    try {
+      await settle();
+      const answer = h.controller.ask({ tool: "bash", class: "exec", cwd: root,
+        input: { command: "git status --short" }, operation: describeShellOperation("git status --short", "/bin/sh") });
+      await settle();
+      expect(h.writes.join("")).toContain("Enter = preview exact argv scope");
+      h.stdin.paste("\r");
+      await settle();
+      expect(h.controller.snapshot().pending?.scope?.preview).toBe(true);
+      expect(h.controller.permissionGrants.list()).toEqual([]);
+      h.stdin.paste("y");
+      await settle();
+      expect(await answer).toBe("allow");
+      expect(h.controller.permissionGrants.list()[0]?.operation.commandPrefix).toEqual(["git", "status", "--short"]);
+    } finally { h.controller.answerPermission("deny"); h.stop(); }
+  });
+
   it("renders sandbox escalation as an outside-sandbox approval", async () => {
     const h = mount(0);
     await settle();
