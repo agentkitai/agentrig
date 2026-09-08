@@ -56,6 +56,9 @@ with build/test/typecheck **0/0/0**, **3386 passed / 4 skipped / 213 files**, fi
 attempt. [Public evidence](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212)
 preserves the original Codex limitation; this is independent local verification,
 not a rewritten historical verdict or a substitute for current CI.
+The next existing-issue batch, **#240/#244**, is described under
+[CI fixture cost and owned cleanup](#outside-train-end-follow-up-batch-ci-fixture-cost-and-owned-cleanup)
+below; it is committed on a branch and is not landed.
 
 R17d is landed via **PR #273**, merge `4320a83`, reviewed head `61b4e72`.
 Post-merge CI **34247066349** and structure **34247066327** passed on that exact
@@ -105,6 +108,96 @@ post-merge CI `34215842021` and structure `34215841911`; the
 closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
+
+## Outside-train END follow-up batch: CI fixture cost and owned cleanup
+
+Builder of this batch: **Claude Code, outside the train**, under the human instruction to work the
+existing open backlog. It is **not** an agentrig-built row, an R17 row, or the start of the R17g
+sweep. Branch `fix/followups-ci-fixtures`, base `cc457c7`, integrated with `efd20a8`.
+Builder session **92c2d179-3398-4f63-a335-cbe41a7527a1**. The batch is exactly
+[#240](https://github.com/agentkitai/agentrig/issues/240) and
+[#244](https://github.com/agentkitai/agentrig/issues/244), including the macOS strand recorded in
+#244 comment 5588619917. **Test files only** — no package source changed, no production cap was
+lowered, no assertion was dropped and no deadline was raised. Independent review and
+exact-head/post-merge CI receipts belong to the batch PR; the local evidence below closes nothing.
+
+**#240 — aggregate-cap fixture setup dominated its work.** The original case created 1000 source
+files and copied them into two real installs before the assertion's `inspectPackages` scan.
+The builder's reported wall time and component timings do not add up, so they are not retained
+as a quantitative phase breakdown or speedup claim. The reduction in filesystem work is structural.
+The cap being proved is a *shared budget*, and the scan spends it on every entry it walks —
+directories included — and charges bytes from `lstat` before opening anything. So the same real
+defaults are now reached without the copying: two small real installs, then the later one padded
+with empty prompt directories to land exactly one entry past `PACKAGE_LIMITS.entries`, under a
+single parent that keeps every `readdir` inside the per-package guard so it is the aggregate that
+fires. A second case sizes the later package's prompt so that the entire later package fits the
+real `PACKAGE_LIMITS.bytes` allowance exactly, including its other files. The earlier package's
+nonzero bytes therefore cause the shared-budget refusal before the large prompt is read.
+Independent Codex review caught that the original whole-allowance prompt already overflowed alone;
+the corrected case kills a mutant resetting the byte budget for every package (restored afterward).
+The new cases measured **597 ms and 27 ms** locally, and the 30 s override drops to 10 s and the default 5 s. Both cases
+now assert the precondition they depend on — that both packages *are* listed before the budget is
+exhausted — so "does not expose an earlier verified package" is load-bearing rather than assumed.
+
+**#240 — owned cleanup.** An install publishes through staging inside the fixture, so one that has
+not finished is still writing after the body it belongs to has stopped; `afterEach` removed the
+fixture out from under it and reported `ENOTEMPTY` in place of the real failure. Every install a
+test starts is now registered, and teardown cancels the fixture's lifetime and joins the work
+before anything is removed. A new regression leaves a real install staging with nobody awaiting it
+and asserts the state teardown hands to `rm`.
+
+**#244 — attachment completion cap.** The 257-entry fixture was 257 separate writes; the scan
+counts directory entries, so it is now one real file plus 256 hard links, one metadata call each
+and nothing to write. **117 ms → 25 ms** locally. Every real helper child now runs on the fixture's
+lifetime and is owned, so teardown cancels and joins it rather than leaving it behind.
+
+**#244 — external expansion.** Both cases ran two full builds and two real sessions inside a single
+5000 ms body, so one deadline covered twice the work it was judging, and when it expired the body's
+own `finally` never ran — leaving a live session writing into the directory cleanup was about to
+remove. Each case is now one real build and one real session per deadline, and teardown aborts and
+joins every session it owns. All four sessions, the real `bash` command and the consent assertions
+are unchanged.
+
+**#244 — the macOS escalation strand.** `attach` ends the observer's lifetime on `session.done`, so
+in *a timed-out escalation counts as expired and degrades the recurring signature* the outcome
+depended on whether a 50 ms timer beat a 25-turn fake session: when the session won, the identical
+expiry was reported as a detached close with no timeout diagnostic at all — the exact macOS symptom
+on PR #282's first head. Locally `onEscalate` was entered at 13–35 ms against a session that ended
+at 73–124 ms, and injecting a 200 ms escalate timeout reproduces the failure as
+`apply:escalate: supervisor detached or session ended`. That is an injected interleaving, **not** a
+reproduction of the historical macOS run, whose exact scheduling is unknown. The fixture no longer
+depends on that session-ending race: the provider holds the turn it would have ended on until the real timeout has been
+reported and the observer has recorded a further signal. `maxTurns` and the test's deadline remain
+bounds; if the real expiry mechanism itself breaks, the test can still fail by its deadline.
+The 50 ms timeout, the real `withTimeout`
+expiry path and the escalate/guidance assertions are unchanged, and the test now passes with the
+escalate timeout injected at 500 ms and 2000 ms — interleavings the old shape failed at 200 ms.
+
+Fail-first and mutants, each killed and then restored: dropping the ownership registration and
+dropping the teardown join both leave `.install-lock` and `.staging-*` behind, which is the
+`ENOTEMPTY` shape #240 reported; removing the aggregate entry guard, removing the aggregate byte
+guard, and turning the `AggregateLimit` early return into an ordinary per-package error each expose
+the earlier verified package; raising the completion cap from 256 resolves instead of refusing;
+allowing an unattended fresh external expansion fails both external-input cases while correctly
+leaving the two user-action cases green; and mapping a real `ObserverTimeoutError` to `closed`
+rather than `expired` produces two escalations instead of one.
+
+Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3478 passed / 4 skipped** in
+**222** files under a private `TMPDIR`. The four changed files were repeated five times without
+flake, and CI's single-worker `packages.test.ts` + `packages-runtime.test.ts` step was rerun as
+configured. This claims **no hosted CI result**. Windows and macOS per-operation latency is not
+reproducible here, so no historical failure is claimed to be reproduced or root-caused; the
+checkpoint `EBUSY` strand of #244 was recovered separately by PR #269/#280 and is untouched.
+
+Operator review repair also keeps provider mocks installed until owned sessions finish teardown.
+After integrating PR #283 and repairing the shared-byte assertion, operator build/test/typecheck
+each exit0: **3493 passed / 4 skipped / 222 files**. Both changed repair files pass34 focused tests.
+Independent Claude session **39987907-da64-45e8-b37f-5497a2fdddd0** approved the pre-repair
+integrated head with **3491 passed / 4 skipped / 222 files**, build/typecheck green, and four
+killed/restored mutants. Codex's actual shared-byte coverage finding is corrected above.
+The attachment-startup readiness strand landed separately in **PR #283**, merge `f38b40b`,
+after green exact-head CI34256456887 and structure34256456860; its narrow independent review
+and controlled 1200ms delay evidence are on that PR. No historical runner timing is inferred.
 
 ## Outside-train END follow-up batch: compiler diagnostics #263 and #264
 
