@@ -1,5 +1,13 @@
 # Status
 
+Issue sweep checkpoint: **15 of17 initial issues closed; none added**. #244 landed via
+PR#286 at`68c639a`, reviewed5212ac2, exact-headCI34261951608/structure34261951673 allgreen.
+It also recovers285's postmergeWindows aggregate fixture failure; originalfailedreceipt retained.
+Repaired-main postmerge34262745133/34262745079 is being monitored. Remaining#275/#267 have
+completed independent reviews. This memory275 branch is integrated with68c639a and passes
+build/test/typecheck0/0/0: **3515 passed / 4 skipped / 224 files**, private temporary directory.
+Implementation unchanged since independent reviews; no extra general review or live-provider run.
+
 ## Outside-train existing issue #275: maintenance timeout scope
 
 Builder: **Codex/operator outside AgentRig**, branch `fix/followups-maintenance-timeouts`, base
