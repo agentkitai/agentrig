@@ -1558,14 +1558,27 @@ need an explicit budget; neither prevents continuing other actionable entries.
   measure and consider capped geometric growth instead of allocating 4 MiB on the
   first metadata line; preserve byte accounting and overflow controls.
 
-- [ ] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
+- [x] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
   cover setup failure without leaking fake timers; include in the R17g core package batch, not a new R17 gate.
-- [ ] Preserve the primary assertion when fixture cleanup also fails ([core-test residual #266](https://github.com/agentkitai/agentrig/issues/266)):
+  Implemented by **Claude Code outside the train** on `fix/followups-checkpoint-cleanup`
+  (file-level `afterEach` real-timer restoration, hung-guard construction inside the guarded body,
+  paired leak/restoration regression). Completion reaches main with the reviewed, green PR merge.
+- [x] Preserve the primary assertion when fixture cleanup also fails ([core-test residual #266](https://github.com/agentkitai/agentrig/issues/266)):
   retain both errors with primary failure precedence; include in the R17g core package batch, not a new R17 gate.
+  Implemented by **Claude Code outside the train** on the same branch: the bounded cleanup
+  join rethrows the primary body failure with the cleanup failure as its `cause`, and still reports
+  a cleanup-only failure. Completion reaches main with the reviewed, green PR merge.
+- [x] Join checkpoint pre-attempt verification before session cleanup ([review residual #272](https://github.com/agentkitai/agentrig/issues/272)):
+  register every started per-session verification/Git promise and drain it in `endSession` before
+  releasing the lease, so a later-turn hook timeout cannot abandon work whose Git children still own
+  the repository. Implemented by **Claude Code outside the train** on the same branch, with
+  a deterministic abandoned-verification regression; fail-closed denial, lease refusals and bounded
+  cancellation unchanged. Not a fix for the #244 Windows fixture timeouts.
+  Completion reaches main with the reviewed, green PR merge.
 - [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
   preexisting reviewer first-run failure, followed by passing isolated/full runs;
   include with END test followups, not a new R17 gate or parent code workaround.
 
-- [ ] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) joins #244 for later-turn cleanup; R17g disposition, not R17d gating.
+- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct Windows timeouts remain open.
 - [ ] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275), clarify per-call versus overall timeout. A 30s message alone does not establish that the entire 300s budget expired.
 - [ ] PR276 LOW residuals for R17g disposition, not new gates: [#277](https://github.com/agentkitai/agentrig/issues/277) probe stop evidence; [#278](https://github.com/agentkitai/agentrig/issues/278) flush diagnostic failure output; [#279](https://github.com/agentkitai/agentrig/issues/279) clarify independently reproduced fail-first count. No fourth PR276 repair here.
