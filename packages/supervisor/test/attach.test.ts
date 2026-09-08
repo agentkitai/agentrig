@@ -476,11 +476,11 @@ describe("review regressions", () => {
     // Which of the 50ms timer and the 25-turn session finished first used to decide that: when the
     // session won, `attach` aborted the observer's lifetime and the same expiry was reported as a
     // detached close with no timeout diagnostic at all. Locally the diagnostic landed at 85ms
-    // against a session that ended at 124ms — 39ms of margin, which macOS CI lost. Nothing below
+    // against a session that ended at 124ms — 39ms of margin; the historical macOS schedule is unknown. Nothing below
     // waits on a clock any more. The session is held at the turn it would
     // have ended on until the real timeout has been reported, and then until the observer has
     // recorded a further signal — which is the "degrades the recurring signature" half of the
-    // contract. `maxTurns` stays the ceiling, so a regression fails on an assertion, not a hang.
+    // contract. `maxTurns` stays the ceiling after the hold, and the test deadline bounds a broken expiry.
     const errors: string[] = [];
     const expired = Promise.withResolvers<void>();
     let sawExpiry = false;

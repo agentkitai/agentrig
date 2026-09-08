@@ -65,25 +65,26 @@ not this row's gate.
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work the
 existing open backlog. It is **not** an agentrig-built row, an R17 row, or the start of the R17g
-sweep. Branch `fix/followups-ci-fixtures`, base `cc457c7`. The batch is exactly
+sweep. Branch `fix/followups-ci-fixtures`, base `cc457c7`, integrated with `efd20a8`.
+Builder session **92c2d179-3398-4f63-a335-cbe41a7527a1**. The batch is exactly
 [#240](https://github.com/agentkitai/agentrig/issues/240) and
 [#244](https://github.com/agentkitai/agentrig/issues/244), including the macOS strand recorded in
 #244 comment 5588619917. **Test files only** — no package source changed, no production cap was
 lowered, no assertion was dropped and no deadline was raised. Independent review and
 exact-head/post-merge CI receipts belong to the batch PR; the local evidence below closes nothing.
 
-**#240 — the aggregate-cap fixture was setup, not assertion.** Of the 3145 ms
-`packages/cli/test/packages.test.ts` spent on *does not expose an earlier verified package when the
-aggregate scan exhausts its cap*, 147 ms built 1000 source files, 1824 ms and 1328 ms copied them
-into two real installs, and 1060 ms rescanned them; the assertion itself is one `inspectPackages`
-call. The cap being proved is a *shared budget*, and the scan spends it on every entry it walks —
+**#240 — aggregate-cap fixture setup dominated its work.** The original case created 1000 source
+files and copied them into two real installs before the assertion's `inspectPackages` scan.
+The builder's reported wall time and component timings do not add up, so they are not retained
+as a quantitative phase breakdown or speedup claim. The reduction in filesystem work is structural.
+The cap being proved is a *shared budget*, and the scan spends it on every entry it walks —
 directories included — and charges bytes from `lstat` before opening anything. So the same real
 defaults are now reached without the copying: two small real installs, then the later one padded
 with empty prompt directories to land exactly one entry past `PACKAGE_LIMITS.entries`, under a
 single parent that keeps every `readdir` inside the per-package guard so it is the aggregate that
 fires. A second case reaches the real `PACKAGE_LIMITS.bytes` default with one file sized at the
 whole allowance, refused only because the earlier package already spent part of it, and never read.
-**3145 ms → 597 ms + 27 ms**, and the 30 s override drops to 10 s and the default 5 s. Both cases
+The new cases measured **597 ms and 27 ms** locally, and the 30 s override drops to 10 s and the default 5 s. Both cases
 now assert the precondition they depend on — that both packages *are* listed before the budget is
 exhausted — so "does not expose an earlier verified package" is load-bearing rather than assumed.
 
@@ -114,9 +115,10 @@ on PR #282's first head. Locally `onEscalate` was entered at 13–35 ms against 
 at 73–124 ms, and injecting a 200 ms escalate timeout reproduces the failure as
 `apply:escalate: supervisor detached or session ended`. That is an injected interleaving, **not** a
 reproduction of the historical macOS run, whose exact scheduling is unknown. The fixture no longer
-waits on a clock: the provider holds the turn it would have ended on until the real timeout has been
-reported and the observer has recorded a further signal, with `maxTurns` still the ceiling so a
-regression fails on an assertion instead of hanging. The 50 ms timeout, the real `withTimeout`
+depends on that session-ending race: the provider holds the turn it would have ended on until the real timeout has been
+reported and the observer has recorded a further signal. `maxTurns` and the test's deadline remain
+bounds; if the real expiry mechanism itself breaks, the test can still fail by its deadline.
+The 50 ms timeout, the real `withTimeout`
 expiry path and the escalate/guidance assertions are unchanged, and the test now passes with the
 escalate timeout injected at 500 ms and 2000 ms — interleavings the old shape failed at 200 ms.
 
