@@ -1551,12 +1551,24 @@ need an explicit budget; neither prevents continuing other actionable entries.
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
   this remaining coverage improvement is not a newly discovered product defect or R17 gate.
-- [ ] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
+- [x] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
   retain useful touched-file diagnostics when metadata becomes unknown, without
   weakening finite bounds, cancellation, coverage checks or fail-closed status.
-- [ ] Right-size the bounded compiler coverage buffer ([review residual #264](https://github.com/agentkitai/agentrig/issues/264)):
+  Implemented by **Claude Code outside the train** on `fix/followups-compiler-diagnostics`:
+  an incomplete run keeps what the bounded sink already parsed and says so explicitly
+  ("partial diagnostics retained; coverage not established"), so unknown coverage still
+  cannot be read as complete. Hook-substituted command output remains unparsed and a
+  cancelled turn still canonicalizes nothing. Completion reaches main with the reviewed,
+  green PR merge.
+- [x] Right-size the bounded compiler coverage buffer ([review residual #264](https://github.com/agentkitai/agentrig/issues/264)):
   measure and consider capped geometric growth instead of allocating 4 MiB on the
   first metadata line; preserve byte accounting and overflow controls.
+  Implemented by **Claude Code outside the train** on the same branch: retention starts at
+  one line bound and doubles under the unchanged cap. Measured on real `tsc --listFiles`
+  output, largest single allocation falls 64x (core) and 32x (cli); a near-cap listing keeps
+  the 4 MiB buffer cap but costs more total allocation while copying, not less RSS by proof.
+  No speedup is claimed. Completion reaches main
+  with the reviewed, green PR merge.
 
 - [x] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
   cover setup failure without leaking fake timers; include in the R17g core package batch, not a new R17 gate.
@@ -1590,6 +1602,7 @@ need an explicit budget; neither prevents continuing other actionable entries.
   preexisting reviewer first-run failure, followed by passing isolated/full runs;
   include with END test followups, not a new R17 gate or parent code workaround.
 
+- [x] Historical review evidence [#261](https://github.com/agentkitai/agentrig/issues/261): independent exact-head build/test/typecheck reproduced and publicly recorded; original Codex limitation retained, not rewritten. [Verification receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
 - [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct Windows timeouts remain open.
 - [ ] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275), clarify per-call versus overall timeout. A 30s message alone does not establish that the entire 300s budget expired.
-- [ ] PR276 LOW residuals for R17g disposition, not new gates: [#277](https://github.com/agentkitai/agentrig/issues/277) probe stop evidence; [#278](https://github.com/agentkitai/agentrig/issues/278) flush diagnostic failure output; [#279](https://github.com/agentkitai/agentrig/issues/279) clarify independently reproduced fail-first count. No fourth PR276 repair here.
+- [x] PR276 probe followups: [#277](https://github.com/agentkitai/agentrig/issues/277) stop evidence asserted; [#278](https://github.com/agentkitai/agentrig/issues/278) natural failure exit flushes pending output while remaining fail-fast; [#279](https://github.com/agentkitai/agentrig/issues/279) independent four-of-five fail-first receipt recorded alongside staged history. Implemented in the separately authorized existing-issue sweep, not another PR276 repair cycle. Completion reaches main with the reviewed, green batch merge.
