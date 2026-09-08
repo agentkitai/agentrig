@@ -122,8 +122,9 @@ it("add, delete and rename take effect together, and the loader's guards still a
     await rename(join(f.skills, "deploy.md"), join(f.skills, "release.md"));
     await writeFile(join(f.skills, "inspect.md"), "---\ndescription: d\n---\nINSPECT BODY", "utf8");
     // a symlink is not a skill, whatever it points at — the refresh runs the same loader
-    await writeFile(join(f.root, "outside.md"), "---\ndescription: d\n---\nOUTSIDE BODY", "utf8");
-    await symlink(join(f.root, "outside.md"), join(f.skills, "linked.md"));
+    const outside = join(f.root, "outside"); await mkdir(outside);
+    await writeFile(join(outside, "SKILL.md"), "---\nname: linked\ndescription: d\n---\nOUTSIDE BODY", "utf8");
+    await symlink(outside, join(f.skills, "linked"), process.platform === "win32" ? "junction" : "dir");
 
     await controller.submit("/new");
     const reloaded = text(controller);

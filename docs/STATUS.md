@@ -55,7 +55,8 @@ Builder: **Claude Code, outside the train**, under the human instruction to work
 backlog while the operator delivers other prepared batches serially. It is **not** an agentrig-built
 row, an R17 gate, or the start of the R17g sweep. Branch `fix/followups-skill-refresh` from main
 `1102c3d`. Independent review, exact-head CI and the serialized merge belong to the operator's
-delivery PR; nothing below claims a hosted CI result or a merge.
+delivery PR; nothing below claims a hosted CI result or a merge. Builder session:
+**bda6d697-ff44-4f7f-ad40-d201aeb15616**.
 
 [#267](https://github.com/agentkitai/agentrig/issues/267) — the catalogue was a startup scan, so an
 edited `SKILL.md` kept serving the body the process read at launch, and the four consumers each held
@@ -87,9 +88,9 @@ rather than at spawn (1).
 Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3481 passed / 4 skipped** in
 **223** files under `TMPDIR=/var/tmp/agentrig-skillrefresh-tmp`. The new CLI file drives the real
 `startTui` wiring rather than a hand-assembled controller, because the defect was four independent
-copies. It is deliberately **not** added to the Windows CI include list: it creates a symlink, as
-`packages/core/test/skills.test.ts` already does, and that file is not in the list either. These are
-local results only.
+copies. The operator changed the symlink control to a directory symlink (Windows junction),
+preserving refusal of linked skill roots, and added this CLI file to Windows CI. The portable
+fixture plus core skills and child wiring pass **60 tests** locally. Hosted results remain pending.
 
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 
