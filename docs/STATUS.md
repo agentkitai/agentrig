@@ -1,5 +1,12 @@
 # Status
 
+Existing-issue delivery checkpoint: **PR #283** merged at`f38b40b`, closed#249, with exact-head
+CI34256456887/structure34256456860 and postmerge34257770832/34257770852 allgreen. **PR #284**
+merged at`4916cf1`, closed#240, exact-headCI34258136965/structure34258137005 allgreen;
+postmerge34258920447/34258920455 is being monitored. #244 stays open for the independently
+reproduced late-permission shutdown fix; no new issue. This branch's #237/#245/#253 batch is now
+integrated with4916cf1: private-temp build/test/typecheck0/0/0, **3509 passed / 4 skipped / 224 files**.
+
 Outside-train operator review repair for #237/#245/#253: independent Claude session
 **8d1b721b-c8af-4fcd-867e-ab98c011e598** ran build/test/typecheck0/0/0,
 **3502 passed / 4 skipped / 224 files**, and four killed/restored mutants at4aa807e.
