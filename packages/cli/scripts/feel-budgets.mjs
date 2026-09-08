@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { assertColdStartBudget, assertFeelBudgets, FeelStreamMeasurement, FeelTaskMeasurement } from '../dist/feel-budgets.js';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const run = (command, args) => execFileSync(command, args, { cwd: root, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
-const terminal = () => z.object({ cold_start_to_prompt_ms: z.number().finite().nonnegative() }).parse(JSON.parse(run('python3', ['.agentrig/r17/terminal-baseline.py']))).cold_start_to_prompt_ms;
+const run = (command, args, env = process.env) => execFileSync(command, args, { cwd: root, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
+const terminal = () => z.object({ cold_start_to_prompt_ms: z.number().finite().nonnegative() }).parse(JSON.parse(run('python3', ['packages/cli/scripts/feel-terminal.py']))).cold_start_to_prompt_ms;
 const coldStartMs = terminal();
 console.log(`cold start control: ${coldStartMs.toFixed(3)} ms`);
 assertColdStartBudget(coldStartMs);
@@ -31,7 +31,7 @@ try {
 } finally { await writeFile(entry, original); }
 assert.deepEqual(await readFile(entry), original, 'CLI entry bytes must be restored');
 
-const stream = FeelStreamMeasurement.parse(JSON.parse(run(process.execPath, ['packages/cli/scripts/feel-stream.mjs'])));
+const stream = FeelStreamMeasurement.parse(JSON.parse(run(process.execPath, ['packages/cli/scripts/feel-stream.mjs'], { ...process.env, CI: 'false' })));
 console.log(`stream/frame: ${JSON.stringify(stream)}`);
 const e1Output = run(process.execPath, ['.agentrig/r17/task-baseline.mjs']);
 process.stdout.write(e1Output);

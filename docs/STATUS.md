@@ -7,7 +7,9 @@ PR delivery pending; next **R17d**, only after exact-head and post-merge CI are 
 
 Builder **agentrig**, conductor **100108d7**. Fresh branch/worktree for R17c only;
 R17b's implementation worktree is untouched. This row has **one implementation
-child**, **zero nested children**, **zero new halts**, **zero repair rounds** so far.
+child**, **zero nested children**, **zero new halts**, **zero external-review repair rounds** so far.
+One pre-review CI correction fixes the owned terminal fixture and cold bundle;
+CI34193777531 failed honestly, with no unchanged rerun or raised budget.
 Child session id and token usage are not tool-observable here; the conductor must
 record its tool-reported accounting. These continuation counts do not replace
 any historical R17b totals, halted conductors, external reviews or outside repairs.

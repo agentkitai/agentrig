@@ -39,6 +39,7 @@
     "string-width": "^7.2.0",
     "tar-stream": "3.2.1",
     "ws": "8.21.3",
+    "yoga-layout": "3.2.1",
     "zod": "^3.25.76"
   },
   "bin": {
