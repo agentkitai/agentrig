@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,11 +9,12 @@ import { expect, it } from "vitest";
 interface Marker { path: string; kind: string; detail?: string }
 interface Inspection { temporaryDirectory: string; probed: string[]; markers: Marker[] }
 type Lstat = (path: string) => Promise<{ isSymbolicLink(): boolean; isDirectory(): boolean; isFile(): boolean }>;
-const { inspectTemporaryRoot, preflightFailure } = await import(
+const { inspectTemporaryRoot: inspectRoot, preflightFailure } = await import(
   new URL("../../../test/fixture-preflight.mjs", import.meta.url).href) as {
-    inspectTemporaryRoot(temporaryDirectory: string, lstat?: Lstat): Promise<Inspection>;
+    inspectTemporaryRoot(temporaryDirectory: string, lstat?: Lstat, realpath?: (path: string) => Promise<string>): Promise<Inspection>;
     preflightFailure(inspection: Inspection): string | undefined;
   };
+const inspectTemporaryRoot = (directory: string, lstat: Lstat) => inspectRoot(directory, lstat, async path => resolve(path));
 
 const script = fileURLToPath(new URL("../../../test/fixture-preflight.mjs", import.meta.url));
 const chain = (...directories: string[]) => directories.map(directory => join(resolve(directory), ".git"));
@@ -82,3 +83,17 @@ it("guards `pnpm test` with the same script it exposes as `pnpm test:preflight`"
   expect(scripts.test).toBe("node test/fixture-preflight.mjs && vitest run");
   expect(scripts["test:preflight"]).toBe("node test/fixture-preflight.mjs --verbose");
 });
+
+it("checks physical ancestry when the effective temporary directory is a symlink", async () => {
+  const base = await mkdtemp(join(tmpdir(), "agentrig-preflight-link-"));
+  try {
+    const physical = join(base, "physical"), work = join(physical, "work"), alias = join(base, "alias");
+    await mkdir(work, { recursive: true }); await mkdir(join(physical, ".git"));
+    await symlink(work, alias, process.platform === "win32" ? "junction" : "dir");
+    const failure = await promisify(execFile)(process.execPath, [script],
+      { env: { ...process.env, TMPDIR: alias, TEMP: alias, TMP: alias }, timeout: 60_000 },
+    ).then(() => undefined, (error: { code: number; stderr: string }) => error);
+    expect(failure?.code).toBe(1);
+    expect(failure?.stderr).toContain(join(physical, ".git"));
+  } finally { await rm(base, { recursive: true, force: true }); }
+}, 70_000);

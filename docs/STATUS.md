@@ -74,8 +74,8 @@ for a `.git` file, directory or symlink, treats a probe it cannot read as presen
 absent, and fails with a named explanation before the suite starts. It is `pnpm test:preflight`
 and a silent-on-success guard in `pnpm test`. It deletes nothing, offers no bypass, skips no test
 and does not touch trust discovery, which is correct as written. [docs/TESTING.md](TESTING.md)
-records the invocations, the Codex `workspace-write` sandbox that synthesizes read-only `.git`
-mounts over the workspace root, `/tmp` and `$TMPDIR`, and the rule that a session which cannot get
+records the invocations, controlled Codex `workspace-write` observations of read-only `.git`
+mounts at `/tmp/.git` and private `$TMPDIR/.git`, and the rule that a session which cannot get
 a clean preflight may review code but must hand execution to a runner outside the sandbox. This is
 **detection only**: no historical failure from #237, #271 or PR #269 is reproduced or fixed here,
 and the sandbox mechanism is still not an identified creator of any host `/tmp/.git`.
@@ -99,18 +99,29 @@ Local verification on the branch, each command run separately with a private `TM
 **0**, followed by three consecutive green full runs. Not merged; no independent review, no
 exact-head CI and no post-merge CI are claimed.
 
-**Open blocker, pre-existing, not introduced by this batch.** The full suite is intermittently red
+**Observed full-suite instability; cause not established.** The full suite was intermittently red
 on this host, reproduced on **unmodified `cc457c7`** (one of six baseline runs, 7 failures) as well
 as on the branch. Every failing run carries the same family: `Project /tmp contains the user
 AgentRig state directory` and a received `projectRoot: '/tmp'`, with trust, config, extension and
 schedule fixtures then reading defaults instead of their fixture config. The host has no
-`/tmp/.git` — the new preflight passes — but it does have a shared `/tmp/.agentrig` whose
+`/tmp/.git` at the later inspection — the preflight passed — but it had shared `/tmp/.agentrig` whose
 `usage.jsonl` was written *during* these runs with fixture-provider records, alongside
 `schedule.json`, `schedule.log`, `raw/sessions/fb380606` and the `packages/pkg-f16d05…` leftover
 named in #237's original report. Nothing there was deleted or worked around. The preflight does not
-detect this: its assigned scope is Git ancestry, and the state directory is a different marker.
-This belongs to #237/#271 fixture isolation, unresolved. One further unrelated flake was observed
-once (`evaluation.test.ts`, `negative outer wall time`); it is not diagnosed here.
+detect state directories because they are **not** project-root markers. The operator rejects the
+builder's repeated `.agentrig`-cause inference: `canonicalProjectRoot` checks `.git` only, as the
+issue's earlier private controls already established. A later inspection does not prove marker
+absence during failures or in another namespace. These observations remain evidence limitations,
+not a demonstrated product defect attributable to the state directory. One further flake was
+observed once (`evaluation.test.ts`, `negative outer wall time`); no cause is claimed here.
+
+Operator corrections before review: canonical as well as lexical temp ancestry is now inspected;
+a real symlink/junction regression fails against lexical-only scanning and passes with the fix.
+The two new CLI files are included in Windows CI, and the root assertion uses portable path
+normalization. TESTING now records the full suite's build prerequisite and verified substring
+filters, and scopes sandbox observations to the actual probed paths. The #237 completion marker
+means its explicitly scoped diagnostic/preflight resolution is implemented, not that historical
+causation was proved or that a preflight prevents later filesystem changes.
 
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 

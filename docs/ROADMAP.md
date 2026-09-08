@@ -1539,21 +1539,19 @@ need an explicit budget; neither prevents continuing other actionable entries.
   Consider bounded replay of a recorded seal-refusal reason and retained checkpoint
   references when explicit undo refuses; this diagnostic replay is not implemented.
   This is an end-of-roadmap follow-up, not an added R17 gate or subrow.
-- [ ] Fixture temporary-root ancestry isolation ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
+- [x] Fixture temporary-root ancestry diagnosis and preflight ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
   detect unexpected ancestor Git markers before fixtures grant trust or write state.
   Private controls disprove the original `.agentrig`-only explanation; the historical
   cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
-  Detection landed by **Claude Code outside the train** on `fix/followups-test-environment`:
+  Implemented by **Claude Code outside the train**, with operator corrections, on `fix/followups-test-environment`:
   `test/fixture-preflight.mjs` fails before the suite on a `.git` file, directory, symlink or
-  unreadable probe at the effective temporary directory or any ancestor, wired as
+  unreadable probe at the effective temporary directory or any lexical/canonical ancestor, wired as
   `pnpm test:preflight` and as a silent guard in `pnpm test`, with the sandbox limitation and the
-  review-versus-execution rules in [docs/TESTING.md](TESTING.md). Detection only: fixtures that
-  escape the private temporary root are still not isolated, no historical failure is reproduced or
-  fixed, and no marker is deleted, bypassed or skipped. Tested on the branch; not merged, no CI
-  claim. The same branch's runs recorded a **pre-existing** intermittent trust-root failure family
-  on an uncontaminated host — reproduced on unmodified `cc457c7` — with shared `/tmp/.agentrig`
-  state written during runs; that remains open here and under
-  [feel #271](https://github.com/agentkitai/agentrig/issues/271).
+  review-versus-execution rules in [docs/TESTING.md](TESTING.md). This completes the bounded
+  diagnostic/preflight resolution recorded in the issue, not a claim to identify every historical
+  failure's cause or owner. No marker is deleted or bypassed, no tests skipped, and product trust
+  remains fail-closed. Later host observations and shared `.agentrig` state do not prove the
+  superseded marker hypothesis. Completion reaches main through the reviewed green PR.
 - [ ] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,

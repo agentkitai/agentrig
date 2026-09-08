@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import base from "../../../vitest.config.js";
 import windows from "../../../vitest.windows.config.js";
@@ -26,6 +27,6 @@ it("discovers a repository test when vitest runs from the CLI workspace without 
 }, 200_000);
 
 it("pins the repository root in the shared config and inherits it into the Windows lane", () => {
-  expect(base.root).toBe(repository.replace(/\/$/, ""));
+  expect(base.root).toBe(resolve(repository));
   expect(windows.root).toBe(base.root);
 });

@@ -12,7 +12,7 @@
  * `node test/fixture-preflight.mjs` is silent on success (it guards `pnpm test`); `--verbose`
  * prints what it checked (`pnpm test:preflight`). See docs/TESTING.md.
  */
-import { lstat as lstatFile } from "node:fs/promises";
+import { lstat as lstatFile, realpath as realpathFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,8 +32,12 @@ const kindOf = stats => stats.isSymbolicLink() ? "symlink" : stats.isDirectory()
  * Look for a `.git` entry beside the temporary directory and each of its ancestors. `lstat` is
  * injectable so the ancestry can be exercised without depending on the host filesystem.
  */
-export async function inspectTemporaryRoot(temporaryDirectory, lstat = lstatFile) {
-  const probed = ancestorDirectories(temporaryDirectory).map(directory => join(directory, ".git"));
+export async function inspectTemporaryRoot(temporaryDirectory, lstat = lstatFile, realpath = realpathFile) {
+  const canonicalDirectory = await realpath(temporaryDirectory);
+  // Product discovery canonicalizes cwd. Lexical ancestry alone misses a Git marker above the
+  // target of a symlinked temp directory (including ordinary platform temp aliases).
+  const directories = new Set([...ancestorDirectories(temporaryDirectory), ...ancestorDirectories(canonicalDirectory)]);
+  const probed = [...directories].map(directory => join(directory, ".git"));
   const markers = [];
   for (const path of probed) {
     try {
@@ -44,7 +48,7 @@ export async function inspectTemporaryRoot(temporaryDirectory, lstat = lstatFile
       if (error?.code !== "ENOENT") markers.push({ path, kind: "unreadable", detail: error?.code ?? String(error) });
     }
   }
-  return { temporaryDirectory: resolve(temporaryDirectory), probed, markers };
+  return { temporaryDirectory: resolve(temporaryDirectory), canonicalDirectory, probed, markers };
 }
 
 /** The operator-facing explanation, or `undefined` when the ancestry is clean. */
@@ -75,13 +79,15 @@ export function preflightFailure(inspection) {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const inspection = await inspectTemporaryRoot(tmpdir());
-  const failure = preflightFailure(inspection);
-  if (failure !== undefined) {
-    console.error(failure);
-    process.exit(1);
-  }
-  if (process.argv.includes("--verbose")) {
-    console.log(`fixture preflight: no ancestor .git above ${inspection.temporaryDirectory} (checked ${inspection.probed.join(", ")})`);
+  try {
+    const inspection = await inspectTemporaryRoot(tmpdir());
+    const failure = preflightFailure(inspection);
+    if (failure !== undefined) { console.error(failure); process.exitCode = 1; }
+    else if (process.argv.includes("--verbose")) {
+      console.log(`fixture preflight: no ancestor .git above ${inspection.temporaryDirectory} (checked ${inspection.probed.join(", ")})`);
+    }
+  } catch (error) {
+    console.error(`Fixture preflight failed: cannot inspect temporary directory ${tmpdir()}: ${error.message}`);
+    process.exitCode = 1;
   }
 }

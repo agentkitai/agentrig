@@ -1,6 +1,8 @@
 # Running the tests
 
-Vitest resolves workspace packages straight to source, so nothing needs building first.
+Most Vitest imports resolve workspace packages to source, but the full suite also exercises built
+CLI/evaluator artifacts. Run `pnpm install --frozen-lockfile` and `pnpm build` before the full suite
+or evaluator tests; source-only focused tests such as `command-outcome` need no build.
 
 ```sh
 pnpm test                  # fixture preflight, then the whole suite
@@ -17,8 +19,8 @@ the same way from anywhere. A workspace-local run works without `--root`:
 pnpm --filter @agentkitai/agentrig-cli exec vitest run packages/core/test/command-outcome.test.ts
 ```
 
-Paths are still repository-relative in that form — `test/command-outcome.test.ts` matches nothing
-from `packages/cli`. The older explicit `--root ../..` invocation remains valid, and
+Use repository-relative paths to avoid ambiguous matches; Vitest's substring filter also accepts
+`test/command-outcome.test.ts`. The older explicit `--root ../..` invocation remains valid, and
 `vitest.windows.config.ts` and `vitest.web.config.ts` spread the base config, so they inherit the
 same root. Before this was pinned, a workspace-local run exited 1 with `No test files found`
 ([feel #245](https://github.com/agentkitai/agentrig/issues/245)).
@@ -27,7 +29,8 @@ same root. Before this was pinned, a workspace-local run exited 1 with `No test 
 
 `test/fixture-preflight.mjs` runs before the suite in `pnpm test` and is silent unless it finds
 something. It looks for a `.git` file, directory or symlink beside the effective temporary
-directory (`TMPDIR`, or the platform default) and each of its ancestors, and fails with an
+directory (`TMPDIR`, or the platform default) and each of its lexical and canonical ancestors,
+including ancestors hidden behind a symlinked temp path, and fails with an
 explanation instead of letting the suite fail 120 tests deep. A marker it cannot read counts as
 present: reporting an `EACCES` probe as "absent" would hide exactly the case it exists to catch.
 
@@ -47,9 +50,10 @@ The preflight does not repair anything, and nothing in the product changes becau
 
 ## Known sandbox limitation
 
-A Codex `workspace-write` sandbox synthesizes empty, mode-0555 `.git` directories over the
-workspace root, `/tmp` and `$TMPDIR`; `/proc/self/mountinfo` shows each as a read-only tmpfs mount.
-The same probe on the host reports `ENOENT` for all of them. Moving `TMPDIR` does not escape it —
+In the controlled Codex `workspace-write` experiment, empty, mode-0555 `.git` directories appeared
+at `/tmp/.git` and the private `$TMPDIR/.git`; `/proc/self/mountinfo` showed read-only tmpfs mounts.
+The same probe on the host reported `ENOENT` for those two paths. This does not claim a real
+checkout's Git metadata is absent or replaced by an empty directory. Moving `TMPDIR` did not escape it —
 the new writable root receives its own synthetic marker. The reproduction and evidence are in
 [feel #237](https://github.com/agentkitai/agentrig/issues/237#issuecomment-5588263750); the working
 diagnostic was `codex sandbox -c 'sandbox_mode="workspace-write"' -- node <probe>` (the current CLI
@@ -60,7 +64,11 @@ pass there. It is a property of that filesystem view, not a product regression, 
 an identified creator of any historically observed `/tmp/.git` on a host. The mechanism explains
 the reviewer environments that reproduce it; the original cause and owner of the failures in #237,
 #271 and PR #269 remain unknown, and neither the preflight nor this document reproduces or fixes
-those historical runs.
+those historical runs. The preflight is a point-in-time check, not a guarantee that ancestry
+cannot change during a run. A later host check cannot establish what another process or earlier
+filesystem namespace saw. In particular, an ancestor `.agentrig` directory alone is **not** a
+project-root marker: `canonicalProjectRoot` in `packages/cli/src/trust.ts` checks `.git` only.
+The earlier `.agentrig`-only explanation is superseded by the controlled evidence linked above.
 
 ## Reviewing code is not running the suite
 
