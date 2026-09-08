@@ -307,6 +307,9 @@ export class Checkpointer implements Hook {
   readonly timeoutMs: number;
   readonly [CHECKPOINTER] = true;
   private readonly attempts = new Map<string, { turn: number; work: Promise<void> }>();
+  /** Every started per-session Git/verification promise that has not settled yet, including work a
+   * caller abandoned. `attempts` alone only ever holds the newest turn's snapshot. */
+  private readonly running = new Map<string, Set<Promise<void>>>();
   private readonly leases = new Map<string, { path: string; repo: string; ino: number; dev: number }>();
   private readonly assertQuiescent: ((ctx: HookContext) => Promise<void>) | undefined;
   private readonly owned = new Map<string, CheckpointState>();
@@ -319,9 +322,30 @@ export class Checkpointer implements Hook {
   }
   private readonly warned = new Set<string>();
 
+  /** Registers work whose Git children own the repository until it settles. The returned promise
+   * is the original one: the caller still reports its own failure, and this copy never rejects. */
+  private track<T>(sessionId: string, work: Promise<T>): Promise<T> {
+    let running = this.running.get(sessionId);
+    if (running === undefined) { running = new Set(); this.running.set(sessionId, running); }
+    const settled = work.then(() => {}, () => {});
+    running.add(settled);
+    void settled.then(() => {
+      const current = this.running.get(sessionId);
+      current?.delete(settled);
+      if (current?.size === 0) this.running.delete(sessionId);
+    });
+    return work;
+  }
+
   /** Release state retained only to coordinate calls within one active session. */
   async endSession(sessionId: string): Promise<void> {
     await this.attempts.get(sessionId)?.work.catch(() => {});
+    // A verification a hook timeout abandoned mid-turn is registered nowhere else: it can still be
+    // running Git in this repository, so releasing the lease first would race its cleanup.
+    for (let running = this.running.get(sessionId); running !== undefined && running.size > 0; running = this.running.get(sessionId)) {
+      await Promise.all([...running]);
+    }
+    this.running.delete(sessionId);
     this.attempts.delete(sessionId);
     this.warned.delete(sessionId);
     this.owned.delete(sessionId);
@@ -380,7 +404,7 @@ export class Checkpointer implements Hook {
     if (this.leases.has(ctx.sessionId)) await this.guard(ctx);
     const owned = this.owned.get(ctx.sessionId);
     if (owned) {
-      const actual = await checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx);
+      const actual = await this.track(ctx.sessionId,checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx));
       if (!sameCheckpointState(owned,actual)) {
         this.uncertain.add(ctx.sessionId);
         throw new Error("non-session changes detected; refusing mutation and undo ownership");
@@ -388,7 +412,9 @@ export class Checkpointer implements Hook {
     }
     let entry = this.attempts.get(ctx.sessionId);
     if (entry?.turn !== ctx.turn) {
-      entry = { turn: ctx.turn, work: this.create(ctx) };
+      // Tracked as well as stored: a later turn replaces this entry, and a failed attempt deletes
+      // it, so the map cannot be relied on to still hold abandoned work at session end.
+      entry = { turn: ctx.turn, work: this.track(ctx.sessionId, this.create(ctx)) };
       this.attempts.set(ctx.sessionId, entry);
     }
     try {
@@ -405,7 +431,7 @@ export class Checkpointer implements Hook {
     if (ctx.toolEffect === "read-only" || !this.leases.has(ctx.sessionId)) return;
     this.uncertain.add(ctx.sessionId);
     await this.guard(ctx);
-    const state = await checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx);
+    const state = await this.track(ctx.sessionId,checkpointState(this.leases.get(ctx.sessionId)!.repo,ctx));
     await this.guard(ctx);
     this.owned.set(ctx.sessionId,state);
     this.uncertain.delete(ctx.sessionId);
@@ -418,7 +444,7 @@ export class Checkpointer implements Hook {
     const lease = this.leases.get(ctx.sessionId);
     if (!owned || !lease) return;
     await this.guard(ctx);
-    const current = await checkpointState(lease.repo,ctx);
+    const current = await this.track(ctx.sessionId,checkpointState(lease.repo,ctx));
     if (!sameCheckpointState(owned,current)) throw new Error(
       "undo unavailable: non-session changes after the final tool. " +
       "Checkpoint snapshots remain, but undo has no verified ownership seal; " +
