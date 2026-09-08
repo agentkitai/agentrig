@@ -1574,12 +1574,24 @@ need an explicit budget; neither prevents continuing other actionable entries.
   subprocess regression runs one targeted core test from `packages/cli` — never a recursive full
   suite. The old config fails both new assertions. Valid invocations are centralized in
   [docs/TESTING.md](TESTING.md). Completion reaches main with the reviewed, green PR merge.
-- [ ] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
+- [x] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
   retain useful touched-file diagnostics when metadata becomes unknown, without
   weakening finite bounds, cancellation, coverage checks or fail-closed status.
-- [ ] Right-size the bounded compiler coverage buffer ([review residual #264](https://github.com/agentkitai/agentrig/issues/264)):
+  Implemented by **Claude Code outside the train** on `fix/followups-compiler-diagnostics`:
+  an incomplete run keeps what the bounded sink already parsed and says so explicitly
+  ("partial diagnostics retained; coverage not established"), so unknown coverage still
+  cannot be read as complete. Hook-substituted command output remains unparsed and a
+  cancelled turn still canonicalizes nothing. Completion reaches main with the reviewed,
+  green PR merge.
+- [x] Right-size the bounded compiler coverage buffer ([review residual #264](https://github.com/agentkitai/agentrig/issues/264)):
   measure and consider capped geometric growth instead of allocating 4 MiB on the
   first metadata line; preserve byte accounting and overflow controls.
+  Implemented by **Claude Code outside the train** on the same branch: retention starts at
+  one line bound and doubles under the unchanged cap. Measured on real `tsc --listFiles`
+  output, largest single allocation falls 64x (core) and 32x (cli); a near-cap listing keeps
+  the 4 MiB buffer cap but costs more total allocation while copying, not less RSS by proof.
+  No speedup is claimed. Completion reaches main
+  with the reviewed, green PR merge.
 
 - [x] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
   cover setup failure without leaking fake timers; include in the R17g core package batch, not a new R17 gate.

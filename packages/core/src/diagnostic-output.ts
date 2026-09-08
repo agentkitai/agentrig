@@ -5,6 +5,9 @@ export const TSC_DIAGNOSTIC_LINE = /^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/;
 // Human-approved #254 amendment: metadata is finite, separate from diagnostic text.
 // 4 MiB covers tens of thousands of ordinary paths; retention never grows past this cap.
 export const TSC_METADATA_BYTES = 4 * 1024 * 1024;
+// #264: measured ordinary listings are far below the cap, so retention starts at one line bound
+// and doubles on demand. The cap, the byte accounting above it and overflow refusal are unchanged.
+export const TSC_METADATA_INITIAL_BYTES = 8192;
 export const TSC_LINE_BYTES = 8192;
 type Stream = "stdout" | "stderr";
 
@@ -21,6 +24,9 @@ export class TscDiagnosticOutput {
 
   constructor(private readonly changedPath: string, private readonly maxDiagnosticBytes: number,
     private readonly signal: AbortSignal) {}
+
+  /** Bytes currently allocated for the retained coverage listing; zero before and after retention. */
+  get metadataCapacity(): number { return this.metadata?.length ?? 0; }
 
   write(chunk: Buffer, stream: Stream): void {
     this.signal.throwIfAborted();
@@ -63,6 +69,24 @@ export class TscDiagnosticOutput {
     this.metadata = undefined;
   }
 
+  /**
+   * Capacity for `bytes` more listing, doubling from a small buffer and copying what is retained.
+   * The caller's byte accounting has already refused anything past `TSC_METADATA_BYTES`, so the
+   * request never exceeds the cap; the loop still stops there rather than trusting that. Both
+   * constants are powers of two, so the clamp cannot fire today — it is what keeps the doubling
+   * from overshooting the cap if either one is ever changed to something else.
+   */
+  private reserve(bytes: number): Buffer {
+    const needed = this.metadataLength + bytes;
+    if (this.metadata !== undefined && this.metadata.length >= needed) return this.metadata;
+    let size = this.metadata?.length ?? TSC_METADATA_INITIAL_BYTES;
+    while (size < needed && size < TSC_METADATA_BYTES) size = Math.min(size * 2, TSC_METADATA_BYTES);
+    const grown = Buffer.alloc(size);
+    if (this.metadata !== undefined) this.metadata.copy(grown, 0, 0, this.metadataLength);
+    this.metadata = grown;
+    return grown;
+  }
+
   private line(raw: string, stream: Stream, terminated: boolean): void {
     this.signal.throwIfAborted();
     const bytes = Buffer.byteLength(raw);
@@ -73,8 +97,7 @@ export class TscDiagnosticOutput {
       if (!terminated) throw new Error("checker coverage metadata ended without newline");
       this.metadataBytes += bytes + 1;
       if (this.metadataBytes > TSC_METADATA_BYTES) throw new Error("checker coverage metadata exceeded bound");
-      this.metadata ??= Buffer.alloc(TSC_METADATA_BYTES);
-      this.metadataLength += this.metadata.write(line + "\n", this.metadataLength, "utf8");
+      this.metadataLength += this.reserve(Buffer.byteLength(line) + 1).write(line + "\n", this.metadataLength, "utf8");
       return;
     }
     this.diagnosticBytes += bytes + (terminated ? 1 : 0);
