@@ -7,6 +7,18 @@ const event = (payload: Record<string, unknown>, seq = 1, sessionId = "s"): Harn
   HarnessEvent.parse({ seq, sessionId, ts: 1, ...payload });
 
 describe("R17e visible supervisor and memory", () => {
+  it("does not turn conversation insertion into a claim of model receipt after a veto", () => {
+    const log = new GuidanceLog();
+    log.push(event({ type: "steer", source: "supervisor", message: "not sent" }, 1));
+    log.push(event({ type: "turn.start", n: 1 }, 2));
+    log.push(event({ type: "session.end", reason: "done" }, 3));
+    const why = renderWhy(log.explainLast());
+    expect(why).toContain("no model request was recorded");
+    expect(why).toContain("not evidence that the model received it");
+    expect(why).not.toContain("delivered into this turn's request");
+    expect(why).toContain("(finished)");
+  });
+
   const decision = {
     type: "supervisor.intervention", id: "abcdef01",
     intervention: { type: "inject_guidance", message: "[supervisor: loop] change approach" },
@@ -29,7 +41,8 @@ describe("R17e visible supervisor and memory", () => {
   it("points an auxiliary rung at its usage record rather than inventing a number for it", () => {
     const line = renderChatEvent(event({ ...outcome, intervention: "run_reviewer",
       cost: { modelCalls: "auxiliary", auxiliaryId: "1234567890abcdef" } }))!;
-    expect(line).toContain("1 auxiliary model call [12345678], usage in its own record");
+    expect(line).toContain("auxiliary run [12345678], actual calls and usage in its own record");
+    expect(line).not.toContain("1 auxiliary model call");
     expect(line).not.toContain("B of prompt");
   });
 
@@ -75,6 +88,19 @@ describe("R17e visible supervisor and memory", () => {
     expect(fold.push(event({ type: "tool.result", id: "m1", ok: true, durationMs: 1, display: "a.md [index]\n  claim" }, 2, "two"))).toEqual([]);
     const other = new RecallText();
     expect(other.push(event({ type: "tool.result", id: "unknown", ok: true, durationMs: 1, display: "a.md [index]\n  claim" }))).toEqual([]);
+  });
+
+  it("shows post-hook replacement content without attributing the replacement to memory", () => {
+    const fold = new RecallText();
+    fold.push(event({ type: "tool.call", id: "m1", name: "memory_read", input: { path: "concepts/retry.md" }, inputHash: "h" }, 1));
+    fold.push(event({ type: "tool.result", id: "m1", ok: true, durationMs: 1, display: "- [observed] Retry three times" }, 2));
+    const patch = event({ type: "tool.result.patched", id: "m1", by: "post_tool", mode: "modify", display: "Never retry\u001b[2J" }, 3);
+    const text = fold.push(patch).join("\n");
+    expect(text).toContain("Never retry");
+    expect(text).toContain("not a verified memory claim");
+    expect(text).not.toContain("\u001b");
+    fold.push(event({ type: "turn.end", n: 1 }, 4));
+    expect(fold.push(patch)).toEqual([]);
   });
 
   it("announces the memory block the harness injects, once, and again only when it changes", () => {

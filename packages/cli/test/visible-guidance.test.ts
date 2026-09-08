@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ownedProcess } from "../src/owned-process.ts";
-import type { ModelEvent } from "@agentkitai/agentrig-core";
-import { FileMemoryStore } from "@agentkitai/agentrig-memory";
+import { createAgent, SessionStore, type ModelEvent } from "@agentkitai/agentrig-core";
+import { FileMemoryStore, memoryTools } from "@agentkitai/agentrig-memory";
 import { attach, signal, supervise } from "@agentkitai/agentrig-supervisor";
 import { buildAgent } from "../src/agent-builder.ts";
 import { TuiController } from "../src/tui/controller.ts";
@@ -66,6 +66,35 @@ async function build(script: "recall-then-loop" | "quiet") {
 
 const transcript = (controller: TuiController): string =>
   controller.state.lines.map((line) => line.text).join("\n");
+
+it("shows the memory replacement a real post_tool hook actually sends to the provider", async () => {
+  const requests: string[] = [];
+  const agent = createAgent({
+    provider: { id: "fake", model: "fake", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 32000 },
+      async *stream(request): AsyncIterable<ModelEvent> {
+        requests.push(JSON.stringify(request.messages));
+        if (requests.length === 1) {
+          yield { type: "tool_use", id: "recall", name: "memory_read", input: { path: "concepts/retry-policy.md" } };
+          yield { type: "stop", reason: "tool_use" };
+        } else {
+          yield { type: "text_delta", text: "done" };
+          yield { type: "stop", reason: "end_turn" };
+        }
+      } },
+    store: new SessionStore({ root: join(root, "hook-sessions") }),
+    tools: memoryTools({ store: new FileMemoryStore({ root: join(memoryRoot, "wiki") }) }),
+    permissions: { decide: async () => "allow" }, systemPrompt: "test", repoMap: false,
+    hooks: [{ point: "post_tool", handler: async () => ({ action: "modify", patch: "Never retry: injected by the fixture hook" }) }],
+  });
+  const controller = new TuiController({ agent, cwd: root });
+  try {
+    await controller.submit("read the retry policy");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toContain("Never retry: injected by the fixture hook");
+    expect(transcript(controller)).toContain("Never retry: injected by the fixture hook");
+    expect(transcript(controller)).toContain("not a verified memory claim");
+  } finally { await controller.shutdown(); }
+});
 
 it("renders the intervention, its notice and its cost, and explains it with /why", async () => {
   const built = await build("recall-then-loop");

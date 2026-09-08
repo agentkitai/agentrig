@@ -182,7 +182,7 @@ export function renderInterventionCost(cost: InterventionCost): string {
   const parts = [
     cost.modelCalls === "none"
       ? "no model call"
-      : `1 auxiliary model call${cost.auxiliaryId === undefined ? "" : ` [${cost.auxiliaryId.slice(0, 8)}]`}, usage in its own record`,
+      : `auxiliary run${cost.auxiliaryId === undefined ? "" : ` [${cost.auxiliaryId.slice(0, 8)}]`}, actual calls and usage in its own record`,
   ];
   if (cost.injected !== undefined) {
     parts.push(`+${cost.injected.bytes} B of prompt (~${Math.ceil(cost.injected.bytes / 4)} est. tokens, not billed tokens)`);
@@ -205,21 +205,32 @@ function renderOutcome(e: EventOf<"supervisor.outcome">): string {
  */
 export class RecallText {
   private readonly pending = new Map<string, { name: string; input: unknown }>();
+  private readonly completed = new Map<string, { name: string; input: unknown }>();
   private session: string | undefined;
   /** Bounded like the tool-summary pairing: an unmatched call must not grow without limit. */
   private static readonly MAX_PENDING = 64;
 
   push(e: HarnessEvent): string[] {
-    if (this.session !== e.sessionId) { this.pending.clear(); this.session = e.sessionId; }
-    if (e.type === "session.start" || e.type === "session.resume" || e.type === "session.fork") this.pending.clear();
+    if (this.session !== e.sessionId) { this.pending.clear(); this.completed.clear(); this.session = e.sessionId; }
+    if (e.type === "session.start" || e.type === "session.resume" || e.type === "session.fork"
+      || e.type === "session.end") { this.pending.clear(); this.completed.clear(); }
+    if (e.type === "turn.end") this.completed.clear();
     if (e.type === "tool.call" && MEMORY_RECALL_TOOLS.has(e.name) && e.internal === undefined) {
       if (this.pending.size >= RecallText.MAX_PENDING) this.pending.delete(this.pending.keys().next().value!);
       this.pending.set(e.id, { name: e.name, input: e.input });
+    }
+    if (e.type === "tool.result.patched") {
+      const call = this.completed.get(e.id);
+      if (call === undefined || e.internal !== undefined) return [];
+      return [`✻ memory result updated (${call.name}) by ${sanitizeLine(e.by, 80)} — model-facing content, not a verified memory claim:`,
+        ...quote(e.display, 8)];
     }
     if (e.type !== "tool.result") return [];
     const call = this.pending.get(e.id);
     if (call === undefined) return [];
     this.pending.delete(e.id);
+    if (this.completed.size >= RecallText.MAX_PENDING) this.completed.delete(this.completed.keys().next().value!);
+    this.completed.set(e.id, call);
     const evidence = recallEvidence({
       tool: call.name,
       input: call.input,
@@ -357,7 +368,9 @@ export function renderWhy(explanation: TurnExplanation | null, opts: WhyOptions 
 
   out.push(explanation.injected.length === 0
     ? "\nInjected guidance: none. Nothing was added to this turn's conversation by the supervisor, a hook, or a steer."
-    : `\nInjected guidance (${explanation.injected.length}), delivered into this turn's request:`);
+    : explanation.requestRecorded
+      ? `\nInjected guidance (${explanation.injected.length}), included in this turn's recorded request attempt (remote receipt is not observable):`
+      : `\nConversation guidance (${explanation.injected.length}) — no model request was recorded for this turn; not evidence that the model received it:`);
   explanation.injected.forEach((entry, i) => out.push(...renderInjected(entry, i + 1, maxLines)));
 
   if (explanation.otherDecisions.length > 0) {

@@ -15,10 +15,9 @@ import { contentHash } from "./session-store.js";
  * here: guidance belongs to the turn whose `turn.start` follows it, never to the turn it was
  * decided during.
  *
- * Everything else is read from the request that was actually built: `context.manifest` is
- * measured from the outgoing `ModelRequest`, so the memory index and any memory tool results in
- * this explanation are the bytes the provider received, not a re-read of a file that may have
- * moved on since.
+ * Context is measured from the prepared outgoing request, not a fresh filesystem read. A
+ * `model.request` record establishes a request attempt; conversation insertion alone does not,
+ * because a hook or cancellation can prevent the request. Remote receipt is not observable.
  *
  * The fold is pure and local: no provider call, no filesystem, no configuration.
  */
@@ -71,8 +70,10 @@ export interface TurnExplanation {
   turn: number | null;
   /** Whether that turn has finished. An explanation is valid either way. */
   complete: boolean;
-  /** Delivered into that turn's request, in order. This is the "actually injected" set. */
+  /** Added to this turn's conversation; requestRecorded distinguishes a later request attempt. */
   injected: InjectedGuidance[];
+  /** A model.request event exists; this is an attempted call, not proof of remote receipt. */
+  requestRecorded: boolean;
   /** Decisions recorded in the window that produced this turn which injected no text. */
   otherDecisions: GuidanceDecision[];
   /** Queued after that turn started: not part of it. */
@@ -113,6 +114,7 @@ export class GuidanceLog {
   private sessionId = "";
   private turn: number | null = null;
   private complete = false;
+  private requestRecorded = false;
   /** Steers seen since the last `turn.start`; they belong to the turn that starts next. */
   private queued: InjectedGuidance[] = [];
   private injected: InjectedGuidance[] = [];
@@ -120,9 +122,8 @@ export class GuidanceLog {
   /** Decisions recorded since the previous turn began, for the "what else did it do" section. */
   private windowStart = 0;
   private previousWindowStart = 0;
-  private byId = new Map<string, GuidanceDecision>();
-  /** Injected-text digest → decisions awaiting their `steer`, in the order they were queued. */
-  private byDigest = new Map<string, GuidanceDecision[]>();
+  /** Weak ownership never retains decisions evicted from the bounded history. */
+  private attributed = new WeakSet<GuidanceDecision>();
   private undelivered: Array<{ seq: number; source: string; message: string }> = [];
   private manifest: EventOf<"context.manifest"> | null = null;
 
@@ -130,13 +131,13 @@ export class GuidanceLog {
     this.sessionId = "";
     this.turn = null;
     this.complete = false;
+    this.requestRecorded = false;
     this.queued = [];
     this.injected = [];
     this.decisions = [];
     this.windowStart = 0;
     this.previousWindowStart = 0;
-    this.byId = new Map();
-    this.byDigest = new Map();
+    this.attributed = new WeakSet();
     this.undelivered = [];
     this.manifest = null;
   }
@@ -157,23 +158,16 @@ export class GuidanceLog {
           noticed: event.noticed ?? [],
         };
         this.decisions = bounded([...this.decisions, decision], LIMITS.decisions);
-        if (event.id !== undefined) this.byId.set(event.id, decision);
         return;
       }
       case "supervisor.outcome": {
-        const decision = this.byId.get(event.id);
+        const decision = [...this.decisions].reverse().find(candidate => candidate.id === event.id);
         if (decision === undefined) return;
         decision.outcome = {
           outcome: event.outcome,
           ...(event.detail === undefined ? {} : { detail: event.detail }),
           cost: event.cost,
         };
-        // Only a decision that claims to have queued text can claim a later steer.
-        if (event.outcome === "queued" && event.cost.injected !== undefined) {
-          const waiting = this.byDigest.get(event.cost.injected.hash) ?? [];
-          waiting.push(decision);
-          this.byDigest.set(event.cost.injected.hash, waiting);
-        }
         return;
       }
       case "steer": {
@@ -187,10 +181,13 @@ export class GuidanceLog {
         // Attribution is claimed only by a SUPERVISOR steer: a user message with identical text
         // must not be able to wear the supervisor's reasoning.
         if (event.source === "supervisor") {
-          const waiting = this.byDigest.get(contentHash(event.message));
-          const decision = waiting?.shift();
-          if (waiting?.length === 0) this.byDigest.delete(contentHash(event.message));
-          if (decision !== undefined) entry.decision = decision;
+          const hash = contentHash(event.message);
+          const decision = this.decisions.find(candidate => !this.attributed.has(candidate)
+            && candidate.outcome?.outcome === "queued" && candidate.outcome.cost.injected?.hash === hash);
+          if (decision !== undefined) {
+            entry.decision = decision;
+            this.attributed.add(decision);
+          }
         }
         this.queued = bounded([...this.queued, entry], LIMITS.batch);
         return;
@@ -198,6 +195,7 @@ export class GuidanceLog {
       case "turn.start": {
         this.turn = event.n;
         this.complete = false;
+        this.requestRecorded = false;
         this.injected = this.queued;
         this.queued = [];
         this.previousWindowStart = this.windowStart;
@@ -209,6 +207,12 @@ export class GuidanceLog {
         if (this.turn === event.n) this.complete = true;
         return;
       }
+      case "model.request":
+        this.requestRecorded = true;
+        return;
+      case "session.end":
+        this.complete = true;
+        return;
       case "context.manifest": {
         if (this.turn === event.turn) this.manifest = event;
         return;
@@ -238,6 +242,7 @@ export class GuidanceLog {
       turn: this.turn,
       complete: this.complete,
       injected: this.injected,
+      requestRecorded: this.requestRecorded,
       // The window that produced this turn: everything the observer decided while the previous
       // turn ran. A decision that injected text is already reported above, not twice.
       otherDecisions: this.decisions.filter(

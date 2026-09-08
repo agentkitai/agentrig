@@ -250,7 +250,8 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       }
       // the supervisor's own records come back through the stream; folding them is right
       // (lastInterventionSeq) but re-detecting on them is not
-      if (event.type === "supervisor.signal" || event.type === "supervisor.intervention" || event.type === "auxiliary.usage") continue;
+      if (event.type === "supervisor.signal" || event.type === "supervisor.intervention"
+        || event.type === "supervisor.outcome" || event.type === "auxiliary.usage") continue;
 
       const signals = [];
       for (const d of opts.detectors) {

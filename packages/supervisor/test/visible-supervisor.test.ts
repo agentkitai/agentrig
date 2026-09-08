@@ -98,6 +98,29 @@ const outcomes = (events: HarnessEvent[]): Array<EventOf<"supervisor.outcome">> 
   events.filter((e): e is EventOf<"supervisor.outcome"> => e.type === "supervisor.outcome");
 
 describe("visible supervisor", () => {
+  it("never re-detects on the supervisor's own outcome bookkeeping", async () => {
+    const seen: string[] = [];
+    const session = run(new LoopingProvider(2));
+    const observer = attach(session, {
+      detectors: [{ id: "spy", observe(event) { seen.push(event.type); return null; } }, onceDetector()],
+      policy: fixedPolicy({ type: "inject_guidance", message: "change approach" }),
+    });
+    try {
+      const events = await drain(session);
+      await session.done;
+      await observer.done;
+      expect(outcomes(events)).toHaveLength(1);
+      expect(seen).toContain("model.request");
+      expect(seen).not.toContain("supervisor.outcome");
+      expect(seen).not.toContain("supervisor.intervention");
+    } finally {
+      session.control.abort();
+      observer.detach();
+      await session.done;
+      await observer.done;
+    }
+  });
+
   it("records what it noticed, that guidance was only queued, and what the queueing cost", async () => {
     const provider = new LoopingProvider();
     const session = run(provider);

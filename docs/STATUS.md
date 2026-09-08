@@ -25,9 +25,15 @@ optional fields plus one new observer record; no tool gained emission authority 
 provenance or log-immutability behaviour changed. Contract and limits: [R17e](plans/R17e.md).
 
 Verification on this branch, private `/var/tmp` TMPDIR, actual preflight: build / test / typecheck
-**0 / 0 / 0**, **3563 passed / 4 skipped / 229 files** (main `4af5d21` was 3526 / 4 / 225). Eleven
+**0 / 0 / 0**, **3569 passed / 4 skipped / 229 files** (main `4af5d21` was 3526 / 4 / 225). Eleven
 removed-wiring mutants were applied one at a time and all eleven were killed by named tests, with
-each test subprocess joined before the source was restored. **R17e is not delivered**: it stays unmarked in ROADMAP until its PR is reviewed and
+each test subprocess joined before the source was restored. Independent Claude and Codex reviewed
+frozen `c14322d`; the operator reproduced and repaired veto/request attribution, bounded correlation
+retention, post-hook memory visibility and supervisor self-event detection. Auxiliary wording no
+longer invents a call count. Seven regression assertions fail against original `c14322d` and pass
+against the repair (four focused files, 81 tests). Original-head operator build/typecheck/full suite
+also passed independently; final repaired build/typecheck/full suite each exit 0. A focused delta
+review closes these findings without restarting general reviews. **R17e is not delivered**: it stays unmarked in ROADMAP until its PR is reviewed and
 merged with green exact-head and post-merge CI verified by root.
 
 ## Issue sweep completion record — 2026-09-08

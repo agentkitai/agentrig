@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   GuidanceLog,
+  createAgent,
+  SessionStore,
   contentHash,
   undeliveredSteerMessage,
   type EventPayload,
   type HarnessEvent,
 } from "@agentkitai/agentrig-core";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 /**
  * R17e's attribution rules, stated as tests because each of them is a way to be wrong in a way a
@@ -42,6 +47,47 @@ const decided = (id: string, message = GUIDANCE): EventPayload[] => [
 ];
 
 describe("guidance fold", () => {
+  it("does not claim a model request when a real pre_model hook vetoed it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentrig-guidance-veto-"));
+    let calls = 0;
+    const session = createAgent({
+      provider: { id: "fake", model: "fake", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 32000 },
+        async *stream() { calls += 1; yield { type: "stop" as const, reason: "end_turn" as const }; } },
+      store: new SessionStore({ root }), tools: [], permissions: { decide: async () => "deny" },
+      systemPrompt: "test", repoMap: false,
+      hooks: [{ point: "pre_model", handler: async () => ({ action: "deny", reason: "test veto" }) }],
+    }).run("test", { cwd: root });
+    session.control.steer(GUIDANCE, "supervisor");
+    const log = new GuidanceLog();
+    try {
+      for await (const event of session.events) log.push(event);
+      await session.done;
+      expect(calls).toBe(0);
+      expect(log.explainLast()).toMatchObject({ complete: true, requestRecorded: false });
+      expect(log.explainLast()?.injected[0]?.message).toBe(GUIDANCE);
+    } finally {
+      session.control.abort();
+      await session.done;
+      await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    }
+  });
+
+  it("evicts decision correlation too, rather than retaining unbounded side indexes", () => {
+    const log = new GuidanceLog();
+    for (let i = 0; i < 1000; i += 1) feed(log, decided(`i${i}`, `message-${i}`));
+    feed(log, [
+      { type: "steer", source: "supervisor", message: "message-0" },
+      { type: "steer", source: "supervisor", message: "message-999" },
+      { type: "turn.start", n: 1 },
+      { type: "model.request", tokensIn: 1 },
+    ]);
+    const explanation = log.explainLast()!;
+    expect(explanation.injected[0]?.decision).toBeUndefined();
+    expect(explanation.injected[1]?.decision?.id).toBe("i999");
+    expect(explanation.requestRecorded).toBe(true);
+    expect(explanation.otherDecisions.length).toBeLessThanOrEqual(64);
+  });
+
   it("attributes guidance to the turn that carried it, not the turn it was decided during", () => {
     const log = new GuidanceLog();
     feed(log, [

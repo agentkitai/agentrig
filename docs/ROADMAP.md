@@ -1,11 +1,18 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Current issue-resolution sweep — 2026-09-08
+## Current delivery — R17e, then R17f and R17g
 
-The operator's current assignment is the seventeen issues open when this sweep began,
-including problems encountered while resolving them. All seventeen resolutions are implemented
-below; #267 is the final delivery. Its check becomes part of main only through its reviewed,
-green merge. No new issues were filed; #244 was explicitly reopened after failed post-merge CI
+Roadmap work has resumed under the user's latest authorization. R17e makes supervisor guidance
+and memory recall visible and adds `/why`; implementation and review repairs are in progress,
+not yet delivered. R17f's measured-default decision follows, then R17g's package follow-up batches.
+Use bounded reviews, focused repair checks and sequential green-CI merges. Historical pause and
+pending-delivery notes below are not current instructions. [Current status](STATUS.md).
+
+## Completed issue-resolution sweep — 2026-09-08
+
+All seventeen issues open when the sweep began are closed through merged PRs #280–#288.
+Final main `4af5d21` passed post-merge CI `34265831646` and structure `34265831694`.
+No new issues were filed; #244 was explicitly reopened after failed post-merge CI
 and repaired in #287. Exact-head and post-merge receipts live on the delivery PRs; failed
 historical runs remain failed. This does **not** mark remaining R17/vision rows complete.
 
