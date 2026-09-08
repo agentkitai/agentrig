@@ -14,6 +14,8 @@ import base from "./vitest.config.js";
  */
 export const windowsCoverage = [
   "packages/cli/test/skill-refresh.test.ts",
+  "packages/cli/test/fixture-preflight.test.ts",
+  "packages/cli/test/workspace-vitest-root.test.ts",
   "packages/cli/test/permission-friction.test.ts",
   "packages/cli/test/tui-frame.test.ts",
   "packages/core/test/injection-fixtures.test.ts",
