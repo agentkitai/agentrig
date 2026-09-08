@@ -1556,6 +1556,15 @@ need an explicit budget; neither prevents continuing other actionable entries.
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
+  One product defect found under this scope is repaired: `TuiController.ask` had no
+  `closing`/`closed` guard, so a permission ask arriving after `shutdown`'s single deny sweep —
+  core's `onAsk` is not raced against the abort — registered a prompt nobody could answer and the
+  shutdown join never returned. Implemented by **Claude Code outside the train** on
+  `fix/followups-permission-shutdown`: one fail-closed refusal before any grant lookup or
+  registration, with a real-agent reproduction, closing/closed regressions, and the #249
+  fixture-only late-deny workaround removed now that the product handles it. Bounds, deadlines and
+  the answered permission paths are unchanged. This lifecycle repair completes the remaining
+  #244 strand after the fixture fixes below; completion requires its reviewed green PR merge.
   Implemented by **Claude Code outside the train** on `fix/followups-ci-fixtures`, test files only.
   The aggregate-cap fixture replaces thousands of copied files with counted empty directories to
   reach the unchanged 2000-entry default; the first local cases measured 597ms/27ms without a

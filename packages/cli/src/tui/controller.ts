@@ -494,7 +494,14 @@ export class TuiController {
   /** The `onAsk` handler an agent is built with: bridges a promise to a rendered prompt. */
   readonly ask = (req: PermissionRequest, context?: PermissionAskContext, signal?: AbortSignal): Promise<Exclude<Decision, "ask">> =>
     new Promise((resolve) => {
-      if (signal?.aborted) { resolve("deny"); return; }
+      // Fail closed once the UI is going away, before any registry is touched. `shutdown` sweeps
+      // the pending prompts once and then waits for the loop; core's `onAsk` is not raced against
+      // the abort, so an ask that lands just after that sweep would otherwise register a prompt
+      // nobody can ever answer — and the wait for the loop it is blocking never returns.
+      // Same guard as `askQuestion`: no prompt, no standing answer consumed, no session opened.
+      // `closed` cannot be reached without `closing` today, so that term is redundant rather than
+      // tested; it is kept so the refusal does not silently depend on `closing` never clearing.
+      if (signal?.aborted || this.closing || this.closed) { resolve("deny"); return; }
       const registry = context === undefined ? this.permissionGrants : context.permissionGrants;
       // A standing answer for this tool: asked once, applied thereafter. Being asked to approve
       // every single write in a twenty-file task is how a permission prompt stops being read at
