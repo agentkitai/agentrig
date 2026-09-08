@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, rm, readFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
@@ -83,6 +83,20 @@ it("guards `pnpm test` with the same script it exposes as `pnpm test:preflight`"
   expect(scripts.test).toBe("node test/fixture-preflight.mjs && vitest run");
   expect(scripts["test:preflight"]).toBe("node test/fixture-preflight.mjs --verbose");
 });
+
+it("does not silently skip preflight when its entry path traverses a directory link", async () => {
+  const base = await mkdtemp(join(tmpdir(), "agentrig-preflight-entry-"));
+  try {
+    const alias = join(base, "scripts"), work = join(base, "work");
+    await mkdir(work); await mkdir(join(base, ".git"));
+    await symlink(dirname(script), alias, process.platform === "win32" ? "junction" : "dir");
+    const failure = await promisify(execFile)(process.execPath, [join(alias, "fixture-preflight.mjs")],
+      { env: { ...process.env, TMPDIR: work, TEMP: work, TMP: work }, timeout: 10_000 },
+    ).then(() => undefined, (error: { code: number; stderr: string }) => error);
+    expect(failure?.code).toBe(1);
+    expect(failure?.stderr).toContain(join(base, ".git"));
+  } finally { await rm(base, { recursive: true, force: true }); }
+}, 15_000);
 
 it("checks physical ancestry when the effective temporary directory is a symlink", async () => {
   const base = await mkdtemp(join(tmpdir(), "agentrig-preflight-link-"));

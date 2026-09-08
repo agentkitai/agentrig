@@ -1,5 +1,16 @@
 # Status
 
+Outside-train operator review repair for #237/#245/#253: independent Claude session
+**8d1b721b-c8af-4fcd-867e-ab98c011e598** ran build/test/typecheck0/0/0,
+**3502 passed / 4 skipped / 224 files**, and four killed/restored mutants at4aa807e.
+Its concrete linked-entry finding is fixed by canonicalizing the entry path before main detection.
+A real directory-link/junction invocation with contaminated private TMPDIR failed before the fix
+(silent exit0), then passed the required exit1 assertion; all10 preflight tests pass afterward.
+CLAUDE's test command now correctly requires the build needed by dist-executing fixtures.
+Independent Codex found no code defects; its build/typecheck passed, but its preflight correctly
+refused the sandbox's `/tmp/.git`, so no Codex full-suite pass is claimed. Historical marker
+creation remains unknown; neither review turns point-in-time observations into a cause attribution.
+
 Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
 **#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
 Administrative evidence issue **#261** is also closed: independent Claude Code

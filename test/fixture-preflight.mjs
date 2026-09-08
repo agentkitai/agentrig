@@ -13,6 +13,7 @@
  * prints what it checked (`pnpm test:preflight`). See docs/TESTING.md.
  */
 import { lstat as lstatFile, realpath as realpathFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -78,7 +79,7 @@ export function preflightFailure(inspection) {
   ].join("\n");
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     const inspection = await inspectTemporaryRoot(tmpdir());
     const failure = preflightFailure(inspection);

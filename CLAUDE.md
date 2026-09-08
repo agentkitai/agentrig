@@ -14,7 +14,7 @@ For live release-train monitoring and child consent, read [train operations](doc
 ```
 pnpm install          # pnpm 11; build scripts are allowlisted in pnpm-workspace.yaml
 pnpm build            # tsc per package, topological order
-pnpm test             # vitest; tests import workspace packages by name, resolved to src (no build needed)
+pnpm test             # preflight + vitest; run pnpm build first for tests that execute dist entry points
 pnpm test:preflight   # the fixture-environment check `pnpm test` runs first; see docs/TESTING.md
 pnpm typecheck
 pnpm demo             # writes a synthetic session under packages/cli/.agentrig/sessions and replays it
