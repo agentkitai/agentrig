@@ -1558,6 +1558,11 @@ need an explicit budget; neither prevents continuing other actionable entries.
   decided a real escalation timeout by whether a 50 ms timer beat a finite fake session, which is the
   macOS strand recorded on #244; the ordering is now a readiness handshake rather than a race.
   Completion reaches main with the reviewed, green PR merge.
+- [x] Pinned evaluator archive transport ([feel #249](https://github.com/agentkitai/agentrig/issues/249)):
+  replace pipe-fed tar input with an owned private regular file, keeping extraction errors,
+  exact pinned bytes, exclusive destination/receipt creation and existing bounds. Implemented
+  on `fix/followups-export-transport`; completion reaches main through the reviewed green PR.
+  The deterministic pipe-error guard is not a reproduction of the original macOS scheduling.
 - [ ] External-review operational guidance regression coverage ([feel #253](https://github.com/agentkitai/agentrig/issues/253)):
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
