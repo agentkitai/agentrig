@@ -1,5 +1,10 @@
 # Status
 
+Shutdown repair builder session **90ffa872-f245-4bed-a0df-e3cec14965a7** (Claude Code outside
+AgentRig), original head8a656b8. Operator follow-through adds `finally` joins to both new held-work
+regressions so assertion failures release the policy/manual barrier, deny any pending ask and
+join owned work before fixture deletion; focused permission/attachment cases pass afterward.
+
 ## Outside-train existing issue #244: late permission ask during shutdown
 
 Builder: **Claude Code, outside the train**, on `fix/followups-permission-shutdown`, based on

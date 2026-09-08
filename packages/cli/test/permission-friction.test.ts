@@ -238,6 +238,7 @@ describe("R17d permission friction", () => {
     c.attach(createAgent({ provider, tools: [tool], permissions, permissionGrants: grants, store: new SessionStore({ root: join(cwd, "logs") }),
       systemPrompt: "inert", repoMap: false, onAsk: (request, context) => { late = c.ask(request, context); reachedAsk(); return late; } }));
     const running = c.submit("probe once");
+    try {
     await evaluating;
     expect(c.snapshot().pending).toBeNull();
     let closed = false; const shutdown = c.shutdown().then(() => { closed = true; });
@@ -248,6 +249,9 @@ describe("R17d permission friction", () => {
     expect(await late).toBe("deny");
     await shutdown; await running;
     expect(closed).toBe(true); expect(executions).toBe(0);
+    } finally {
+      releasePolicy(); c.abort(); await c.shutdown(); await running;
+    }
   });
 
   it("refuses a late direct ask while closing and once closed, consuming no standing grant", async () => {
@@ -260,6 +264,7 @@ describe("R17d permission friction", () => {
     let finish!: () => void; const working = new Promise<void>(r => { finish = r; });
     c.setManualCommands({ doctor: async () => { ready(); await working; return []; }, diff: async () => [] });
     const doctor = c.submit("/doctor"); await entered;
+    try {
     let closed = false; const shutdown = c.shutdown().then(() => { closed = true; });
     const closing = c.ask(req, { permissionGrants: standing });
     expect(c.snapshot().pending).toBeNull();
@@ -273,6 +278,9 @@ describe("R17d permission friction", () => {
     expect(c.snapshot().pending).toBeNull();
     expect(await late).toBe("deny");
     expect(fresh.list()).toEqual([]); expect(standing.inspect()[0]?.matchedDecisions).toBe(1);
+    } finally {
+      finish(); c.abort(); await c.shutdown(); await doctor;
+    }
   });
 
   it("does not collapse across parent and child registries or after abort", async () => {
