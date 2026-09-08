@@ -346,8 +346,8 @@ describe("skillTool", () => {
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
     // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
-    expect(body).toContain("two reviewers that share nothing with the builder, in parallel, in one worktree you prepare");
-    expect(body).toContain("--model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash'");
+    expect(body).toContain("two reviewers that share nothing with the builder, in parallel, in separate reviewer-owned worktrees you prepare");
+    expect(body).toContain("--model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
     expect(body).toContain("--output-format json --no-session-persistence");
     expect(body).toContain("not claude-opus-5");
     expect(body).toContain("codex review --base review-base");

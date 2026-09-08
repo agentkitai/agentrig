@@ -109,21 +109,34 @@ with the train's own external review pass still to come. A topic child's job end
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
 
+Prepare separate reviewer-owned worktrees at the recorded PR head, with independent installs,
+build outputs and command-local TMPDIRs, as in topic §2 step 4. Never run a mutation probe in
+the author's tree or a tree another reviewer is reading. Keep outputs outside both trees;
+join both jobs and their subprocesses and verify unchanged HEADs and restored tracked/index
+state before accepting verdicts. The conductor owns removal of both trees after joining.
+
 - `codex review` over the full diff against `origin/main`.
 - A `claude` review of the same diff, pinned to Opus and given the tools to VERIFY, not just read:
-  `claude -p --model claude-opus-5 --permission-mode plan --allowedTools 'Read,Grep,Glob,Bash' "…"`.
+  `cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' --output-format json --no-session-persistence "…"`.
   Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
   review spend independent of whatever model the main session happens to be running. Without
   `--allowedTools` including Bash the reviewer cannot run vitest or probe built output, and its
   first line becomes "I could not execute the test suite" — a read-only review that verifies
-  nothing, which the brief below explicitly forbids.
+  nothing, which the brief below explicitly forbids. `dontAsk` denies unallowed requests without
+  prompting; unlike plan mode it permits the authorized tests and mutations. Never use a
+  permission bypass, change permission settings, or relax required checks after a denial.
+  Bash is not a filesystem sandbox: confine work to the owned review tree and temporary root.
+  Direct push/merge denials are defense in depth, not containment against scripts, alternate
+  spellings or shared Git metadata; private-fixture Git operations remain available for tests.
+  Require no children/auxiliary models and assert sole `claude-opus-5` modelUsage using topic's
+  extraction command before accepting the result; record the complete reviewed SHA.
 
 Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
 before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
 
 **Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
 the PR (§7) and does NOT run external reviews:
-the conductor runs the same two external reviews itself, in one worktree, against the PR head
+the conductor runs the same two external reviews itself, in separate reviewer-owned worktrees, against the PR head
 (`topic` §2 step 4). Children may run on a local model and the review must never share the
 builder's model; a child running the pair too would double every pass for no extra eyes. Your
 task text says when you are a child. Standalone dogfood keeps both reviews because nothing else

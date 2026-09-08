@@ -13,6 +13,7 @@ import base from "./vitest.config.js";
  * runs single-worker to keep its cap fixture apart from real npm packing.
  */
 export const windowsCoverage = [
+  "packages/core/test/review-launch-guidance.test.ts",
   "packages/core/test/manual-compaction.test.ts",
   "packages/cli/test/manual-commands.test.ts",
   "packages/cli/test/manual-startup.test.ts",

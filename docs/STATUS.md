@@ -163,6 +163,30 @@ File AgentRig friction with the `feel` label before the next child starts.
   product trust. `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
   4 skipped**). Exact-head CI is verified in the PR handoff record after push.
   Independent external reviews follow in the conductor; no reviews or merge by this child.
+External-review execution repair (outside train, 2026-09-07): Codex addresses
+[feel #243](https://github.com/agentkitai/agentrig/issues/243), observed under original
+conductor `8fbde1a3` and carried by conductor `2aa2f739`. Topic/dogfood Claude
+launches now use `dontAsk` with explicit read, execution and mutation tool allowances,
+not plan mode or a permission bypass. Both parallel reviewers own separate trees,
+installs, build output and temporary roots; restored files and joined processes are
+required before accepting results. AgentRig permissions, exact-head/model checks,
+required trio/mutants, repair-round limits and merge authorization do not change.
+A private actual Claude CLI probe (`be2b32da-8a3a-4444-b723-7530587f9c35`, sole
+`claude-opus-5` modelUsage) ran a write-producing Node check, used Edit to introduce
+an assertion-killed mutant, restored original bytes and reran: exits 0/1/0, no
+permission denials. This proves the installed CLI launch mode in that fixture,
+not future provider availability, OS sandboxing or completion of any R17 row.
+Independent review caught stale contract pins and ship's one-tree wording, the old
+Codex path prefix, missing recorded post-merge review SHA, dependency-install path
+visibility and standalone command context. These are corrected without removing
+gate assertions; each install retains its own 600-second minimum call allowance.
+Direct push/merge command denials add defense in depth, not script or shared-Git
+containment. A second private CLI control (`0ed5d7e4-84e1-4108-8687-0a642a2cdbaf`)
+observed an explicit harmless command denial and preserved allowed mutation checks
+at exits 0/1/0. A private divergent-Git fixture verified the recorded post-merge
+SHA, separate trees and restoration without touching a sibling's bytes. Neither
+probe claims an end-to-end hosted train run.
+
 R17 checkpoint/ingest visibility repair (outside train, 2026-09-07): conductor
 `8fbde1a3`, continuation builder `b9109d9f`, reported
 [feel #235](https://github.com/agentkitai/agentrig/issues/235) from nested fixture
