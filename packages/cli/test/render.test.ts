@@ -121,7 +121,7 @@ describe("renderEvent", () => {
       tree: "b".repeat(40),
     });
     expect(renderEvent(created)).toContain(`turn=2 ref=refs/agentrig/s/2 commit=${"a".repeat(40)} tree=${"b".repeat(40)}`);
-    expect(renderChatEvent(created)).toBeNull();
+    expect(renderChatEvent(created)).toBe("Checkpoint: turn 2 saved");
 
     const warning = HarnessEvent.parse({
       seq: 2,

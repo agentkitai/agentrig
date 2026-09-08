@@ -364,12 +364,47 @@ describe("Checkpointer", () => {
 
   it("bounds a hung quiescence callback and settles the session without executing a mutation", async () => {
     await initRepo();
-    const cp = new Checkpointer({ timeoutMs: 30, assertQuiescent: async () => new Promise<void>(() => {}) });
+    const realSetTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+    let entered!: (signal: AbortSignal) => void, release!: () => void;
+    const ready = new Promise<AbortSignal>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let guardReturned = false;
+    const cp = new Checkpointer({ timeoutMs: 30, assertQuiescent: async ctx => { entered(ctx.signal); await blocked; guardReturned = true; } });
+    // Freeze only deadline timers: real Git discovery must finish before testing the hung guard.
+    // Advancing time before readiness could deny on Git startup and never exercise this callback.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let watchdog!: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      watchdog = realSetTimeout(() => reject(new Error("hung guard fixture did not reach readiness or settle")), 5000);
+    });
     const session = agent([[call("w", "write", { path: "tracked.txt", content: "unsafe" }), usage, stop("tool_use")], [usage, stop("end_turn")]],
       [writeTool()], { checkpointer: cp }).run("write", { cwd: root, id: "hung_guard" });
-    const events = await collect(session); await session.done;
-    expect(events.some(e => e.type === "tool.denied")).toBe(true);
-    expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
+    const collected = collect(session);
+    try {
+      const signal = await Promise.race([ready, deadline]);
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(29);
+      expect(signal.aborted).toBe(false);
+      expect(guardReturned).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal.aborted).toBe(true);
+      expect(guardReturned).toBe(false);
+      const events = await Promise.race([collected, deadline]);
+      await Promise.race([session.done, deadline]);
+      expect(events.some(e => e.type === "tool.denied")).toBe(true);
+      expect(events.some(e => e.type === "checkpoint.created")).toBe(false);
+      expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
+    } finally {
+      release(); session.control.abort();
+      vi.useRealTimers();
+      realClearTimeout(watchdog);
+      // A fired readiness watchdog must not short-circuit the owned session's cleanup join.
+      const cleanupDeadline = new Promise<never>((_, reject) => {
+        watchdog = realSetTimeout(() => reject(new Error("hung guard fixture cleanup did not settle")), 5000);
+      });
+      try { await Promise.race([Promise.all([collected, session.done]), cleanupDeadline]); }
+      finally { realClearTimeout(watchdog); }
+    }
   });
 
   it("preserves a replaced lease and refuses both mutation and cleanup", async () => {
@@ -829,4 +864,47 @@ describe("Checkpointer", () => {
     expect(await git("rev-parse", "refs/agentrig/append_failure/1")).toBe(original);
     expect(appends).toBe(2);
   });
+});
+
+it("sealing retains only the last two turn refs and preserves last retained undo", async () => {
+  await initRepo();
+  const branch = await git("rev-parse", "HEAD");
+  const turns: ModelEvent[][] = Array.from({length: 5}, (_, i) => [call(String(i), "write", {path: "tracked.txt", content: `turn ${i+1}`}), stop("tool_use")]);
+  turns.push([stop("end_turn")]);
+  const session = agent(turns, [writeTool()]).run("change", {cwd: root, id: "retention"});
+  const events = await collect(session); await session.done;
+  const refs = (await git("for-each-ref", "--format=%(refname)", "refs/agentrig/retention/")).split("\n");
+  expect(refs).toEqual(["refs/agentrig/retention/4", "refs/agentrig/retention/5", "refs/agentrig/retention/sealed/6"]);
+  expect(await git("rev-parse", "HEAD")).toBe(branch);
+  expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(5);
+  const store = new SessionStore({root: join(root, ".agentrig", "sessions")});
+  await expect(undoSession(store, session.id, {cwd: root, toTurn: 1})).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained");
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 5");
+  await undoSession(store, session.id, {cwd: root, toTurn: 4});
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn 3");
+});
+
+it("prune failure cannot publish a seal and successful seal observes already-pruned refs", async () => {
+  await initRepo();
+  const cp = new Checkpointer(); const events: CheckpointHookEvent[] = [];
+  let refsAtSeal: string | undefined;
+  const ctx = {point:"pre_tool" as const, sessionId:"atomicprune", cwd:root, turn:1,
+    signal:new AbortController().signal, emitCheckpoint:async(e:CheckpointHookEvent)=>{
+      if(e.type==="checkpoint.sealed") refsAtSeal=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+      events.push(e);
+    }};
+  try {
+    for(let turn=1;turn<=4;turn++) {ctx.turn=turn;await cp.handler(ctx);await writeFile(join(root,"tracked.txt"),`turn ${turn}`);await cp.afterTool(ctx);}
+    const lock=join(root,".git","refs","agentrig","atomicprune","1.lock");
+    await writeFile(lock,"locked");
+    await expect(cp.seal(ctx)).rejects.toThrow();
+    expect(events.some(e=>e.type==="checkpoint.sealed")).toBe(false);
+    const failedRefs=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+    expect(failedRefs.split("\n")).toHaveLength(4);
+    expect(failedRefs).not.toContain("/sealed/");
+    await rm(lock);
+    await cp.seal(ctx);
+    expect(refsAtSeal).toContain("/sealed/");
+    expect(refsAtSeal).not.toMatch(/atomicprune\/[12](?:\n|$)/);
+  } finally {await cp.endSession(ctx.sessionId);}
 });

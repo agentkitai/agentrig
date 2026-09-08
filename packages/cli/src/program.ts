@@ -205,8 +205,6 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--trust", "load project instructions and config for this run only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
-      .option("--verbose", "show the raw event trace instead of just the conversation")
-      .option("--notifications <mode>", "TUI idle notifications: off (default), bell, desktop, both; ignored in headless run")
       .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default30)", Number)
       .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
       .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
@@ -234,7 +232,6 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")
       .option("--no-sandbox-network", "disable sandbox networking for this invocation, overriding config; none mode remains unsandboxed")
       .option("--otel-endpoint <url>", "explicit OTLP/HTTP JSON traces URL; exports minimized timing/status metadata")
-      .option("--checkpoints", "opt-in checkpoints for undo; requires --sandbox none and stopped external/background writers")
       .option(
         "--sandbox <mode>",
         "execution boundary: read-only, workspace-write, or none; enforcing modes refuse host hooks and MCP startup",
@@ -250,9 +247,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--price-cache-read <usd>", "cache-read price per million tokens; overrides provider default")
       .option("--price-cache-write <usd>", "cache-write price per million tokens; overrides provider default")
       .option("--max-tokens-per-turn <n>", "max_tokens per model response", RUN_NUMERIC_DEFAULTS.maxTokensPerTurn)
-      .option("--supervise", "attach the supervisor: heuristic detectors + escalating policy ladder")
       .option("--supervisor-abort", "allow the supervisor's final ladder rung to abort the session")
-      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires --supervise --supervisor-abort --checkpoints and stopped external writers")
+      .option("--supervisor-abort-restores", "restore an owned checkpoint after supervisor abort; requires explicit supervise/checkpoints config, --supervisor-abort and stopped external writers")
       .option("--supervisor-no-abort", "compatibility no-op: abort is disabled unless --supervisor-abort is set")
       .option("--supervisor-soft <fraction>", "fraction of the budget at which the soft warning trips", RUN_NUMERIC_DEFAULTS.supervisorSoft)
       .option(
@@ -264,7 +260,6 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
         "--supervisor-review",
         "enable the LLM-backed supervisor rungs (trajectory reviewer + rubric grader); costs tokens",
       )
-      .option("--ingest-on-end", "distil this session into the wiki when it finishes (PLAN §3.2); costs tokens")
       .option("--dream-on-end", "run the scheduled dream when one is due (PLAN §3.7); reports, never applies")
       .option("--dream-every-sessions <n>", "sessions since the last dream before one is due", RUN_NUMERIC_DEFAULTS.dreamEverySessions)
       .option("--dream-every-hours <n>", "hours since the last dream before one is due", RUN_NUMERIC_DEFAULTS.dreamEveryHours)
@@ -289,10 +284,8 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       // Config may enable a boolean; paired negations let one invocation still override it.
       .option("--no-dangerously-skip-permissions", "override config and require permission checks")
       .option("--no-yolo", "override config and require permission checks")
-      .option("--no-supervise", "override config and disable supervision")
       .option("--no-supervisor-abort", "override config and disable supervisor aborts")
       .option("--no-supervisor-review", "override config and disable trajectory review")
-      .option("--no-ingest-on-end", "override config and skip session-end memory ingest")
       .option("--ingest-limits <json>", "bounded ingest limits (JSON object; e.g. maxSpans, maxCalls, timeoutMs)", parseIngestLimits)
       .option("--ingest-span-chars <n>", "maximum characters per ingest span (default 6000)", ingestSpanChars)
       .option("--no-dream-on-end", "override config and skip scheduled session-end dream")

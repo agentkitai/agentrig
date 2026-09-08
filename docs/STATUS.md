@@ -1,5 +1,228 @@
 # Status
 
+Current roadmap row: **R17b** — implementation complete on PR #234, delivery
+pending; next **R17c**, only after exact-head and post-merge CI are green.
+
+## Outside review completed; Windows fixture repaired, final gates pending
+
+Builder **Codex, outside AgentRig**; original builder **agentrig**, halted
+conductor **2aa2f739**, blocking feel **#254**. No new train round or cap reset.
+At `a7bccda4555a82ff096eb8f537a37efcec2c43a7`, independent
+[Claude review](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579551634)
+verified #256–#259, the required-Docker full trio (3419 passed / 2 skipped),
+the default-PATH smoke and four killed/restored mutants. The separate
+[Codex review](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579551897)
+found no actionable regression but could not validate its suite in that execution
+environment; feel/review-residual #261 records the limitation, not a green claim.
+
+Exact-head Linux, macOS and structure checks passed; Windows failed only the
+checkpointer hung-quiescence fixture's EBUSY cleanup (#262). No unchanged rerun.
+Its tests-only repair establishes callback readiness before advancing the
+unchanged 30ms deadline and settles owned work before cleanup. The restored
+checkpointer file passed 40/40. Fixture mutations removing readiness notification,
+shifting the deadline to 31ms and unblocking the callback each failed as intended;
+final mutant runs had no cleanup errors. New-head validation
+and CI are still required; a7bccda is not merge-ready.
+
+[All six review dispositions](plans/R17b-outside-diagnostics.md#outside-review-dispositions)
+are explicit. Required completion bookkeeping and human-authorized end-of-roadmap
+follow-ups are not acceptance changes. LOW residuals #263/#264 are recorded at the
+roadmap's end, not added R17 gates. Host-local mutation logs are no longer presented
+as portable evidence. Earlier candidate/halt snapshots below remain history.
+
+## R17b outside-train repair candidate — implementation complete; delivery gates pending
+
+Builder **Codex, outside AgentRig**; original halted conductor **2aa2f739**,
+blocking feel **#254**, existing PR **#234**. This section supersedes the historical
+HALTED/uncommitted administrative snapshots below without erasing their evidence.
+The human explicitly approved a separate bounded coverage-metadata allowance:
+“ok... resolve it and continue. do not stop all the time for nonsense.” The exact
+proposal, approval links, contract amendment and limitations are recorded in
+[the outside repair plan](plans/R17b-outside-diagnostics.md).
+
+The 48-line halt handoff was committed as `45b78ba`; green main `da5236a`, including
+#255's isolated executable-review instructions, was merged without rebase in
+`49f88d738cf09a344712e2200171bf62deffdf5e`. No fourth in-train round, new arbiter,
+cap reset or changed security defaults. Prior conductors and all original receipts
+below remain historical, not claims that this outside repair was built by AgentRig.
+
+#256/#257 are repaired in this candidate with separate finite 4 MiB metadata,
+unchanged diagnostic cap, 8192-byte line bounds and actual large-program broken,
+clean and excluded controls. Related #258 avoids redundant post-witness realpath
+while still rejecting unknown paths; #259's inaccurate helper-provenance sentence
+is corrected. Nine named guard mutants were killed and restored; the restored
+focused suite passed **78/78**, exit 0. No paid provider calls were made.
+
+R17b's roadmap completion marker denotes implementation on this branch, **not a
+landed row**. Final exact clean-head build/full test/typecheck and default-PATH smoke
+receipts, independent external reviews, exact-head CI and post-merge CI remain
+delivery gates. The operator will post their actual results to PR #234; no earlier
+dirty candidate or historical review is relabelled as final evidence. The train
+has not resumed and later rows have not started under this receipt.
+
+
+---
+## HALTED — final repair round 3/3 exhausted (administrative handoff)
+
+Builder **agentrig**; conductor **2aa2f739**; administrative continuation **4f8eb85f**, bookkeeping child 7, NOT a fourth repair round or a seventh implementation child. Blocking feel **#254**: https://github.com/agentkitai/agentrig/issues/254. HIGH 1 survives three rounds: **DO NOT LAND**, regardless of green CI. Human continuation must decide next steps; no new authorization, exception or cap reset is asserted.
+
+Exact reviewed and unchanged PR head: `fdf72cf5838f0004a93a6f7630382114041c3686`. Both final review comments were read verbatim:
+- Claude: https://github.com/agentkitai/agentrig/pull/234#issuecomment-5575519391
+- Codex: https://github.com/agentkitai/agentrig/pull/234#issuecomment-5575519610
+
+All four hosted checks are green at this head: CI 34160143218 and structure 34160143215. This updates only the historical queued/in-progress snapshot above; it does not cure residuals or establish missing independent local evidence.
+
+ENTIRE preceding PR body, authorizations and history are preserved verbatim, including the sole sandbox deviation, human #248 resolution and three-round cap. Feels #251 (orphan lock), #252 (model-provenance retry succeeded), #254 (current halt) retained. Prior conductors 8fbde1a3 and 38c4612d retained. Two recorded halts: historical #248 human-resolved, current #254 blocking.
+
+Child count: **7 total = 6 implementation/arbitration children + 1 administrative continuation**. This conductor run: **2 implementation children** (round 2, 633e8e44; round 3, b12646c7) **+ this bookkeeping child** (4f8eb85f). Initial builder 7dbfad2b, arbiter 1bb8ec86, builder continuation b9109d9f, round-1 fixer 12b8dd75 retained. No child spawned by bookkeeping.
+
+Local-only handoff note: `/home/amit/agentrig/.claude/worktrees/r17b-defaults/docs/STATUS.md` is updated **UNCOMMITTED AND UNPUSHED**. No source or artifact commit, no new head, no implementation, review, push or merge. R17c–R17g untouched. This note is not part of the reviewed commit.
+
+## Residuals
+
+- #256 — [review residual] HIGH 1: recommended tsc listFiles exceeds checker output bound — https://github.com/agentkitai/agentrig/issues/256
+- #257 — [review residual] MEDIUM 2: missing over-bound real-compiler regression coverage — https://github.com/agentkitai/agentrig/issues/257
+- #258 — [review residual] LOW 3: repeated realpath calls after touched-file coverage is found — https://github.com/agentkitai/agentrig/issues/258
+- #259 — [review residual] LOW 4: incorrect smoke-helper provenance in round-3 ledger — https://github.com/agentkitai/agentrig/issues/259
+- #260 — [review residual] Claude Code (claude-opus-5): final-review verification evidence limitation — https://github.com/agentkitai/agentrig/issues/260
+- #261 — [review residual] Codex: final-review verification evidence limitation — https://github.com/agentkitai/agentrig/issues/261
+
+All six remain open; the two evidence residuals are separate from verified code defects. No finding downgraded, waived or rebutted.
+
+### Final completed-child canonical usage (disjoint fields)
+
+Source: complete `model.response.usage` records in `.agentrig/raw/sessions/<session>.jsonl`; each listed session has terminal `session.end` and every response has `usageComplete: true`. Missing cacheWrite is zero reported cache-write tokens. Terminal error is not a successful task claim.
+
+| Session | Responses | Terminal seq | End reason | Input (uncached) | Output | CacheRead | CacheWrite |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 7dbfad2b | 72 | 1784 | done | 550,715 | 24,997 | 2,032,256 | 0 |
+| 1bb8ec86 | 10 | 1364 | done | 107,642 | 2,239 | 113,536 | 0 |
+| b9109d9f | 125 | 1985 | done | 791,759 | 46,500 | 6,296,832 | 0 |
+| 12b8dd75 | 112 | 1449 | error | 694,423 | 49,047 | 5,914,880 | 0 |
+| 633e8e44 | 39 | 1251 | done | 247,595 | 15,526 | 938,752 | 0 |
+| b12646c7 | 66 | 1939 | done | 362,790 | 22,418 | 1,661,056 | 0 |
+
+Summed DISJOINT completed-child fields: **input 2,754,924**, **output 160,727**, **cacheRead 16,957,312**, **cacheWrite 0**; combined **19,872,963** tokens.
+
+Auxiliary usage is separate: no auxiliary-usage event/receipt is present in these six canonical child logs; no auxiliary total or zero-cost claim is inferred. External-review process usage and synthetic fixture auxiliary receipts are not included. These are the final six terminated implementation/arbitration child totals, not a final all-session row total. Incomplete parent conductor 2aa2f739 and current bookkeeping child 4f8eb85f are excluded; no current snapshot is called final.
+
+## Preserved pre-halt STATUS history
+
+## R17b final repair round 3/3 — builder agentrig, conductor 2aa2f739
+
+Repair session **b12646c7**, sixth known implementation/arbitration child; zero
+spawned children. Existing single worktree, branch feat/r17b-defaults, PR #234.
+Old head `e5b8044f86b9edbcc7ada95e2c7dde8db6e9d715`; current main is already
+an ancestor. No rebase, new arbiter, second exception, review or merge by child.
+All prior authorization, sandbox RECORD, human #248 resolution and session
+history below remain in force. Prior sessions: builders 7dbfad2b, b9109d9f;
+arbiter 1bb8ec86; fixers 12b8dd75, 633e8e44; conductors 8fbde1a3, 38c4612d,
+2aa2f739. See [round-3 receipts](plans/R17b-round3.md).
+
+**Historical evidence correction:** round-2's local 213-file/3379-passed/4-skipped
+trio and auxiliary receipts are dirty-tree-only, not reproducible from clean old
+head. Hosted run 34157135772 failed Ubuntu and macOS at
+recommended-defaults.test.ts:117; Windows passed and structure passed separately.
+Neither reviewer reproduced the retained PTY/E1 receipts. They are not current
+clean-head or independent-review evidence.
+
+Accounting: six known implementation/arbitration children, one historical halt
+(#248, human resolved), no new halt. Historical round-2 main-model snapshot is
+247595 uncached input + 15526 output + 938752 cached input = 1201873 tokens;
+auxiliary separate, never a row total. Prior feel issues remain below, including
+#251 orphan worktree index.lock and #252 initial Claude provenance failure
+(retry succeeded using sole claude-opus-5). No new AgentRig friction observed.
+Current fixer snapshot (session b12646c7 through event 688):
+337277 uncached input + 17980 output + 1288576 cached input =
+1643833 main-model tokens; auxiliary separate, later turns excluded.
+This is the final repair round, not a reset. Independent delta review remains
+required; residuals must be tracked, not waived.
+
+Round-3 clean candidate 47b4ecd464a3ef769a4e5753081c15c2ee5adf09: build **0**,
+test **0** (213 files, **3386 passed / 4 skipped**, 3390 collected), typecheck **0**;
+final receipt-only head gets the same clean trio before push (exact SHA/exits in
+PR #234). Hosted at receipt commit: **not yet pushed/not run**, not green; final
+hosted snapshot is recorded on the PR. PTY smoke and latency scripts exit **0**;
+E1 reproduction exits **1**, six PASS/two manual BLOCKED, all behavior checks PASS,
+seven unavailable-checker results retained. No all-E1-green or reviewer-reproduction
+claim. Full bounded observations and separate new receipts: R17b-round3.md.
+
+### Historical round-2 record (superseded where corrected above)
+
+## R17b repair round 2/3 — builder agentrig, conductor 2aa2f739
+
+Prior halt feel #248 is resolved by the human outside the train: restore diagnostics
+under the existing acceptance, not a new exception; no second arbiter. This is
+round 2 of the three-round cap, preserving completed round 1 and the sandbox
+approval by 1bb8ec86. Previous conductors: 8fbde1a3, 38c4612d. Prior children:
+7dbfad2b, 1bb8ec86, b9109d9f, 12b8dd75. This continuation is the fifth known implementation/arbitration child (builder
+agentrig; external-review child counts are unavailable here); it spawns zero children. Current child token/session telemetry is not
+available in this tool surface; prior partial snapshots remain below, not totals.
+One prior halt (#248); historical friction and accounting are preserved.
+Round-2 repairs and reproducible evidence: [R17b-round2](plans/R17b-round2.md).
+Local build/test/typecheck exit 0 (213 files, 3379 passed / 4 skipped).
+No child spawned. Feel #251 records orphan worktree index.lock friction before
+recovery (cause unverified); exact pushed-head CI is reported in PR #234.
+
+
+## R17 builder gate
+
+Every R17 PR body and STATUS entry names **builder agentrig, conductor 8fbde1a3**,
+or names the blocking `feel` issue if AgentRig could not build it. Record child
+count, observable token usage (never an invented estimate), and halts for each row.
+File AgentRig friction with the `feel` label before the next child starts.
+
+- **R17b repair round 1/3 — builder agentrig, conductor 8fbde1a3.** Child 4
+  `12b8dd75` repairs all 13 Claude findings and the shared Codex TUI finding on
+  existing PR #234; no nested builder, arbitration or PR merge. Baseline-first
+  history retained; the sole sandbox deviation remains unchanged. Full resolution,
+  real mutation probes and reproducible measurements: [repair ledger](plans/R17b-repair.md).
+  Pending fresh independent delta pair on the pushed head; no clean-review claim.
+  This repair has no human permission pause. Known feel issues #235/#236/#237/#239
+  remain referenced, not used to waive any open review finding. Available repair
+  usage snapshot through canonical session `12b8dd75` seq 1067: 89 model responses,
+  input 667,812 / output 35,068 / cache-read 3,748,992 / cache-write 0 (not final totals).
+  Per-response accounting is committed in `plans/R17b-repair-accounting.json`.
+  Merged moved main `7841b88` without rebasing. Green local trio: 212 files,
+  3,366 passed / 4 skipped; CLI-workspace runtime probe 1 passed. Hosted exact-head
+  CI is recorded in the PR after push. New workflow feel #245 records the
+  workspace-relative Vitest include friction (session 12b8dd75, call seq 1055,
+  result seq 1080); successful explicit-root invocation is recorded, not waived.
+
+- **R17b implemented, awaiting independent review — builder agentrig, conductor
+  8fbde1a3.** Existing single worktree/PR [#234](https://github.com/agentkitai/agentrig/pull/234);
+  baseline-first history preserved. Three children: builder `7dbfad2b`, arbiter
+  `1bb8ec86`, continuation builder `b9109d9f`; human pauses **2** (prior **1** plus one
+  scoped permission wait in this continuation, feel #236). [Defaults/migration](DEFAULTS.md), [plan/evidence](plans/R17b.md).
+  Every changed flag: `--supervise`, `--no-supervise`, `--checkpoints`,
+  `--ingest-on-end`, `--no-ingest-on-end`, `--notifications <mode>`, `--verbose`.
+  Security defaults (`ask`, sandbox, grants, fail-closed manifests) unchanged.
+  The **only approved deviation** is arbiter `1bb8ec86`'s host-hook exception:
+  implicit checkpoint/ingest only with absent/none sandbox, visible omission under
+  enforcing sandboxes, explicit opt-ins retain the core fail-closed startup error.
+  ROADMAP has exactly its authorized phrase replacement; acceptance/renunciation unchanged.
+  Fail-first config tests and defaults-disabled real-CLI mutation fail as expected;
+  real CLI and PTY smoke cover diagnostics, rendered Markdown, checkpoint event and
+  completed ingest without config. Root help remains **2 options (<40)**.
+  Observable tokens from canonical `model.response.usage` events, separate fields
+  (not billing estimates): builder `7dbfad2b`: **550715 input / 24997 output /
+  2032256 cache-read** (72 responses); arbiter `1bb8ec86`: **107642 / 2239 / 113536**
+  (10 responses); continuation `b9109d9f` partial snapshot: **708390 / 26320 /
+  1939712** (72 responses, through event sequence 865). Conductor separately:
+  **184729 / 4892 / 340864** (18 responses); continuation/future review totals are
+  not complete and no unseen usage is estimated.
+  Feel [#232](https://github.com/agentkitai/agentrig/issues/232) remains documented;
+  [#233](https://github.com/agentkitai/agentrig/issues/233) is handled by the approved
+  exception; new [#235](https://github.com/agentkitai/agentrig/issues/235) records
+  ingest writes invalidating the terminal checkpoint ownership seal (checkpoint
+  creation succeeds; undo can remain unavailable, and its safety guard is unchanged).
+  Feel #236 (filed by the operator) records the 77-minute `attempt_log` approval
+  wait: canonical continuation events **790 ask → 791 allow**, with no bypass.
+  Feel #237 records a shared `/tmp/.agentrig` marker changing fixture trust roots;
+  validation uses clean `TMPDIR=/var/tmp` without deleting the marker or changing
+  product trust. `pnpm build`, `pnpm test`, `pnpm typecheck` exit **0** (211 files, **3337 passed /
+  4 skipped**). Exact-head CI is verified in the PR handoff record after push.
+  Independent external reviews follow in the conductor; no reviews or merge by this child.
 External-review execution repair (outside train, 2026-09-07): Codex addresses
 [feel #243](https://github.com/agentkitai/agentrig/issues/243), observed under original
 conductor `8fbde1a3` and carried by conductor `2aa2f739`. Topic/dogfood Claude

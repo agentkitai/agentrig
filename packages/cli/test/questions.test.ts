@@ -94,7 +94,7 @@ it.each([0, 1200])("actual provider/controller question appears in an Ink frame 
 }, 10000);
 
 it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a local provider and records honest answer provenance", async mode => {
-  const cwd = await root(); await mkdir(join(cwd, "home")); let calls = 0;
+  const cwd = await root(); await mkdir(`${cwd}-home`); let calls = 0;
   const server = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume request */ }
     const asking = calls++ === 0;
@@ -105,13 +105,17 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   cleanups.push(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
   const address = server.address(); if (address === null || typeof address === "string") throw new Error("no address");
+  // Isolate main-loop assertions from the recommended session-end auxiliary call.
+  await mkdir(join(`${cwd}-home`, ".agentrig"), { recursive: true });
+  await writeFile(join(`${cwd}-home`, ".agentrig/config.json"), JSON.stringify({ ingestOnEnd: false }));
+  cleanups.push(() => rm(`${cwd}-home`, { recursive: true, force: true }));
   const answerFile = join(cwd, "answers.json");
   await writeFile(answerFile, JSON.stringify({ version: 1, answers: [{ question, answer: { text: "literal fixture" } }] }));
   if (mode === "acp") {
     const child = spawn(process.execPath, [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "acp",
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
-    { cwd, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), OPENAI_API_KEY: "local-fixture" }, stdio: ["pipe", "pipe", "pipe"] });
+    { cwd, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, stdio: ["pipe", "pipe", "pipe"] });
     let stderr = ""; child.stderr.on("data", chunk => { stderr += String(chunk); });
     const closed = once(child, "close"); let questions = 0;
     const peer = client().onRequest("_agentrig/question", z.object({ question: z.object({ id: z.string().uuid() }).passthrough() }).passthrough(), ({ params }) => {
@@ -129,7 +133,7 @@ it.each(["fail", "first-option", "file", "acp"])("actual CLI %s policy uses a lo
       "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`,
       "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"), "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery",
       ...(mode === "fail" ? [] : ["--answer-policy", mode === "file" ? `file:${answerFile}` : mode])],
-    { cwd, env: { ...process.env, HOME: join(cwd, "home"), USERPROFILE: join(cwd, "home"), OPENAI_API_KEY: "local-fixture" }, timeout: 20_000, maxBuffer: 1_048_576 },
+    { cwd, env: { ...process.env, HOME: `${cwd}-home`, USERPROFILE: `${cwd}-home`, OPENAI_API_KEY: "local-fixture" }, timeout: 20_000, maxBuffer: 1_048_576 },
     (error, stdout, stderr) => { if (error && typeof error.code !== "number") reject(error); else resolve({ code: error?.code ?? 0, stdout, stderr }); });
   });
   expect(result.code, result.stderr).toBe(mode === "fail" ? 1 : 0);

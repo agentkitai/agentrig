@@ -13,7 +13,7 @@ export async function runtimeFixture(stream: (request: ModelRequest, signal?: Ab
   let ready!: (s: Awaited<ReturnType<typeof serveWeb>>) => void; const started = new Promise<Awaited<ReturnType<typeof serveWeb>>>(resolve => { ready = resolve; });
   const program = buildProgram({ config: { cwd: root, home, env: {} }, web: { ready,
     build: async (options, extras) => {
-      const built = await buildAgent(options, extras);
+      const built = await buildAgent({ ...options, ingestOnEnd: false }, extras);
       built.provider.stream = stream; return built;
     } } });
   // Provider constructor needs a fixture credential; no provider network is ever used.

@@ -143,6 +143,8 @@ export function buildSandbox(
  */
 
 export interface AgentBuildOptions extends ProviderOptions {
+  /** Internal notice for mounted UIs; not a user configuration key. */
+  defaultHookNotice?: string;
   tui?: TuiSettings;
   notifications?: "off" | "bell" | "desktop" | "both";
   notificationIdleSeconds?: number;
@@ -493,6 +495,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   if (opts.mcpConfig !== undefined && opts.sandbox !== undefined && opts.sandbox !== "none" && opts.sandboxNetwork !== true)
     throw new Error("MCP servers start in the host process outside the tool sandbox; remote HTTP requires explicit --sandbox-network and network permission; stdio requires --sandbox none");
   opts = heartbeatBuildOptions(opts);
+  if (opts.defaultHookNotice !== undefined) extras.onNotice?.(opts.defaultHookNotice);
   validateProviderSelectionTable(resolveProviderEntries(opts));
   const installed = opts.packages === false || opts.trustedProjectRoot === undefined
     ? { packages: [], errors: [] } : await inspectPackages(opts.trustedProjectRoot);

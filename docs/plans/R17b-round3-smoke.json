@@ -1,0 +1,34 @@
+{
+  "fixture": "local deterministic TUI; no config files or feature opt-ins",
+  "command": [
+    "node",
+    "/home/amit/agentrig/.claude/worktrees/r17b-defaults/packages/cli/dist/index.js",
+    "--provider",
+    "openai",
+    "--model",
+    "gpt-4o",
+    "--base-url",
+    "http://127.0.0.1:41149",
+    "--allow",
+    "write_file"
+  ],
+  "session_ids": [
+    "f818445c"
+  ],
+  "provider_requests": 3,
+  "ingest_requests": 1,
+  "expanded_preference_applied": true,
+  "permission_requests": 2,
+  "main_responses": 2,
+  "auxiliary_usage": [],
+  "complete": true,
+  "raw_markdown_preserved": true,
+  "markdown_rendered": true,
+  "diagnostics_line": true,
+  "checkpoint_created": true,
+  "checkpoint_visible": true,
+  "ingest_at_end": true,
+  "config_expected": true,
+  "security": "explicit fixture write approval; diagnostic exec approval declined via n; no YOLO/sandbox/grant change",
+  "terminal_final_frame": ", or /help for commands\r\nWrite a TypeScript file then give a Markdown heading and bold result.\r\nProvider for turn 1: \r\n{\"entry\":\"default\",\"provider\":\"openai-compatible\",\"model\":\"gpt-4o\"} (previous \r\nselection unknown)\r\nCheckpoint: turn 1 saved\r\n\u00b1 create a.ts\r\nDeclared permission: \"exec\" for \"core:diagnostics\".\r\nExec may change files and reach the network; effects are not established by \r\nargv.\r\ncwd: \"/var/tmp/r17-recommended-58i9h2lg/project\"\r\nDeclared paths: none; path effects unknown (not an empty effect set).\r\nNames, model prose and MCP read-only hints do not establish effects or \r\nauthority.\r\nStanding session answers cover ALL future \"core:diagnostics\" requests in this \r\nlive session, any resource/class/cwd. Children currently share that group. \r\nExplicit base rules still apply.\r\ndenied core:diagnostics\r\npermission deny \"core:diagnostics\" \r\n[\"diagnostic-35cf4efb-08a3-49e8-8df8-fa56b726ee08\"] \u2014 approval handler \r\n(human/host)\r\n\u2717 denied core:diagnostics\r\n\u2713 write_file a.ts \u00b7 245ms \u00b7 ok\r\ndiff a.ts [observed before/after]\r\nsnapshots: before=complete, after=complete\r\n--- before\r\n+++ after\r\n@@ -1,0 +1,1 @@\r\n+const n: number = 1;\r\nDiagnostics: checker was not executed; 0 touched-file, 0 other-file, 0 omitted\r\nResult\r\n\r\nReady\r\nmemory: ingested 0 fact(s) into 1 page(s)\r\nmemory: auxiliary ingest: 1 call(s), 10 input / 2 output / 0 cache-read / 0 \r\ncache-write reported tokens; 0 call(s) with unknown total usage; cost unknown; \r\ncompleted; local writes completed\r\n! checkpoint seal failed: Error: undo unavailable: non-session changes after the\r\n final tool. Checkpoint snapshots remain, but undo has no verified ownership \r\nseal; session-end hooks such as memory inges\u2026\r\ndone after 2 turn(s), 20 in / 4 out\r\n\r\n> \r\nasks:0 \u00b7 ask(policy) grants:0 \u00b7 sb:none \u00b7 cost:unknown \u00b7 sup:unavailable \u00b7 idle\u2026"
+}

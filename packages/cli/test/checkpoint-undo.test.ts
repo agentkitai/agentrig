@@ -82,7 +82,7 @@ it("shared CLI/TUI supervisor wiring restores after abort and clears automatic r
   };
   let restored=false;
   const controller=new TuiController({agent:b.agent,cwd:root,onSession:session=>supervise(session,{
-    ...supervisorOptions({opts:{supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true},task:"fixture",budget:{maxTurns:2},memoryIndex:"",provider:b.provider,soft:0.99,turnsRemaining:1,
+    ...supervisorOptions({opts:{superviseExplicit:true,checkpointsExplicit:true,supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true},task:"fixture",budget:{maxTurns:2},memoryIndex:"",provider:b.provider,soft:0.99,turnsRemaining:1,
       restoreCheckpoint:checkpointRestorer(join(root,"sessions")),onRestore:result=>{restored=result.restored;if(restored)controller.forgetRestoredConversation();}}),
     ladder:{ladder:["abort"]},
   })});
@@ -92,10 +92,11 @@ it("shared CLI/TUI supervisor wiring restores after abort and clears automatic r
 });
 
 it("requires explicit supervisor, abort and checkpoint opt-ins before restoration wiring",()=>{
-  const valid={supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true};
-  expect(parseConfigText("fixture",JSON.stringify(valid))).toMatchObject(valid);
+  const valid={superviseExplicit:true,checkpointsExplicit:true,supervise:true,supervisorAbort:true,checkpoints:true,supervisorAbortRestores:true};
+  expect(parseConfigText("fixture",JSON.stringify({supervise:true,checkpoints:true,supervisorAbort:true,supervisorAbortRestores:true}))).toMatchObject({supervise:true,checkpoints:true});
+  expect(() => parseConfigText("fixture", JSON.stringify(valid))).toThrow("Unrecognized setting");
   expect(()=>validateAbortRestores(valid)).not.toThrow();
-  for(const key of ["supervise","supervisorAbort","checkpoints"])expect(()=>validateAbortRestores({...valid,[key]:false})).toThrow("requires --supervise");
+  for(const key of ["supervise","supervisorAbort","checkpoints"])expect(()=>validateAbortRestores({...valid,[key]:false})).toThrow("requires supervise/checkpoints config enabled");
   expect(()=>validateAbortRestores({...valid,sandbox:"workspace-write"})).toThrow("--sandbox none");
   expect(()=>validateAbortRestores({})).not.toThrow();
 });

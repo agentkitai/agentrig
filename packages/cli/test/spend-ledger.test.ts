@@ -22,7 +22,7 @@ async function fixture() {
   const cwd = join(root, "project"), home = join(root, "home"), logs = join(root, "logs");
   await mkdir(join(cwd, ".agentrig"), { recursive: true }); await mkdir(home);
   await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ root: logs, repoMap: false,
-    packages: false, extensionDiscovery: false, skillDiscovery: false, contextWindow: 10 }));
+    packages: false, ingestOnEnd: false, extensionDiscovery: false, skillDiscovery: false, contextWindow: 10 }));
   vi.spyOn(process, "cwd").mockReturnValue(cwd); vi.stubEnv("OPENAI_API_KEY", "private-fixture-key");
   vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
   vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
@@ -126,7 +126,7 @@ it("actual Web ACP uses the shared capped adapter: first prompt settles, second 
   const started = new Promise<Awaited<ReturnType<typeof serveWeb>>>(resolve => { ready = resolve; });
   const running = buildProgram({ config: { cwd: f.cwd, home: f.home }, web: { ready } }).parseAsync([
     "web", "--trust", "--provider", "openai", "--model", "fixture", "--daily-cap", "0.000020",
-    "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--no-supervise",
+    "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10",
   ], { from: "user" });
   const server = await Promise.race([started, running.then(() => { throw Error("Web exited before ready"); })]);
   const client = await connect(server);
@@ -147,7 +147,7 @@ it("actual Web ACP uses the shared capped adapter: first prompt settles, second 
 it.each([100, 2000])("actual ACP reviewer retains session accounting and cap events (cap=%i)", async cap => {
   const f = await fixture();
   await writeFile(join(f.cwd, ".agentrig/config.json"), JSON.stringify({ root: f.logs, repoMap: false, packages: false,
-    extensionDiscovery: false, skillDiscovery: false, contextWindow: 10,
+    ingestOnEnd: false, extensionDiscovery: false, skillDiscovery: false, contextWindow: 10,
     providers: { review: { provider: "openai", model: "review", contextWindow: 10 } }, roles: { supervisor: "review" } }));
   let mainCalls = 0, reviewCalls = 0, release!: () => void;
   const attempted = new Promise<void>(resolve => { release = resolve; });
@@ -168,7 +168,7 @@ it.each([100, 2000])("actual ACP reviewer retains session accounting and cap eve
   const started = new Promise<Awaited<ReturnType<typeof serveWeb>>>(resolve => { ready = resolve; });
   const running = buildProgram({ config: { cwd: f.cwd, home: f.home }, web: { ready } }).parseAsync([
     "web", "--trust", "--provider", "openai", "--model", "fixture", "--daily-cap", String(cap / 1_000_000),
-    "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--supervise", "--supervisor-review",
+    "--price-in", "1", "--price-out", "1", "--max-tokens-per-turn", "10", "--supervisor-review",
   ], { from: "user" });
   const server = await Promise.race([started, running.then(() => { throw Error("Web exited before ready"); })]);
   const client = await connect(server);

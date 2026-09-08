@@ -223,6 +223,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `✗ denied ${e.name}`;
     case "file.changed":
       return `± ${e.op} ${e.path}`;
+    case "checkpoint.created":
+      return `Checkpoint: turn ${e.turn} saved`;
     case "checkpoint.warning":
       return `⚠ ${oneLine(e.message, 200)}`;
     case "plan.updated": {
@@ -277,7 +279,6 @@ export function renderChatEvent(e: HarnessEvent): string | null {
     case "context.loaded":
     case "context.manifest":
     case "context.repo_map":
-    case "checkpoint.created":
     case "checkpoint.sealed":
     case "checkpoint.restored":
     case "memory.note":

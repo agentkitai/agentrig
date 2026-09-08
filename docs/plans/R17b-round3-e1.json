@@ -1,0 +1,857 @@
+[
+  {
+    "task": "A1",
+    "permissionPrompts": 4,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "cc12ee8a",
+    "ingestCalls": 6,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 25.74946699999964,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.8523870000008174,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.2856539999993402,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.122200999998313,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.037967000000208,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.0488750000004075,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.9198980000001029,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 60,
+        "output": 12
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [
+      {
+        "type": "tool.result",
+        "id": "diagnostic-8d07d589-345b-49f0-9493-e67655071495",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 102,
+        "permission": "exec",
+        "toolCallSeq": 28,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "2"
+        },
+        "seq": 29,
+        "sessionId": "cc12ee8a",
+        "ts": 1788813193367
+      },
+      {
+        "type": "tool.result",
+        "id": "diagnostic-258782ea-2c8b-451c-ab92-60b06abd161d",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 97,
+        "permission": "exec",
+        "toolCallSeq": 47,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "3"
+        },
+        "seq": 48,
+        "sessionId": "cc12ee8a",
+        "ts": 1788813200689
+      }
+    ],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "A2",
+    "permissionPrompts": 4,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "386de17c",
+    "ingestCalls": 7,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 18.80116000000271,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.9177889999991748,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 1.030877999997756,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.6080839999995078,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.6687499999970896,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.5401830000046175,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.4883330000011483,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.622652999998536,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 70,
+        "output": 14
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [
+      {
+        "type": "tool.result",
+        "id": "diagnostic-dad79381-e13c-41ab-bc08-57155ac0800a",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 95,
+        "permission": "exec",
+        "toolCallSeq": 28,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "2"
+        },
+        "seq": 29,
+        "sessionId": "386de17c",
+        "ts": 1788813215209
+      },
+      {
+        "type": "tool.result",
+        "id": "diagnostic-20aa8b59-000f-427d-9baa-95abcbecb1e4",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 95,
+        "permission": "exec",
+        "toolCallSeq": 47,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "3"
+        },
+        "seq": 48,
+        "sessionId": "386de17c",
+        "ts": 1788813222489
+      }
+    ],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "A3",
+    "permissionPrompts": 6,
+    "turnsToDone": 5,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "170bdc09",
+    "ingestCalls": 6,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 17.33208000000741,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.9545170000055805,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.7809529999940423,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.49379699998826254,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.5513579999969807,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.5453160000033677,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.5451549999997951,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 60,
+        "output": 12
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 3,
+    "toolErrors": [
+      {
+        "type": "tool.result",
+        "id": "diagnostic-3bfef468-210e-4c1c-811f-9a69d4000062",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 96,
+        "permission": "exec",
+        "toolCallSeq": 28,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "2"
+        },
+        "seq": 29,
+        "sessionId": "170bdc09",
+        "ts": 1788813237195
+      },
+      {
+        "type": "tool.result",
+        "id": "diagnostic-f2dd6ace-f0bd-401c-8aba-623506fb3c6e",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 97,
+        "permission": "exec",
+        "toolCallSeq": 47,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "3"
+        },
+        "seq": 48,
+        "sessionId": "170bdc09",
+        "ts": 1788813244711
+      },
+      {
+        "type": "tool.result",
+        "id": "diagnostic-a17a24ec-0012-4078-bf35-fe11e5101d4f",
+        "ok": false,
+        "display": "checker failed to start (exit unknown)",
+        "durationMs": 90,
+        "permission": "exec",
+        "toolCallSeq": 69,
+        "internal": {
+          "kind": "diagnostics",
+          "parentToolUseId": "4"
+        },
+        "seq": 70,
+        "sessionId": "170bdc09",
+        "ts": 1788813252215
+      }
+    ],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "A4",
+    "permissionPrompts": 2,
+    "turnsToDone": 5,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "4880d3ec",
+    "ingestCalls": 6,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 14.989367000001948,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.716629999995348,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.8633220000047004,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.5844179999985499,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.47871999999915715,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.45766299999377225,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        },
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.6140089999971678,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 60,
+        "output": 12
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [],
+    "check": {
+      "outcome": "BLOCKED",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "X1",
+    "permissionPrompts": 2,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "f5874fbf",
+    "ingestCalls": 1,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 11.172113999986323,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.7734150000032969,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 10,
+        "output": 2
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "X2",
+    "permissionPrompts": 2,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "8056a9f4",
+    "ingestCalls": 1,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 11.486664000010933,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.7612689999950817,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 10,
+        "output": 2
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "X3",
+    "permissionPrompts": 2,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "ac309008",
+    "ingestCalls": 1,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 10.744569999995292,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.7363299999997253,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 10,
+        "output": 2
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [],
+    "check": {
+      "outcome": "PASS",
+      "behavior": "PASS"
+    }
+  },
+  {
+    "task": "X4",
+    "permissionPrompts": 2,
+    "turnsToDone": 4,
+    "sessionEnd": "session.end",
+    "reason": "done",
+    "sessionId": "c38b3e18",
+    "ingestCalls": 1,
+    "ingestReport": {
+      "operation": "ingest",
+      "outcome": "completed",
+      "durationMs": 11.113652000000002,
+      "calls": [
+        {
+          "operation": "completion",
+          "provider": "openai-compatible",
+          "model": "gpt-4o",
+          "outcome": "completed",
+          "durationMs": 0.7081210000033025,
+          "usageComplete": true,
+          "usage": {
+            "input": 10,
+            "output": 2
+          }
+        }
+      ],
+      "reportedUsage": {
+        "input": 10,
+        "output": 2
+      },
+      "unknownUsageCalls": 0,
+      "costUsd": null,
+      "localCommitState": "completed"
+    },
+    "implicitDiagnosticCheckers": [
+      {
+        "parser": "tsc",
+        "extensions": [
+          ".ts",
+          ".tsx",
+          ".mts",
+          ".cts"
+        ],
+        "executable": "tsc",
+        "args": [
+          "--noEmit",
+          "--pretty",
+          "false",
+          "--listFiles"
+        ],
+        "timeoutMs": 10000,
+        "maxOutputBytes": 65536
+      }
+    ],
+    "checkpointCount": 2,
+    "toolErrors": [],
+    "check": {
+      "outcome": "BLOCKED",
+      "behavior": "PASS"
+    }
+  }
+]

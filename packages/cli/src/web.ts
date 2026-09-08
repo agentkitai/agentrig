@@ -80,7 +80,7 @@ export async function serveWeb(options: { host: string; port: number; run(input:
 export type WebFlags = AcpFlags & { host?: string; port?: string };
 export interface WebDependencies extends AcpDependencies { ready?(server: Awaited<ReturnType<typeof serveWeb>>): void }
 export async function startWeb(command: Command, flags: WebFlags, dependencies: WebDependencies = {}): Promise<void> {
-  if (flags.json || flags.verbose) throw new Error("Web uses ACP updates; raw-event flags are not supported");
+  if (flags.json) throw new Error("Web uses ACP updates; raw-event flags are not supported");
   if (flags.port !== undefined && !/^\d{1,5}$/.test(flags.port)) throw new Error("Web port must be a decimal integer");
   const server = await serveWeb({ host: flags.host ?? "127.0.0.1", port: Number(flags.port ?? 0),
     run: (input, output) => startAcp(command, flags, { ...dependencies, input, output }) });

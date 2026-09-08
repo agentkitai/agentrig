@@ -19,6 +19,10 @@ it("real acp CLI over OS pipes completes deny then allow with a local provider a
   let requests = 0; let decisions = 0; const replies: string[] = []; const bodies: unknown[] = [];
   const server = createServer(async (req, res) => {
     let text = ""; for await (const chunk of req) text += chunk;
+    if (!JSON.parse(text).tools?.length) {
+      res.setHeader("content-type", "text/event-stream");
+      res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: '{"facts":[],"nothingDurable":true}' }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`); return;
+    }
     bodies.push(JSON.parse(text));
     const tool = requests++ % 2 === 0;
     const delta = tool ? { tool_calls: [{ index: 0, id: "write", type: "function", function: { name: "write_file",

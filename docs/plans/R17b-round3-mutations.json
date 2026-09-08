@@ -1,0 +1,149 @@
+[
+  {
+    "name": "HIGH1 pre-provider validation",
+    "path": "packages/cli/test/recommended-defaults.test.ts",
+    "old": "review: {provider, process: reviewProcess}}).parseAsync(['review', '--profile', 'recommended', '--comment'], {from:'user'});",
+    "new": "review: {provider, process: reviewProcess}}).parseAsync(['review', '--profile', 'recommended'], {from:'user'});",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (24 tests | 1 failed) 138ms\n   \u00d7 review accepts the built-in recommended baseline without enabling run hooks 6ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 23 passed (24)\n   Start at  23:30:29\n   Duration  1.58s (transform 901ms, setup 17ms, import 1.35s, tests 138ms, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > review accepts the built-in recommended baseline without enabling run hooks\nAssertionError: expected \"vi.fn()\" to not be called at all, but actually been called 1 times\n\nReceived:\n\n  1st vi.fn() call:\n\n    Array [\n      \"git\",\n      Array [\n        \"--no-optional-locks\",\n        \"-c\",\n        \"core.hooksPath=/dev/null\",\n        \"-c\",\n        \"core.fsmonitor=false\",\n        \"rev-parse\",\n        \"--show-toplevel\",\n      ],\n      Object {\n        \"cwd\": \"/home/amit/agentrig/.claude/worktrees/r17b-defaults\",\n        \"maxBytes\": 16384,\n        \"signal\": AbortSignal {\n          Symbol(kEvents): Map {},\n          Symbol(events.maxEventTargetListeners): 0,\n          Symbol(events.maxEventTargetListenersWarned): false,\n          Symbol(kHandlers): Map {},\n          Symbol(kAborted): false,\n          Symbol(kReason): undefined,\n          Symbol(kComposite): true,\n          Symbol(kSourceSignals): Set {\n            SafeWeakRef {},\n            SafeWeakRef {},\n          },\n        },\n      },\n    ]\n\n\nNumber of calls: 1\n\n \u276f packages/cli/test/recommended-defaults.test.ts:117:29\n    115|   await buildProgram({config: {cwd: root, home: root, env: {}}, review\u2026\n    116|   expect(provider).not.toHaveBeenCalled();\n    117|   expect(reviewProcess).not.toHaveBeenCalled();\n       |                             ^\n    118|   spy.mockRestore(); process.exitCode = 0;\n    119|   expect(errors.join(\"\\n\")).not.toContain(\"unknown config profile\");\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  24 passed (24)\n   Start at  23:30:31\n   Duration  1.53s (transform 860ms, setup 14ms, import 1.31s, tests 134ms, environment 0ms)\n\n"
+    }
+  },
+  {
+    "name": "HIGH2/Codex coverage",
+    "path": "packages/core/src/diagnostics.ts",
+    "old": "if (checksCoverage && !touchedFileListed) {",
+    "new": "if (false) {",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/core/test/post-edit-diagnostics.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/core/test/post-edit-diagnostics.test.ts (33 tests | 3 failed) 3768ms\n   \u00d7 default-style tsc proves touched-file coverage: references-only 69ms\n   \u00d7 default-style tsc proves touched-file coverage: jsonc-references 60ms\n   \u00d7 default-style tsc proves touched-file coverage: excluded 486ms\n\n Test Files  1 failed (1)\n      Tests  3 failed | 30 passed (33)\n   Start at  23:30:33\n   Duration  4.41s (transform 404ms, setup 15ms, import 549ms, tests 3.77s, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 3 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/core/test/post-edit-diagnostics.test.ts > default-style tsc proves touched-file coverage: references-only\n FAIL  packages/core/test/post-edit-diagnostics.test.ts > default-style tsc proves touched-file coverage: jsonc-references\n FAIL  packages/core/test/post-edit-diagnostics.test.ts > default-style tsc proves touched-file coverage: excluded\nAssertionError: expected 'reported' to be 'incomplete' // Object.is equality\n\nExpected: \"incomplete\"\nReceived: \"reported\"\n\n \u276f packages/core/test/post-edit-diagnostics.test.ts:272:28\n    270|     const {events} = await run(f);\n    271|     const report = diagnosticResult(events).diagnostics;\n    272|     expect(report?.status).toBe(kind === 'mixed' || kind === 'clean' ?\u2026\n       |                            ^\n    273|     if (kind === 'mixed') expect(report?.entries).toEqual([expect.obje\u2026\n    274|     if (['references-only', 'jsonc-references', 'excluded'].includes(k\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/3]\u23af\n\n"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  33 passed (33)\n   Start at  23:30:38\n   Duration  4.34s (transform 396ms, setup 14ms, import 552ms, tests 3.70s, environment 0ms)\n\n"
+    }
+  },
+  {
+    "name": "HIGH2 default coverage invocation",
+    "path": "packages/cli/src/config.ts",
+    "old": "args: [\"--noEmit\", \"--pretty\", \"false\", \"--listFiles\"]",
+    "new": "args: [\"--noEmit\", \"--pretty\", \"false\"]",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (24 tests | 1 failed) 138ms\n   \u00d7 zero-config recommended profile enables existing conveniences without moving authority 15ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 23 passed (24)\n   Start at  23:30:43\n   Duration  1.55s (transform 881ms, setup 14ms, import 1.33s, tests 138ms, environment 0ms)\n\nstderr | packages/cli/test/recommended-defaults.test.ts > zero-config recommended profile enables existing conveniences without moving authority\nProject \"/var/tmp/recommended-Hrfc3A/project\" is not trusted; skipping project instructions and .agentrig/config.json. Use --trust to load them for this run.\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > zero-config recommended profile enables existing conveniences without moving authority\nAssertionError: expected [ { parser: 'tsc', \u2026(5) } ] to deeply equal [ ObjectContaining{\u2026} ]\n\n- Expected\n+ Received\n\n@@ -2,10 +2,18 @@\n    {\n      \"args\": [\n        \"--noEmit\",\n        \"--pretty\",\n        \"false\",\n-       \"--listFiles\",\n+     ],\n+     \"executable\": \"tsc\",\n+     \"extensions\": [\n+       \".ts\",\n+       \".tsx\",\n+       \".mts\",\n+       \".cts\",\n      ],\n+     \"maxOutputBytes\": 65536,\n      \"parser\": \"tsc\",\n+     \"timeoutMs\": 10000,\n    },\n  ]\n\n \u276f packages/cli/test/recommended-defaults.test.ts:25:28\n     23|   const opts = await resolved();\n     24|   expect(opts).toMatchObject({ supervise: true, checkpoints: true, ing\u2026\n     25|   expect(opts.diagnostics).toEqual([expect.objectContaining({parser: \"\u2026\n       |                            ^\n     26|   expect(opts.yolo).not.toBe(true); expect(opts.allow).toEqual([]); ex\u2026\n     27|   expect(opts.supervisorReview).not.toBe(true); expect(opts.supervisor\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  24 passed (24)\n   Start at  23:30:45\n   Duration  1.54s (transform 878ms, setup 14ms, import 1.33s, tests 130ms, environment 0ms)\n\n"
+    }
+  },
+  {
+    "name": "MEDIUM3 recommended note",
+    "path": "packages/cli/src/config.ts",
+    "old": "if (!recommended && profile === \"recommended\" && !selected(user) && !selected(project)) {",
+    "new": "if (false) {",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/recommended-defaults.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/recommended-defaults.test.ts (24 tests | 1 failed) 133ms\n   \u00d7 recommended on a config-aware non-run command notes that run defaults do not apply 5ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 23 passed (24)\n   Start at  23:30:47\n   Duration  1.54s (transform 870ms, setup 14ms, import 1.32s, tests 133ms, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/recommended-defaults.test.ts > recommended on a config-aware non-run command notes that run defaults do not apply\nAssertionError: expected 'Project \"/var/tmp/recommended-note-TW\u2026' to contain 'recommended run defaults do not apply\u2026'\n\nExpected: \"recommended run defaults do not apply to `review`\"\nReceived: \"Project \"/var/tmp/recommended-note-TWrUVr\" contains the user AgentRig state directory; ignoring user config and trust records. Use --trust to load project files for this run.\"\n\n \u276f packages/cli/test/recommended-defaults.test.ts:134:30\n    132|   await buildProgram({config: {cwd: root, home: root, env: {}, notice:\u2026\n    133|     .parseAsync(['review', '--profile', 'recommended', '--comment'], {\u2026\n    134|   expect(notices.join('\\n')).toContain('recommended run defaults do no\u2026\n       |                              ^\n    135|   expect(errors.mock.calls.flat().join('\\n')).not.toContain('unknown c\u2026\n    136| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  24 passed (24)\n   Start at  23:30:49\n   Duration  1.53s (transform 861ms, setup 13ms, import 1.32s, tests 134ms, environment 0ms)\n\n"
+    }
+  },
+  {
+    "name": "LOW4 exact reviewer verbose deletion",
+    "path": "packages/cli/src/tui/start.tsx",
+    "old": "    ...(opts.verbose === undefined ? {} : { verbose: opts.verbose }),\n",
+    "new": "",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/prompt-history-startup.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/prompt-history-startup.test.ts (5 tests | 1 failed) 567ms\n   \u00d7 startTui forwards persistent verbose=true to the mounted controller 5ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 4 passed (5)\n   Start at  23:30:51\n   Duration  1.77s (transform 753ms, setup 13ms, import 1.12s, tests 567ms, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/prompt-history-startup.test.ts > startTui forwards persistent verbose=true to the mounted controller\nAssertionError: expected false to be true // Object.is equality\n\n- Expected\n+ Received\n\n- true\n+ false\n\n \u276f packages/cli/test/prompt-history-startup.test.ts:75:22\n     73|     harness.exercise = async c => { observed = c.snapshot().verbose; };\n     74|     await startTui({verbose, root:join(root,\"logs\"), provider:\"anthrop\u2026\n     75|     expect(observed).toBe(verbose);\n       |                      ^\n     76|   } finally { if (tty) Object.defineProperty(process.stdin,\"isTTY\",tty\u2026\n     77| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\u001b[?25h"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  5 passed (5)\n   Start at  23:30:53\n   Duration  1.78s (transform 769ms, setup 14ms, import 1.14s, tests 566ms, environment 0ms)\n\n\u001b[?25h"
+    }
+  },
+  {
+    "name": "LOW7 undo wording",
+    "path": "packages/core/src/checkpoint-undo.ts",
+    "old": "only the last two mutating-turn refs are retained",
+    "new": "only the last two sealed turn refs are retained",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/core/test/checkpointer.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/core/test/checkpointer.test.ts (40 tests | 1 failed) 7307ms\n   \u00d7 sealing retains only the last two turn refs and preserves last retained undo 586ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 39 passed (40)\n   Start at  23:30:56\n   Duration  7.93s (transform 388ms, setup 15ms, import 539ms, tests 7.31s, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/core/test/checkpointer.test.ts > sealing retains only the last two turn refs and preserves last retained undo\nAssertionError: expected [Function] to throw error including 'checkpoint turn 1 is unavailable (pru\u2026' but got 'checkpoint turn 1 is unavailable (pru\u2026'\n\nExpected: \"checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained\"\nReceived: \"checkpoint turn 1 is unavailable (pruned or missing); only the last two sealed turn refs are retained\"\n\n \u276f packages/core/test/checkpointer.test.ts:846:71\n    844|   expect(events.filter(e => e.type === \"checkpoint.created\")).toHaveLe\u2026\n    845|   const store = new SessionStore({root: join(root, \".agentrig\", \"sessi\u2026\n    846|   await expect(undoSession(store, session.id, {cwd: root, toTurn: 1}))\u2026\n       |                                                                       ^\n    847|   expect(await readFile(join(root, \"tracked.txt\"), \"utf8\")).toBe(\"turn\u2026\n    848|   await undoSession(store, session.id, {cwd: root, toTurn: 4});\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  40 passed (40)\n   Start at  23:31:04\n   Duration  7.99s (transform 379ms, setup 16ms, import 523ms, tests 7.38s, environment 0ms)\n\n"
+    }
+  },
+  {
+    "name": "LOW7 diff wording",
+    "path": "packages/cli/src/tui/manual.ts",
+    "old": "only the last two mutating-turn refs are retained",
+    "new": "only the last two sealed turn refs are retained",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "packages/cli/test/manual-commands.test.ts"
+    ],
+    "mutant": {
+      "exit": 1,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n \u276f packages/cli/test/manual-commands.test.ts (25 tests | 1 failed) 2218ms\n   \u00d7 checkpoint diff validates its recorded run and refuses a moved ref (unsealed=false) 234ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 24 passed (25)\n   Start at  23:31:12\n   Duration  3.45s (transform 780ms, setup 14ms, import 1.15s, tests 2.22s, environment 0ms)\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  packages/cli/test/manual-commands.test.ts > checkpoint diff validates its recorded run and refuses a moved ref (unsealed=false)\nAssertionError: expected [Function] to throw error including 'checkpoint turn 1 is unavailable (pru\u2026' but got 'checkpoint turn 1 is unavailable (pru\u2026'\n\nExpected: \"checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained\"\nReceived: \"checkpoint turn 1 is unavailable (pruned or missing); only the last two sealed turn refs are retained\"\n\n \u276f packages/cli/test/manual-commands.test.ts:338:85\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\u001b[?25h"
+    },
+    "restored": {
+      "exit": 0,
+      "output": "\n RUN  v4.1.11 /home/amit/agentrig/.claude/worktrees/r17b-defaults\n\n\n Test Files  1 passed (1)\n      Tests  25 passed (25)\n   Start at  23:31:16\n   Duration  3.42s (transform 752ms, setup 15ms, import 1.12s, tests 2.22s, environment 0ms)\n\n\u001b[?25h"
+    }
+  }
+]

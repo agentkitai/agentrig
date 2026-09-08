@@ -496,7 +496,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     let diagnostics: Diagnostics | undefined;
     const changed = ok ? takeChanged(tool, r, ctx) : undefined;
     if (changed !== undefined) {
-      const checker = checkerTool(changed.checker);
+      const checker = checkerTool(changed.checker, changed.changed.path);
       if (await unchanged(changed.changed) && !signal.aborted && !isEnded()) {
         const { schedule: _schedule, ...nested } = context;
         // This call is core-owned, not model-visible registration. The outer exclusive hazard

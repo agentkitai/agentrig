@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -160,10 +161,12 @@ it("a post-validation hook command change is executed under policy but cannot be
   const { events } = await run(f); expect(diagnosticResult(events).diagnostics).toMatchObject({ status: "incomplete", reason: "checker command changed by hook" });
 });
 
-it("cancellation joins the owned checker and stops its cooperative descendant before terminal delivery", async () => {
+it.each([false, true])("cancellation joins the owned checker and stops its cooperative descendant before terminal delivery, coverage=%s", async coverage => {
   const child = 'const fs=require("fs");let n=0;fs.writeFileSync("child-ready","ready");setInterval(()=>fs.writeFileSync("child-tick",String(++n)),10)';
   const script = `require("child_process").spawn(process.execPath,["-e",${JSON.stringify(child)}],{stdio:"ignore"});setInterval(()=>{},1000)`;
-  const f = await fixture(scripted(script));
+  const config = scripted(script);
+  if (coverage) config[0]!.args.push("--", "--listFiles");
+  const f = await fixture(config);
   f.turns.push([call("write_file", "edit", { path: "target.ts", content: "written" }), { type: "stop", reason: "tool_use" }]);
   const session = createAgent(f.agent).run("write target", { cwd: f.cwd });
   const deadline = Date.now() + 5000;
@@ -177,6 +180,38 @@ it("cancellation joins the owned checker and stops its cooperative descendant be
   expect(await readFile(join(f.cwd, "child-tick"), "utf8")).toBe(before);
   expect((await f.store.readAll(session.id)).at(-1)).toMatchObject({ type: "session.end", reason: "aborted" });
 }, 10_000);
+
+it.each(['diagnostic overflow', 'metadata overflow', 'unknown after witness', 'stderr witness', 'timeout', 'changed file', 'changed argv', 'exec denied'] as const)
+  ('coverage collector preserves runtime guards: %s', async kind => {
+    const base = 'const p=require("path").resolve("target.ts");';
+    const body = kind === 'diagnostic overflow' ? 'process.stdout.write(p+"\\n"+(p+"(1,1): error TS1234: "+"x".repeat(100)+"\\n").repeat(100));'
+      : kind === 'metadata overflow' ? 'process.stdout.write((p+"\\n").repeat(Math.floor(4194304/Buffer.byteLength(p+"\\n"))+1));'
+      : kind === 'unknown after witness' ? 'process.stdout.write(p+"\\n"+p+"/not-a-real-path malformed output\\n");'
+      : kind === 'stderr witness' ? 'process.stderr.write(p+"\\n");'
+      : kind === 'timeout' ? 'process.stdout.write(p+"\\n");setInterval(()=>{},1000);'
+      : kind === 'changed file' ? 'process.stdout.write(p+"\\n");require("fs").writeFileSync(p,"changed elsewhere");'
+      : 'require("fs").writeFileSync("checker-ran","yes");process.stdout.write(p+"\\n");';
+    const config = scripted(base + body, {maxOutputBytes: 4096, ...(kind === 'timeout' ? {timeoutMs: 250} : {})});
+    config[0]!.args.push('--', '--listFiles');
+    const f = await fixture(config);
+    if (kind === 'exec denied') f.agent.permissions = new RulePolicy([{class: 'write', decision: 'allow'}, {class: 'exec', decision: 'deny'}]);
+    if (kind === 'changed argv') {
+      f.agent.hooks = [{point: 'pre_tool', handler: async ctx => ctx.tool?.name === 'core:diagnostics'
+        ? {action: 'modify', patch: {args: ['-e', 'process.exit(0)']}} : {action: 'continue'}}];
+      f.agent.onAsk = async () => 'allow';
+    }
+    f.turns.push([call('write_file', 'edit', {path: 'target.ts', content: 'export const x=1;'}), {type: 'stop', reason: 'tool_use'}]);
+    const {events} = await run(f), report = diagnosticResult(events).diagnostics!;
+    expect(diagnosticResult(events).ok).toBe(true);
+    expect(report.status).toBe(kind === 'changed file' ? 'changed' : kind === 'exec denied' ? 'unavailable' : 'incomplete');
+    const reasons = {'diagnostic overflow': 'checker output exceeded bound', 'metadata overflow': 'checker coverage metadata exceeded bound',
+      'unknown after witness': 'checker coverage path could not be verified', 'stderr witness': 'checker did not establish touched-file coverage',
+      timeout: 'checker timed out', 'changed file': 'changed-file bytes could not be verified', 'changed argv': 'checker command changed by hook',
+      'exec denied': 'checker was not executed'};
+    expect(report.reason).toBe(reasons[kind]);
+    if (kind !== 'changed file') expect(await readFile(join(f.cwd, 'target.ts'), 'utf8')).toBe('export const x=1;');
+    if (kind === 'exec denied') await expect(readFile(join(f.cwd, 'checker-ran'))).rejects.toMatchObject({code: 'ENOENT'});
+  }, 10000);
 
 it("a denied edit never starts its otherwise allowed checker", async () => {
   const f = await fixture(scripted('require("fs").writeFileSync("checker-ran", "yes")'));
@@ -224,3 +259,75 @@ it("two actual edits with checkpoints retain checker ownership and undo both edi
   expect(await readFile(join(f.cwd, "target.ts"), "utf8")).toBe("original");
   expect(await readFile(join(f.cwd, "checker-effect"), "utf8")).toBe("0");
 }, 30_000);
+
+it("expands the exact diagnostic path placeholder before exec permission without shell interpolation", async () => {
+  const f = await fixture([{parser: "ruff-json", extensions: [".py"], executable: process.execPath,
+    args: ["-e", "console.log('[]')", "--", "{path}"]}]);
+  f.turns.push([call("write_file", "edit", {path: "space ; name.py", content: "x=1\n"}), {type: "stop", reason: "tool_use"}]);
+  const { events } = await run(f);
+  const invocation = events.find(e => e.type === "tool.call" && e.internal?.kind === "diagnostics");
+  expect(invocation?.type === "tool.call" && invocation.input).toMatchObject({args: ["-e", "console.log('[]')", "--", join(f.cwd, "space ; name.py")]});
+  expect(diagnosticResult(events).diagnostics?.status).toBe("reported");
+});
+
+it.each([false, true])('real root TypeScript checker reports edited-file errors=%s instead of tsc help', async erroneous => {
+  const f = await fixture([{parser: 'tsc', extensions: ['.ts'], executable: process.execPath,
+    args: [createRequire(import.meta.url).resolve('typescript/lib/tsc.js'), '--noEmit', '--pretty', 'false']}]);
+  await writeFile(join(f.cwd, 'tsconfig.json'), JSON.stringify({compilerOptions: {types: [], skipLibCheck: true}, include: ['*.ts']}));
+  f.turns.push([call('write_file', 'edit', {path: 'a.ts', content: erroneous ? 'const x: number = "bad";\n' : 'const x: number = 1;\n'}), {type: 'stop', reason: 'tool_use'}]);
+  const {events} = await run(f);
+  const result = diagnosticResult(events).diagnostics!;
+  expect(result.status).toBe('reported');
+  expect(result.entries).toHaveLength(erroneous ? 1 : 0);
+  if (erroneous) expect(result.entries[0]?.code).toBe('TS2322');
+  expect(result.exitCode).toBe(erroneous ? 2 : 0);
+}, 20_000);
+
+// Real compiler, fake model: root solutions do not compile their referenced children.
+it.each(['broken', 'clean', 'excluded'] as const)('large real TypeScript program retains bounded diagnostics: %s', async kind => {
+  const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+  const args = [compiler, '--noEmit', '--pretty', 'false', '--listFiles'];
+  const f = await fixture([{parser: 'tsc', extensions: ['.ts'], executable: process.execPath, args}]);
+  await writeFile(join(f.cwd, 'tsconfig.json'), JSON.stringify({compilerOptions: {types: [], skipLibCheck: true, lib: ['es2022']},
+    include: ['*.ts'], ...(kind === 'excluded' ? {exclude: ['target.ts']} : {})}));
+  // Long enough even in short temporary roots: measure the actual compiler output, not a guessed file-count threshold.
+  for (let i = 0; i < 750; i++) await writeFile(join(f.cwd, `source_${i}_${'segment'.repeat(10)}.ts`), `export const value = ${i};\n`);
+  const baseline = await promisify(execFileCallback)(process.execPath, args, {cwd: f.cwd, timeout: 10000, maxBuffer: 2 * 1024 * 1024});
+  expect(Buffer.byteLength(baseline.stdout)).toBeGreaterThan(65536);
+  expect(baseline.stderr).toBe('');
+  f.turns.push([call('write_file', 'edit', {path: 'target.ts', content: kind === 'clean' ? 'export const x: number = 1;' : 'export const x: number = "bad";'}), {type: 'stop', reason: 'tool_use'}]);
+  const {events} = await run(f), report = diagnosticResult(events).diagnostics!;
+  expect(report.status).toBe(kind === 'excluded' ? 'incomplete' : 'reported');
+  expect(report.exitCode).toBe(kind === 'broken' ? 2 : 0);
+  expect(report.entries).toHaveLength(kind === 'broken' ? 1 : 0);
+  if (kind === 'broken') expect(report.entries[0]?.code).toBe('TS2322');
+  if (kind === 'excluded') expect(report.reason).toBe('checker did not establish touched-file coverage');
+  expect(events.find(e => e.type === 'tool.result' && e.internal?.kind === 'diagnostics')).toMatchObject({ok: true});
+}, 30000);
+
+it.each(['references-only', 'jsonc-references', 'mixed', 'excluded', 'missing', 'clean'])
+  ('default-style tsc proves touched-file coverage: %s', async kind => {
+    const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+    const f = await fixture([{parser: 'tsc', extensions: ['.ts'], executable: process.execPath,
+      args: [compiler, '--noEmit', '--pretty', 'false', '--listFiles'], timeoutMs: 20000}]);
+    await mkdir(join(f.cwd, 'child'));
+    await writeFile(join(f.cwd, 'child/tsconfig.json'), JSON.stringify({compilerOptions: {composite: true}, include: ['*.ts']}));
+    await writeFile(join(f.cwd, 'other.ts'), 'export const other = 1;');
+    await mkdir(join(f.cwd, 'reference'));
+    await writeFile(join(f.cwd, 'reference/tsconfig.json'), '{"compilerOptions": {"composite": true}, "files": ["index.ts"]}');
+    await writeFile(join(f.cwd, 'reference/index.ts'), 'export const unrelated = 1;');
+    const refs = {files: [], references: [{path: './child'}]};
+    const config = kind === 'mixed' ? {compilerOptions: {skipLibCheck: true}, include: ['child/*.ts'], references: [{path: './reference'}]}
+      : kind === 'excluded' ? {files: ['other.ts']} : kind === 'clean' ? {include: ['child/*.ts']} : refs;
+    if (kind !== 'missing') await writeFile(join(f.cwd, 'tsconfig.json'), kind === 'jsonc-references'
+      ? '{ // real references, not text matching\n "files": [], "references": [{"path": "./child"}], }' : JSON.stringify(config));
+    f.turns.push([call('write_file', 'edit', {path: 'child/target.ts', content: kind === 'clean' ? 'export const x: number = 2;' : 'export const x: number = "bad";'}), {type: 'stop', reason: 'tool_use'}]);
+    const {events} = await run(f);
+    const report = diagnosticResult(events).diagnostics;
+    expect(report?.status).toBe(kind === 'mixed' || kind === 'clean' ? 'reported' : 'incomplete');
+    if (kind === 'mixed') expect(report?.entries).toEqual([expect.objectContaining({code: 'TS2322'})]);
+    if (['references-only', 'jsonc-references', 'excluded'].includes(kind)) {
+      expect(report?.exitCode).toBe(0);
+      expect(report?.reason).toContain('did not establish touched-file coverage');
+    }
+  }, 30000);

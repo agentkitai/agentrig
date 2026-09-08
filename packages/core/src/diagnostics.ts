@@ -9,6 +9,7 @@ import { sandboxSpawnInvocation } from "./sandbox-providers.js";
 import { JobRegistry } from "./tools/background-jobs.js";
 import { defaultKillTree } from "./tools/bash.js";
 import { DiagnosticsConfigSchema, type DiagnosticChecker, type Diagnostics, type DiagnosticsConfig } from "./diagnostics-types.js";
+import { TscDiagnosticOutput, TSC_DIAGNOSTIC_LINE } from "./diagnostic-output.js";
 
 // Only the real factories call these internal seams. Names, copied output and persisted data
 // cannot activate a checker or attest to changed bytes. Trusted SDK JavaScript is not sandboxed.
@@ -34,7 +35,7 @@ export function takeChanged(tool: AnyTool, result: ToolResult, context: ToolCont
   const receipt = changes.get(result); changes.delete(result);
   if (receipt?.context !== context) return undefined;
   const checker = configured.get(tool)?.find(c => c.extensions.includes(extname(receipt.changed.path).toLowerCase()));
-  return checker === undefined ? undefined : { changed: receipt.changed, checker };
+  return checker === undefined ? undefined : { changed: receipt.changed, checker: { ...checker, args: checker.args.map(arg => arg === "{path}" ? receipt.changed.path : arg) } };
 }
 export async function unchanged(changed: Changed): Promise<boolean> {
   if (changed.unverifiable) return false;
@@ -49,8 +50,8 @@ export async function unchanged(changed: Changed): Promise<boolean> {
   } catch { return false; } finally { await file?.close(); }
 }
 
-interface Observed { text: string; exitCode: number | null; incomplete: boolean; reason: string; sameCommand: boolean }
-export function checkerTool(checker: DiagnosticChecker): { tool: AnyTool; input: unknown; observed: () => Observed | undefined; id: string; join: () => Promise<void> } {
+interface Observed { text: string; exitCode: number | null; incomplete: boolean; reason: string; sameCommand: boolean; touchedFileListed?: boolean }
+export function checkerTool(checker: DiagnosticChecker, changedPath: string): { tool: AnyTool; input: unknown; observed: () => Observed | undefined; id: string; join: () => Promise<void> } {
   let observed: Observed | undefined;
   let settled = Promise.resolve();
   const input = { executable: checker.executable, args: checker.args };
@@ -63,21 +64,25 @@ export function checkerTool(checker: DiagnosticChecker): { tool: AnyTool; input:
       const invocation = sandboxSpawnInvocation(actual.executable, actual.args, ctx.cwd);
       const registry = new JobRegistry();
       ctx.signal.throwIfAborted();
+      const sameCommand = isDeepStrictEqual(actual, expectedCommand);
+      const deadline = new AbortController();
+      const sink = sameCommand && checker.parser === "tsc" && checker.args.includes("--listFiles")
+        ? new TscDiagnosticOutput(changedPath, checker.maxOutputBytes, AbortSignal.any([ctx.signal, deadline.signal])) : undefined;
       const job = registry.start({ command: invocation.command, args: invocation.args, cwd: ctx.cwd,
         isWindows: process.platform === "win32", killTree: defaultKillTree, signal: ctx.signal,
-        maxUnreadBytes: checker.maxOutputBytes, killOnOverflow: true });
+        maxUnreadBytes: checker.maxOutputBytes, killOnOverflow: true, ...(sink === undefined ? {} : { outputConsumer: sink }) });
       const record = registry.get(job.id)!;
       settled = record.done;
       let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; registry.kill(job.id); }, checker.timeoutMs);
+      const timer = setTimeout(() => { timedOut = true; deadline.abort(); registry.kill(job.id); }, checker.timeoutMs);
       try { await record.done; }
       finally { clearTimeout(timer); registry.disposeAll(); }
       const output = registry.read(job.id)!;
       const reason = ctx.signal.aborted ? "checker aborted" : timedOut ? "checker timed out" : record.spawnError !== undefined
-        ? "checker failed to start" : output.droppedBytes > 0 ? "checker output exceeded bound" : record.exitCode === null ? "checker ended without exit status" : "checker completed";
-      observed = { text: output.output, exitCode: record.exitCode, reason,
-        incomplete: ctx.signal.aborted || timedOut || record.spawnError !== undefined || output.droppedBytes > 0 || record.exitCode === null,
-        sameCommand: isDeepStrictEqual(actual, expectedCommand) };
+        ? "checker failed to start" : record.outputError ?? (output.droppedBytes > 0 ? "checker output exceeded bound" : record.exitCode === null ? "checker ended without exit status" : "checker completed");
+      observed = { text: sink?.text ?? output.output, exitCode: record.exitCode, reason,
+        incomplete: ctx.signal.aborted || timedOut || record.spawnError !== undefined || record.outputError !== undefined || output.droppedBytes > 0 || record.exitCode === null,
+        sameCommand, ...(sink === undefined ? {} : { touchedFileListed: sink.touchedFileListed }) };
       // A completed compiler reporting errors is an observation, not a failed tool dispatch.
       // Its exit remains in diagnostics; ordinary in-progress edits must not trigger error bursts.
       return { output: { exitCode: record.exitCode }, display: `${reason} (exit ${record.exitCode ?? "unknown"})`, isError: observed.incomplete };
@@ -97,15 +102,21 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
   if (observed.incomplete || !observed.sameCommand) return { ...report, status: "incomplete", reason: observed.sameCommand ? observed.reason : "checker command changed by hook" };
   const entries: Array<{ path: string; line: number; column?: number; code?: string; message: string }> = [];
   let unknown = false;
+  // --listFiles is compiler-observed coverage, not a guessed tsconfig traversal.
+  // A solution can exit zero without compiling any referenced source files.
+  const checksCoverage = checker.parser === "tsc" && checker.args.includes("--listFiles");
   if (checker.parser === "ruff-json") {
     try { for (const d of Ruff.parse(JSON.parse(observed.text))) entries.push({ path: d.filename, line: d.location.row,
       column: d.location.column, ...(d.code === null ? {} : { code: d.code }), message: d.message }); }
     catch { unknown = true; }
   } else for (const line of observed.text.split(/\r?\n/).filter(s => s.trim() !== "")) {
     if (line.length > 8192) { unknown = true; continue; }
-    const match = checker.parser === "tsc" ? /^(.+)\((\d+),(\d+)\): error (TS\d+): (.+)$/.exec(line)
+    const match = checker.parser === "tsc" ? TSC_DIAGNOSTIC_LINE.exec(line)
       : /^(.+?):(\d+)(?::(\d+))?: (.+)$/.exec(line);
-    if (match === null) { unknown = true; continue; }
+    if (match === null) {
+      unknown = true;
+      continue;
+    }
     const n = Number(match[2]), col = match[3] === undefined ? undefined : Number(match[3]);
     if (!Number.isSafeInteger(n) || n < 1 || (col !== undefined && (!Number.isSafeInteger(col) || col < 1))) { unknown = true; continue; }
     entries.push({ path: match[1]!, line: n, ...(col === undefined ? {} : { column: col }),
@@ -122,7 +133,9 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
     size += bytes; report.entries.push(bounded);
     if (entry.message.length > 1024 || (entry.code?.length ?? 0) > 64) unknown = true;
   }
-  if (unknown || report.omitted > 0 || (observed.exitCode !== 0 && entries.length === 0)) {
+  if (checksCoverage && observed.touchedFileListed !== true) {
+    report.status = "incomplete"; report.reason = "checker did not establish touched-file coverage";
+  } else if (unknown || report.omitted > 0 || (observed.exitCode !== 0 && entries.length === 0)) {
     report.status = "incomplete"; report.reason = "unrecognized, omitted or unexplained checker output";
   } else { report.status = "reported"; report.reason = report.otherFileCount > 0 ? "checker also reported other-file diagnostics"
     : report.entries.length > 0 ? "checker reported touched-file diagnostics" : "no diagnostics reported (not proof of correctness)"; }

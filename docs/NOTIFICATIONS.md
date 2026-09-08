@@ -1,10 +1,10 @@
-# Opt-in TUI notifications
+# TUI notifications
 
-Notifications default to off. To enable a bell after 30 seconds without input in
-this TUI:
+The recommended CLI profile defaults to a bell after 30 seconds without input
+in this TUI. To change the threshold:
 
 ```sh
-agentrig --notifications bell --notification-idle-seconds 30
+agentrig --notification-idle-seconds 30
 ```
 
 Trusted project or user config can set:
@@ -14,7 +14,7 @@ Trusted project or user config can set:
 ```
 
 Modes are `off`, `bell`, `desktop`, `both`; idle seconds are integers 1–3600.
-Explicit `--notifications off` overrides enabled config. These are UI preferences,
+Set `"notifications":"off"` in user or trusted project config to disable. See [the complete flag migration](DEFAULTS.md). These are UI preferences,
 not model permissions. Headless run/CI, ACP, MCP and scheduler never notify.
 Both input and output must be actual TTYs and the UI must be mounted.
 

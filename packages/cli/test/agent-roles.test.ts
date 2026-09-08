@@ -21,7 +21,7 @@ it.each([undefined, "2", "2.0"])("actual trusted CLI role discovery reaches the 
   const cwd = join(root, "project"), home = join(root, "home"), logs = join(root, "logs");
   await mkdir(join(cwd, ".agentrig", "agents"), { recursive: true }); await mkdir(home);
   await writeFile(join(cwd, ".agentrig", "agents", "reader.md"), '---\ntools: ["read_file"]\nmax-turns: 2\n---\nROLE FIXTURE: inspect only.');
-  await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ root: logs, repoMap: false,
+  await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ ingestOnEnd: false, root: logs, repoMap: false,
     packages: false, extensionDiscovery: false, skillDiscovery: false, subagents: true }));
   vi.spyOn(process, "cwd").mockReturnValue(cwd);
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential"); vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
