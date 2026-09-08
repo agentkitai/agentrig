@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, readFile, writeFile, mkdir, cp, rm, realpath } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir, cp, rm, realpath, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -230,11 +230,24 @@ describe("E1 workspace and outcome mechanics", () => {
   it("exports a real pinned tree without copying dirty source or overwriting existing work", async () => {
     const parent = await temp();
     const dest = join(parent, "task");
-    const prepare = () => spawnSync(process.execPath, [join(root, "eval/workspace.mjs"), "A4", root, dest], {
+    // Deterministic transport guard, not a claim to reproduce the historical macOS scheduler:
+    // a pipe-fed tar gets the reported EPIPE; a file-fed tar still executes the real extractor.
+    const preload = join(parent, "transport.mjs");
+    await writeFile(preload, `import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const run = cp.execFileSync;
+cp.execFileSync = (command, args, options) => {
+  if (command === 'tar' && options?.input !== undefined)
+    throw Object.assign(new Error('spawnSync tar EPIPE'), { code: 'EPIPE' });
+  return run(command, args, options);
+};
+syncBuiltinESMExports();`);
+    const prepare = () => spawnSync(process.execPath, ["--import", pathToFileURL(preload).href, join(root, "eval/workspace.mjs"), "A4", root, dest], {
       encoding: "utf8", timeout: 60_000,
     });
     const sourceBefore = execFileSync("git", ["status", "--porcelain=v1"], { cwd: root, encoding: "utf8" });
     const first = prepare(); passed(first);
+    expect((await readdir(parent)).filter(name => name.startsWith(".agentrig-eval-archive-"))).toEqual([]);
     const receipt = JSON.parse(await readFile(`${dest}.receipt.json`, "utf8"));
     expect(receipt.revision).toBe("a14dd57cca42e00693bfa4dbda36d246c9e39bcf");
     expect(await readFile(join(dest, "TASK.md"), "utf8")).toContain("Investigate how supervisor");
@@ -246,6 +259,25 @@ describe("E1 workspace and outcome mechanics", () => {
     const scope = spawnSync(process.execPath, [checker, `${dest}.receipt.json`], { encoding: "utf8", timeout: 30_000 });
     expect(scope.status, scope.stderr).toBe(1);
     expect(JSON.parse(scope.stdout)).toMatchObject({ scope: "FAIL", outcome: "FAIL" });
+  }, 90_000);
+
+  it("preserves extraction failures and incomplete receipts, but removes owned transport files", async () => {
+    const parent = await temp(), dest = join(parent, "task"), preload = join(parent, "tar-failure.mjs");
+    await writeFile(preload, `import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const run = cp.execFileSync;
+cp.execFileSync = (command, args, options) => {
+  if (command === 'tar') throw new Error('fixture extraction refused');
+  return run(command, args, options);
+};
+syncBuiltinESMExports();`);
+    const result = spawnSync(process.execPath, ["--import", pathToFileURL(preload).href,
+      join(root, "eval/workspace.mjs"), "A4", root, dest], { encoding: "utf8", timeout: 60_000 });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2); expect(result.stderr).toContain("fixture extraction refused");
+    expect(await readFile(`${dest}.receipt.json`, "utf8")).toBe("");
+    expect(await readdir(dest)).toEqual([]);
+    expect((await readdir(parent)).filter(name => name.startsWith(".agentrig-eval-archive-"))).toEqual([]);
   }, 90_000);
 
   it("blocks malformed receipts and unknown task IDs rather than passing or resetting", async () => {

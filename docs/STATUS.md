@@ -1,5 +1,29 @@
 # Status
 
+## Outside-train existing issue #249: pinned archive transport
+
+Builder: **Codex/operator outside AgentRig**, on `fix/followups-export-transport`, based on
+merged main `cc457c7`. The user authorized all existing issues through reviewed, green merges.
+The evaluator previously supplied the complete Git archive through `execFileSync`'s input pipe.
+It now writes those same pinned bytes to a private, exclusively created regular file and passes
+its path to the real tar extractor. This removes the input-pipe EPIPE path; it does **not** prove
+why the historical macOS extractor closed its input. No extraction error is swallowed, no retry,
+timeout increase, security change or live-provider invocation is introduced. Owned transport
+files are removed after the joined extractor; failed workspaces/receipts remain inspectable.
+
+The existing real pinned-export regression now injects EPIPE only for pipe-fed tar while letting
+file-fed tar run normally: it fails against old code and passes after the change. Dirty-source,
+exclusive-reuse, real extraction and receipt checks remain. A new extraction-failure control
+retains BLOCKED and the empty receipt and verifies transport cleanup. Mutants swallowing tar's
+failure and omitting archive removal are both killed; joined and restored. All 16 evaluator tests
+pass after restoration. Initial whole-file execution before building had three missing-dist
+errors (test prerequisite, not a product failure); after build, full build/test/typecheck each
+exit **0**, **3475 passed / 4 skipped / 222 files**. Reviews/hosted CI/merge remain operator gates.
+
+Predecessor probe PR **#281** merged as `cc457c7`, closing #277/#278/#279; post-merge CI
+**34251674801** and structure **34251674739** passed first attempt on all platforms.
+[Landing receipt](https://github.com/agentkitai/agentrig/pull/281#issuecomment-5588626177).
+
 Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
 **#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
 Administrative evidence issue **#261** is also closed: independent Claude Code

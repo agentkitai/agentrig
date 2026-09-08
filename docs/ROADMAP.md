@@ -1547,6 +1547,11 @@ need an explicit budget; neither prevents continuing other actionable entries.
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
   skip checks, or claim an intermittent CI failure's root cause is known.
+- [x] Pinned evaluator archive transport ([feel #249](https://github.com/agentkitai/agentrig/issues/249)):
+  replace pipe-fed tar input with an owned private regular file, keeping extraction errors,
+  exact pinned bytes, exclusive destination/receipt creation and existing bounds. Implemented
+  on `fix/followups-export-transport`; completion reaches main through the reviewed green PR.
+  The deterministic pipe-error guard is not a reproduction of the original macOS scheduling.
 - [ ] External-review operational guidance regression coverage ([feel #253](https://github.com/agentkitai/agentrig/issues/253)):
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
