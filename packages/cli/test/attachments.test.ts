@@ -1,12 +1,27 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, link } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RulePolicy } from "@agentkitai/agentrig-core";
 import { parseAttachments, completeAttachment, clipboardCommand, readClipboard } from "../src/tui/attachments.js";
 const png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
 const roots:string[]=[];
-afterEach(async()=>{vi.useRealTimers();for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
+/**
+ * These fixtures are real directories and real helper children, so a body that misses its deadline
+ * leaves work still running. Everything a test starts is owned here and every helper runs on the
+ * fixture's lifetime: teardown cancels, joins, and only then removes, rather than racing `rm`
+ * against live writes and reporting a cleanup failure in place of the actual one.
+ */
+const owned=new Set<Promise<unknown>>();
+let lifetime=new AbortController();
+function own<T>(work:Promise<T>):Promise<T>{const settled=work.then(()=>undefined,()=>undefined);owned.add(settled);void settled.finally(()=>owned.delete(settled));return work;}
+beforeEach(()=>{lifetime=new AbortController();});
+afterEach(async()=>{
+  vi.useRealTimers();
+  lifetime.abort(new Error("attachment fixture teardown"));
+  while(owned.size>0)await Promise.all([...owned]);
+  for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});
+});
 it("parses only explicit references; quoted spaces and literal at signs remain distinct",()=>{
   expect(parseAttachments('review @"my file.txt" and @image.png @@literal person@example.org')).toEqual({text:'review  and  @literal person@example.org',attachments:[{kind:"file",path:"my file.txt"},{kind:"file",path:"image.png"}]});
   expect(parseAttachments('@note')).toEqual({text:"",attachments:[{kind:"file",path:"note"}]});
@@ -14,7 +29,7 @@ it("parses only explicit references; quoted spaces and literal at signs remain d
 });
 it("actual completion requires read authority, never exec; one-time ask only before bounded directory enumeration",async()=>{
   const root=await mkdtemp(join(tmpdir(),"agentrig-complete-"));roots.push(root);await writeFile(join(root,"sample.txt"),"PAYLOAD_NOT_READ");
-  const ask=vi.fn(async()=>"deny" as const),signal=new AbortController().signal;
+  const ask=vi.fn(async()=>"deny" as const),signal=lifetime.signal;
   await expect(completeAttachment("@sa",{cwd:root,permissions:new RulePolicy([{class:"read",decision:"deny"},{class:"exec",decision:"allow"}]),ask},signal)).rejects.toThrow("denied");expect(ask).not.toHaveBeenCalled();
   const yes=vi.fn(async()=>"allow" as const);
   expect(await completeAttachment("look @sa",{cwd:root,permissions:new RulePolicy([]),ask:yes},signal)).toEqual({text:"look @sample.txt ",hint:"sample.txt"});expect(yes).toHaveBeenCalledOnce();
@@ -22,8 +37,13 @@ it("actual completion requires read authority, never exec; one-time ask only bef
   await expect(completeAttachment("@sa",{cwd:root,sandbox:"read-only",ask:yes},signal)).rejects.toThrow("sandbox");expect(yes).toHaveBeenCalledOnce();
 });
 it("caps completion scans rather than silently presenting a partial result",async()=>{
-  const root=await mkdtemp(join(tmpdir(),"agentrig-complete-cap-"));roots.push(root);await Promise.all(Array.from({length:257},(_,i)=>writeFile(join(root,`f${i}`),"")));
-  await expect(completeAttachment("@f",{cwd:root,permissions:new RulePolicy([{class:"read",decision:"allow"}]),ask:async()=>"deny"},new AbortController().signal)).rejects.toThrow("256");
+  const root=await mkdtemp(join(tmpdir(),"agentrig-complete-cap-"));roots.push(root);
+  // One real entry past the real 256 cap. The scan counts directory entries, so the padding is
+  // hard links to one real file rather than 257 separate writes: a link is a single metadata call
+  // with no content behind it, and it still reads back as the regular file the scan classifies.
+  const seed=join(root,"f0");await writeFile(seed,"");
+  await own(Promise.all(Array.from({length:256},(_,i)=>link(seed,join(root,`f${i+1}`)))));
+  await expect(completeAttachment("@f",{cwd:root,permissions:new RulePolicy([{class:"read",decision:"allow"}]),ask:async()=>"deny"},lifetime.signal)).rejects.toThrow("256");
 });
 it("uses verified fixed platform helper contracts; refuses remote DISPLAY and never executes these commands in tests",()=>{
   expect(clipboardCommand("darwin",{})).toEqual({command:"pngpaste",args:["-"]});
@@ -32,22 +52,22 @@ it("uses verified fixed platform helper contracts; refuses remote DISPLAY and ne
   expect(()=>clipboardCommand("linux",{DISPLAY:"evil.example:0"})).toThrow();expect(clipboardCommand("win32",{}).args).toContain("-Sta");
 });
 it("actual inert child supplies PNG, malformed/overflow/error children refuse without leaking diagnostics",async()=>{
-  const signal=new AbortController().signal;
-  expect(await readClipboard(signal,{command:process.execPath,args:["-e",`process.stdout.write(Buffer.from('${png}','base64'))`]})).toEqual({kind:"clipboard",data:png});
+  const signal=lifetime.signal;
+  expect(await own(readClipboard(signal,{command:process.execPath,args:["-e",`process.stdout.write(Buffer.from('${png}','base64'))`]}))).toEqual({kind:"clipboard",data:png});
   for(const script of ["process.stdout.write('garbage')","process.stdout.write(Buffer.alloc(4194305))","process.stderr.write('SECRET_DIAGNOSTIC');process.exit(1)"]){
-    await expect(readClipboard(signal,{command:process.execPath,args:["-e",script]})).rejects.not.toThrow("SECRET_DIAGNOSTIC");
+    await expect(own(readClipboard(signal,{command:process.execPath,args:["-e",script]}))).rejects.not.toThrow("SECRET_DIAGNOSTIC");
   }
 });
 it("cancels and joins an actual inert helper without accepting late bytes",async()=>{
-  const abort=new AbortController(); const work=readClipboard(abort.signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]});
+  const abort=new AbortController(); const work=own(readClipboard(abort.signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]}));
   abort.abort();await expect(work).rejects.toThrow("cancelled");
 });
 it("a missing owned helper settles with a bounded refusal rather than leaving input busy",async()=>{
   const root=await mkdtemp(join(tmpdir(),"agentrig-missing-helper-"));roots.push(root);
-  await expect(readClipboard(new AbortController().signal,{command:join(root,"no-such-helper"),args:[]})).rejects.toThrow("unavailable");
+  await expect(own(readClipboard(lifetime.signal,{command:join(root,"no-such-helper"),args:[]}))).rejects.toThrow("unavailable");
 });
 it("bounds the actual helper deadline and awaits process close",async()=>{
   vi.useFakeTimers({toFake:["setTimeout","clearTimeout"]});
-  const work=readClipboard(new AbortController().signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]});
+  const work=own(readClipboard(lifetime.signal,{command:process.execPath,args:["-e","setInterval(()=>{},1000)"]}));
   const assertion=expect(work).rejects.toThrow("timed out");await vi.advanceTimersByTimeAsync(2001);await assertion;
 });
