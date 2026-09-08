@@ -8,6 +8,14 @@ identity gap; outside-train Claude repair **8dc7dcc5-5db8-4980-a26c-0bfdeb3d5aea
 adds the already-validated content digest to admission identity. Its real same-version/equal-size
 replacement regression fails before the correction and kills digest omission afterward;
 full3498/4/223 and build/typecheckgreen, focused44passed. No extra discovery roots or permissions.
+Bounded Codex digest delta review approves15d6484, buildgreen/35focusedpassed; adjacent runtime
+tests encountered its known temporary-root/offline-tooling limitations, not reported as passing.
+Operator integration with mainf38b40b passed build/typecheck but initially failed113 tests in28
+files under shared `/tmp`, with trust-boundary resolution to `/tmp`. A later probe found no marker;
+that does not establish its absence during the failed run or identify a creator. In a private
+`/var/tmp/agentrig-skills-integrated.U8hjhP`, the actual preflight passed and the unchanged integrated
+suite passed **3500 / 4 skipped / 223 files**. This is an explicitly changed test environment,
+not a first-attempt pass or an unexplained CI retry; #237 supplies the preflight diagnosis.
 
 ## Outside-train existing issue #249: pinned archive transport
 
