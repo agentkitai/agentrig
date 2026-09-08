@@ -2,12 +2,12 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 
 const source = fileURLToPath(new URL("../../../docs/plans/feel250-provider-omission-probe.mjs", import.meta.url));
 
-function run(args: string[], mode: string) {
+function run(args: string[], mode: string, deferOutput = false) {
   const root = mkdtempSync(join(tmpdir(), "agentrig-feel250-probe-"));
   try {
     const scripts = join(root, "docs", "plans");
@@ -38,7 +38,14 @@ function run(args: string[], mode: string) {
         }
       }
     `);
-    return spawnSync(process.execPath, ["--unhandled-rejections=strict", script, ...args], {
+    const preload = join(root, "deferred-output.mjs");
+    // Deterministic pending-write stand-in for pipe backpressure: a forced exit loses the
+    // scheduled write, while natural process shutdown drains it. No live network is involved.
+    writeFileSync(preload, `
+      const write = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (...args) => { setTimeout(() => write(...args), 25); return true; };
+    `);
+    return spawnSync(process.execPath, ["--unhandled-rejections=strict", ...(deferOutput ? ["--import", pathToFileURL(preload).href] : []), script, ...args], {
       encoding: "utf8", timeout: 10_000,
       env: { ...process.env, FEEL250_TEST_MODE: mode, FEEL250_MODEL: "fixture-model" },
     });
@@ -67,10 +74,21 @@ it.each(["capture-only", "both"])("probe retains structured evidence on %s failu
     mode: "omitted", model: "fixture-model", captureError: "Error: capture disconnected",
     toolCalls: [{ name: "record_choice", input: { task: "probe" } }],
     usage: [{ input: 7, output: 3 }],
+    stop: mode === "both" ? [] : ["tool_use"],
   });
   if (mode === "both") expect(record.error).toBe("Error: stream disconnected");
   else expect(record).not.toHaveProperty("error");
   expect(result.stderr).toBe("");
+});
+
+it("probe flushes a pending diagnostic write before failing without a second call", () => {
+  const result = run(["--live"], "capture-only", true);
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe("");
+  const records = result.stdout.trim().split("\n").map(line => JSON.parse(line));
+  expect(records).toHaveLength(1);
+  expect(records[0]).toMatchObject({ mode: "omitted", captureError: "Error: capture disconnected", stop: ["tool_use"] });
 });
 
 it("probe replays both distinct wire controls and selected model without network", () => {
@@ -88,6 +106,7 @@ it("probe replays both distinct wire controls and selected model without network
   for (const record of records) {
     expect(record.model).toBe("fixture-model");
     expect(record.toolCalls[0].input.model).toBe("fixture-model");
+    expect(record.stop).toEqual(["tool_use"]);
     expect(record).not.toHaveProperty("error");
     expect(record).not.toHaveProperty("captureError");
   }
