@@ -1,5 +1,37 @@
 # Status
 
+PR #285 first-head CI34259124799 failed the new workspace-output assertion on all platforms:
+the child passed its two tests, but ANSI formatting interrupted the human-summary regex.
+Windows also exposed an 8.3-versus-canonical physical-path expectation in the junction control.
+Operator repair uses the real child's JSON reporter (success, exactly2passed/0failed, one exact
+file) under color-on/off settings, and compares physical ancestry against `realpath` on Windows.
+The JSON assertion fails with the old verbose reporter and passes with JSON; no count/file check,
+product behavior or deadline is weakened. The earlier local color attempt did not reproduce
+colored output in this shell and is not claimed as fail-first evidence. Hosted logs establish
+the ANSI failure; this repair avoids parsing presentation entirely. Both changed files pass13
+focused tests. Predecessor284 postmerge34258920447/34258920455 is allgreen.
+
+Existing-issue delivery checkpoint: **PR #283** merged at`f38b40b`, closed#249, with exact-head
+CI34256456887/structure34256456860 and postmerge34257770832/34257770852 allgreen. **PR #284**
+merged at`4916cf1`, closed#240, exact-headCI34258136965/structure34258137005 allgreen;
+postmerge34258920447/34258920455 is being monitored. #244 stays open for the independently
+reproduced late-permission shutdown fix; no new issue. This branch's #237/#245/#253 batch is now
+integrated with4916cf1: private-temp build/test/typecheck0/0/0, **3509 passed / 4 skipped / 224 files**.
+
+Outside-train operator review repair for #237/#245/#253: independent Claude session
+**8d1b721b-c8af-4fcd-867e-ab98c011e598** ran build/test/typecheck0/0/0,
+**3502 passed / 4 skipped / 224 files**, and four killed/restored mutants at4aa807e.
+Its concrete linked-entry finding is fixed by canonicalizing the entry path before main detection.
+A real directory-link/junction invocation with contaminated private TMPDIR failed before the fix
+(silent exit0), then passed the required exit1 assertion; all10 preflight tests pass afterward.
+CLAUDE's test command now correctly requires the build needed by dist-executing fixtures.
+Independent Codex found no code defects; its build/typecheck passed, but its preflight correctly
+refused the sandbox's `/tmp/.git`, so no Codex full-suite pass is claimed. Historical marker
+creation remains unknown; neither review turns point-in-time observations into a cause attribution.
+Integrated with mainf38b40b after that correction: operator build/test/typecheck0/0/0,
+**3505 passed / 4 skipped / 224 files**. Bounded Codex delta review found no defects; syntax/diff
+passed, while its preflight still correctly refused its sandbox ancestry (no bypass).
+
 ## Outside-train existing issue #249: pinned archive transport
 
 Builder: **Codex/operator outside AgentRig**, on `fix/followups-export-transport`, based on
@@ -108,6 +140,73 @@ post-merge CI `34215842021` and structure `34215841911`; the
 closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
+
+## Outside-train END follow-up batch: test environment, workspace root, delta-review pins
+
+Builder of this batch: **Claude Code, outside the train**, session
+**38edebec-f5e3-40e1-a91b-dae44179db70**, on `fix/followups-test-environment` with `origin/main`
+`cc457c7` merged first. It is not an agentrig-built row, an R17 completion, or the start of the
+R17g sweep. The batch is exactly [#237](https://github.com/agentkitai/agentrig/issues/237)
+(detection scope only), [#245](https://github.com/agentkitai/agentrig/issues/245) and
+[#253](https://github.com/agentkitai/agentrig/issues/253); the remaining open issues are untouched.
+Independent review and exact-head/post-merge CI receipts belong to the batch PR — none of the three
+issues is closed by local verification.
+
+**#237** — `test/fixture-preflight.mjs` walks the effective temporary directory and every ancestor
+for a `.git` file, directory or symlink, treats a probe it cannot read as present rather than
+absent, and fails with a named explanation before the suite starts. It is `pnpm test:preflight`
+and a silent-on-success guard in `pnpm test`. It deletes nothing, offers no bypass, skips no test
+and does not touch trust discovery, which is correct as written. [docs/TESTING.md](TESTING.md)
+records the invocations, controlled Codex `workspace-write` observations of read-only `.git`
+mounts at `/tmp/.git` and private `$TMPDIR/.git`, and the rule that a session which cannot get
+a clean preflight may review code but must hand execution to a runner outside the sandbox. This is
+**detection only**: no historical failure from #237, #271 or PR #269 is reproduced or fixed here,
+and the sandbox mechanism is still not an identified creator of any host `/tmp/.git`.
+
+**#245** — `vitest.config.ts` pins `root` to its own directory, so the repository-relative `include`
+no longer resolves against the caller's cwd; `vitest.windows.config.ts` and `vitest.web.config.ts`
+inherit it by spread. `packages/cli/test/workspace-vitest-root.test.ts` runs one targeted core test
+in a real subprocess from `packages/cli` (single-worker, never a recursive full suite) and pins the
+Windows lane's inherited root. Removing the `root` line fails both assertions with the reported
+`No test files found`.
+
+**#253** — `packages/core/test/review-launch-guidance.test.ts` slices §3's delta bullet out of
+`.agentrig/skills/topic/SKILL.md` and asserts only inside that slice, with a guard that the slice
+excludes the §2 step 4 full-pass wording. The three documented prose mutants — deleting the delta
+echo sentence, dropping `REVHEAD` from its echo tuple, recombining the two dependency installs —
+each fail their own pin and nothing else, and were restored; the skill prose is byte-identical.
+These are text pins and do not implement isolation or sandboxing.
+
+Local verification on the branch, each command run separately with a private `TMPDIR`:
+`pnpm build` **0**, `pnpm test` **0** (**224 files, 3488 passed / 4 skipped**), `pnpm typecheck`
+**0**, followed by three consecutive green full runs. Not merged; no independent review, no
+exact-head CI and no post-merge CI are claimed.
+
+**Observed full-suite instability; cause not established.** The full suite was intermittently red
+on this host, reproduced on **unmodified `cc457c7`** (one of six baseline runs, 7 failures) as well
+as on the branch. Every failing run carries the same family: `Project /tmp contains the user
+AgentRig state directory` and a received `projectRoot: '/tmp'`, with trust, config, extension and
+schedule fixtures then reading defaults instead of their fixture config. The host has no
+`/tmp/.git` at the later inspection — the preflight passed — but it had shared `/tmp/.agentrig` whose
+`usage.jsonl` was written *during* these runs with fixture-provider records, alongside
+`schedule.json`, `schedule.log`, `raw/sessions/fb380606` and the `packages/pkg-f16d05…` leftover
+named in #237's original report. Nothing there was deleted or worked around. The preflight does not
+detect state directories because they are **not** project-root markers. The operator rejects the
+builder's repeated `.agentrig`-cause inference: `canonicalProjectRoot` checks `.git` only, as the
+issue's earlier private controls already established. A later inspection does not prove marker
+absence during failures or in another namespace. These observations remain evidence limitations,
+not a demonstrated product defect attributable to the state directory. One further flake was
+observed once (`evaluation.test.ts`, `negative outer wall time`); no cause is claimed here.
+
+Operator corrections before review: canonical as well as lexical temp ancestry is now inspected;
+a real symlink/junction regression fails against lexical-only scanning and passes with the fix.
+The two new CLI files are included in Windows CI, and the root assertion uses portable path
+normalization. TESTING now records the full suite's build prerequisite and verified substring
+filters, and scopes sandbox observations to the actual probed paths. The #237 completion marker
+means its explicitly scoped diagnostic/preflight resolution is implemented, not that historical
+causation was proved or that a preflight prevents later filesystem changes.
+After integration with merged main `efd20a8`, the operator's full build/test/typecheck each
+exit **0**, **3502 passed / 4 skipped / 224 files**; focused new/changed guidance tests pass19.
 
 ## Outside-train END follow-up batch: CI fixture cost and owned cleanup
 
