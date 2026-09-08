@@ -1,6 +1,43 @@
 # Status
 
-## Current — R17e: visible supervisor and memory (2026-09-08)
+## Current — R17f: measured-default preparation (2026-09-08)
+
+R17e is delivered: exact head `2f38017` (CI 34275594904, structure 34275594911 green), merged at
+main `2a8ea5968e665dbf84456b138d8f5219d741c18a` with post-merge CI 34276366300 and structure
+34276366380 green.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/289#issuecomment-5591695371).
+
+Current work is ROADMAP §5 row 17's **R17f — tune or default off**, on branch
+`feat/r17f-measured-defaults` from that main. Builder: **Claude/operator outside AgentRig**; R17a's
+dogfood mandate is unmet for this row and is recorded, not skipped silently. No child or reviewer
+was spawned, no issue was filed and **no live model, provider or E3 call was made**.
+
+This commit is the **network-free preparation only; R17f is not done and no product default has
+moved**. `eval/r17f.mjs` reruns E3's own 96-slot matrix under today's defaults: the profile comes
+from the product's own config resolution against an empty home and untrusted cwd (and the run
+refuses to start if the recommended values regressed or if LLM review/abort stopped being opt-in),
+permissions are the real `defaultRules` policy with a session grant registry answered by R17d's
+frozen preset response policy through the actual approval controller, and R17e's intervention,
+recall and index-announcement lines plus `/why` are written into each attempt's evidence. E3's
+frozen corpus is recovered byte-exactly from the published evidence archive, so no training tokens
+are spent and retrieval material is identical. Preparation, isolation, independent checks,
+accounting, reporting and publication are the existing E1/E2 components; `eval/live.mjs` and E3's
+reports, archive and results are unchanged. Budget is the authorized **12,000,000 reported tokens**
+with balanced rounds of 32, no outcome-driven retries, and any unknown-usage call stopping further
+scheduling. The supervisor arm and the assessor are preregistered before collection; A4/X4 stay
+BLOCKED absent a separately attributed authorized assessment. Contract, commands, budget arithmetic
+for the LLM-ladder arm, and limits: [R17f](plans/R17f.md).
+
+Verification on this branch, private `/var/tmp` TMPDIR, actual preflight: build / test / typecheck
+**0 / 0 / 0**, **3580 passed / 4 skipped / 230 files** (main `2a8ea59` was 3563 / 4 / 229). Eight
+mutants — removed permission wiring, dropped operation descriptor, unchecked profile, an
+over-authorized token cap, unknown-usage scheduling, removed visibility, skipped corpus
+re-verification and an extra advisory call per cell — were applied one at a time and all eight were
+killed by named tests, with each test subprocess joined and the source restored byte for byte.
+Root owns the independent review of the frozen runner before any spending, the live run,
+publication, CI and merge.
+
+## Previous — R17e: visible supervisor and memory (2026-09-08)
 
 Correction to the record below, which was written while #267 was still open and is now stale as a
 statement of current scope: the seventeen-issue sweep is **finished**. All 17 issues are closed,

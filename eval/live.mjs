@@ -19,9 +19,13 @@ const save = (path, data) => writeFile(path, `${JSON.stringify(data, null, 2)}\n
 const Settings = z.object({ worker: z.string().regex(/^sha256:[a-f0-9]{64}$/), checker: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   source: z.string(), output: z.string() }).strict();
 
+// The one pinned, user-selected E3 identity. R17f reuses this exact constant so a rerun cannot
+// silently change model or reasoning effort; comparability depends on it staying a single source.
+export const E3_MODEL = Object.freeze({ model: 'gpt-5.6-luna', reasoningEffort: 'medium' });
+
 // Provider identities/auth are fixed here; never read project/provider config or accept an API key.
 export function metered(auth, ledger, calls, role, makeProvider = options => new OpenAIChatGPTProvider(options)) {
-  const p = makeProvider({ model: 'gpt-5.6-luna', reasoningEffort: 'medium', auth, retry: { maxRetries: 0 } });
+  const p = makeProvider({ ...E3_MODEL, auth, retry: { maxRetries: 0 } });
   return { id: p.id, model: p.model, capabilities: p.capabilities,
     async *stream(request, signal) {
       guard(ledger);
