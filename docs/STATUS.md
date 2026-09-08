@@ -3,7 +3,8 @@
 ## Outside-train existing issue #275: maintenance timeout scope
 
 Builder: **Codex/operator outside AgentRig**, branch `fix/followups-maintenance-timeouts`, base
-main `cc457c7`, under the user's authorization to resolve every existing issue end-to-end.
+main `cc457c7`, now integrated with `efd20a8`, under the user's authorization to resolve every
+existing issue end-to-end.
 The old maintenance helper emitted identical wording for both the per-call and overall timers.
 It now names the maintenance operation and, for calls, the current call, explicitly labelling
 `per-call limit; overall budget ...ms` versus `run ... (overall budget)`. Both scheduled timers
@@ -24,6 +25,11 @@ the run label and call label to the old ambiguous message are both killed and re
 runs. Full build/test/typecheck each exit **0**, **3477 passed / 4 skipped / 222 files**. The changed
 test file is already in Windows CI. Independent review, exact-head/post-merge CI and merge remain
 delivery gates; this local implementation does not itself close the issue.
+
+After integration with merged compiler PR #282, full build/test/typecheck each exit **0**:
+**3490 passed / 4 skipped / 222 files**. Independent Codex review of the unchanged memory
+implementation found no defects and separately passed build/typecheck plus **134 tests across
+five files**; it did not claim a full-suite or Windows run.
 
 Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
 **#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
