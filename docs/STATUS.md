@@ -1,5 +1,12 @@
 # Status
 
+R17d is landed via **PR #273**, merge `4320a83`, reviewed head `61b4e72`.
+Post-merge CI **34247066349** and structure **34247066327** passed on that exact
+merge, all platforms first attempt; [landing receipt](https://github.com/agentkitai/agentrig/pull/273#issuecomment-5588039366).
+The pending statements below are preserved historical implementation/review notes.
+The currently prioritized outside-train checkpoint issue batch is described below;
+it does not claim completion of R17e/f/g.
+
 PR #273 review repair: **agentrig** conductor **11dfb0d6**, repair child
 **75fb2099**, followed by **Codex/operator outside-train completion** after the
 operator stopped the orchestration on the human's delivery-feedback request.
@@ -74,7 +81,7 @@ bounded cleanup join now rethrows a primary body failure with the cleanup failur
 readiness, blocked-callback, denied-write and joined-cleanup assertions are unchanged, and no
 production behaviour or test deadline was relaxed.
 
-Fail-first: three new tests failed before the changes — the abandoned-verification join
+Fail-first: three tests failed before the changes — the new abandoned-verification join
 (`settled` false once `endSession` resolved), the real-timer restoration, and, as collateral
 damage from the leaked fake timers, the unrelated `blocks a write when the checkpoint times out`
 fixture, whose blocked write actually executed. Eight mutants were killed and then restored:
