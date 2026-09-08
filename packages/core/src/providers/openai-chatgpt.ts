@@ -160,6 +160,10 @@ export function toResponsesRequest(
       name: t.name,
       description: t.description,
       parameters: t.inputSchema,
+      // Responses can normalize omitted strict to true, making optional fields required.
+      // Builtins retain runtime field validation; MCP has none in the harness, so a server
+      // that does not validate may receive underspecified inputs. Permissions are unchanged.
+      strict: false,
     }));
     body.tool_choice = "auto";
   }

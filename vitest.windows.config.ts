@@ -112,6 +112,7 @@ export const windowsCoverage = [
   "packages/core/test/extensions.test.ts",
   "packages/core/test/external-expansion.test.ts",
   "packages/core/test/file-diff.test.ts",
+  "packages/core/test/feel250-probe.test.ts",
   "packages/core/test/generated-skills.test.ts",
   "packages/core/test/h6-trace.test.ts",
   "packages/core/test/hooks.test.ts",
