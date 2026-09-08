@@ -1,5 +1,30 @@
 # Status
 
+## Outside-train existing issue #275: maintenance timeout scope
+
+Builder: **Codex/operator outside AgentRig**, branch `fix/followups-maintenance-timeouts`, base
+main `cc457c7`, under the user's authorization to resolve every existing issue end-to-end.
+The old maintenance helper emitted identical wording for both the per-call and overall timers.
+It now names the maintenance operation and, for calls, the current call, explicitly labelling
+`per-call limit; overall budget ...ms` versus `run ... (overall budget)`. Both scheduled timers
+and elapsed-time checks use the same scoped messages. TimeoutError classification, cancellation,
+30,000ms call / 300,000ms overall defaults, call ceilings, and usage accounting are unchanged.
+
+This explains why the original `maintenance timed out after 30000ms` report was ambiguous; it
+does not prove why that provider call stalled, invent historical usage, or claim the entire 300s
+budget elapsed. A bounded call may still legitimately time out. The foreground session-success
+wording and auxiliary report remain intact; no silent retry, model spend, deadline inflation or
+ingestion skip was introduced.
+
+Two existing real-ingest timeout controls now require distinct exact messages, and a new two-call
+control verifies completed-call plus partial timed-out-call usage is retained while total usage
+remains unknown. All three assertions fail with the old shared wording and pass after the fix.
+Two additional deterministic elapsed-clock controls protect the non-timer paths. Mutants reverting
+the run label and call label to the old ambiguous message are both killed and restored after joined
+runs. Full build/test/typecheck each exit **0**, **3477 passed / 4 skipped / 222 files**. The changed
+test file is already in Windows CI. Independent review, exact-head/post-merge CI and merge remain
+delivery gates; this local implementation does not itself close the issue.
+
 Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
 **#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
 Administrative evidence issue **#261** is also closed: independent Claude Code
