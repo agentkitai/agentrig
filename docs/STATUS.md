@@ -5,6 +5,55 @@ retains its evidence and the human-approved supplemental benchmark correction.
 Conductor **ed60c956** halted on [feel #250](https://github.com/agentkitai/agentrig/issues/250);
 the blocking provider-schema repair below must pass review and CI before the train resumes.
 
+## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
+
+Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
+the existing open backlog while the operator finishes PR #273. It is **not** an agentrig-built
+row, R17d completion, or the start of the R17g sweep; the conductor remains **ed60c956** and
+PR #273 is untouched. The work is committed locally on `fix/followups-checkpoint-cleanup` from
+`02d8b25`: **not pushed, reviewed, CI-verified or merged**, and no issue is claimed closed.
+The batch is exactly [#272](https://github.com/agentkitai/agentrig/issues/272),
+[#265](https://github.com/agentkitai/agentrig/issues/265) and
+[#266](https://github.com/agentkitai/agentrig/issues/266); the other fourteen open issues remain
+open with a recorded grouped disposition for the operator to dispatch separately.
+
+**#272** — `Checkpointer` now registers every started per-session Git/verification promise
+(`create`, the `handler` pre-attempt owned-state verification, `afterTool` and `seal`) and
+`endSession` drains them before it releases the lease. Only the newest turn's attempt was joined
+before, so a later-turn hook timeout could abandon a verification whose Git children still had the
+repository as cwd while cleanup ran. Fail-closed write denial, ownership-uncertainty and
+lease-replacement refusals, literal Git argv, the existing 60 s Git timeout and bounded
+cancellation are unchanged, and the registered copy never swallows the caller's failure. This is a
+pre-existing later-turn ownership gap; it is **not** a fix for the original attachment /
+external-expansion Windows timeouts in [#244](https://github.com/agentkitai/agentrig/issues/244),
+nor for that issue's checkpoint `EBUSY` strand, which PR #269 recovered separately.
+
+**#265/#266** — `packages/core/test/checkpointer.test.ts` only. A file-level `afterEach` restores
+real timers, the hung-guard fixture constructs its agent/session inside the guarded body, and its
+bounded cleanup join now rethrows a primary body failure with the cleanup failure attached as
+`cause` while still reporting a cleanup-only failure. The exact 29/30 ms deadline steps,
+readiness, blocked-callback, denied-write and joined-cleanup assertions are unchanged, and no
+production behaviour or test deadline was relaxed.
+
+Fail-first: three new tests failed before the changes — the abandoned-verification join
+(`settled` false once `endSession` resolved), the real-timer restoration, and, as collateral
+damage from the leaked fake timers, the unrelated `blocks a write when the checkpoint times out`
+fixture, whose blocked write actually executed. Eight mutants were killed and then restored:
+dropping the `endSession` drain (1 test); leaving the pre-attempt verification unregistered
+(1); making the registered promise swallow rejections (13); disabling the owned-state comparison
+that refuses mutation after non-session changes (1); removing the `afterEach` real-timer
+restoration (2, including the collateral timeout fixture); letting cleanup replace the primary
+failure (1); swallowing a cleanup-only failure (1); and skipping the bounded cleanup join after a
+primary failure (1). Moving construction inside the guarded body
+has no killing mutant — a controlled synthetic construction failure fails identically either way
+once the `afterEach` exists — and is retained as bounded defence for `release()` and the watchdog.
+
+Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3451 passed / 4 skipped**
+in **221** files under `TMPDIR=/var/tmp`; `packages/core/test/checkpointer.test.ts` is 45/45 and
+repeated five times without flake. That file is already in the Windows CI include list, so the new
+regressions run there. Independent review and exact-head/post-merge CI remain required; this entry
+claims no hosted CI result.
+
 ## Outside-train feel #250 recovery: preserve optional tool arguments
 
 Builder of this narrow repair: **Codex/operator outside the train**, under the standing

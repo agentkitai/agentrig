@@ -45,8 +45,25 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "agentrig-checkpointer-"));
 });
 afterEach(async () => {
+  // A fixture that fails before reaching its own restoration must not leak frozen timers: every
+  // later test that waits on a real deadline would then hang or silently skip its timeout.
+  vi.useRealTimers();
   await rm(root, { recursive: true, force: true });
 });
+
+/** Bounded fixture cleanup that never lets its own failure replace the assertion that failed.
+ *  A cleanup failure on its own is still a failure — it is only demoted, never swallowed. */
+async function settleFixture(failure: { error: unknown } | undefined, cleanup: () => Promise<void>): Promise<void> {
+  let cleanupError: unknown;
+  try { await cleanup(); } catch (error) { cleanupError = error; }
+  if (failure !== undefined) {
+    if (cleanupError !== undefined && failure.error instanceof Error && failure.error.cause === undefined) {
+      failure.error.cause = cleanupError;
+    }
+    throw failure.error;
+  }
+  if (cleanupError !== undefined) throw cleanupError;
+}
 
 async function git(...args: string[]): Promise<string> {
   const { stdout } = await execFile("git", args, { cwd: root, encoding: "utf8" });
@@ -377,10 +394,15 @@ describe("Checkpointer", () => {
     const deadline = new Promise<never>((_, reject) => {
       watchdog = realSetTimeout(() => reject(new Error("hung guard fixture did not reach readiness or settle")), 5000);
     });
-    const session = agent([[call("w", "write", { path: "tracked.txt", content: "unsafe" }), usage, stop("tool_use")], [usage, stop("end_turn")]],
-      [writeTool()], { checkpointer: cp }).run("write", { cwd: root, id: "hung_guard" });
-    const collected = collect(session);
+    // Constructed inside the guarded body: a synchronous agent/session failure here must still
+    // release the callback, restore real timers and disarm the watchdog.
+    let session: ReturnType<ReturnType<typeof agent>["run"]> | undefined;
+    let collected: Promise<HarnessEvent[]> | undefined;
+    let failure: { error: unknown } | undefined;
     try {
+      session = agent([[call("w", "write", { path: "tracked.txt", content: "unsafe" }), usage, stop("tool_use")], [usage, stop("end_turn")]],
+        [writeTool()], { checkpointer: cp }).run("write", { cwd: root, id: "hung_guard" });
+      collected = collect(session);
       const signal = await Promise.race([ready, deadline]);
       expect(signal.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(29);
@@ -394,16 +416,89 @@ describe("Checkpointer", () => {
       expect(events.some(e => e.type === "tool.denied")).toBe(true);
       expect(events.some(e => e.type === "checkpoint.created")).toBe(false);
       expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
-    } finally {
-      release(); session.control.abort();
-      vi.useRealTimers();
-      realClearTimeout(watchdog);
+    } catch (error) { failure = { error }; }
+    release(); session?.control.abort();
+    vi.useRealTimers();
+    realClearTimeout(watchdog);
+    await settleFixture(failure, async () => {
       // A fired readiness watchdog must not short-circuit the owned session's cleanup join.
       const cleanupDeadline = new Promise<never>((_, reject) => {
         watchdog = realSetTimeout(() => reject(new Error("hung guard fixture cleanup did not settle")), 5000);
       });
-      try { await Promise.race([Promise.all([collected, session.done]), cleanupDeadline]); }
+      try { await Promise.race([Promise.all([collected, session?.done]), cleanupDeadline]); }
       finally { realClearTimeout(watchdog); }
+    });
+  });
+
+  it("preserves the primary fixture failure when its bounded cleanup also fails", async () => {
+    const primary = new Error("hung guard fixture assertion failed");
+    const cleanupFailure = new Error("hung guard fixture cleanup did not settle");
+    let joined = false;
+    await expect(settleFixture({ error: primary }, async () => { joined = true; throw cleanupFailure; })).rejects.toBe(primary);
+    expect(joined).toBe(true); // the bounded join is still attempted, not skipped
+    expect(primary.cause).toBe(cleanupFailure);
+  });
+
+  it("reports a cleanup-only failure and stays silent when both succeed", async () => {
+    const cleanupFailure = new Error("hung guard fixture cleanup did not settle");
+    await expect(settleFixture(undefined, async () => { throw cleanupFailure; })).rejects.toBe(cleanupFailure);
+    let joined = false;
+    await expect(settleFixture(undefined, async () => { joined = true; })).resolves.toBeUndefined();
+    expect(joined).toBe(true);
+  });
+
+  it("leaves fake timers installed when checkpoint session construction throws", () => {
+    // Same order as the hung guard fixture above: deadline timers are frozen before the checkpoint
+    // session exists, so a synchronous construction failure escapes before any local restoration.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    expect(() => agent([[usage, stop("end_turn")]], [writeTool()], { hookTimeoutMs: 0 })).toThrow("checkpoint timeout");
+    expect(vi.isFakeTimers()).toBe(true);
+  });
+
+  it("restores real timers for the next test after a leaked construction failure", async () => {
+    // Pairs with the test directly above, which deliberately never restores them: only the
+    // file-level afterEach stands between a failed setup and every later test silently hanging.
+    expect(vi.isFakeTimers()).toBe(false);
+    const started = Date.now();
+    await new Promise<void>(resolve => { setTimeout(resolve, 5); });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(4);
+  });
+
+  it("joins an abandoned later-turn verification before releasing the session", async () => {
+    await initRepo();
+    const cp = new Checkpointer();
+    const base = { point: "pre_tool" as const, sessionId: "later_turn", cwd: root, turn: 1,
+      signal: new AbortController().signal, emitCheckpoint: async () => {} };
+    await cp.handler(base);
+    await writeFile(join(root, "tracked.txt"), "turn one");
+    await cp.afterTool(base); // owned state, so turn 2 verifies before it registers its own attempt
+    // A private temporary root: this verification's own state directory is the observable proof
+    // that its Git work finished, and nothing else in this file writes there.
+    const tmpEnv = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    const stateRoot = await mkdtemp(join(tmpdir(), "agentrig-later-turn-"));
+    const aborting = new AbortController();
+    let reached!: () => void;
+    const verifying = new Promise<void>(resolve => { reached = resolve; });
+    let settled = false;
+    try {
+      process.env.TMPDIR = process.env.TEMP = process.env.TMP = stateRoot;
+      // Read once per covered path while the verification walks the worktree, so the abort below
+      // lands with real Git work in flight rather than before or after it.
+      const abandoned = cp.handler({ ...base, turn: 2, signal: aborting.signal,
+        get checkpointExcludes(): string[] { reached(); return []; } });
+      const observed = abandoned.then(() => { settled = true; }, () => { settled = true; });
+      await verifying;
+      aborting.abort(); // the hook timeout fires and the runner stops awaiting this handler
+      await cp.endSession(base.sessionId);
+      expect(settled).toBe(true);
+      expect(await readdir(stateRoot)).toEqual([]);
+      await observed;
+      expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("turn one");
+    } finally {
+      for (const [name, value] of Object.entries(tmpEnv)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+      await rm(stateRoot, { recursive: true, force: true });
     }
   });
 

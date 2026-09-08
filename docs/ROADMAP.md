@@ -1555,8 +1555,21 @@ need an explicit budget; neither prevents continuing other actionable entries.
 
 - [ ] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
   cover setup failure without leaking fake timers; include in the R17g core package batch, not a new R17 gate.
+  Implemented locally by **Claude Code outside the train** on `fix/followups-checkpoint-cleanup`
+  (file-level `afterEach` real-timer restoration, hung-guard construction inside the guarded body,
+  paired leak/restoration regression). Unmerged and unreviewed: leave open until a PR lands.
 - [ ] Preserve the primary assertion when fixture cleanup also fails ([core-test residual #266](https://github.com/agentkitai/agentrig/issues/266)):
   retain both errors with primary failure precedence; include in the R17g core package batch, not a new R17 gate.
+  Implemented locally by **Claude Code outside the train** on the same branch: the bounded cleanup
+  join rethrows the primary body failure with the cleanup failure as its `cause`, and still reports
+  a cleanup-only failure. Unmerged and unreviewed: leave open until a PR lands.
+- [ ] Join checkpoint pre-attempt verification before session cleanup ([review residual #272](https://github.com/agentkitai/agentrig/issues/272)):
+  register every started per-session verification/Git promise and drain it in `endSession` before
+  releasing the lease, so a later-turn hook timeout cannot abandon work whose Git children still own
+  the repository. Implemented locally by **Claude Code outside the train** on the same branch, with
+  a deterministic abandoned-verification regression; fail-closed denial, lease refusals and bounded
+  cancellation unchanged. Unmerged and unreviewed, and not a fix for the #244 Windows fixture
+  timeouts. Leave open until a PR lands.
 - [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
   preexisting reviewer first-run failure, followed by passing isolated/full runs;
   include with END test followups, not a new R17 gate or parent code workaround.
