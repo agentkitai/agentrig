@@ -77,9 +77,45 @@ it.each(["callTimeoutMs", "timeoutMs"] as const)("bounds a never-settling provid
   let signal: AbortSignal | undefined; const onUsage = vi.fn();
   await expect(ingest({ limits: { [limit]: limit === "timeoutMs" ? 1000 : 40 }, onUsage, provider: provider(async function* (_req, s) {
     signal = s; await new Promise(() => {}); yield { type: "text_delta", text: answer };
-  }) })).rejects.toMatchObject({ name: "TimeoutError" });
+  }) })).rejects.toMatchObject({ name: "TimeoutError", message: limit === "timeoutMs"
+    ? "maintenance ingest run timed out after 1000ms (overall budget)"
+    : "maintenance ingest completion call timed out after 40ms (per-call limit; overall budget 300000ms)" });
   expect(signal!.aborted).toBe(true); expect(await store.read(source)).toBeNull();
   expect(onUsage.mock.calls[0]![0]).toMatchObject({ outcome: "timeout", unknownUsageCalls: 1 });
+});
+
+it("identifies a per-call expiry without discarding prior or partial usage", async () => {
+  const run = new MaintenanceRun("ingest", { callTimeoutMs: 30 });
+  let failure: unknown;
+  try {
+    await run.call("first", "fixture", async (_signal, usage) => { usage({ input: 10, output: 2 }); });
+    await run.call("second", "fixture", async (_signal, usage) => {
+      usage({ input: 3, output: 1 }, false); await new Promise(() => {});
+    });
+  } catch (error) { failure = error; }
+  const report = run.finish(failure);
+  expect(failure).toMatchObject({ name: "TimeoutError",
+    message: "maintenance ingest second call timed out after 30ms (per-call limit; overall budget 300000ms)" });
+  expect(run.signal.aborted).toBe(false);
+  expect(report).toMatchObject({ outcome: "timeout", reportedUsage: { input: 13, output: 3 }, unknownUsageCalls: 1,
+    calls: [{ operation: "first", outcome: "completed", usageComplete: true },
+      { operation: "second", outcome: "timeout", usageComplete: false }] });
+});
+
+it.each(["run", "call"] as const)("identifies elapsed %s deadlines even before timer callbacks run", async scope => {
+  const now = performance.now(), clock = vi.spyOn(performance, "now").mockReturnValue(now);
+  const run = new MaintenanceRun("ingest", { timeoutMs: 100, callTimeoutMs: 30 });
+  let failure: unknown;
+  try {
+    if (scope === "run") { clock.mockReturnValue(now + 101); run.check(); }
+    else await run.call("elapsed", "fixture", async () => { clock.mockReturnValue(now + 31); });
+  } catch (error) { failure = error; }
+  const report = run.finish(failure);
+  expect(failure).toMatchObject({ name: "TimeoutError", message: scope === "run"
+    ? "maintenance ingest run timed out after 100ms (overall budget)"
+    : "maintenance ingest elapsed call timed out after 30ms (per-call limit; overall budget 100ms)" });
+  expect(report.outcome).toBe("timeout");
+  expect(run.signal.aborted).toBe(scope === "run");
 });
 
 it("retains partial reported usage on failure but marks total usage unknown", async () => {

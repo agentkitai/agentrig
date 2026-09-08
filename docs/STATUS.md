@@ -1,5 +1,61 @@
 # Status
 
+Second Windows recovery under reopened#244: postmerge286 CI34262745133/job102184507170
+failed the10s cap fixture again and real npm packing hit its unchanged45s owned-process timeout.
+The earlier recursion reduction was insufficient to establish reliableWindows execution.
+Operator correction restores the aggregate fixture's **original30s** allowance (the10s reduction
+in284 was based on local timings, not a product latency contract) while retaining the lower-I/O
+fixture, real2000cap and assertions. Windows now runs npm-runtime first, cap tests second, then
+the bulk suite: separate single-worker invocations preserve every test and remove that preceding
+fixture load. Npm45s/outer60s, owned-tree cleanup, productlimits and all consent checks stayunchanged.
+No claim that a particular host scheduler/antivirus caused the failures. PR287 is also the recovery
+for failedmain; original285/286 postmerge failures remainfailed. Exactrepairedhead and repaired
+postmergegreen must precede the final267 delivery. #244 remainsopen until that recovery lands.
+
+Issue sweep checkpoint: **15 of17 initial issues closed; none added**. #244 landed via
+PR#286 at`68c639a`, reviewed5212ac2, exact-headCI34261951608/structure34261951673 allgreen.
+It also recovers285's postmergeWindows aggregate fixture failure; originalfailedreceipt retained.
+Repaired-main postmerge34262745133/34262745079 is being monitored. Remaining#275/#267 have
+completed independent reviews. This memory275 branch is integrated with68c639a and passes
+build/test/typecheck0/0/0: **3515 passed / 4 skipped / 224 files**, private temporary directory.
+Implementation unchanged since independent reviews; no extra general review or live-provider run.
+
+## Outside-train existing issue #275: maintenance timeout scope
+
+Builder: **Codex/operator outside AgentRig**, branch `fix/followups-maintenance-timeouts`, base
+main `cc457c7`, now integrated with `efd20a8`, under the user's authorization to resolve every
+existing issue end-to-end.
+The old maintenance helper emitted identical wording for both the per-call and overall timers.
+It now names the maintenance operation and, for calls, the current call, explicitly labelling
+`per-call limit; overall budget ...ms` versus `run ... (overall budget)`. Both scheduled timers
+and elapsed-time checks use the same scoped messages. TimeoutError classification, cancellation,
+30,000ms call / 300,000ms overall defaults, call ceilings, and usage accounting are unchanged.
+
+This explains why the original `maintenance timed out after 30000ms` report was ambiguous; it
+does not prove why that provider call stalled, invent historical usage, or claim the entire 300s
+budget elapsed. A bounded call may still legitimately time out. The foreground session-success
+wording and auxiliary report remain intact; no silent retry, model spend, deadline inflation or
+ingestion skip was introduced.
+
+Two existing real-ingest timeout controls now require distinct exact messages, and a new two-call
+control verifies completed-call plus partial timed-out-call usage is retained while total usage
+remains unknown. All three assertions fail with the old shared wording and pass after the fix.
+Two additional deterministic elapsed-clock controls protect the non-timer paths. Mutants reverting
+the run label and call label to the old ambiguous message are both killed and restored after joined
+runs. Full build/test/typecheck each exit **0**, **3477 passed / 4 skipped / 222 files**. The changed
+test file is already in Windows CI. Independent review, exact-head/post-merge CI and merge remain
+delivery gates; this local implementation does not itself close the issue.
+
+After integration with merged compiler PR #282, full build/test/typecheck each exit **0**:
+**3490 passed / 4 skipped / 222 files**. Independent Codex review of the unchanged memory
+implementation found no defects and separately passed build/typecheck plus **134 tests across
+five files**; it did not claim a full-suite or Windows run.
+Independent Claude session **ae2b5992-fe3f-4cf0-a086-bc1dba017b45** approved the unchanged
+implementation atae9675a with full3490/4/222, build/typecheckgreen, two killed/restored mutants,
+and post-restoration memory634passed/2skipped/28files. Its optional supervisor-message note is
+outside this memory issue and nonblocking; no new issue or scope expansion. Updated main/CI
+verification is operator-owned and published on the delivery PR.
+
 Postmerge #285 recovery under existing#244: Windows34260977438/job102178538056 passed its main
 suite but the final single-worker aggregate-entry fixture exceeded10s. No oldhead rerun. PR#286
 also changes its padding to1991 ignored root directories: production still mkdir/lstats every
