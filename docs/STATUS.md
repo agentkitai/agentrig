@@ -1,5 +1,14 @@
 # Status
 
+Existing-issue delivery: checkpoint **PR #280** merged at `1102c3d`, closing
+**#272/#265/#266**. Its exact-head CI was green; post-merge receipts are on that PR.
+Administrative evidence issue **#261** is also closed: independent Claude Code
+session **2222963d-7e54-4df1-9a00-e8d3fb13a7ce** reran historical head `fdf72cf`
+with build/test/typecheck **0/0/0**, **3386 passed / 4 skipped / 213 files**, first
+attempt. [Public evidence](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212)
+preserves the original Codex limitation; this is independent local verification,
+not a rewritten historical verdict or a substitute for current CI.
+
 R17d is landed via **PR #273**, merge `4320a83`, reviewed head `61b4e72`.
 Post-merge CI **34247066349** and structure **34247066327** passed on that exact
 merge, all platforms first attempt; [landing receipt](https://github.com/agentkitai/agentrig/pull/273#issuecomment-5588039366).
@@ -191,6 +200,8 @@ original probe is unchanged, and all verification is offline. Review and hosted 
 receipts belong to this batch's PR; no other open issue is claimed fixed.
 Local build/test/typecheck each exit 0: **3469 passed / 4 skipped in 222 files**
 on base `4320a83`. Tests retain the offline provider stub and Windows coverage.
+After merging updated main `1102c3d`, build/test/typecheck again each exit 0:
+**3474 passed / 4 skipped in 222 files**. Original archived probe bytes are unchanged.
 
 Exact focused command: `pnpm exec vitest run packages/core/test/openai-chatgpt.test.ts packages/core/test/subagent.test.ts packages/core/test/agent-roles.test.ts packages/core/test/permission-grants.test.ts`.
 
