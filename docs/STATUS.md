@@ -10,6 +10,9 @@ CLAUDE's test command now correctly requires the build needed by dist-executing 
 Independent Codex found no code defects; its build/typecheck passed, but its preflight correctly
 refused the sandbox's `/tmp/.git`, so no Codex full-suite pass is claimed. Historical marker
 creation remains unknown; neither review turns point-in-time observations into a cause attribution.
+Integrated with mainf38b40b after that correction: operator build/test/typecheck0/0/0,
+**3505 passed / 4 skipped / 224 files**. Bounded Codex delta review found no defects; syntax/diff
+passed, while its preflight still correctly refused its sandbox ancestry (no bypass).
 
 ## Outside-train existing issue #249: pinned archive transport
 
