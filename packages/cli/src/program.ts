@@ -15,9 +15,14 @@ import { loginCommand } from "./login.js";
 import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
 import { dreamCommand, type DreamOptions } from "./dream.js";
 import { startTui } from "./tui/start.js";
-import { startAcp, type AcpDependencies, type AcpFlags } from "./acp.js";
-import { startWeb, type WebDependencies, type WebFlags } from "./web.js";
-import { startMcpServe, type McpServeDependencies } from "./mcp-serve.js";
+import type { AcpDependencies, AcpFlags } from "./acp.js";
+// Server adapters are existing commands, not prerequisites for an interactive prompt.
+// Keep their SDK/schema initialization lazy; command dispatch and dependency seams stay intact.
+const startAcp: typeof import("./acp.js").startAcp = async (...args) => (await import("./acp.js")).startAcp(...args);
+import type { WebDependencies, WebFlags } from "./web.js";
+const startWeb: typeof import("./web.js").startWeb = async (...args) => (await import("./web.js")).startWeb(...args);
+import type { McpServeDependencies } from "./mcp-serve.js";
+const startMcpServe: typeof import("./mcp-serve.js").startMcpServe = async (...args) => (await import("./mcp-serve.js")).startMcpServe(...args);
 import { loadRunConfig, type LoadRunConfigOptions } from "./config.js";
 import { addPackage } from "./packages.js";
 import { withMaintenanceSignal } from "./maintenance.js";

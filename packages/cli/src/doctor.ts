@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { formatFeelBudgets } from "./feel-budgets.js";
+import { feelReference } from "./feel-reference.js";
 import { constants } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -586,7 +588,7 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
   }
 
   return {
-    lines: checks.map((check) => `${check.status} ${check.label} — ${check.detail}`),
+    lines: [...checks.map((check) => `${check.status} ${check.label} — ${check.detail}`), ...formatFeelBudgets(feelReference)],
     exitCode: checks.some((check) => check.status === "fail") ? 1 : 0,
   };
 }

@@ -36,6 +36,7 @@ export function gitEnvironment(): NodeJS.ProcessEnv {
 
 export function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal?: AbortSignal, input?: Buffer): Promise<GitResult> {
   return new Promise((resolve, reject) => {
+    let finish: (() => void) | undefined;
     const child = execFile("git", ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args], {
       cwd,
       encoding: "utf8",
@@ -47,12 +48,13 @@ export function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv, signal
       env: env ?? gitEnvironment(),
       ...(signal === undefined ? {} : { signal }),
     }, (error, stdout, stderr) => {
-      if (error !== null) {
-        reject(Object.assign(error, { stdout, stderr }));
-        return;
-      }
-      resolve({ stdout, stderr });
+      // AbortError can reach this callback before the process and its stdio close.
+      // Retain ownership until close, so endSession cannot race Windows cwd cleanup.
+      finish = () => error !== null
+        ? reject(Object.assign(error, { stdout, stderr }))
+        : resolve({ stdout, stderr });
     });
+    child.once("close", () => finish?.());
     child.stdin?.on("error", () => {}); // the command callback reports early process failures
     child.stdin?.end(input);
   });

@@ -1,7 +1,110 @@
 # Status
 
-Current roadmap row: **R17b** — implementation complete on PR #234, delivery
-pending; next **R17c**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17c** — targeted outside-train checkpoint cleanup recovery after
+the round-3 Windows CI halt; independent delta review and green exact-head CI pending.
+Next **R17d**, only after exact-head and post-merge CI are green.
+
+## R17c checkpoint cancellation recovery
+
+Builder of the R17c row remains **agentrig**, conductor **100108d7**. This narrow
+recovery was implemented by **Codex outside the train**, explicitly authorized by
+the human after the halt; it is not a fourth general train repair round.
+Windows attempts 1 and 2 on `16203be` failed the checkpoint-timeout fixture with
+`EBUSY` directory cleanup; the operator stopped the train and cancelled its extra
+retry. Evidence and the halt are retained in [feel #244](https://github.com/agentkitai/agentrig/issues/244)
+and [PR #269](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5582974488).
+
+Checkpoint Git calls now settle only after subprocess `close`, not the earlier
+abort callback. Existing session-end attempt joining therefore retains ownership
+until Git and its stdio close, before temporary-directory cleanup. Literal argv,
+Git timeout/kill signal, output bounds, and fail-closed write denial are unchanged.
+Four deterministic callback-before-close regressions failed against the old helper
+and pass with the fix: abort, spawn failure, success, and checkpoint end-session
+ownership. They are included in Windows CI. All 44 checkpoint tests pass locally;
+build/test/typecheck exit **0/0/0**, with **3440 passed / 4 skipped** in 220 files.
+Exact-head Windows CI and independent review must still complete before landing.
+
+## R17c final delta repair round 3
+
+Builder **agentrig**, conductor **100108d7**; same R17c branch/worktree,
+no nested children, merge, or child-run external reviews. All three new LOW
+findings from [the round-2 delta review](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5581960155)
+are fixed: nonexistent argv paths import without building; the FIFO regression
+probes optional `mkfifo` once and skips only when absent (or on Windows), while
+still killing the exact regular-file-guard mutant on capable POSIX hosts; the
+vacuous post-schema frame assertion is removed and the raw sample-count assertion
+has an explanatory message. No budget, security, schema or acceptance changes.
+Separate build/test/typecheck exits **0/0/0**, local suite **3436 passed / 4 skipped**
+in **219 files**; real feel:prepare/check exits **0/0**, startup mutant killed,
+compiled entry bytes restored. Reproduction and boundaries: [R17c plan](plans/R17c.md).
+Independent third-round delta review remains the parent's next step; no premature
+residual filing. The other review's subprocess/FIFO environment limitation is
+not a passing suite. Historical accounting stays host-only; completed known totals
+and the explicitly nonterminal round-2 snapshot in PR269 are retained, not extended
+with invented final usage. Parent captures this child's id and terminal accounting.
+
+## R17c delta repair round 2
+
+All four newly reported delta findings are fixed, without changing budgets, the
+sixteen-write schema, acceptance, or security authority. Disposable compiled-bundle
+fixtures are ignored even when their child is terminated. A POSIX FIFO-with-reader
+regression kills deletion of the regular-file descriptor guard and verifies no
+session-byte leakage or sequence consumption. Stream reports select the first
+sixteen distinct writes (including every coalesced event in them), so a lagged
+15→17 arrival no longer fails an exact-count assertion. The bundle entrypoint
+compares real paths, covering absolute symlink invocation and
+`--preserve-symlinks-main` without triggering a build on import. Fail-first and
+restored-control evidence, exact-head checks, and executable feel preparation /
+measurement / artifact recipes are recorded on PR #269. Prior review limitations
+remain limitations, not independent execution claims; host accounting is not
+publicly accessible. R17c remains the row; R17d is next after the train's gate.
+
+## R17c — measured feel budgets (current continuation)
+
+Builder **agentrig**, conductor **100108d7**. Fresh branch/worktree for R17c only;
+R17b's implementation worktree is untouched. This row has **one implementation
+child**, **zero nested children**, **zero new halts**, **one external-review repair round** (round 1/3).
+Three pre-review CI corrections fix the owned terminal fixture, cold bundle,
+lazy server-command initialization and pinned E1 dependency preparation.
+CI34193777531, CI34194679601 and CI34195265656 failed honestly, with no
+unchanged rerun, raised budget or disabled dependency-policy check.
+Canonical completed accounting from the parent snapshot and immutable model.response
+logs: R17b lander **80014b20**, **582,777** total tokens including cache; R17c builder
+**8b9feae0**, **10,508,902** including cache. Both have zero nested child spawns; totals
+exclude auxiliaries/review CLI usage. Repair-child session/usage remain for the parent
+to record, not an invented id. PR269 records reproduction and log digests. These continuation counts do not replace
+any historical R17b totals, halted conductors, external reviews or outside repairs.
+
+[Plan and measurement boundaries](plans/R17c.md): a real bundled CLI cold-start
+budget (<400 ms), real first-byte-to-persisted-and-rendered-stream tick budget,
+measured CPU cost for 16 actual event frames, and all eight pinned E1 reference
+prompt/turn budgets now fail CI on regression. Doctor prints the measured reference
+with its environment/date and ceilings, explicitly a historical snapshot, not fresh
+CI or local-machine telemetry. Round 1 repairs pin the streaming descriptor to session
+lifecycle, isolate E1 duplicate-guard mutation coverage, tolerate coalesced writes by
+collecting sixteen distinct frames, refresh the reference and keep lazy TypeScript
+external with an executed compiled-ESM regression. All five external findings are fixed.
+The real CLI startup mutant (450 ms inserted delay) fails the same PTY budget test.
+No permission, grant, sandbox or model-capability expansion is included.
+
+R17b is now merged at `9372a6b9a8ada563b292c989003c8238c7aa5c1e`; independently
+verified exact-merge **CI34191054274** and **structure34191054280** are green.
+Land child **80014b20** reported **zero new halts/repair rounds**
+([receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579880355)).
+Original builder **agentrig** and all historical conductor/session attribution
+remain intact below; the #254 repair remains explicitly **outside the train**.
+The sole sandbox arbitration, human #248/#254 resolutions and PR234 review records
+are preserved, not re-arbitrated or reset.
+
+Authorized non-blocking END core-test followups **#265/#266/#271** now accompany
+**#263/#264** for the R17g core batch; none is a new acceptance gate. Conductor
+feel issues **#267/#268/#270/#271** predate this final repair spawn.
+[#271](https://github.com/agentkitai/agentrig/issues/271) records preexisting shared-`/tmp`
+test interference from the reviewer's first failed run (subsequent isolated/full
+runs passed); it is an END followup, not a new gate or parent code workaround. No additional agentrig-harness friction
+has been encountered by this child; row-code fixture failures were repaired here.
+Earlier pending/halted snapshots below are retained historical records, superseded
+only by the current continuation and the linked R17b landing receipt.
 
 ## Outside review completed; Windows fixture repaired, final gates pending
 
