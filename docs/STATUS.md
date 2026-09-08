@@ -1,5 +1,53 @@
 # Status
 
+
+---
+## HALTED — final repair round 3/3 exhausted (administrative handoff)
+
+Builder **agentrig**; conductor **2aa2f739**; administrative continuation **4f8eb85f**, bookkeeping child 7, NOT a fourth repair round or a seventh implementation child. Blocking feel **#254**: https://github.com/agentkitai/agentrig/issues/254. HIGH 1 survives three rounds: **DO NOT LAND**, regardless of green CI. Human continuation must decide next steps; no new authorization, exception or cap reset is asserted.
+
+Exact reviewed and unchanged PR head: `fdf72cf5838f0004a93a6f7630382114041c3686`. Both final review comments were read verbatim:
+- Claude: https://github.com/agentkitai/agentrig/pull/234#issuecomment-5575519391
+- Codex: https://github.com/agentkitai/agentrig/pull/234#issuecomment-5575519610
+
+All four hosted checks are green at this head: CI 34160143218 and structure 34160143215. This updates only the historical queued/in-progress snapshot above; it does not cure residuals or establish missing independent local evidence.
+
+ENTIRE preceding PR body, authorizations and history are preserved verbatim, including the sole sandbox deviation, human #248 resolution and three-round cap. Feels #251 (orphan lock), #252 (model-provenance retry succeeded), #254 (current halt) retained. Prior conductors 8fbde1a3 and 38c4612d retained. Two recorded halts: historical #248 human-resolved, current #254 blocking.
+
+Child count: **7 total = 6 implementation/arbitration children + 1 administrative continuation**. This conductor run: **2 implementation children** (round 2, 633e8e44; round 3, b12646c7) **+ this bookkeeping child** (4f8eb85f). Initial builder 7dbfad2b, arbiter 1bb8ec86, builder continuation b9109d9f, round-1 fixer 12b8dd75 retained. No child spawned by bookkeeping.
+
+Local-only handoff note: `/home/amit/agentrig/.claude/worktrees/r17b-defaults/docs/STATUS.md` is updated **UNCOMMITTED AND UNPUSHED**. No source or artifact commit, no new head, no implementation, review, push or merge. R17c–R17g untouched. This note is not part of the reviewed commit.
+
+## Residuals
+
+- #256 — [review residual] HIGH 1: recommended tsc listFiles exceeds checker output bound — https://github.com/agentkitai/agentrig/issues/256
+- #257 — [review residual] MEDIUM 2: missing over-bound real-compiler regression coverage — https://github.com/agentkitai/agentrig/issues/257
+- #258 — [review residual] LOW 3: repeated realpath calls after touched-file coverage is found — https://github.com/agentkitai/agentrig/issues/258
+- #259 — [review residual] LOW 4: incorrect smoke-helper provenance in round-3 ledger — https://github.com/agentkitai/agentrig/issues/259
+- #260 — [review residual] Claude Code (claude-opus-5): final-review verification evidence limitation — https://github.com/agentkitai/agentrig/issues/260
+- #261 — [review residual] Codex: final-review verification evidence limitation — https://github.com/agentkitai/agentrig/issues/261
+
+All six remain open; the two evidence residuals are separate from verified code defects. No finding downgraded, waived or rebutted.
+
+### Final completed-child canonical usage (disjoint fields)
+
+Source: complete `model.response.usage` records in `.agentrig/raw/sessions/<session>.jsonl`; each listed session has terminal `session.end` and every response has `usageComplete: true`. Missing cacheWrite is zero reported cache-write tokens. Terminal error is not a successful task claim.
+
+| Session | Responses | Terminal seq | End reason | Input (uncached) | Output | CacheRead | CacheWrite |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 7dbfad2b | 72 | 1784 | done | 550,715 | 24,997 | 2,032,256 | 0 |
+| 1bb8ec86 | 10 | 1364 | done | 107,642 | 2,239 | 113,536 | 0 |
+| b9109d9f | 125 | 1985 | done | 791,759 | 46,500 | 6,296,832 | 0 |
+| 12b8dd75 | 112 | 1449 | error | 694,423 | 49,047 | 5,914,880 | 0 |
+| 633e8e44 | 39 | 1251 | done | 247,595 | 15,526 | 938,752 | 0 |
+| b12646c7 | 66 | 1939 | done | 362,790 | 22,418 | 1,661,056 | 0 |
+
+Summed DISJOINT completed-child fields: **input 2,754,924**, **output 160,727**, **cacheRead 16,957,312**, **cacheWrite 0**; combined **19,872,963** tokens.
+
+Auxiliary usage is separate: no auxiliary-usage event/receipt is present in these six canonical child logs; no auxiliary total or zero-cost claim is inferred. External-review process usage and synthetic fixture auxiliary receipts are not included. These are the final six terminated implementation/arbitration child totals, not a final all-session row total. Incomplete parent conductor 2aa2f739 and current bookkeeping child 4f8eb85f are excluded; no current snapshot is called final.
+
+## Preserved pre-halt STATUS history
+
 ## R17b final repair round 3/3 — builder agentrig, conductor 2aa2f739
 
 Repair session **b12646c7**, sixth known implementation/arbitration child; zero
