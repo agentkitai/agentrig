@@ -1,5 +1,14 @@
 # Status
 
+Issue sweep delivery: **14 of the original17 closed**, none added. PR #285 merged as`24eefc1`,
+closing#237/#245/#253 after exact-headCI34260254554/structure34260254956 passed all platforms;
+postmerge34260977438/34260977458 is being monitored. Remaining#244/#267/#275 are implemented.
+This #244 shutdown repair is integrated with24eefc1: build/test/typecheck0/0/0,
+**3512 passed / 4 skipped / 224 files**. Independent Codex approves28dddc5 with build/23focused
+green; independent Claude **6e1ffd4b-3994-4e3f-862e-98d9ae18d347** approves with full3491/4/222,
+build/typecheckgreen and two killed/restored placement/omission mutants. No blockers; optional
+late-denial logging note does not expand this fix. Exact-head/postmergegreen remains required.
+
 Shutdown repair builder session **90ffa872-f245-4bed-a0df-e3cec14965a7** (Claude Code outside
 AgentRig), original head8a656b8. Operator follow-through adds `finally` joins to both new held-work
 regressions so assertion failures release the policy/manual barrier, deny any pending ask and
