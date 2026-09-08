@@ -19,6 +19,15 @@ mandatory. Explicit `strict: false` retained only `task` as required and allowed
 requested omission. The Responses adapter now explicitly sends `strict: false`
 for function tools while preserving their schemas. Runtime input validation,
 provider choices, role refusals, permissions, grants and sandboxing are unchanged.
+This restores optionality for every function tool on this provider, not just child
+routing. Schema-backed builtins retain local field validation; MCP tools retain
+their existing passthrough input schema and server-side field validation, with
+unchanged permission gates. This repair adds no local MCP JSON Schema validator.
+Live backend acceptance rests on this single operator-reported, unretained probe
+(the script remains ephemeral under `/tmp`, with no raw response artifact attached).
+Mocked-fetch tests verify the outgoing payload, not live backend acceptance or
+future compatibility. Feel #250 remains open until a real resumed conductor omits
+the provider field; removing the wire requirement does not guarantee model compliance.
 
 Three request assertions failed before the fix (including the real subagent schema
 and the actual mocked-fetch body); all **105** targeted provider/subagent/role/grant

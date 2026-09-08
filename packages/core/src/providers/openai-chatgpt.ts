@@ -161,7 +161,8 @@ export function toResponsesRequest(
       description: t.description,
       parameters: t.inputSchema,
       // Responses can normalize omitted strict to true, making optional fields required.
-      // Preserve the tool's schema; the runtime still validates inputs and permissions.
+      // Schema-backed builtins retain runtime validation; MCP inputs retain their existing
+      // passthrough/server validation. Permission enforcement is unchanged for all tools.
       strict: false,
     }));
     body.tool_choice = "auto";
