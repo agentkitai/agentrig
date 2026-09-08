@@ -54,7 +54,7 @@ export function assertFeelBudgets(input: unknown): FeelReport {
 export function formatFeelBudgets(input: unknown): string[] {
   const report = FeelReport.parse(input);
   return [
-    `info feel:reference — fake-provider measured reference, ${report.measuredAt}, ${report.platform}, ${report.node}; not a measurement of this machine or a live provider`,
+    `info feel:reference — fake-provider measured reference, ${report.measuredAt}, ${report.platform}, ${report.node}; historical snapshot; not fresh CI; not a measurement of this machine or a live provider`,
     `info feel:startup — ${report.coldStartMs.toFixed(3)} ms cold process to visible prompt; budget < ${FEEL_LIMITS.startupMs} ms`,
     `info feel:first-byte — event ${report.stream.firstByteToEventTicks} ticks / ${report.stream.firstByteToEventMs.toFixed(3)} ms; visible stream ${report.stream.firstByteToVisibleTicks} ticks / ${report.stream.firstByteToVisibleMs.toFixed(3)} ms; budget <= ${FEEL_LIMITS.firstByteTicks} event-loop tick`,
     `info feel:frame — ${report.stream.meanFrameCpuMs.toFixed(3)} ms mean / ${report.stream.maxFrameCpuMs.toFixed(3)} ms max CPU per streamed event (${report.stream.frameCount} actual TUI frames, 2000-line scrollback); max budget < ${FEEL_LIMITS.frameCpuMs} ms`,

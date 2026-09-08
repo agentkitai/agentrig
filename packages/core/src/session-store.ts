@@ -1,12 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, createReadStream } from "node:fs";
-import { appendFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFileSync, createReadStream, appendFile as appendDescriptor, open as openDescriptor, fstat, closeSync, constants } from "node:fs";
+import { promisify } from "node:util";
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { z } from "zod";
 import { type EventPayload, type HarnessEvent, Usage, parseEvent, serializeEvent } from "./events.js";
 import { advisoryPromptBlocks, MessageSchema, type ContentBlock, type Message } from "./messages.js";
 import { ProviderSelectionInfoSchema, type ProviderSelectionInfo } from "./provider-selection.js";
+
+const openFd = promisify(openDescriptor);
+const statFd = promisify(fstat);
+const appendFd = promisify(appendDescriptor);
 
 export interface SessionRef {
   id: string;
@@ -98,6 +103,15 @@ export class SessionStore {
   private readonly knownIds = new Set<string>();
   /** Sessions a live `run()` is appending to. See `claim`. */
   private readonly claimed = new Set<string>();
+  private readonly descriptors = new Map<string, number>();
+  private readonly locked = new Set<string>();
+
+  private closeUnownedDescriptor(sessionId: string): void {
+    if (this.claimed.has(sessionId) || this.locked.has(sessionId)) return;
+    const fd = this.descriptors.get(sessionId);
+    this.descriptors.delete(sessionId);
+    if (fd !== undefined) closeSync(fd);
+  }
 
   constructor(opts: SessionStoreOptions) {
     this.root = opts.root;
@@ -135,7 +149,13 @@ export class SessionStore {
       throw new Error(`session ${sessionId} is already being written by this process`);
     }
     this.claimed.add(sessionId);
-    return () => this.claimed.delete(sessionId);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.claimed.delete(sessionId);
+      this.closeUnownedDescriptor(sessionId);
+    };
   }
 
   pathFor(sessionId: string): string {
@@ -182,7 +202,15 @@ export class SessionStore {
       }
       throw err;
     }
+    // Claims and locks may coexist (manual compaction owns both). Neither may
+    // close the shared descriptor until the other owner has also released it.
+    this.locked.add(sessionId);
+    let released = false;
     return async () => {
+      if (released) return;
+      released = true;
+      this.locked.delete(sessionId);
+      this.closeUnownedDescriptor(sessionId);
       await rm(path, { force: true });
     };
   }
@@ -203,14 +231,29 @@ export class SessionStore {
   async append(sessionId: string, payload: EventPayload): Promise<HarnessEvent> {
     const seq = await this.nextSeq(sessionId);
     const event = { ...payload, seq, sessionId, ts: this.now() } as HarnessEvent;
-    if (payload.type === "model.delta" && seq > 0) {
-      // A live stream has already created its log. Persist this small delta before publishing
-      // it, without additional event-loop turns for mkdir/open/write/close. Never publish a
-      // token before its append succeeds; all other events retain the asynchronous path.
-      appendFileSync(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+    const line = serializeEvent(event) + "\n";
+    // Only a lifecycle-owned, validated descriptor may use the one-tick path. Never
+    // synchronously reopen a mutable pathname (it could now name a FIFO or symlink).
+    const established = this.descriptors.get(sessionId);
+    if (payload.type === "model.delta" && established !== undefined) {
+      appendFileSync(established, line, "utf8");
     } else {
-      await mkdir(this.root, { recursive: true });
-      await appendFile(this.pathFor(sessionId), serializeEvent(event) + "\n", "utf8");
+      let fd = established;
+      let opened = false;
+      try {
+        if (fd === undefined) {
+          await mkdir(this.root, { recursive: true });
+          fd = await openFd(this.pathFor(sessionId), constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT
+            | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0), 0o600);
+          opened = true;
+          if (!(await statFd(fd)).isFile()) throw new Error("session log must be a regular file");
+        }
+        await appendFd(fd, line, "utf8");
+        // Keep only successfully initialized live descriptors; direct appends own no fd.
+        if (this.claimed.has(sessionId) || this.locked.has(sessionId)) this.descriptors.set(sessionId, fd);
+      } finally {
+        if (opened && fd !== undefined && this.descriptors.get(sessionId) !== fd) closeSync(fd);
+      }
     }
     this.seqs.set(sessionId, seq + 1);
     return event;

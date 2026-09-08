@@ -32,6 +32,11 @@ try {
 assert.deepEqual(await readFile(entry), original, 'CLI entry bytes must be restored');
 
 const stream = FeelStreamMeasurement.parse(JSON.parse(run(process.execPath, ['packages/cli/scripts/feel-stream.mjs'], { ...process.env, CI: 'false' })));
+const coalescedRaw = JSON.parse(run(process.execPath, ['packages/cli/scripts/feel-stream.mjs', '--coalesce-fixture'], { ...process.env, CI: 'false' }));
+const coalesced = FeelStreamMeasurement.parse(coalescedRaw);
+assert.ok(coalescedRaw.sampledEvents > coalesced.frameCount, 'fixture must actually coalesce markers');
+assert.ok(coalesced.frameCount >= 16, 'coalesced stream must still collect sixteen distinct writes');
+console.log(`coalescing control: ${JSON.stringify(coalesced)}`);
 console.log(`stream/frame: ${JSON.stringify(stream)}`);
 const e1Output = run(process.execPath, ['.agentrig/r17/task-baseline.mjs']);
 process.stdout.write(e1Output);

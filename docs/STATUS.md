@@ -1,26 +1,33 @@
 # Status
 
-Current roadmap row: **R17c** — implementation complete, independent review and
-PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17c** — external review repair round **1/3** complete, independent delta review
+and PR delivery pending; next **R17d**, only after exact-head and post-merge CI are green.
 
 ## R17c — measured feel budgets (current continuation)
 
 Builder **agentrig**, conductor **100108d7**. Fresh branch/worktree for R17c only;
 R17b's implementation worktree is untouched. This row has **one implementation
-child**, **zero nested children**, **zero new halts**, **zero external-review repair rounds** so far.
+child**, **zero nested children**, **zero new halts**, **one external-review repair round** (round 1/3).
 Three pre-review CI corrections fix the owned terminal fixture, cold bundle,
 lazy server-command initialization and pinned E1 dependency preparation.
 CI34193777531, CI34194679601 and CI34195265656 failed honestly, with no
 unchanged rerun, raised budget or disabled dependency-policy check.
-Child session id and token usage are not tool-observable here; the conductor must
-record its tool-reported accounting. These continuation counts do not replace
+Canonical completed accounting from the parent snapshot and immutable model.response
+logs: R17b lander **80014b20**, **582,777** total tokens including cache; R17c builder
+**8b9feae0**, **10,508,902** including cache. Both have zero nested child spawns; totals
+exclude auxiliaries/review CLI usage. Repair-child session/usage remain for the parent
+to record, not an invented id. PR269 records reproduction and log digests. These continuation counts do not replace
 any historical R17b totals, halted conductors, external reviews or outside repairs.
 
 [Plan and measurement boundaries](plans/R17c.md): a real bundled CLI cold-start
 budget (<400 ms), real first-byte-to-persisted-and-rendered-stream tick budget,
 measured CPU cost for 16 actual event frames, and all eight pinned E1 reference
 prompt/turn budgets now fail CI on regression. Doctor prints the measured reference
-with its environment/date and ceilings, explicitly not local-machine telemetry.
+with its environment/date and ceilings, explicitly a historical snapshot, not fresh
+CI or local-machine telemetry. Round 1 repairs pin the streaming descriptor to session
+lifecycle, isolate E1 duplicate-guard mutation coverage, tolerate coalesced writes by
+collecting sixteen distinct frames, refresh the reference and keep lazy TypeScript
+external with an executed compiled-ESM regression. All five external findings are fixed.
 The real CLI startup mutant (450 ms inserted delay) fails the same PTY budget test.
 No permission, grant, sandbox or model-capability expansion is included.
 

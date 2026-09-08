@@ -1,5 +1,6 @@
 // Isolated real Agent -> SessionStore -> TuiController -> App/Ink stream and frame probe.
 // No fake timers, mocked append, debug renderer or render-to-string replacement.
+import { distinctFrameCount, waitForDistinctFrames } from './feel-frame-samples.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -25,11 +26,17 @@ const provider = {
   id: 'fake', model: 'feel-reference',
   capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
   async *stream() {
-    for (let i = 0; i < 16; i++) {
+    // Ink may coalesce adjacent events. Keep producing real markers until sixteen
+    // actual writes have been observed; never pad the measurement with duplicates.
+    const deadline = performance.now() + 5000;
+    for (let i = 0; distinctFrameCount(frames) < 16 && performance.now() < deadline; i++) {
       firstByte ??= { ms: performance.now(), tick };
       yield { type: 'text_delta', text: `${marker(i)} ` };
       // Let each event produce an actual frame instead of measuring a coalesced final answer.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Deterministic integration coverage for the coalescing mode seen on cold macOS.
+      if (!(process.argv.includes('--coalesce-fixture') && i === 0)) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     }
     yield { type: 'stop', reason: 'end_turn' };
   },
@@ -53,6 +60,8 @@ const controller = new TuiController({ agent, cwd: home });
 for (let i = 0; i < 2000; i++) controller.print(`historical tool result ${i}`, 'event');
 const stdout = new Writable({ write(chunk, _encoding, callback) {
   const text = String(chunk);
+  // Controlled slow sink: expose the first two markers together, not as two writes.
+  if (process.argv.includes('--coalesce-fixture') && text.includes(marker(0)) && !text.includes(marker(1))) { callback(); return; }
   const frameId = ++writeId;
   for (const [key, start] of delivered) {
     if (!text.includes(key)) continue;
@@ -74,21 +83,21 @@ try {
   await mount;
   await new Promise(resolve => setTimeout(resolve, 80));
   await controller.submit('return the streaming markers');
-  const deadline = performance.now() + 5000;
-  while (frames.length < 16 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+  await waitForDistinctFrames(frames);
   assert.ok(firstByte && firstEvent && firstVisible, 'first byte must traverse the actual persisted and rendered stream');
   const result = {
     firstByteToEventMs: firstEvent.ms - firstByte.ms,
     firstByteToEventTicks: firstEvent.tick - firstByte.tick,
     firstByteToVisibleMs: firstVisible.ms - firstByte.ms,
     firstByteToVisibleTicks: firstVisible.tick - firstByte.tick,
-    frameCount: new Set(frames.map(frame => frame.frameId)).size,
+    frameCount: distinctFrameCount(frames),
+    sampledEvents: frames.length,
     maxFrameCpuMs: Math.max(...frames.map(frame => frame.cpuMs)),
     meanFrameCpuMs: frames.reduce((sum, frame) => sum + frame.cpuMs, 0) / frames.length,
     frames,
   };
   console.log(JSON.stringify(result));
-  assert.equal(result.frameCount, 16, 'every streamed event must produce a measured real frame');
+  assert.equal(result.frameCount, 16, 'must measure sixteen distinct real streamed writes, even with coalescing');
   assert.ok(result.firstByteToEventTicks <= 1, 'first byte -> canonical model.delta exceeded one event-loop tick');
   assert.ok(result.firstByteToVisibleTicks <= 1, 'first byte -> rendered stream exceeded one event-loop tick');
   assert.ok(result.maxFrameCpuMs < 16, 'TUI frame CPU cost per streamed event exceeded 16 ms');
