@@ -1,6 +1,28 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Current: continue the entire END follow-up queue with bounded independent PRs and
+## Current issue-resolution sweep — 2026-09-08
+
+The operator's current assignment is the seventeen issues open when this sweep began,
+including problems encountered while resolving them. All seventeen resolutions are implemented
+below; #267 is the final delivery. Its check becomes part of main only through its reviewed,
+green merge. No new issues were filed; #244 was explicitly reopened after failed post-merge CI
+and repaired in #287. Exact-head and post-merge receipts live on the delivery PRs; failed
+historical runs remain failed. This does **not** mark remaining R17/vision rows complete.
+
+- [x] #272, #265, #266 — checkpoint ownership and cleanup: [PR #280](https://github.com/agentkitai/agentrig/pull/280).
+- [x] #261 — independent historical-head verification: [receipt on PR #234](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
+- [x] #277, #278, #279 — probe termination and evidence: [PR #281](https://github.com/agentkitai/agentrig/pull/281).
+- [x] #263, #264 — partial compiler diagnostics and bounded allocation: [PR #282](https://github.com/agentkitai/agentrig/pull/282).
+- [x] #249 — pinned archive transport: [PR #283](https://github.com/agentkitai/agentrig/pull/283).
+- [x] #240 — aggregate fixture and owned cleanup: [PR #284](https://github.com/agentkitai/agentrig/pull/284), final Windows allowance restored in #287.
+- [x] #237, #245, #253 — fixture preflight, workspace test root, review-guidance pins: [PR #285](https://github.com/agentkitai/agentrig/pull/285).
+- [x] #244 — fixture and late-permission shutdown fixes: [PR #286](https://github.com/agentkitai/agentrig/pull/286), Windows recovery [PR #287](https://github.com/agentkitai/agentrig/pull/287).
+- [x] #275 — per-call versus overall memory timeout reporting: [PR #287](https://github.com/agentkitai/agentrig/pull/287).
+- [x] #267 — coherent skill refresh at `/new` and `/clear`, with package digest revalidation: final `fix/followups-skill-refresh` delivery.
+
+The entries below preserve the earlier roadmap continuation and delivery history.
+
+Historical instruction: continue the entire END follow-up queue with bounded independent PRs and
 serialized exact-head/current-main/post-main gates. Prior batches do not end the queue.
 
 - [x] #217 capability evidence summary — green main ebfd10f,

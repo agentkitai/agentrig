@@ -1,5 +1,24 @@
 # Status
 
+## Issue sweep completion record — 2026-09-08
+
+The seventeen-issue sweep has sixteen issues closed and only #267 awaiting this final delivery.
+Every resolution is checked and mapped to its PR at the top of [ROADMAP](ROADMAP.md).
+No new issues were opened. #244 was explicitly reopened after post-merge Windows failures,
+then repaired again in PR#287; those failed receipts remain failed, not rewritten.
+
+PR#287 merged as`325c053`, reviewed`5e60dfa`, exact-headCI34264056674/structure34264056689
+allgreen. Repaired-main postmerge34264798087/34264797921 must be green before this final merge;
+its separate npm-runtime/package-cap Windows steps have already passed. This #267 branch is
+integrated with325c053: **build/test/typecheck0/0/0, 3526 passed / 4 skipped / 225 files**,
+private `/var/tmp/agentrig-final-skills.kbFbsv`. All prior review findings and bounded repairs are
+recorded below; no fresh general review was restarted for integration or the Windows comment
+correction. Exact final-head and post-merge receipts belong to the final skill-refresh PR.
+
+The AgentRig conductor remains stopped. This operator/Claude issue sweep does not complete
+unimplemented R17 vision rows or run the live E3 matrix. Earlier delivery notes below are history,
+not new pending gates. #267's remaining zero-startup-skills restart limitation is explicit below.
+
 Outside-train #267 review completion: independent Claude **d45c5e92-7b73-4c73-8ed0-8222b75be3c8**
 approved9ad314f with full3497/4/223 and build/typecheckgreen; three mutants killed, one optional
 zero-startup-skills coverage mutant survived and is disclosed in the PR review, not called green.
