@@ -20,11 +20,22 @@ requested omission. The Responses adapter now explicitly sends `strict: false`
 for function tools while preserving their schemas. Runtime input validation,
 provider choices, role refusals, permissions, grants and sandboxing are unchanged.
 This restores optionality for every function tool on this provider, not just child
-routing. Schema-backed builtins retain local field validation; MCP tools retain
-their existing passthrough input schema and server-side field validation, with
-unchanged permission gates. This repair adds no local MCP JSON Schema validator.
-Live backend acceptance rests on this single operator-reported, unretained probe
-(the script remains ephemeral under `/tmp`, with no raw response artifact attached).
+routing. Schema-backed builtins retain local field validation; MCP tools have no
+harness-side field-level validation. A server that does not validate its own inputs
+may receive under-specified arguments. Permission gates are unchanged; this repair
+adds no local MCP JSON Schema validator. Previous backend normalization for MCP
+schemas is an inference, not something the child-routing probe measured.
+Live backend acceptance rests on the single operator-reported probe above; no raw
+response artifact is attached. The [retained probe](plans/feel250-provider-omission-probe.mjs)
+now permits manual reproduction after `pnpm build`, with explicit `--live` consent
+for two inert subscription calls; without it, only usage is printed. It executes
+no tools and is not run live in CI. The two-call/90-second-per-call controls are
+operational bounds, not a hard token cap: this backend rejects `max_output_tokens`,
+so the script's 128-token request hint is not binding. Usage is outside E3.
+Retention is the delta review's additional
+evidence requirement; round 1 had used the full review's permitted disclosure option.
+No further live calls were made for this repair. The original 317 tokens remain
+historical evidence, not a cap or prediction for a future rerun.
 Mocked-fetch tests verify the outgoing payload, not live backend acceptance or
 future compatibility. Feel #250 remains open until a real resumed conductor omits
 the provider field; removing the wire requirement does not guarantee model compliance.
@@ -35,6 +46,8 @@ tests pass after it. Removing `strict: false` again kills the same three asserti
 restoring it passes all **21** adapter tests. Build/test/typecheck exit **0/0/0**;
 the full suite has **3441 passed / 4 skipped** in **220** files.
 Independent review and exact-head/post-merge CI remain pending.
+
+Exact focused command: `pnpm exec vitest run packages/core/test/openai-chatgpt.test.ts packages/core/test/subagent.test.ts packages/core/test/agent-roles.test.ts packages/core/test/permission-grants.test.ts`.
 
 R17c [PR #269](https://github.com/agentkitai/agentrig/pull/269) landed at
 `e74018c707a5715ef20ec5686210a092b8d909ab`; exact-head CI **34214005131** and
