@@ -1,5 +1,17 @@
 # Status
 
+Postmerge #285 recovery under existing#244: Windows34260977438/job102178538056 passed its main
+suite but the final single-worker aggregate-entry fixture exceeded10s. No oldhead rerun. PR#286
+also changes its padding to1991 ignored root directories: production still mkdir/lstats every
+entry and crosses the unchanged2000 shared cap by exactlyone, but no longer readdirs1990 empty
+selected subdirectories. Both real installs are verified before padding; the early verified
+package must remain hidden on aggregate failure. Padding is intentionally unsupported content
+if the aggregate guard is bypassed, so a mutant resetting the cap per package exposes the earlier
+package and fails the regression (joined/restored). New focused case449ms locally; historical
+Windows scheduling and any speedup factor are not established. Deadline stays10s, no product
+change. This PR is the recovery for failed predecessor main: repaired exact-head and postmerge
+CI must be green before the next unrelated delivery; the original failed receipt remains failed.
+
 Issue sweep delivery: **14 of the original17 closed**, none added. PR #285 merged as`24eefc1`,
 closing#237/#245/#253 after exact-headCI34260254554/structure34260254956 passed all platforms;
 postmerge34260977438/34260977458 is being monitored. Remaining#244/#267/#275 are implemented.
