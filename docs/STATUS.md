@@ -77,19 +77,21 @@ requirement and the refusal of unverifiable listed paths are untouched.
 Retention starts at one line bound (8 KiB) and doubles on demand, copying what is already held,
 and never passes the existing `TSC_METADATA_BYTES`. The byte accounting and its overflow refusal
 are unchanged; the growth request is derived from that same accounting, so it cannot exceed the
-cap. Measured with the real sink over real `tsc --listFiles` output, 200 runs each, allocation
-counted by instrumenting `Buffer.alloc`:
+cap. Measured with the real sink over real `tsc --listFiles` output (200 runs for
+core/cli, 50 for the synthetic listing), allocation counted by instrumenting `Buffer.alloc`:
 
-| listing | before peak | after peak | before total | after total | before | after |
+| listing | before largest buffer | after largest buffer | before total | after total | before | after |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `packages/core`, 53,506 B / 452 paths | 4,194,304 B | 65,536 B | 4,194,304 B | 122,880 B | 0.46 ms | 0.29 ms |
 | `packages/cli`, 96,227 B / 836 paths | 4,194,304 B | 131,072 B | 4,194,304 B | 253,952 B | 0.66 ms | 0.49 ms |
 | synthetic 2,097,295 B / 12,935 paths | 4,194,304 B | 4,194,304 B | 4,194,304 B | 8,380,416 B | 7.40 ms | 8.23 ms |
 
 The near-cap row is a real regression and is reported as one: a listing that approaches the cap
-keeps the same peak, allocates about twice as much in total because of the doublings and their
-copies, and runs slightly slower. **No speedup is claimed.** The sub-millisecond differences on
-the ordinary rows are noise against the compiler run they accompany; the change is about peak and
+keeps the same largest single allocation, allocates about twice as much in total because of
+the doublings and their copies, and runs slightly slower. Old and new buffers coexist while
+copying, so the 4 MiB retention cap is not a process RSS or total-live-allocation bound.
+**No speedup is claimed.** The sub-millisecond differences on
+the ordinary rows are noise against the compiler run they accompany; the change is about individual and
 total allocation per checked edit, not latency.
 
 Fail-first: eleven new test cases, of which seven were written first and failed against the

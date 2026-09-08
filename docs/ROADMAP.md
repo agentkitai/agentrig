@@ -1565,8 +1565,9 @@ need an explicit budget; neither prevents continuing other actionable entries.
   first metadata line; preserve byte accounting and overflow controls.
   Implemented by **Claude Code outside the train** on the same branch: retention starts at
   one line bound and doubles under the unchanged cap. Measured on real `tsc --listFiles`
-  output, peak allocation falls 64x (core) and 32x (cli); a near-cap listing keeps the same
-  4 MiB peak and costs slightly more, and no speedup is claimed. Completion reaches main
+  output, largest single allocation falls 64x (core) and 32x (cli); a near-cap listing keeps
+  the 4 MiB buffer cap but costs more total allocation while copying, not less RSS by proof.
+  No speedup is claimed. Completion reaches main
   with the reviewed, green PR merge.
 
 - [x] Restore timers if checkpoint session construction throws ([core-test residual #265](https://github.com/agentkitai/agentrig/issues/265)):
