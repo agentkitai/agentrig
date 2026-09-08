@@ -1,5 +1,35 @@
 # Status
 
+Current roadmap row: **R17b** — implementation complete on PR #234, delivery
+pending; next **R17c**, only after exact-head and post-merge CI are green.
+
+## Outside review completed; Windows fixture repaired, final gates pending
+
+Builder **Codex, outside AgentRig**; original builder **agentrig**, halted
+conductor **2aa2f739**, blocking feel **#254**. No new train round or cap reset.
+At `a7bccda4555a82ff096eb8f537a37efcec2c43a7`, independent
+[Claude review](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579551634)
+verified #256–#259, the required-Docker full trio (3419 passed / 2 skipped),
+the default-PATH smoke and four killed/restored mutants. The separate
+[Codex review](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5579551897)
+found no actionable regression but could not validate its suite in that execution
+environment; feel/review-residual #261 records the limitation, not a green claim.
+
+Exact-head Linux, macOS and structure checks passed; Windows failed only the
+checkpointer hung-quiescence fixture's EBUSY cleanup (#262). No unchanged rerun.
+Its tests-only repair establishes callback readiness before advancing the
+unchanged 30ms deadline and settles owned work before cleanup. The restored
+checkpointer file passed 40/40. Fixture mutations removing readiness notification,
+shifting the deadline to 31ms and unblocking the callback each failed as intended;
+final mutant runs had no cleanup errors. New-head validation
+and CI are still required; a7bccda is not merge-ready.
+
+[All six review dispositions](plans/R17b-outside-diagnostics.md#outside-review-dispositions)
+are explicit. Required completion bookkeeping and human-authorized end-of-roadmap
+follow-ups are not acceptance changes. LOW residuals #263/#264 are recorded at the
+roadmap's end, not added R17 gates. Host-local mutation logs are no longer presented
+as portable evidence. Earlier candidate/halt snapshots below remain history.
+
 ## R17b outside-train repair candidate — implementation complete; delivery gates pending
 
 Builder **Codex, outside AgentRig**; original halted conductor **2aa2f739**,

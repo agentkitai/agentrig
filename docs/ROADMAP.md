@@ -1546,3 +1546,9 @@ need an explicit budget; neither prevents continuing other actionable entries.
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
   this remaining coverage improvement is not a newly discovered product defect or R17 gate.
+- [ ] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
+  retain useful touched-file diagnostics when metadata becomes unknown, without
+  weakening finite bounds, cancellation, coverage checks or fail-closed status.
+- [ ] Right-size the bounded compiler coverage buffer ([review residual #264](https://github.com/agentkitai/agentrig/issues/264)):
+  measure and consider capped geometric growth instead of allocating 4 MiB on the
+  first metadata line; preserve byte accounting and overflow controls.

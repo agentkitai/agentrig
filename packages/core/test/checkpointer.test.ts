@@ -364,12 +364,47 @@ describe("Checkpointer", () => {
 
   it("bounds a hung quiescence callback and settles the session without executing a mutation", async () => {
     await initRepo();
-    const cp = new Checkpointer({ timeoutMs: 30, assertQuiescent: async () => new Promise<void>(() => {}) });
+    const realSetTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+    let entered!: (signal: AbortSignal) => void, release!: () => void;
+    const ready = new Promise<AbortSignal>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let guardReturned = false;
+    const cp = new Checkpointer({ timeoutMs: 30, assertQuiescent: async ctx => { entered(ctx.signal); await blocked; guardReturned = true; } });
+    // Freeze only deadline timers: real Git discovery must finish before testing the hung guard.
+    // Advancing time before readiness could deny on Git startup and never exercise this callback.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let watchdog!: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_, reject) => {
+      watchdog = realSetTimeout(() => reject(new Error("hung guard fixture did not reach readiness or settle")), 5000);
+    });
     const session = agent([[call("w", "write", { path: "tracked.txt", content: "unsafe" }), usage, stop("tool_use")], [usage, stop("end_turn")]],
       [writeTool()], { checkpointer: cp }).run("write", { cwd: root, id: "hung_guard" });
-    const events = await collect(session); await session.done;
-    expect(events.some(e => e.type === "tool.denied")).toBe(true);
-    expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
+    const collected = collect(session);
+    try {
+      const signal = await Promise.race([ready, deadline]);
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(29);
+      expect(signal.aborted).toBe(false);
+      expect(guardReturned).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal.aborted).toBe(true);
+      expect(guardReturned).toBe(false);
+      const events = await Promise.race([collected, deadline]);
+      await Promise.race([session.done, deadline]);
+      expect(events.some(e => e.type === "tool.denied")).toBe(true);
+      expect(events.some(e => e.type === "checkpoint.created")).toBe(false);
+      expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
+    } finally {
+      release(); session.control.abort();
+      vi.useRealTimers();
+      realClearTimeout(watchdog);
+      // A fired readiness watchdog must not short-circuit the owned session's cleanup join.
+      const cleanupDeadline = new Promise<never>((_, reject) => {
+        watchdog = realSetTimeout(() => reject(new Error("hung guard fixture cleanup did not settle")), 5000);
+      });
+      try { await Promise.race([Promise.all([collected, session.done]), cleanupDeadline]); }
+      finally { realClearTimeout(watchdog); }
+    }
   });
 
   it("preserves a replaced lease and refuses both mutation and cleanup", async () => {
