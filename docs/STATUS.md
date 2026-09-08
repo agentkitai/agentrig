@@ -1,8 +1,37 @@
 # Status
 
-Current roadmap row: **R17c** — targeted outside-train checkpoint cleanup recovery after
-the round-3 Windows CI halt; independent delta review and green exact-head CI pending.
-Next **R17d**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17d**, incomplete. Draft [PR #273](https://github.com/agentkitai/agentrig/pull/273)
+retains its evidence and the human-approved supplemental benchmark correction.
+Conductor **ed60c956** halted on [feel #250](https://github.com/agentkitai/agentrig/issues/250);
+the blocking provider-schema repair below must pass review and CI before the train resumes.
+
+## Outside-train feel #250 recovery: preserve optional tool arguments
+
+Builder of this narrow repair: **Codex/operator outside the train**, under the standing
+human instruction to fix the blocking issue after a halt, record outside attribution,
+and restart. It is not an agentrig-built row, R17d completion, or an early R17g sweep.
+The agentrig conductor remains **ed60c956**; its interrupted R17d PR is adopted on restart.
+
+A bounded two-call, **317-token** subscription probe, with no tool execution,
+[confirmed](https://github.com/agentkitai/agentrig/issues/250#issuecomment-5584543686)
+that omitted function `strict` was normalized to `true`, making optional `provider`
+mandatory. Explicit `strict: false` retained only `task` as required and allowed the
+requested omission. The Responses adapter now explicitly sends `strict: false`
+for function tools while preserving their schemas. Runtime input validation,
+provider choices, role refusals, permissions, grants and sandboxing are unchanged.
+
+Three request assertions failed before the fix (including the real subagent schema
+and the actual mocked-fetch body); all **105** targeted provider/subagent/role/grant
+tests pass after it. Removing `strict: false` again kills the same three assertions;
+restoring it passes all **21** adapter tests. Build/test/typecheck exit **0/0/0**;
+the full suite has **3441 passed / 4 skipped** in **220** files.
+Independent review and exact-head/post-merge CI remain pending.
+
+R17c [PR #269](https://github.com/agentkitai/agentrig/pull/269) landed at
+`e74018c707a5715ef20ec5686210a092b8d909ab`; exact-head CI **34214005131** and
+post-merge CI **34215842021** plus structure checks are green
+([landing receipt](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5583828105)).
+Earlier pending R17c entries below are historical, superseded by this receipt.
 
 ## R17c checkpoint cancellation recovery
 

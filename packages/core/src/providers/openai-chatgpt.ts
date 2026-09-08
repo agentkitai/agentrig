@@ -160,6 +160,9 @@ export function toResponsesRequest(
       name: t.name,
       description: t.description,
       parameters: t.inputSchema,
+      // Responses can normalize omitted strict to true, making optional fields required.
+      // Preserve the tool's schema; the runtime still validates inputs and permissions.
+      strict: false,
     }));
     body.tool_choice = "auto";
   }
