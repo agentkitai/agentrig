@@ -1,5 +1,5 @@
-import type { AuxiliaryReport, Session } from "@agentkitai/agentrig-core";
-import { randomUUID } from "node:crypto";
+import type { AuxiliaryReport, InterventionCost, Session, SupervisorRecord } from "@agentkitai/agentrig-core";
+import { createHash, randomUUID } from "node:crypto";
 import { AuxiliaryLimitError, auxiliaryDiagnostic, positiveLimit, DEFAULT_AUXILIARY_LIMITS, type AuxiliaryOptions, type AuxiliaryLimits } from "./auxiliary.js";
 import type { Detachable, Detector, EscalationOutcome, Policy } from "./types.js";
 import { initialState, reduce, type StateOptions, type SupervisorState } from "./state.js";
@@ -13,6 +13,33 @@ import { VerificationEvidence } from "./verification-lanes.js";
 export const DEFAULT_ESCALATE_TIMEOUT_MS = 60_000;
 /** An LLM-backed rung is bounded like any other blocking call in the observer's loop. */
 export const DEFAULT_REVIEW_TIMEOUT_MS = 90_000;
+
+/**
+ * R17e. Digest of the exact text an intervention queued for the model prompt, so a reader can
+ * match a recorded decision to the `steer` event that delivered it without the log carrying the
+ * text twice. Deliberately the same convention as core's `contentHash` for a string — the first
+ * 16 hex characters of SHA-256 over its UTF-8 bytes — because core's `/why` fold compares the two;
+ * `supervisor/test/visible-supervisor.test.ts` pins that the two implementations agree.
+ * (`supervisor` depends on core for types only, so the convention is restated rather than imported.)
+ */
+export function guidanceDigest(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
+}
+
+/** What an intervention that queued prompt text cost: no model call, and the bytes it added. */
+function injectedCost(text: string, auxiliaryId?: string): InterventionCost {
+  return {
+    modelCalls: auxiliaryId === undefined ? "none" : "auxiliary",
+    ...(auxiliaryId === undefined ? {} : { auxiliaryId }),
+    injected: { bytes: Buffer.byteLength(text, "utf8"), hash: guidanceDigest(text) },
+  };
+}
+
+/** Bounded free text for an outcome record; the schema caps it and a log line is not a stack trace. */
+function detailOf(value: unknown): string {
+  const text = value instanceof Error ? `${value.name}: ${value.message}` : String(value);
+  return text.length > 512 ? `${text.slice(0, 511)}…` : text;
+}
 
 class ObserverTimeoutError extends Error {}
 
@@ -149,7 +176,11 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
     });
   };
 
-  const runAuxiliary = async <T>(operation: "reviewer" | "grader", work: (call: AuxiliaryOptions, start: () => void) => Promise<T>): Promise<T> => {
+  const runAuxiliary = async <T>(operation: "reviewer" | "grader", work: (call: AuxiliaryOptions, start: () => void) => Promise<T>,
+    /** R17e: the run id this call accounts under, so an outcome can point at it instead of
+     * restating usage that may be incomplete. Called before any work starts, so a failed or
+     * cancelled call is still attributable. */
+    onRunId?: (id: string) => void): Promise<T> => {
     lifetime.signal.throwIfAborted();
     const controller = new AbortController();
     const abort = () => controller.abort(lifetime.signal.reason);
@@ -159,6 +190,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
     const started = performance.now();
     const timer = setTimeout(() => controller.abort(new DOMException(`${operation} did not answer within ${ms}ms`, "TimeoutError")), ms);
     const id = randomUUID();
+    onRunId?.(id);
     let accepting = true;
     let opaque = false;
     let failure: unknown;
@@ -245,12 +277,27 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       for (const intervention of interventions) {
         if (detached || state.ended || lifetime.signal.aborted) break;
 
-        session.control.record({ type: "supervisor.intervention", intervention });
+        // R17e. The decision and the effect are two different facts, so they are two records: this
+        // one says what was decided and what it noticed, and the `supervisor.outcome` below says
+        // what applying it actually did. A reader must never have to infer "applied" from
+        // "recorded" — `inject_guidance` in particular is only QUEUED here, and the `steer` event
+        // is the sole receipt that it reached the model.
+        const id = randomUUID();
+        const cause = opts.policy.cause?.(intervention);
+        const noticed = cause === undefined ? signals.slice(0, 8) : [cause];
+        session.control.record({ type: "supervisor.intervention", intervention, id, noticed });
         const active = intervention;
+        let auxiliaryId: string | undefined;
+        const free: InterventionCost = { modelCalls: "none" };
+        const auxiliaryCost = (): InterventionCost => ({ modelCalls: "auxiliary",
+          ...(auxiliaryId === undefined ? {} : { auxiliaryId }) });
+        let outcome: Omit<Extract<SupervisorRecord, { type: "supervisor.outcome" }>, "type" | "id" | "intervention"> | null = null;
         try {
           switch (active.type) {
             case "inject_guidance":
               session.control.steer(active.message, "supervisor");
+              outcome = { outcome: "queued", cost: injectedCost(active.message),
+                detail: "queued for the next turn boundary; the steer event is the receipt" };
               break;
             case "escalate": {
               if (opts.onEscalate === undefined) {
@@ -258,10 +305,12 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 // recording an intervention that quietly does nothing
                 opts.policy.onEscalationOutcome?.(active, "closed");
                 report("apply", new Error("escalate was reached with no onEscalate handler; nobody was asked"));
+                outcome = { outcome: "unavailable", cost: free,
+                  detail: "no onEscalate handler is attached; nobody was asked" };
                 break;
               }
               try {
-                const outcome = await withTimeout(
+                const answered = await withTimeout(
                   Promise.resolve(opts.onEscalate(active.question)),
                   opts.escalateTimeoutMs ?? DEFAULT_ESCALATE_TIMEOUT_MS,
                   "onEscalate",
@@ -270,7 +319,10 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 // Legacy non-interactive handlers only report that delivery returned; they do not
                 // prove a human answered. Treat void as closed (which, like answered, suppresses
                 // nothing) and reserve answered for an explicit outcome from an interactive seam.
-                opts.policy.onEscalationOutcome?.(active, outcome ?? "closed");
+                opts.policy.onEscalationOutcome?.(active, answered ?? "closed");
+                // The question was put; any reply is the host's to steer as a USER message, so
+                // nothing is claimed here about text entering the prompt.
+                outcome = { outcome: "applied", cost: free, detail: `question put to the host: ${answered ?? "closed"}` };
               } catch (err) {
                 opts.policy.onEscalationOutcome?.(
                   active,
@@ -283,20 +335,25 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
             case "abort":
               session.control.abort();
               if (opts.abortRestores === true) restoreRequested = true;
+              outcome = { outcome: "applied", cost: free,
+                detail: "abort requested; the session's own end reason is the receipt" };
               break;
-            case "force_replan":
+            case "force_replan": {
               // real as of M6: the loop refuses every tool except `update_plan` until a fresh
               // plan lands. This is why the rung sits above inject_guidance — guidance can be
               // ignored, a gate cannot.
-              session.control.requirePlan(
-                signals.length === 1 && signals[0] !== undefined
-                  ? `${signals[0].type}: ${signals[0].evidence[0] ?? ""}`
-                  : `the supervisor asked for a fresh plan (${signals.map((s) => s.type).join(", ")})`,
-              );
+              const reason = signals.length === 1 && signals[0] !== undefined
+                ? `${signals[0].type}: ${signals[0].evidence[0] ?? ""}`
+                : `the supervisor asked for a fresh plan (${signals.map((s) => s.type).join(", ")})`;
+              session.control.requirePlan(reason);
+              // A gate is not prompt text: the reason reaches the model only if it tries a tool.
+              outcome = { outcome: "applied", cost: free, detail: `tools gated until a fresh plan lands — ${reason}` };
               break;
+            }
             case "run_reviewer": {
               if (opts.reviewer === undefined) {
                 report("apply", new Error("run_reviewer was reached with no reviewer attached; nothing was reviewed"));
+                outcome = { outcome: "unavailable", cost: free, detail: "no reviewer is attached; nothing was reviewed" };
                 break;
               }
               const review = await runAuxiliary("reviewer", async (call, start) => {
@@ -308,24 +365,32 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                     attempts,
                     ...(opts.memoryIndex === undefined ? {} : { memoryIndex: opts.memoryIndex }),
                   }, call);
-              });
-              if (detached || state.ended || lifetime.signal.aborted) break;
-              if (review.guidance.trim() === "") break;
+              }, runId => { auxiliaryId = runId; });
+              if (detached || state.ended || lifetime.signal.aborted) {
+                outcome = { outcome: "failed", cost: auxiliaryCost(),
+                  detail: "the observer closed before the review could be applied" };
+                break;
+              }
+              if (review.guidance.trim() === "") {
+                outcome = { outcome: "no-action", cost: auxiliaryCost(), detail: "the reviewer returned no guidance" };
+                break;
+              }
               // the reviewer's product is guidance, so it lands through the same `steer` channel
               // as inject_guidance — a better message, not a different mechanism
               const options =
                 review.directions.length === 0
                   ? ""
                   : `\n\nCandidate directions:\n${review.directions.map((d) => `- ${d}`).join("\n")}`;
-              session.control.steer(
-                `[supervisor: reviewer] ${review.diagnosis}\n\n${review.guidance}${options}`,
-                "supervisor",
-              );
+              const guidance = `[supervisor: reviewer] ${review.diagnosis}\n\n${review.guidance}${options}`;
+              session.control.steer(guidance, "supervisor");
+              outcome = { outcome: "queued", cost: injectedCost(guidance, auxiliaryId),
+                detail: "reviewer guidance queued for the next turn boundary" };
               break;
             }
             case "run_grader": {
               if (opts.grader === undefined) {
                 report("apply", new Error("run_grader was reached with no grader attached; nothing was graded"));
+                outcome = { outcome: "unavailable", cost: free, detail: "no grader is attached; nothing was graded" };
                 break;
               }
               const grade = await runAuxiliary("grader", async (call, start) => {
@@ -340,14 +405,21 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                     evidence: evidence.report(),
                     trajectory: state.recent,
                   }, call);
-              });
-              if (detached || state.ended || lifetime.signal.aborted) break;
+              }, runId => { auxiliaryId = runId; });
+              if (detached || state.ended || lifetime.signal.aborted) {
+                outcome = { outcome: "failed", cost: auxiliaryCost(),
+                  detail: "the observer closed before the grade could be applied" };
+                break;
+              }
               if (!grade.pass && grade.gaps.length > 0) {
-                session.control.steer(
-                  `[supervisor: grader] The work does not yet meet the rubric:\n` +
-                    grade.gaps.map((g) => `- ${g}`).join("\n"),
-                  "supervisor",
-                );
+                const guidance = `[supervisor: grader] The work does not yet meet the rubric:\n` +
+                  grade.gaps.map((g) => `- ${g}`).join("\n");
+                session.control.steer(guidance, "supervisor");
+                outcome = { outcome: "queued", cost: injectedCost(guidance, auxiliaryId),
+                  detail: `graded: ${grade.gaps.length} gap(s) queued as guidance` };
+              } else {
+                outcome = { outcome: "no-action", cost: auxiliaryCost(),
+                  detail: grade.pass ? "the grader passed the work; nothing was injected" : "the grader reported no gaps to inject" };
               }
               break;
             }
@@ -356,9 +428,18 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
                 "apply",
                 new Error(`intervention "${active.type}" is recorded but not applied until a later milestone`),
               );
+              outcome = { outcome: "unavailable", cost: free,
+                detail: `this harness cannot perform "${active.type}"; it was recorded and not applied` };
           }
         } catch (err) {
           report(`apply:${active.type}`, err);
+          outcome = { outcome: "failed", cost: auxiliaryId === undefined ? free : auxiliaryCost(), detail: detailOf(err) };
+        }
+        if (outcome !== null) {
+          // Records after `session.end` are dropped by core so the log's last line stays the end
+          // event; a terminal rung can therefore lose its outcome line, and the session's own end
+          // reason remains the receipt for it.
+          session.control.record({ type: "supervisor.outcome", id, intervention: active.type, ...outcome });
         }
       }
     } } finally {

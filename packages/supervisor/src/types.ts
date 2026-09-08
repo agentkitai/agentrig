@@ -17,6 +17,13 @@ export interface Policy {
   decide(signals: Signal[], state: SupervisorState): Intervention[];
   /** Optional feedback seam for policies whose future choice depends on whether a human answered. */
   onEscalationOutcome?(intervention: Intervention, outcome: EscalationOutcome): void;
+  /**
+   * R17e. Which signal this policy acted on when it built that intervention, so a transcript line
+   * can say what was noticed rather than listing every signal in the batch. Optional: a policy
+   * that cannot attribute exactly says nothing and the observer records the whole batch instead,
+   * which is a weaker claim but never a wrong one.
+   */
+  cause?(intervention: Intervention): Signal | undefined;
 }
 
 export interface Detachable {

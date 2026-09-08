@@ -429,6 +429,12 @@ Duplicate captures (`session_end` firing twice on a growing transcript) are dete
 
 **Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
 
+R17e makes both halves of retrieval visible: a recall renders as the page and the claim that
+matched rather than a result count, and the index injected into the system prompt announces itself
+in the transcript. `memory` owns the retrieval display format on both sides (written and read back
+in one module), so returned backend text cannot forge a page entry, and a failed or denied call
+renders no recall claim at all.
+
 **Promotion is structural.** "Never promote anything derived from a single session" is enforced
 by runtime-backed, claim-level evidence, not citation counts (H4). Every claim needs at least two
 independent located observations from validated immutable session logs. Related lineage and
@@ -707,6 +713,14 @@ Reports use the UI/stderr and separate undo audit, not events after the original
 TUI clears automatic resume state after success. See [R4c](plans/R4c.md); this does not implement
 the independent mid-session `checkpoint_rollback` rung.
 
+R17e separates the decision from its effect, because the observer records an intervention *before*
+it applies one: `supervisor.intervention` gains an `id` and `noticed` (the signal the policy acted
+on), and a new `supervisor.outcome` record reports `queued` / `applied` / `no-action` /
+`unavailable` / `failed` with a cost. Queued is not applied — the `steer` event is the only receipt
+that guidance reached the model — and an LLM-backed rung's cost names its `auxiliary.usage` record
+instead of restating consumption that may be unknown. Both are `SupervisorRecord` variants, so the
+observer's write gate is unchanged. See [R17e](plans/R17e.md) for the rendering and its limits.
+
 A rung is **skipped when the harness cannot perform it** rather than parked on, so one ladder
 definition is correct at every milestone: in M4 (no reviewer, no pre-tool hook, and no human in a
 headless run) it collapses to inject_guidance → abort, and it deepens on its own as M6 attaches a
@@ -884,7 +898,14 @@ the displayed snapshot. Missing receipts leave a fixed uncertainty marker, never
 cleared or used to retry execution. Main/auxiliary usage and unknown cost remain distinct.
 See [R7c](plans/R7c.md) for retention, accounting and cooperative crash/recovery limits.
 
-- `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/resume`
+R17e adds idle-or-running `/why`: a local fold over the events this process already received that
+explains the guidance actually injected into the last turn — its origin, the supervisor decision and
+signal behind it, its cost — plus the automatic memory context and the memory tool results the sent
+request carried, read from that turn's `context.manifest`. Queued-but-undelivered guidance is
+reported as such, never as injected. No provider call, no file read; it resets with the
+conversation. See [R17e](plans/R17e.md).
+
+- `agentrig` — interactive Ink TUI: streams events, permission prompts, `/memory`, `/dream`, `/supervisor`, `/plan`, `/why`, `/resume`
 - `agentrig run "<task>" [--headless --json]` — scriptable; emits event JSONL to stdout
 - `agentrig dream [--review|--auto] [--scope project|global] [--since <n>]`
 - `agentrig sessions ls|show <id>|resume <id>`

@@ -31,6 +31,7 @@ export * from "./tool-result-eviction.js";
 export * from "./extensions.js";
 export * from "./repo-map.js";
 export * from "./context-manifest.js";
+export * from "./guidance.js";
 export * from "./providers/anthropic.js";
 export * from "./providers/openai.js";
 export * from "./providers/openai-chatgpt.js";

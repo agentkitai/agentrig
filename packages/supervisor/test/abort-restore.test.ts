@@ -94,7 +94,9 @@ it("never restores early and joins an already-requested restoration even after d
   await vi.waitFor(()=>expect(restore).toHaveBeenCalledOnce());expect(signal?.aborted).toBe(false);
   let joined=false;void observer.done.then(()=>{joined=true;});await Promise.resolve();expect(joined).toBe(false);
   release();await observer.done;expect(joined).toBe(true);
-  expect(record.mock.calls.every(([e])=>e.type==="supervisor.signal" || e.type==="supervisor.intervention")).toBe(true);
+  expect(record.mock.calls.every(([e])=>e.type==="supervisor.signal" || e.type==="supervisor.intervention" || e.type==="supervisor.outcome")).toBe(true);
+  // R17e: an abort is recorded as applied, and the session's own end reason remains the receipt.
+  expect(record.mock.calls.some(([e])=>e.type==="supervisor.outcome" && e.intervention==="abort" && e.outcome==="applied")).toBe(true);
 });
 
 it("rejects a missing restore seam and carries the options through supervise",async()=>{

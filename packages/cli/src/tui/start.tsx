@@ -125,6 +125,9 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   if (built.selection !== undefined) controller.setProviderSelection(built.selection);
   controller.configureStatus(() => ({ posture: skipsPermissions(opts) ? "yolo" : "ask", sandbox: opts.sandbox ?? "none" }));
   controller.setSkills(built.skills);
+  // What memory actually injects into the system prompt, so `/why` can verify it against the
+  // request manifest rather than re-reading a wiki that may have changed since.
+  controller.setMemoryIndex(built.memoryIndex);
   if (built.refreshSkills !== undefined) controller.setSkillRefresh(built.refreshSkills);
   controller.setCommands(built.commands ?? []);
   {

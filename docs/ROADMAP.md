@@ -992,6 +992,11 @@ appears as a transcript line and `/why` names it. R17f — the matrix is rerun o
 agreed budget and the resulting defaults are the ones shipped. R17g — the follow-ups section is
 empty or contains only declined items with reasons.
 
+R17e implementation is complete on branch `feat/r17e-visible-guidance` (base main `4af5d21`),
+built by Claude/operator outside AgentRig — R17a's dogfood gate is unmet for it and named here
+rather than silently skipped. It is **not delivered** until its PR is reviewed and merged with green
+exact-head and post-merge CI. Contract, limits and mutation receipts: [R17e](plans/R17e.md).
+
 Renunciation: no new capability in this band. Every row makes something that exists default,
 measured, visible or cheaper. Security defaults move only toward less prompting for
 already-authorised operations, never toward wider authority.

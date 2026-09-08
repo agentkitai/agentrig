@@ -37,6 +37,7 @@ import {
   renderSystemBlocks,
   type PromptBlock,
 } from "./context-manifest.js";
+import { undeliveredSteerMessage } from "./guidance.js";
 
 export interface Budget {
   maxTurns?: number;
@@ -1197,7 +1198,9 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
       for (const s of pendingSteers.splice(0)) {
         await emit({
           type: "error",
-          message: `steer from ${s.source} not delivered (session ended): ${s.message}`,
+          // Shared with `GuidanceLog`, which reads this back: `/why` must never report guidance
+          // that never reached a turn boundary as injected.
+          message: undeliveredSteerMessage(s.source, s.message),
           fatal: false,
         }).catch(() => {});
       }

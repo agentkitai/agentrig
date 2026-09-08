@@ -1,6 +1,137 @@
 import { describe, expect, it } from "vitest";
-import { HarnessEvent } from "@agentkitai/agentrig-core";
-import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderEvent } from "../src/render.ts";
+import { GuidanceLog, HarnessEvent, contentHash } from "@agentkitai/agentrig-core";
+import { AssistantText, AuxiliaryText, MemoryContextText, RecallText, formatUsage, renderChatEvent,
+  renderEvent, renderWhy } from "../src/render.ts";
+
+const event = (payload: Record<string, unknown>, seq = 1, sessionId = "s"): HarnessEvent =>
+  HarnessEvent.parse({ seq, sessionId, ts: 1, ...payload });
+
+describe("R17e visible supervisor and memory", () => {
+  const decision = {
+    type: "supervisor.intervention", id: "abcdef01",
+    intervention: { type: "inject_guidance", message: "[supervisor: loop] change approach" },
+    noticed: [{ type: "loop", confidence: 0.9, evidence: ["inputHash=abc x3"], window: [1, 9] }],
+  };
+  const outcome = {
+    type: "supervisor.outcome", id: "abcdef01", intervention: "inject_guidance", outcome: "queued",
+    detail: "queued for the next turn boundary", cost: { modelCalls: "none", injected: { bytes: 34, hash: "0".repeat(16) } },
+  };
+
+  it("puts the notice, the action and the known cost where a reader will see them", () => {
+    expect(renderChatEvent(event(decision))).toContain("⚠ supervisor: noticed loop (0.90): inputHash=abc x3 → inject_guidance");
+    expect(renderChatEvent(event(outcome))).toBe(
+      "  ↳ inject_guidance queued — queued for the next turn boundary · no model call · +34 B of prompt (~9 est. tokens, not billed tokens)");
+    // the trace keeps the same facts, and says a decision is not yet an effect
+    expect(renderEvent(event(decision))).toContain("(decision, not yet applied)");
+    expect(renderEvent(event(outcome))).toContain("inject_guidance id=abcdef01 queued");
+  });
+
+  it("points an auxiliary rung at its usage record rather than inventing a number for it", () => {
+    const line = renderChatEvent(event({ ...outcome, intervention: "run_reviewer",
+      cost: { modelCalls: "auxiliary", auxiliaryId: "1234567890abcdef" } }))!;
+    expect(line).toContain("1 auxiliary model call [12345678], usage in its own record");
+    expect(line).not.toContain("B of prompt");
+  });
+
+  it("degrades to the pre-R17e rendering for a log with no recorded notice", () => {
+    const { noticed: _noticed, id: _id, ...legacy } = decision;
+    expect(renderChatEvent(event(legacy))).toBe("⚠ supervisor: inject_guidance — [supervisor: loop] change approach");
+  });
+
+  it("flattens control characters out of injected text shown back to the user", () => {
+    const steer = renderChatEvent(event({ type: "steer", source: "supervisor", message: "before\u001b[2Jafter" }))!;
+    // the escape byte itself is gone; what is left is inert printable text
+    expect(steer).not.toContain("\u001b");
+    expect(steer).toContain("before [2Jafter");
+    const rung = renderChatEvent(event({ type: "supervisor.intervention",
+      intervention: { type: "inject_guidance", message: "guidance\u001b[2Jhidden" } }))!;
+    expect(rung).not.toContain("\u001b");
+  });
+
+  it("flattens control characters out of a notice, so evidence cannot rewrite the terminal", () => {
+    const line = renderChatEvent(event({ ...decision,
+      noticed: [{ type: "loop", confidence: 0.9, evidence: ["first\u001b[2Jsecond\nthird"], window: [1, 2] }] }))!;
+    expect(line).not.toContain("\u001b");
+    expect(line.split("\n")).toHaveLength(1);
+  });
+
+  it("renders a recall as page and claim, and says nothing at all when the call failed", () => {
+    const fold = new RecallText();
+    expect(fold.push(event({ type: "tool.call", id: "m1", name: "memory_search", input: { query: "retry" }, inputHash: "h" }))).toEqual([]);
+    const lines = fold.push(event({ type: "tool.result", id: "m1", ok: true, durationMs: 2,
+      display: "concepts/retry-policy.md [index]\n  - [observed] Retries apply per request" }, 2));
+    expect(lines[0]).toContain('✻ memory recall (memory_search) "retry"');
+    expect(lines[1]).toContain("concepts/retry-policy.md [index] — - [observed] Retries apply per request");
+    expect(lines.join("\n")).not.toMatch(/\b1 result/);
+
+    const failed = new RecallText();
+    failed.push(event({ type: "tool.call", id: "m2", name: "memory_search", input: { query: "x" }, inputHash: "h" }));
+    expect(failed.push(event({ type: "tool.result", id: "m2", ok: false, durationMs: 1, display: "boom" }, 2))).toEqual([]);
+  });
+
+  it("never pairs a recall across sessions or with an unmatched result", () => {
+    const fold = new RecallText();
+    fold.push(event({ type: "tool.call", id: "m1", name: "memory_search", input: { query: "q" }, inputHash: "h" }, 1, "one"));
+    expect(fold.push(event({ type: "tool.result", id: "m1", ok: true, durationMs: 1, display: "a.md [index]\n  claim" }, 2, "two"))).toEqual([]);
+    const other = new RecallText();
+    expect(other.push(event({ type: "tool.result", id: "unknown", ok: true, durationMs: 1, display: "a.md [index]\n  claim" }))).toEqual([]);
+  });
+
+  it("announces the memory block the harness injects, once, and again only when it changes", () => {
+    const fold = new MemoryContextText();
+    const manifest = (hash: string, turn: number) => event({ type: "context.manifest", turn, requestHash: "r", blocks: [
+      { source: "memory_index", origin: "memory:wiki-index", authority: "data", hash, reason: "index", bytes: 40, tokens: 10, disposition: "kept" },
+    ] }, turn);
+    expect(fold.push(manifest("h1", 1))[0]).toContain("✻ memory in the prompt: index injected — 40 B, ~10 est. tokens");
+    expect(fold.push(manifest("h1", 2))).toEqual([]);
+    expect(fold.push(manifest("h2", 3))[0]).toContain("index changed");
+    expect(fold.push(event({ type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" }, 4))).toEqual([]);
+    expect(fold.push(manifest("h2", 1))[0]).toContain("index injected");
+  });
+
+  it("explains nothing at all rather than guessing when no turn has run", () => {
+    expect(renderWhy(null)).toContain("no turn has run in this conversation yet");
+  });
+
+  it("quotes the injected index only when it hashes to the block the request carried", () => {
+    const log = new GuidanceLog();
+    const index = "## Project memory (index)\n- concepts/a.md — a";
+    for (const payload of [
+      { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" },
+      { type: "turn.start", n: 1 },
+      { type: "context.manifest", turn: 1, requestHash: "r", blocks: [
+        { source: "memory_index", origin: "memory:wiki-index", authority: "data", hash: contentHash(index),
+          reason: "index", bytes: 40, tokens: 10, disposition: "kept" },
+      ] },
+    ]) log.push(event(payload as Record<string, unknown>));
+    const explained = log.explainLast()!;
+
+    const matching = renderWhy(explained, { memoryIndex: index });
+    expect(matching).toContain("content verified against this request's hash");
+    expect(matching).toContain("- concepts/a.md — a");
+    // a view holding different text says so instead of quoting what was never sent
+    const stale = renderWhy(explained, { memoryIndex: "## Project memory (index)\n- concepts/b.md — b" });
+    expect(stale).toContain("content not held by this view");
+    expect(stale).not.toContain("concepts/b.md");
+    expect(renderWhy(explained)).toContain("content not held by this view");
+  });
+
+  it("discloses the lines it left out of a long quotation rather than trailing off", () => {
+    const log = new GuidanceLog();
+    const message = Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n");
+    for (const payload of [
+      { type: "session.start", task: "t", cwd: "/w", provider: "p", model: "m" },
+      { type: "turn.start", n: 1 },
+      { type: "steer", source: "user", message },
+      { type: "turn.start", n: 2 },
+    ]) log.push(event(payload as Record<string, unknown>));
+
+    const why = renderWhy(log.explainLast()!, { maxLines: 3 });
+    expect(why).toContain("| line 2");
+    expect(why).not.toContain("| line 3");
+    expect(why).toContain("…17 more line(s) omitted here; the session log has the full text");
+  });
+});
 
 it.each([null, true, false])("renders coordinator evaluation outcomes distinctly from advisory assessment (%s)", advisoryPass => {
   const event = HarnessEvent.parse({ type: "eval.result", seq: 1, sessionId: "coordinator", ts: 1,

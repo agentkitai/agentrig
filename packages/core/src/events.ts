@@ -126,6 +126,74 @@ export const Intervention = z.discriminatedUnion("type", [
 export type Intervention = z.infer<typeof Intervention>;
 
 /**
+ * The rung an outcome reports on. Kept as its own enum rather than derived from `Intervention`, so
+ * a new rung is a deliberate edit in both places; `events.test.ts` pins that the two agree.
+ */
+export const InterventionType = z.enum([
+  "inject_guidance", "force_replan", "run_grader", "run_reviewer", "checkpoint_rollback", "escalate", "abort",
+]);
+export type InterventionType = z.infer<typeof InterventionType>;
+
+/**
+ * R17e. What one intervention actually cost, in the only terms the harness can honestly state.
+ *
+ * `modelCalls: "none"` is a fact about the heuristic rungs — a detector and the ladder are local
+ * computation, so there is nothing to bill. `"auxiliary"` means an LLM-backed rung ran, and the
+ * consumption lives in the `auxiliary.usage` record named by `auxiliaryId`: reported usage there
+ * may be incomplete or absent, and unknown must stay unknown, so it is deliberately NOT copied or
+ * summed here. `injected` measures the text queued for the model prompt — bytes on the wire and a
+ * digest of them, never billed tokens, which only the provider's own usage can establish.
+ */
+export const InterventionCost = z.object({
+  modelCalls: z.enum(["none", "auxiliary"]),
+  auxiliaryId: z.string().min(1).max(128).optional(),
+  injected: z.object({
+    bytes: z.number().int().nonnegative(),
+    /** First 16 hex characters of SHA-256 over the exact injected UTF-8 text (`contentHash`). */
+    hash: z.string().regex(/^[a-f0-9]{16}$/),
+  }).optional(),
+});
+export type InterventionCost = z.infer<typeof InterventionCost>;
+
+const SupervisorSignalEvent = z.object({ type: z.literal("supervisor.signal"), signal: Signal });
+
+/**
+ * A DECISION, not proof that anything happened: the observer records it before it applies the
+ * rung (PLAN §4.4). `supervisor.outcome` reports what applying it actually did.
+ *
+ * `noticed` carries the signal(s) the policy acted on, so one transcript line can say what was
+ * noticed and what was done without a reader having to correlate two events across an await
+ * boundary. It duplicates the adjacent `supervisor.signal` records on purpose and is bounded.
+ */
+const SupervisorInterventionEvent = z.object({
+  type: z.literal("supervisor.intervention"),
+  intervention: Intervention,
+  /** Correlates this decision with its `supervisor.outcome`. Absent on logs written before R17e. */
+  id: z.string().min(1).max(128).optional(),
+  noticed: z.array(Signal).max(16).optional(),
+});
+
+/**
+ * R17e. What applying a recorded intervention did, so "recorded" is never read as "applied".
+ *
+ * - `queued`: text was handed to `steer` and lands at the next turn boundary. The `steer` event is
+ *   the only proof it was delivered; a session that ends first records a non-delivery `error`.
+ * - `applied`: the effect happened synchronously (a plan gate went up, an abort was requested, a
+ *   human was asked and answered).
+ * - `no-action`: the rung ran and produced nothing to inject (an empty reviewer, a passing grade).
+ * - `unavailable`: the harness cannot perform this rung (no escalation handler, no reviewer).
+ * - `failed`: applying it threw, timed out, or was cancelled.
+ */
+const SupervisorOutcomeEvent = z.object({
+  type: z.literal("supervisor.outcome"),
+  id: z.string().min(1).max(128),
+  intervention: InterventionType,
+  outcome: z.enum(["queued", "applied", "no-action", "unavailable", "failed"]),
+  detail: z.string().max(4096).optional(),
+  cost: InterventionCost,
+});
+
+/**
  * The only payloads an out-of-band observer may append through `SessionControl.record`.
  * Validated there: `serializeEvent` is a bare `JSON.stringify`, so an unvalidated payload (a
  * detector emitting `confidence: 1.4`, or `NaN`, which stringifies to `null`) would write a line
@@ -134,8 +202,9 @@ export type Intervention = z.infer<typeof Intervention>;
  */
 export const SupervisorRecord = z.discriminatedUnion("type", [
   AuxiliaryUsageRecord,
-  z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
-  z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+  SupervisorSignalEvent,
+  SupervisorInterventionEvent,
+  SupervisorOutcomeEvent,
 ]);
 export type SupervisorRecord = z.infer<typeof SupervisorRecord>;
 
@@ -442,8 +511,9 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("steer"), source: z.enum(["user", "supervisor", "hook"]), message: z.string(), context: InstructionContextSchema.optional() }),
   z.object({ type: z.literal("memory.note"), scope: z.enum(["project", "global"]), path: z.string() }),
-  z.object({ type: z.literal("supervisor.signal"), signal: Signal }),
-  z.object({ type: z.literal("supervisor.intervention"), intervention: Intervention }),
+  SupervisorSignalEvent,
+  SupervisorInterventionEvent,
+  SupervisorOutcomeEvent,
   AuxiliaryUsageRecord,
   z.object({ type: z.literal("error"), message: z.string(), fatal: z.boolean() }),
 ]);

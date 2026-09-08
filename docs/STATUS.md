@@ -1,5 +1,35 @@
 # Status
 
+## Current — R17e: visible supervisor and memory (2026-09-08)
+
+Correction to the record below, which was written while #267 was still open and is now stale as a
+statement of current scope: the seventeen-issue sweep is **finished**. All 17 issues are closed,
+PRs #280–#288 are merged, main is `4af5d218ef1334382bde06599023c0236de2cbf1`, and its post-merge CI
+`34265831646` with structure `34265831694` is green at **3526 passed / 4 skipped / 225 files**.
+Nothing below is rewritten — it stays as history, including the failed receipts it retains.
+
+Current work is ROADMAP §5 row 17's **R17e — visible supervisor and memory**, on branch
+`feat/r17e-visible-guidance` from that main. Builder: **Claude/operator outside AgentRig**; R17a's
+dogfood mandate is unmet for this row and is recorded, not skipped silently. The AgentRig conductor
+remains stopped; no train was restarted, no issue was filed, and no live model or E3 spend occurred.
+
+Each supervisor intervention now renders what it noticed and which rung it chose, with a separate
+outcome line saying whether that rung was queued, applied, unavailable or failed and what it cost —
+"no model call" for the heuristic rungs, a pointer to the `auxiliary.usage` record for the LLM-backed
+ones, and injected prompt bytes as an estimate that is never presented as billed tokens. `/why`
+explains the guidance actually injected into the last turn, the decision and signal behind it, and
+the memory the request carried, separating the automatically injected index from memory tool
+results; queued-but-undelivered guidance is reported as undelivered. Memory recall renders the page
+and the claim instead of a count, on both the TUI and headless `run`. The event schema additions are
+optional fields plus one new observer record; no tool gained emission authority and no permission,
+provenance or log-immutability behaviour changed. Contract and limits: [R17e](plans/R17e.md).
+
+Verification on this branch, private `/var/tmp` TMPDIR, actual preflight: build / test / typecheck
+**0 / 0 / 0**, **3563 passed / 4 skipped / 229 files** (main `4af5d21` was 3526 / 4 / 225). Eleven
+removed-wiring mutants were applied one at a time and all eleven were killed by named tests, with
+each test subprocess joined before the source was restored. **R17e is not delivered**: it stays unmarked in ROADMAP until its PR is reviewed and
+merged with green exact-head and post-merge CI verified by root.
+
 ## Issue sweep completion record — 2026-09-08
 
 The seventeen-issue sweep has sixteen issues closed and only #267 awaiting this final delivery.

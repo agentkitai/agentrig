@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AnyTool, ToolContext } from "@agentkitai/agentrig-core";
 import { pagePath, serializePage } from "./page.js";
 import { unionRetrieve, withBackendRecall } from "./search.js";
+import { formatRecallHits } from "./recall.js";
 import type { MemoryBackend } from "./backend.js";
 import { recheckStoredPins } from "./pins.js";
 import type { FileMemoryStore } from "./store.js";
@@ -123,9 +124,10 @@ export function memoryTools(opts: MemoryToolsOptions): AnyTool[] {
             ? { ref: h.ref, via: h.via, snippet: h.text, ...(h.page === undefined ? {} : { page: h.page }) }
             : { path: h.page.path, via: h.via, snippet: h.snippet },
         ),
-        display: hits
-          .map((h) => (h.via === "backend" ? `${h.ref} [backend]\n  ${h.text}` : `${h.page.path} [${h.via}]\n  ${h.snippet}`))
-          .join("\n"),
+        // One page/claim pair per hit, in the format `recallEvidence` reads back for the
+        // transcript. A backend's returned text is flattened to one line here: a snippet
+        // containing a newline could otherwise forge a second page entry in this display.
+        display: formatRecallHits(hits),
       };
     },
   };
