@@ -148,6 +148,19 @@ each exited **0**: **3485 passed / 4 skipped / 222 files**. No test deadline or 
 Independent review, exact-head CI and post-merge CI remain required and are not claimed here;
 these are local implementation and test results only, and neither issue is closed by them.
 
+PR #282 independent Codex review reproduced a genuine partial-output attribution bug: raw
+byte-truncated output from non-sink checkers could turn `nested/target.ts` into `target.ts`.
+The operator repaired this before merge: only the line-bounded sink can supply partial records;
+incomplete raw output retains its prior refusal. Two real-child regressions (`tsc` and `go-vet`)
+failed with misattributed entries before the guard, and pass after it. An initial test draft hit
+the argv bound rather than the bug; only the corrected, child-generated output is fail-first
+evidence. Full repaired build/test/typecheck each exit **0**, **3487 passed / 4 skipped / 222 files**.
+No new issue or general review cycle was created for this in-PR correction.
+
+The initial macOS CI at `87960d4` failed the unchanged supervisor escalation expiry assertion
+(`attach.test.ts`, no timeout diagnostic observed), not a compiler test. That evidence is retained
+with the existing CI fixture investigation; a subsequent green run is not a claim to fix it.
+
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work

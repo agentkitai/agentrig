@@ -50,7 +50,7 @@ export async function unchanged(changed: Changed): Promise<boolean> {
   } catch { return false; } finally { await file?.close(); }
 }
 
-interface Observed { text: string; exitCode: number | null; incomplete: boolean; aborted: boolean; reason: string; sameCommand: boolean; touchedFileListed?: boolean }
+interface Observed { text: string; exitCode: number | null; incomplete: boolean; aborted: boolean; partialSafe: boolean; reason: string; sameCommand: boolean; touchedFileListed?: boolean }
 export function checkerTool(checker: DiagnosticChecker, changedPath: string): { tool: AnyTool; input: unknown; observed: () => Observed | undefined; id: string; join: () => Promise<void> } {
   let observed: Observed | undefined;
   let settled = Promise.resolve();
@@ -80,7 +80,7 @@ export function checkerTool(checker: DiagnosticChecker, changedPath: string): { 
       const output = registry.read(job.id)!;
       const reason = ctx.signal.aborted ? "checker aborted" : timedOut ? "checker timed out" : record.spawnError !== undefined
         ? "checker failed to start" : record.outputError ?? (output.droppedBytes > 0 ? "checker output exceeded bound" : record.exitCode === null ? "checker ended without exit status" : "checker completed");
-      observed = { text: sink?.text ?? output.output, exitCode: record.exitCode, reason, aborted: ctx.signal.aborted,
+      observed = { text: sink?.text ?? output.output, exitCode: record.exitCode, reason, aborted: ctx.signal.aborted, partialSafe: sink !== undefined,
         incomplete: ctx.signal.aborted || timedOut || record.spawnError !== undefined || record.outputError !== undefined || output.droppedBytes > 0 || record.exitCode === null,
         sameCommand, ...(sink === undefined ? {} : { touchedFileListed: sink.touchedFileListed }) };
       // A completed compiler reporting errors is an observation, not a failed tool dispatch.
@@ -103,6 +103,9 @@ export async function diagnosticReport(changed: Changed, checker: DiagnosticChec
   if (!observed.sameCommand) return { ...report, status: "incomplete", reason: "checker command changed by hook" };
   // A cancelled turn stops here rather than spending canonicalization on output nobody awaits.
   if (observed.aborted) return { ...report, status: "incomplete", reason: observed.reason };
+  // Only the line-bounded sink preserves whole diagnostic records on failure. A raw registry
+  // tail can start midway through a filename, falsely attributing another file's error here.
+  if (observed.incomplete && !observed.partialSafe) return { ...report, status: "incomplete", reason: observed.reason };
   const entries: Array<{ path: string; line: number; column?: number; code?: string; message: string }> = [];
   let unknown = false;
   // --listFiles is compiler-observed coverage, not a guessed tsconfig traversal.

@@ -140,6 +140,20 @@ it.each([
   expect(events.find(e => e.type === "tool.result" && e.internal !== undefined)).toMatchObject({ ok: status === "changed" });
 });
 
+it.each(["tsc", "go-vet"] as const)("does not attribute a byte-truncated %s filename to the touched file", async parser => {
+  const line = parser === "tsc" ? "target.ts(1,1): error TS1234: other file " : "target.ts:1:1: other file ";
+  // The 4096-byte tail starts after 'nested/': parsing it would invent a touched-file error.
+  const script = `process.stdout.write('nested/' + ${JSON.stringify(line)}.padEnd(4095, 'x') + '\\n')`;
+  const config = scripted(script, { maxOutputBytes: 4096 });
+  config[0]!.parser = parser;
+  const f = await fixture(config);
+  await mkdir(join(f.cwd, "nested")); await writeFile(join(f.cwd, "nested/target.ts"), "other file");
+  f.turns.push([call("write_file", "edit", { path: "target.ts", content: "written" }), { type: "stop", reason: "tool_use" }]);
+  const { events } = await run(f);
+  expect(diagnosticResult(events).diagnostics).toMatchObject({ status: "incomplete", entries: [],
+    reason: "checker output exceeded bound", otherFileCount: 0 });
+});
+
 it("external ancestry still requires fresh exec approval after a successful contained write", async () => {
   const f = await fixture(scripted('require("fs").writeFileSync("checker-ran", "yes")'));
   f.agent.tools.push({ name: "external", description: "external fixture", permission: "read", effects: "read-only", resultSource: "external",
@@ -229,7 +243,7 @@ async function partialReport(over: Partial<Observed>) {
   await writeFile(join(cwd, "target.ts"), text);
   const changed = { path: join(cwd, "target.ts"), contentHash: contentHash(text) };
   const observed: Observed = { text: `${changed.path}(1,1): error TS2322: captured before the sink failed\n`,
-    exitCode: 2, incomplete: true, aborted: false, sameCommand: true, touchedFileListed: false,
+    exitCode: 2, incomplete: true, aborted: false, partialSafe: true, sameCommand: true, touchedFileListed: false,
     reason: "checker coverage path could not be verified", ...over };
   return diagnosticReport(changed, coverageChecker, cwd, "call-1", observed);
 }
