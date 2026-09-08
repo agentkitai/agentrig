@@ -44,5 +44,5 @@ for (const mode of ['omitted','false']) {
   await capture;
   if (captureError !== undefined) result.captureError = captureError;
   console.log(JSON.stringify(result));
-  if(result.error || captureError !== undefined) process.exit(1);
+  if(result.error || captureError !== undefined) { process.exitCode = 1; break; }
 }

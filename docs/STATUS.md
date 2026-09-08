@@ -103,6 +103,26 @@ Before the fix, three of the first four tests failed (help status and lost error
 records); afterward all five tests pass. No live calls were made in these tests.
 The subprocess regressions are also included in the Windows CI seam suite.
 
+The independent [final PR #276 review](https://github.com/agentkitai/agentrig/pull/276#issuecomment-5585212045)
+also reverted the final five-test probe to the earlier script and observed **four
+failures / one pass**: help status, both error-record cases and unrecorded model
+selection. This later evidence supplements, rather than replaces, the staged
+three-of-four history above (#279).
+
+Existing-issue followups **#277/#278/#279** are implemented by **Codex/operator
+outside the train** on `fix/followups-probe-evidence`. Stop reasons are now asserted
+for both successful wire controls and both failure shapes. Diagnostic failure sets
+`process.exitCode = 1` and breaks the loop so pending stdout drains without a second
+call. A deterministic deferred-write subprocess regression fails on the old forced
+exit (empty JSON output) and passes after the fix. This simulates pending pipe
+output; it does not claim that the original platform-specific truncation hypothesis
+was observed in production. Removing stop accumulation and removing the fail-fast
+break each fail the focused suite; restored source passes all six tests. The archived
+original probe is unchanged, and all verification is offline. Review and hosted CI
+receipts belong to this batch's PR; no other open issue is claimed fixed.
+Local build/test/typecheck each exit 0: **3469 passed / 4 skipped in 222 files**
+on base `4320a83`. Tests retain the offline provider stub and Windows coverage.
+
 Exact focused command: `pnpm exec vitest run packages/core/test/openai-chatgpt.test.ts packages/core/test/subagent.test.ts packages/core/test/agent-roles.test.ts packages/core/test/permission-grants.test.ts`.
 
 R17c [PR #269](https://github.com/agentkitai/agentrig/pull/269) landed at
