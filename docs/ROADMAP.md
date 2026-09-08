@@ -1539,10 +1539,19 @@ need an explicit budget; neither prevents continuing other actionable entries.
   Consider bounded replay of a recorded seal-refusal reason and retained checkpoint
   references when explicit undo refuses; this diagnostic replay is not implemented.
   This is an end-of-roadmap follow-up, not an added R17 gate or subrow.
-- [ ] Fixture temporary-root ancestry isolation ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
+- [x] Fixture temporary-root ancestry diagnosis and preflight ([feel #237](https://github.com/agentkitai/agentrig/issues/237)):
   detect unexpected ancestor Git markers before fixtures grant trust or write state.
   Private controls disprove the original `.agentrig`-only explanation; the historical
   cause and owner remain unknown. Preserve product trust boundaries and non-Git checks.
+  Implemented by **Claude Code outside the train**, with operator corrections, on `fix/followups-test-environment`:
+  `test/fixture-preflight.mjs` fails before the suite on a `.git` file, directory, symlink or
+  unreadable probe at the effective temporary directory or any lexical/canonical ancestor, wired as
+  `pnpm test:preflight` and as a silent guard in `pnpm test`, with the sandbox limitation and the
+  review-versus-execution rules in [docs/TESTING.md](TESTING.md). This completes the bounded
+  diagnostic/preflight resolution recorded in the issue, not a claim to identify every historical
+  failure's cause or owner. No marker is deleted or bypassed, no tests skipped, and product trust
+  remains fail-closed. Later host observations and shared `.agentrig` state do not prove the
+  superseded marker hypothesis. Completion reaches main through the reviewed green PR.
 - [x] CI fixture performance and owned cleanup ([feel #240](https://github.com/agentkitai/agentrig/issues/240), [feel #244](https://github.com/agentkitai/agentrig/issues/244)):
   investigate measured slow phases and ensure owned work settles before cleanup.
   Preserve real aggregate-cap, attachment and external-expansion inputs/assertions; do not blindly increase deadlines,
@@ -1563,10 +1572,24 @@ need an explicit budget; neither prevents continuing other actionable entries.
   exact pinned bytes, exclusive destination/receipt creation and existing bounds. Implemented
   on `fix/followups-export-transport`; completion reaches main through the reviewed green PR.
   The deterministic pipe-error guard is not a reproduction of the original macOS scheduling.
-- [ ] External-review operational guidance regression coverage ([feel #253](https://github.com/agentkitai/agentrig/issues/253)):
+- [x] External-review operational guidance regression coverage ([feel #253](https://github.com/agentkitai/agentrig/issues/253)):
   pin unchanged delta/base/head reporting and separate reviewer install/worktree instructions
   with stronger operational probes. The #255 execution/isolation repair is landed;
   this remaining coverage improvement is not a newly discovered product defect or R17 gate.
+  Implemented by **Claude Code outside the train** on `fix/followups-test-environment`: the §3
+  delta bullet of `.agentrig/skills/topic/SKILL.md` is sliced out and pinned apart from the §2
+  step 4 full pass, covering the delta echo sentence, the `REVHEAD` echo tuple and the two
+  separate dependency installs. Each of the three documented prose mutants is killed by its own
+  pin and restored; the skill prose is byte-identical. Text pins, not sandboxing.
+  Completion reaches main with the reviewed, green PR merge.
+- [x] CLI-workspace Vitest invocation needs an explicit repository root
+  ([feel #245](https://github.com/agentkitai/agentrig/issues/245)): the shared repository-relative
+  `include` resolved against the caller's cwd, so a workspace-local run exited `No test files
+  found`. Implemented by **Claude Code outside the train** on the same branch: `vitest.config.ts`
+  pins `root` to its own directory, the Windows and web configs inherit it by spread, and a real
+  subprocess regression runs one targeted core test from `packages/cli` — never a recursive full
+  suite. The old config fails both new assertions. Valid invocations are centralized in
+  [docs/TESTING.md](TESTING.md). Completion reaches main with the reviewed, green PR merge.
 - [x] Preserve partial compiler errors with incomplete coverage ([review residual #263](https://github.com/agentkitai/agentrig/issues/263)):
   retain useful touched-file diagnostics when metadata becomes unknown, without
   weakening finite bounds, cancellation, coverage checks or fail-closed status.

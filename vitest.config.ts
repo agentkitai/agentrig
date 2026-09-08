@@ -1,10 +1,16 @@
 import { defineConfig } from "vitest/config";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkg = (name: string) =>
   fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url));
 
 export default defineConfig({
+  // `include` below is repository-relative, so the root has to be this file's directory rather than
+  // the caller's cwd: a `vitest run` from `packages/cli` otherwise resolved the glob under that
+  // package and exited "No test files found" (feel #245). Derived from `import.meta.url`, so the
+  // configs that spread this one — Windows and web — inherit the same root.
+  root: dirname(fileURLToPath(import.meta.url)),
   test: {
     include: ["packages/*/test/**/*.test.ts"],
     // Ink disables the render path the TUI frame tests assert on whenever `CI` is set, which is

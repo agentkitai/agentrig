@@ -13,6 +13,8 @@ import base from "./vitest.config.js";
  * runs single-worker to keep its cap fixture apart from real npm packing.
  */
 export const windowsCoverage = [
+  "packages/cli/test/fixture-preflight.test.ts",
+  "packages/cli/test/workspace-vitest-root.test.ts",
   "packages/cli/test/permission-friction.test.ts",
   "packages/cli/test/tui-frame.test.ts",
   "packages/core/test/injection-fixtures.test.ts",
