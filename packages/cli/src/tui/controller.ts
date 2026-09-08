@@ -10,6 +10,7 @@ import type {
   RunOptions,
   Signal,
   Skill,
+  SkillCatalogUpdate,
   ExtensionCommand,
   InputAttachment,
   ProviderSelectionInfo,
@@ -135,6 +136,12 @@ export function applyChildEvent(children: readonly TuiChild[], e: HarnessEvent):
     return children.map((c) => (c.id === e.id ? { ...c, reason: e.reason ?? "ended" } : c));
   }
   return [...children];
+}
+
+/** A reload may touch every entry, and a skill name is repository text: bounded and one line. */
+function skillNameList(names: readonly string[]): string {
+  const shown = names.slice(0, 5).map((name) => sanitizeLine(name, 80));
+  return names.length > shown.length ? `${shown.join(", ")} and ${names.length - shown.length} more` : shown.join(", ");
 }
 
 const BASH_COMMAND_PREFIX_LENGTH = 32;
@@ -403,8 +410,15 @@ export class TuiController {
   }
 
   /** The loaded catalogue, for `/skills` and `/<skill-name>`. Set after buildAgent discovers it. */
-  setSkills(skills: Skill[]): void {
+  setSkills(skills: readonly Skill[]): void {
     this.skills = skills;
+  }
+  /**
+   * How this session rescans its skill roots (issue #267). Absent when there is nothing to
+   * refresh — a headless controller, or a session that started with no skills at all.
+   */
+  setSkillRefresh(refresh: () => Promise<SkillCatalogUpdate>): void {
+    this.skillRefresh = refresh;
   }
   /** Names only: completion never loads or invokes a skill/extension. */
   completionNames(): string[] {
@@ -450,7 +464,8 @@ export class TuiController {
   private tree: ((id: string) => Promise<string[]>) | undefined;
   private children: ((children: ReadonlyArray<TuiChild>, now: number, parent: string) => Promise<string[]>) | undefined;
   private spawned: ((id: string) => Promise<TuiChild[]>) | undefined;
-  private skills: Skill[] = [];
+  private skills: readonly Skill[] = [];
+  private skillRefresh: (() => Promise<SkillCatalogUpdate>) | undefined;
 
   subscribe(fn: (s: TuiState) => void): () => void {
     this.listeners.add(fn);
@@ -1116,10 +1131,51 @@ export class TuiController {
         // context is per-conversation and the next session starts empty; the model persists
         this.set({ sessionId: null, plan: [], signals: [], children: [], turns: 0, context: null });
         this.print("starting fresh — the next task begins a new session", "system");
+        await this.refreshSkills();
         return true;
       default:
         return true;
     }
+  }
+
+  /**
+   * Rescans the skill roots at the fresh-conversation boundary (issue #267).
+   *
+   * The catalogue used to be a startup snapshot, so an edited SKILL.md kept serving the body the
+   * process read at launch — in completion, in the composed `/<skill>` turn, in the model's
+   * `skill` tool and in the system-prompt listing alike. `/new` is the one place all four can move
+   * together: nothing is running, this conversation is already being left behind, and the next
+   * task starts a session that never saw the old generation. A conversation that IS running keeps
+   * what it started with, which is what the idle guard above buys.
+   */
+  private async refreshSkills(): Promise<void> {
+    const refresh = this.skillRefresh;
+    if (refresh === undefined) return;
+    // held like `/fork`'s filesystem work: a prompt submitted while the scan is in flight must not
+    // start a turn that composes from one generation and calls tools built from another
+    const abort = new AbortController(); this.startupAbort = abort;
+    const work = Promise.resolve().then(async () => {
+      let update: SkillCatalogUpdate;
+      try {
+        update = await refresh();
+      } catch (error) {
+        // the swap is all-or-nothing, so a refused scan leaves every consumer exactly where it was
+        this.print(`skill catalogue refresh failed: ${error instanceof Error ? error.message : String(error)}; the ${this.skills.length} skill(s) already loaded are unchanged`, "error");
+        return;
+      }
+      // applied even if `/abort` arrived while the scan ran: the new generation already answers
+      // the model's `skill` tool, and leaving the slash surface on the previous one is precisely
+      // the split this exists to prevent
+      this.setSkills(update.generation.skills);
+      const changes = [
+        ...(update.added.length === 0 ? [] : [`added ${skillNameList(update.added)}`]),
+        ...(update.removed.length === 0 ? [] : [`removed ${skillNameList(update.removed)}`]),
+        ...(update.updated.length === 0 ? [] : [`updated ${skillNameList(update.updated)}`]),
+      ];
+      if (changes.length > 0) this.print(`skills reloaded: ${changes.join("; ")} (${this.skills.length} now loaded)`, "system");
+    });
+    this.starting = work;
+    try { await work; } finally { this.startupAbort = undefined; this.starting = undefined; }
   }
 
   /**

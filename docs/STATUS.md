@@ -49,6 +49,48 @@ closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
 
+## Outside-train END follow-up: skill catalogue refresh at `/new` (#267)
+
+Builder: **Claude Code, outside the train**, under the human instruction to work the existing open
+backlog while the operator delivers other prepared batches serially. It is **not** an agentrig-built
+row, an R17 gate, or the start of the R17g sweep. Branch `fix/followups-skill-refresh` from main
+`1102c3d`. Independent review, exact-head CI and the serialized merge belong to the operator's
+delivery PR; nothing below claims a hosted CI result or a merge.
+
+[#267](https://github.com/agentkitai/agentrig/issues/267) — the catalogue was a startup scan, so an
+edited `SKILL.md` kept serving the body the process read at launch, and the four consumers each held
+their own copy of it: slash completion, the `/<skill>` turn the TUI composes, the model's `skill`
+tool and the system-prompt listing. `packages/core/src/tools/skills.ts` now holds one immutable
+generation in a `SkillCatalog`; `skillTool` follows a catalogue but pins a plain array, so a child
+keeps its snapshot. `/new` — idle by its existing guard, with the conversation already being left
+behind — rescans exactly the roots configuration resolved and installs the result as one generation,
+so completion, composition, the tool, the injected listing and the next children all move together.
+A running conversation and an already-spawned child keep what they started with. A refused rescan
+throws out of `replace` with the catalogue untouched and is printed as a failure naming the count
+still loaded; there is no partial swap and no second discovery policy. Trust, source precedence,
+symlink, byte, size and name-collision controls are the same loader's, unchanged, and the local/MCP
+ambiguity refusal now runs on every generation rather than only the first. A session that started
+with **no** skills has no `skill` tool and no catalogue block, so no refresh is offered there and a
+first skill still needs a restart: adding a tool mid-process would change the model's advertised
+tool list, which is a separate decision.
+
+Fail-first: against unmodified sources three of the four new `packages/cli/test/skill-refresh.test.ts`
+tests fail (no reload line at `/new`, stale add/delete/rename, no refusal path); the fourth — a
+rescan reaching only the configured roots — passes before and after, as a guard should. The three
+new `SkillCatalog` tests and the child-generation test fail on the missing API. Four mutants were
+killed and the bytes restored (verified by checksum): dropping the `/new` refresh (3 tests);
+pinning the `skill` tool's index at construction (2, including the tool-result assertion, which is
+what proves that check is not satisfied by conversation history); injecting the startup listing
+instead of the current generation (1); and sampling the catalogue when the subagent wiring is built
+rather than at spawn (1).
+
+Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3481 passed / 4 skipped** in
+**223** files under `TMPDIR=/var/tmp/agentrig-skillrefresh-tmp`. The new CLI file drives the real
+`startTui` wiring rather than a hand-assembled controller, because the defect was four independent
+copies. It is deliberately **not** added to the Windows CI include list: it creates a symlink, as
+`packages/core/test/skills.test.ts` already does, and that file is not in the list either. These are
+local results only.
+
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work

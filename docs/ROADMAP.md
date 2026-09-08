@@ -1575,6 +1575,17 @@ need an explicit budget; neither prevents continuing other actionable entries.
   a deterministic abandoned-verification regression; fail-closed denial, lease refusals and bounded
   cancellation unchanged. Not a fix for the #244 Windows fixture timeouts.
   Completion reaches main with the reviewed, green PR merge.
+- [x] Refresh the skill catalogue at a fresh-conversation boundary ([feel #267](https://github.com/agentkitai/agentrig/issues/267)):
+  slash completion/composition, the model's `skill` lookup, the system-prompt catalogue and the
+  next children move together to one immutable generation at `/new`; a running conversation and an
+  already-spawned child keep the generation they started with. Implemented by **Claude Code outside
+  the train** on `fix/followups-skill-refresh`: a `SkillCatalog` holds the generation, `/new`
+  rescans exactly the roots configuration resolved, and a refused rescan is reported with the
+  previous generation left in force — never a partial swap. Trust, source precedence, symlink,
+  byte and collision controls are the same loader's, unchanged. A session that started with no
+  skills has no `skill` tool or catalogue block to move and still needs a restart; that limit is
+  deliberate, since conjuring a tool mid-process would change the advertised tool list.
+  Completion reaches main with the reviewed, green PR merge.
 - [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
   preexisting reviewer first-run failure, followed by passing isolated/full runs;
   include with END test followups, not a new R17 gate or parent code workaround.

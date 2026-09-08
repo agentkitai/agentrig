@@ -152,8 +152,86 @@ export async function discoverSkills(opts: DiscoverOptions): Promise<Skill[]> {
   return resolveManifestNames(candidates, opts.onError).slice(0, maxSkills).map(({ precedence: _precedence, ...skill }) => skill);
 }
 
+/** One immutable generation of the catalogue: the exact entries some consumer was handed. */
+export interface SkillGeneration {
+  /** Monotonic within one catalogue. Lets a consumer notice a swap without diffing entries. */
+  readonly id: number;
+  readonly skills: readonly Skill[];
+}
+
+/** What one refresh changed, by name, so a caller can report it without diffing again. */
+export interface SkillCatalogUpdate {
+  readonly generation: SkillGeneration;
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly updated: readonly string[];
+}
+
+/**
+ * The one catalogue every consumer reads: slash completion, the composed `/<skill>` turn, the
+ * model's `skill` lookup and the system-prompt listing.
+ *
+ * Those four used to be four independent copies of one startup scan (issue #267), so editing a
+ * SKILL.md left every one of them serving the body the process had read at launch — and
+ * refreshing any single one would have been worse than refreshing none: the catalogue would
+ * advertise instructions the tool could not load, or a slash invocation would paste a body the
+ * model's own lookup disagreed with.
+ *
+ * So a refresh is a whole generation or nothing. `replace` re-runs the collision check the first
+ * generation had to pass and throws WITHOUT swapping when it fails, leaving every consumer on the
+ * generation it already had. Whoever captured an earlier generation — a spawned child, a running
+ * conversation — keeps exactly the entries it was given.
+ */
+export class SkillCatalog {
+  /** MCP-backed entries belong to the connected servers, not the disk: they survive a refresh. */
+  private readonly remote: readonly Skill[];
+  private generation: SkillGeneration;
+
+  constructor(local: readonly Skill[], remote: readonly Skill[] = []) {
+    this.remote = Object.freeze([...remote]);
+    this.generation = composeGeneration(0, local, this.remote);
+  }
+
+  current(): SkillGeneration {
+    return this.generation;
+  }
+
+  /** Installs a freshly discovered local scan as the next generation, or throws and keeps this one. */
+  replace(local: readonly Skill[]): SkillCatalogUpdate {
+    // built before anything is swapped: a refused generation never becomes visible to anyone
+    const generation = composeGeneration(this.generation.id + 1, local, this.remote);
+    const before = new Map(this.generation.skills.map((s) => [s.name.toLowerCase(), s]));
+    const after = new Map(generation.skills.map((s) => [s.name.toLowerCase(), s]));
+    const update = {
+      generation,
+      added: [...after].filter(([key]) => !before.has(key)).map(([, s]) => s.name),
+      removed: [...before].filter(([key]) => !after.has(key)).map(([, s]) => s.name),
+      // a changed body is the case that started this: same name, same line in the catalogue,
+      // different instructions
+      updated: [...after].filter(([key, s]) => before.has(key) && fingerprint(before.get(key)!) !== fingerprint(s)).map(([, s]) => s.name),
+    };
+    this.generation = generation;
+    return update;
+  }
+}
+
+function composeGeneration(id: number, local: readonly Skill[], remote: readonly Skill[]): SkillGeneration {
+  // the startup rule, applied to every generation: a local name shadowing a connected MCP prompt
+  // makes `skill` ambiguous, and which one answers would depend on load order
+  const names = new Set(local.map((s) => s.name.toLowerCase()));
+  if (remote.some((s) => names.has(s.name.toLowerCase()))) {
+    throw new Error("MCP prompt skill conflicts with a local skill; refusing ambiguous activation");
+  }
+  return Object.freeze({ id, skills: Object.freeze([...local, ...remote]) });
+}
+
+/** Everything a consumer would serve differently after a refresh — not the object identity. */
+function fingerprint(skill: Skill): string {
+  return JSON.stringify([skill.description, skill.path, skill.body, skill.trigger ?? null, skill.generated === true]);
+}
+
 /** The one-line-each catalogue injected into the system prompt. */
-export function skillsInjection(skills: Skill[]): string {
+export function skillsInjection(skills: readonly Skill[]): string {
   if (skills.length === 0) return "";
   const header = [
     "## Skills",
@@ -187,12 +265,33 @@ export function skillsInjection(skills: Skill[]): string {
   return [...header, ...lines, ...(example ? [example] : [])].join("\n");
 }
 
+function indexGeneration(generation: SkillGeneration): { id: number; byName: Map<string, Skill> } {
+  return { id: generation.id, byName: new Map(generation.skills.map((s) => [s.name.toLowerCase(), s])) };
+}
+
 const SkillInput = z.object({ name: z.string().min(1).describe("the skill's name, exactly as listed") });
 const RemoteSkillInput = SkillInput.extend({ arguments: z.record(z.string().max(4096)).optional() });
 
-/** Loads one skill body on demand. Reads nothing but the skills already discovered. */
-export function skillTool(skills: Skill[]): AnyTool {
-  const byName = new Map(skills.map((s) => [s.name.toLowerCase(), s]));
+/**
+ * Loads one skill body on demand. Reads nothing but the skills already discovered.
+ *
+ * An array is a snapshot — what a spawned child is given, so its instructions cannot shift under
+ * it mid-task. A `SkillCatalog` is live: the session that owns the catalogue must answer from the
+ * generation its last refresh installed, or the model would be told about a skill whose body this
+ * tool no longer has.
+ */
+export function skillTool(source: readonly Skill[] | SkillCatalog): AnyTool {
+  const pinned = source instanceof SkillCatalog ? undefined : Object.freeze({ id: 0, skills: Object.freeze([...source]) });
+  const generation = (): SkillGeneration => pinned ?? (source as SkillCatalog).current();
+  let indexed = indexGeneration(generation());
+  const lookup = (name: string): Skill | undefined => {
+    const current = generation();
+    if (indexed.id !== current.id) indexed = indexGeneration(current);
+    return indexed.byName.get(name.trim().toLowerCase());
+  };
+  // Remote entries come from connected servers and `SkillCatalog` carries them across every
+  // generation, so what the schema and permission class must cover cannot change under a refresh.
+  const skills = generation().skills;
   return {
     name: "skill",
     sandbox: "compatible",
@@ -200,12 +299,12 @@ export function skillTool(skills: Skill[]): AnyTool {
     inputSchema: skills.some(s => s.remote) ? RemoteSkillInput : SkillInput,
     // reads a file the harness itself chose, from a fixed set — not a path the model supplies,
     // so there is nothing here for a cwdOnly rule to confine
-    permission: skills.some(s => s.remote) ? input => byName.get(input.name.trim().toLowerCase())?.remote?.permission ?? "read" : "read",
-    ...(skills.some(s => s.remote) ? { resultSource: { external: (input: z.infer<typeof SkillInput>) => !!byName.get(input.name.trim().toLowerCase())?.remote } } : {}),
+    permission: skills.some(s => s.remote) ? input => lookup(input.name)?.remote?.permission ?? "read" : "read",
+    ...(skills.some(s => s.remote) ? { resultSource: { external: (input: z.infer<typeof SkillInput>) => !!lookup(input.name)?.remote } } : {}),
     execute: async (input: z.infer<typeof RemoteSkillInput>, ctx: ToolContext): Promise<ToolResult<unknown>> => {
-      const skill = byName.get(input.name.trim().toLowerCase());
+      const skill = lookup(input.name);
       if (skill === undefined) {
-        const known = [...byName.values()].map((s) => s.name).join(", ");
+        const known = generation().skills.map((s) => s.name).join(", ");
         return {
           output: { found: false },
           display: `no skill named ${JSON.stringify(input.name)}. Available: ${known || "(none)"}`,

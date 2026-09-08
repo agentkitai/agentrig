@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverSkills, parseSkill, skillTool, skillsInjection } from "@agentkitai/agentrig-core";
+import { SkillCatalog, discoverSkills, parseSkill, skillTool, skillsInjection } from "@agentkitai/agentrig-core";
 
 let dir: string;
 beforeEach(async () => {
@@ -405,5 +405,69 @@ describe("skillTool", () => {
     expect(dogfood.body).toContain("post-delta, self-verified, not re-reviewed");
     expect(dogfood.body).toContain("A finding that lives only in a PR body is a finding nobody");
     expect(body).toContain("filing a residual as an issue after three rounds is not skipping it");
+  });
+});
+
+/**
+ * Issue #267: the catalogue was a startup snapshot, so an edited SKILL.md kept serving the body
+ * the process had read at launch — and the tool, the injected listing and the slash surface each
+ * held their own copy of it, so refreshing one alone would have made them disagree.
+ */
+describe("SkillCatalog", () => {
+  it("moves the live lookup to the new generation and leaves every captured one alone", async () => {
+    await skill("deploy.md", "---\ndescription: ship it\n---\nOLD BODY");
+    const catalogue = new SkillCatalog(await discoverSkills({ roots: [dir] }));
+    const spawned = catalogue.current(); // what a child would have been given
+    const live = skillTool(catalogue);
+    const child = skillTool(spawned.skills);
+    expect((await live.execute({ name: "deploy" }, ctx)).display).toBe("OLD BODY");
+
+    await skill("deploy.md", "---\ndescription: ship it faster\n---\nNEW BODY");
+    const update = catalogue.replace(await discoverSkills({ roots: [dir] }));
+
+    expect(update.updated).toEqual(["deploy"]);
+    expect((await live.execute({ name: "deploy" }, ctx)).display).toBe("NEW BODY");
+    expect(skillsInjection(catalogue.current().skills)).toContain("ship it faster");
+    // the snapshot a running child holds cannot move under it, in its tool or in its listing
+    expect((await child.execute({ name: "deploy" }, ctx)).display).toBe("OLD BODY");
+    expect(spawned.skills.map((s) => s.body)).toEqual(["OLD BODY"]);
+    expect(skillsInjection(spawned.skills)).toContain("ship it");
+  });
+
+  it("reports an added, removed and renamed skill by name", async () => {
+    await skill("deploy.md", "---\ndescription: d\n---\nbody");
+    await skill("stale.md", "---\ndescription: d\n---\nbody");
+    const catalogue = new SkillCatalog(await discoverSkills({ roots: [dir] }));
+
+    await rm(join(dir, "stale.md"));
+    await rm(join(dir, "deploy.md"));
+    await skill("release.md", "---\ndescription: d\n---\nbody"); // deploy.md renamed
+    await skill("review.md", "---\ndescription: d\n---\nbody");
+    const update = catalogue.replace(await discoverSkills({ roots: [dir] }));
+
+    expect(update.added).toEqual(["release", "review"]);
+    expect(update.removed).toEqual(["deploy", "stale"]);
+    expect(update.updated).toEqual([]);
+    expect(catalogue.current().skills.map((s) => s.name)).toEqual(["release", "review"]);
+  });
+
+  it("refuses a generation that shadows a connected MCP prompt, keeping the one in force", async () => {
+    const remote = {
+      name: "handbook", description: "server prompt", path: "mcp:handbook", body: "",
+      remote: { toolName: "handbook", permission: "net" as const, load: async () => ({ output: {}, display: "remote" }) },
+    };
+    await skill("deploy.md", "---\ndescription: d\n---\nbody");
+    const catalogue = new SkillCatalog(await discoverSkills({ roots: [dir] }), [remote]);
+    const before = catalogue.current();
+    const live = skillTool(catalogue);
+
+    await skill("handbook.md", "---\ndescription: d\n---\nLOCAL SHADOW");
+    expect(() => catalogue.replace([...before.skills.filter((s) => s.remote === undefined), parseSkill("---\ndescription: d\n---\nLOCAL SHADOW", join(dir, "handbook.md"))]))
+      .toThrow(/refusing ambiguous activation/);
+
+    // nothing moved: not the generation, not the lookup the model already has
+    expect(catalogue.current()).toBe(before);
+    expect((await live.execute({ name: "handbook" }, ctx)).display).toBe("remote");
+    expect((await live.execute({ name: "deploy" }, ctx)).display).toBe("body");
   });
 });

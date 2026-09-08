@@ -24,6 +24,8 @@ import {
   discoverExtensions,
   loadExtensions,
   type ExtensionCommand,
+  SkillCatalog,
+  type SkillCatalogUpdate,
   skillsInjection,
   skillTool,
   subagentTool,
@@ -311,6 +313,14 @@ export interface BuiltAgent {
   tools: AnyTool[];
   /** The discovered skill catalogue, so the TUI can serve /skills and /<skill-name> (issue #62). */
   skills: Skill[];
+  /**
+   * Rescans the configured roots and installs the result as one generation (issue #267), so a
+   * fresh conversation, the model's `skill` tool, the system-prompt listing and the next children
+   * all move together. Present only when this session already has a skill surface: with no skills
+   * at startup there is no `skill` tool and no catalogue block, and conjuring either mid-process
+   * would change the tool list the model was advertised, so a first skill still needs a restart.
+   */
+  refreshSkills?: () => Promise<SkillCatalogUpdate>;
   commands?: Array<ExtensionCommand & { extension: string }>;
   memoryIndex: string;
   memoryStore?: FileMemoryStore;
@@ -396,7 +406,8 @@ export interface SubagentWiring {
   providers: ProviderSet;
   permissionPolicy: PermissionPolicy;
   sandbox?: SandboxConfig;
-  skills: Skill[];
+  /** Read once per spawn: a child is given the generation current when it starts, and keeps it. */
+  skills: SkillCatalog;
   maxTokensPerTurn: number;
   /** The tools a child inherits, minus skills — rebuilt per child so nothing is shared by accident. */
   childTools: () => AnyTool[];
@@ -438,40 +449,46 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
     ...(w.opts.providers !== undefined && Object.keys(w.opts.providers).length > 0
       ? { providerChoices: { names: w.providers.names, default: w.providers.roleNames.subagents, main: w.providers.roleNames.main } }
       : {}),
-    childConfig: (choice) => ({
-      provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
-      // skills too: a subagent doing a task the project has instructions for should be able to
-      // load them, and the catalogue costs one line each
-      tools: [...w.childTools(), ...(w.skills.length > 0 ? [skillTool(w.skills)] : [])],
-      permissions: w.permissionPolicy,
-      ...(w.extras.permissionGrants === undefined ? {} : { permissionGrants: w.extras.permissionGrants }),
-      ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
-      // Explicit base policy stays shared; the actual subagent derives a filtered live grant
-      // view and forwards it as same-call context to this asker. A child that could do MORE than its parent
-      // is a permission bypass; a child that can do LESS is the failure this originally had —
-      // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
-      // file, was never prompted about it, and could not say why. `origin` is set on the config
-      // rather than wrapped around `onAsk`, so the emitted `permission.request` carries it too:
-      // the prompt, the log and `sessions show` then agree on who asked.
-      origin: "subagent",
-      ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
-      repoMap: w.opts.repoMap === false ? false : {},
-      ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
-      ...(w.extras.onQuestion === undefined ? {} : { onQuestion: w.extras.onQuestion }),
-      systemPrompt: (ctx: { cwd: string }) => promptBlocks({
-        system: [
-          "You are a subagent. You have been given one self-contained task and none of the",
-          "parent conversation. Do the task, then reply with the answer and no tool calls —",
-          "your final message is all the parent receives.",
-          `Working directory: ${ctx.cwd}`,
-        ].join("\n"),
-        systemOrigin: "cli:subagent-default",
-        skills: skillsInjection(w.skills),
-        skillsOrigin: (w.opts.skills ?? []).join(",") || "skills:discovered",
-      }),
-      store: new SessionStore({ root: w.opts.root }),
-      maxTokensPerTurn: w.maxTokensPerTurn,
-    }),
+    childConfig: (choice) => {
+      // Read here, at spawn: the child's catalogue and its tool are snapshots of the generation
+      // current when it starts, so a later refresh cannot move the instructions under a running
+      // child, and a child spawned after one is not left on the superseded bodies (issue #267).
+      const skills = w.skills.current().skills;
+      return {
+        provider: choice?.provider === undefined ? w.providers.subagents : w.providers.get(choice.provider),
+        // skills too: a subagent doing a task the project has instructions for should be able to
+        // load them, and the catalogue costs one line each
+        tools: [...w.childTools(), ...(skills.length > 0 ? [skillTool(skills)] : [])],
+        permissions: w.permissionPolicy,
+        ...(w.extras.permissionGrants === undefined ? {} : { permissionGrants: w.extras.permissionGrants }),
+        ...(w.sandbox === undefined ? {} : { sandbox: w.sandbox }),
+        // Explicit base policy stays shared; the actual subagent derives a filtered live grant
+        // view and forwards it as same-call context to this asker. A child that could do MORE than its parent
+        // is a permission bypass; a child that can do LESS is the failure this originally had —
+        // `onAsk` defaults to deny, so an interactive parent got a subagent that could not write a
+        // file, was never prompted about it, and could not say why. `origin` is set on the config
+        // rather than wrapped around `onAsk`, so the emitted `permission.request` carries it too:
+        // the prompt, the log and `sessions show` then agree on who asked.
+        origin: "subagent",
+        ...(w.opts.trustedProjectRoot === undefined ? {} : { trustedProjectRoot: w.opts.trustedProjectRoot }),
+        repoMap: w.opts.repoMap === false ? false : {},
+        ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
+        ...(w.extras.onQuestion === undefined ? {} : { onQuestion: w.extras.onQuestion }),
+        systemPrompt: (ctx: { cwd: string }) => promptBlocks({
+          system: [
+            "You are a subagent. You have been given one self-contained task and none of the",
+            "parent conversation. Do the task, then reply with the answer and no tool calls —",
+            "your final message is all the parent receives.",
+            `Working directory: ${ctx.cwd}`,
+          ].join("\n"),
+          systemOrigin: "cli:subagent-default",
+          skills: skillsInjection(skills),
+          skillsOrigin: (w.opts.skills ?? []).join(",") || "skills:discovered",
+        }),
+        store: new SessionStore({ root: w.opts.root }),
+        maxTokensPerTurn: w.maxTokensPerTurn,
+      };
+    },
   };
 }
 
@@ -689,16 +706,18 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     const key = resolve(path);
     if (!rootPrecedence.has(key)) rootPrecedence.set(key, packageRoots.includes(path) ? insertion : index);
   }
-  const skills = skillRoots.length === 0
+  // One scan function, used for the first generation and for every later refresh: a refresh that
+  // resolved its own roots, precedence or limits would be a second discovery policy, and the
+  // trust decision behind these roots was made once, at configuration time.
+  const scanSkills = async (): Promise<Skill[]> => skillRoots.length === 0
     ? []
-    : await discoverSkills({
+    : discoverSkills({
         roots: skillRoots,
         rootPrecedence,
         onError: (err) => extras.onHookError?.(`skill discovery: ${err.message}`),
       });
-  if (mcpSkills.some(remote => skills.some(local => local.name.toLowerCase() === remote.name.toLowerCase())))
-    throw new Error("MCP prompt skill conflicts with a local skill; refusing ambiguous activation");
-  skills.push(...mcpSkills);
+  const catalogue = new SkillCatalog(await scanSkills(), mcpSkills);
+  const skills = [...catalogue.current().skills];
 
   // validated once, here, rather than failing on every bash call with an ENOENT that names
   // neither the flag nor the file
@@ -710,7 +729,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   let telemetry: ReturnType<typeof acquireOtel>;
   const observeSession = (session: import("@agentkitai/agentrig-core").Session) => telemetry?.observe(session);
   const tools: AnyTool[] = opts.heartbeat === "empty" ? [] : [...builtins(), ...memoryToolset, ...mcpTools];
-  if (skills.length > 0) tools.push(skillTool(skills));
+  if (skills.length > 0) tools.push(skillTool(catalogue));
   if (opts.subagents === true) {
     const agentRoles = opts.trustedProjectRoot === undefined ? [] : await discoverAgentRoles(opts.trustedProjectRoot,
       error => extras.onHookError?.(error.message));
@@ -725,7 +744,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
           providers,
           permissionPolicy,
           sandbox,
-          skills,
+          skills: catalogue,
           maxTokensPerTurn,
           childTools: () => [...builtins(), ...memoryToolset, ...mcpTools],
         }); return { ...options, childConfig: choice => ({ ...options.childConfig(choice), observeSession,
@@ -763,7 +782,9 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     systemPrompt: (ctx) => promptBlocks({
       system: opts.system ?? defaultSystemPrompt(ctx.cwd),
       systemOrigin: opts.system === undefined ? "cli:default-system" : "cli:--system",
-      skills: skillsInjection(skills),
+      // the generation in force when the session starts, so the listing and the `skill` tool
+      // above cannot disagree about what this conversation may load
+      skills: skillsInjection(catalogue.current().skills),
       skillsOrigin: (opts.skills ?? []).join(",") || "skills:discovered",
       memory: memoryIndex,
     }),
@@ -777,6 +798,9 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   });
 
   telemetry = acquireOtel(opts, extras.onNotice ?? console.error);
-  return { agent, selection: selection.control, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, get provider() { return selection.resolve().provider; }, providers, tools, skills, commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
+  // A refused scan throws out of `replace` with the catalogue untouched, so the caller reports a
+  // failure over a session that is still whole rather than one half-moved to a new generation.
+  const refreshSkills = skills.length === 0 ? undefined : async (): Promise<SkillCatalogUpdate> => catalogue.replace(await scanSkills());
+  return { agent, selection: selection.control, ...(spend === undefined ? {} : { spend }), ...(telemetry === undefined ? {} : { closeTelemetry: telemetry.close }), permissions: permissionPolicy, get provider() { return selection.resolve().provider; }, providers, tools, skills, ...(refreshSkills === undefined ? {} : { refreshSkills }), commands, memoryIndex, mcp, ...(memoryStore === undefined ? {} : { memoryStore }) };
   }
 }
