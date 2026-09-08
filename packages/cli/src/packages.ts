@@ -243,7 +243,10 @@ export async function addPackage(options: { projectRoot: string; source: string;
   } finally { try { if (staging !== undefined) await rm(staging, { recursive: true, force: true }); } finally { await release(); } }
 }
 
-export interface InstalledPackage { name: string; version: string; directory: string; extensions: string[]; skills: string[]; prompts: string[]; bytes: number; files: number }
+/** `digest` is the record's content digest, exposed only after this inspection recomputed and
+ * matched it: an identity built from name/version/size alone cannot tell two same-length bodies
+ * apart, so anything pinning a bundle byte for byte needs the digest itself. */
+export interface InstalledPackage { name: string; version: string; digest: string; directory: string; extensions: string[]; skills: string[]; prompts: string[]; bytes: number; files: number }
 export async function inspectPackages(projectRoot: string, signal?: AbortSignal): Promise<{ packages: InstalledPackage[]; errors: string[] }> {
   const root = await packagesRoot(projectRoot, false);
   if (root === undefined) return { packages: [], errors: [] };
@@ -264,7 +267,7 @@ export async function inspectPackages(projectRoot: string, signal?: AbortSignal)
       const listed = bundle.files.sort((a, b) => a.path < b.path ? -1 : 1).map(file => ({ path: file.path, size: file.bytes.length, sha256: hash(file.bytes) }));
       if (record.name !== validated.manifest.name || record.version !== validated.manifest.version || name !== packageDirectoryName(record.name)
         || JSON.stringify(record.files) !== JSON.stringify(listed) || record.digest !== digest(listed)) throw new Error("package integrity mismatch; preserve/remove it explicitly before reinstalling");
-      packages.push({ name: record.name, version: record.version, directory, extensions: validated.extensions.map(path => join(directory, path)),
+      packages.push({ name: record.name, version: record.version, digest: record.digest, directory, extensions: validated.extensions.map(path => join(directory, path)),
         skills: validated.skills.length === 0 ? [] : [join(directory, "skills")], prompts: validated.prompts, bytes: listed.reduce((sum, file) => sum + file.size, 0), files: listed.length });
     } catch (error) {
       if (error instanceof AggregateLimit) return { packages: [], errors: [...errors, error.message] };

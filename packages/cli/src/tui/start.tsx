@@ -125,6 +125,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
   if (built.selection !== undefined) controller.setProviderSelection(built.selection);
   controller.configureStatus(() => ({ posture: skipsPermissions(opts) ? "yolo" : "ask", sandbox: opts.sandbox ?? "none" }));
   controller.setSkills(built.skills);
+  if (built.refreshSkills !== undefined) controller.setSkillRefresh(built.refreshSkills);
   controller.setCommands(built.commands ?? []);
   {
     // The same root the agent's own store writes to; a separate instance because the store is

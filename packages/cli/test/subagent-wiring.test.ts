@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   discoverSkills,
   RulePolicy,
+  SkillCatalog,
   defaultRules,
   renderSystemBlocks,
   type AgentBuildOptions,
@@ -68,7 +69,7 @@ function wiring(
     budget: { maxTurns: 10 },
     providers: fakeSet(),
     permissionPolicy: new RulePolicy(defaultRules),
-    skills: [],
+    skills: new SkillCatalog([]),
     maxTokensPerTurn: 1024,
     childTools: () => [],
     ...over,
@@ -161,7 +162,7 @@ describe("what a child inherits", () => {
   it("the project's skills, catalogue and tool both", async () => {
     await writeFile(join(root, "deploy.md"), "---\ndescription: how to ship\n---\nRUN THE RELEASE SCRIPT", "utf8");
     const skills: Skill[] = await discoverSkills({ roots: [root] });
-    const config = wiring({ skills }).childConfig();
+    const config = wiring({ skills: new SkillCatalog(skills) }).childConfig();
 
     expect(config.tools.map((t) => t.name)).toContain("skill");
     const configured = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : config.systemPrompt;
@@ -171,8 +172,36 @@ describe("what a child inherits", () => {
     expect(prompt).not.toContain("RUN THE RELEASE SCRIPT");
   });
 
+  it("a child spawned after a refresh gets the new bodies; the one already spawned keeps its own", async () => {
+    // issue #267: children read the catalogue at spawn, so a refresh cannot move the instructions
+    // under a child that is already working, and a later child is not left on superseded bodies
+    await writeFile(join(root, "deploy.md"), "---\ndescription: ship it\n---\nOLD BODY", "utf8");
+    const catalogue = new SkillCatalog(await discoverSkills({ roots: [root] }));
+    const options = wiring({ skills: catalogue });
+    const spawnedBefore = options.childConfig();
+
+    await writeFile(join(root, "deploy.md"), "---\ndescription: ship it faster\n---\nNEW BODY", "utf8");
+    catalogue.replace(await discoverSkills({ roots: [root] }));
+    const spawnedAfter = options.childConfig();
+
+    const ctx = { cwd: root, sessionId: "child", emit: () => {}, signal: new AbortController().signal };
+    const body = async (config: ReturnType<typeof options.childConfig>): Promise<unknown> =>
+      (await config.tools.find(tool => tool.name === "skill")!.execute({ name: "deploy" }, ctx)).display;
+    const catalogueOf = (config: ReturnType<typeof options.childConfig>): string => {
+      const configured = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: root }) : config.systemPrompt;
+      return typeof configured === "string" ? configured : renderSystemBlocks(configured);
+    };
+
+    expect(await body(spawnedBefore)).toBe("OLD BODY");
+    expect(catalogueOf(spawnedBefore)).toContain("deploy: ship it");
+    expect(await body(spawnedAfter)).toBe("NEW BODY");
+    expect(catalogueOf(spawnedAfter)).toContain("deploy: ship it faster");
+    // the earlier child's own listing never moved either
+    expect(catalogueOf(spawnedBefore)).not.toContain("faster");
+  });
+
   it("no skill tool when there are none, rather than an empty catalogue in every request", () => {
-    const config = wiring({ skills: [] }).childConfig();
+    const config = wiring({ skills: new SkillCatalog([]) }).childConfig();
     expect(config.tools.map((t) => t.name)).not.toContain("skill");
     const configured = typeof config.systemPrompt === "function" ? config.systemPrompt({ task: "t", cwd: "/w" }) : config.systemPrompt;
     const prompt = typeof configured === "string" ? configured : renderSystemBlocks(configured);

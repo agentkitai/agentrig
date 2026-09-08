@@ -1,6 +1,28 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-Current: continue the entire END follow-up queue with bounded independent PRs and
+## Current issue-resolution sweep — 2026-09-08
+
+The operator's current assignment is the seventeen issues open when this sweep began,
+including problems encountered while resolving them. All seventeen resolutions are implemented
+below; #267 is the final delivery. Its check becomes part of main only through its reviewed,
+green merge. No new issues were filed; #244 was explicitly reopened after failed post-merge CI
+and repaired in #287. Exact-head and post-merge receipts live on the delivery PRs; failed
+historical runs remain failed. This does **not** mark remaining R17/vision rows complete.
+
+- [x] #272, #265, #266 — checkpoint ownership and cleanup: [PR #280](https://github.com/agentkitai/agentrig/pull/280).
+- [x] #261 — independent historical-head verification: [receipt on PR #234](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
+- [x] #277, #278, #279 — probe termination and evidence: [PR #281](https://github.com/agentkitai/agentrig/pull/281).
+- [x] #263, #264 — partial compiler diagnostics and bounded allocation: [PR #282](https://github.com/agentkitai/agentrig/pull/282).
+- [x] #249 — pinned archive transport: [PR #283](https://github.com/agentkitai/agentrig/pull/283).
+- [x] #240 — aggregate fixture and owned cleanup: [PR #284](https://github.com/agentkitai/agentrig/pull/284), final Windows allowance restored in #287.
+- [x] #237, #245, #253 — fixture preflight, workspace test root, review-guidance pins: [PR #285](https://github.com/agentkitai/agentrig/pull/285).
+- [x] #244 — fixture and late-permission shutdown fixes: [PR #286](https://github.com/agentkitai/agentrig/pull/286), Windows recovery [PR #287](https://github.com/agentkitai/agentrig/pull/287).
+- [x] #275 — per-call versus overall memory timeout reporting: [PR #287](https://github.com/agentkitai/agentrig/pull/287).
+- [x] #267 — coherent skill refresh at `/new` and `/clear`, with package digest revalidation: final `fix/followups-skill-refresh` delivery.
+
+The entries below preserve the earlier roadmap continuation and delivery history.
+
+Historical instruction: continue the entire END follow-up queue with bounded independent PRs and
 serialized exact-head/current-main/post-main gates. Prior batches do not end the queue.
 
 - [x] #217 capability evidence summary — green main ebfd10f,
@@ -1634,6 +1656,17 @@ need an explicit budget; neither prevents continuing other actionable entries.
   the repository. Implemented by **Claude Code outside the train** on the same branch, with
   a deterministic abandoned-verification regression; fail-closed denial, lease refusals and bounded
   cancellation unchanged. Not a fix for the #244 Windows fixture timeouts.
+  Completion reaches main with the reviewed, green PR merge.
+- [x] Refresh the skill catalogue at a fresh-conversation boundary ([feel #267](https://github.com/agentkitai/agentrig/issues/267)):
+  slash completion/composition, the model's `skill` lookup, the system-prompt catalogue and the
+  next children move together to one immutable generation at `/new`; a running conversation and an
+  already-spawned child keep the generation they started with. Implemented by **Claude Code outside
+  the train** on `fix/followups-skill-refresh`: a `SkillCatalog` holds the generation, `/new`
+  rescans exactly the roots configuration resolved, and a refused rescan is reported with the
+  previous generation left in force — never a partial swap. Trust, source precedence, symlink,
+  byte and collision controls are the same loader's, unchanged. A session that started with no
+  skills has no `skill` tool or catalogue block to move and still needs a restart; that limit is
+  deliberate, since conjuring a tool mid-process would change the advertised tool list.
   Completion reaches main with the reviewed, green PR merge.
 - [ ] Isolate tests from shared `/tmp` Git-root interference ([feel #271](https://github.com/agentkitai/agentrig/issues/271)):
   preexisting reviewer first-run failure, followed by passing isolated/full runs;

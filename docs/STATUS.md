@@ -1,5 +1,41 @@
 # Status
 
+## Issue sweep completion record — 2026-09-08
+
+The seventeen-issue sweep has sixteen issues closed and only #267 awaiting this final delivery.
+Every resolution is checked and mapped to its PR at the top of [ROADMAP](ROADMAP.md).
+No new issues were opened. #244 was explicitly reopened after post-merge Windows failures,
+then repaired again in PR#287; those failed receipts remain failed, not rewritten.
+
+PR#287 merged as`325c053`, reviewed`5e60dfa`, exact-headCI34264056674/structure34264056689
+allgreen. Repaired-main postmerge34264798087/34264797921 must be green before this final merge;
+its separate npm-runtime/package-cap Windows steps have already passed. This #267 branch is
+integrated with325c053: **build/test/typecheck0/0/0, 3526 passed / 4 skipped / 225 files**,
+private `/var/tmp/agentrig-final-skills.kbFbsv`. All prior review findings and bounded repairs are
+recorded below; no fresh general review was restarted for integration or the Windows comment
+correction. Exact final-head and post-merge receipts belong to the final skill-refresh PR.
+
+The AgentRig conductor remains stopped. This operator/Claude issue sweep does not complete
+unimplemented R17 vision rows or run the live E3 matrix. Earlier delivery notes below are history,
+not new pending gates. #267's remaining zero-startup-skills restart limitation is explicit below.
+
+Outside-train #267 review completion: independent Claude **d45c5e92-7b73-4c73-8ed0-8222b75be3c8**
+approved9ad314f with full3497/4/223 and build/typecheckgreen; three mutants killed, one optional
+zero-startup-skills coverage mutant survived and is disclosed in the PR review, not called green.
+The already documented restart requirement stays unchanged. Codex caught the same-size package
+identity gap; outside-train Claude repair **8dc7dcc5-5db8-4980-a26c-0bfdeb3d5aea** at15d6484
+adds the already-validated content digest to admission identity. Its real same-version/equal-size
+replacement regression fails before the correction and kills digest omission afterward;
+full3498/4/223 and build/typecheckgreen, focused44passed. No extra discovery roots or permissions.
+Bounded Codex digest delta review approves15d6484, buildgreen/35focusedpassed; adjacent runtime
+tests encountered its known temporary-root/offline-tooling limitations, not reported as passing.
+Operator integration with mainf38b40b passed build/typecheck but initially failed113 tests in28
+files under shared `/tmp`, with trust-boundary resolution to `/tmp`. A later probe found no marker;
+that does not establish its absence during the failed run or identify a creator. In a private
+`/var/tmp/agentrig-skills-integrated.U8hjhP`, the actual preflight passed and the unchanged integrated
+suite passed **3500 / 4 skipped / 223 files**. This is an explicitly changed test environment,
+not a first-attempt pass or an unexplained CI retry; #237 supplies the preflight diagnosis.
+
 Second Windows recovery under reopened#244: postmerge286 CI34262745133/job102184507170
 failed the10s cap fixture again and real npm packing hit its unchanged45s owned-process timeout.
 The earlier recursion reduction was insufficient to establish reliableWindows execution.
@@ -279,6 +315,143 @@ post-merge CI `34215842021` and structure `34215841911`; the
 closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
+
+## Outside-train END follow-up: skill catalogue refresh at `/new` (#267)
+
+Builder: **Claude Code, outside the train**, under the human instruction to work the existing open
+backlog while the operator delivers other prepared batches serially. It is **not** an agentrig-built
+row, an R17 gate, or the start of the R17g sweep. Branch `fix/followups-skill-refresh` from main
+`1102c3d`. Independent review, exact-head CI and the serialized merge belong to the operator's
+delivery PR; nothing below claims a hosted CI result or a merge. Builder session:
+**bda6d697-ff44-4f7f-ad40-d201aeb15616**.
+
+[#267](https://github.com/agentkitai/agentrig/issues/267) — the catalogue was a startup scan, so an
+edited `SKILL.md` kept serving the body the process read at launch, and the four consumers each held
+their own copy of it: slash completion, the `/<skill>` turn the TUI composes, the model's `skill`
+tool and the system-prompt listing. `packages/core/src/tools/skills.ts` now holds one immutable
+generation in a `SkillCatalog`; `skillTool` follows a catalogue but pins a plain array, so a child
+keeps its snapshot. `/new` — idle by its existing guard, with the conversation already being left
+behind — rescans exactly the roots configuration resolved and installs the result as one generation,
+so completion, composition, the tool, the injected listing and the next children all move together.
+A running conversation and an already-spawned child keep what they started with. A refused rescan
+throws out of `replace` with the catalogue untouched and is printed as a failure naming the count
+still loaded; there is no partial swap and no second discovery policy. Trust, source precedence,
+symlink, byte, size and name-collision controls are the same loader's, unchanged, and the local/MCP
+ambiguity refusal now runs on every generation rather than only the first. A session that started
+with **no** skills has no `skill` tool and no catalogue block, so no refresh is offered there and a
+first skill still needs a restart: adding a tool mid-process would change the model's advertised
+tool list, which is a separate decision.
+
+Fail-first: against unmodified sources three of the four new `packages/cli/test/skill-refresh.test.ts`
+tests fail (no reload line at `/new`, stale add/delete/rename, no refusal path); the fourth — a
+rescan reaching only the configured roots — passes before and after, as a guard should. The three
+new `SkillCatalog` tests and the child-generation test fail on the missing API. Four mutants were
+killed and the bytes restored (verified by checksum): dropping the `/new` refresh (3 tests);
+pinning the `skill` tool's index at construction (2, including the tool-result assertion, which is
+what proves that check is not satisfied by conversation history); injecting the startup listing
+instead of the current generation (1); and sampling the catalogue when the subagent wiring is built
+rather than at spawn (1).
+
+Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3481 passed / 4 skipped** in
+**223** files under `TMPDIR=/var/tmp/agentrig-skillrefresh-tmp`. The new CLI file drives the real
+`startTui` wiring rather than a hand-assembled controller, because the defect was four independent
+copies. The operator changed the symlink control to a directory symlink (Windows junction),
+preserving refusal of linked skill roots, and added this CLI file to Windows CI. The portable
+fixture plus core skills and child wiring pass **60 tests** locally. Hosted results remain pending.
+
+### Repair pass over the Codex review of `46d56b1` (Claude, outside the train)
+
+Repair builder: **Claude Code, outside the train** — one bounded correction pass over the row
+above, not a new row and not a second review loop. The original build and its attribution (builder
+session **bda6d697-ff44-4f7f-ad40-d201aeb15616**) stand unchanged. No push, PR, GitHub write, new
+issue, child, auxiliary model or live call happened here, and nothing below claims a hosted CI
+result or a merge.
+
+**P1 — a refresh could activate package content a restart refuses.** Startup admits an installed
+package's skill root only after `inspectPackages` has verified that bundle's recorded digest, its
+recorded file list and the link restrictions. The rescan then re-read those same directories with
+the plain skill loader, which checks none of that: editing an installed skill after startup, or
+dropping an unrecorded one beside it, was activated by `/new` on a path where restarting the
+process refuses it. `agent-builder.ts` now revalidates before `catalogue.replace`, requiring every
+already-admitted bundle to still be present with an identical signature (name, version, directory,
+skill roots, extensions, file count, bytes). A mismatch throws before anything is swapped, so the
+previous generation stays in force and the refusal is printed like any other refused rescan. A
+package installed or replaced since startup is deliberately **not** picked up: which roots a
+session reads is a configuration-time trust decision, and a refresh does not make new ones.
+
+**P2 — coverage corrections.** The configured-roots test started with no skills at all, so
+`refreshSkills` was `undefined` and its `/new` refreshed nothing — it could not have caught a
+refresh that discovered an unconfigured root. It now starts with a configured skill, changes that
+body, and requires the same `/new` to pick the change up while an unconfigured `.agentrig/skills`
+root stays out of completion, `/skills` and the composed turn. A new deferred-rescan control holds
+the real refresh open mid-flight and pins the promised contract: a prompt submitted while the scan
+runs starts no model request, another slash command is refused, `/abort` does not tear the scan in
+half, `shutdown()` does not return until it settles, and completion names agree with the settled
+generation afterwards. That is a contract guard, not a reproduced race. The add/delete/rename test
+now asserts completion as well as the loader.
+
+The zero-startup-skills restart limitation is unchanged and is **not** reclassified. #267 and its
+operator comment describe an already-loaded skill going stale after a repository change; no
+tool-advertisement feature was invented in this repair, and nothing here claims a first-ever skill
+activates dynamically.
+
+Fail-first: with the P1 source change reverted, the new tamper regression fails on the actual
+defect — `/new` printed `skills reloaded: updated deploy, audit`, having activated the tampered
+package body. The file's five other tests pass with and without that change, which is what a
+contract guard should do. Three mutants, each run to process exit before its bytes were restored:
+collapsing the package signature to the name alone (the uninstall-and-replace case fails);
+revalidating after `catalogue.replace` rather than before (the tamper case fails, the generation
+having already moved); and dropping `startupAbort` from `isIdle()` (the deferred-rescan control
+fails, a turn starting mid-scan). `git status` after restoration shows only the two intended files
+modified.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck`, run separately with real exits, are
+**0/0/0** with **3497 passed / 4 skipped** in **223** files under a private
+`TMPDIR=/tmp/agentrig-claude-skill-repair.hCsyJE/tmpdir` outside the repository. The operator's
+Windows-portable junction control and the Windows coverage entry for this file are preserved; the
+new package regression uses the `addPackage`/`inspectPackages` path Windows CI already exercises
+in its own single-worker step. Hosted CI, independent review and the merge remain the operator's.
+That repair pass was builder session **29a6cedc-02c3-4aaf-a3f2-9a770badabb3**, recorded here after
+the fact; it landed as `9ad314f`.
+
+### Digest repair over the Codex delta review of `9ad314f` (Claude, outside the train)
+
+Repair builder: **Claude Code, outside the train** — a third bounded pass over this row, scoped to
+the single residual finding of the delta review of `9ad314f`, and to nothing else. The original
+build (builder session **bda6d697-ff44-4f7f-ad40-d201aeb15616**) and the first repair pass (session
+**29a6cedc-02c3-4aaf-a3f2-9a770badabb3**) stand unchanged; this pass's own session id is the one
+the operator records on return. No push, PR, GitHub write, new issue, child agent, auxiliary model
+or live call happened here, and nothing below claims a hosted CI result or a merge.
+
+**P2 — package identity was not pinned byte for byte.** The admitted-bundle signature compared
+name, version, directory, skill roots, extensions, file count and total bytes — every field except
+the one that changes when content does. A package uninstalled and reinstalled under the same name
+and version with a body of the same length therefore produced an identical signature, and `/new`
+re-admitted it: the substitution the revalidation exists to refuse, in the one shape it could not
+see. Nothing new is verified to close it. `inspectPackages` already recomputes each bundle's
+content digest and refuses the package unless it matches the record, so `InstalledPackage` now
+carries that already-validated digest and `packageSignature` leads with it. The tamper cases, the
+unrecorded-file case, the version-changing replacement, the restore-and-succeed control and the
+deferred-rescan contract are untouched, as are the discovery roots, limits and defaults.
+
+Fail-first: with the digest absent from both the exposed identity and the signature, the new
+same-version/equal-size regression fails on the actual defect — `/new` printed `skills reloaded:
+updated audit (2 now loaded)`, having activated the swapped package body — while the file's six
+other tests passed unchanged, which is what the surrounding guards should do. The regression
+installs and replaces through the real `addPackage`, and asserts as its premise that every
+identity field short of the digest is equal across the two bundles, so it cannot pass by accident
+on a size or version difference. One mutant, run to process exit before its bytes were restored:
+dropping `pkg.digest` from `packageSignature` (only the new regression fails — 1 failed / 34
+passed across the two files; restored, 35 passed). After restoration `git diff --stat` showed
+exactly the two source and two test files this pass intends to change; this STATUS entry was
+written after that check.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck`, run separately with real exits, are
+**0/0/0** with **3498 passed / 4 skipped** in **223** files; the focused
+`skill-refresh` + `packages` + `packages-runtime` trio is **44 passed**. `skill-refresh.test.ts` is
+already in the Windows include list, so the new regression rides that job; the added
+`packages.test.ts` assertion rides the single-worker installer step. Hosted CI, independent review
+and the merge remain the operator's.
 
 ## Outside-train END follow-up batch: test environment, workspace root, delta-review pins
 
