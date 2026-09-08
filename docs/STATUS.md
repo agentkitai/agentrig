@@ -64,7 +64,7 @@ Builder of this batch: **Claude Code, outside the train**, under the human instr
 the open END backlog while the operator lands the preceding checkpoint batch. It is **not** an
 agentrig-built row, R17d completion, or the start of the R17g sweep. AgentRig orchestration is
 stopped. The branch is `fix/followups-compiler-diagnostics`, originally based on main
-`4320a83` (PR #273), now integrated with `1102c3d` (merged checkpoint PR #280).
+`4320a83` (PR #273), now integrated with `cc457c7` (merged probe PR #281).
 The STATUS overlap was resolved by retaining both batch records. The batch is exactly
 [#263](https://github.com/agentkitai/agentrig/issues/263) and
 [#264](https://github.com/agentkitai/agentrig/issues/264); no other open issue was touched, none
@@ -136,11 +136,14 @@ six cases across `cli/test/ci-run`, `cli/test/output-schema`, `cli/test/spend-le
 on the next two runs. Three full-suite runs on the **unmodified base `4320a83`** flaked at the same
 rate, failing once on `core/test/extensions.test.ts`. Every affected test spawns a real CLI
 subprocess against a temporary fixture root and none constructs a diagnostics checker, so this is
-the pre-existing fixture-interference family already recorded at roadmap END
+consistent with the pre-existing fixture-instability family recorded at roadmap END
 ([#240](https://github.com/agentkitai/agentrig/issues/240) /
 [#244](https://github.com/agentkitai/agentrig/issues/244) /
-[#271](https://github.com/agentkitai/agentrig/issues/271)), not a regression from this batch and
-not a claim that those issues are fixed.
+[#271](https://github.com/agentkitai/agentrig/issues/271)). The controls do not establish the
+individual failures' causes or prove they share one cause, and do not claim those issues fixed.
+
+After integration with merged #280 and #281, the operator's full build, test and typecheck
+each exited **0**: **3485 passed / 4 skipped / 222 files**. No test deadline or assertion changed.
 
 Independent review, exact-head CI and post-merge CI remain required and are not claimed here;
 these are local implementation and test results only, and neither issue is closed by them.
