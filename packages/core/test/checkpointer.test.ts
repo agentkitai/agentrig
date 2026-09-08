@@ -48,7 +48,9 @@ afterEach(async () => {
   // A fixture that fails before reaching its own restoration must not leak frozen timers: every
   // later test that waits on a real deadline would then hang or silently skip its timeout.
   vi.useRealTimers();
-  await rm(root, { recursive: true, force: true });
+  // Sessions join their owned work before cleanup; Windows can still transiently refuse
+  // directory deletion. Bound OS-level retries without weakening any timeout assertion.
+  await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 });
 
 /** Bounded fixture cleanup that never lets its own failure replace the assertion that failed.

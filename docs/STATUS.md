@@ -104,6 +104,12 @@ After merging main `4320a83`, the operator reran build, full tests and typecheck
 each exited 0, with **3473 passed / 4 skipped in 222 files**. The five new tests
 remain present alongside R17d's tests; no implementation or test assertion changed
 during integration. This is local integration evidence, not the independent verdict.
+Windows exact-head CI then hit `EBUSY` in the existing timeout fixture's directory
+removal, after its assertions passed. Its `afterEach` now uses three bounded OS
+removal retries (50 ms backoff) after joined sessions; timeout/denial assertions and
+runtime behavior are unchanged. This does not establish the lock owner's identity
+or close #244's separate attachment/external-expansion timeouts. The focused
+checkpoint/process suites pass (49 tests); new-head Windows CI remains required.
 
 ## Outside-train feel #250 recovery: preserve optional tool arguments
 
