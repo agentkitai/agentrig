@@ -190,6 +190,8 @@ reproducible here, so no historical failure is claimed to be reproduced or root-
 checkpoint `EBUSY` strand of #244 was recovered separately by PR #269/#280 and is untouched.
 
 Operator review repair also keeps provider mocks installed until owned sessions finish teardown.
+After integrating PR #283 and repairing the shared-byte assertion, operator build/test/typecheck
+each exit0: **3493 passed / 4 skipped / 222 files**. Both changed repair files pass34 focused tests.
 Independent Claude session **39987907-da64-45e8-b37f-5497a2fdddd0** approved the pre-repair
 integrated head with **3491 passed / 4 skipped / 222 files**, build/typecheck green, and four
 killed/restored mutants. Codex's actual shared-byte coverage finding is corrected above.
