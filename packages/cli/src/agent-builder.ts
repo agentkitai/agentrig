@@ -160,6 +160,13 @@ export interface AgentBuildOptions extends ProviderOptions {
   extensionDiscovery?: boolean;
   root: string;
   memory?: string;
+  /**
+   * Whether the memory `index.md` is injected into the system prompt automatically. Config-only
+   * (`memoryIndexInjection`), no CLI flag. `false` suppresses that one prompt block; the memory
+   * tools and the session-end ingest hook are untouched, so explicit retrieval and ingestion keep
+   * working. Unspecified means ON, which is the current and legacy behaviour.
+   */
+  memoryIndexInjection?: boolean;
   system?: string;
   allow?: string[];
   allowCommand?: string[][];
@@ -558,7 +565,10 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   let memoryStore: FileMemoryStore | undefined;
   if (opts.memory !== undefined) {
     memoryStore = new FileMemoryStore({ root: join(opts.memory, "wiki") });
-    memoryIndex = await indexInjection(memoryStore).catch(() => "");
+    // The only gate for automatic index injection. Everything below — the tools, the backend, and
+    // the session-end ingest hook further down — is deliberately outside it, so disabling the
+    // automatic prompt block never disables explicit retrieval or ingestion.
+    if (opts.memoryIndexInjection !== false) memoryIndex = await indexInjection(memoryStore).catch(() => "");
     let backend = openBackend({ onError: (op, err) => extras.onHookError?.(`lore ${op} failed (continuing): ${err.message}`) });
     if (backend !== null && opts.sandbox !== undefined && opts.sandbox !== "none") {
       backend = null;

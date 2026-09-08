@@ -117,6 +117,14 @@ const ConfigValuesSchema = z
     priceCacheWrite: positiveSetting.optional(),
     maxTokensPerTurn: positiveSetting.optional(),
     ingestOnEnd: z.boolean().optional(),
+    /**
+     * Automatic `index.md` injection into the system prompt (PLAN §3.2). Config-only, no CLI flag.
+     * `false` disables *only* that injection: the `memory_search`/`memory_read` tools and
+     * `ingestOnEnd` keep their current behaviour. Unspecified stays ON — R17f decides the product
+     * default from measured results, and this key exists so that decision is one value, not a
+     * redesign. See docs/DEFAULTS.md.
+     */
+    memoryIndexInjection: z.boolean().optional(),
     ingestLimits: IngestLimitsSchema.optional(),
     ingestSpanChars: integerSetting.refine(value => Number(value) >= 2 && Number(value) <= 2_147_483_647, "must be from 2 to 2147483647").optional(),
     dreamOnEnd: z.boolean().optional(),

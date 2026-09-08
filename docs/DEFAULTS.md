@@ -48,6 +48,15 @@ normally.
   memory and the configured ingest role. This can make a separately accounted
   model call. Failure is reported without changing the successful main task;
   an unavailable provider is not a successful ingest.
+- **Automatic memory index injection**: on, unchanged. When a memory directory is
+  in use, its `index.md` is injected into the system prompt as a `memory_index`
+  block. The new config-only key `"memoryIndexInjection": false` disables **that
+  block only**: the `memory_search` / `memory_read` tools, their startup allow
+  rules and `ingestOnEnd` keep working, so the agent can still retrieve memory
+  explicitly and the session still compounds into the wiki. There is no CLI flag,
+  and leaving the key unset is the current behaviour. This key exists so R17f can
+  turn injection off from one measured value; **the default stays ON until that
+  measured decision**, and nothing in this repository has changed it.
 - **Supervisor heuristics**: `supervise: true`. LLM review and automatic abort
   are still separate explicit choices, not newly enabled.
 - **Tool summaries**: `toolSummaries: true`; expanded event output remains
