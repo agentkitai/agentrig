@@ -229,16 +229,13 @@ async function twoInstalled() {
 it("does not expose an earlier verified package when the aggregate scan exhausts its entry cap", async () => {
   const { f, late } = await twoInstalled();
   // The entry budget is shared across packages and spent on every entry the walk sees, directories
-  // included. Empty prompt directories exhaust the same real 2000-entry default that two thousand
-  // installed files used to, without the install copying or the scan reading any of them, and they
-  // leave the package otherwise intact so it is the aggregate that fires and nothing else. One
-  // extra entry beyond the budget, under a single parent that keeps every `readdir` well inside the
-  // per-package entry guard.
-  const pad = join(late.destination, "prompts", "pad");
-  await mkdir(pad);
-  // FIXTURE_ENTRIES (early) + FIXTURE_ENTRIES + pad + padding === PACKAGE_LIMITS.entries + 1
-  const padding = PACKAGE_LIMITS.entries + 1 - (2 * FIXTURE_ENTRIES + 1);
-  await Promise.all(Array.from({ length: padding }, (_, i) => mkdir(join(pad, `d${String(i).padStart(4, "0")}`))));
+  // included, before selection. Ignored root directories spend that same real budget without
+  // recursively opening 1990 empty prompt directories on Windows. They sort after the valid
+  // package surfaces; each directory is still really created and lstat'd by the production walk.
+  // Both packages together exceed the default by exactly one; the late package fits that cap alone, and
+  // its root readdir remains below the per-package guard. Recorded package content is untouched.
+  const padding = PACKAGE_LIMITS.entries + 1 - 2 * FIXTURE_ENTRIES;
+  await Promise.all(Array.from({ length: padding }, (_, i) => mkdir(join(late.destination, `z-padding-${String(i).padStart(4, "0")}`))));
   const result = await inspectPackages(f.projectRoot);
   expect(result.packages).toEqual([]);
   expect(result.errors.join()).toContain("aggregate package discovery entry limit exceeded");

@@ -17,6 +17,89 @@ that does not establish its absence during the failed run or identify a creator.
 suite passed **3500 / 4 skipped / 223 files**. This is an explicitly changed test environment,
 not a first-attempt pass or an unexplained CI retry; #237 supplies the preflight diagnosis.
 
+Postmerge #285 recovery under existing#244: Windows34260977438/job102178538056 passed its main
+suite but the final single-worker aggregate-entry fixture exceeded10s. No oldhead rerun. PR#286
+also changes its padding to1991 ignored root directories: production still mkdir/lstats every
+entry and crosses the unchanged2000 shared cap by exactlyone, but no longer readdirs1990 empty
+selected subdirectories. Both real installs are verified before padding; the early verified
+package must remain hidden on aggregate failure. Padding is intentionally unsupported content
+if the aggregate guard is bypassed, so a mutant resetting the cap per package exposes the earlier
+package and fails the regression (joined/restored). New focused case449ms locally; historical
+Windows scheduling and any speedup factor are not established. Deadline stays10s, no product
+change. This PR is the recovery for failed predecessor main: repaired exact-head and postmerge
+CI must be green before the next unrelated delivery; the original failed receipt remains failed.
+
+Issue sweep delivery: **14 of the original17 closed**, none added. PR #285 merged as`24eefc1`,
+closing#237/#245/#253 after exact-headCI34260254554/structure34260254956 passed all platforms;
+postmerge34260977438/34260977458 is being monitored. Remaining#244/#267/#275 are implemented.
+This #244 shutdown repair is integrated with24eefc1: build/test/typecheck0/0/0,
+**3512 passed / 4 skipped / 224 files**. Independent Codex approves28dddc5 with build/23focused
+green; independent Claude **6e1ffd4b-3994-4e3f-862e-98d9ae18d347** approves with full3491/4/222,
+build/typecheckgreen and two killed/restored placement/omission mutants. No blockers; optional
+late-denial logging note does not expand this fix. Exact-head/postmergegreen remains required.
+
+Shutdown repair builder session **90ffa872-f245-4bed-a0df-e3cec14965a7** (Claude Code outside
+AgentRig), original head8a656b8. Operator follow-through adds `finally` joins to both new held-work
+regressions so assertion failures release the policy/manual barrier, deny any pending ask and
+join owned work before fixture deletion; focused permission/attachment cases pass afterward.
+
+## Outside-train existing issue #244: late permission ask during shutdown
+
+Builder: **Claude Code, outside the train**, on `fix/followups-permission-shutdown`, based on
+merged main `f38b40b`. It is **not** an agentrig-built row, R17d completion, or the start of the
+R17g sweep. This is bounded to the shutdown-lifecycle defect recorded under existing
+[#244](https://github.com/agentkitai/agentrig/issues/244); no new issue was filed, no issue was
+commented on or closed, and no push, PR or other GitHub write was made. #244's Windows fixture
+timeouts and the rest of its scope remain open.
+
+`TuiController.ask` had no `closing`/`closed` guard, unlike `askQuestion`. `shutdown()` sweeps the
+outstanding prompts once with `denyAllPending()` and then waits for the loop (`await this.running`),
+but core's `onAsk` is not raced against the abort signal (`tool-execution.ts`; the `raceAbort`
+beside it covers only `freshExpansion`), and core's pre-ask abort check happens *before* the async
+policy evaluation and grant-audit flush that precede the call. An ask landing in that window
+registered a prompt nobody could answer, so the wait it was blocking never returned — a user
+quitting exactly as a permission is being prepared hangs shutdown, and in the TUI only a second
+ctrl-C recovers it. The repair is one fail-closed line, placed before any registry is touched, so a
+late ask opens no prompt, consumes no standing grant and begins no grant session. No lifecycle
+refactor, no timer or deadline change, and no change to `denyAllPending`, abort or the answered
+paths.
+
+Fail-first: two new cases in `packages/cli/test/permission-friction.test.ts`, both failing against
+the pre-change code in 32 ms with the specific assertion rather than a timeout. The first drives a
+**real** `createAgent` session through the controller and holds a real `PermissionPolicy` inside
+core's ask window so the ask is issued after the sweep; it reported the published `probe` prompt
+where `null` was expected, and it asserts the join, the denial and that the tool never executed.
+The second covers a direct late ask while closing and once closed: it reported `matchedDecisions`
+of 2 where 1 was expected — the standing allow grant was consumed after shutdown began — and it
+also pins that a registry passed after close is never opened (`beginSession`) and no prompt is
+published.
+
+The fixture-only late-deny workaround introduced under #249 (`fixture.closing` and its
+`closing ? "deny"` branch in `packages/cli/test/attachments-startup.test.ts`) is removed, now that
+the product handles the case. The `["protocol",1200]` delayed control, the shared five-second
+readiness allowance, the unchanged 15-second case deadline, the joined `controller.shutdown()`
+teardown and every privacy, provenance and history assertion are preserved; all three cases pass in
+2.19 s, matching the previously recorded time.
+
+Five guard mutants were applied one at a time and restored byte-for-byte from a saved head
+(sha256 verified). Four were killed by the focused file: removing the guard entirely (2 cases),
+checking only `closed` (2), resolving `allow` instead of `deny` (2), and moving the guard after
+`beginSession`/`authorize` (1 — the grant-consumption assertion, which is what makes the placement
+tested rather than incidental). The fifth — checking only `closing` — **survives by construction**:
+`closing` is never cleared, so `closed` cannot be true while `closing` is false. That term is kept
+for symmetry with `askQuestion` and documented in the code as redundant rather than presented as
+tested. Cross-file, with the guard removed *and* the reviewer's phase-wait mutant (dropping
+`readiness` from the image `input_file` wait), the attachment case hangs — `Test timed out in
+15000ms` at 15012 ms; with the guard restored and no fixture workaround, the same mutant reports
+the original `expected undefined to be 'input_file'` assertion in 1.49 s. Both were restored.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck` were run separately and each exited **0**,
+with **3491 passed / 4 skipped in 222 files**, under a private `TMPDIR` rather than a shared `/tmp`
+root. Both changed test files are already in the Windows CI include list. `packages/*/test` is
+outside every `tsconfig.json` `include`, so the new cases are transform-checked by vitest, not by
+`pnpm typecheck`. Independent review, exact-head CI, post-merge CI and the merge itself remain
+required and are not claimed here; #244 is not closed by this.
+
 PR #285 first-head CI34259124799 failed the new workspace-output assertion on all platforms:
 the child passed its two tests, but ANSI formatting interrupted the human-summary regex.
 Windows also exposed an 8.3-versus-canonical physical-path expectation in the junction control.
