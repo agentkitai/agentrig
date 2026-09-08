@@ -46,9 +46,11 @@ not this row's gate.
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
 the existing open backlog while the operator finishes PR #273. It is **not** an agentrig-built
-row, R17d completion, or the start of the R17g sweep; the conductor remains **ed60c956** and
-PR #273 is untouched. The work is committed locally on `fix/followups-checkpoint-cleanup` from
-`02d8b25`: **not pushed, reviewed, CI-verified or merged**, and no issue is claimed closed.
+row, R17d completion, or the start of the R17g sweep. AgentRig orchestration is stopped;
+R17d landed separately via PR #273 at `4320a83`. The operator merged that updated main into
+`fix/followups-checkpoint-cleanup` for review and delivery of this batch. Builder session:
+**6b081b67-5a74-4bef-8294-88e6e1336a09**. Independent review and exact-head/post-merge CI
+receipts belong to the batch PR; local verification alone does not close these issues.
 The batch is exactly [#272](https://github.com/agentkitai/agentrig/issues/272),
 [#265](https://github.com/agentkitai/agentrig/issues/265) and
 [#266](https://github.com/agentkitai/agentrig/issues/266); the other fourteen open issues remain
@@ -90,6 +92,11 @@ in **221** files under `TMPDIR=/var/tmp`; `packages/core/test/checkpointer.test.
 repeated five times without flake. That file is already in the Windows CI include list, so the new
 regressions run there. Independent review and exact-head/post-merge CI remain required; this entry
 claims no hosted CI result.
+
+After merging main `4320a83`, the operator reran build, full tests and typecheck:
+each exited 0, with **3473 passed / 4 skipped in 222 files**. The five new tests
+remain present alongside R17d's tests; no implementation or test assertion changed
+during integration. This is local integration evidence, not the independent verdict.
 
 ## Outside-train feel #250 recovery: preserve optional tool arguments
 
