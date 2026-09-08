@@ -19,7 +19,7 @@ import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
 import type { ProviderSelectionControl } from "../provider-selection.js";
 import { observeStatus } from "./status-snapshot.js";
-import { initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
+import { defaultPermissionScopeAvailable, initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, formatUsage, renderChatEvent, renderContextManifest, renderEvent, renderPlanAcceptance } from "../render.js";
 import {
@@ -55,6 +55,7 @@ export interface TuiLine {
 export interface PendingPermission {
   req: PermissionRequest;
   permissionGrants?: PermissionGrantRegistry;
+  flushPermissionGrants?: () => Promise<void>;
   scope?: { kind: ScopeKind; text: string; preview: boolean; error?: string };
   /** `remember` applies the answer to every later request for the same tool this session. */
   resolve: (d: Exclude<Decision, "ask">, remember: boolean, scope?: { kind: ScopeKind; text: string }) => void;
@@ -503,7 +504,8 @@ export class TuiController {
       const sandboxEscalation = req.origin === "sandbox-escalation" || req.origin === "mcp-definition-change" || req.origin === "external-input-expansion";
       if (registry !== undefined && registry.context.sessionId === undefined) registry.beginSession("interactive-prompt");
       const revision = registry?.revision;
-      const standing = sandboxEscalation ? "ask" : registry?.decide(req) ?? "ask";
+      const authorization = sandboxEscalation ? undefined : registry?.authorize(req, true);
+      const standing = (authorization?.auditBlocked || authorization?.viewExpired) ? "ask" : authorization?.decision ?? "ask";
       if (standing !== "ask") {
         resolve(standing);
         return;
@@ -521,6 +523,7 @@ export class TuiController {
       };
       const entry: PendingPermission = {
         req,
+        ...(context?.flushPermissionGrants === undefined ? {} : { flushPermissionGrants: context.flushPermissionGrants }),
         ...(registry === undefined ? {} : { permissionGrants: registry }),
         resolve: (d, remember, scope) => {
           if (settled) return;
@@ -570,14 +573,30 @@ export class TuiController {
 
   private advanceQueue(): void {
     const next = this.queue.shift();
+    // Disclose effects before publishing an answerable prompt, even when audit is slow.
     if (next !== undefined) this.showPermissionEffects(next.req, next.permissionGrants !== undefined);
     this.set({ pending: next ?? null, queued: this.queue.length });
+    if (next === undefined) return;
+    // Concurrent dispatches can queue before the first explicit scoped approval.
+    // Recheck only the request's own live registry, never cache allow-once consent.
+    // Audit append must complete before usage accounting and scoped authority consumption.
+    const consume = (): void => {
+      if (this.state.pending?.resolve !== next.resolve || this.state.pending.scope !== undefined) return;
+      const authorization = next.permissionGrants?.authorize(next.req, true);
+      const standing = (authorization?.auditBlocked || authorization?.viewExpired) ? "ask" : authorization?.decision ?? "ask";
+      if (standing !== "ask") next.resolve(standing, false);
+    };
+    if (next.flushPermissionGrants === undefined) consume();
+    else void next.flushPermissionGrants().then(consume).catch(() => {
+      // Failed append is not human denial: retain the prompt, and never count a match.
+    });
   }
 
   private showPermissionEffects(req: PermissionRequest, standing = true): void {
     if (req.origin === "mcp-definition-change") this.print(JSON.stringify(req.input, null, 2), "system");
     if (req.operation !== undefined) this.print(`shell operation: ${JSON.stringify(req.operation)}`, "system");
     for (const line of permissionEffectLines(req, { color: process.stdout.isTTY === true })) if (standing || !line.startsWith("Standing ")) this.print(line, "system");
+    if (standing && defaultPermissionScopeAvailable(req)) this.print("Enter: preview the exact argv-prefix session grant at this cwd; the displayed confirmation key then confirms. The allow-once key alone still allows once.", "system");
     if (!standing) this.print("One-time approval only; this request does not consume or create standing grants.", "system");
   }
 
@@ -589,6 +608,14 @@ export class TuiController {
   answerPermission(d: Exclude<Decision, "ask">, remember = false): void {
     if (this.state.pending?.scope !== undefined) return;
     this.state.pending?.resolve(d, remember);
+  }
+
+  /** Enter offers the existing R12b exact draft, never installs it implicitly. */
+  startDefaultPermissionScope(): void {
+    const pending = this.state.pending;
+    if (pending === null || pending.scope !== undefined || pending.permissionGrants === undefined || !defaultPermissionScopeAvailable(pending.req)) return;
+    this.startPermissionScope();
+    this.previewPermissionScope();
   }
 
   startPermissionScope(): void {

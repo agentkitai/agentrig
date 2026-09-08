@@ -1402,6 +1402,8 @@ describe("review regressions", () => {
     c.answerPermission("deny", true);
     expect(await escalation).toBe("deny");
 
+    // Model core's durable audit append before consuming the ordinary standing grant.
+    await c.permissionGrants.flush(async () => {});
     // The attempted remembered escalation answer did not replace the ordinary standing grant.
     await expect(c.ask({ tool: "bash", input: {}, class: "exec", cwd: root })).resolves.toBe("allow");
   });

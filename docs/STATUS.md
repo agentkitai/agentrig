@@ -1,9 +1,46 @@
 # Status
 
-Current roadmap row: **R17d**, incomplete. Draft [PR #273](https://github.com/agentkitai/agentrig/pull/273)
-retains its evidence and the human-approved supplemental benchmark correction.
-Conductor **ed60c956** halted on [feel #250](https://github.com/agentkitai/agentrig/issues/250);
-the blocking provider-schema repair below must pass review and CI before the train resumes.
+PR #273 review repair: **agentrig** conductor **11dfb0d6**, repair child
+**75fb2099**, followed by **Codex/operator outside-train completion** after the
+operator stopped the orchestration on the human's delivery-feedback request.
+The original implementation attribution below is unchanged. Queued approvals now
+flush grant audit events before consuming scoped authority and counting matches;
+regressions cover queued child confinement, pending/failed audit and cancellation.
+The operator completed the existing sandbox-consent fixture's explicit audit step.
+Local build, full tests (**3468 passed, 4 skipped, 222 files**) and typecheck passed,
+including two added real-dispatch audit-callback tests. Operator mutation checks
+killed audit-flush omission, parent-registry substitution and Enter-binding removal.
+The unchanged benchmark reruns retain supplemental 25 prompts and historical 17;
+A4/X4 manual assessment remains BLOCKED. The ROADMAP done marker records completed
+implementation; landing remains pending below.
+These are local repair results, not final independent review or new-head CI.
+Independent review, exact-head CI and post-merge CI receipts are recorded on
+[PR #273](https://github.com/agentkitai/agentrig/pull/273); all are required for
+landing. No later roadmap row is completed by this change.
+The second repair normalizes Windows fixture paths and discloses queued effects
+before publishing an answerable prompt. Audit completion leaves an open scope
+editor untouched. Three new regressions cover these races and direct-ask durable
+audit/counting; removing each corresponding guard is killed by the focused suite.
+The done marker is committed on the feature branch as required by the land skill;
+main does not advance until the reviewed, green head is merged.
+The background-review/checkpoint incompatibility and foreground review timeout
+were observed in conductor **11dfb0d6**; no security settings were changed and no
+duplicate issue was opened. Claude's completed review explicitly did not run the
+full suite; the operator's passing run does not erase that evidence limitation.
+
+Current roadmap row: **R17d**, implementation continuation by **agentrig**, conductor **96c179ab**, adopting draft PR #273 and its same branch. Predecessor conductor **a4decdf9**, builder **b97650ae**, arbiter **a769b04f** (historical REJECT/needs-human). The human approved the exact supplemental benchmark acceptance; [feel #274](https://github.com/agentkitai/agentrig/issues/274) is resolved outside the train, not an arbiter APPROVE. Historical E1 stays an unchanged control; A4/X4 manual verdicts remain BLOCKED/unknown. R17e/f/g are not implemented here.
+
+R17d implementation result on PR #273: pre-product freeze **770df83**; identical supplemental traces **33 → 25** prompts, exactly **1 fewer/task**. Historical E1 control unchanged (**2/task, A3 3**), A4/X4 manual still **BLOCKED/unknown**. Existing R12b full-argv/exact-cwd scoped grant is offered on Enter with separate confirmation; queued covered requests consume that explicit scoped decision, never one-time consent. Trusted read defaults unchanged, R13e green. Local build/test/typecheck each exit **0** (3458 passed, 4 skipped); see [R17d evidence](plans/R17d.md). Awaiting exact-head CI and independent review; not landed, R17e/f/g untouched. This child spawned zero children/reviewers and spent no E3; true child ID/tokens are parent-accounted, unavailable here.
+
+Conductor **ed60c956** subsequently made **three denied provider:cloud calls**, spawned **zero children**, and halted; main usage **700150 cache-inclusive tokens**, no E3. Outside repair **PR #276** landed at `02d8b2554e92f3e7e0790e74da0e63566fc585a7`; exact post-merge CI **34227031087** / structure **34227031064** passed. Reviews: comments **5585212045 / 5585212440**. The Codex/operator attribution below is preserved. Feel #250 closure remains operator-owned pending actual omission/route evidence. LOW residuals #277/#278/#279 belong to END for R17g disposition, not new gates; no fourth repair. #275 joins END memory (30s per-call timeout alone does not establish expiration of the overall 300s budget); #272 joins #244 core lifecycle.
+
+R17c landed via #269 at `e74018c707a5715ef20ec5686210a092b8d909ab`
+(head `8e5b9d3df1d31a29a0dad42a4f1d27f7325d1f6b`). Parent verified green
+post-merge CI `34215842021` and structure `34215841911`; the
+[landing receipt](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5583828105)
+closes the prior pending state. Builder and outside-train recovery history below
+are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
+not this row's gate.
 
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 
@@ -122,6 +159,7 @@ R17c [PR #269](https://github.com/agentkitai/agentrig/pull/269) landed at
 post-merge CI **34215842021** plus structure checks are green
 ([landing receipt](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5583828105)).
 Earlier pending R17c entries below are historical, superseded by this receipt.
+
 
 ## R17c checkpoint cancellation recovery
 

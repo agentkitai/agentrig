@@ -337,7 +337,7 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   await emit({ type: "permission.request", req: permReq });
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before permission authorization", true);
   const evaluated = await evaluatePermissionPolicy(config.permissions, originalPermissionRequest);
-  const askContext = Object.freeze(config.permissionGrants === undefined ? {} : { permissionGrants: config.permissionGrants });
+  const askContext = Object.freeze(config.permissionGrants === undefined ? {} : { permissionGrants: config.permissionGrants, flushPermissionGrants: async () => { await config.permissionGrants!.flush(emit); } });
   let decision = evaluated.decision;
   let decisionSource: PermissionDecisionSource = evaluated.source;
   await config.permissionGrants?.flush(emit);

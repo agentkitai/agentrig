@@ -69,3 +69,12 @@ export function proposedPermissionGrant(req: PermissionRequest, kind: ScopeKind,
   if (!permissionGrantCoversRequest(spec, req)) throw new Error("scope does not cover this request; no grant installed");
   return spec;
 }
+
+/** Only the literal foreground bash operation can offer argv scope as the default. */
+export function defaultPermissionScopeAvailable(req: PermissionRequest): boolean {
+  if (req.tool !== "bash" || req.class !== "exec" || req.operation === undefined) return false;
+  try {
+    const draft = initialPermissionScope(req);
+    return draft.kind === "argv" && Buffer.byteLength(draft.text) <= MAX_SCOPE_TEXT;
+  } catch { return false; }
+}

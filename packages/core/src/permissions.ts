@@ -10,7 +10,11 @@ export interface PermissionPolicy {
 
 /** Trusted same-call context, not serialized permission metadata. Absence of a registry is
  * explicit when this context exists; an asker must not fall back to a broader root registry. */
-export interface PermissionAskContext { readonly permissionGrants?: PermissionGrantRegistry }
+export interface PermissionAskContext {
+  readonly permissionGrants?: PermissionGrantRegistry;
+  /** Append pending grant audit events before an approval UI consumes scoped authority. */
+  readonly flushPermissionGrants?: () => Promise<void>;
+}
 
 /** Evaluate exactly once. Optional diagnostics cannot change the policy's actual decision.
  * A custom policy may ignore the callback. Malformed, multiple, mismatched or late receipts
