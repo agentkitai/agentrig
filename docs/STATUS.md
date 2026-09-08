@@ -153,6 +153,47 @@ Local `pnpm build`, `pnpm test` and `pnpm typecheck`, run separately with real e
 Windows-portable junction control and the Windows coverage entry for this file are preserved; the
 new package regression uses the `addPackage`/`inspectPackages` path Windows CI already exercises
 in its own single-worker step. Hosted CI, independent review and the merge remain the operator's.
+That repair pass was builder session **29a6cedc-02c3-4aaf-a3f2-9a770badabb3**, recorded here after
+the fact; it landed as `9ad314f`.
+
+### Digest repair over the Codex delta review of `9ad314f` (Claude, outside the train)
+
+Repair builder: **Claude Code, outside the train** — a third bounded pass over this row, scoped to
+the single residual finding of the delta review of `9ad314f`, and to nothing else. The original
+build (builder session **bda6d697-ff44-4f7f-ad40-d201aeb15616**) and the first repair pass (session
+**29a6cedc-02c3-4aaf-a3f2-9a770badabb3**) stand unchanged; this pass's own session id is the one
+the operator records on return. No push, PR, GitHub write, new issue, child agent, auxiliary model
+or live call happened here, and nothing below claims a hosted CI result or a merge.
+
+**P2 — package identity was not pinned byte for byte.** The admitted-bundle signature compared
+name, version, directory, skill roots, extensions, file count and total bytes — every field except
+the one that changes when content does. A package uninstalled and reinstalled under the same name
+and version with a body of the same length therefore produced an identical signature, and `/new`
+re-admitted it: the substitution the revalidation exists to refuse, in the one shape it could not
+see. Nothing new is verified to close it. `inspectPackages` already recomputes each bundle's
+content digest and refuses the package unless it matches the record, so `InstalledPackage` now
+carries that already-validated digest and `packageSignature` leads with it. The tamper cases, the
+unrecorded-file case, the version-changing replacement, the restore-and-succeed control and the
+deferred-rescan contract are untouched, as are the discovery roots, limits and defaults.
+
+Fail-first: with the digest absent from both the exposed identity and the signature, the new
+same-version/equal-size regression fails on the actual defect — `/new` printed `skills reloaded:
+updated audit (2 now loaded)`, having activated the swapped package body — while the file's six
+other tests passed unchanged, which is what the surrounding guards should do. The regression
+installs and replaces through the real `addPackage`, and asserts as its premise that every
+identity field short of the digest is equal across the two bundles, so it cannot pass by accident
+on a size or version difference. One mutant, run to process exit before its bytes were restored:
+dropping `pkg.digest` from `packageSignature` (only the new regression fails — 1 failed / 34
+passed across the two files; restored, 35 passed). After restoration `git diff --stat` showed
+exactly the two source and two test files this pass intends to change; this STATUS entry was
+written after that check.
+
+Local `pnpm build`, `pnpm test` and `pnpm typecheck`, run separately with real exits, are
+**0/0/0** with **3498 passed / 4 skipped** in **223** files; the focused
+`skill-refresh` + `packages` + `packages-runtime` trio is **44 passed**. `skill-refresh.test.ts` is
+already in the Windows include list, so the new regression rides that job; the added
+`packages.test.ts` assertion rides the single-worker installer step. Hosted CI, independent review
+and the merge remain the operator's.
 
 ## Outside-train END follow-up batch: compiler diagnostics #263 and #264
 

@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ModelEvent, ModelProvider, ModelRequest } from "@agentkitai/agentrig-core";
 import { TuiController } from "../src/tui/controller.js";
-import { addPackage } from "../src/packages.js";
+import { addPackage, inspectPackages } from "../src/packages.js";
 
 /**
  * Issue #267: the skill catalogue was read once, at startup. An edited `SKILL.md` therefore kept
@@ -282,6 +282,43 @@ it("an installed package edited after startup is refused, and the whole generati
     expect(newest(5)).toContain("PACKAGE BODY");
     expect(newest(5)).not.toContain("REPLACEMENT BODY");
     expect(requests).toHaveLength(6);
+    await controller.shutdown();
+  }, { packages: true, skillDiscovery: true, trustedProjectRoot: f.root });
+});
+
+it("a same-version, equal-size package replacement is refused, and the admitted bundle stays in force", async () => {
+  // The version-changing replacement above leaves the cheap half of the identity untested: name,
+  // version, file count and total bytes all survive a reinstall that swaps a body for a different
+  // one of the same length, so an identity built from those alone re-admits content this session
+  // was never admitted with. Only the recorded content digest separates the two bundles.
+  const f = await fixture();
+  await writeFile(join(f.skills, "deploy.md"), "---\ndescription: d\n---\nOLD BODY", "utf8");
+  const installed = await installPackage(f.root, { body: "PACKAGE BODY" });
+  const admitted = (await inspectPackages(f.root)).packages[0]!;
+  await session(f, async controller => {
+    await controller.submit("/audit it");
+    expect(newest(0)).toContain("PACKAGE BODY");
+
+    // uninstalled and reinstalled by the real installer under the same name and version, with a
+    // body of exactly the same length — a fresh record, consistent with itself, that therefore
+    // passes its own integrity check
+    await rm(installed, { recursive: true, force: true });
+    await installPackage(f.root, { body: "SWAPPED BODY" });
+    const replacement = (await inspectPackages(f.root)).packages[0]!;
+    // the premise of the regression: every identity field short of the digest is unchanged, so an
+    // identity that omits the digest cannot tell the replacement from the admitted bundle
+    const shallow = (pkg: typeof admitted) => [pkg.name, pkg.version, pkg.directory, pkg.skills, pkg.extensions, pkg.files, pkg.bytes];
+    expect(shallow(replacement)).toEqual(shallow(admitted));
+
+    await controller.submit("/new");
+    const printed = text(controller);
+    expect(printed).toContain("skill catalogue refresh failed: installed package fixture no longer passes its integrity check");
+    expect(printed).not.toContain("skills reloaded");
+
+    await controller.submit("/audit it");
+    expect(newest(1)).toContain("PACKAGE BODY");
+    expect(newest(1)).not.toContain("SWAPPED BODY");
+    expect(requests).toHaveLength(2);
     await controller.shutdown();
   }, { packages: true, skillDiscovery: true, trustedProjectRoot: f.root });
 });

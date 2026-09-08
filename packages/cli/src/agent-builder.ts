@@ -730,8 +730,10 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
   const admittedPackages = packageRoots.length === 0
     ? []
     : installed.packages.filter(pkg => pkg.skills.some(path => packageRoots.includes(path)));
+  // The digest leads because it is the only field that pins content: name, version, file count and
+  // total bytes all survive a reinstall that swaps a body for a different one of the same length.
   const packageSignature = (pkg: InstalledPackage): string =>
-    JSON.stringify([pkg.name, pkg.version, pkg.directory, pkg.skills, pkg.extensions, pkg.files, pkg.bytes]);
+    JSON.stringify([pkg.digest, pkg.name, pkg.version, pkg.directory, pkg.skills, pkg.extensions, pkg.files, pkg.bytes]);
   const revalidatePackages = async (): Promise<void> => {
     const trusted = opts.trustedProjectRoot;
     if (admittedPackages.length === 0 || trusted === undefined) return;

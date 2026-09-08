@@ -33,6 +33,9 @@ it("installs a complete immutable copy, lists inert prompts, verifies integrity 
   const inspected = await inspectPackages(f.projectRoot);
   expect(inspected.errors).toEqual([]); expect(inspected.packages).toHaveLength(1);
   expect(inspected.packages[0]?.skills).toEqual([join(result.destination, "skills")]);
+  // the digest the inspection just matched, handed on: callers that must pin a bundle byte for
+  // byte have no other field that changes when a same-size body does
+  expect(inspected.packages[0]?.digest).toBe(result.digest);
   await expect(addPackage(f)).rejects.toThrow(/already exists/);
   expect((await inspectPackages(f.projectRoot)).errors).toEqual([]);
   await writeFile(join(result.destination, "skills", "guide.md"), "human edit");
