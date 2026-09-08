@@ -1,5 +1,12 @@
 # Status
 
+R17d is landed via **PR #273**, merge `4320a83`, reviewed head `61b4e72`.
+Post-merge CI **34247066349** and structure **34247066327** passed on that exact
+merge, all platforms first attempt; [landing receipt](https://github.com/agentkitai/agentrig/pull/273#issuecomment-5588039366).
+The pending statements below are preserved historical implementation/review notes.
+The currently prioritized outside-train checkpoint issue batch is described below;
+it does not claim completion of R17e/f/g.
+
 PR #273 review repair: **agentrig** conductor **11dfb0d6**, repair child
 **75fb2099**, followed by **Codex/operator outside-train completion** after the
 operator stopped the orchestration on the human's delivery-feedback request.
@@ -47,15 +54,13 @@ not this row's gate.
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
 the open END backlog while the operator lands the preceding checkpoint batch. It is **not** an
 agentrig-built row, R17d completion, or the start of the R17g sweep. AgentRig orchestration is
-stopped. The branch is `fix/followups-compiler-diagnostics`, based on main `4320a83` (the PR #273
-merge). It does **not** contain the `fix/followups-checkpoint-cleanup` batch (#265/#266/#272),
-which is still in the operator's review queue; both branches append a section here, so this file
-is the expected merge conflict. The batch is exactly
+stopped. The branch is `fix/followups-compiler-diagnostics`, originally based on main
+`4320a83` (PR #273), now integrated with `1102c3d` (merged checkpoint PR #280).
+The STATUS overlap was resolved by retaining both batch records. The batch is exactly
 [#263](https://github.com/agentkitai/agentrig/issues/263) and
 [#264](https://github.com/agentkitai/agentrig/issues/264); no other open issue was touched, none
-was commented on or closed, and no new issue was filed. The builder session id is not recorded
-here because this non-interactive run's transcript was not locatable — that is a missing
-identifier, not a claim that some other session did the work.
+was commented on or closed by the builder, and no new issue was filed. The operator
+recorded the returned builder session id: **59eab286-d192-4a67-b8aa-85d7d029c55f**.
 
 **#263** — `diagnosticReport` no longer throws away the touched-file diagnostics the bounded sink
 already parsed when the run is incomplete. An overlong metadata line or a listed path that
@@ -105,7 +110,7 @@ unknown-coverage qualifier from retained reports (5); removing the metadata cap 
 copying the retained listing on growth (4); reverting growth to unconditional full-cap allocation
 (3); not releasing the coverage buffer after the join (1); swallowing an unverifiable coverage
 path (4); and removing the overlong-line refusal (2). The twelfth — deleting the `Math.min` clamp
-in the growth step — **survives by construction and is left in place deliberately**: both
+in the growth step — **survives by construction; the original clamp is retained**: both
 constants are powers of two, so the clamp cannot fire today and only matters if either is changed
 later. It is documented in the code as such rather than presented as tested.
 
@@ -128,6 +133,68 @@ not a claim that those issues are fixed.
 
 Independent review, exact-head CI and post-merge CI remain required and are not claimed here;
 these are local implementation and test results only, and neither issue is closed by them.
+
+## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
+
+Builder of this batch: **Claude Code, outside the train**, under the human instruction to work
+the existing open backlog while the operator finishes PR #273. It is **not** an agentrig-built
+row, R17d completion, or the start of the R17g sweep. AgentRig orchestration is stopped;
+R17d landed separately via PR #273 at `4320a83`. The operator merged that updated main into
+`fix/followups-checkpoint-cleanup` for review and delivery of this batch. Builder session:
+**6b081b67-5a74-4bef-8294-88e6e1336a09**. Independent review and exact-head/post-merge CI
+receipts belong to the batch PR; local verification alone does not close these issues.
+The batch is exactly [#272](https://github.com/agentkitai/agentrig/issues/272),
+[#265](https://github.com/agentkitai/agentrig/issues/265) and
+[#266](https://github.com/agentkitai/agentrig/issues/266); the other fourteen open issues remain
+open with a recorded grouped disposition for the operator to dispatch separately.
+
+**#272** — `Checkpointer` now registers every started per-session Git/verification promise
+(`create`, the `handler` pre-attempt owned-state verification, `afterTool` and `seal`) and
+`endSession` drains them before it releases the lease. Only the newest turn's attempt was joined
+before, so a later-turn hook timeout could abandon a verification whose Git children still had the
+repository as cwd while cleanup ran. Fail-closed write denial, ownership-uncertainty and
+lease-replacement refusals, literal Git argv, the existing 60 s Git timeout and bounded
+cancellation are unchanged, and the registered copy never swallows the caller's failure. This is a
+pre-existing later-turn ownership gap; it is **not** a fix for the original attachment /
+external-expansion Windows timeouts in [#244](https://github.com/agentkitai/agentrig/issues/244),
+nor for that issue's checkpoint `EBUSY` strand, which PR #269 recovered separately.
+
+**#265/#266** — `packages/core/test/checkpointer.test.ts` only. A file-level `afterEach` restores
+real timers, the hung-guard fixture constructs its agent/session inside the guarded body, and its
+bounded cleanup join now rethrows a primary body failure with the cleanup failure attached as
+`cause` while still reporting a cleanup-only failure. The exact 29/30 ms deadline steps,
+readiness, blocked-callback, denied-write and joined-cleanup assertions are unchanged, and no
+production behaviour or test deadline was relaxed.
+
+Fail-first: three tests failed before the changes — the new abandoned-verification join
+(`settled` false once `endSession` resolved), the real-timer restoration, and, as collateral
+damage from the leaked fake timers, the unrelated `blocks a write when the checkpoint times out`
+fixture, whose blocked write actually executed. Eight mutants were killed and then restored:
+dropping the `endSession` drain (1 test); leaving the pre-attempt verification unregistered
+(1); making the registered promise swallow rejections (13); disabling the owned-state comparison
+that refuses mutation after non-session changes (1); removing the `afterEach` real-timer
+restoration (2, including the collateral timeout fixture); letting cleanup replace the primary
+failure (1); swallowing a cleanup-only failure (1); and skipping the bounded cleanup join after a
+primary failure (1). Moving construction inside the guarded body
+has no killing mutant — a controlled synthetic construction failure fails identically either way
+once the `afterEach` exists — and is retained as bounded defence for `release()` and the watchdog.
+
+Local `pnpm build && pnpm test && pnpm typecheck` exit **0/0/0** with **3451 passed / 4 skipped**
+in **221** files under `TMPDIR=/var/tmp`; `packages/core/test/checkpointer.test.ts` is 45/45 and
+repeated five times without flake. That file is already in the Windows CI include list, so the new
+regressions run there. Independent review and exact-head/post-merge CI remain required; this entry
+claims no hosted CI result.
+
+After merging main `4320a83`, the operator reran build, full tests and typecheck:
+each exited 0, with **3473 passed / 4 skipped in 222 files**. The five new tests
+remain present alongside R17d's tests; no implementation or test assertion changed
+during integration. This is local integration evidence, not the independent verdict.
+Windows exact-head CI then hit `EBUSY` in the existing timeout fixture's directory
+removal, after its assertions passed. Its `afterEach` now uses three bounded OS
+removal retries (50 ms backoff) after joined sessions; timeout/denial assertions and
+runtime behavior are unchanged. This does not establish the lock owner's identity
+or close #244's separate attachment/external-expansion timeouts. The focused
+checkpoint/process suites pass (49 tests); new-head Windows CI remains required.
 
 ## Outside-train feel #250 recovery: preserve optional tool arguments
 
