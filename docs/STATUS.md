@@ -1,8 +1,17 @@
 # Status
 
-Current roadmap row: **R17c** — targeted outside-train checkpoint cleanup recovery after
-the round-3 Windows CI halt; independent delta review and green exact-head CI pending.
-Next **R17d**, only after exact-head and post-merge CI are green.
+Current roadmap row: **R17d** — builder **agentrig**, conductor **a4decdf9**.
+Implementation halted for measurement-contract arbitration; no permission changes.
+See [R17d deviation request](plans/R17d-deviation-request.md) and measured evidence.
+R17d is not complete; R17e/f/g have not been pulled forward.
+
+R17c landed via #269 at `e74018c707a5715ef20ec5686210a092b8d909ab`
+(head `8e5b9d3df1d31a29a0dad42a4f1d27f7325d1f6b`). Parent verified green
+post-merge CI `34215842021` and structure `34215841911`; the
+[landing receipt](https://github.com/agentkitai/agentrig/pull/269#issuecomment-5583828105)
+closes the prior pending state. Builder and outside-train recovery history below
+are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
+not this row's gate.
 
 ## R17c checkpoint cancellation recovery
 

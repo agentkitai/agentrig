@@ -1,0 +1,1231 @@
+{
+  "base": "e74018c707a5715ef20ec5686210a092b8d909ab",
+  "command": "node .agentrig/r17/task-baseline.mjs",
+  "exit": 0,
+  "tasks": [
+    {
+      "task": "A1",
+      "sessionId": "d0c39b71",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "A1",
+        "runId": "6aba5a49-1eb6-4a6a-ad45-e6abb111ba5d",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A1\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  13:55:27\n   Duration  294ms (transform 330ms, setup 30ms, import 386ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A1\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  13:55:28\n   Duration  251ms (transform 143ms, setup 14ms, import 165ms, tests 3ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A1",
+          "runId": "6aba5a49-1eb6-4a6a-ad45-e6abb111ba5d",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A1"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A1"
+            ],
+            "observation": "Actual A1 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Quoted/comma/whitespace aliases round-trip through parse and serialize."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 8,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "packages/memory/src/page.ts"
+          ],
+          "inputSha256": "5d0f604991ff3869d2980f1be7102a7585b2d084cfec1e6acdfa04052bf7c77d"
+        },
+        {
+          "seq": 19,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/src/page.ts"
+          ],
+          "inputSha256": "90ea81dfc12cd7835ee5c6bb87086487abb9783ade9b128543a102c300820009"
+        },
+        {
+          "seq": 32,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/test/eval-alias.test.ts"
+          ],
+          "inputSha256": "84c037edc5ceef512c06d1a1d584ea489eab78b3ef19e181b41dacf897d4738f"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 9,
+          "sessionId": "d0c39b71",
+          "ts": 1788864922316
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 20,
+          "sessionId": "d0c39b71",
+          "ts": 1788864922321
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 21,
+          "sessionId": "d0c39b71",
+          "ts": 1788864922321
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 33,
+          "sessionId": "d0c39b71",
+          "ts": 1788864922327
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 34,
+          "sessionId": "d0c39b71",
+          "ts": 1788864922328
+        }
+      ]
+    },
+    {
+      "task": "A2",
+      "sessionId": "24fe6cff",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "A2",
+        "runId": "defde305-6a2f-4d04-a47f-5a3a00114cb9",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A2\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  13:55:35\n   Duration  278ms (transform 313ms, setup 28ms, import 363ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A2\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  13:55:35\n   Duration  258ms (transform 147ms, setup 15ms, import 169ms, tests 2ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A2",
+          "runId": "defde305-6a2f-4d04-a47f-5a3a00114cb9",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A2"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A2"
+            ],
+            "observation": "Actual A2 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Stopword-only query returns no hits; duplicate retrieval paths coalesce."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 8,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "packages/memory/src/search.ts"
+          ],
+          "inputSha256": "be168a198a51f6ca09f2296e93fe8cb1172560c709672e9fe71f94b104ce6b0f"
+        },
+        {
+          "seq": 19,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/src/search.ts"
+          ],
+          "inputSha256": "e396b4de9d8b3626c85081b9876fb8251a39d3aa104606231b7b9374a530eec9"
+        },
+        {
+          "seq": 32,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/test/eval-retrieve.test.ts"
+          ],
+          "inputSha256": "1c0067503ee954a36f7a6b13bf1f4f0778a587dc1fef2a0cdce23b5b819ec7ba"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 9,
+          "sessionId": "24fe6cff",
+          "ts": 1788864929535
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 20,
+          "sessionId": "24fe6cff",
+          "ts": 1788864929539
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 21,
+          "sessionId": "24fe6cff",
+          "ts": 1788864929539
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 33,
+          "sessionId": "24fe6cff",
+          "ts": 1788864929544
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 34,
+          "sessionId": "24fe6cff",
+          "ts": 1788864929544
+        }
+      ]
+    },
+    {
+      "task": "A3",
+      "sessionId": "16926205",
+      "permissionPrompts": 3,
+      "reason": "done",
+      "check": {
+        "task": "A3",
+        "runId": "6c35fdbb-b552-4416-8333-5fd2157f95c1",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A3\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  13:55:42\n   Duration  284ms (transform 325ms, setup 31ms, import 374ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "\n RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A3\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  13:55:42\n   Duration  268ms (transform 153ms, setup 15ms, import 179ms, tests 2ms, environment 0ms)\n\n"
+        ],
+        "verification": {
+          "task": "A3",
+          "runId": "6c35fdbb-b552-4416-8333-5fd2157f95c1",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A3"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:A3"
+            ],
+            "observation": "Actual A3 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Empty/non-link text produces no links; reverse module dependency is rejected."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 8,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "packages/memory/src/page.ts"
+          ],
+          "inputSha256": "5d0f604991ff3869d2980f1be7102a7585b2d084cfec1e6acdfa04052bf7c77d"
+        },
+        {
+          "seq": 19,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/src/wikilinks.ts"
+          ],
+          "inputSha256": "1e482a02840e4143be50da22a8e12c35e6d12109c1ccb871ffba4cf8632b2f82"
+        },
+        {
+          "seq": 32,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/src/page.ts"
+          ],
+          "inputSha256": "e602bdb3c3e267d291c05e1fd64f701bdc52f3caec01f1cda798fd551d7f7485"
+        },
+        {
+          "seq": 45,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "packages/memory/test/eval-links.test.ts"
+          ],
+          "inputSha256": "5b1852b200824beea5459d80fd518f213841ecbded059b2d5f714624c2c8abd3"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 9,
+          "sessionId": "16926205",
+          "ts": 1788864936715
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 20,
+          "sessionId": "16926205",
+          "ts": 1788864936718
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 21,
+          "sessionId": "16926205",
+          "ts": 1788864936718
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 33,
+          "sessionId": "16926205",
+          "ts": 1788864936722
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 34,
+          "sessionId": "16926205",
+          "ts": 1788864936722
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "4",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 46,
+          "sessionId": "16926205",
+          "ts": 1788864936727
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "4",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 47,
+          "sessionId": "16926205",
+          "ts": 1788864936727
+        }
+      ]
+    },
+    {
+      "task": "A4",
+      "sessionId": "94e549f2",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "A4",
+        "runId": "a5defb7c-3de0-4e91-a6b2-d977eeb4eb6d",
+        "outcome": "BLOCKED",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "NOT_REQUIRED",
+        "scope": "PASS",
+        "manual": "PENDING",
+        "evidence": [
+          "Scope: 4 of 5 workspace projects\n",
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: RUN  v4.1.11 /tmp/r17-e1-kL4TNF/A4\n\n\n Test Files  2 passed (2)\n      Tests  16 passed (16)\n   Start at  13:55:49\n   Duration  280ms (transform 325ms, setup 30ms, import 373ms, tests 16ms, environment 0ms)\n\n\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+        ],
+        "verification": {
+          "task": "A4",
+          "runId": "a5defb7c-3de0-4e91-a6b2-d977eeb4eb6d",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:A4"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "golden",
+            "references": [
+              "eval/check.mjs:behavior:A4"
+            ],
+            "humanReview": "required",
+            "observation": "Structured A4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 8,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "packages/core/src/events.ts"
+          ],
+          "inputSha256": "0b20024a17a17c1607db475db4d5189d7a98d7a48e42e28877a16703a36f8569"
+        },
+        {
+          "seq": 19,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "packages/cli/src/render.ts"
+          ],
+          "inputSha256": "1bff7eabdfe4b8643f921313cf10dee04f7b7db09e4475500b4feb55ab8777b1"
+        },
+        {
+          "seq": 30,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "answer.json"
+          ],
+          "inputSha256": "1ac413b7d4a0e59901b570dc1ae0110fe5a32afde6d1de099f9635c66e50879d"
+        },
+        {
+          "seq": 43,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "answer.md"
+          ],
+          "inputSha256": "5ad7309262bf6111b7569bc8c15db6e7906030dc1ffa850804bf31478700a67d"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 9,
+          "sessionId": "94e549f2",
+          "ts": 1788864943914
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 20,
+          "sessionId": "94e549f2",
+          "ts": 1788864943917
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 31,
+          "sessionId": "94e549f2",
+          "ts": 1788864943921
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 32,
+          "sessionId": "94e549f2",
+          "ts": 1788864943921
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "4",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 44,
+          "sessionId": "94e549f2",
+          "ts": 1788864943924
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "4",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 45,
+          "sessionId": "94e549f2",
+          "ts": 1788864943924
+        }
+      ]
+    },
+    {
+      "task": "X1",
+      "sessionId": "0641538d",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "X1",
+        "runId": "d2df12e2-4154-45f7-adbf-5c1fbcfab2fd",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X1",
+          "runId": "d2df12e2-4154-45f7-adbf-5c1fbcfab2fd",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X1"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X1"
+            ],
+            "observation": "Actual X1 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Whitespace, nonfinite values and nonprimitive coercions are rejected."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 7,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "index.js"
+          ],
+          "inputSha256": "55af6c797d289b1917d55bc06f00c7e6e8db897fb6335fe474167a92aff5200a"
+        },
+        {
+          "seq": 18,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "index.js"
+          ],
+          "inputSha256": "8003eb479cb5aa26dc98a68f92ffeed97bc4c1074c42068f24de7dfc0d3dc54b"
+        },
+        {
+          "seq": 31,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "eval-test-reference.js"
+          ],
+          "inputSha256": "9651e70b57cfbed40a33ca59f518d9ef183e8fa6bb9dfc49dc0b1ea85955ea69"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 8,
+          "sessionId": "0641538d",
+          "ts": 1788864949851
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 19,
+          "sessionId": "0641538d",
+          "ts": 1788864949854
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 20,
+          "sessionId": "0641538d",
+          "ts": 1788864949854
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 32,
+          "sessionId": "0641538d",
+          "ts": 1788864949857
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 33,
+          "sessionId": "0641538d",
+          "ts": 1788864949857
+        }
+      ]
+    },
+    {
+      "task": "X2",
+      "sessionId": "ba0f2e36",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "X2",
+        "runId": "ecc5d1e9-b32c-4d8c-b38a-7a3eb68a3804",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X2",
+          "runId": "ecc5d1e9-b32c-4d8c-b38a-7a3eb68a3804",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X2"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X2"
+            ],
+            "observation": "Actual X2 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Numeric strings and boxed numbers are rejected by the strict surface."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 7,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "index.js"
+          ],
+          "inputSha256": "55af6c797d289b1917d55bc06f00c7e6e8db897fb6335fe474167a92aff5200a"
+        },
+        {
+          "seq": 18,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "strict.js"
+          ],
+          "inputSha256": "aa3dc7be06c38a79f707eb38ee9bdab64cacd79ad122860b3c3e1cb91b0897e6"
+        },
+        {
+          "seq": 31,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "eval-test-reference.js"
+          ],
+          "inputSha256": "3b2d2d43865f726234f8b915e23df64f8675e2ec6a108b3c85b5d9df12a310fa"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 8,
+          "sessionId": "ba0f2e36",
+          "ts": 1788864950138
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 19,
+          "sessionId": "ba0f2e36",
+          "ts": 1788864950141
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 20,
+          "sessionId": "ba0f2e36",
+          "ts": 1788864950141
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 32,
+          "sessionId": "ba0f2e36",
+          "ts": 1788864950144
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 33,
+          "sessionId": "ba0f2e36",
+          "ts": 1788864950144
+        }
+      ]
+    },
+    {
+      "task": "X3",
+      "sessionId": "3598b722",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "X3",
+        "runId": "c5eb9d59-f803-4555-8466-44cf06994ba6",
+        "outcome": "PASS",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "PASS",
+        "scope": "PASS",
+        "manual": "NOT_REQUIRED",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          ""
+        ],
+        "verification": {
+          "task": "X3",
+          "runId": "c5eb9d59-f803-4555-8466-44cf06994ba6",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X3"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "surface",
+            "references": [
+              "eval/check.mjs:behavior:X3"
+            ],
+            "observation": "Actual X3 task surface completed evaluator-owned assertions.",
+            "negativeProbe": "Whitespace/nonprimitive values are classified other rather than number."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 7,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "index.js"
+          ],
+          "inputSha256": "55af6c797d289b1917d55bc06f00c7e6e8db897fb6335fe474167a92aff5200a"
+        },
+        {
+          "seq": 18,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "classify.js"
+          ],
+          "inputSha256": "f59199f5dc3b2893a1ab44b7d739899954968c32efde8eb54c0d12ac2de6edae"
+        },
+        {
+          "seq": 31,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "eval-test-reference.js"
+          ],
+          "inputSha256": "3b309f7eace1d5a9d037c04c1e6f21c2b86f01ebed9a7818b94ec995aff10a7e"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 8,
+          "sessionId": "3598b722",
+          "ts": 1788864950430
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 19,
+          "sessionId": "3598b722",
+          "ts": 1788864950433
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 20,
+          "sessionId": "3598b722",
+          "ts": 1788864950433
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 32,
+          "sessionId": "3598b722",
+          "ts": 1788864950437
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 33,
+          "sessionId": "3598b722",
+          "ts": 1788864950437
+        }
+      ]
+    },
+    {
+      "task": "X4",
+      "sessionId": "bf9bf482",
+      "permissionPrompts": 2,
+      "reason": "done",
+      "check": {
+        "task": "X4",
+        "runId": "b018fe11-5315-4057-95f2-dad3503c8579",
+        "outcome": "BLOCKED",
+        "behavior": "PASS",
+        "regression": "PASS",
+        "submittedTests": "NOT_REQUIRED",
+        "scope": "PASS",
+        "manual": "PENDING",
+        "evidence": [
+          "behavior: independent assertions passed\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "regression: 111 pinned upstream synchronous cases passed (adapted runner, not Mocha)\nAGENTRIG_EVAL_ASSERTIONS_COMPLETED",
+          "Independent human must assess answer.md against EVALSET rubric; record signed verdict separately."
+        ],
+        "verification": {
+          "task": "X4",
+          "runId": "b018fe11-5315-4057-95f2-dad3503c8579",
+          "evaluator": {
+            "id": "agentrig-evalset-v1",
+            "sourceSha256": "ab02caf5b3a5bd8d0caa24afac9d7060ba7895e2618b5f45fd26697c96738221"
+          },
+          "regression": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "pinned-regression",
+            "references": [
+              "eval/check.mjs:regression:X4"
+            ],
+            "observation": "Pinned regression worker completed its assertions."
+          },
+          "behavior": {
+            "verdict": "PASS",
+            "complete": true,
+            "basis": "golden",
+            "references": [
+              "eval/check.mjs:behavior:X4"
+            ],
+            "humanReview": "required",
+            "observation": "Structured X4 answer fields/citations passed fixed evaluator checks; prose semantics not assessed."
+          }
+        }
+      },
+      "requests": [
+        {
+          "seq": 7,
+          "tool": "read_file",
+          "class": "read",
+          "paths": [
+            "index.js"
+          ],
+          "inputSha256": "55af6c797d289b1917d55bc06f00c7e6e8db897fb6335fe474167a92aff5200a"
+        },
+        {
+          "seq": 18,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "answer.json"
+          ],
+          "inputSha256": "953b184c58f8d2cd21509b3207bc8bb711cc659405ec1c7cff28c0c0b632c82b"
+        },
+        {
+          "seq": 31,
+          "tool": "write_file",
+          "class": "write",
+          "paths": [
+            "answer.md"
+          ],
+          "inputSha256": "10c1c9b3a3d41cdc6b115c7f43f31cf2e24ce8dde18aa8f333e4a052dd80fd55"
+        }
+      ],
+      "decisions": [
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "1",
+          "tool": "read_file",
+          "source": {
+            "kind": "rule",
+            "index": 4,
+            "rule": {
+              "class": "read",
+              "cwdOnly": true,
+              "decision": "allow"
+            }
+          },
+          "seq": 8,
+          "sessionId": "bf9bf482",
+          "ts": 1788864950721
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 19,
+          "sessionId": "bf9bf482",
+          "ts": 1788864950724
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "2",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 20,
+          "sessionId": "bf9bf482",
+          "ts": 1788864950724
+        },
+        {
+          "type": "permission.decision",
+          "d": "ask",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "fallback"
+          },
+          "seq": 32,
+          "sessionId": "bf9bf482",
+          "ts": 1788864950728
+        },
+        {
+          "type": "permission.decision",
+          "d": "allow",
+          "toolUseId": "3",
+          "tool": "write_file",
+          "source": {
+            "kind": "approval-handler"
+          },
+          "seq": 33,
+          "sessionId": "bf9bf482",
+          "ts": 1788864950728
+        }
+      ]
+    }
+  ]
+}
