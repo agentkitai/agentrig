@@ -58,6 +58,60 @@ closes the prior pending state. Builder and outside-train recovery history below
 are preserved. #272/#244 later-turn residuals remain at roadmap END / R17g,
 not this row's gate.
 
+## Outside-train END follow-up batch: test environment, workspace root, delta-review pins
+
+Builder of this batch: **Claude Code, outside the train**, session
+**38edebec-f5e3-40e1-a91b-dae44179db70**, on `fix/followups-test-environment` with `origin/main`
+`cc457c7` merged first. It is not an agentrig-built row, an R17 completion, or the start of the
+R17g sweep. The batch is exactly [#237](https://github.com/agentkitai/agentrig/issues/237)
+(detection scope only), [#245](https://github.com/agentkitai/agentrig/issues/245) and
+[#253](https://github.com/agentkitai/agentrig/issues/253); the remaining open issues are untouched.
+Independent review and exact-head/post-merge CI receipts belong to the batch PR — none of the three
+issues is closed by local verification.
+
+**#237** — `test/fixture-preflight.mjs` walks the effective temporary directory and every ancestor
+for a `.git` file, directory or symlink, treats a probe it cannot read as present rather than
+absent, and fails with a named explanation before the suite starts. It is `pnpm test:preflight`
+and a silent-on-success guard in `pnpm test`. It deletes nothing, offers no bypass, skips no test
+and does not touch trust discovery, which is correct as written. [docs/TESTING.md](TESTING.md)
+records the invocations, the Codex `workspace-write` sandbox that synthesizes read-only `.git`
+mounts over the workspace root, `/tmp` and `$TMPDIR`, and the rule that a session which cannot get
+a clean preflight may review code but must hand execution to a runner outside the sandbox. This is
+**detection only**: no historical failure from #237, #271 or PR #269 is reproduced or fixed here,
+and the sandbox mechanism is still not an identified creator of any host `/tmp/.git`.
+
+**#245** — `vitest.config.ts` pins `root` to its own directory, so the repository-relative `include`
+no longer resolves against the caller's cwd; `vitest.windows.config.ts` and `vitest.web.config.ts`
+inherit it by spread. `packages/cli/test/workspace-vitest-root.test.ts` runs one targeted core test
+in a real subprocess from `packages/cli` (single-worker, never a recursive full suite) and pins the
+Windows lane's inherited root. Removing the `root` line fails both assertions with the reported
+`No test files found`.
+
+**#253** — `packages/core/test/review-launch-guidance.test.ts` slices §3's delta bullet out of
+`.agentrig/skills/topic/SKILL.md` and asserts only inside that slice, with a guard that the slice
+excludes the §2 step 4 full-pass wording. The three documented prose mutants — deleting the delta
+echo sentence, dropping `REVHEAD` from its echo tuple, recombining the two dependency installs —
+each fail their own pin and nothing else, and were restored; the skill prose is byte-identical.
+These are text pins and do not implement isolation or sandboxing.
+
+Local verification on the branch, each command run separately with a private `TMPDIR`:
+`pnpm build` **0**, `pnpm test` **0** (**224 files, 3488 passed / 4 skipped**), `pnpm typecheck`
+**0**, followed by three consecutive green full runs. Not merged; no independent review, no
+exact-head CI and no post-merge CI are claimed.
+
+**Open blocker, pre-existing, not introduced by this batch.** The full suite is intermittently red
+on this host, reproduced on **unmodified `cc457c7`** (one of six baseline runs, 7 failures) as well
+as on the branch. Every failing run carries the same family: `Project /tmp contains the user
+AgentRig state directory` and a received `projectRoot: '/tmp'`, with trust, config, extension and
+schedule fixtures then reading defaults instead of their fixture config. The host has no
+`/tmp/.git` — the new preflight passes — but it does have a shared `/tmp/.agentrig` whose
+`usage.jsonl` was written *during* these runs with fixture-provider records, alongside
+`schedule.json`, `schedule.log`, `raw/sessions/fb380606` and the `packages/pkg-f16d05…` leftover
+named in #237's original report. Nothing there was deleted or worked around. The preflight does not
+detect this: its assigned scope is Git ancestry, and the state directory is a different marker.
+This belongs to #237/#271 fixture isolation, unresolved. One further unrelated flake was observed
+once (`evaluation.test.ts`, `negative outer wall time`); it is not diagnosed here.
+
 ## Outside-train END follow-up batch: checkpoint ownership and fixture cleanup
 
 Builder of this batch: **Claude Code, outside the train**, under the human instruction to work

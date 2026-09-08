@@ -32,6 +32,40 @@ it("topic launches Codex in its own tree and temp root for full and delta passes
   expect(text).toContain("Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's");
 });
 
+/**
+ * §3's delta bullet only. The full-pass preparation in §2 step 4 says the same things in different
+ * words, so a delta assertion written against the whole file passes even after the delta paragraph
+ * is deleted — the gap #253 recorded. Everything below reads this slice, never the file.
+ */
+async function deltaPass() {
+  const text = await skill("topic");
+  const start = text.indexOf("- **Re-review the delta**");
+  const end = text.indexOf("\n- **Convergence**", start);
+  expect(start, "delta bullet").toBeGreaterThanOrEqual(0);
+  expect(end, "convergence bullet after the delta bullet").toBeGreaterThan(start);
+  return text.slice(start, end).replace(/\s+/g, " ");
+}
+
+it("the delta bullet is pinned apart from the full-pass preparation", async () => {
+  const delta = await deltaPass();
+  expect(delta).toContain("run the external review pass again (§2 step 4) over the delta only");
+  expect(delta).not.toContain("End preparation with");
+  expect(delta).not.toContain("One `bash` call for preparation, then one call per install.");
+});
+
+it("delta preparation ends by echoing what the next calls must be given", async () => {
+  expect(await deltaPass()).toContain("End the command with `echo ");
+});
+
+it("the delta echo tuple carries REVHEAD with the three paths", async () => {
+  expect(await deltaPass()).toContain('echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`, record the paths/SHA');
+});
+
+it("delta dependencies install in two separate calls under the full pass's limits", async () => {
+  expect(await deltaPass()).toContain(
+    "install dependencies in two separate calls with the same per-install timeout and exit-code requirements as §2 step 4.");
+});
+
 it("ship and standalone dogfood preserve separate trees and explicit launch locations", async () => {
   expect(await skill("ship")).toContain("in parallel in separate reviewer-owned worktrees you prepare");
   expect(await skill("dogfood")).toContain("cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p");
