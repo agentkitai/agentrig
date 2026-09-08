@@ -239,7 +239,9 @@ it("does not expose an earlier verified package when the aggregate scan exhausts
   const result = await inspectPackages(f.projectRoot);
   expect(result.packages).toEqual([]);
   expect(result.errors.join()).toContain("aggregate package discovery entry limit exceeded");
-}, 10_000);
+  // This is a real-filesystem cap test, not a 10s performance contract. Restore its original
+  // 30s fixture allowance: both post-merge Windows runs exceeded the reduced local-derived 10s.
+}, 30_000);
 
 it("does not expose an earlier verified package when the aggregate scan exhausts its byte cap", async () => {
   const { f, late, earlyBytes, lateBytes } = await twoInstalled();

@@ -1651,6 +1651,10 @@ need an explicit budget; neither prevents continuing other actionable entries.
   include with END test followups, not a new R17 gate or parent code workaround.
 
 - [x] Historical review evidence [#261](https://github.com/agentkitai/agentrig/issues/261): independent exact-head build/test/typecheck reproduced and publicly recorded; original Codex limitation retained, not rewritten. [Verification receipt](https://github.com/agentkitai/agentrig/pull/234#issuecomment-5588358212).
-- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's distinct attachment/external-expansion timeouts and its macOS escalation strand are addressed separately in the CI fixture item above, pending that batch's merge.
-- [ ] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275), clarify per-call versus overall timeout. A 30s message alone does not establish that the entire 300s budget expired.
+- [x] Core lifecycle: [#272](https://github.com/agentkitai/agentrig/issues/272) later-turn cleanup is implemented in the checkpoint batch above; #244's fixture strands landed separately in PR #284, with its late-permission shutdown repair still pending.
+- [x] Memory session-end ingest: [feel #275](https://github.com/agentkitai/agentrig/issues/275),
+  timeout errors now name the operation and distinguish a per-call limit from the overall run
+  budget. Defaults and partial-usage accounting are unchanged; the original 30s message does not
+  establish that the 300s budget expired. Implemented on `fix/followups-maintenance-timeouts`;
+  completion reaches main through the reviewed green PR.
 - [x] PR276 probe followups: [#277](https://github.com/agentkitai/agentrig/issues/277) stop evidence asserted; [#278](https://github.com/agentkitai/agentrig/issues/278) natural failure exit flushes pending output while remaining fail-fast; [#279](https://github.com/agentkitai/agentrig/issues/279) independent four-of-five fail-first receipt recorded alongside staged history. Implemented in the separately authorized existing-issue sweep, not another PR276 repair cycle. Completion reaches main with the reviewed, green batch merge.

@@ -23,7 +23,7 @@ export class MaintenanceLimitError extends Error { override name = "MaintenanceL
 export function maintenanceDiagnostic(callback: () => unknown): void {
   try { void Promise.resolve(callback()).catch(() => {}); } catch { /* diagnostic only */ }
 }
-const timeout = (ms: number) => new DOMException(`maintenance timed out after ${ms}ms`, "TimeoutError");
+const timeout = (message: string) => new DOMException(message, "TimeoutError");
 function outcome(error: unknown): AuxiliaryCall["outcome"] {
   if (error instanceof MaintenanceLimitError) return "limit";
   if (error instanceof Error && error.name === "TimeoutError") return "timeout";
@@ -54,12 +54,20 @@ export class MaintenanceRun {
     this.parent = signal;
     signal?.addEventListener("abort", this.abortParent, { once: true });
     if (signal?.aborted) this.abortParent();
-    this.timer = setTimeout(() => this.controller.abort(timeout(this.limits.timeoutMs)), this.limits.timeoutMs);
+    this.timer = setTimeout(() => this.controller.abort(this.runTimeout()), this.limits.timeoutMs);
+  }
+
+  private runTimeout(): DOMException {
+    return timeout(`maintenance ${this.operation} run timed out after ${this.limits.timeoutMs}ms (overall budget)`);
+  }
+
+  private callTimeout(operation: string): DOMException {
+    return timeout(`maintenance ${this.operation} ${operation} call timed out after ${this.limits.callTimeoutMs}ms (per-call limit; overall budget ${this.limits.timeoutMs}ms)`);
   }
 
   check(): void {
     if (this.finished) throw new Error("maintenance run is closed");
-    if (performance.now() - this.started >= this.limits.timeoutMs) this.controller.abort(timeout(this.limits.timeoutMs));
+    if (performance.now() - this.started >= this.limits.timeoutMs) this.controller.abort(this.runTimeout());
     this.signal.throwIfAborted();
   }
 
@@ -69,7 +77,7 @@ export class MaintenanceRun {
     const controller = new AbortController();
     const abort = () => controller.abort(this.signal.reason);
     this.signal.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => controller.abort(timeout(this.limits.callTimeoutMs)), this.limits.callTimeoutMs);
+    const timer = setTimeout(() => controller.abort(this.callTimeout(operation)), this.limits.callTimeoutMs);
     const started = performance.now();
     const record: AuxiliaryCall = { operation, provider, ...(model === undefined ? {} : { model }),
       outcome: "failed", durationMs: 0, usageComplete: false };
@@ -101,7 +109,7 @@ export class MaintenanceRun {
         });
       });
       const result = await Promise.race([work, aborted]);
-      if (performance.now() - started >= this.limits.callTimeoutMs) controller.abort(timeout(this.limits.callTimeoutMs));
+      if (performance.now() - started >= this.limits.callTimeoutMs) controller.abort(this.callTimeout(operation));
       controller.signal.throwIfAborted(); this.check();
       record.outcome = "completed";
       record.usageComplete = record.usage !== undefined && reported && !malformedUsage;

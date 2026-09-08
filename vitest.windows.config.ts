@@ -8,9 +8,9 @@ import base from "./vitest.config.js";
  * more time than the tests themselves. This file is the same list, booted once, run in parallel
  * workers. Adding Windows coverage means adding a path here, not a workflow step.
  *
- * Three invocations stay as their own steps in `ci.yml`: a name-filtered subagent case, the
- * deliberate post-suite repeat of the ingest regression, and the package installer pair that
- * runs single-worker to keep its cap fixture apart from real npm packing.
+ * Four invocations stay as their own steps in `ci.yml`: a name-filtered subagent case, the
+ * deliberate post-suite repeat of the ingest regression, and separate single-worker package
+ * runtime and installer steps. Real npm packing runs before the cap fixture and bulk suite.
  */
 export const windowsCoverage = [
   "packages/cli/test/skill-refresh.test.ts",
