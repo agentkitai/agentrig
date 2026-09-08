@@ -6,9 +6,11 @@ Roadmap work has resumed under the user's latest authorization. R17e is complete
 at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
 ([final receipt](https://github.com/agentkitai/agentrig/pull/289#issuecomment-5591695371)).
 R17f's measured-default decision follows, then R17g's package follow-up batches.
-**R17f is in preparation and not done**: the runner, protocol and pre-registration are committed
-network-free on `feat/r17f-measured-defaults` ([contract](plans/R17f.md)); no live call has been
-made, no result exists, and no default has moved.
+**R17f is not done**: its first collection was stopped for a prompt-contract defect after two
+attempts started.306,143reported tokens plus one unknown interrupted call are retained;
+no feature conclusion or default change follows from invalid measurements. The original test
+filename instruction is restored and tested. A corrected run within the remaining original
+budget awaits authorization ([record](plans/R17f.md)).
 Use bounded reviews, focused repair checks and sequential green-CI merges. Historical pause and
 pending-delivery notes below are not current instructions. [Current status](STATUS.md).
 

@@ -139,7 +139,7 @@ export async function run(settings, dependencies = {}) {
   const transport = dependencies.transport ?? evaluationTransport();
   const makeProvider = dependencies.provider ?? (() => bounded(new OpenAIChatGPTProvider({
     ...E3_MODEL, auth: dependencies.auth ?? new OpenAIChatGPTAuth(), retry: { maxRetries: 0 } })));
-  const ledger = new R17fBudget(settings.totalTokens, settings.maxMinutes, output);
+  const ledger = new R17fBudget(settings.totalTokens, settings.maxMinutes, output, dependencies.signal);
   const completed = [];
   let blocked = null;
   try {
@@ -265,6 +265,7 @@ export async function run(settings, dependencies = {}) {
       await ledger.record({ phase: 'attempt-settled', key, outcome: row.outcome, tokens: ledger.tokens });
       console.log(`DONE ${key} ${JSON.stringify(row)} totalTokens=${ledger.tokens}`);
     }
+    ledger.guard(); // Cancellation/unknown usage on the last slot is still a batch stop.
   } catch (error) {
     blocked = error.message;
     console.error(`BLOCKED ${blocked}`);
@@ -282,7 +283,15 @@ export async function run(settings, dependencies = {}) {
   return { completed, blocked, tokens: ledger.tokens, unknownCalls: ledger.unknownCalls };
 }
 
+export function measurementSignals(controller, source = process) {
+  const abort = () => controller.abort();
+  source.once('SIGINT', abort); source.once('SIGTERM', abort);
+  return () => { source.removeListener('SIGINT', abort); source.removeListener('SIGTERM', abort); };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  try { await run(Settings.parse(JSON.parse(await readFile(process.argv[2], 'utf8')))); }
+  const controller = new AbortController(), dispose = measurementSignals(controller);
+  try { await run(Settings.parse(JSON.parse(await readFile(process.argv[2], 'utf8'))), { signal: controller.signal }); }
   catch (error) { console.error(`BLOCKED: ${error.message}`); process.exitCode = 2; }
+  finally { dispose(); }
 }

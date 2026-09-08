@@ -1,5 +1,31 @@
 # Status
 
+## Current — R17f collection interrupted; correcting the protocol (2026-09-09)
+
+Frozen evaluator `04072b177510d88820926605fd73e122ba00e0a4` passed the bounded reviews below,
+including focused Codex delta `01a082ff-ffe6-7313-9e5c-d6a7d46850d1`. Collection began
+2026-09-08T21:53:46Z (September9local). Monitoring caught an omitted original E3 instruction:
+allowed regression-test filename patterns were not disclosed, so attempt001 failed a hidden
+filename rule. The operator stopped the invalid collection during attempt002, joined the
+owned process at exit143 and observed no remaining Docker containers. No model benefit/loss
+is inferred from these invalid measurements, and no result is retroactively changed.
+
+**306,143reported tokens; one interrupted call has unknown consumption.** All raw evidence is
+retained outside the checkout. The process did not produce final results/calls files; an
+operator interruption receipt explicitly records that gap. A corrected matrix is requested,
+not yet authorized, with **10,515,857tokens** remaining after charging the known usage and
+reserving1,178,000for the unknown call against the same12Mallowance. No additional budget
+is requested, and the reserve is not claimed as measured usage or a guaranteed billing bound.
+
+The original instruction is restored and covered by a fail-first actual-request test;
+graceful operator cancellation/finalization is also tested.24focused cases pass; full and
+focused independent repair checks follow. Builder remains Claude/operator outside AgentRig,
+no conductor session or new `feel` issue. R17f remains incomplete, defaults unchanged.
+The separate memory-control helper is preparing an explicit opt-out without changing the
+current default; it has no access to benchmark results and has made no live evaluation calls.
+
+## Preparation history
+
 ## Current — R17f: measured-default preparation (2026-09-09)
 
 R17e is delivered: exact head `2f38017` (CI 34275594904, structure 34275594911 green), merged at

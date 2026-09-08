@@ -9,8 +9,8 @@ export class R17fBudget extends EvaluationBudget {
   stopped = null;
   writes = Promise.resolve();
 
-  constructor(tokens, minutes, output) {
-    super(tokens, minutes);
+  constructor(tokens, minutes, output, signal) {
+    super(tokens, minutes, signal);
     this.output = output;
     // Original E3's conservative unknown-call reserve, capped at 10% for smaller
     // explicit budgets. Headroom is scheduling only, never reported consumption.

@@ -3,6 +3,7 @@ import { mkdtemp, realpath, rm, readFile, mkdir, rename, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EventEmitter } from "node:events";
 import { PermissionGrantRegistry, describeShellOperation, type ModelProvider, type PermissionRequest } from "@agentkitai/agentrig-core";
 import { TuiController } from "../src/tui/controller.js";
 import { evaluationTransport, type EvaluationTransport } from "../src/evaluation-transport.js";
@@ -27,6 +28,7 @@ const runner = await import(new URL("../../../eval/r17f.mjs", import.meta.url).h
   };
   transcriber(): { lines: string[]; push(event: unknown): void };
   attemptKey(ordinal: number, config: object): string;
+  measurementSignals(controller: AbortController, source: EventEmitter): () => void;
   run(settings: object, dependencies?: object): Promise<{ completed: unknown[]; blocked: string | null; tokens: number }>;
 };
 const corpusModule = await import(new URL("../../../eval/r17f-corpus.mjs", import.meta.url).href) as {
@@ -257,10 +259,21 @@ it("passes the measurement abort signal into permission prompts", async () => {
 
 it("runs the preregistered slots on a fake provider with real defaults, permissions and R17e lines", async () => {
   const { root, transport, settings: input } = await prepared();
+  const requests: string[] = [];
   // Slots 17-20 are X1's four configurations in repetition one, in their frozen order.
-  const result = await runner.run(input, { transport, slots: [16, 17, 18, 19], provider: () => scripted() });
+  const result = await runner.run(input, { transport, slots: [16, 17, 18, 19], provider: () => {
+    const inner = scripted();
+    return { ...inner, async *stream(request: Parameters<ModelProvider["stream"]>[0], signal: AbortSignal) {
+      requests.push(request.system); yield* inner.stream(request, signal);
+    } };
+  } });
   expect(result.blocked).toBeNull();
   expect(result.completed).toHaveLength(4);
+  // Frozen E1 TASK.md omits these evaluator-owned filename rules for several tasks.
+  // Original E3 disclosed them in the common system prompt; every candidate must receive them.
+  expect(requests[0]).toContain("packages/memory/test/eval-<lowercase-kebab-name>.test.ts");
+  expect(requests[0]).toContain("eval-test-<lowercase-kebab-name>.js");
+  expect(requests[0]).toContain("External tests must run directly with node and built-in assert");
 
   const protocol = JSON.parse(await readFile(join(root, "evidence", "protocol.json"), "utf8"));
   expect(protocol.model).toMatchObject({ model: "gpt-5.6-luna", reasoningEffort: "medium", apiKeyFallback: false });
@@ -438,3 +451,33 @@ it("keeps final results and call accounting when a progress append fails", async
   expect(saved.ledger.blocked).toMatch(/EISDIR/);
   expect(JSON.parse(await readFile(join(root, "evidence", "calls.json"), "utf8"))).toHaveLength(4);
 }, 120_000);
+
+it("operator cancellation settles the session and preserves unknown-call accounting on the last slot", async () => {
+  const { root, transport, settings: input } = await prepared(), controller = new AbortController();
+  const provider: ModelProvider = { ...scripted(), async *stream(_request, signal) {
+    yield { type: "text_delta", text: "partial before operator stop" };
+    controller.abort(); signal.throwIfAborted();
+    yield { type: "stop", reason: "end_turn" };
+  } };
+  const result = await runner.run(input, { transport, slots: [16], provider: () => provider, signal: controller.signal });
+  expect(result.blocked).toMatch(/cancelled/);
+  const saved = JSON.parse(await readFile(join(root, "evidence", "results.json"), "utf8"));
+  expect(saved.ledger.unknownCalls).toBe(1);
+  expect(saved.ledger.blocked).toMatch(/cancelled/);
+  const calls = JSON.parse(await readFile(join(root, "evidence", "calls.json"), "utf8"));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ complete: false, usage: null });
+}, 120_000);
+
+it("joins operator signals through cancellation without removing unrelated handlers", () => {
+  const source = new EventEmitter(), controller = new AbortController();
+  let unrelated = 0;
+  source.on("SIGTERM", () => { unrelated++; });
+  const dispose = runner.measurementSignals(controller, source);
+  source.emit("SIGTERM");
+  expect(controller.signal.aborted).toBe(true);
+  dispose();
+  expect(source.listenerCount("SIGINT")).toBe(0);
+  expect(source.listenerCount("SIGTERM")).toBe(1);
+  expect(unrelated).toBe(1);
+});
