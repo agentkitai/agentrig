@@ -276,7 +276,7 @@ it("blocks a store writer while copying a guarded source snapshot", async () => 
 
 it("stamp writes use the mutation lock and the configured wait", async () => {
   await withMemoryLock(store.root, async () => {
-    await expect(markDreamed(store.root, 1000, { timeoutMs: 0 })).rejects.toThrow("timed out waiting for memory lock");
+    await expect(markDreamed(store.root, 1000, { timeoutMs: 0 })).rejects.toThrow("another writer may still be active: wait for it to finish and retry");
     expect(await lastDreamAt(store.root)).toBeUndefined();
     await expect(runDream({ wiki: store, raw: new FileRawStore({ root }), structuralOnly: true,
       outputRoot: join(root, "blocked-output"), lockTimeoutMs: 0 })).rejects.toThrow("timed out waiting for memory lock");

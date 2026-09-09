@@ -21,6 +21,7 @@ export interface ProcedureDetection {
   candidates: ProcedureCandidate[];
   rejected: Array<{ pages: string[]; reason: string }>;
   refinementError?: string;
+  refinementSkipped?: string;
 }
 
 /** Conservative initial dialect: complete tagged Step N / Scope / Limitation claims. */

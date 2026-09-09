@@ -65,6 +65,7 @@ it("uses effect verdicts rather than risky words, retains human review and accou
   });
   expect(model.requests[0]!.system).toContain("NOT keywords");
   expect(model.requests[0]!.system).toContain("untrusted data");
+  expect(model.requests[0]!.system).toContain("1–1,000 characters");
   expect(usage?.calls).toHaveLength(1); expect(usage?.reportedUsage).toEqual({ input: 10, output: 5 });
 });
 
@@ -81,10 +82,11 @@ it("fails closed for absent, serialized, stale and uncertain assessment receipts
   expect(selectForPromotion([f.page], { evidenceIndex: f.evidenceIndex, guardrailIndex: unknown }).rejected[0]?.guardrails?.status).toBe("unknown");
 });
 
-it.each(["missing dimension", "omitted claim", "duplicate claim", "wrong candidate", "omitted candidate", "rewrite"])("rejects malformed assessments: %s", async fault => {
+it.each(["overlong reason", "missing dimension", "omitted claim", "duplicate claim", "wrong candidate", "omitted candidate", "rewrite"])("rejects malformed assessments: %s", async fault => {
   const f = await fixture("Retries apply per request", "Diagnostics retain failures");
   const model = provider(undefined, { mutate: value => {
     const c = value.assessments[0];
+    if (fault === "overlong reason") c.claims[0].reason = "x".repeat(1001);
     if (fault === "missing dimension") delete c.claims[0].effects["hide-failures"];
     if (fault === "omitted claim") c.claims = [];
     if (fault === "duplicate claim") c.claims[1] = c.claims[0];

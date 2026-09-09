@@ -27,6 +27,7 @@ export interface AppliedChanges {
   /** Findings that named something the page did not contain — reported, not silently dropped. */
   unmatchedRemovals: Array<{ page: string; line: string }>;
   mergedPages: Array<{ from: string; into: string }>;
+  skippedMerges: Array<{ from: string; into: string; reason: string }>;
   rewrittenDates: Array<{ page: string; from: string; to: string }>;
   supersededMarked: Array<{ page: string; old: string }>;
 }
@@ -35,6 +36,7 @@ const empty = (): AppliedChanges => ({
   removedLines: [],
   unmatchedRemovals: [],
   mergedPages: [],
+  skippedMerges: [],
   rewrittenDates: [],
   supersededMarked: [],
 });
@@ -165,7 +167,10 @@ export async function applyConsolidation(
       const src = pages.get(from)!;
       // Opaque metadata has no safe automatic cross-page merge semantics. Keep the source
       // rather than discard human fields or invent a conflicting metadata precedence rule.
-      if (src.extraFrontmatter?.trim()) continue;
+      if (src.extraFrontmatter?.trim()) {
+        changes.skippedMerges.push({ from, into: m.to, reason: "source has opaque frontmatter; retained without guessing metadata precedence" });
+        continue;
+      }
       if (Buffer.byteLength(target.body) + Buffer.byteLength(src.body) + Buffer.byteLength(from) + 32
         > (opts.scanLimits?.maxFileBytes ?? DEFAULT_SCAN_LIMITS.maxFileBytes)) throw new MaintenanceLimitError("dream merged page output limit exceeded");
       // append rather than interleave: the merge is a model's judgement, and a wrong ordering

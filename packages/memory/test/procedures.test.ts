@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -71,10 +71,29 @@ it("actual structural dream yields exactly one witnessed three-step candidate an
       for (const witness of claim.witnesses) expect(witness.excerpt).toBe(claim.claim);
     }
     expect(renderReport(result.report)).toContain("skill-candidate [structural-unassessed]");
+    expect(renderReport(result.report)).toContain("primary artifact: concepts/release.md");
+    expect(renderReport(result.report)).toContain("Procedure refinement skipped: structural-only requested");
     expect(renderReport(result.report)).toContain("fresh evidence/effect review required before emission");
     expect(model.requests).toEqual([]); expect(result.auxiliary?.calls).toEqual([]);
     expect(await Promise.all(paths.map(path => readFile(path, "utf8")))).toEqual(before);
     expect((await f.wiki.pages()).map(page => page.path)).toEqual(pagePaths);
+  } finally { await result.workspace.dispose(); }
+});
+
+it.each(["raw scan incomplete", "consolidation failed", "assessor unavailable"])("explains why refinement was skipped: %s", async reason => {
+  const f = await fixture(); const model = provider();
+  if (reason === "raw scan incomplete") {
+    await mkdir(join(f.root, "raw/attempts"), { recursive: true });
+    await writeFile(join(f.root, "raw/attempts/broken.json"), "{");
+  }
+  if (reason === "consolidation failed") model.stream = async function* () {
+    yield { type: "text_delta", text: "not JSON" }; yield { type: "stop", reason: "end_turn" };
+  };
+  const result = await runDream({ ...f, ...(reason === "assessor unavailable" ? {} : { provider: model }), procedureCandidates: true });
+  try {
+    expect(result.report.procedures?.refinementSkipped).toContain(reason);
+    expect(renderReport(result.report)).toContain(`Procedure refinement skipped: ${reason}`);
+    expect(result.report.procedures?.candidates[0]?.status).toBe("structural-unassessed");
   } finally { await result.workspace.dispose(); }
 });
 

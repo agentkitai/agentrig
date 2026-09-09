@@ -113,7 +113,7 @@ async function writeProposals(report: SkillEmissionReport, opts: SkillEmissionOp
         });
         await safeDirectories(dirname(item.path), base, true, run.signal);
         prior = await existing(item.path, run.signal);
-        if (directoryExists && prior === undefined) throw new Error("occupied skill directory without owned SKILL.md preserved");
+        if (directoryExists && prior === undefined) throw new Error("occupied skill directory without owned SKILL.md preserved; stop writers, inspect this directory, and only if empty remove the directory manually before retrying; retain any foreign contents");
         if (prior !== undefined && !owned(prior, item)) throw new Error("locked, edited, malformed or foreign skill preserved");
       } catch (error) {
         run.check(); report.preserved.push({ path: item.path, reason: String(error) }); continue;
@@ -160,7 +160,11 @@ export async function prepareProcedureSkills(pages: WikiPage[], raw: RawStore, o
     else if (proposals.length === 0) reason = "no eligible procedure skills";
     else if (procedures.refinementError !== undefined) reason = `fresh procedure review failed: ${procedures.refinementError}`;
     else if (procedures.candidates.some(candidate => checkPromotionGuardrails(receipts, candidate.artifact).status !== "allow")) reason = "fresh model/effect review required; no skill emitted";
-    if (reason !== undefined) { emission.status = "refused"; emission.reason = reason; }
+    if (reason !== undefined) {
+      emission.status = "refused";
+      emission.reason = reason + (procedures.rejected.length === 0 ? "" : `; fresh model rejection: ${procedures.rejected.map(item => `${item.pages.join(", ")}: ${item.reason}`).join("; ")}`)
+        + (procedures.refinementError === undefined || reason.includes(procedures.refinementError) ? "" : `; fresh procedure review failed: ${procedures.refinementError}`);
+    }
     else await writeProposals(emission, opts, base, run, context.lockTimeoutMs);
   }
   run.check(); return { procedures, emission };

@@ -95,6 +95,7 @@ export async function lastDreamAt(wikiRoot: string, opts: MemoryLockOptions = {}
     .then(bytes => bytes.toString("utf8")).catch((error: NodeJS.ErrnoException) => {
       opts.signal?.throwIfAborted();
       if (error.code === "ENOENT") return "";
+      error.message += "; scheduling stamp could not be read; stop running/scheduled dreams and inspect the stamp; for a regular file, preserve it with agentrig memory reset-dream-stamp --dir <memory-directory> --confirm (use the memory directory containing this wiki)";
       throw error;
     });
   opts.signal?.throwIfAborted();
@@ -313,6 +314,11 @@ async function dreamInto(
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
   let procedures: ProcedureDetection | undefined;
+  const refinementSkipped = unreadableAttempts.length > 0 ? "raw scan incomplete"
+    : consolidationError !== undefined ? "consolidation failed"
+    : opts.structuralOnly === true ? "structural-only requested"
+    : opts.provider === undefined ? "assessor unavailable; no provider supplied (no adverse claim judgment)"
+    : pages.length === 0 ? "no pages to assess" : undefined;
   let skillEmission: SkillEmissionReport | undefined;
   if (opts.emitSkills !== undefined) {
     phase("skill-emission");
@@ -330,6 +336,7 @@ async function dreamInto(
       ? await refineProcedureCandidates(candidates, opts.provider!, run)
       : { candidates, rejected: [] };
   }
+  if (procedures !== undefined && refinementSkipped !== undefined) procedures.refinementSkipped = refinementSkipped;
 
   // built from `applied`, never from `consolidation`: the report describes the artifact
   const mergedInto = new Map<string, string[]>();
@@ -345,6 +352,7 @@ async function dreamInto(
     orphans: structural.orphans,
     missingPages: structural.missingPages,
     merged: [...mergedInto.entries()].map(([to, from]) => ({ from: [...from, to], to })),
+    skippedMerges: applied.skippedMerges,
     removed: applied.removedLines.map((r) => {
       const found = consolidation.removed.find((x) => x.page === r.page);
       return { page: r.page, line: r.line, reason: found?.reason ?? "" };

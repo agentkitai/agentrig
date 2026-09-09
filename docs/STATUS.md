@@ -6,19 +6,29 @@ R17f is merged at `4c82ebb99b92ecbdb2729f0df1f06457bc7292bf` (PR #290), with gre
 post-merge CI34388378742 and structure34388378715. [Final receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920).
 
 Four package worktrees implement the final follow-ups; merges remain sequential.
-Supervisor is first because memory uses its additive auxiliary-call state schema.
-Its [fragment table](plans/R17g-supervisor.md) records implemented changes and explicit
-conditional dispositions. Local build/typecheck and 314 focused tests pass; six
-fail-first controls and two restored fold mutants are recorded. Independent reviews,
-full-suite and hosted landing checks are pending, not implied by local completion.
-Memory is locally implemented and under review; core is being built with Claude;
-CLI/evaluation work continues in parallel. No new issues or live benchmark calls.
+Supervisor PR #291 merged at `528ee21494aaf36dc2d66b703f71d2da569c6f5c` after green
+exact-head Linux/macOS/Windows/structure CI and completed Claude/Codex reviews.
+One diagnostic finding was repaired and passed one scoped independent delta check;
+the final local suite passed 3611 tests with four existing skips. Its
+[fragment table](plans/R17g-supervisor.md) records every outcome. Post-merge
+CI34392795813/structure34392795901 are tracked on that PR before the next merge.
+
+Memory is the current delivery batch: [fragment table](plans/R17g-memory.md).
+Both independent reviews are clean. The two memory commits rebased unchanged onto
+the supervisor merge (verified by range-diff); combined build/typecheck and full
+3618-test suite pass, with four existing skips. Hosted CI remains a delivery gate.
+Core is being built with Claude; CLI/evaluation passed 3633 local tests and is in
+its independent review pair. No new issues or live benchmark calls.
 
 Builder: **Codex/operator outside AgentRig**, not an `agentrig` conductor; no conductor
 session id or R17a dogfood success is invented. Package helper task `/root/r13f` built
 supervisor. AgentRig child count zero; external helper/review identities and actual
 usage receipts are recorded on delivery PRs, not counted as AgentRig routing data.
 Core Claude builder session `4f6c0844-94e5-419c-bb4c-04fe8c6ad8e4` is separate work.
+Memory helper `/root/r17g_memory`; Claude reviewer
+`8cf96304-d4bf-42b3-9635-2c2e1cfba7db`, Codex reviewer
+`01a08777-3df9-72d2-bf13-0dffa43f7e4d`. Claude independently ran behavioral suites;
+Codex performed static/type checks and disclosed sandbox fixture-preflight limits.
 
 ## Completed — R17f measurement and defaults (2026-09-09)
 

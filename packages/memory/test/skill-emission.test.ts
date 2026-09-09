@@ -69,6 +69,10 @@ it.each(["unsafe", "rewrite", "nonrepeatable", "timeout"])("fresh %s review cann
   const f = await fixture(); const preview = await dream(f, undefined, undefined, { structuralOnly: true });
   const applied = await dream(f, preview.skillEmission!.digest, fault, { limits: { maxCalls: 3, callTimeoutMs: 30 } });
   expect(applied.skillEmission!.status).toBe("refused"); expect(applied.skillEmission!.written).toEqual([]);
+  if (fault === "unsafe" || fault === "nonrepeatable") {
+    expect(applied.skillEmission!.reason).toContain("review digest");
+    expect(applied.skillEmission!.reason).toContain("fresh model rejection");
+  }
 });
 
 it("default shared two-call budget refuses emission without raising its ceiling", async () => {
@@ -98,6 +102,7 @@ it.each(["edited", "locked", "foreign", "directory", "occupied", "symlink"])("pr
   const applied = await dream(f, preview.skillEmission!.digest);
   expect(applied.skillEmission!.status).toBe("refused"); expect(applied.skillEmission!.preserved).toHaveLength(1);
   expect(applied.skillEmission!.written).toEqual([]);
+  if (mode === "occupied") expect(applied.skillEmission!.preserved[0]!.reason).toContain("stop writers");
   if (!["directory", "symlink", "occupied"].includes(mode)) expect(await readFile(item.path, "utf8")).toBe(text);
 });
 
