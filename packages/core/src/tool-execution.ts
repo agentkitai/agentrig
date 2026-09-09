@@ -19,6 +19,7 @@ import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
 import { bindExpansionRestriction, expansionSurface, type externalExpansion } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
+import { sanitizeLine } from "./tools/skills.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 import { evaluatePermissionPolicy } from "./permissions.js";
 import { bindPermissionView } from "./child-permissions.js";
@@ -371,12 +372,26 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     decision = "ask"; decisionSource = { kind: "boundary", reason: "external-input-expansion" };
   }
   await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
+  // A handler that throws or is aborted also produces "deny", and until now it produced the SAME
+  // receipt as a person answering "no". They are different facts: one is a decision, the other is
+  // nobody having decided. Both refuse and neither dispatches — that is unchanged — but a reader
+  // auditing why a call was blocked has to be able to tell them apart.
+  let approvalFailure: unknown;
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion
-      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval").catch(() => "deny" as const)
+      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval")
+        .catch((error: unknown) => { approvalFailure = error; return "deny" as const; })
       : await config.onAsk(permReq, askContext);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
-    decisionSource = config.onAsk ? { kind: "approval-handler" } : { kind: "unattended" };
+    decisionSource = config.onAsk === undefined ? { kind: "unattended" }
+      : approvalFailure === undefined ? { kind: "approval-handler" }
+      : { kind: "boundary", reason: signal.aborted || isEnded() ? "approval-aborted" : "approval-handler-failed" };
+    if (approvalFailure !== undefined) {
+      // Bounded, one line, into the log rather than into the model's view of the refusal: this is
+      // host-side failure detail, and the model has no use for it and no business acting on it.
+      await emit({ type: "error", fatal: false,
+        message: `approval handler did not answer for ${tu.name}: ${sanitizeLine(String(approvalFailure), 512)}` });
+    }
     if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
     if (config.permissionGrants?.active === false) {
@@ -394,7 +409,9 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   }
   if (decision === "deny") {
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });
-    return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
+    return resultBlock(`permission denied: ${tu.name} [${permClass}]`
+      + (approvalFailure === undefined ? ""
+        : ` (fail-closed: the approval handler ${signal.aborted || isEnded() ? "was aborted" : "failed"} rather than answering; this is not an explicit denial)`), true);
   }
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before tool execution", true);
 

@@ -203,6 +203,35 @@ it.each([false, true])("failed fresh approval is audited as denial (async=%s)", 
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
 });
 
+it.each([false, true])("a failed handler is audited apart from an explicit denial (async=%s)", async asynchronous => {
+  const f = await fixture([call("document"), call("exec")]);
+  const { events } = await run(f, { onAsk: () => {
+    if (asynchronous) return Promise.reject(new Error("approval unavailable"));
+    throw new Error("approval unavailable");
+  } });
+  // unchanged: refused, audited, nothing dispatched
+  expect(f.invoked).toEqual([]);
+  expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
+  expect(events.some(e => e.type === "tool.denied" && e.name === "exec")).toBe(true);
+  // new: the receipt says nobody decided, rather than claiming somebody said no
+  expect(events).toContainEqual(expect.objectContaining({ type: "permission.decision", d: "deny", tool: "exec",
+    source: { kind: "boundary", reason: "approval-handler-failed" } }));
+  const detail = events.filter(e => e.type === "error" && e.message.startsWith("approval handler did not answer for exec"));
+  expect(detail).toHaveLength(1);
+  expect((detail[0] as { message: string }).message).toContain("approval unavailable");
+  // and the model is told it was a fail-closed refusal, without the host's failure detail
+  const blocks = JSON.stringify(events.filter(e => e.type === "message.append"));
+  expect(blocks).toContain("fail-closed: the approval handler failed rather than answering");
+  expect(blocks).not.toContain("approval unavailable");
+
+  // the discriminating pair: an explicit "no" keeps the plain approval-handler receipt
+  const explicit = await fixture([call("document"), call("exec")]);
+  const denied = await run(explicit, { onAsk: async () => "deny" as const });
+  expect(denied.events).toContainEqual(expect.objectContaining({ type: "permission.decision", d: "deny", tool: "exec",
+    source: { kind: "approval-handler" } }));
+  expect(denied.events.filter(e => e.type === "error" && e.message.startsWith("approval handler did not answer"))).toEqual([]);
+});
+
 it("round-trips the distinct expansion audit and source-origin fields without changing legacy requests", () => {
   const event = HarnessEvent.parse({ type: "permission.expansion", seq: 1, sessionId: "s", ts: 1, id: "c", name: "exec", surface: "exec", decision: "deny", sourceOrigin: "child" });
   expect(HarnessEvent.parse(JSON.parse(JSON.stringify(event)))).toEqual(event);

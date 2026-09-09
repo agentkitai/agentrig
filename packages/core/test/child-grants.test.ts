@@ -13,10 +13,17 @@ it.each([false, true])("filters ancestor allows and denies by delegable=%s; keep
     const inherited = record(root, { delegable, decision }); const child = root.childView(); const sibling = root.childView(); const grandchild = child.childView();
     await flush(root);
     expect(root.decide(req)).toBe(decision);
-    for (const view of [child, sibling, grandchild]) expect(view.decide(req)).toBe(delegable ? decision : "ask");
+    // named, and asserted distinct: three views that compare equal would satisfy every predicate
+    // below while proving nothing about whose authority is whose
+    const views = { child, sibling, grandchild };
+    expect(new Set(Object.values(views).map(view => view.subject)).size).toBe(3);
+    for (const [name, view] of Object.entries(views)) expect(view.decide(req), name).toBe(delegable ? decision : "ask");
     root.revoke(inherited.id); const local = record(child, { delegable: true }); await flush(child);
     expect(root.inspect().map(x => x.grant.id)).toContain(local.id);
-    expect(root.decide(req)).toBe("ask"); expect(sibling.decide(req)).toBe("ask");
+    expect(root.decide(req)).toBe("ask");
+    // the sibling is a peer of `child`, not an ancestor of it: a child-owned scope must not reach it
+    expect(sibling.subject).not.toBe(child.subject);
+    expect(sibling.decide(req), "sibling of the granting child").toBe("ask");
     expect(child.authorize(req)).toEqual({ decision: "allow", grantId: local.id });
     expect(grandchild.authorize(req)).toEqual({ decision: "allow", grantId: local.id });
     expect(root.inspect()[0]!.matchedDecisions).toBe(2);
