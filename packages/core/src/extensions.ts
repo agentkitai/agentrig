@@ -9,6 +9,22 @@ import { sanitizeLine } from "./tools/skills.js";
 import type { AnyTool, ToolContext } from "./tool.js";
 import { createExtensionOwner, extensionCallback, extensionDisabled, extensionHandler, ownExtension } from "./extension-runtime.js";
 import { PermissionClass } from "./permission-types.js";
+import { ShellOperationSchema } from "./shell-operation.js";
+
+/**
+ * What each synchronously typed tool descriptor must actually return.
+ *
+ * A JavaScript extension is not bound by the TypeScript signature, and the consumers here read the
+ * value directly: `paths` returning the string `"/etc"` instead of `["/etc"]` iterates as eight
+ * single-character paths, none of which a `cwdOnly` rule would recognise as the file being read.
+ * Checking the shape at the boundary turns that into a disabled extension with a receipt.
+ */
+const DESCRIPTOR_SHAPES = {
+  permission: (value: unknown) => { PermissionClass.parse(value); },
+  paths: (value: unknown) => { z.array(z.string()).parse(value); },
+  effects: (value: unknown) => { z.enum(["read-only", "workspace", "background"]).parse(value); },
+  operation: (value: unknown) => { ShellOperationSchema.parse(value); },
+} as const;
 
 export interface ExtensionCommand {
   name: string;
@@ -155,19 +171,25 @@ export async function loadExtensions(options: {
         for (const key of ["permission", "paths", "effects", "operation"] as const) {
           const callback = tool[key];
           if (typeof callback === "function") Object.assign(registered, {
-            [key]: extensionCallback(owner, `${tool.name}.${key}`, callback.bind(tool)),
+            [key]: extensionCallback(owner, `${tool.name}.${key}`, callback.bind(tool), undefined, DESCRIPTOR_SHAPES[key]),
           });
         }
         if (tool.hasBackgroundWork !== undefined) registered.hasBackgroundWork = extensionCallback(owner,
-          `${tool.name}.hasBackgroundWork`, tool.hasBackgroundWork.bind(tool), () => true);
+          // an unusable probe leaves ownership uncertain, which is exactly what `true` means here
+          `${tool.name}.hasBackgroundWork`, tool.hasBackgroundWork.bind(tool), () => true, (value) => { z.boolean().parse(value); });
         if (tool.resultSource !== undefined && typeof tool.resultSource !== "string") registered.resultSource = "file" in tool.resultSource ? {
-          file: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.file.bind(tool.resultSource)),
-        } : { external: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.external.bind(tool.resultSource), () => true) };
+          file: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.file.bind(tool.resultSource), undefined, (value) => { z.string().parse(value); }),
+          // an unusable provenance probe means "treat the result as external", never as trusted
+        } : { external: extensionCallback(owner, `${tool.name}.resultSource`, tool.resultSource.external.bind(tool.resultSource), () => true, (value) => { z.boolean().parse(value); }) };
         // Normal zod validation failures remain data, not a thrown extension fault.
         registered.inputSchema = new Proxy(tool.inputSchema, { get(target, key, receiver) {
           const value = Reflect.get(target, key, receiver);
           if (key !== "safeParse" || typeof value !== "function") return value;
-          return extensionCallback(owner, `${tool.name}.inputSchema`, value.bind(target));
+          // a `safeParse` that reports success without `data` would admit an unvalidated input
+          return extensionCallback(owner, `${tool.name}.inputSchema`, value.bind(target), undefined, (result) => {
+            z.union([z.object({ success: z.literal(true) }).passthrough().refine((r) => "data" in r, "successful safeParse must carry data"),
+              z.object({ success: z.literal(false), error: z.unknown() }).passthrough()]).parse(result);
+          });
         } });
         tools.push(ownExtension(Object.freeze(registered), owner));
       }); },

@@ -69,6 +69,68 @@ it.each(["permission", "paths", "effects", "operation", "inputSchema", "hasBackg
   expect(result.events.filter(e => e.type === "extension.error")).toHaveLength(1);
 });
 
+/**
+ * The descriptors above are typed synchronous, but an extension is JavaScript: `async` compiles,
+ * and so does returning the wrong type. Neither is a contract this host can honour — a thenable
+ * compared against a permission class is not "read", and a rejected one nobody awaited ends the
+ * process. Both must land as an ordinary disabling extension fault.
+ */
+const asyncImplementation: Record<string, string> = {
+  permission: 'tool.permission=async()=>"read"',
+  paths: 'tool.paths=async()=>[]',
+  effects: 'tool.effects=async()=>"read-only"',
+  operation: 'tool.operation=async()=>({status:"unsupported"})',
+  inputSchema: 'tool.inputSchema.safeParse=async()=>({success:true,data:{}})',
+  hasBackgroundWork: 'tool.hasBackgroundWork=async()=>false',
+};
+const malformedImplementation: Record<string, string> = {
+  // a bare string iterates as one path per character, so no cwdOnly rule would recognise the file
+  paths: 'tool.paths=()=>"/etc/passwd"',
+  permission: 'tool.permission=()=>"superuser"',
+  effects: 'tool.effects=()=>"probably-read-only"',
+  operation: 'tool.operation=()=>({status:"argv"})',
+  // success without `data` would admit input nothing validated
+  inputSchema: 'tool.inputSchema.safeParse=()=>({success:true})',
+  hasBackgroundWork: 'tool.hasBackgroundWork=()=>"yes"',
+};
+
+it.each(Object.keys(asyncImplementation))("%s implemented asynchronously is refused, not awaited by the caller", async field => {
+  const f = await fixture(asyncImplementation[field]!);
+  if (field === "hasBackgroundWork") await promisify(execFile)("git", ["init", f.root]);
+  const { agent } = agentFor(f.root, f.extensions, ["fragile_tool", "fragile_tool"], true);
+  const result = await collect(agent.run("work", { cwd: f.root }));
+  expect(result.summary.reason).toBe("done"); expect(f.module.calls.tool).toBe(0);
+  expect(result.events.filter(e => e.type === "extension.error")).toMatchObject([{ phase: "tool", disabled: true }]);
+  expect(result.events.find(e => e.type === "extension.error")!.message).toMatch(/synchronously/);
+});
+
+it.each(Object.keys(malformedImplementation))("%s returning the wrong shape is refused rather than consumed", async field => {
+  const f = await fixture(malformedImplementation[field]!);
+  if (field === "hasBackgroundWork") await promisify(execFile)("git", ["init", f.root]);
+  const { agent } = agentFor(f.root, f.extensions, ["fragile_tool", "fragile_tool"], true);
+  const result = await collect(agent.run("work", { cwd: f.root }));
+  expect(result.summary.reason).toBe("done"); expect(f.module.calls.tool).toBe(0);
+  expect(result.events.filter(e => e.type === "extension.error")).toMatchObject([{ phase: "tool", disabled: true }]);
+});
+
+it("a rejected promise from a synchronous descriptor is settled here, not left unhandled", async () => {
+  const f = await fixture('tool.permission=()=>Promise.reject(new Error("descriptor rejected"))');
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", listener);
+  try {
+    const { agent } = agentFor(f.root, f.extensions);
+    const result = await collect(agent.run("work", { cwd: f.root }));
+    expect(result.summary.reason).toBe("done");
+    expect(result.events.filter(e => e.type === "extension.error")).toMatchObject([{ phase: "tool", disabled: true }]);
+    // the rejection is attached to a handler before this call returns, so it can never reach the
+    // process default and take the harness down with a stack that names core
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(unhandled).toEqual([]);
+  } finally { process.off("unhandledRejection", listener); }
+});
+
 it.each(["pre_model", "session_end"])("%s throw emits before terminal and disables sibling surfaces", async hook => {
   const f = await fixture('handler=()=>{calls.hook++;throw new Error("hook broke")}', hook);
   const { agent } = agentFor(f.root, f.extensions, []);
