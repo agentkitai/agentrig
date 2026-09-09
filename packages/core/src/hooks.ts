@@ -46,7 +46,18 @@ export interface HookContext {
   turn: number;
   /** `user_prompt`: the task or steer about to be added. */
   prompt?: string;
-  /** `pre_model`: the request about to be sent. */
+  /**
+   * `pre_model`: the request about to be sent.
+   *
+   * This is the rendered request — the system text, messages and tool list a provider will
+   * receive. It is deliberately NOT the context manifest: the provenance and authority labels for
+   * this turn are recomputed AFTER every pre_model patch is applied, because a patch is one of
+   * the things being labelled. An observer here therefore sees what will be sent and not how the
+   * manifest will attribute it, and that ordering is the point rather than an omission — a hook
+   * that could read final authority before contributing to it would be reading a label of its own
+   * patch. Read `context.manifest` from the event stream for the effective labels; nothing a hook
+   * returns can raise the authority of what it contributes (see `authority: "data"` below).
+   */
   request?: ModelRequest;
   /** `post_model`: the assistant message that came back. */
   response?: Message;

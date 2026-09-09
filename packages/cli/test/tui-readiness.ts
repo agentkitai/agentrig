@@ -29,8 +29,8 @@ export function waitForTuiState(
     // subscribe immediately publishes its current state, before it returns the disposer.
     if (settled) unsubscribe();
     void run.then(
-      () => finish(failure("run settled before readiness")),
-      error => finish(failure(`run rejected before readiness: ${String(error).slice(0, 200)}`)),
+      () => { if (!settled) finish(failure("run settled before readiness")); },
+      error => { if (!settled) finish(failure(`run rejected before readiness: ${String(error).slice(0, 200)}`)); },
     );
   });
 }

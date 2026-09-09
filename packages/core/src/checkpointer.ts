@@ -135,7 +135,16 @@ async function captureTree(repo: string, parent: string | undefined, env: NodeJS
       throw error;
     }
     if (!inside(repo, await realpath(dirname(full)))) throw new Error("checkpoint parent escapes repository");
-    if (stat.isDirectory()) throw new Error("checkpoint cannot cover nested repositories/submodules");
+    if (stat.isDirectory()) {
+      // Git listed this path as a file and the worktree has a directory there. Two very different
+      // causes look identical from here and the operator has to be told which to go and look for:
+      // a nested repository/submodule that the snapshot deliberately does not cover, or an
+      // ordinary tracked file that something replaced with a directory. Naming the path is the
+      // difference between a fixable report and "checkpointing is broken".
+      throw new Error(`checkpoint path ${JSON.stringify(path)} is a directory where a file was listed: `
+        + "a nested repository or submodule is not covered, and a tracked file replaced by a directory "
+        + "cannot be snapshotted. Resolve that path, then retry.");
+    }
     let bytes: Buffer;
     if (stat.isSymbolicLink()) bytes = await readlink(full, { encoding: "buffer" });
     else {

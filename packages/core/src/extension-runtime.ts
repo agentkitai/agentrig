@@ -46,17 +46,40 @@ export function extensionHookFailed(hook: Hook, error: unknown, signal?: AbortSi
   const owner = owners.get(hook);
   if (owner !== undefined) fail(owner, "hook", hook.point, error, signal);
 }
-/** Synchronous callbacks retain their shapes. Unknown background work stays conservative. */
+/**
+ * Synchronous callbacks retain their shapes. Unknown background work stays conservative.
+ *
+ * These descriptors are typed synchronous and are consumed synchronously — a permission class is
+ * compared, a path list is iterated, a probe is used as a boolean. TypeScript says so; a JavaScript
+ * extension is not obliged to agree, and neither an `async` implementation nor a wrong return type
+ * is a contract this host can honour by guessing. Both are treated as the extension fault they are:
+ * the owner is disabled and the caller gets the conservative fallback, or a refusal.
+ *
+ * `validate` runs on the returned value only. It describes the callback's own contract, not the
+ * policy the value later feeds — widening a class or trusting a path is still core's decision.
+ */
 export function extensionCallback<T extends (...args: any[]) => any>(owner: Owner, surface: string, callback: T,
-  fallback?: () => ReturnType<T>): T {
+  fallback?: () => ReturnType<T>, validate?: (value: unknown) => void): T {
+  const refuse = (error: unknown): ReturnType<T> => {
+    fail(owner, "tool", surface, error);
+    if (fallback !== undefined) return fallback();
+    throw new ExtensionHandlerError(`extension ${owner.name} ${surface} failed: ${sanitizeLine(String(error), 1024)}`);
+  };
   return ((...args: Parameters<T>) => {
     if (owner.disabled) { if (fallback !== undefined) return fallback(); throw refusal(owner); }
-    try { return callback(...args); }
-    catch (error) {
-      fail(owner, "tool", surface, error);
-      if (fallback !== undefined) return fallback();
-      throw new ExtensionHandlerError(`extension ${owner.name} ${surface} failed: ${sanitizeLine(String(error), 1024)}`);
+    let result: unknown;
+    try { result = callback(...args); }
+    catch (error) { return refuse(error); }
+    if (typeof (result as { then?: unknown } | null | undefined)?.then === "function") {
+      // Settle it here. A rejected promise nobody awaited is an unhandled rejection that, under
+      // Node's default, ends the harness process with a stack naming core rather than the
+      // extension — and it would do so long after this call already returned a thenable that the
+      // permission check quietly read as "not read-only".
+      void Promise.resolve(result).then(() => {}, () => {});
+      return refuse(new Error("must return synchronously; async or thenable results are unsupported"));
     }
+    try { validate?.(result); } catch (error) { return refuse(error); }
+    return result;
   }) as T;
 }
 export async function extensionHandler<T>(owner: Owner, phase: "tool" | "command", surface: string,

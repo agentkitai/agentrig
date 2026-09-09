@@ -691,6 +691,26 @@ describe("pre_model and post_model", () => {
     ]));
   });
 
+  it("an arbitrary pre_model rewrite downgrades the whole prompt to one hook-owned data block", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      // not "previous + suffix": there is no way left to say which surviving byte came from which
+      // original source, so per-source blocks would be claims about text this hook may have rewritten
+      { point: "pre_model", handler: () => ({ action: "modify", patch: { system: "ENTIRELY REPLACED" } }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    const manifest = events.find((event) => event.type === "context.manifest");
+    if (manifest?.type !== "context.manifest") throw new Error("missing context manifest");
+    const system = manifest.blocks.filter((block) => block.source === "system_prompt");
+    expect(system).toHaveLength(1);
+    expect(system[0]).toMatchObject({ origin: "hook:anonymous:0", authority: "data",
+      reason: "pre_model hook replaced the rendered system prompt" });
+    // a downgrade in resolution, never an upgrade in authority
+    expect(system[0]!.authority).not.toBe("instruction");
+    expect(manifest.blocks.some((block) => block.origin === "agent.config.systemPrompt")).toBe(false);
+  });
+
   it("pre_model reports a patch of the wrong shape", async () => {
     const session = run(
       [[usage(1, 1), stop("end_turn")]],
@@ -799,5 +819,90 @@ describe("session_end hooks are bounded as a group", () => {
     const events = await collect(session);
     await session.done;
     expect(events.at(-1)!.type).toBe("session.end");
+  });
+});
+
+/**
+ * The fail-closed runner is what stands between a built-in safety hook and the operation it
+ * guards. Every branch that can refuse is reached here directly, because through the agent loop
+ * only the handler-failure branch is easy to provoke — and a branch that silently became
+ * fail-open would still look like a passing checkpoint suite.
+ */
+describe("fail-closed hook runner branches", () => {
+  const ctx = { sessionId: "s", cwd: "/w", turn: 1, signal: new AbortController().signal };
+  const hook = (handler: () => unknown, extra: Record<string, unknown> = {}) =>
+    ({ point: "pre_tool" as const, id: "guard", handler: handler as never, ...extra });
+  const run = (hooks: unknown[], failClosed: boolean, signal?: AbortSignal) => {
+    const errors: string[] = [];
+    return runHooks({ hooks: hooks as never, onError: (m) => errors.push(m), failClosed, ...(signal === undefined ? {} : { signal }) },
+      "pre_tool", ctx).then((result) => ({ result, errors }));
+  };
+
+  it("an already-aborted session blocks rather than skipping the guard", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let called = false;
+    const closed = await run([hook(() => { called = true; return { action: "continue" }; })], true, controller.signal);
+    expect(closed.result.denied).toMatch(/the session was aborted/);
+    expect(called).toBe(false);
+    const open = await run([hook(() => ({ action: "continue" }))], false, controller.signal);
+    expect(open.result.denied).toBeUndefined();
+    expect(open.errors).toHaveLength(1);
+  });
+
+  it("a spent chain budget blocks rather than letting the operation through unguarded", async () => {
+    // the exhausted-budget boundary itself, rather than a sleep racing a deadline: with nothing
+    // left for this point the guard cannot run, and an unrunnable guard must not mean "allowed"
+    let called = false;
+    const errors: string[] = [];
+    const guard = hook(() => { called = true; return { action: "continue" }; }, { timeoutMs: 1000 });
+    const result = await runHooks({ hooks: [guard] as never, onError: (m) => errors.push(m), failClosed: true, totalTimeoutMs: 0 }, "pre_tool", ctx);
+    expect(result.denied).toBe("hooks at pre_tool stopped: the 0ms budget for this point is spent");
+    expect(called).toBe(false);
+    const open = await runHooks({ hooks: [guard] as never, onError: (m) => errors.push(m), failClosed: false, totalTimeoutMs: 0 }, "pre_tool", ctx);
+    expect(open.denied).toBeUndefined();
+    expect(called).toBe(false);
+  });
+
+  it("a handler that throws blocks, and the same handler is merely reported when fail-open", async () => {
+    const closed = await run([hook(() => { throw new Error("guard broke"); })], true);
+    expect(closed.result.denied).toBe("hook guard failed (blocking): guard broke");
+    const open = await run([hook(() => { throw new Error("guard broke"); })], false);
+    expect(open.result.denied).toBeUndefined();
+    expect(open.errors).toEqual(["hook guard failed (continuing): guard broke"]);
+  });
+
+  it("a handler that times out blocks", async () => {
+    const closed = await run([hook(() => new Promise(() => {}), { timeoutMs: 5 })], true);
+    expect(closed.result.denied).toMatch(/did not finish within 5ms/);
+  });
+
+  it("a result with no action blocks instead of being ignored", async () => {
+    for (const value of [undefined, null, "continue", { reason: "no action here" }]) {
+      const closed = await run([hook(() => value)], true);
+      expect(closed.result.denied).toBe("hook guard returned no action; blocking");
+      const open = await run([hook(() => value)], false);
+      expect(open.result.denied).toBeUndefined();
+      expect(open.errors).toEqual(["hook guard returned no action; ignoring"]);
+    }
+  });
+
+  it("an action this point does not support blocks instead of being ignored", async () => {
+    const closed = await run([hook(() => ({ action: "inject", message: "hi" }))], true);
+    expect(closed.result.denied).toBe('hook guard returned "inject", which pre_tool does not support; blocking');
+    const open = await run([hook(() => ({ action: "inject", message: "hi" }))], false);
+    expect(open.result.denied).toBeUndefined();
+    expect(open.result.injects).toEqual([]);
+  });
+
+  it("an explicit deny stops the chain whether or not the runner is fail-closed", async () => {
+    let second = false;
+    const hooks = [hook(() => ({ action: "deny", reason: "refused" })), hook(() => { second = true; return { action: "continue" }; })];
+    for (const failClosed of [true, false]) {
+      second = false;
+      const { result } = await run(hooks, failClosed);
+      expect(result.denied).toBe("refused");
+      expect(second).toBe(false);
+    }
   });
 });

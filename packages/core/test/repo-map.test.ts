@@ -122,7 +122,7 @@ describe("repository map", () => {
     for (const dir of ["malformed", "oversized", "symlinked"]) expect(map.content).toContain(`${dir}/AGENTS.md`);
   });
 
-  it("honours its complete byte budget and truncates a huge tree deterministically", async () => {
+  it("honours its complete byte budget and summarizes a huge tree deterministically", async () => {
     const root = await fixture();
     await mkdir(join(root, "src"));
     for (let i = 0; i < 200; i += 1) {
@@ -134,9 +134,36 @@ describe("repository map", () => {
     expect(first.bytes).toBeLessThanOrEqual(512);
     expect(first.truncated).toBe(true);
     expect(first.content).toBe(second.content);
-    expect(first.content).toContain("src/000.ts");
-    expect(first.content).not.toContain("src/199.ts");
+    // the whole directory is accounted for by count rather than a lexicographic prefix of it
+    const filesSection = first.content.slice(first.content.indexOf("Files:"), first.content.indexOf("Exports:"));
+    expect(first.content).toContain("- src/: 200 file(s), not listed");
+    expect(filesSection).not.toContain("src/000.ts");
+    expect(filesSection).not.toContain("src/199.ts");
+    // the bytes the prefix used to spend on 4 file names now buy signatures as well as breadth
+    expect(first.content).toContain("export function symbol0");
     expect(first.content).toContain("repository map truncated");
+  });
+
+  it("names every directory that exists rather than a prefix of one of them", async () => {
+    const root = await fixture();
+    for (const dir of ["apps", "packages", "zeta"]) {
+      await mkdir(join(root, dir, "nested"), { recursive: true });
+      for (let i = 0; i < 60; i += 1) await writeFile(join(root, dir, "nested", `f${String(i).padStart(3, "0")}.txt`), "x");
+    }
+
+    const map = await generateRepoMap(root, { maxBytes: 700 });
+    expect(map.bytes).toBeLessThanOrEqual(700);
+    expect(map.truncated).toBe(true);
+    // the defect this replaces: a prefix of the file list stops inside `apps/` and never tells the
+    // model that `zeta/` is in the repository at all
+    for (const dir of ["apps", "packages", "zeta"]) expect(map.content).toContain(`${dir}/nested/: 60 file(s), not listed`);
+    expect(map.content).toContain("summarized by count, not listed");
+    expect(map.content).not.toContain("f000.txt");
+    // and a budget too small even for the top-level summary still falls back to the old prefix
+    const tiny = await generateRepoMap(root, { maxBytes: 256 });
+    expect(tiny.bytes).toBeLessThanOrEqual(256);
+    expect(tiny.truncated).toBe(true);
+    expect(tiny.content).toContain("repository map truncated");
   });
 
   it("extracts top-level TypeScript exports and signatures without executing source", async () => {

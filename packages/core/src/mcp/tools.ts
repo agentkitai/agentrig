@@ -182,6 +182,11 @@ export async function connectServers(opts: ConnectOptions): Promise<{ tools: Any
             throw new Error("MCP definitions changed during consent; reconnect before executing");
           }
           await pins.compareAndSet(client.name, baseline, snapshot);
+          // The refusal path is loud and the approval path was silent, so an operator who
+          // approved a definition change had no receipt that the new baseline actually became
+          // durable — and the next session simply would not ask again. Say it happened, and say
+          // what it means: consent recorded, not a safety assessment of the new definitions.
+          opts.onDefinitionNotice?.(`MCP ${JSON.stringify(client.name)}: approved definition change persisted as the new baseline (consent recorded; not a safety assessment)`);
         }
         ctx.signal.throwIfAborted();
       };

@@ -2,7 +2,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyDream, copyWiki, discardDreamWorkspace, FileMemoryStore, FileRawStore, fingerprint,
   inspectDreamWorkspace, runDream } from "@agentkitai/agentrig-memory";
@@ -11,10 +11,15 @@ vi.mock("node:fs/promises", async original => {
   const actual = await original<typeof import("node:fs/promises")>();
   return { ...actual, rename: vi.fn(actual.rename), rm: vi.fn(actual.rm), open: vi.fn(actual.open) };
 });
+vi.mock("node:os", async original => {
+  const actual = await original<typeof import("node:os")>();
+  return { ...actual, hostname: vi.fn(actual.hostname) };
+});
 let root: string; let wiki: FileMemoryStore; let output: string;
 const children: { child: ChildProcess; closed: Promise<void> }[] = [];
 beforeEach(async () => {
   vi.mocked(fs.rename).mockReset(); vi.mocked(fs.rm).mockReset(); vi.mocked(fs.open).mockReset();
+  vi.mocked(hostname).mockReset();
   root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "agentrig-dream-recovery-")));
   wiki = new FileMemoryStore({ root: join(root, "wiki") }); output = join(root, "output"); await wiki.init();
 });
@@ -27,6 +32,14 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 const absent = (path: string) => expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+it.each([0, 1025])("validates generated producer metadata before opening a manifest (host length %i)", async length => {
+  const before = await fingerprint(wiki.root);
+  vi.mocked(hostname).mockReturnValue("x".repeat(length));
+  await expect(copyWiki(wiki.root, output)).rejects.toThrow();
+  expect(vi.mocked(fs.open).mock.calls.some(args => String(args[0]) === output + ".dream.json")).toBe(false);
+  await absent(output); await absent(output + ".dream.json");
+  expect(await fingerprint(wiki.root)).toBe(before);
+});
 function message(child: ChildProcess, key: string): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => fail(new Error("producer did not send " + key)), 4000);
@@ -187,6 +200,9 @@ it("reports failed runtime handoff without discarding a completed artifact or cl
   const result = await runDream({ wiki, raw: new FileRawStore({ root }), outputRoot: output, structuralOnly: true, onError: error => warnings.push(error) });
   expect(result.auxiliary).toMatchObject({ outcome: "completed", localCommitState: "completed" });
   expect(warnings.some(error => error.message.includes("ownership handoff failed"))).toBe(true);
+  const handoff = warnings.find(error => error.message.includes("ownership handoff failed"))!;
+  expect(handoff.message).toContain("inspect retained artifact " + output + " and manifest " + result.workspace.manifestPath);
+  expect(handoff.message).not.toMatch(/inspect [^;\n]*\.tmp/);
   expect((await inspectDreamWorkspace(output)).activity).toBe("active");
   expect((await fs.readdir(root)).some(name => name.endsWith(".tmp"))).toBe(false);
   await result.workspace.dispose();

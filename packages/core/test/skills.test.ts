@@ -48,6 +48,18 @@ describe("parseSkill", () => {
   it("treats a document with no frontmatter as all body", () => {
     expect(parseSkill("just prose", "/x/a.md").body).toBe("just prose");
   });
+
+  it("an opening line that is not exactly --- is prose, not unterminated frontmatter", () => {
+    // `--- foo` and `----` are ordinary Markdown a person wrote; refusing them as broken
+    // frontmatter would make a plain document unloadable. Only a bare `---` line opens one.
+    for (const text of ["--- foo\nname: not-a-field\n", "----\nstill prose\n", "  ---\nindented\n"]) {
+      const s = parseSkill(text, "/x/a.md");
+      expect(s.body).toBe(text.trim());
+      expect(s.name).toBe("a");
+    }
+    // an opening `---` that never closes IS malformed, and stays an error
+    expect(() => parseSkill("---\nname: deploy\nno closing marker\n", "/x/a.md")).toThrow(/missing closing/);
+  });
 });
 
 describe("discoverSkills", () => {
@@ -210,6 +222,37 @@ describe("what reaches the system prompt is untrusted input", () => {
     // `--skills .` on a repo root would otherwise be an error storm the user sees
     expect(found.map((s) => s.name)).toEqual(["real"]);
     expect(errors).toEqual([]);
+  });
+
+  it("holds the 1024-entry root cap exactly, counting entries that are not skills", async () => {
+    // the cap guards the scan, so it counts what `readdir` returns — a root can be pushed over it
+    // by files that would never have been loaded, and then NOTHING from that root is loaded
+    await Promise.all(Array.from({ length: 1023 }, (_, i) => writeFile(join(dir, `pad${i}.txt`), "x", "utf8")));
+    await skill("real.md", "---\ndescription: d\n---\nb");
+    const atCap: string[] = [];
+    expect((await discoverSkills({ roots: [dir], onError: (e) => atCap.push(e.message) })).map((s) => s.name)).toEqual(["real"]);
+    expect(atCap).toEqual([]);
+
+    await writeFile(join(dir, "pad1023.txt"), "x", "utf8");
+    const overCap: string[] = [];
+    expect(await discoverSkills({ roots: [dir], onError: (e) => overCap.push(e.message) })).toEqual([]);
+    expect(overCap.join("\n")).toContain("exceeds 1024 entries; none loaded");
+  });
+
+  it("names the losing path and the winner when a lower-precedence root is shadowed", async () => {
+    const global = join(dir, "global");
+    await skill("project/deploy.md", "---\nname: deploy\ndescription: the project one\n---\nPROJECT");
+    await skill("global/deploy.md", "---\nname: deploy\ndescription: the global one\n---\nGLOBAL");
+    const errors: string[] = [];
+    const found = await discoverSkills({ roots: [join(dir, "project"), global], onError: (e) => errors.push(e.message) });
+
+    expect(found.map((s) => s.body)).toEqual(["PROJECT"]);
+    // the operator has to be able to tell WHICH copy lost and to what: "shadowed" alone would
+    // leave them editing the file the loader ignored
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(join(global, "deploy.md"));
+    expect(errors[0]).toContain(`is shadowed by ${join(dir, "project", "deploy.md")}`);
+    expect(errors[0]).not.toContain("ambiguous");
   });
 });
 

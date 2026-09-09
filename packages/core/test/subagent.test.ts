@@ -791,6 +791,13 @@ describe("a subagent cannot run away", () => {
     const timerImplementation = globalThis.setTimeout;
     const timerSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback, delay, ...args) => {
       const timer = timerImplementation(callback, delay, ...args);
+      // Delay is the only discriminator available here, so name what each one IS: the 200 ms timer
+      // is the CHILD's `settleOrphans` grace (its own `abortGraceMs`, halved from the parent's 400
+      // by the subagent tool) and the 400 ms timer is the PARENT's. Neither is the phase-gate cut
+      // below, which the subagent tool arms at grace + half a grace (150 ms for a 100 ms child).
+      // If another timer is ever armed at exactly 200 or 400 ms in this fixture's lifetime, this
+      // spy will resolve the wrong latch and the test will pass for the wrong reason — so a new
+      // equal-delay timer anywhere in the abort path has to be reviewed against these two.
       if (delay === 200) childGraceArmed.resolve();
       if (delay === 400) parentGraceArmed.resolve();
       return timer;

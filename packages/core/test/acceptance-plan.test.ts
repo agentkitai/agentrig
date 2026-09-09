@@ -81,3 +81,49 @@ it("canonical and tool schemas share bounded optional checks without interpretin
     expect(HarnessEvent.parse(JSON.parse(JSON.stringify(event)))).toEqual(event);
   }
 });
+
+it("a resumed run with a declared plan gets the short instruction, keeping every load-bearing clause", async () => {
+  const f = await fixture([call("update_plan", { items }), [stop]]);
+  const agent = createAgent(f.config);
+  const first = agent.run("plan", { cwd: f.root }); await first.done;
+  f.turns.push([stop]);
+  const resumed = agent.run("carry on", { resume: first.id }); await resumed.done;
+
+  const fresh = f.requests[0]!.system!, again = f.requests[2]!.system!;
+  expect(fresh).toContain("Include an accept field for every item");
+  // the worked examples and field bounds are already in this conversation's own history
+  expect(again).toContain("Acceptance planning: this conversation already declared a plan");
+  expect(again).not.toContain("pnpm test exits 0'");
+  expect(again).not.toContain("at most 1024 characters");
+  expect(again.length).toBeLessThan(fresh.length);
+  // nothing load-bearing is dropped
+  for (const clause of ["call update_plan", "accept check on every item", "not verified evidence",
+    "does not prove its check passed", "does not grant permission or represent new user consent"]) {
+    expect(again).toContain(clause);
+  }
+  const events = await f.config.store.readAll(resumed.id);
+  const manifests = events.filter(event => event.type === "context.manifest");
+  const planning = manifests.flatMap(m => m.blocks).filter(block => block.origin === "runtime.acceptance-planning");
+  expect(planning.map(block => block.reason)).toEqual([
+    "first request asks for observable acceptance declarations, not proof",
+    "first request of a resumed run asks for a revised plan, not proof",
+  ]);
+});
+
+it("an entirely undeclared plan says so once instead of once per step, and still says unverified", async () => {
+  const legacy = [{ id: "a", text: "first step", status: "done" as const }, { id: "b", text: "second step", status: "pending" as const }];
+  const f = await fixture([call("update_plan", { items: legacy }), [stop]]);
+  const session = createAgent(f.config).run("plan", { cwd: f.root }); await session.done;
+  const display = (await f.config.store.readAll(session.id)).find(event => event.type === "tool.result")!.display!;
+  expect(display).toContain("acceptance: undeclared for all 2 step(s) (unverified)");
+  expect(display.match(/undeclared/g)).toHaveLength(1);
+  expect(display).toContain("[done] first step");
+  expect(display).toContain("[pending] second step");
+
+  // a mixed plan is unchanged: no item loses its own line when any item has one
+  const mixed = await fixture([call("update_plan", { items }), [stop]]);
+  const second = createAgent(mixed.config).run("plan", { cwd: mixed.root }); await second.done;
+  const both = (await mixed.config.store.readAll(second.id)).find(event => event.type === "tool.result")!.display!;
+  expect(both).toContain('accept: "pnpm test exits 0" (declared, unverified)');
+  expect(both).toContain("accept: undeclared (unverified)");
+});

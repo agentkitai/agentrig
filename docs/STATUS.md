@@ -1,6 +1,6 @@
 # Status
 
-## Current — R17g package follow-up sweep (2026-09-09)
+## Current — R17g final core/integration delivery (2026-09-09)
 
 R17f is merged at `4c82ebb99b92ecbdb2729f0df1f06457bc7292bf` (PR #290), with green
 post-merge CI34388378742 and structure34388378715. [Final receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920).
@@ -18,19 +18,45 @@ Memory PR #292 merged at `6fb3413d3843fa0e964ec76f4b154406b040237f`:
 Both independent reviews are clean. The two memory commits rebased unchanged onto
 the supervisor merge (verified by range-diff); combined build/typecheck and full
 3618-test suite pass, with four existing skips. Exact-head CI34393444926 and
-structure34393444898 passed; post-merge CI34394218642/structure34394218627 are
-monitored on the PR before the next merge.
-CLI/evaluation is the current delivery batch: [fragment tables](plans/R17g-cli.md).
-Its independent Claude/Codex reviews are clean. Core implementation and scoped
-integration checks continue in separate worktrees. No new issues or live benchmark calls.
-CLI's unchanged rebase onto `6fb3413` passed integrated build/typecheck and
-3651 tests across 235 files, with four existing conditional skips.
+structure34393444898 passed; post-merge CI34394218642 (attempt2) and
+structure34394218627 are green. An unchanged CLI skill-refresh case hit its5s
+deadline on the first Windows attempt; the identical-commit rerun passed without
+source changes or timeout inflation. The failed attempt remains disclosed on PR #292.
+CLI/evaluation PR #293 merged at `4c1005c9d1d7fd7be13c43c4a94e153e9404a3c6`:
+[fragment tables](plans/R17g-cli.md). Its independent reviews and exact-head
+CI34394407422/structure34394407465 are green; final post-merge receipts for
+CI34395999803/structure34395999812 are maintained on the PR. Its first post-merge
+Windows run timed out a different unchanged memory symlink-preservation case;
+one same-commit failed-job rerun then timed out the compound scheduler and E1 A3
+fixtures. That post-merge run remains failed. PR #294 is also the corrective PR:
+it splits independent scheduler cases and shares immutable E1 dependency setup,
+preserving assertions and deadlines. Its own exact-head and final post-merge checks
+must pass; no historical failed run is relabeled green.
+
+Core/final integration is the last package delivery: [complete outcomes](plans/R17g-core.md).
+This includes the bounded undo/consent fixes, workspace recovery manifest validation,
+shared CLI plan formatting and test-only integration required by core changes.
+Root's final combined build/typecheck/preflight and full suite passed **3722 tests /
+four existing conditional skips /236 files**. All three findings from the independent
+review pair were repaired together, followed by one scoped repair check. The delivery
+PR owns exact-head, merge and post-merge receipts; these are not inferred from local tests.
+The END queue is reset with every disposition recorded and its original text archived.
+No new issues or live benchmark calls were made during this sweep.
 
 Builder: **Codex/operator outside AgentRig**, not an `agentrig` conductor; no conductor
 session id or R17a dogfood success is invented. Package helper task `/root/r13f` built
 supervisor. AgentRig child count zero; external helper/review identities and actual
 usage receipts are recorded on delivery PRs, not counted as AgentRig routing data.
-Core Claude builder session `4f6c0844-94e5-419c-bb4c-04fe8c6ad8e4` is separate work.
+Core Claude builder session `4f6c0844-94e5-419c-bb4c-04fe8c6ad8e4` completed; root
+and scoped helpers integrated its result. Independent core Claude reviewer
+`1f3832e6-5760-439f-843c-5200cbe3e623` reproduced the initial3682-test full pass and
+one parser compatibility defect; Codex reviewer `01a087a7-e361-7251-a911-193e6d386f96`
+found the effect-scheduling and large-map defects by static review, with typecheck
+passed and sandbox fixture-preflight limits disclosed. Repair receipt is on the final PR.
+Scoped Codex repair reviewer `01a087b4-4cf4-74e3-b0be-475a55c5e75e` returned clean
+on `f6f4740` after checking only the three repaired findings and their tests.
+The final test-only portability correction separates POSIX execute-bit coverage
+from all-platform deletion recovery; it does not change reviewed production code.
 Memory helper `/root/r17g_memory`; Claude reviewer
 `8cf96304-d4bf-42b3-9635-2c2e1cfba7db`, Codex reviewer
 `01a08777-3df9-72d2-bf13-0dffa43f7e4d`. Claude independently ran behavioral suites;

@@ -19,6 +19,7 @@ import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
 import { bindExpansionRestriction, expansionSurface, type externalExpansion } from "./external-expansion.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
+import { sanitizeLine } from "./tools/skills.js";
 import { bound, DISPLAY_CAP, safeSliceEnd } from "./tools/shared.js";
 import { evaluatePermissionPolicy } from "./permissions.js";
 import { bindPermissionView } from "./child-permissions.js";
@@ -26,7 +27,20 @@ import type { PermissionDecisionSource } from "./permission-attribution.js";
 import type { PipelineSchedule } from "./parallel-runtime.js";
 import { isIsolatedTool, bindIsolatedContext } from "./isolated-runtime.js";
 import { bindQuestion, isQuestionTool, questionResultTrust, type QuestionState } from "./question-runtime.js";
+import type { TurnToolCall } from "./turn-strategy.js";
 
+/**
+ * The live force_replan gate, shared by reference between the loop and every tool call in it.
+ *
+ * It is cleared SYNCHRONOUSLY, not by whoever raised it: `createSessionLifecycle`'s `onEmit`
+ * callback in `agent.ts` sets `reason = null` and `refusals = 0` the moment a `plan.updated`
+ * payload is emitted — before the append is awaited, and before the emitting tool's own call has
+ * returned. That is deliberate. The gate refuses every non-planning call while it is up, so a
+ * clear that waited for the append would refuse the very calls the fresh plan was meant to
+ * release, and a clear owned by the raiser would leave a plan landing from a tool with nobody to
+ * lower it. Only `update_plan` may emit `plan.updated` (`TOOL_EMIT_SOURCES`), which is what keeps
+ * this synchronous clear from being a forgery seam.
+ */
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
 
@@ -174,7 +188,7 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
   return emitFromTool;
 }
 
-export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+export async function executeTool(tu: TurnToolCall, context: ToolExecutionContext): Promise<ContentBlock> {
   await context.schedule?.prepare();
   const onAsk = context.config.onAsk;
   if (onAsk !== undefined && context.schedule !== undefined) {
@@ -196,7 +210,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     return { type: "tool_result", toolUseId: tu.id, content: error.message, isError: true, trust: "tool-output" };
   } finally { await flushExtensionFailures(); }
 }
-async function executeToolInner(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext): Promise<ContentBlock> {
   const { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, emitFromTool, hook, signal, endSignal, raceAbort, now, isEnded } = context;
   const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external", context?: InstructionContext): ContentBlock =>
     isError
@@ -302,8 +316,22 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const operation = tool.operation?.(input);
   const proposal = proposedFileDiff(tool, input);
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
-  const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
-    ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
+  let declaredEffect: "read-only" | "workspace" | "background" | undefined;
+  if (context.schedule !== undefined || checkpointers.length > 0) {
+    if (typeof tool.effects !== "function") declaredEffect = tool.effects;
+    else try {
+      declaredEffect = tool.effects(input);
+    } catch (error) {
+      // An extension's descriptor already has its own disabling receipt; leave that path alone.
+      if (error instanceof ExtensionHandlerError) throw error;
+      // A trusted host descriptor that throws is a defect in the tool, not evidence that the call
+      // is harmless. Leave the effect unknown: the checkpointer still snapshots and the scheduler
+      // uses an exclusive barrier ("workspace" could admit disjoint writes in parallel), instead of one broken
+      // descriptor ending the turn before a call that has not even been authorized yet.
+      await emit({ type: "error", fatal: false,
+        message: `${tu.name} effects descriptor failed (${error instanceof Error ? error.message : String(error)}); treating the call as potentially mutating` });
+    }
+  }
   const isolated = isIsolatedTool(tool);
   await context.schedule?.admit({ cwd, permission: permClass, effects: hasDiagnostics(tool) ? undefined : declaredEffect, paths: declaredPaths, isolated });
   const permReq: PermissionRequest = {
@@ -356,12 +384,26 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
     decision = "ask"; decisionSource = { kind: "boundary", reason: "external-input-expansion" };
   }
   await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
+  // A handler that throws or is aborted also produces "deny", and until now it produced the SAME
+  // receipt as a person answering "no". They are different facts: one is a decision, the other is
+  // nobody having decided. Both refuse and neither dispatches — that is unchanged — but a reader
+  // auditing why a call was blocked has to be able to tell them apart.
+  let approvalFailure: unknown;
   if (decision === "ask") {
     decision = config.onAsk === undefined ? "deny" : freshExpansion
-      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval").catch(() => "deny" as const)
+      ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval")
+        .catch((error: unknown) => { approvalFailure = error; return "deny" as const; })
       : await config.onAsk(permReq, askContext);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
-    decisionSource = config.onAsk ? { kind: "approval-handler" } : { kind: "unattended" };
+    decisionSource = config.onAsk === undefined ? { kind: "unattended" }
+      : approvalFailure === undefined ? { kind: "approval-handler" }
+      : { kind: "boundary", reason: signal.aborted || isEnded() ? "approval-aborted" : "approval-handler-failed" };
+    if (approvalFailure !== undefined) {
+      // Bounded, one line, into the log rather than into the model's view of the refusal: this is
+      // host-side failure detail, and the model has no use for it and no business acting on it.
+      await emit({ type: "error", fatal: false,
+        message: `approval handler did not answer for ${tu.name}: ${sanitizeLine(String(approvalFailure), 512)}` });
+    }
     if (!freshExpansion && config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted while awaiting permission", true);
     await config.permissionGrants?.flush(emit);
     if (config.permissionGrants?.active === false) {
@@ -379,7 +421,9 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   }
   if (decision === "deny") {
     await emit({ type: "tool.denied", id: tu.id, name: tu.name });
-    return resultBlock(`permission denied: ${tu.name} [${permClass}]`, true);
+    return resultBlock(`permission denied: ${tu.name} [${permClass}]`
+      + (approvalFailure === undefined ? ""
+        : ` (fail-closed: the approval handler ${signal.aborted || isEnded() ? "was aborted" : "failed"} rather than answering; this is not an explicit denial)`), true);
   }
   if (config.permissionGrants !== undefined && (isEnded() || signal.aborted)) return resultBlock("aborted before tool execution", true);
 
@@ -400,7 +444,13 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       return resultBlock(`checkpoint failed; tool blocked: ${checkpoint.denied}`, true);
     }
   }
-  if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
+  if (checkpointers.length > 0 && signal.aborted) {
+    // The checkpoint gate passed and then the run was aborted, so this call is refused after
+    // approval like any other blocked call. Without the receipt the log shows an authorized tool
+    // that simply has no result, and a reader cannot tell it from a lost append.
+    await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+    return resultBlock("aborted before tool execution", true);
+  }
   if (!isolated) context.schedule?.authorized();
   const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input),
     ...(inputContext === undefined ? {} : { context: inputContext }) });
@@ -475,11 +525,13 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       // one call exactly one opportunity to run outside the boundary.
       const escalationReq: PermissionRequest = { ...permReq, origin: "sandbox-escalation" };
       await emit({ type: "permission.request", req: escalationReq });
-      await emit({ type: "permission.decision", d: "ask" });
+      await emit({ type: "permission.decision", d: "ask", toolUseId: tu.id, tool: tu.name,
+        source: { kind: "boundary", reason: "sandbox-escalation" } });
       const escalationDecision = config.onAsk === undefined
         ? "deny"
         : await config.onAsk(escalationReq, askContext);
-      await emit({ type: "permission.decision", d: escalationDecision });
+      await emit({ type: "permission.decision", d: escalationDecision, toolUseId: tu.id, tool: tu.name,
+        source: config.onAsk === undefined ? { kind: "unattended" } : { kind: "approval-handler" } });
       if (escalationDecision !== "allow") {
         sandboxRetryDenied = true;
         throw err;

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -64,17 +64,39 @@ it("serializes cooperating ticks and mutations until actual launched work settle
   expect(await f.store.tick(now, async () => {})).toEqual([]);
 });
 
-it("retains failed claims, refuses over-cap ticks before any launch, and stops after cancellation", async () => {
+it("retains a failed launch claim and never retries it in the same minute", async () => {
   const f = await fixture(); await f.store.add(entry("one"));
   await expect(f.store.tick(now, async () => { throw new Error("launch failed"); })).rejects.toThrow("launch failed");
-  expect(await f.store.tick(now, async () => {})).toEqual([]);
-  for (let i = 0; i < 11; i++) await f.store.add(entry(`extra${i}`));
+  expect((await f.store.read()).entries[0]?.lastClaimedMinute).toBe(Math.floor(now.getTime() / 60_000));
   const launch = vi.fn(async () => {});
+  expect(await f.store.tick(now, launch)).toEqual([]); expect(launch).not.toHaveBeenCalled();
+});
+
+it("refuses an over-cap tick before any launch or claim modification", async () => {
+  const f = await fixture(); await mkdir(join(f.project, ".agentrig"));
+  const path = join(f.project, ".agentrig", "schedule.json");
+  // Exercise real validated table reading/tick admission without repeating eleven unrelated
+  // add/lock/fsync cycles under one test deadline. add validation has its own controls above.
+  const table = { version: 1, entries: [
+    { ...entry("claimed"), lastClaimedMinute: Math.floor(now.getTime() / 60_000) },
+    ...Array.from({ length: 11 }, (_, i) => entry(`extra${i}`)),
+  ] };
+  await writeFile(path, JSON.stringify(table));
+  expect((await f.store.read()).entries).toHaveLength(12);
+  const before = await readFile(path); const launch = vi.fn(async () => {});
   await expect(f.store.tick(now, launch)).rejects.toThrow("more than 10"); expect(launch).not.toHaveBeenCalled();
-  await f.store.remove("extra10");
+  expect(await readFile(path)).toEqual(before);
+});
+
+it("stops after callback cancellation with later due entries unclaimed", async () => {
+  const f = await fixture(); await f.store.add(entry("first")); await f.store.add(entry("second"));
   const controller = new AbortController();
-  await expect(f.store.tick(now, async () => { controller.abort(); }, controller.signal)).rejects.toThrow();
-  expect((await f.store.read()).entries.filter(e => e.lastClaimedMinute !== undefined)).toHaveLength(2);
+  const launch = vi.fn(async () => { controller.abort(); });
+  await expect(f.store.tick(now, launch, controller.signal)).rejects.toThrow();
+  expect(launch).toHaveBeenCalledTimes(1);
+  expect((await f.store.read()).entries.map(e => [e.id, e.lastClaimedMinute])).toEqual([
+    ["first", Math.floor(now.getTime() / 60_000)], ["second", undefined],
+  ]);
 });
 
 it("rejects outside directory aliases and symlinked tables without changing the target", async () => {

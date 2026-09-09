@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,6 +146,42 @@ describe("R5d persistent definition consent", () => {
     expect(await readFile(join(root, file!), "utf8")).toBe("broken");
     expect(() => mcpDefinitionSnapshot([...original, ...original])).toThrow("duplicate");
     expect(() => mcpDefinitionSnapshot([{ name: "x", description: "a".repeat(1024 * 1024) }])).toThrow("1 MiB");
+  });
+
+  it("reports a persisted approval, and reads a small pin without allocating the whole cap", async () => {
+    const pins = new FileMcpPins(root, "config");
+    await pins.compareAndSet("example", undefined, mcpDefinitionSnapshot(original));
+    const [file] = await readdir(root);
+    // a real pin is kilobytes; the read used to allocate and zero 1 MiB on every tool call
+    expect((await readFile(join(root, file!), "utf8")).length).toBeLessThan(1024 * 1024);
+    const notices: string[] = [];
+    const fake = server(changed);
+    const connection = await connectServers({ servers: [fake.client], pins,
+      onDefinitionChange: async () => true, onDefinitionNotice: (message) => notices.push(message) });
+    await connection.tools[0]!.execute({}, context());
+    // approving used to be the silent path: only refusals produced a receipt
+    expect(notices.filter(message => message.includes("approved definition change persisted as the new baseline"))).toHaveLength(1);
+    expect(notices.join("\n")).toContain("not a safety assessment");
+    expect(await pins.read("example")).toBe(mcpDefinitionSnapshot(changed));
+    // and the cap still binds, whatever the file claims about its own size
+    await writeFile(join(root, file!), "a".repeat(1024 * 1024 + 1));
+    await expect(pins.read("example")).rejects.toThrow("exceeds 1 MiB");
+  });
+
+  it("names the held lock and what actually clears it", async () => {
+    const pins = new FileMcpPins(root, "config");
+    await pins.compareAndSet("example", undefined, mcpDefinitionSnapshot(original));
+    const [file] = await readdir(root);
+    const before = await readFile(join(root, file!), "utf8");
+    await mkdir(join(root, `${file!}.lock`));
+    const failure = await pins.compareAndSet("example", mcpDefinitionSnapshot(original), mcpDefinitionSnapshot(changed))
+      .then(() => undefined, (error: Error) => error);
+    expect(failure!.message).toContain("locked by another writer");
+    expect(failure!.message).toContain("never stolen or expired");
+    expect(failure!.message).toContain("no consent has been lost");
+    // the refusal changes nothing, including the lock it refused to steal
+    expect(await readFile(join(root, file!), "utf8")).toBe(before);
+    expect(await readdir(root)).toContain(`${file!}.lock`);
   });
 
   it("CAS rejects stale approval and config scopes do not share trust", async () => {

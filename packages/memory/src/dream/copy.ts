@@ -88,6 +88,8 @@ async function readManifest(out: string, opts: MemoryLockOptions = {}): Promise<
 }
 
 function manifestBytes(manifest: Manifest): string {
+  // Runtime host metadata is not guaranteed by TypeScript; never publish an unreadable owner.
+  Manifest.parse(manifest);
   const bytes = JSON.stringify(manifest) + "\n";
   if (Buffer.byteLength(bytes) > MAX_MANIFEST_BYTES) throw new MaintenanceLimitError("dream manifest exceeds metadata byte limit");
   return bytes;
@@ -107,7 +109,8 @@ async function replaceManifest(manifest: Manifest): Promise<void> {
     await handle.close();
     await rename(temp, path);
   } catch (error) {
-    throw new Error("dream handoff failed; inspect " + temp + ": " + String(error), { cause: error });
+    throw new Error("dream handoff failed; inspect retained artifact " + manifest.outputRoot + " and manifest " + path
+      + "; the staging temp may be cleaned during recovery: " + String(error), { cause: error });
   } finally {
     await handle.close().catch(() => {});
     if (owned !== undefined) {
@@ -304,10 +307,11 @@ export async function copyWiki(sourceRoot: string, destRoot?: string, opts: Drea
         sourceRoot: src, sourceIdentity,
         sourceFingerprint: before, outputRoot: out, outputIdentity: owned!,
       };
+      const bytes = manifestBytes(manifest);
       const handle = await open(manifestPath(out), "wx", 0o600);
       try {
         ownedManifest = await handle.stat({ bigint: true });
-        await handle.writeFile(manifestBytes(manifest), "utf8");
+        await handle.writeFile(bytes, "utf8");
       } finally { await handle.close(); }
       opts.signal?.throwIfAborted();
       return workspace(manifest);

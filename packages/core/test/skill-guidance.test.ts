@@ -20,6 +20,33 @@ it("rejects malformed, oversized or executable-shaped hint fields", () => {
   }
 });
 
+/** The generated dialect's required provenance fields, so a hint can also be placed in `metadata`. */
+const generatedFields = Object.entries({
+  "agentrig-schema": "1", "agentrig-generated": "true", "agentrig-sessions": '["session:s1","session:s2"]',
+  "agentrig-page": "concepts/procedure.md", "agentrig-dream": "fixture", "agentrig-evidence": "0".repeat(64),
+  "agentrig-content": "0".repeat(64), locked: "false",
+}).map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`).join("");
+
+it("a hint that sanitizes away entirely is absent, not an empty property", () => {
+  // Zero-width space and word joiner are stripped outright and BEL collapses to whitespace that
+  // then trims away, so each value passes the manifest's `min(1)` and nothing survives
+  // sanitization. An empty string is not a shorter hint, it is no hint — a consumer testing
+  // `"trigger" in skill` must not be handed one.
+  const zwsp = String.fromCharCode(0x200b), joiner = String.fromCharCode(0x2060), bel = String.fromCharCode(7);
+  for (const value of [zwsp + joiner, bel, " " + zwsp + " "]) {
+    const manual = parseSkill(`---\nname: test\ntrigger: ${value}\n---\nBody`, "/skills/test.md");
+    expect(manual).not.toHaveProperty("trigger");
+    expect(skillsInjection([manual])).not.toContain("[trigger:");
+  }
+  const generated = parseSkill(
+    `---\nname: hinted\ndescription: d\nmetadata:\n${generatedFields}  agentrig-trigger: ${JSON.stringify(zwsp)}\n---\nBody`,
+    "/skills/hinted/SKILL.md");
+  expect(generated.generated).toBe(true);
+  expect(generated).not.toHaveProperty("trigger");
+  // a hint with anything left still lands on the property, so absence means absence
+  expect(parseSkill(`---\nname: test\ntrigger: ${zwsp}When testing\n---\nBody`, "/skills/test.md").trigger).toBe("When testing");
+});
+
 it("total byte cap covers multibyte hints, example and omitted entries", () => {
   const skills = Array.from({ length: 100 }, (_, i) => parseSkill(`---\nname: s${i}\ndescription: ${"界".repeat(200)}\ntrigger: ${"界".repeat(160)}\n---\nBody`, `/skills/s${i}.md`));
   const text = skillsInjection(skills);

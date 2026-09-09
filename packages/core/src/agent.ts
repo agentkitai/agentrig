@@ -30,7 +30,7 @@ import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
 import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
 import { createSessionLifecycle, abortGraceOf } from "./session-lifecycle.js";
 import { executeTool, createToolEmitterFactory, PLAN_TOOL, type ReplanState } from "./tool-execution.js";
-import { sequential, type TurnStrategy } from "./turn-strategy.js";
+import { sequential, type TurnStrategy, type TurnToolCall } from "./turn-strategy.js";
 import { bindParallelRuntime, executeParallel, type PipelineSchedule } from "./parallel-runtime.js";
 import {
   buildContextManifest,
@@ -287,6 +287,13 @@ export function createAgent(config: AgentConfig): Agent {
     toolAllowlist: Object.freeze(AgentRoleToolNames.parse(config.toolAllowlist)) };
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
     throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
+  }
+  if ((config.hooks ?? []).filter(isCheckpointerHook).length > 1) {
+    // Two instances do not checkpoint twice: each keeps its OWN leases, owned state and uncertainty
+    // set, so the second one's `lease` finds the first one's lock directory and reports "another
+    // session or retained lock exists; stop writers before manual recovery" — a diagnostic that
+    // sends the operator looking for a stray process instead of at their own hook list.
+    throw new Error("only one Checkpointer may be configured; remove the duplicate hook instance");
   }
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
@@ -775,7 +782,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
           }
         };
         {
-          // pre_model: last chance to adjust or refuse the request about to be billed
+          // pre_model: last chance to adjust or refuse the request about to be billed.
+          //
+          // Order, deliberately: observers run against the rendered request, and the authority
+          // remap below runs after them. A hook cannot see the labels its own patch will be given,
+          // which is what stops "read the manifest, then contribute under the authority you just
+          // read". Every contribution is labelled `authority: "data"` with the hook as its origin
+          // whatever the hook returns, so the ordering cannot be used for an upgrade either way.
           const h = await hook("pre_model", { sessionId: id, cwd, turn: turns, request: req });
           if (h.denied !== undefined) {
             await emit({ type: "error", message: `model request refused by hook: ${h.denied}`, fatal: false });
@@ -802,8 +815,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
                   },
                 ];
               } else {
-                // An arbitrary replacement destroys recoverable boundaries; representing the whole
-                // rendered value as one hook block is more honest than stale provenance.
+                // A patch that is not "the previous text plus a suffix" is an arbitrary rewrite: it
+                // may have deleted, reordered or edited text from the project prompt, the skill
+                // catalogue and the memory recall alike, and there is no way left to say which
+                // surviving byte came from which of them. So the WHOLE rendered prompt is
+                // downgraded to one hook-owned `data` block rather than keeping per-source blocks
+                // that would now be claims about text this hook may have rewritten. That is a loss
+                // of resolution, not of authority: no block gains any, and `expansion.unknown()`
+                // above has already marked the turn's expansion surface unknown.
                 requestSystemBlocks = [{
                   content: patch.system,
                   source: "system_prompt",
@@ -826,14 +845,25 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         }
 
         if (hasPlanTool && turnsThisRun === 1) {
-          const instruction = "Acceptance planning: before starting or continuing this task, call update_plan with the complete plan. " +
-            "Include an accept field for every item: a concrete observable check such as 'pnpm test exits 0' or 'the endpoint returns 401 without a token'. " +
-            "Keep each check nonblank and at most 1024 characters. These are declared checks, not verified evidence; marking an item done does not prove its check passed. " +
-            "This planning request does not grant permission or represent new user consent.";
+          // A resumed conversation that already declared a plan does not need the worked examples
+          // and the field-length rules again — it has them in its own history. Every load-bearing
+          // clause stays in both: revise before continuing, keep a check per item, checks are
+          // declarations rather than proof, and this is not consent.
+          const declaredPlan = messages.some(message => message.role === "assistant"
+            && message.content.some(block => block.type === "tool_use" && block.name === PLAN_TOOL));
+          const instruction = declaredPlan
+            ? "Acceptance planning: this conversation already declared a plan. Before continuing, call update_plan with the complete revised plan, keeping an accept check on every item. " +
+              "These remain declared checks, not verified evidence; marking an item done does not prove its check passed. " +
+              "This planning request does not grant permission or represent new user consent."
+            : "Acceptance planning: before starting or continuing this task, call update_plan with the complete plan. " +
+              "Include an accept field for every item: a concrete observable check such as 'pnpm test exits 0' or 'the endpoint returns 401 without a token'. " +
+              "Keep each check nonblank and at most 1024 characters. These are declared checks, not verified evidence; marking an item done does not prove its check passed. " +
+              "This planning request does not grant permission or represent new user consent.";
           req.system = [req.system, instruction].filter(text => text !== "").join("\n\n");
           requestSystemBlocks = [...requestSystemBlocks, { content: instruction, source: "system_prompt",
             origin: "runtime.acceptance-planning", authority: "instruction", context: PLATFORM_CONTEXT,
-            reason: "first request asks for observable acceptance declarations, not proof" }];
+            reason: declaredPlan ? "first request of a resumed run asks for a revised plan, not proof"
+              : "first request asks for observable acceptance declarations, not proof" }];
         }
         await flushDelegations();
         expansion.beginRequest();
@@ -871,7 +901,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         }));
         await emit({ type: "model.request", tokensIn: estimateTokens(req.system, req.messages) });
 
-        const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
+        const toolUses: TurnToolCall[] = [];
         let usage: Usage = { input: 0, output: 0 };
         let usageReported = false;
         let usageRetried = false;
@@ -1164,6 +1194,19 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
       principals.close();
       await flushDelegations();
       lifecycle.beginEnding();
+      // A staged continuation that never became an attempt. The nudge message is already in the
+      // log — it is appended before the next turn starts — but `turn.continued` is emitted only
+      // for an ACTUAL provider attempt, so a budget stop, an abort or a pre_model veto in between
+      // leaves a persisted "[Platform continuation: …]" user message with no attempt beside it.
+      // Reading the log, that is indistinguishable from a retry that ran and produced nothing.
+      // Saying so costs one non-fatal line and changes no counter: `consecutiveContinuations` is
+      // not spent, no attempt is claimed, and nothing here re-enables the retry.
+      if (continuationFrom !== undefined) {
+        await emit({ type: "error", fatal: false,
+          message: `continuation staged after turn ${continuationFrom} was never attempted (${reason}); the persisted continuation message is not a retry`,
+        }).catch(() => {});
+        continuationFrom = undefined;
+      }
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
       // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.
@@ -1227,7 +1270,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
     }
     return { id, reason, turns, usage: totals };
 
-    function runTool(tu: { id: string; name: string; input: unknown }, schedule?: PipelineSchedule): Promise<ContentBlock> {
+    function runTool(tu: TurnToolCall, schedule?: PipelineSchedule): Promise<ContentBlock> {
       return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, questionState,
         ...(schedule === undefined ? {} : { schedule }),
         expansion,

@@ -66,7 +66,16 @@ class PauseGate {
   }
 }
 
-/** Internal per-session owner of ordering, cancellation and terminal resource release. */
+/**
+ * Internal per-session owner of ordering, cancellation and terminal resource release.
+ *
+ * `graceMs` is the NORMALIZED abort grace in milliseconds — already through `abortGraceOf`, so it
+ * is a finite non-negative number and never `AgentConfig.abortGraceMs`'s raw optional value. This
+ * signature takes the normalized number rather than the config on purpose: the loop and the
+ * subagent tool (which halves its parent's grace for a child) both normalize first, and a second
+ * `?? DEFAULT_ABORT_GRACE_MS` inside here would silently turn a deliberate `0` into a full second.
+ * Zero is a legitimate value and means "do not wait for orphans at all".
+ */
 export function createSessionLifecycle(store: SessionStore, id: string, graceMs: number, onEmit: (payload: EventPayload) => void) {
   const stream = new EventStream();
   const gate = new PauseGate();

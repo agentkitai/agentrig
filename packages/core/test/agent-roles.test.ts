@@ -69,8 +69,15 @@ it("discovers bounded canonical local files, refuses bad units and never follows
   expect(roles[0]!.hash).toMatch(/^[a-f0-9]{64}$/);
   const outside = await root(); await mkdir(join(outside, ".agentrig"));
   await symlink(dir, join(outside, ".agentrig", "agents"), process.platform === "win32" ? "junction" : "dir");
-  await expect(discoverAgentRoles(outside)).rejects.toThrow("regular directory");
+  await expect(discoverAgentRoles(outside)).rejects.toThrow("agent role directory must be a regular directory; symlinked .agentrig/agents paths are not supported");
   expect(await readFile(join(dir, "bad.md"), "utf8")).toContain("yolo");
+});
+
+it("canonicalizes a direct SDK project alias without treating linked role directories as trusted", async () => {
+  const cwd = await root(), links = await root(); const dir = join(cwd, ".agentrig", "agents");
+  await mkdir(dir, { recursive: true }); await writeFile(join(dir, "reader.md"), "---\ntools: []\n---\nRead only.");
+  const alias = join(links, "project"); await symlink(cwd, alias, process.platform === "win32" ? "junction" : "dir");
+  expect((await discoverAgentRoles(alias)).map(role => role.name)).toEqual(["reader"]);
 });
 
 it.each([false, true])("actual spawn narrows bash despite parent blanket authority (allowed=%s), and records project advisory role", async allowed => {

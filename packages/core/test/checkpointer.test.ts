@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -1004,4 +1004,212 @@ it("prune failure cannot publish a seal and successful seal observes already-pru
     expect(refsAtSeal).toContain("/sealed/");
     expect(refsAtSeal).not.toMatch(/atomicprune\/[12](?:\n|$)/);
   } finally {await cp.endSession(ctx.sessionId);}
+});
+
+it("refuses two configured checkpointers instead of reporting a stray lock holder", () => {
+  // Each instance keeps its own leases/owned state, so the second one's `lease` finds the first's
+  // lock directory and reports "another session or retained lock exists" — which sends the operator
+  // hunting for a process rather than at their own hook list.
+  const build = (hooks: Checkpointer[]) => createAgent({
+    provider: new FakeProvider([]), tools: [], permissions: new RulePolicy([], "allow"), hooks,
+    systemPrompt: "test", store: new SessionStore({ root: join(root, ".agentrig", "sessions") }),
+  });
+  expect(() => build([new Checkpointer(), new Checkpointer()])).toThrow(/only one Checkpointer/);
+  expect(() => build([new Checkpointer()])).not.toThrow();
+});
+
+it("names the path when a listed file is a directory in the worktree", async () => {
+  await initRepo();
+  // Git still lists `tracked.txt`; the worktree has a directory there. A nested repository looks
+  // exactly the same from the capture loop, and the operator has to be told which path to inspect.
+  await rm(join(root, "tracked.txt"));
+  await mkdir(join(root, "tracked.txt"));
+  const tool = writeTool();
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("write", { cwd: root, id: "file_to_dir" });
+  const events = await collect(session);
+  await session.done;
+  const failure = events.find(e => e.type === "error" && e.message.includes("core:checkpointer"));
+  expect(failure).toBeDefined();
+  expect((failure as { message: string }).message).toContain('checkpoint path "tracked.txt" is a directory');
+  expect((failure as { message: string }).message).toContain("nested repository or submodule");
+  expect(events.filter(e => e.type === "tool.denied" && e.id === "a")).toHaveLength(1);
+  // the tool never ran: a blocked checkpoint blocks the write
+  await expect(readFile(join(root, "new.txt"), "utf8")).rejects.toThrow();
+});
+
+it("records a denial when the run aborts after the checkpoint and before the call", async () => {
+  await initRepo();
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [writeTool()])
+    .run("write", { cwd: root, id: "late_abort_denial" });
+  const events: HarnessEvent[] = [];
+  for await (const event of session.events) {
+    events.push(event);
+    // the narrow window this covers: the snapshot is durable, the tool has not been called
+    if (event.type === "checkpoint.created") session.control.abort();
+  }
+  await session.done;
+  expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
+  // the snapshot is durable and the tool never ran, so every abort in this window — whether the
+  // hook runner reports it or the post-gate check catches it — must leave a denial receipt
+  expect(events.filter(e => e.type === "error" && e.message.includes("aborted"))).not.toEqual([]);
+  expect(events.filter(e => e.type === "tool.denied" && e.id === "a")).toHaveLength(1);
+  // an authorized tool with no result and no receipt is indistinguishable from a lost append
+  expect(events.some(e => e.type === "tool.call" && e.id === "a")).toBe(false);
+  await expect(readFile(join(root, "new.txt"), "utf8")).rejects.toThrow();
+});
+
+it("a throwing effects descriptor is contained, and the call is treated as mutating", async () => {
+  await initRepo();
+  const tool: AnyTool = { ...writeTool(), effects: () => { throw new Error("descriptor defect"); } };
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("write", { cwd: root, id: "throwing_effects" });
+  const events = await collect(session);
+  await session.done;
+  // not a fatal turn: the run continues, the descriptor failure is visible, and the conservative
+  // unknown effect means the checkpoint is still taken before the write lands
+  expect(events.filter(e => e.type === "error" && e.message.includes("effects descriptor failed"))).toHaveLength(1);
+  expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
+  expect(events.find(e => e.type === "tool.result" && e.id === "a")).toMatchObject({ ok: true });
+  expect(await readFile(join(root, "new.txt"), "utf8")).toBe("x");
+});
+
+it("a second undo says the worktree already matches the turn, not that a stranger wrote to it", async () => {
+  await initRepo();
+  const session = agent([
+    [call("a", "write", { path: "tracked.txt", content: "first" }), stop("tool_use")],
+    [call("b", "write", { path: "tracked.txt", content: "second" }), stop("tool_use")],
+    [stop("end_turn")],
+  ], [writeTool()]).run("change", { cwd: root, id: "undo_repeat" });
+  await collect(session); await session.done;
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+
+  expect((await undoSession(store, session.id, { cwd: root })).turn).toBe(2);
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("first");
+  // the "non-session change" the second run sees is the first run's own restoration
+  await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow(/worktree already matches turn 2/);
+  await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow(/nothing to restore/);
+  // still refused, and still nothing written
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("first");
+  // an actual foreign change is still reported as one
+  await writeFile(join(root, "external.txt"), "human change");
+  await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow("non-session changes");
+});
+
+it("replays the recorded seal refusal and recorded references when undo has no seal", async () => {
+  await initRepo();
+  // a session_end hook that writes a covered file is exactly what invalidates the seal
+  const ingest = { point: "session_end" as const, id: "fixture:ingest",
+    handler: async () => { await writeFile(join(root, "tracked.txt"), "written by session-end maintenance"); return { action: "continue" as const }; } };
+  const session = createAgent({
+    provider: new FakeProvider([[call("a", "write", { path: "tracked.txt", content: "first" }), stop("tool_use")], [stop("end_turn")]]),
+    tools: [writeTool()], permissions: new RulePolicy([], "allow"), hooks: [new Checkpointer(), ingest],
+    systemPrompt: "test", store: new SessionStore({ root: join(root, ".agentrig", "sessions") }), budget: { maxTurns: 10 },
+  }).run("change", { cwd: root, id: "undo_seal_refused" });
+  const events = await collect(session); await session.done;
+  expect(events.filter(e => e.type === "checkpoint.sealed")).toHaveLength(0);
+  expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
+
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+  const failure = await undoSession(store, session.id, { cwd: root }).then(() => undefined, (error: Error) => error);
+  expect(failure).toBeDefined();
+  expect(failure!.message).toContain("no verified ownership seal");
+  // the reason was recorded at session end and would otherwise never be read again
+  expect(failure!.message).toContain("recorded refusal: checkpoint seal failed:");
+  expect(failure!.message).toContain("session-end hooks such as memory ingest may change covered files");
+  // Recorded references are named without claiming their present retention or safe restoration.
+  expect(failure!.message).toMatch(/recorded checkpoint \(current retention not checked; not restorable without a seal\): turn 1 at refs\/agentrig\/undo_seal_refused\/1/);
+  expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("written by session-end maintenance");
+});
+
+it("a hand-restored matching tree does not claim a prior undo or retained originals", async () => {
+  await initRepo();
+  const session = agent([[call("a", "write", { path: "tracked.txt", content: "first" }), stop("tool_use")],
+    [call("b", "write", { path: "tracked.txt", content: "second" }), stop("tool_use")], [stop("end_turn")]], [writeTool()])
+    .run("change", { cwd: root, id: "manual_match" });
+  await collect(session); await session.done;
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+  await writeFile(join(root, "tracked.txt"), "first");
+  const before = await readFile(store.pathFor(session.id));
+  const error = await undoSession(store, session.id, { cwd: root }).catch(error => error as Error);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("worktree already matches turn 2");
+  expect((error as Error).message).not.toContain("undo already applied");
+  expect((error as Error).message).not.toContain("originals");
+  expect((await readdir(join(root, ".git"))).filter(name => name.startsWith("agentrig-undo-"))).toEqual([]);
+  expect(await readFile(store.pathFor(session.id))).toEqual(before);
+});
+
+it("bounds recorded refusal replay and names omissions without altering the journal", async () => {
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") }); const id = await store.create();
+  await store.append(id, { type: "session.start", task: "fixture", cwd: root, provider: "fixture", model: "fixture" });
+  for (let i = 0; i < 40; i++) {
+    await store.append(id, { type: "error", fatal: false, message: "checkpoint seal failed: " + "x".repeat(1500) + "\u001b[31m" });
+    await store.append(id, { type: "checkpoint.created", turn: i + 1, ref: `refs/agentrig/${"x".repeat(128)}/${i + 1}`, tree: "a".repeat(40), commit: "b".repeat(40) });
+  }
+  await store.append(id, { type: "session.end", reason: "done" });
+  const before = await readFile(store.pathFor(id)); const error = await undoSession(store, id).catch(error => error as Error);
+  expect(error).toBeInstanceOf(Error); expect((error as Error).message.length).toBeLessThanOrEqual(4096);
+  expect((error as Error).message).toContain("omitted 72 recorded entries");
+  expect((error as Error).message).toContain("truncated"); expect((error as Error).message).not.toContain("\u001b");
+  expect((error as Error).message).toContain("current retention not checked");
+  expect(await readFile(store.pathFor(id))).toEqual(before);
+});
+
+for (const kind of ["deletion", "executable bit"] as const) {
+// Windows chmod/stat do not expose POSIX execute bits. Keep deletion coverage independent.
+it.skipIf(kind === "executable bit" && process.platform === "win32")(`round-trips ${kind}`, async () => {
+  await initRepo();
+  await writeFile(join(root, "script.sh"), "#!/bin/sh\noriginal\n", { mode: 0o644 });
+  await writeFile(join(root, "doomed.txt"), "still here\n");
+  await git("add", "script.sh", "doomed.txt");
+  await git("commit", "-qm", "round trip baseline");
+
+  const tool: AnyTool = { name: "mutate", description: "mutate", permission: "write", inputSchema: z.object({}),
+    execute: async () => {
+      if (kind === "executable bit") await chmod(join(root, "script.sh"), 0o755);
+      else await rm(join(root, "doomed.txt"));
+      return { output: null, display: "mutated" };
+    } };
+  const session = agent([[call("a", "mutate", {}), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("mutate", { cwd: root, id: "undo_round_trip" });
+  await collect(session); await session.done;
+  if (kind === "executable bit") expect((await lstat(join(root, "script.sh"))).mode & 0o111).not.toBe(0);
+  else await expect(readFile(join(root, "doomed.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+  expect((await undoSession(store, session.id, { cwd: root })).restored).toBe(true);
+  // the executable bit is part of the snapshot, not just the bytes
+  if (kind === "executable bit") expect((await lstat(join(root, "script.sh"))).mode & 0o111).toBe(0);
+  expect(await readFile(join(root, "script.sh"), "utf8")).toBe("#!/bin/sh\noriginal\n");
+  // and a deleted file comes back
+  expect(await readFile(join(root, "doomed.txt"), "utf8")).toBe("still here\n");
+});
+}
+
+it("refuses a file/directory collision as a collision, and restores nothing", async () => {
+  await initRepo();
+  // untracked, so the post-turn snapshot itself is capturable: the collision is only in the undo
+  await writeFile(join(root, "slot"), "a plain file\n");
+  const tool: AnyTool = { name: "mutate", description: "mutate", permission: "write", inputSchema: z.object({}),
+    execute: async () => {
+      await rm(join(root, "slot"));
+      await mkdir(join(root, "slot"));
+      await writeFile(join(root, "slot", "inner.txt"), "inside a directory\n");
+      return { output: null, display: "mutated" };
+    } };
+  const session = agent([[call("a", "mutate", {}), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("mutate", { cwd: root, id: "undo_collision_dir" });
+  const events = await collect(session); await session.done;
+  expect(events.filter(e => e.type === "checkpoint.sealed")).toHaveLength(1);
+
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+  const failure = await undoSession(store, session.id, { cwd: root }).then(() => undefined, (error: Error) => error);
+  expect(failure!.message).toContain("undo refuses non-file path: slot");
+  // not ".gitignore is hiding something": a directory is standing where a file belongs
+  expect(failure!.message).toContain("a directory now occupies a path the checkpoint holds as a file");
+  expect(failure!.message).not.toContain("ignored or unowned");
+  // fail-closed: the collision is refused before any original is moved
+  expect((await lstat(join(root, "slot"))).isDirectory()).toBe(true);
+  expect(await readFile(join(root, "slot", "inner.txt"), "utf8")).toBe("inside a directory\n");
 });

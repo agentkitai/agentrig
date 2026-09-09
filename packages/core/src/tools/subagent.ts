@@ -324,6 +324,12 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         }, allowlist === undefined ? undefined : { tools: allowlist, maxTurns: effectiveTurns }));
       }
       const { permissionGrants: _configuredGrants, ...childConfig } = config;
+      // A registry configured on the child config is never authority of its own: a child's grants
+      // are DERIVED from the parent's live view, so with no parent registry there is nothing to
+      // derive from and the configured one is dropped rather than promoted into standing authority
+      // the parent never held. Dropping it silently is indistinguishable from inheriting it, which
+      // is the one reading a caller must not be left with — so the result says so.
+      const ignoredGrantRegistry = permissionGrants === undefined && _configuredGrants !== undefined;
       const child = opts.createAgent({
         ...childConfig,
         ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
@@ -472,7 +478,8 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
             answerIsFinal || text === ""
               ? text
               : `(the subagent's final turn carried no message; this was its last one)\n${text}`;
-          const sessionLine = `subagent session ${session.id}`;
+        const sessionLine = `subagent session ${session.id}`
+            + (ignoredGrantRegistry ? "\nnote: the configured child permission-grant registry was ignored — this parent session has no live grant registry to derive a child view from, so the child ran with no standing grants" : "");
           if (summary.reason !== "done") {
             return {
               output: summary,

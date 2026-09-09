@@ -126,9 +126,9 @@ it.each(["untracked wiki", "tracked wiki", "concurrent tracked wiki edit", "igno
     expect((await execFile("git", ["show", `${checkpoint.ref}:task.txt`], { cwd: root })).stdout).toBe("before task\n");
     const index = await readFile(join(dir, "wiki", "index.md"), "utf8");
     const raw = await readFile(join(store.root, `${session.id}.jsonl`), "utf8");
-    // The new seal-time diagnostic above does not change the explicit undo entry point's refusal.
+    // Replayed diagnostics add context without weakening the explicit undo refusal or changing bytes.
     await expect(undoSession(store, session.id, { cwd: root })).rejects.toMatchObject({
-      message: "undo unavailable: this run has no verified ownership seal (legacy, interrupted, or uncertain work)",
+      message: expect.stringContaining("undo unavailable: this run has no verified ownership seal (legacy, interrupted, or uncertain work)"),
     });
     expect(await readFile(join(root, "task.txt"), "utf8")).toBe("task completed\n");
     expect(await readFile(join(dir, "wiki", "index.md"), "utf8")).toBe(index);
