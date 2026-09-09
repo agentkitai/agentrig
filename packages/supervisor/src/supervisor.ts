@@ -156,7 +156,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
   positiveLimit("reviewTimeoutMs", opts.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS);
   for (const [key, value] of Object.entries(opts.auxiliaryLimits ?? {})) positiveLimit(key, value);
   const state = initialState();
-  const evidence = evidenceReportCollector({ scope: "current-run" });
+  const evidence = evidenceReportCollector({ scope: "current-run", onFoldError: error => report("evidence", error) });
   const stateOpts: StateOptions = {};
   if (opts.windowSize !== undefined) stateOpts.windowSize = opts.windowSize;
   if (opts.pricing !== undefined) stateOpts.pricing = opts.pricing;
@@ -250,8 +250,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
         evidence.omitEvents(1);
       }
       // Independent fold: a state failure must not hide this event from evidence.
-      try { evidence.observe(event); }
-      catch (err) { evidence.omitEvents(1); report("evidence", err); }
+      evidence.observe(event);
       if (stateFailed) continue;
       // the supervisor's own records come back through the stream; folding them is right
       // (lastInterventionSeq) but re-detecting on them is not

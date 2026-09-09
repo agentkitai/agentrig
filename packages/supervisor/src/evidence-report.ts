@@ -1,5 +1,6 @@
 import type { HarnessEvent, PlanItem } from "@agentkitai/agentrig-core";
 import { initialPlanEvidence, reducePlanEvidence, type PlanItemEvidence } from "./plan-evidence.js";
+import { auxiliaryDiagnostic } from "./auxiliary.js";
 
 export const MAX_EVIDENCE_EVENTS = 100_000;
 const MAX_REPORT_CHARS = 12_000;
@@ -13,7 +14,7 @@ export interface EvidenceReport {
 }
 
 /** Streaming bounded state, shared by the grader and read-only finished-session report. */
-export function evidenceReportCollector(options: { scope?: "current-run" } = {}) {
+export function evidenceReportCollector(options: { scope?: "current-run"; onFoldError?: (error: unknown) => unknown } = {}) {
   const ledger = initialPlanEvidence();
   let statuses: PlanItem["status"][] = [];
   let hasDeclarations = false;
@@ -45,11 +46,12 @@ export function evidenceReportCollector(options: { scope?: "current-run" } = {})
         hasDeclarations = event.items.some(item => item.accept !== undefined);
       }
       reducePlanEvidence(ledger, event);
-      } catch {
+      } catch (error) {
         // Malformed trusted/custom streams must not disable later observations or certify a gap.
         foldErrors++;
         ledger.incomplete = true;
         finished = false;
+        auxiliaryDiagnostic(() => options.onFoldError?.(error));
       }
     },
     omitEvents(amount: number): void { omittedEvents += amount; finished = false; },

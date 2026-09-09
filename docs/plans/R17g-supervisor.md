@@ -41,3 +41,22 @@ build/typecheck. Root owns combined full gates, one bounded independent review a
   opaque custom calls and successful/failed auxiliary call lifecycle tests.
 - No independent review initiated by package agent. Root owns review, combined
   cross-package validation, full Docker/Chromium and exact-head hosted delivery.
+
+## Bounded review repair
+
+Claude `54ba8e26-dfae-4ee8-ba92-89cea94c0f8d` found a diagnostic regression: the
+collector retained incomplete evidence but swallowed the exception before the
+host error callback could observe it. An isolated optional collector callback now
+reports that failure; the unreachable outer catch is removed. The real attach
+regression failed first with zero evidence notifications, then checks one callback,
+a throwing host diagnostic, retained later plan and explicit `fold errors 1`.
+Neither a failed fold nor a failed diagnostic can certify complete evidence.
+Codex `01a0877b-4f0f-7622-85b2-a6f806600965` found no substantive issue in the first pass.
+
+Other review observations do not open new gates: with a known cwd, `/src` is an
+absolute host path, not legacy shorthand for `src`; use relative `src` or the full
+task-root path. Slash-only `/` retains its documented task marker. A state-fold
+failure conservatively increments omitted-event coverage even when the independent
+evidence fold retains that event; the incomplete label is intentional. Memory's
+separate batch supplies running-state rendering. No historical scores or authority
+boundaries changed, and no general review is restarted for these observations.

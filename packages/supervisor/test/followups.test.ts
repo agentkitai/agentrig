@@ -103,6 +103,26 @@ it("shows original attestations separately when derived lane is blocked", () => 
   expect(report.text).toContain("regression: BLOCKED");
 });
 
+it("actual attach reports an isolated evidence fold failure and retains later observations", async () => {
+  const ev = events(); const errors: string[] = []; let supplied: GradeInput | undefined;
+  const session = { id: "fixture", done: new Promise(() => {}), events: (async function* () {
+    yield ev({ type: "session.start", id: "fixture", task: "task", cwd: "/repo", provider: "fake", model: "fake" });
+    yield { ...ev({ type: "plan.updated", items: [] }), items: null } as unknown as HarnessEvent;
+    yield ev({ type: "plan.updated", items: [{ id: "later", text: "retained", status: "done", accept: "false exits 0" }] });
+    yield ev({ type: "model.delta", text: "grade" });
+  })(), control: { record() {}, steer() {}, abort() {} } } as unknown as Session;
+  const observer = attach(session, { detectors: [{ id: "trigger", observe: event => event.type === "model.delta" ?
+    { type: "stall", confidence: 1, evidence: ["trigger"], window: [event.seq, event.seq] } : null }],
+    policy: { decide: () => [{ type: "run_grader", rubric: "verify" }] },
+    grader: { async grade(input) { supplied = input; return { pass: false, gaps: ["unverified"] }; } },
+    onError: where => { errors.push(where); if (where === "evidence") throw new Error("host diagnostic failure"); } });
+  try { await observer.done; } finally { observer.detach(); }
+  expect(errors.filter(where => where === "evidence")).toHaveLength(1);
+  expect(supplied?.evidence).toMatchObject({ incomplete: true, finished: false });
+  expect(supplied?.evidence?.text).toContain("later");
+  expect(supplied?.evidence?.text).toContain("fold errors 1");
+});
+
 it.each([false, true])("auxiliary provisional calls are neutral and settle without changing terminal semantics (failed=%s)", async failed => {
   const run = new AuxiliaryRun("reviewer"); let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
