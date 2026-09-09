@@ -95,13 +95,26 @@ export class FileMcpPins {
     try {
       const handle = await open(this.path(server), "r");
       try {
-        const buffer = Buffer.alloc(MAX_BYTES + 1);
-        let size = 0;
-        while (size < buffer.length) {
-          const { bytesRead } = await handle.read(buffer, size, buffer.length - size, null);
-          if (bytesRead === 0) break;
-          size += bytesRead;
-        }
+        // Size the allocation to the file rather than to the cap. A pin is typically a few
+        // kilobytes and this ran on every tool call, allocating and zeroing 1 MiB each time. The
+        // cap itself is unchanged and still hard: `drain` reads one byte past whatever it was
+        // given, so an over-length file is still detected rather than silently truncated, and a
+        // file that turns out to be larger than its own stat is re-read once at the full cap.
+        const drain = async (capacity: number): Promise<{ buffer: Buffer; size: number }> => {
+          const buffer = Buffer.alloc(capacity + 1);
+          let size = 0;
+          while (size < buffer.length) {
+            const { bytesRead } = await handle.read(buffer, size, buffer.length - size, 0 + size);
+            if (bytesRead === 0) break;
+            size += bytesRead;
+          }
+          return { buffer, size };
+        };
+        const stat = await handle.stat();
+        if (stat.size > MAX_BYTES) throw new Error("MCP pin file exceeds 1 MiB");
+        let { buffer, size } = await drain(Math.min(Number(stat.size), MAX_BYTES));
+        // filled its whole buffer with room left under the cap: the file grew, so read it properly
+        if (size === buffer.length && buffer.length <= MAX_BYTES) ({ buffer, size } = await drain(MAX_BYTES));
         if (size > MAX_BYTES) throw new Error("MCP pin file exceeds 1 MiB");
         const raw: unknown = JSON.parse(buffer.subarray(0, size).toString("utf8"));
         const old = Snapshot.safeParse(raw);
@@ -119,7 +132,13 @@ export class FileMcpPins {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const path = this.path(server);
     const lock = `${path}.lock`;
-    await mkdir(lock); // no stale-lock stealing; operator recovery requires stopped writers
+    // no stale-lock stealing: recovery is an operator decision made with the writers stopped
+    try { await mkdir(lock); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      throw new Error(`MCP pin state for ${JSON.stringify(server)} is locked by another writer (${lock}). `
+        + "This lock is never stolen or expired: stop every process using these pins, confirm none is mid-write, "
+        + "then remove that directory by hand. The pin file itself is untouched and no consent has been lost.");
+    }
     const temporary = join(lock, randomUUID());
     try {
       const actual = await this.read(server);
