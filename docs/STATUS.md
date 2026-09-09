@@ -27,13 +27,16 @@ CLI/evaluation PR #293 merged at `4c1005c9d1d7fd7be13c43c4a94e153e9404a3c6`:
 CI34394407422/structure34394407465 are green; final post-merge receipts for
 CI34395999803/structure34395999812 are maintained on the PR. Its first post-merge
 Windows run timed out a different unchanged memory symlink-preservation case;
-one same-commit failed-job rerun was started, with no skipped assertion or widened
-deadline. Core will not merge before the predecessor's post-merge checks are green.
+one same-commit failed-job rerun then timed out the compound scheduler and E1 A3
+fixtures. That post-merge run remains failed. PR #294 is also the corrective PR:
+it splits independent scheduler cases and shares immutable E1 dependency setup,
+preserving assertions and deadlines. Its own exact-head and final post-merge checks
+must pass; no historical failed run is relabeled green.
 
 Core/final integration is the last package delivery: [complete outcomes](plans/R17g-core.md).
 This includes the bounded undo/consent fixes, workspace recovery manifest validation,
 shared CLI plan formatting and test-only integration required by core changes.
-Root's final combined build/typecheck/preflight and full suite passed **3719 tests /
+Root's final combined build/typecheck/preflight and full suite passed **3722 tests /
 four existing conditional skips /236 files**. All three findings from the independent
 review pair were repaired together, followed by one scoped repair check. The delivery
 PR owns exact-head, merge and post-merge receipts; these are not inferred from local tests.

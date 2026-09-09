@@ -249,3 +249,23 @@ not modify reviewed production code. All56 checkpointer cases and the final full
 suite passed: **3719 tests / four existing local skips /236 files**. Windows has
 the explicit execute-bit case skip while retaining the deletion case; hosted CI
 is the platform execution evidence, not the local Linux run.
+
+### Hosted-CI fixture correction
+
+CLI #293 post-merge CI34395999803 failed on Windows deadlines twice (first memory
+symlink preservation; rerun E1 A3 and compound scheduler). This final PR also owns
+the corrective fixtures; that historical run stays failed. Helpers `/root/r13f`
+and `/root/r5d` split the scheduler cases and prepare one private immutable E1
+dependency/compiler base with isolated mutable leaves and joined cleanup. No test
+deadline increased or behavioral assertion was skipped. Scheduler cap/cancellation
+mutants and repeated dependency-copy mutant were detected and restored; focused
+suites passed22 and17 cases respectively. Root inspected both diffs.
+
+Initial #294 Windows CI34397591943 found my invalid parameterized-test context.skip
+call. Declaration-time skipIf now expresses the same Windows-only POSIX-bit
+exclusion, using the existing suite convention; deletion remains all-platform.
+Reviewed production source did not change. Combined build/typecheck passed and full
+suite passed **3722 tests / four existing local skips /236 files**. The first local
+full run hit an existing torn-claim diagnostic count mismatch; the second passed,
+and the failed log is retained rather than claimed green. Exact-head and final-main
+post-merge CI remain mandatory for this corrective delivery.

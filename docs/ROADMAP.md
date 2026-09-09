@@ -10,8 +10,10 @@ and structure34388378715 ([receipt](https://github.com/agentkitai/agentrig/pull/
 R17g's follow-up disposition work is complete across four package batches.
 Supervisor PR #291 (`528ee21`) and memory PR #292 (`6fb3413`) have green exact-head
 and post-merge receipts. CLI PR #293 (`4c1005c`) is merged with clean reviews and
-exact-head checks; its final post-merge receipt is on the PR. Core/final integration
-is this delivery, with all three independent-review findings repaired and3719 local
+exact-head checks; its post-merge Windows run failed on test deadlines. Core/final
+integration #294 also owns those fixture repairs and must restore green main;
+the failed historical checks remain disclosed. Core/final integration
+is this delivery, with all three independent-review findings repaired and3722 local
 tests passing. [Package outcomes and delivery records](#follow-ups--nice-to-haves--r17g-closeout)
 replace the old queue; its original text is preserved in the linked archive.
 No AgentRig conductor or R17a dogfood success is claimed for these operator-built batches.

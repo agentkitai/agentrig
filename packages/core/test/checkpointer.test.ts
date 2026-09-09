@@ -1156,9 +1156,9 @@ it("bounds recorded refusal replay and names omissions without altering the jour
   expect(await readFile(store.pathFor(id))).toEqual(before);
 });
 
-it.each(["deletion", "executable bit"] as const)("round-trips %s", async (kind, context) => {
-  // Windows chmod/stat do not expose POSIX execute bits. Keep deletion coverage independent.
-  if (kind === "executable bit" && process.platform === "win32") context.skip();
+for (const kind of ["deletion", "executable bit"] as const) {
+// Windows chmod/stat do not expose POSIX execute bits. Keep deletion coverage independent.
+it.skipIf(kind === "executable bit" && process.platform === "win32")(`round-trips ${kind}`, async () => {
   await initRepo();
   await writeFile(join(root, "script.sh"), "#!/bin/sh\noriginal\n", { mode: 0o644 });
   await writeFile(join(root, "doomed.txt"), "still here\n");
@@ -1185,6 +1185,7 @@ it.each(["deletion", "executable bit"] as const)("round-trips %s", async (kind, 
   // and a deleted file comes back
   expect(await readFile(join(root, "doomed.txt"), "utf8")).toBe("still here\n");
 });
+}
 
 it("refuses a file/directory collision as a collision, and restores nothing", async () => {
   await initRepo();
