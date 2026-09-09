@@ -1156,7 +1156,9 @@ it("bounds recorded refusal replay and names omissions without altering the jour
   expect(await readFile(store.pathFor(id))).toEqual(before);
 });
 
-it("round-trips an executable bit and a deletion", async () => {
+it.each(["deletion", "executable bit"] as const)("round-trips %s", async (kind, context) => {
+  // Windows chmod/stat do not expose POSIX execute bits. Keep deletion coverage independent.
+  if (kind === "executable bit" && process.platform === "win32") context.skip();
   await initRepo();
   await writeFile(join(root, "script.sh"), "#!/bin/sh\noriginal\n", { mode: 0o644 });
   await writeFile(join(root, "doomed.txt"), "still here\n");
@@ -1165,19 +1167,20 @@ it("round-trips an executable bit and a deletion", async () => {
 
   const tool: AnyTool = { name: "mutate", description: "mutate", permission: "write", inputSchema: z.object({}),
     execute: async () => {
-      await chmod(join(root, "script.sh"), 0o755);   // mode change only, identical bytes
-      await rm(join(root, "doomed.txt"));            // deletion
+      if (kind === "executable bit") await chmod(join(root, "script.sh"), 0o755);
+      else await rm(join(root, "doomed.txt"));
       return { output: null, display: "mutated" };
     } };
   const session = agent([[call("a", "mutate", {}), stop("tool_use")], [stop("end_turn")]], [tool])
     .run("mutate", { cwd: root, id: "undo_round_trip" });
   await collect(session); await session.done;
-  expect((await lstat(join(root, "script.sh"))).mode & 0o111).not.toBe(0);
+  if (kind === "executable bit") expect((await lstat(join(root, "script.sh"))).mode & 0o111).not.toBe(0);
+  else await expect(readFile(join(root, "doomed.txt"))).rejects.toMatchObject({ code: "ENOENT" });
 
   const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
   expect((await undoSession(store, session.id, { cwd: root })).restored).toBe(true);
   // the executable bit is part of the snapshot, not just the bytes
-  expect((await lstat(join(root, "script.sh"))).mode & 0o111).toBe(0);
+  if (kind === "executable bit") expect((await lstat(join(root, "script.sh"))).mode & 0o111).toBe(0);
   expect(await readFile(join(root, "script.sh"), "utf8")).toBe("#!/bin/sh\noriginal\n");
   // and a deleted file comes back
   expect(await readFile(join(root, "doomed.txt"), "utf8")).toBe("still here\n");

@@ -234,3 +234,18 @@ as introduced defects and do not start a new general review cycle.
 Final combined supervisor/memory/CLI/core build, typecheck and full suite passed
 **3718 tests / four existing conditional skips / 236 files** on main `4c1005c` plus
 these repairs. Exact-head and post-merge hosted checks remain separate delivery gates.
+
+Scoped Codex reviewer `01a087b4-4cf4-74e3-b0be-475a55c5e75e` returned **CLEAN** on
+`3fb76ad..f6f4740`, confirming all three repairs and no substantive repair-introduced
+defect. Core typecheck passed; behavioral execution was blocked by sandbox fixture
+ancestry and is not claimed. The full independent pair plus this one scoped check
+completes reviews; no cosmetic general-review loop followed.
+
+Final pre-publication portability check split the new combined undo test into
+independent deletion and executable-bit cases. Deletion remains tested on every
+platform; POSIX execute-bit assertions are explicitly inapplicable on Windows,
+whose chmod/stat contract does not supply that bit. This test-only change does
+not modify reviewed production code. All56 checkpointer cases and the final full
+suite passed: **3719 tests / four existing local skips /236 files**. Windows has
+the explicit execute-bit case skip while retaining the deletion case; hosted CI
+is the platform execution evidence, not the local Linux run.
