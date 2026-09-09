@@ -427,7 +427,7 @@ Global is a **separate wiki**, not a label on project pages. Teams running the p
 
 Duplicate captures (`session_end` firing twice on a growing transcript) are detected by prefix comparison; only provably superseded snapshots are dropped — unique content is never deleted.
 
-**Query** — the `memory_search` tool plus system-prompt injection. Index-first: `index.md` is in every system prompt; the agent picks pages, reads them, synthesizes. Recall fix from practice: return the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
+**Query** — the `memory_search` tool plus optional system-prompt injection. R17f makes automatic `index.md` injection opt-in in the recommended CLI profile (`memoryIndexInjection: true`); explicit retrieval remains available, and direct SDK callers retain their unspecified-option behavior. When injected, the index lets the agent pick pages, read them and synthesize. Recall returns the **union** of index-selected pages and BM25 top-k over page bodies. Additive only, so recall can never regress below index-only. Answers worth keeping (a comparison, a root cause) are filed back into `analyses/` so explorations compound like sources do.
 
 R17e makes both halves of retrieval visible: a recall renders as the page and the claim that
 matched rather than a result count, and the index injected into the system prompt announces itself

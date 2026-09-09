@@ -63,6 +63,22 @@ were included in one bounded scoped review of `4d41826a0ba064e67dead46125aa6a64e
 
 [Scoped-review receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5592593005).
 The separate injection-control builder was Claude session `a77dc921-e7b3-49fb-83af-60bd6f4e7c5d`.
-No conductor session is invented. Later final default/publication verification belongs to the
-delivery receipt; it is pending here, and unchanged preparation does not require more general
-review rounds. [Collected results and limitations](../R17f-RESULTS.md).
+No conductor session is invented. [Collected results and limitations](../R17f-RESULTS.md).
+
+## Final default/publication delta
+
+One bounded pass per reviewer over `4d41826..8e10adc`, not another general evaluator review:
+
+- Claude Code `fb9a645c-765b-41bf-9dd2-b4e35945e4ae`: CLEAN. Actual fixture preflight and
+  changed suites passed (12 tests); independently reproduced all outcomes, medians, paired
+  comparisons, tokens, mechanism counts, archive hashes and 3,236 embedded-file hashes.
+- Codex `01a08757-de12-7dd0-abf1-83309b9b1544`: CLEAN. Verified source/test delta, unique
+  slots, accounting/ratios, archive and embedded hashes. Its fixture preflight rejected the
+  sandbox TMPDIR ancestry; no bypass or unexecuted test claim. Root/Claude supply execution.
+- Root: build/typecheck pass, 85 focused tests, full **3600 passed / 4 skipped / 232 files**.
+  Default regression failed before the config change. The old headless visibility assumption
+  failed in the full suite and was replaced with actual default-off/explicit-on controls.
+
+The final follow-through changes only documentation: two stale injection descriptions, exact
+failure-slot wording, and delivery/review status. No new general review is needed for those
+corrections. Final exact-head and post-merge CI remain mandatory and are recorded on PR #290.

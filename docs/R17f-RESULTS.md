@@ -1,4 +1,4 @@
-# R17f results — measured defaults, verification pending
+# R17f results — measured defaults
 
 All 96 corrected matrix slots have outcomes across **two separately preserved segments**, not
 one uninterrupted run: **67 PASS, 17 FAIL, 12 BLOCKED**. The unchanged primary comparison does
@@ -8,8 +8,9 @@ The implementation decision is recommended `memoryIndexInjection: false`, while 
 explicit retrieval remain on. Explicit config/profile `true` restores injection; direct SDK
 construction with the option unspecified retains legacy injection. Free supervision heuristics
 stay on; LLM review stays opt-in and automatic abort stays off. Security defaults do not move.
-Implementation and evidence are being finalized in [PR #290](https://github.com/agentkitai/agentrig/pull/290);
-final-head verification, merge and post-merge CI are pending. R17f is not marked delivered yet.
+Implementation and evidence are complete in [PR #290](https://github.com/agentkitai/agentrig/pull/290).
+That delivery PR carries the exact-head/merge/post-merge CI receipts; preparation-head checks
+are not substituted for final-head verification.
 
 ## Collection and accounting
 
@@ -72,8 +73,8 @@ The scope failures leave five regression lanes BLOCKED (91 PASS), so all compari
 have `lanesKnown: false`; supervisor-on introduces new scope failures in both memory settings.
 These are actual unchanged gates, not an assessment of human prose or statistical superiority.
 
-Per-task variability: A1/A2/A3/X1 pass all 12 times each. X2 fails first-repeat plain,
-memory-only and supervisor-only slots 021/022/024 for out-of-scope `eval-*.js` test files
+Per-task variability: A1/A2/A3/X1 pass all 12 times each. X2 fails first-repeat memory-only,
+supervisor-only and plain slots 021/022/024 respectively for out-of-scope `eval-*.js` test files
 instead of the disclosed `eval-test-*.js` pattern; its other nine attempts pass. X3 fails
 supervisor-only/both third-repeat slots 091/092 for `eval-classify.js`; its other ten pass.
 These five scope failures remain FAIL; downstream checks remain BLOCKED.

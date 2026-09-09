@@ -1,6 +1,6 @@
 # Status
 
-## Current — R17f measured-default implementation; final verification pending (2026-09-09)
+## Current — R17f complete in PR #290; next R17g (2026-09-09)
 
 All 96 corrected matrix outcomes are collected: **67 PASS / 17 FAIL / 12 BLOCKED**,
 **10,369,886 reported tokens plus one unknown call**. Evaluator
@@ -31,9 +31,10 @@ are in [R17f preparation reviews](reviews/R17f-PREPARATION.md). No new `feel` is
 The default-off regression failed first (expected false, received undefined); 85 focused tests
 pass. Build and typecheck passed. The first full run exposed a visibility fixture's old default
 assumption; it now checks both default-off and explicit opt-in while preserving recall assertions.
-The final full suite passes **3600 tests / 4 skips / 232 files**. **PR #290 remains unmerged;
-scoped final-delta review, exact final-head and post-merge CI remain pending.**
-After delivery, continue R17g's package batches with bounded reviews and sequential merges.
+The final full suite passes **3600 tests / 4 skips / 232 files**. Independent Claude and Codex
+final-delta reviews are clean; see the review record. Exact-head, merge and post-merge CI
+receipts are maintained on [delivery PR #290](https://github.com/agentkitai/agentrig/pull/290).
+R17g's package batches follow verified delivery, with bounded reviews and sequential merges.
 
 ## Preparation history
 
