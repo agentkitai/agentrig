@@ -526,11 +526,13 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
       // one call exactly one opportunity to run outside the boundary.
       const escalationReq: PermissionRequest = { ...permReq, origin: "sandbox-escalation" };
       await emit({ type: "permission.request", req: escalationReq });
-      await emit({ type: "permission.decision", d: "ask" });
+      await emit({ type: "permission.decision", d: "ask", toolUseId: tu.id, tool: tu.name,
+        source: { kind: "boundary", reason: "sandbox-escalation" } });
       const escalationDecision = config.onAsk === undefined
         ? "deny"
         : await config.onAsk(escalationReq, askContext);
-      await emit({ type: "permission.decision", d: escalationDecision });
+      await emit({ type: "permission.decision", d: escalationDecision, toolUseId: tu.id, tool: tu.name,
+        source: config.onAsk === undefined ? { kind: "unattended" } : { kind: "approval-handler" } });
       if (escalationDecision !== "allow") {
         sandboxRetryDenied = true;
         throw err;

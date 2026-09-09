@@ -1087,7 +1087,7 @@ it("a second undo says the worktree already matches the turn, not that a strange
   expect((await undoSession(store, session.id, { cwd: root })).turn).toBe(2);
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("first");
   // the "non-session change" the second run sees is the first run's own restoration
-  await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow(/undo already applied: the worktree already matches turn 2/);
+  await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow(/worktree already matches turn 2/);
   await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow(/nothing to restore/);
   // still refused, and still nothing written
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("first");
@@ -1096,7 +1096,7 @@ it("a second undo says the worktree already matches the turn, not that a strange
   await expect(undoSession(store, session.id, { cwd: root })).rejects.toThrow("non-session changes");
 });
 
-it("replays the recorded seal refusal and the retained references when undo has no seal", async () => {
+it("replays the recorded seal refusal and recorded references when undo has no seal", async () => {
   await initRepo();
   // a session_end hook that writes a covered file is exactly what invalidates the seal
   const ingest = { point: "session_end" as const, id: "fixture:ingest",
@@ -1117,9 +1117,43 @@ it("replays the recorded seal refusal and the retained references when undo has 
   // the reason was recorded at session end and would otherwise never be read again
   expect(failure!.message).toContain("recorded refusal: checkpoint seal failed:");
   expect(failure!.message).toContain("session-end hooks such as memory ingest may change covered files");
-  // and the snapshots that DO exist are named, without implying they can be restored
-  expect(failure!.message).toMatch(/checkpoint snapshots retained \(not restorable without a seal\): turn 1 at refs\/agentrig\/undo_seal_refused\/1/);
+  // Recorded references are named without claiming their present retention or safe restoration.
+  expect(failure!.message).toMatch(/recorded checkpoint \(current retention not checked; not restorable without a seal\): turn 1 at refs\/agentrig\/undo_seal_refused\/1/);
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("written by session-end maintenance");
+});
+
+it("a hand-restored matching tree does not claim a prior undo or retained originals", async () => {
+  await initRepo();
+  const session = agent([[call("a", "write", { path: "tracked.txt", content: "first" }), stop("tool_use")],
+    [call("b", "write", { path: "tracked.txt", content: "second" }), stop("tool_use")], [stop("end_turn")]], [writeTool()])
+    .run("change", { cwd: root, id: "manual_match" });
+  await collect(session); await session.done;
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") });
+  await writeFile(join(root, "tracked.txt"), "first");
+  const before = await readFile(store.pathFor(session.id));
+  const error = await undoSession(store, session.id, { cwd: root }).catch(error => error as Error);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("worktree already matches turn 2");
+  expect((error as Error).message).not.toContain("undo already applied");
+  expect((error as Error).message).not.toContain("originals");
+  expect((await readdir(join(root, ".git"))).filter(name => name.startsWith("agentrig-undo-"))).toEqual([]);
+  expect(await readFile(store.pathFor(session.id))).toEqual(before);
+});
+
+it("bounds recorded refusal replay and names omissions without altering the journal", async () => {
+  const store = new SessionStore({ root: join(root, ".agentrig", "sessions") }); const id = await store.create();
+  await store.append(id, { type: "session.start", task: "fixture", cwd: root, provider: "fixture", model: "fixture" });
+  for (let i = 0; i < 40; i++) {
+    await store.append(id, { type: "error", fatal: false, message: "checkpoint seal failed: " + "x".repeat(1500) + "\u001b[31m" });
+    await store.append(id, { type: "checkpoint.created", turn: i + 1, ref: `refs/agentrig/${"x".repeat(128)}/${i + 1}`, tree: "a".repeat(40), commit: "b".repeat(40) });
+  }
+  await store.append(id, { type: "session.end", reason: "done" });
+  const before = await readFile(store.pathFor(id)); const error = await undoSession(store, id).catch(error => error as Error);
+  expect(error).toBeInstanceOf(Error); expect((error as Error).message.length).toBeLessThanOrEqual(4096);
+  expect((error as Error).message).toContain("omitted 72 recorded entries");
+  expect((error as Error).message).toContain("truncated"); expect((error as Error).message).not.toContain("\u001b");
+  expect((error as Error).message).toContain("current retention not checked");
+  expect(await readFile(store.pathFor(id))).toEqual(before);
 });
 
 it("round-trips an executable bit and a deletion", async () => {

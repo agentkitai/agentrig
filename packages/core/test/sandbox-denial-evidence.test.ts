@@ -22,7 +22,7 @@ async function providerFixture(backend: "docker" | "seatbelt", text: string, std
     : new class extends SeatbeltSandboxProvider { protected override wrap() { return invocation(); } }();
 }
 
-async function sessionFixture(provider: SandboxProvider, name: string, input: unknown, mode: "workspace-write" | "read-only" = "workspace-write") {
+async function sessionFixture(provider: SandboxProvider, name: string, input: unknown, mode: "workspace-write" | "read-only" = "workspace-write", answer: "allow" | "deny" | "unattended" = "deny") {
   let turn = 0; const asks: string[] = [];
   const model: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
     async *stream(): AsyncIterable<ModelEvent> {
@@ -33,7 +33,7 @@ async function sessionFixture(provider: SandboxProvider, name: string, input: un
   const store = new SessionStore({ root: join(root, "logs") });
   const session = createAgent({ provider: model, tools: builtinTools(), store, systemPrompt: "fixture", repoMap: false,
     sandbox: { mode, provider }, permissions: new RulePolicy([{ class: "exec", decision: "allow" }, { class: "write", decision: "allow" }]),
-    onAsk: async req => { asks.push(req.origin ?? "ordinary"); return "deny"; },
+    ...(answer === "unattended" ? {} : { onAsk: async (req: import("@agentkitai/agentrig-core").PermissionRequest) => { asks.push(req.origin ?? "ordinary"); return answer; } }),
   }).run("perform the requested operation", { cwd: root });
   await session.done;
   return { events: await store.readAll(session.id), asks };
@@ -104,6 +104,20 @@ it.each(["none", "missing-launcher"] as const)("trusted %s refusal remains a den
   const result = await sessionFixture(provider, "bash", { command: "must-not-run" });
   expect(result.events.some(e => e.type === "sandbox.denied")).toBe(true);
   expect(result.asks).toEqual(["sandbox-escalation"]);
+});
+
+it.each(["allow", "deny", "unattended"] as const)("correlates real sandbox escalation and %s final consent to its original call", async answer => {
+  const result = await sessionFixture(new NoneSandboxProvider(), "write_file", { path: "inside.txt", content: "allowed only on explicit retry" }, "read-only", answer);
+  const index = result.events.findIndex(e => e.type === "permission.request" && e.req.origin === "sandbox-escalation");
+  expect(index).toBeGreaterThan(-1);
+  const decisions = result.events.slice(index).filter(e => e.type === "permission.decision");
+  expect(decisions).toMatchObject([
+    { d: "ask", toolUseId: "call", tool: "write_file", source: { kind: "boundary", reason: "sandbox-escalation" } },
+    { d: answer === "allow" ? "allow" : "deny", toolUseId: "call", tool: "write_file", source: { kind: answer === "unattended" ? "unattended" : "approval-handler" } },
+  ]);
+  expect(result.events.filter(e => e.type === "tool.call")).toHaveLength(1);
+  if (answer === "allow") expect(await readFile(join(root, "inside.txt"), "utf8")).toBe("allowed only on explicit retry");
+  else await expect(readFile(join(root, "inside.txt"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("the exported legacy compatibility shim cannot turn claimed stderr into authority", async () => {

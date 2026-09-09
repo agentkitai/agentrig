@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { Checkpointer, checkpointState, git, gitEnvironment, inside, sameCheckpointState } from "./checkpointer.js";
 import { SessionStore, assertSessionId } from "./session-store.js";
 import type { HookContext } from "./hooks.js";
+import { sanitizeLine } from "./tools/skills.js";
 
 interface Entry { path: string; mode: string; oid: string }
 
@@ -84,18 +85,23 @@ export async function undoSession(store: SessionStore, sessionId: string, option
       if (run.some(event=>event.type==="checkpoint.warning") && !run.some(event=>event.type==="checkpoint.created")) {
         return {restored:false,message:"undo skipped: checkpointing was unavailable outside Git"};
       }
-      // The seal is refused far away from here — at session end, by a hook that changed a covered
-      // file (memory ingest and wiki writes are the usual ones) — and the reason is written to the
-      // log and then never read again. Replaying it, with the checkpoint references that DO still
-      // exist, is the difference between "undo is broken" and one recorded, actionable refusal.
-      // This is diagnosis only: no seal is inferred and nothing is restored.
-      const refusals = run.filter(event=>event.type==="error" && event.message.startsWith("checkpoint seal failed:"))
-        .map(event=>(event as {message:string}).message);
-      const snapshots = run.filter(event=>event.type==="checkpoint.created")
-        .map(event=>`turn ${(event as {turn:number}).turn} at ${(event as {ref:string}).ref}`);
+      // Replay bounded recorded evidence, not a claim that refs still exist or restoration is safe.
+      // At most 8 lines of <= 400 UTF-16 units (+ fixed truncation label): total < 4096 units.
+      const lines: string[] = []; let omitted = 0;
+      for (const event of run) {
+        let line: string;
+        if (event.type === "error" && event.message.startsWith("checkpoint seal failed:")) line = `recorded refusal: ${event.message}`;
+        else if (event.type === "checkpoint.created") line = `recorded checkpoint (current retention not checked; not restorable without a seal): turn ${event.turn} at ${event.ref}`;
+        else continue;
+        if (lines.length === 8) { omitted++; continue; }
+        const clean = sanitizeLine(line, 401);
+        let prefix = "";
+        for (const point of clean) { if (prefix.length + point.length > 400) break; prefix += point; }
+        lines.push(prefix + (prefix.length < clean.length ? " [truncated]" : ""));
+      }
       throw new Error(["undo unavailable: this run has no verified ownership seal (legacy, interrupted, or uncertain work)",
-        ...refusals.map(reason=>`recorded refusal: ${reason}`),
-        ...(snapshots.length === 0 ? [] : [`checkpoint snapshots retained (not restorable without a seal): ${snapshots.join("; ")}`]),
+        ...lines,
+        ...(omitted === 0 ? [] : [`omitted ${omitted} recorded entries; inspect the unchanged session log for complete evidence`]),
       ].join("\n"));
     }
     if (run.some(event=>event.seq>seal.seq && event.type!=="session.end" && event.type!=="error")) throw new Error("activity followed the ownership seal");
@@ -123,12 +129,10 @@ export async function undoSession(store: SessionStore, sessionId: string, option
       await checkpointer.guard(ctx);
       const actual = await checkpointState(repo,ctx);
       if (sameCheckpointState(seal,actual)) return;
-      // The commonest way to see this is running undo twice: the second run's "non-session
-      // changes" are the first run's restoration, which is exactly the state the caller asked
-      // for. Saying so beats sending them to look for a writer that does not exist.
+      // Equality establishes current state only; a user or another tool may have restored it.
       if (actual.tree===checkpoint.tree && actual.head===seal.head && actual.indexHash===seal.indexHash) {
-        throw new Error(`undo already applied: the worktree already matches turn ${checkpoint.turn}, so there is nothing to restore. `
-          + "The originals from that undo remain in its own recovery directory; this run changed nothing.");
+        throw new Error(`the worktree already matches turn ${checkpoint.turn}, so there is nothing to restore. `
+          + "This observation does not establish who restored it; this undo changed nothing.");
       }
       throw new Error("non-session changes detected in worktree, HEAD, or index; undo refused");
     };

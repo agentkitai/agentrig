@@ -24,7 +24,7 @@ export async function discoverAgentRoles(projectRoot: string, onError?: (error: 
   const root = await realpath(projectRoot);
   const state = join(root, ".agentrig"), directory = join(state, "agents");
   for (const path of [state, directory]) {
-    try { const stat = await lstat(path); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("agent role directory must be a regular directory"); }
+    try { const stat = await lstat(path); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("agent role directory must be a regular directory; symlinked .agentrig/agents paths are not supported"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
   }
   const entries: string[] = []; let count = 0;
