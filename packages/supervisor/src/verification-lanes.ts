@@ -62,6 +62,7 @@ export function assessVerificationLanes(input?: VerificationEvidence) {
     }
     if (verdict !== "PASS") gaps.push(`${name}: ${verdict} — ${reason}`);
     lines.push(`${name}: ${verdict} — ${reason}; basis=${lane.basis}; refs=${JSON.stringify(lane.references)}`,
+      `  original attestation: ${lane.verdict}; complete=${lane.complete}; evaluator-owned input, not the derived verdict`,
       `  observation=${JSON.stringify(lane.observation ?? "unverified")}; negative probe=${JSON.stringify(lane.negativeProbe ?? "unverified")}`);
     return verdict;
   });

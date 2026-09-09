@@ -108,10 +108,10 @@ export function loopDetector(opts: LoopOptions = {}): Detector {
 
   return {
     id: "loop",
-    observe(event: HarnessEvent, state: SupervisorState) {
+    observe: function observe(event: HarnessEvent, state: SupervisorState): ReturnType<Detector["observe"]> {
       if (event.type === "tool.result") {
         const detected = (state.corroboratedChanges ?? []).flatMap(change => {
-          const found = this.observe(change, state); return found === null ? [] : [found];
+          const found = observe(change, state); return found === null ? [] : [found];
         });
         if (detected.length > 0) return signal("loop", Math.max(...detected.map(s => s.confidence)),
           detected.flatMap(s => s.evidence), [Math.min(...detected.map(s => s.window[0])), event.seq]);

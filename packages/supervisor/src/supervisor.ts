@@ -210,7 +210,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
           // A custom reviewer need not use our model adapter. Its opaque work has unknown cost,
           // not a fabricated zero. Built-in model snapshots replace this conservative marker.
           controller.signal.throwIfAborted();
-          progress({ ...latest, calls: [{ operation, provider: "custom", outcome: "failed", durationMs: 0, usageComplete: false }],
+          progress({ ...latest, calls: [{ operation, provider: "custom", state: "running", outcome: "failed", durationMs: 0, usageComplete: false }],
             unknownUsageCalls: 1, costUsd: null });
           opaque = true;
         });
@@ -228,7 +228,7 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       const name = (failure as Error | undefined)?.name;
       const final: AuxiliaryReport = { ...latest, operation, durationMs: Math.max(0, performance.now() - started),
         outcome: failure === undefined ? latest.outcome : name === "TimeoutError" ? "timeout" : name === "AbortError" ? "aborted" : name === "AuxiliaryLimitError" ? "limit" : "failed" };
-      if (opaque) final.calls = final.calls.map(call => ({ ...call, outcome: final.outcome, durationMs: final.durationMs }));
+      if (opaque) final.calls = final.calls.map(call => ({ ...call, state: "settled", outcome: final.outcome, durationMs: final.durationMs }));
       controller.abort(new DOMException("auxiliary intervention closed", "AbortError"));
       auxiliaryDiagnostic(() => session.control.record({ type: "auxiliary.usage", id, report: final, final: true }));
       auxiliaryDiagnostic(() => opts.onUsage?.(structuredClone(final)));
@@ -241,13 +241,18 @@ export function attach(session: Session, opts: AttachOptions): Detachable {
       const next = await untilAborted(iterator.next(), lifetime.signal);
       if (next.done || detached || lifetime.signal.aborted) return;
       const event = next.value;
+      let stateFailed = false;
       try {
         reduce(state, event, stateOpts);
-        evidence.observe(event);
       } catch (err) {
         report("state", err);
-        continue;
+        stateFailed = true;
+        evidence.omitEvents(1);
       }
+      // Independent fold: a state failure must not hide this event from evidence.
+      try { evidence.observe(event); }
+      catch (err) { evidence.omitEvents(1); report("evidence", err); }
+      if (stateFailed) continue;
       // the supervisor's own records come back through the stream; folding them is right
       // (lastInterventionSeq) but re-detecting on them is not
       if (event.type === "supervisor.signal" || event.type === "supervisor.intervention"
