@@ -84,7 +84,19 @@ export async function undoSession(store: SessionStore, sessionId: string, option
       if (run.some(event=>event.type==="checkpoint.warning") && !run.some(event=>event.type==="checkpoint.created")) {
         return {restored:false,message:"undo skipped: checkpointing was unavailable outside Git"};
       }
-      throw new Error("undo unavailable: this run has no verified ownership seal (legacy, interrupted, or uncertain work)");
+      // The seal is refused far away from here — at session end, by a hook that changed a covered
+      // file (memory ingest and wiki writes are the usual ones) — and the reason is written to the
+      // log and then never read again. Replaying it, with the checkpoint references that DO still
+      // exist, is the difference between "undo is broken" and one recorded, actionable refusal.
+      // This is diagnosis only: no seal is inferred and nothing is restored.
+      const refusals = run.filter(event=>event.type==="error" && event.message.startsWith("checkpoint seal failed:"))
+        .map(event=>(event as {message:string}).message);
+      const snapshots = run.filter(event=>event.type==="checkpoint.created")
+        .map(event=>`turn ${(event as {turn:number}).turn} at ${(event as {ref:string}).ref}`);
+      throw new Error(["undo unavailable: this run has no verified ownership seal (legacy, interrupted, or uncertain work)",
+        ...refusals.map(reason=>`recorded refusal: ${reason}`),
+        ...(snapshots.length === 0 ? [] : [`checkpoint snapshots retained (not restorable without a seal): ${snapshots.join("; ")}`]),
+      ].join("\n"));
     }
     if (run.some(event=>event.seq>seal.seq && event.type!=="session.end" && event.type!=="error")) throw new Error("activity followed the ownership seal");
     const checkpoint = run.filter(event=>event.type==="checkpoint.created").filter(event=>options.toTurn===undefined || event.turn===options.toTurn).at(-1);
@@ -109,7 +121,16 @@ export async function undoSession(store: SessionStore, sessionId: string, option
     if (parent.length>1 || (parent[0]??"unborn")!==expectedHead) throw new Error("HEAD changed since the checkpoint; undo will not rewrite history");
     const verify = async () => {
       await checkpointer.guard(ctx);
-      if (!sameCheckpointState(seal,await checkpointState(repo,ctx))) throw new Error("non-session changes detected in worktree, HEAD, or index; undo refused");
+      const actual = await checkpointState(repo,ctx);
+      if (sameCheckpointState(seal,actual)) return;
+      // The commonest way to see this is running undo twice: the second run's "non-session
+      // changes" are the first run's restoration, which is exactly the state the caller asked
+      // for. Saying so beats sending them to look for a writer that does not exist.
+      if (actual.tree===checkpoint.tree && actual.head===seal.head && actual.indexHash===seal.indexHash) {
+        throw new Error(`undo already applied: the worktree already matches turn ${checkpoint.turn}, so there is nothing to restore. `
+          + "The originals from that undo remain in its own recovery directory; this run changed nothing.");
+      }
+      throw new Error("non-session changes detected in worktree, HEAD, or index; undo refused");
     };
     await verify();
     const current = await entries(repo,seal.tree,signal);
@@ -119,8 +140,14 @@ export async function undoSession(store: SessionStore, sessionId: string, option
       if (seal.excludes.some(excluded=>inside(excluded,resolve(repo,path)))) throw new Error("undo would touch excluded session evidence");
       await parents(repo,path);
       const actual = await lstat(resolve(repo,path)).catch(error=>{if(error.code==="ENOENT")return undefined;throw error;});
+      // Order matters for the diagnostic, not the outcome: both refuse. A directory standing where
+      // the checkpoint holds a file is a collision the operator has to resolve by hand, and
+      // reporting it as an "ignored or unowned path" sends them to look at .gitignore instead.
+      if (actual && !actual.isFile() && !actual.isSymbolicLink()) {
+        throw new Error(`undo refuses non-file path: ${path}`
+          + (actual.isDirectory() ? " — a directory now occupies a path the checkpoint holds as a file; resolve that collision by hand, nothing was restored" : ""));
+      }
       if (actual && !current.has(path)) throw new Error(`undo would overwrite an ignored or unowned path: ${path}`);
-      if (actual && !actual.isFile() && !actual.isSymbolicLink()) throw new Error(`undo refuses non-file path: ${path}`);
     }
     // Git metadata is outside the captured tree. A cross-device rename refuses without truncation.
     const gitDir = await realpath(resolve(repo,(await git(repo,["rev-parse","--git-dir"],undefined,signal)).stdout.trim()));
