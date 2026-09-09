@@ -29,6 +29,18 @@ import { isIsolatedTool, bindIsolatedContext } from "./isolated-runtime.js";
 import { bindQuestion, isQuestionTool, questionResultTrust, type QuestionState } from "./question-runtime.js";
 import type { TurnToolCall } from "./turn-strategy.js";
 
+/**
+ * The live force_replan gate, shared by reference between the loop and every tool call in it.
+ *
+ * It is cleared SYNCHRONOUSLY, not by whoever raised it: `createSessionLifecycle`'s `onEmit`
+ * callback in `agent.ts` sets `reason = null` and `refusals = 0` the moment a `plan.updated`
+ * payload is emitted — before the append is awaited, and before the emitting tool's own call has
+ * returned. That is deliberate. The gate refuses every non-planning call while it is up, so a
+ * clear that waited for the append would refuse the very calls the fresh plan was meant to
+ * release, and a clear owned by the raiser would leave a plan landing from a tool with nobody to
+ * lower it. Only `update_plan` may emit `plan.updated` (`TOOL_EMIT_SOURCES`), which is what keeps
+ * this synchronous clear from being a forgery seam.
+ */
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
 

@@ -1183,6 +1183,19 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
       principals.close();
       await flushDelegations();
       lifecycle.beginEnding();
+      // A staged continuation that never became an attempt. The nudge message is already in the
+      // log — it is appended before the next turn starts — but `turn.continued` is emitted only
+      // for an ACTUAL provider attempt, so a budget stop, an abort or a pre_model veto in between
+      // leaves a persisted "[Platform continuation: …]" user message with no attempt beside it.
+      // Reading the log, that is indistinguishable from a retry that ran and produced nothing.
+      // Saying so costs one non-fatal line and changes no counter: `consecutiveContinuations` is
+      // not spent, no attempt is claimed, and nothing here re-enables the retry.
+      if (continuationFrom !== undefined) {
+        await emit({ type: "error", fatal: false,
+          message: `continuation staged after turn ${continuationFrom} was never attempted (${reason}); the persisted continuation message is not a retry`,
+        }).catch(() => {});
+        continuationFrom = undefined;
+      }
       // Orphaned work first: a subagent the abort raced past is still finishing its own log, and
       // everything below (snapshot, session_end hooks, session.end) describes a session whose
       // children have ended. Bounded by `abortGraceMs`; no-op when nothing was orphaned.

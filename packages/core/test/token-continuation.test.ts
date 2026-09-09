@@ -135,6 +135,37 @@ it.each(["veto", "abort", "time"] as const)("does not announce a retry blocked d
   expect(provider.requests).toHaveLength(1);
 });
 
+it.each(["veto", "abort", "time"] as const)("names the staged-but-unattempted continuation so the log is not read as a retry: %s", async mode => {
+  let session: Session;
+  let clock = 0;
+  const provider = new Script([reply("max_tokens")]);
+  session = createAgent(config(provider, { now: () => clock, budget: { maxMinutes: 1 }, hooks: [{ point: "pre_model", handler: ({ turn }) => {
+    if (turn === 2) {
+      if (mode === "veto") return { action: "deny", reason: "fixture" };
+      if (mode === "abort") session.control.abort();
+      if (mode === "time") clock = 60_001;
+    }
+    return { action: "continue" };
+  } }] })).run("task", { cwd: root });
+  const events = await collect(session);
+  // the nudge is persisted before the next turn starts, so without this line the log shows a
+  // continuation message with no attempt beside it — the same shape as a retry that ran and did nothing
+  expect(JSON.stringify(events)).toContain("[Platform continuation:");
+  expect(events.filter(e => e.type === "turn.continued")).toEqual([]);
+  const notice = events.filter(e => e.type === "error" && e.message.startsWith("continuation staged after turn 1 was never attempted"));
+  expect(notice).toHaveLength(1);
+  expect((notice[0] as { message: string }).message).toContain("is not a retry");
+  expect((notice[0] as { fatal: boolean }).fatal).toBe(false);
+  expect(provider.requests).toHaveLength(1);
+});
+
+it("an attempted continuation is not reported as staged-and-unattempted", async () => {
+  const provider = new Script([reply("max_tokens", "one"), reply("end_turn", "two")]);
+  const events = await collect(createAgent(config(provider)).run("task", { cwd: root }));
+  expect(events.filter(e => e.type === "turn.continued")).toHaveLength(1);
+  expect(events.filter(e => e.type === "error" && e.message.includes("never attempted"))).toEqual([]);
+});
+
 it.each(["anthropic", "openai", "responses"] as const)("continues actual %s parser truncation output without dispatching partial JSON", async kind => {
   const chunks = kind === "anthropic" ? [
     { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "cut", name: "probe", input: {} } },
