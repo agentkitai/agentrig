@@ -20,6 +20,6 @@ it.each([{name:'acp', start:startAcp}, {name:'mcp-serve', start:startMcpServe}])
   } finally {input.destroy();output.destroy();await rm(root,{recursive:true,force:true});}
 });
 it('Web ignores expanded chat preference without relaxing literal-loopback validation', async () => {
-  await expect(startWeb(new Command('web'), {root:'unused',verbose:true,host:'localhost'})).rejects.toThrow('literal');
+  await expect(startWeb(new Command('web'), {root:'unused',verbose:true,host:'localhost'})).rejects.toThrow('Web bind refused: use host 127.0.0.1');
   await expect(startWeb(new Command('web'), {root:'unused',verbose:true,json:true,host:'localhost'})).rejects.toThrow('raw-event');
 });

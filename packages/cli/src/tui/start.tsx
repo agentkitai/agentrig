@@ -4,7 +4,7 @@ import {
   formatAuxiliaryUsage,
 } from "@agentkitai/agentrig-memory";
 import { App } from "./app.js";
-import { TuiSettingsSchema } from "./settings.js";
+import { parseTuiSettings } from "./settings.js";
 import { PromptHistory } from "./prompt-history.js";
 import { completeAttachment, readClipboard } from "./attachments.js";
 import { TuiController } from "./controller.js";
@@ -29,7 +29,7 @@ import {
 import { parseBudget } from "../agent-builder.js";
 import { askInteractively, skipsPermissions } from "../run.js";
 import { withMaintenanceSignal } from "../maintenance.js";
-import { supervise } from "@agentkitai/agentrig-supervisor";
+import { supervise, type AbortRestoreResult } from "@agentkitai/agentrig-supervisor";
 import { ScheduleReports, type FailureNotice } from "../schedule-report.js";
 import { reviewChanges, reviewArguments, renderReview, reviewFailure } from "../review.js";
 import { manualDoctor, manualDiff } from "./manual.js";
@@ -37,7 +37,7 @@ import { buildPermissionPolicy } from "../run.js";
 import { diagnosticConfigValues } from "../config.js";
 import { mountNotifications, NotificationMode, NotificationIdleSeconds, type Notifications } from "./notifications.js";
 
-export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean; verbose?: boolean };
+export type TuiOptions = AgentBuildOptions & SupervisorFlags & { modelExplicit?: boolean; verbose?: boolean; headless?: boolean };
 
 /**
  * `agentrig` with no subcommand (PLAN §5). Thin by design: `buildAgent` assembles exactly the
@@ -54,7 +54,7 @@ export async function startTui(opts: TuiOptions): Promise<void> {
 
   let built;
   // Capture validated settings before any asynchronous provider/startup work.
-  const settings = TuiSettingsSchema.parse(opts.tui ?? {});
+  const settings = parseTuiSettings(opts.tui);
   NotificationMode.parse(opts.notifications ?? "off");
   NotificationIdleSeconds.parse(opts.notificationIdleSeconds ?? 30);
   validateAbortRestores(opts);
@@ -86,11 +86,13 @@ export async function startTui(opts: TuiOptions): Promise<void> {
                 memoryIndex: "",
                 provider: built!.provider,
                 reviewProvider: built!.providers.supervisor,
-                restoreCheckpoint: checkpointRestorer(opts.root),
-                onRestore: result => {
-                  controller.print(`supervisor abort-restore: ${result.message}`, "system");
-                  if (result.restored) controller.forgetRestoredConversation();
-                },
+                ...(opts.supervisorAbortRestores === true ? {
+                  restoreCheckpoint: checkpointRestorer(opts.root),
+                  onRestore: (result: AbortRestoreResult) => {
+                    controller.print(`supervisor abort-restore: ${result.message}`, "system");
+                    if (result.restored) controller.forgetRestoredConversation();
+                  },
+                } : {}),
                 soft: supervisorSoft,
                 turnsRemaining: supervisorTurnsRemaining,
                 onEscalate: (question: string) => controller.askSupervisor(question),

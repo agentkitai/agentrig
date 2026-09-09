@@ -19,6 +19,13 @@ import { TuiController } from "../src/tui/controller.js";
 const source = "# Result\n\n- **Ready**\n- *Next*\n\n| Item | Detail |\n| --- | --- |\n| code | A long explanation that makes column widths observable at both terminal sizes. |\n\n```js\nconst answer = 42;\n```";
 const plain = (text: string) => text.replace(/\u001b\[[\d;]*m/g, "");
 const roots: string[] = [];
+it.each(["white", "black"] as const)("retains heading depth and restores the %s assistant tone after inline SGR", tone => {
+  const out = renderMarkdown("# Main\n\n### Detail\n\n**bold** plain `code` end", 80, true, tone);
+  expect(plain(out)).toContain("# Main\n\n### Detail");
+  expect(out).toContain(`\u001b[0m\u001b[${tone === "white" ? 37 : 30}m plain`);
+  expect(out).toContain(`\u001b[0m\u001b[${tone === "white" ? 37 : 30}m end`);
+  expect(renderMarkdown("## Plain", 80, false, tone)).toBe("## Plain");
+});
 afterEach(async () => { vi.unstubAllEnvs(); observed.renders = 0; for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 it("table layout sizes for the longest observed cell, not the shortest header", () => {
@@ -31,7 +38,7 @@ it.each([
   [80, 38, "A long explanation that makes column …"],
   [120, 58, "A long explanation that makes column widths observable at…"],
 ] as const)("golden ANSI final reply at %s columns", (width, cellWidth, detail) => {
-  const expected = "\u001b[1;36mResult\u001b[0m\n\n• \u001b[1mReady\u001b[0m\n• \u001b[3mNext\u001b[0m\n\n"
+  const expected = "\u001b[1;36m# \u001b[0m\u001b[1;36mResult\u001b[0m\n\n• \u001b[1mReady\u001b[0m\n• \u001b[3mNext\u001b[0m\n\n"
     + "Item │ Detail" + " ".repeat(cellWidth - 6) + "\n"
     + "─────┼" + "─".repeat(cellWidth + 1) + "\ncode │ " + detail
     + "\n[table display elided; original text retained]\n\n\u001b[90m┌─ js\u001b[0m\n"

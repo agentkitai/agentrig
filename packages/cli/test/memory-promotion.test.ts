@@ -91,6 +91,18 @@ describe("memory promotion publication gate", () => {
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain("not eligible");
   });
 
+  it("distinguishes unavailable assessor credentials from an adverse claim judgment", async () => {
+    backend(); vi.mocked(buildRoleProvider).mockImplementation(() => { throw new Error("fixture missing credentials"); });
+    await memoryPromote(path, { dir: root, confirm: true });
+    expect(LoreBackend.prototype.promote).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+    const errors = vi.mocked(console.error).mock.calls.flat().join("\n");
+    expect(errors).toContain("effect assessment unavailable");
+    expect(errors).toContain("not an adverse claim judgment");
+    expect(errors).not.toContain("not eligible");
+    expect(vi.mocked(console.log)).not.toHaveBeenCalled();
+  });
+
   it("sends the checked artifact rather than extra unverified citations", async () => {
     backend();
     const p = (await wiki.read(path))!;

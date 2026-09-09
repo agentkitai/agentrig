@@ -27,7 +27,7 @@ export interface ReviewDependencies {
 }
 export interface ReviewResult { identity: string; coverage: string; review: DiffReviewOutput; usage?: AuxiliaryReport; commented: boolean }
 export function reviewArguments(text: string): Pick<ReviewOptions, "base" | "pr" | "comment"> {
-  if (text.length > 512) throw new Error("review arguments exceed limit");
+  if (text.length > 512) throw new ReviewRefusal("review arguments exceed limit");
   const words = text.trim() ? text.trim().split(/\s+/) : [];
   const result: Pick<ReviewOptions, "base" | "pr" | "comment"> = {};
   for (let index = 0; index < words.length; index++) {
@@ -35,9 +35,9 @@ export function reviewArguments(text: string): Pick<ReviewOptions, "base" | "pr"
     if (word === "--comment" && result.comment === undefined) result.comment = true;
     else if ((word === "--base" || word === "--pr") && words[index + 1] !== undefined) {
       const key = word === "--base" ? "base" : "pr";
-      if (result[key] !== undefined) throw new Error("duplicate review option");
+      if (result[key] !== undefined) throw new ReviewRefusal("duplicate review option");
       result[key] = words[++index]!;
-    } else throw new Error("usage: /review [--base ref | --pr n] [--comment]");
+    } else throw new ReviewRefusal("usage: /review [--base ref | --pr n] [--comment]");
   }
   return result;
 }
@@ -54,14 +54,14 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
   dependencies: ReviewDependencies = {}): Promise<ReviewResult> {
   if (options.maxTokens !== undefined || options.maxUsd !== undefined)
     throw new ReviewRefusal("diff review cannot enforce configured total-session maxTokens/maxUsd; select a review profile without these caps and use supported maxMinutes/maxTokensPerTurn limits instead. No provider call or comment was made.");
-  if ((options.sandbox ?? "none") !== "none") throw new Error("review host git/gh requires --sandbox none (including under YOLO)");
-  if (options.base !== undefined && options.pr !== undefined) throw new Error("review accepts --base or --pr, not both");
-  if (options.comment === true && options.pr === undefined) throw new Error("--comment requires --pr");
-  if (options.pr !== undefined && !/^[1-9][0-9]{0,8}$/.test(options.pr)) throw new Error("--pr requires a positive PR number");
-  if (options.base !== undefined && (!/^[A-Za-z0-9][A-Za-z0-9_./~^{}-]{0,255}$/.test(options.base))) throw new Error("unsupported base ref spelling");
+  if ((options.sandbox ?? "none") !== "none") throw new ReviewRefusal("review host git/gh requires --sandbox none (including under YOLO)");
+  if (options.base !== undefined && options.pr !== undefined) throw new ReviewRefusal("review accepts --base or --pr, not both");
+  if (options.comment === true && options.pr === undefined) throw new ReviewRefusal("--comment requires --pr");
+  if (options.pr !== undefined && !/^[1-9][0-9]{0,8}$/.test(options.pr)) throw new ReviewRefusal("--pr requires a positive PR number");
+  if (options.base !== undefined && (!/^[A-Za-z0-9][A-Za-z0-9_./~^{}-]{0,255}$/.test(options.base))) throw new ReviewRefusal("unsupported base ref spelling");
   const maxTokens = Math.min(2048, Number(options.maxTokensPerTurn ?? 2048));
   const timeout = Math.min(90_000, Number(options.maxMinutes ?? 1.5) * 60_000);
-  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || !Number.isFinite(timeout) || timeout < 1) throw new Error("invalid review budget");
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || !Number.isFinite(timeout) || timeout < 1) throw new ReviewRefusal("invalid review budget");
   const controller = new AbortController();
   const signal = AbortSignal.any([parent, controller.signal]);
   const timer = setTimeout(() => controller.abort(new DOMException("review timed out", "TimeoutError")), timeout);
@@ -87,7 +87,7 @@ export async function reviewChanges(cwd: string, options: ReviewOptions, parent:
       let decision = await cancellable(() => policy.decide(request));
       if (decision === "ask") decision = await cancellable(async () => await dependencies.ask?.(request, signal) ?? "deny");
       signal.throwIfAborted();
-      if (decision !== "allow") throw new Error(`review ${cls} permission denied`);
+      if (decision !== "allow") throw new ReviewRefusal(`review ${cls} permission denied`);
     };
     const invoke = async (program: "git" | "gh", args: string[], maxBytes = 16_384, input?: string) => {
       if (program === "gh") return gitHubRequest(args, { cwd: root, signal, process,

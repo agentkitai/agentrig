@@ -19,6 +19,23 @@ async function fixture() {
 }
 const input = (outcome: ReceiptInput["outcome"] = "error"): ReceiptInput => ({ ts: now.getTime(), minute: Math.floor(now.getTime() / 60000), entry: "one", source: "schedule", sessionId: null, outcome, maintenanceFailed: false, accounting: null });
 
+it("acknowledgement diagnostics identify the operational file without echoing its content", async () => {
+  const f = await fixture(); await f.reports.append(input());
+  const ack = join(f.project, ".agentrig/schedule.ack.json");
+  await writeFile(ack, "SECRET_ACK_CANARY");
+  for (const read of [() => f.reports.notice(), () => f.reports.acknowledge(1)]) {
+    const error = await read().catch(error => error as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain(".agentrig/schedule.ack.json");
+    expect((error as Error).message).toContain("retained without overwrite");
+    expect((error as Error).message).not.toContain("SECRET_ACK_CANARY");
+  }
+  expect(await readFile(ack, "utf8")).toBe("SECRET_ACK_CANARY");
+  await writeFile(ack, Buffer.from([0xff]));
+  await expect(f.reports.notice()).rejects.toThrow("invalid UTF-8 in scheduled state .agentrig/schedule.ack.json; retained without overwrite");
+  expect(await readFile(ack)).toEqual(Buffer.from([0xff]));
+});
+
 it("records bounded structured outcomes and acknowledges only the observed cutoff, not newer failures", async () => {
   const f = await fixture(); expect((await f.reports.notice()).text).toBeNull();
   const first = await f.reports.append(input()); expect(first.seq).toBe(1);
@@ -59,7 +76,7 @@ it("refuses malformed, oversized, aliased or locked state without overwriting it
   await rm(path); await symlink(f.home, path, "junction");
   await expect(f.reports.append(input())).rejects.toThrow("unsafe"); await rm(path);
   await writeFile(join(dir, "schedule-report.lock"), "existing owner");
-  await expect(f.reports.append(input())).rejects.toThrow("busy");
+  await expect(f.reports.append(input())).rejects.toThrow("scheduled reports busy; stop writers before recovering .agentrig/schedule-report.lock; acknowledgement is .agentrig/schedule.ack.json");
   expect(await readFile(join(dir, "schedule-report.lock"), "utf8")).toBe("existing owner");
 });
 

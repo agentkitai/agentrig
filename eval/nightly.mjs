@@ -20,6 +20,8 @@ const imagePattern = /^sha256:[a-f0-9]{64}$/;
 const evaluatorRoot = fileURLToPath(new URL('..', import.meta.url));
 
 export function assertNightlyOutcome(test, result, report, checks) {
+  if (test.name === 'broken' && (checks.regression !== 'FAIL' || checks.scope !== 'PASS'))
+    throw new Error('broken control did not exercise regression failure');
   if (result?.results?.length !== 1 || result.cancelled || result.unknownCalls !== 0
     || result.evidenceLane !== 'scripted' || result.results[0].outcome !== test.expected
     || result.results[0].task !== test.task || result.results[0].usageComplete !== true
@@ -97,6 +99,7 @@ export async function runNightly(options, dependencies = {}) {
     const revision = await transport.command('git', ['rev-parse', 'HEAD'], { cwd: evaluatorRoot, signal: controller.signal, ownedTree: true });
     if (revision.infrastructure || revision.code !== 0 || !/^[a-f0-9]{40}$/.test(revision.stdout.trim())) throw new Error('revision unavailable');
     summary.evaluatorRevision = revision.stdout.trim(); summary.phase = 'source preparation';
+    await save(summaryPath, summary);
     const source = join(work, 'source');
     const cloned = await transport.command('git', ['clone', '--quiet', '--branch', 'fixture',
       fileURLToPath(new URL('./fixtures/is-number-pinned.bundle', import.meta.url)), source], { signal: controller.signal, ownedTree: true });
@@ -105,9 +108,11 @@ export async function runNightly(options, dependencies = {}) {
     for (const [index, test] of NIGHTLY_CASES.entries()) {
       if (controller.signal.aborted) throw new Error('cancelled');
       summary.phase = `${test.name}: baseline`;
+      await save(summaryPath, summary);
       if (!baselines.has(test.task)) baselines.set(test.task, await baseline(work, source, test.task, transport,
         { workerImage: options.workerImage, checkerImage: options.checkerImage }, summary.evaluatorRevision, controller.signal));
       const fixture = baselines.get(test.task); summary.phase = `${test.name}: evaluation`;
+      await save(summaryPath, summary);
       const result = await (dependencies.evaluate ?? evaluateSessions)({ sessions: [fixture.id], against: test.name,
         fixtures: fixture.map, output: join(work, test.name), execute: true, batchTokens: 10_000, batchMinutes: 2,
         signal: controller.signal, profile: { provider: 'openai', model: 'scripted-fixture', maxTurns: '4', maxTokensPerTurn: '2000' } },

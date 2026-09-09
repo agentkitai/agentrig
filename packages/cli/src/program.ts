@@ -210,7 +210,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--trust", "load project instructions and config for this run only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
-      .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default30)", Number)
+      .option("--notification-idle-seconds <n>", "TUI input idle seconds before notifications (1–3600; default 30)", Number)
       .option("--memory <dir>", "inject this memory wiki's index into the system prompt", ".agentrig")
       .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
       .option("--system <prompt>", "override the system prompt")
@@ -443,7 +443,11 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .action(async (opts: { execute?: boolean; trust?: boolean; json?: boolean; profile?: string }, cmd: Command) => {
       const store = await scheduleStore();
       const date = (dependencies.scheduleNow ?? (() => new Date()))();
-      if (opts.execute !== true) { console.log(JSON.stringify({ preview: true, due: await store.tick(date, undefined, undefined, 5) })); return; }
+      if (opts.execute !== true) {
+        console.log(JSON.stringify({ preview: true, due: await store.tick(date, undefined, undefined, 5),
+          note: "Model-free preview: execution-only provider/profile/trust/JSON/budget options are not applied; no claims or model calls are made." }));
+        return;
+      }
       const trust = await resolveProjectTrust(store.projectRoot, { home: dependencies.config?.home ?? homedir(), interactive: false, ...(opts.trust === undefined ? {} : { explicitTrust: opts.trust }) });
       if (!trust.trusted) throw new Error("scheduled execution requires trusted canonical project; use --trust explicitly");
       // These are shared defaults, not typed CLI overrides: preserve config precedence.
@@ -492,7 +496,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
           }
           if (signal.aborted && launchError !== undefined) throw launchError;
           signal.throwIfAborted();
-        }, signal, Number((resolved as { heartbeatMaxTurns?: string }).heartbeatMaxTurns ?? "5"));
+        }, signal, Number(runOptions.heartbeatMaxTurns ?? "5"));
         process.exitCode = failed ? 1 : 0;
       }, undefined, "schedule tick");
     });

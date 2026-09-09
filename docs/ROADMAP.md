@@ -9,9 +9,10 @@ R17f is delivered in PR #290 at main `4c82ebb`, with green post-merge CI34388378
 and structure34388378715 ([receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920)).
 R17g is now being implemented in parallel package worktrees, with sequential reviewed merges.
 Supervisor merged in PR #291 at `528ee21` ([dispositions](plans/R17g-supervisor.md));
-its post-merge checks are tracked on the PR. Memory is the current delivery batch,
-with clean independent reviews and integrated tests ([dispositions](plans/R17g-memory.md)).
-Core implementation and CLI independent reviews proceed in parallel.
+all its post-merge checks are green. Memory merged in PR #292 at `6fb3413`, with
+clean independent reviews and exact-head checks ([dispositions](plans/R17g-memory.md));
+post-merge checks are tracked on the PR. CLI is the current reviewed delivery batch
+([dispositions](plans/R17g-cli.md)); core implementation/integration proceeds in parallel.
 All 96 corrected slots have outcomes across two preserved segments: 67 PASS / 17 FAIL /
 12 BLOCKED, 10,369,886 reported tokens and one unknown call. Neither factor demonstrates the
 required benefit. Recommended automatic index injection defaults off; retrieval, ingestion
@@ -1204,10 +1205,10 @@ The detailed queue is retained until all four package deliveries are verified.
 
 | Package batch | Current status |
 |---|---|
-| Supervisor | Merged in PR #291 at `528ee21`, exact-head CI and bounded independent reviews green; post-merge receipt on PR. [Fragment dispositions](plans/R17g-supervisor.md). |
-| Memory | Current delivery batch; independent Claude/Codex reviews clean, integrated build/typecheck and 3618 tests pass. [Fragment dispositions](plans/R17g-memory.md). |
+| Supervisor | Done: PR #291 at `528ee21`, exact-head and post-merge CI green; bounded independent reviews complete. [Fragment dispositions](plans/R17g-supervisor.md). |
+| Memory | Merged: PR #292 at `6fb3413`, independent reviews and exact-head CI green; post-merge receipt on PR. [Fragment dispositions](plans/R17g-memory.md). |
 | Core | Claude implementation in progress in a separate worktree. |
-| CLI/evaluation | Implemented; local build/typecheck and 3633 tests pass. Independent Claude/Codex reviews in progress. |
+| CLI/evaluation | Current delivery batch; independent Claude/Codex reviews clean. [Fragment dispositions](plans/R17g-cli.md). |
 
 ### Delivery progress
 

@@ -121,6 +121,13 @@ it("resource-only initial and continued ACP prompts cannot acquire blanket exec 
   expect(initial).toMatchObject({ type: "text", trust: "external", context: { authority: "advisory" } });
 });
 
+it("resource-link advisory blocks count toward the prompt limit before any model request", async () => {
+  const f = await fixture(async () => ({ outcome: { outcome: "cancelled" } }));
+  await expect(f.peer.agent.request("session/prompt", { sessionId: f.sessionId,
+    prompt: Array.from({ length: 33 }, () => ({ type: "resource_link" as const, uri: "file:///fixture", name: "resource" })) })).rejects.toThrow();
+  expect(f.requests).toHaveLength(0); expect(f.effects()).toBe(0);
+});
+
 it("cancel settles the prompt and denies pending effects even if the client leaves its permission reply pending", async () => {
   let seen!: () => void; const asked = new Promise<void>(resolve => { seen = resolve; });
   const f = await fixture(async () => { seen(); return new Promise(() => {}); });

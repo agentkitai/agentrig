@@ -108,6 +108,22 @@ it("actual core tools/checker distinguish correct and broken profiles, with coun
   expect(await readFile(join(f.baseline, "original.jsonl"))).toEqual(original);
 }, 30_000);
 
+it("actual attempt preserves a verbose checker diagnostic without invalidating its report", async () => {
+  const f = await fixture(), diagnostic = "verbose diagnostic\n".repeat(70_000);
+  const result = await evaluateSessions({ sessions: ["original"], against: "verbose", fixtures: f.map,
+    output: join(f.root, "verbose"), profile, execute: true, batchTokens: 10_000, batchMinutes: 2 },
+  { provider: async (_options, role) => fake(fix, role), transport: { ...f.transport, async worker(...args) {
+    const result = await f.transport.worker(...args);
+    if (args[0].checkerReceipt) result.stdout = JSON.stringify({ ...JSON.parse(result.stdout), evidence: [diagnostic] });
+    return result;
+  } } });
+  expect(result.results).toMatchObject([{ outcome: "PASS" }]);
+  const dir = join(f.root, "verbose", "01-X1");
+  const checks = JSON.parse(await readFile(join(dir, "checks.json"), "utf8"));
+  expect(checks.diagnosticFiles).toHaveLength(1);
+  expect(await readFile(join(dir, checks.diagnosticFiles[0].path), "utf8")).toBe(diagnostic);
+}, 30_000);
+
 it.each(["skills", "extension", "mcpConfig", "shell", "allow", "root", "evidenceLane"])("unsupported effective %s is rejected explicitly", key => {
   expect(() => validateEvaluationProfile({ [key]: ["x"] } as never)).toThrow(`effective field: ${key}`);
 });

@@ -228,6 +228,17 @@ describe("supervisorOptions", () => {
     const reviewed = wiring({ opts: { supervisorReview: true, memory: root }, onError });
     expect((await reviewed.attempts!("current", new AbortController().signal)).map(a => a.id)).toEqual(["current"]);
     expect(onError).toHaveBeenCalledWith("attempts", expect.objectContaining({ message: expect.stringContaining(torn) }));
+    await reviewed.attempts!("current", new AbortController().signal);
+    expect(onError).toHaveBeenCalledTimes(1);
+    const another = join(root, "raw/attempts/another-torn.json");
+    await writeFile(another, "");
+    await reviewed.attempts!("current", new AbortController().signal);
+    expect(onError).toHaveBeenCalledTimes(2);
+    await rm(torn); await rm(another);
+    await reviewed.attempts!("current", new AbortController().signal);
+    await writeFile(torn, "");
+    await reviewed.attempts!("current", new AbortController().signal);
+    expect(onError).toHaveBeenCalledTimes(3);
     await new Promise<void>(resolve => setImmediate(resolve));
   });
 

@@ -203,6 +203,41 @@ it("actual CLI deadline cancels a pending provider and preserves a partial repor
 function summary(): RunSummary { return { id: "fixture", reason: "done", turns: 1, usage: { input: 10, output: 2 }, scheduledAccounting: {
   main: { usage: { input: 10, output: 2 }, complete: true, costUsd: null }, auxiliary: { usage: { input: 0, output: 0 }, complete: true, costUsd: 0 }, coverage: "complete", costUsd: null,
 } }; }
+it.each([
+  { text: "first line\nsecond line\n``` @team <tag>\u001b", expected: "first line\nsecond line\nˋˋˋ @\u200bteam &lt;tag&gt;" },
+  { text: "x".repeat(16_383) + "😀", expected: "x".repeat(16_383) },
+  { text: "@".repeat(8191) + "😀", expected: "@\u200b".repeat(8191) + "😀" },
+])("CI capture preserves inert lines and complete UTF-8 code points", async ({ text, expected }) => {
+  const root = await fixture(), reportPath = join(root, "unicode.md");
+  await runCi({ taskFile: join(root, "task.txt"), report: reportPath }, options(root), new AbortController().signal, {
+    run: async (_task, _options, runtime) => {
+      runtime?.observe?.({ type: "model.delta", text, seq: 1, ts: 1, sessionId: "fixture" });
+      return summary();
+    },
+  });
+  const report = await readFile(reportPath, "utf8");
+  expect(process.exitCode).toBe(0);
+  expect(report).toContain(expected);
+  expect(report).not.toContain("\ufffd");
+  expect(report).not.toContain("\u001b");
+  expect(Buffer.byteLength(report)).toBeLessThanOrEqual(65_536);
+});
+it("a truncated multibyte capture remains an actual prefix when later chunks arrive", async () => {
+  const root = await fixture(); const reportPath = join(root, "prefix.md");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await runCi({ taskFile: join(root, "task.txt"), report: reportPath }, options(root), new AbortController().signal, {
+    run: async (_task, _options, runtime) => {
+      for (const text of ["x".repeat(16_383) + "😀", "Z"]) {
+        runtime?.observe?.({ type: "model.delta", text, seq: 1, ts: 1, sessionId: "fixture" });
+      }
+      return summary();
+    },
+  });
+  const report = await readFile(reportPath, "utf8");
+  expect(report).toContain("x".repeat(16_383));
+  expect(report).not.toContain("Z"); expect(report).not.toContain("�");
+  expect(report).toContain("omitted remainder. Coverage is partial.");
+});
 it("shared GitHub transport requires explicit exec+net, exact identity and complete accounting", async () => {
   const root = await fixture(); const calls: string[][] = [];
   const identity = { number: 12, baseRefOid: "a".repeat(40), headRefOid: "b".repeat(40), url: "https://github.com/owner/repo/pull/12" };

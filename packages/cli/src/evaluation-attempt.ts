@@ -12,7 +12,7 @@ import { FileMemoryStore, memoryTools, indexInjection } from "@agentkitai/agentr
 import { supervise, TrajectoryReviewer, RubricGrader } from "@agentkitai/agentrig-supervisor";
 import type { ConfigValues } from "./config.js";
 import { EvaluationBudget } from "./evaluation-budget.js";
-import { EvaluationChecks, type EvaluationManifest, readEvaluationReport } from "./evaluation.js";
+import { EvaluationChecks, EvaluationCheckerOutput, writeEvaluationChecks, type EvaluationManifest, readEvaluationReport } from "./evaluation.js";
 import type { EvaluationReceipt, EvaluationTask, EvaluationTransport } from "./evaluation-transport.js";
 
 export const saveEvaluationArtifact = (path: string, data: unknown) =>
@@ -170,13 +170,13 @@ export async function runEvaluationAttempt(options: EvaluationAttemptOptions) {
       ["node", "/evaluator/eval/check.mjs", "/receipt.json"], ledger.controller.signal, 300_000);
     await saveEvaluationArtifact(join(directory, "checker-process.json"), result);
     try {
-      const parsed = EvaluationChecks.parse(JSON.parse(result.stdout));
+      const parsed = EvaluationCheckerOutput.parse(JSON.parse(result.stdout));
       if (parsed.task !== receipt.id || parsed.runId !== receipt.runId || result.infrastructure
         || result.code !== (parsed.outcome === "PASS" ? 0 : parsed.outcome === "FAIL" ? 1 : 2)) throw new Error("checker mismatch");
       checks = parsed;
     } catch { /* Keep explicit independent BLOCKED; process prose cannot authorize a pass. */ }
   }
-  await saveEvaluationArtifact(join(directory, "checks.json"), checks);
+  checks = await writeEvaluationChecks(directory, checks);
 
   const snapshots: Array<{ sessionId: string; id: string; ts: number; final: boolean; report: AuxiliaryReport }> = [];
   // Attachment is sequential, so the observed `auxiliary.usage` ids and the final reports arrive in

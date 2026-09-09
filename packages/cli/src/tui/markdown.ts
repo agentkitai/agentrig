@@ -35,14 +35,17 @@ function fallback(source: string, reason: string): string {
 }
 
 /** Pure final-answer presentation. No terminal width or global parser configuration is mutated. */
-export function renderMarkdown(source: string, columns: number, color = process.env["NO_COLOR"] === undefined): string {
+export function renderMarkdown(source: string, columns: number, color = process.env["NO_COLOR"] === undefined, assistantTone?: "white" | "black"): string {
   if (Buffer.byteLength(source) > MARKDOWN_LIMITS.source) return fallback(source, "source exceeds 32 KiB");
   let nodes = 0, bytes = 0;
   const enter = (depth: number) => { if (++nodes > MARKDOWN_LIMITS.nodes || depth > MARKDOWN_LIMITS.depth) throw Error("structure bound"); };
   const checked = (text: string) => { bytes += Buffer.byteLength(text); if (bytes > MARKDOWN_LIMITS.output) throw Error("output bound"); return text; };
+  // Ink supplies the surrounding tone once; a renderer-owned reset must restore it.
+  // This fixed enum never accepts arbitrary terminal sequences from configuration or Markdown.
+  const restore = RESET + (assistantTone === undefined ? "" : `\u001b[${assistantTone === "white" ? 37 : 30}m`);
   const paint = (text: string, styles: number[] = [], decode = true) => {
     const safe = terminalText(decode ? entities(text) : text);
-    return checked(color && styles.length && safe ? `\u001b[${styles.join(";")}m${safe}${RESET}` : safe);
+    return checked(color && styles.length && safe ? `\u001b[${styles.join(";")}m${safe}${restore}` : safe);
   };
   const syntax = (items: SyntaxNode[], depth: number, styles: number[] = []): string => items.map(node => {
     enter(depth);
@@ -69,7 +72,7 @@ export function renderMarkdown(source: string, columns: number, color = process.
       case "codespan": return paint((token as Tokens.Codespan).text, [...styles, 36], false);
       case "br": return checked("\n");
       case "hr": return paint("────────", [90]) + checked("\n\n");
-      case "heading": return children(token as Tokens.Heading, [1, 36]) + checked("\n\n");
+      case "heading": return paint("#".repeat((token as Tokens.Heading).depth) + " ", [1, 36]) + children(token as Tokens.Heading, [1, 36]) + checked("\n\n");
       case "link": {
         const link = token as Tokens.Link;
         return children(link, [4]) + (link.text === link.href ? "" : paint(` (${link.href})`, [90]));
@@ -114,11 +117,11 @@ export function renderMarkdown(source: string, columns: number, color = process.
 }
 
 /** Weak keys do not retain evicted controller lines; Static never retroactively reflows them. */
-export function createMarkdownCache(render = renderMarkdown): (line: { text: string; tone: string }, columns: number, color: boolean) => string {
+export function createMarkdownCache(render = renderMarkdown): (line: { text: string; tone: string }, columns: number, color: boolean, assistantTone?: "white" | "black") => string {
   const cache = new WeakMap<object, string>();
-  return (line, columns, color) => {
+  return (line, columns, color, assistantTone) => {
     if (line.tone !== "assistant") return line.text;
     const prior = cache.get(line); if (prior !== undefined) return prior;
-    const result = render(line.text, columns, color); cache.set(line, result); return result;
+    const result = render(line.text, columns, color, assistantTone); cache.set(line, result); return result;
   };
 }

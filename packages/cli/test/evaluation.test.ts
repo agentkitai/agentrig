@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createAgent, SessionStore, RulePolicy, HarnessEvent, type EventPayload, type ModelEvent, type ModelProvider } from "@agentkitai/agentrig-core";
 import { attach, TrajectoryReviewer } from "@agentkitai/agentrig-supervisor";
-import { buildEvaluationReport, EvaluationManifest, formatEvaluationReport, readEvaluationReport, type EvaluationInput } from "../src/evaluation.js";
+import { buildEvaluationReport, EvaluationManifest, formatEvaluationReport, readEvaluationReport, writeEvaluationChecks, type EvaluationInput } from "../src/evaluation.js";
 
 const runId = "00000000-0000-4000-8000-000000000001";
 const events = (payloads: EventPayload[], sessionId = "main") => payloads.map((p, seq) => HarnessEvent.parse({ ...p, seq, ts: 100 + seq, sessionId }));
@@ -247,14 +247,15 @@ describe("E2 actual provider and bundle integration", () => {
     if (kind !== "unclosed") stream.push({ type: "stop", reason: "end_turn" });
     const provider: ModelProvider = { id: "fixture", model: "one", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 10000 },
       async *stream() { yield* stream; } };
-    const store = new SessionStore({ root: path, newId: () => "main" });
-    const before = Date.now();
+    let tick = 1000; const now = () => tick++;
+    const store = new SessionStore({ root: path, newId: () => "main", now });
+    const before = now();
     const session = createAgent({ provider, store, tools: [], permissions: new RulePolicy([]), systemPrompt: "fixture", repoMap: false,
       compaction: { shouldCompact: () => false, compact: async (messages) => messages }, trustedProjectRoot: path }).run("fixture", { cwd: path });
     const observed: HarnessEvent[] = []; for await (const e of session.events) observed.push(e);
     await session.done;
     const input = fixture(); input.logs[0]!.events = observed;
-    input.manifest.timing = { startedAt: before, settledAt: Date.now(), includesObserverAndMaintenance: true, evidence: "fixture-clock" };
+    input.manifest.timing = { startedAt: before, settledAt: now(), includesObserverAndMaintenance: true, evidence: "fixture-injected-clock" };
     const response = observed.find((e) => e.type === "model.response");
     expect(response).toMatchObject({ usageComplete: kind === "reported" });
     const report = buildEvaluationReport(input);
@@ -270,6 +271,28 @@ describe("E2 actual provider and bundle integration", () => {
     await writeFile(join(path, "main.jsonl"), input.logs[0]!.events.map((e) => JSON.stringify(e)).join("\n") + "\n");
     return { path, input, manifest: join(path, "manifest.json") };
   }
+  it("retains verbose diagnostics in bounded hash-verified sidefiles", async () => {
+    const b = await bundle(); await rm(join(b.path, "checks.json"));
+    const diagnostic = "diagnostic\n".repeat(110_000);
+    const checks = await writeEvaluationChecks(b.path, { ...b.input.checks, evidence: [diagnostic, diagnostic] });
+    expect(checks.diagnosticFiles).toHaveLength(1);
+    const sidefile = checks.diagnosticFiles![0]!;
+    expect(await readFile(join(b.path, sidefile.path), "utf8")).toBe(diagnostic);
+    expect((await readEvaluationReport(b.manifest)).evidence.sha256[sidefile.path]).toBe(sidefile.sha256);
+    await writeFile(join(b.path, sidefile.path), `${diagnostic.slice(0, -1)}!`);
+    await expect(readEvaluationReport(b.manifest)).rejects.toThrow(/diagnostic/);
+    await expect(writeEvaluationChecks(await temp(), { ...b.input.checks, evidence: ["é".repeat(3 * 1024 * 1024)] })).rejects.toThrow(/byte limit/);
+    await expect(writeEvaluationChecks(await temp(), { ...checks, evidence: [] })).rejects.toThrow(/references/);
+    const escaped = await writeEvaluationChecks(await temp(), { ...b.input.checks, evidence: Array(100).fill("\u0000".repeat(7000)) });
+    expect(escaped.diagnosticFiles).toHaveLength(1);
+    expect(Buffer.byteLength(JSON.stringify(escaped))).toBeLessThan(1024 * 1024);
+  });
+  it("reports offending timestamps without relaxing strict windows", () => {
+    const input = fixture(); input.logs[0]!.events[0]!.ts = 201;
+    expect(() => buildEvaluationReport(input)).toThrow(/seq=0 ts=201 start=90 end=200/);
+    const snapshotInput = fixture(); snapshotInput.auxiliary!.snapshots = [{ ...auxiliary(), ts: 89 }];
+    expect(() => buildEvaluationReport(snapshotInput)).toThrow(/snapshot outside run window: ts=89 start=90 end=200/);
+  });
   it("loads bounded evidence, retains hashes, and renders through the built script", async () => {
     const b = await bundle(); const report = await readEvaluationReport(b.manifest);
     expect(Object.keys(report.evidence.sha256)).toHaveLength(4);

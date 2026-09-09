@@ -1,4 +1,4 @@
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, realpath, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
@@ -12,13 +12,39 @@ const dollars = z.number().finite().nonnegative();
 const role = z.enum(["main", "subagent", "supervisor", "memory", "compaction", "other"]);
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const lane = z.enum(["PASS", "FAIL", "BLOCKED", "NOT_REQUIRED", "NOT_RUN"]);
+const DiagnosticFile = z.object({ path: z.string().regex(/^diagnostic-[a-f0-9]{64}\.txt$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/), bytes: count.max(4 * 1024 * 1024) }).strict();
 export const EvaluationChecks = z.object({
   task: text, runId: z.string().uuid(), outcome: z.enum(["PASS", "FAIL", "BLOCKED", "SKIP"]),
   behavior: lane.optional(), regression: lane.optional(), scope: lane.optional(), submittedTests: lane.optional(),
   manual: z.enum(["PENDING", "NOT_REQUIRED"]).optional(), evidence: z.array(z.string().max(256 * 1024)).max(100),
   skipReason: text.optional(),
+  diagnosticFiles: z.array(DiagnosticFile).max(100).optional(),
   verification: VerificationEvidence.optional(),
 });
+export const EvaluationCheckerOutput = EvaluationChecks.extend({ evidence: z.array(z.string().max(4 * 1024 * 1024)).max(100) });
+/** Retain verbose checker text outside the compact checks JSON; create-only, bounded evidence. */
+export async function writeEvaluationChecks(directory: string, input: unknown): Promise<z.infer<typeof EvaluationChecks>> {
+  const parsed = EvaluationCheckerOutput.parse(input);
+  const bytes = parsed.evidence.reduce((sum, entry) => sum + Buffer.byteLength(entry), 0);
+  check(bytes <= 8 * 1024 * 1024, "checker diagnostic total byte limit exceeded");
+  check(!parsed.diagnosticFiles?.length, "checker cannot supply external diagnostic references");
+  check(parsed.evidence.every(entry => Buffer.byteLength(entry) <= 4 * 1024 * 1024), "checker diagnostic byte limit exceeded");
+  const files = new Map<string, z.infer<typeof DiagnosticFile>>();
+  const evidence = [];
+  for (const entry of parsed.evidence) {
+    if (Buffer.byteLength(JSON.stringify(entry)) <= 8192) { evidence.push(entry); continue; }
+    const data = Buffer.from(entry); check(data.length <= 4 * 1024 * 1024, "checker diagnostic byte limit exceeded");
+    const sha256 = createHash("sha256").update(data).digest("hex"), path = `diagnostic-${sha256}.txt`;
+    if (!files.has(path)) { await writeFile(resolve(directory, path), data, { flag: "wx" }); files.set(path, { path, sha256, bytes: data.length }); }
+    evidence.push(`Verbose diagnostic retained: ${path} (${data.length} bytes; sha256 ${sha256})`);
+  }
+  const result = EvaluationChecks.parse({ ...parsed, evidence, ...(files.size ? { diagnosticFiles: [...files.values()] } : {}) });
+  const serialized = `${JSON.stringify(result, null, 2)}\n`;
+  check(Buffer.byteLength(serialized) <= 1024 * 1024, "checks summary byte limit exceeded");
+  await writeFile(resolve(directory, "checks.json"), serialized, { flag: "wx" });
+  return result;
+}
 const Pricing = z.object({ input: dollars, output: dollars, cacheRead: dollars.optional(), cacheWrite: dollars.optional() }).strict();
 export const EvaluationManifest = z.object({
   version: z.literal(1), runId: z.string().uuid(), task: text, evaluatorRevision: sha, startingRevision: sha,
@@ -133,7 +159,8 @@ export function buildEvaluationReport(input: EvaluationInput) {
       check(e.sessionId === log.sessionId && (i === 0 || e.seq === events[i - 1]!.seq + 1), "non-contiguous/wrong-session log");
       check(!ended, "events after session.end");
       check(i === 0 || !["session.start", "session.resume", "session.fork"].includes(e.type), "mixed/resumed evaluation log is unsupported");
-      check(e.ts >= m.timing.startedAt && (m.timing.settledAt === null || e.ts <= m.timing.settledAt), "event outside declared run window");
+      check(e.ts >= m.timing.startedAt && (m.timing.settledAt === null || e.ts <= m.timing.settledAt),
+        `event outside declared run window: seq=${e.seq} ts=${e.ts} start=${m.timing.startedAt} end=${m.timing.settledAt ?? "open"}`);
       firstTs = firstTs === null ? e.ts : Math.min(firstTs, e.ts); lastTs = lastTs === null ? e.ts : Math.max(lastTs, e.ts);
       if (e.type === "model.request") { check(!pending, "overlapping main requests"); pending = { retries: 0 }; }
       if (e.type === "model.retry") { check(pending, "retry without request"); pending.retries++; }
@@ -175,7 +202,8 @@ export function buildEvaluationReport(input: EvaluationInput) {
   // provisional snapshots at the same instant; later contradictory snapshots still fail.
   for (const s of snapshots.sort((a, b) => a.ts - b.ts || Number(a.final) - Number(b.final))) {
     check(ids.has(s.sessionId), "auxiliary snapshot has unknown session");
-    check(s.ts >= m.timing.startedAt && (m.timing.settledAt === null || s.ts <= m.timing.settledAt), "auxiliary snapshot outside run window");
+    check(s.ts >= m.timing.startedAt && (m.timing.settledAt === null || s.ts <= m.timing.settledAt),
+      `auxiliary snapshot outside run window: ts=${s.ts} start=${m.timing.startedAt} end=${m.timing.settledAt ?? "open"}`);
     const key = JSON.stringify([s.sessionId, s.id]); const old = latest.get(key);
     if (old?.final) { check(s.final && JSON.stringify(old.report) === JSON.stringify(s.report), "conflicting snapshot after auxiliary final"); continue; }
     if (old) check(old.report.operation === s.report.operation, "auxiliary run changed operation");
@@ -277,6 +305,10 @@ export async function readEvaluationReport(manifestPath: string) {
   };
   const manifest = EvaluationManifest.parse(JSON.parse(await read(relative(root, absolute), 256 * 1024)));
   const checks = EvaluationChecks.parse(JSON.parse(await read(manifest.checks, 1024 * 1024)));
+  for (const file of checks.diagnosticFiles ?? []) {
+    const content = await read(file.path, 4 * 1024 * 1024);
+    check(Buffer.byteLength(content) === file.bytes && digests[file.path] === file.sha256, "diagnostic sidefile integrity mismatch");
+  }
   const logs = [];
   for (const entry of manifest.logs) {
     const data = await read(entry.path, 8 * 1024 * 1024);

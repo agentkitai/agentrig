@@ -83,7 +83,7 @@ it.each([80, 120])("fresh-process actual Ink honours dark/light and NO_COLOR bef
     import {App} from ${JSON.stringify(new URL("../dist/tui/app.js", import.meta.url).href)};
     import {TuiController} from ${JSON.stringify(new URL("../dist/tui/controller.js", import.meta.url).href)};
     const controller=new TuiController({cwd:process.cwd(),agent:{run(){throw Error('no dispatch');}}});
-    controller.print('**MARKDOWN_CANARY**','assistant');controller.print('\\u001b[32m+DIFF_CANARY\\u001b[0m','event');
+    controller.print('**MARKDOWN_CANARY** AFTER_MARKDOWN_CANARY','assistant');controller.print('\\u001b[32m+DIFF_CANARY\\u001b[0m','event');
     const writes=[];const stdout=Object.assign(new EventEmitter(),{columns:${columns},rows:30,isTTY:true,write:s=>{writes.push(s);return true;}});
     const stdin=Object.assign(new EventEmitter(),{isTTY:true,setEncoding(){},setRawMode(){},ref(){},unref(){},read(){return null;}});
     let ready;const mounted=new Promise(r=>ready=r);const app=render(createElement(App,{controller,settings:{theme:process.env.TEST_THEME},onMounted:ready}),{stdout,stdin,patchConsole:false,exitOnCtrlC:false});
@@ -94,8 +94,21 @@ it.each([80, 120])("fresh-process actual Ink honours dark/light and NO_COLOR bef
     const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", script], { cwd: fileURLToPath(new URL("..", import.meta.url)), env, timeout: 10000, maxBuffer: 100000 });
     return JSON.parse(result.stdout) as string;
   };
-  expect(await run("dark", false)).toContain("\u001b[32m>");
-  expect(await run("light", false)).toContain("\u001b[34m>");
+  const dark = await run("dark", false), light = await run("light", false);
+  expect(dark).toContain("\u001b[32m>"); expect(light).toContain("\u001b[34m>");
+  // Ink normalizes adjacent SGR, so inspect terminal foreground at the following prose,
+  // not the renderer's intermediate reset spelling.
+  const foregroundAtProse = (text: string) => {
+    let foreground: number | undefined;
+    for (const match of text.slice(0, text.indexOf(" AFTER_MARKDOWN_CANARY")).matchAll(/\u001b\[([\d;]*)m/g)) {
+      for (const code of (match[1] || "0").split(";").map(Number)) {
+        if (code === 0 || code === 39) foreground = undefined;
+        else if (code >= 30 && code <= 37) foreground = code;
+      }
+    }
+    return foreground;
+  };
+  expect(foregroundAtProse(dark)).toBe(37); expect(foregroundAtProse(light)).toBe(30);
   const plain = await run("light", true); expect(plain).toContain("MARKDOWN_CANARY"); expect(plain).toContain("DIFF_CANARY");
   expect(plain).not.toMatch(/\u001b\[[0-9;:]*m/);
 }, 30000);

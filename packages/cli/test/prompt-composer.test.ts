@@ -33,6 +33,42 @@ async function fixture(history = new PromptHistory(), columns = 80, rows = 24) {
 }
 const lastPrompt = (requests: ModelRequest[]) => requests.at(-1)?.messages.filter(m=>m.role==="user").at(-1)?.content;
 const graphemes = ["😀", "e\u0301", "👩🏽‍💻", "🇮🇱", "👨‍👩‍👧‍👦"];
+it.each(["", "\u001b[201~"])("held ZWJ backspace redraws before release without treating pasted backspace as an edit (%j)", async prefix => {
+  const f = await fixture(); const cluster = "👨‍👩‍👧‍👦";
+  f.input.send(cluster.repeat(30)); await vi.waitFor(() => expect(f.writes.join("")).toContain(cluster));
+  f.writes.length = 0; vi.useFakeTimers();
+  try {
+    for (let i = 0; i < 12; i++) { f.input.send(prefix + "\u007f"); await vi.advanceTimersByTimeAsync(10); }
+    expect(f.writes.join("")).toContain(cluster);
+    expect(f.requests).toEqual([]);
+    f.writes.length = 0;
+    f.input.send("\u001b[200~", cluster + "\u007f");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(f.writes).toEqual([]);
+    f.input.send("\u001b[201~"); await vi.advanceTimersByTimeAsync(100);
+  } finally { vi.useRealTimers(); }
+});
+it("retires a completion hint when unrelated controller output arrives", async () => {
+  const f = await fixture();
+  vi.spyOn(f.controller, "completeInput").mockResolvedValue({ text: "@fixture", hint: "STALE-COMPLETION-CANARY" });
+  f.input.send("@fixture", "\t");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("STALE-COMPLETION-CANARY"));
+  f.writes.length = 0; f.controller.print("NEW-STATUS-CANARY", "system");
+  await vi.waitFor(() => expect(f.writes.join("")).toContain("NEW-STATUS-CANARY"));
+  expect(f.writes.join("")).not.toContain("STALE-COMPLETION-CANARY");
+  expect(f.requests).toEqual([]);
+});
+
+it("a permission opened before React redraw discards framed pasted content synchronously", async () => {
+  const f = await fixture();
+  const permission = f.controller.ask({ tool: "effect", class: "exec", input: {}, cwd: process.cwd() });
+  f.input.send("\u001b[200~PASTE-MUST-NOT-LEAK\u001b[201~", "n");
+  expect(await permission).toBe("deny");
+  f.input.send("safe", "\r");
+  await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+  expect(lastPrompt(f.requests)).toContainEqual(expect.objectContaining({ type: "text", text: "safe" }));
+  expect(f.controller.permissionGrants.list()).toEqual([]);
+});
 it.each(["", "\u001b[201~"])("backspace removes whole graphemes in actual prompt input (%j)", async prefix => {
   const f=await fixture();
   for (const [index,grapheme] of graphemes.entries()) {
@@ -125,6 +161,8 @@ it.each(["", "\u001b[201~"])("slash text remains an answer, not a menu, in quest
   const f=await fixture();f.controller.setSkills([{name:"SkillCanary",body:"never run"}] as Skill[]);
   const question=f.controller.askQuestion({id:"00000000-0000-4000-8000-000000000001",sessionId:"fixture",toolUseId:"question",prompt:"QuestionCanary",options:["one"]},new AbortController().signal);
   f.input.send(prefix+"/");await vi.waitFor(()=>expect(f.writes.join("")).toContain("answer: /"));
+  expect(f.writes.join("")).toContain("1–4 alone select options");
+  expect(f.writes.join("")).toContain("/commands");
   expect(f.writes.join("")).not.toContain("[skill]");
   f.input.send(prefix+"\t",prefix+"\u001b[B",prefix+"\r");
   expect(await question).toMatchObject({answer:{text:"/"}});

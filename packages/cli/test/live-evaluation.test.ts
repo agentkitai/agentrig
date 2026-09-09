@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -8,6 +8,24 @@ function probe(code: string) {
 }
 
 describe("E3 frozen live-comparison mechanics (no live calls)", () => {
+  it("missing CLI arguments fail with fixed usage, not stack traces", () => {
+    for (const script of ["summarize-live.mjs", "pack-live.mjs"]) {
+      const result = spawnSync(process.execPath, [`eval/${script}`], { cwd: root, encoding: "utf8" });
+      expect(result.status).toBe(2); expect(result.stderr).toContain("Usage:");
+      expect(result.stderr).not.toMatch(/TypeError|\n\s+at /);
+    }
+  });
+  it("distinguishes created incomplete evidence and rejects malformed, linked and oversized publication inputs", () => {
+    probe(`import assert from 'node:assert/strict';import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {pack} from './eval/pack-live.mjs';import {summarize} from './eval/summarize-live.mjs';
+      const root=await mkdtemp(join(tmpdir(),'agentrig-e3-rejections-')),dest=root+'-publication';
+      const results={planned:96,ledger:{tokens:0,startedAt:1,blocked:'fixture'},completed:[]};
+      try {const s=summarize(results,['001-A1-s0m0-r1']);assert.equal(s.groups[0].createdIncomplete,1);assert.equal(s.groups[0].untouched,23);assert.equal(s.groups[1].untouched,24);assert.equal(summarize(results).groups[0].untouched,null);
+        await writeFile(join(root,'results.json'),JSON.stringify(results));await writeFile(join(root,'protocol.json'),JSON.stringify({revision:'invalid'}));
+        await assert.rejects(pack(root,dest),/revision/);await writeFile(join(root,'protocol.json'),JSON.stringify({revision:'a'.repeat(40)}));
+        await mkdir(join(root,'001-A1-s0m0-r1'));await writeFile(join(root,'001-A1-s0m0-r1','large.txt'),'x'.repeat(8*1024*1024+1));await assert.rejects(pack(root,dest),/invalid evidence file/);
+        await rm(join(root,'001-A1-s0m0-r1'),{recursive:true});await mkdir(join(root,'outside'));await symlink(join(root,'outside'),join(root,'001-A1-s0m0-r1'),process.platform==='win32'?'junction':'dir');await assert.rejects(pack(root,dest),/invalid evidence directory/);
+      } finally {await rm(root,{recursive:true,force:true});await rm(dest,{recursive:true,force:true});}`);
+  });
   it("binds AI-only prose judgments to immutable answers and reproduces every derived outcome", () => {
     probe(`import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {gunzipSync} from 'node:zlib';import {createHash} from 'node:crypto';import {createRequire} from 'node:module';
       import {Results,summarize} from './eval/summarize-live.mjs';

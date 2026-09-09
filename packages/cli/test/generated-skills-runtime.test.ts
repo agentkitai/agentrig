@@ -11,6 +11,22 @@ import { renderEvent } from "../src/render.ts";
 import { skillFixture, skillProvider } from "../../memory/test/fixtures/skill-emission.ts";
 
 let selectedProvider: ModelProvider;
+
+it.each(["tui", "resume"])("generated discovery options survive actual %s command option resolution", async mode => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-generated-options-")));
+  try {
+    for (const enabled of [true, false]) {
+      const captured: unknown[] = [];
+      await buildProgram({ config: { cwd: root, home: root, env: {} },
+        tui: async options => { captured.push(options); }, run: async (_task, options) => { captured.push(options); } })
+        .parseAsync([...(mode === "tui" ? ["tui"] : ["sessions", "resume", "fixture"]),
+          enabled ? "--generated-skills" : "--no-generated-skills", "--memory", join(root, "wiki")], { from: "user" });
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toMatchObject({ generatedSkills: enabled, memory: join(root, "wiki"),
+        ...(mode === "resume" ? { resume: "fixture" } : {}) });
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 vi.mock("../src/provider.ts", async importOriginal => {
   const actual = await importOriginal<typeof import("../src/provider.ts")>();
   return { ...actual, buildProviders: vi.fn(() => ({ main: selectedProvider, memory: selectedProvider,

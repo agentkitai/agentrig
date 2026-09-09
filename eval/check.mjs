@@ -161,7 +161,12 @@ export async function check(receiptPath) {
     try { assert.ok((await lstat(join(root, path))).isFile(), `changed path must be a regular file: ${path}`); }
     catch (error) { result.scope = 'FAIL'; result.evidence.push(error.message); }
   }
-  if (result.scope === 'FAIL') return result;
+  if (result.scope === 'FAIL') {
+    result.behavior = result.regression = result.submittedTests = 'NOT_RUN';
+    // Verification schema still uses BLOCKED for an incomplete oracle; no assertions ran.
+    result.verification.behavior.observation = result.verification.regression.observation = 'Not run: submission scope refused before evaluator execution.';
+    return result;
+  }
   if (receipt.id.startsWith('A')) {
     // Missing prerequisites are BLOCKED; compilation failures in a prepared run are FAIL.
     await lstat(join(root, 'node_modules/typescript/bin/tsc'));

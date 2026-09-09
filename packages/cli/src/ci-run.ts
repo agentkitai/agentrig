@@ -9,6 +9,7 @@ import { ScheduledUsage } from "./schedule-report.js";
 import { redactExportMessages } from "./session-export.js";
 import { postGitHubReport, readGitHubPr, type GitHubPr, type GitHubTransport } from "./github-report.js";
 import type { ReviewProcess } from "./review-process.js";
+import { utf8Prefix } from "./text-bounds.js";
 
 export interface CiFlags { ci?: boolean | undefined; taskFile?: string | undefined; eventFile?: string | undefined; eventField?: string | undefined; report?: string | undefined; pr?: string | undefined; repo?: string | undefined; comment?: boolean | undefined }
 export interface CiDependencies { run?: typeof runCommand; process?: ReviewProcess }
@@ -75,7 +76,9 @@ function inert(text: string): string {
   const copy = redactExportMessages([{ role: "assistant", content: [{ type: "text", text }] }]);
   const block = copy.messages[0]!.content[0]!;
   const redacted = block.type === "text" ? block.text : "[unsupported content omitted]";
-  return sanitizeLine(redacted, 32_768).replace(/`/g, "ˋ").replace(/@/g, "@\u200b").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Newlines are safe inside our fixed inert fence; sanitize each bounded line independently.
+  return redacted.split(/\r?\n/).map(line => sanitizeLine(line, 32_768)).join("\n")
+    .replace(/`/g, "ˋ").replace(/@/g, "@\u200b").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 async function reserveReport(path: string): Promise<FileHandle> {
   const requested = resolve(path), parent = await realpath(dirname(requested));
@@ -86,6 +89,7 @@ async function reserveReport(path: string): Promise<FileHandle> {
 export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortSignal, dependencies: CiDependencies = {}): Promise<void> {
   let file: FileHandle | undefined, summary: RunSummary | undefined, pr: GitHubPr | undefined;
   let outcome = "error", asked = 0, denied = 0, currentText = "", omitted = false, diagnostic = "";
+  let captureClosed = false;
   let questions = 0, answered = 0, unanswered = 0;
   let outputValidation = "not requested or not reached";
   let options: RunOptions | undefined, github: GitHubTransport | undefined;
@@ -93,12 +97,14 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   const controller = new AbortController(), signal = AbortSignal.any([parent, controller.signal]);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const observe = (event: HarnessEvent): void => {
-    if (event.type === "turn.start") currentText = "";
-    if (event.type === "model.delta") {
+    if (event.type === "turn.start") { currentText = ""; captureClosed = false; }
+    if (event.type === "model.delta" && !captureClosed) {
       const available = CI_LIMITS.taskBytes - Buffer.byteLength(currentText);
       const bytes = Buffer.from(event.text);
-      if (bytes.length > available) omitted = true;
-      currentText += bytes.subarray(0, Math.max(0, available)).toString("utf8");
+      // Once a code point is omitted, later chunks cannot fill its spare bytes: that
+      // would splice unrelated suffix text into what is advertised as a prefix.
+      if (bytes.length > available) { omitted = true; captureClosed = true; }
+      currentText += utf8Prefix(event.text, available);
     }
     if (event.type === "tool.denied") denied++;
     if (event.type === "output.validated") outputValidation = `${event.valid ? "valid" : "invalid"} (${event.mode}, ${event.attempt}, ${event.category})`;
@@ -137,7 +143,7 @@ export async function runCi(flags: CiFlags, original: RunOptions, parent: AbortS
   } catch (error) { outcome = asked ? "permission-refused" : signal.aborted ? "aborted" : "error"; diagnostic = error instanceof CiRefusal ? error.message : failure; }
   const rendered = Buffer.from(inert(currentText));
   if (rendered.length > 32_768) omitted = true;
-  const text = rendered.subarray(0, 32_768).toString("utf8");
+  const text = utf8Prefix(rendered.toString("utf8"), 32_768);
   const report = () => {
     const lines = ["# AgentRig CI report", "", `Outcome: ${outcome}`, `Runtime reason: ${summary?.reason ?? "unknown"}`, `Comment: ${publication}`,
       `Session: ${summary === undefined ? "not available" : inert(summary.id)}`,

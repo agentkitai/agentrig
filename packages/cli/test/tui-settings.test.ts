@@ -28,3 +28,9 @@ it("maps only supported decoded actions and preserves immutable interrupt/escape
   expect(mapTuiAction({ type: "interrupt" }, settings)).toEqual({ type: "interrupt" });
   expect(mapTuiAction({ type: "escape" }, settings)).toEqual({ type: "escape" });
 });
+it("SDK errors explain supported settings without printing unknown keys or values", () => {
+  for (const input of [{ CANARY_SECRET_KEY: "CANARY_SECRET_VALUE" }, { theme: "CANARY_SECRET_VALUE" }]) {
+    expect(() => resolveTuiSettings(input as never)).toThrow("Invalid TUI settings");
+    try { resolveTuiSettings(input as never); } catch (error) { expect(String(error)).not.toContain("CANARY"); }
+  }
+});

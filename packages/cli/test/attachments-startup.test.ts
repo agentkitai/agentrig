@@ -51,7 +51,11 @@ it.each([["ordinary",0],["protocol",0],["protocol",1200]] as const)("actual star
     send(`@${join(root,"image.png")}`);send("\r");await vi.waitFor(()=>expect(c.snapshot().pending?.req.tool).toBe("input_file"),readiness);send("y");await vi.waitFor(()=>{expect(fixture.requests).toHaveLength(2);expect(c.snapshot().status).toBe("idle");},readiness);
     expect(fixture.requests[1]!.messages.flatMap(m=>m.content).filter(b=>b.type==="image").map(b=>b.trust)).toEqual(["external","user"]);
     expect(writes.join("")).not.toContain("FILE_CONTENT_CANARY");expect(writes.join("")).not.toContain(png);
-    const answer=c.ask({tool:"read",class:"read",cwd:root,input:{}}); input.send("\u0016");send("n");expect(await answer).toBe("deny");expect(fixture.clipboardCalls).toBe(1);
+    const answer=c.ask({tool:"read",class:"read",cwd:root,input:{}});
+    await c.pasteImage();
+    expect(c.snapshot().lines.map(line=>line.text).join("\n")).toContain("no clipboard read was queued");
+    expect(fixture.clipboardCalls).toBe(1);
+    input.send("\u0016");send("n");expect(await answer).toBe("deny");expect(fixture.clipboardCalls).toBe(1);
   };
   try {await startTui({root:join(root,"logs"),trustedProjectRoot:root,provider:"anthropic",model:"fake",repoMap:false,maxTurns:"4",maxTokensPerTurn:"100",allow:["read"]});}
   finally{if(tty)Object.defineProperty(process.stdin,"isTTY",tty);else Reflect.deleteProperty(process.stdin,"isTTY");}

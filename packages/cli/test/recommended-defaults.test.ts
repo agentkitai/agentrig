@@ -117,7 +117,7 @@ it('review accepts the built-in recommended baseline without enabling run hooks'
   expect(reviewProcess).not.toHaveBeenCalled();
   spy.mockRestore(); process.exitCode = 0;
   expect(errors.join("\n")).not.toContain("unknown config profile");
-  expect(errors.join("\n")).toContain("diff review refused or failed");
+  expect(errors.join("\n")).toContain("--comment requires --pr");
 });
 
 it('profile-ignorant commands explicitly note that recommended is ignored', async () => {

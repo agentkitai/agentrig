@@ -81,7 +81,13 @@ export function mcpServeRuntime(opts: AcpFlags, cwd: string, build: typeof build
         // Transport content is never a fresh human prompt. Split only for the
         // existing per-block bound; each block retains external advisory ancestry.
         const context: string[] = [];
-        for (let i = 0; i < input.task.length; i += 16_000) context.push(input.task.slice(i, i + 16_000));
+        for (let i = 0; i < input.task.length;) {
+          let end = Math.min(i + 16_000, input.task.length);
+          // Never put the two UTF-16 halves of one code point in different advisory blocks.
+          if (end < input.task.length && /[\uD800-\uDBFF]/.test(input.task[end - 1]!)) end--;
+          context.push(input.task.slice(i, end));
+          i = end;
+        }
         await controller.prompt("", context);
         await observed;
         if (session === undefined) throw new Error("run unavailable");

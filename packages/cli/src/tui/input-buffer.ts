@@ -210,13 +210,15 @@ export class InputBuffer {
    * Records input, and optionally work to run once it has been drawn. Both happen at the next
    * quiet point, so neither writes to the terminal while a paste is still arriving.
    */
-  set(next: string, thenRun?: () => void): void {
+  set(next: string, thenRun?: () => void, gesture: "text" | "edit" = "text"): void {
     if (this.disposed) return;
     const delta = Math.abs(next.length - this.text.length);
     this.text = next;
     if (thenRun !== undefined) this.queued.push(thenRun);
     // a keystroke leaves the existing deadline alone; only a burst-sized change pushes it out
-    if (this.handle !== null && delta <= KEYSTROKE && thenRun === undefined) return;
+    // Decoded edit keys can delete a long grapheme; code-unit delta is not paste size.
+    // Paste payloads never receive this gesture, and bracket framing still calls hold().
+    if (this.handle !== null && (gesture === "edit" || delta <= KEYSTROKE) && thenRun === undefined) return;
     this.cancel();
     this.handle = this.setTimer(() => {
       this.handle = null;
@@ -234,8 +236,9 @@ export class InputBuffer {
    * Records stdin activity that changes no text (for example, a completed closing marker). It
    * starts the quiet wait only after bracket framing has fully resolved.
    */
-  touch(): void {
+  touch(gesture: "text" | "edit" = "text"): void {
     if (this.disposed) return;
+    if (gesture === "edit" && this.handle !== null) return;
     this.cancel();
     this.handle = this.setTimer(() => {
       this.handle = null;

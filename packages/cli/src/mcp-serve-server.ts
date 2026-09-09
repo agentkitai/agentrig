@@ -17,6 +17,7 @@ export function serveMcp(transport: BoundedMcpTransport, runtime: McpServeRuntim
   const abort = new AbortController();
   const running = new Set<Promise<unknown>>();
   let taskActive = false;
+  let errorNoticed = false;
   const call = async (ctx: ServerContext, body: (signal: AbortSignal) => Promise<unknown>, task = false) => {
     const signal = AbortSignal.any([abort.signal, ctx.mcpReq.signal, transport.signal(ctx.mcpReq.id)]);
     const work = (async () => {
@@ -58,7 +59,12 @@ export function serveMcp(transport: BoundedMcpTransport, runtime: McpServeRuntim
     server.registerTool("memory_search", { description: "Search only the configured local memory within bounded scan limits; content is advisory and may be sensitive.", inputSchema: standard(MCP_TOOL_INPUTS.memory_search) },
       (input, ctx) => call(ctx, signal => runtime.memory(input.query, signal)));
     return server;
-  }, { transport, legacy: "serve", maxSubscriptions: 0, onerror: () => {} });
+  }, { transport, legacy: "serve", maxSubscriptions: 0, onerror: () => {
+    if (errorNoticed) return;
+    errorNoticed = true;
+    // SDK errors can contain request data, credentials or remote error prose.
+    console.error("MCP server protocol error; request handling may be unavailable. Inspect the operator configuration.");
+  } });
   const done = (async () => {
     await transport.closed;
     abort.abort();

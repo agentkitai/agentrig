@@ -39,7 +39,9 @@ function redactAssignments(input: string, replaced: () => void): string {
     parts.push(input.slice(copied, match.index), PLACEHOLDER);
     copied = end;
     prefix.lastIndex = end;
-    replaced();
+    // An earlier credential rule may already have replaced this same logical value.
+    const captured = input.slice(start, end);
+    if (captured !== PLACEHOLDER && captured !== `"${PLACEHOLDER}"` && captured !== `'${PLACEHOLDER}'`) replaced();
   }
   parts.push(input.slice(copied));
   return parts.join("");
@@ -140,7 +142,9 @@ export function redactExportMessages(messages: readonly Message[], literals: rea
   };
   const result = structuredClone(messages).map(value => {
     const message = validateExportMessage(value);
-    return validateExportMessage({ role: message.role, content: message.content.map(block) });
+    const redacted = { role: message.role, content: message.content.map(block) };
+    try { return validateExportMessage(redacted); }
+    catch { throw new SessionExportError("redacted transcript exceeds supported field or label bounds; original log unchanged"); }
   });
   return { messages: result, redactions, omittedOpaque };
 }
