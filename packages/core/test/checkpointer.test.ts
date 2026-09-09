@@ -1067,7 +1067,7 @@ it("a throwing effects descriptor is contained, and the call is treated as mutat
   const events = await collect(session);
   await session.done;
   // not a fatal turn: the run continues, the descriptor failure is visible, and the conservative
-  // "workspace" effect means the checkpoint is still taken before the write lands
+  // unknown effect means the checkpoint is still taken before the write lands
   expect(events.filter(e => e.type === "error" && e.message.includes("effects descriptor failed"))).toHaveLength(1);
   expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
   expect(events.find(e => e.type === "tool.result" && e.id === "a")).toMatchObject({ ok: true });

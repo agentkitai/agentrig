@@ -325,12 +325,11 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
       // An extension's descriptor already has its own disabling receipt; leave that path alone.
       if (error instanceof ExtensionHandlerError) throw error;
       // A trusted host descriptor that throws is a defect in the tool, not evidence that the call
-      // is harmless. Localize it here: the effect falls back to the conservative "workspace", so
-      // the checkpointer still snapshots and the scheduler still serializes, instead of one broken
+      // is harmless. Leave the effect unknown: the checkpointer still snapshots and the scheduler
+      // uses an exclusive barrier ("workspace" could admit disjoint writes in parallel), instead of one broken
       // descriptor ending the turn before a call that has not even been authorized yet.
       await emit({ type: "error", fatal: false,
         message: `${tu.name} effects descriptor failed (${error instanceof Error ? error.message : String(error)}); treating the call as potentially mutating` });
-      declaredEffect = "workspace";
     }
   }
   const isolated = isIsolatedTool(tool);

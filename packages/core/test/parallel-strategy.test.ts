@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { afterEach, expect, it, vi } from "vitest";
+import * as parallelRuntime from "../src/parallel-runtime.js";
 import { createAgent, parallel, RulePolicy, SessionStore, writeFileTool, editFileTool, grepTool,
   type AgentConfig, type ModelEvent, type ModelProvider, type Tool } from "@agentkitai/agentrig-core";
 
@@ -42,6 +43,39 @@ async function fixture(calls: Input[], overrides: Partial<AgentConfig> = {}, con
   return { root, entered, gates, described, stages, paths, session, finished, store };
 }
 const call = (path: string, label: string, kind: Input["kind"] = "read"): Input => ({ path, label, kind });
+
+it("throwing effects remain unknown exclusive barriers for actual disjoint writes without hooks", async () => {
+  const attempted = latch(); const metadata: parallelRuntime.SchedulingMetadata[] = [];
+  const executeParallel = parallelRuntime.executeParallel;
+  // Observe the real pipeline's existing scheduler boundary; do not replace classification or
+  // infer exclusivity from an elapsed period in which the second body happened not to run.
+  const spy = vi.spyOn(parallelRuntime, "executeParallel").mockImplementation((calls, signal, limit, runTool, forceExclusive) =>
+    executeParallel(calls, signal, limit, (call, schedule) => runTool(call, { ...schedule, admit(info) {
+      metadata.push(info); const admitted = schedule.admit(info);
+      if (metadata.length === 2) attempted.release();
+      return admitted;
+    } }), forceExclusive));
+  const f = await fixture([call("a", "one", "write"), call("b", "two", "write")], {}, undefined,
+    tool => { tool.effects = () => { throw new Error("descriptor fixture"); }; });
+  try {
+    await f.entered[0]!.promise; await attempted.promise;
+    // In the known regression the scheduler receives disjoint workspace writes. Observe the
+    // resulting second live body before releasing the first, rather than hiding overlap in cleanup.
+    if (metadata[1]?.effects === "workspace") await f.entered[1]!.promise;
+    expect([...f.stages]).toEqual(["start:one"]);
+    expect(metadata.map(info => info.effects)).toEqual([undefined, undefined]);
+    expect(metadata.map(info => info.paths)).toEqual([["a"], ["b"]]);
+    f.gates[0]!.release(); await f.entered[1]!.promise; f.gates[1]!.release();
+    const { events, summary } = await f.finished;
+    expect(summary.reason).toBe("done");
+    expect(f.stages).toEqual(["start:one", "end:one", "start:two", "end:two"]);
+    expect(events.filter(e => e.type === "error" && e.message.includes("effects descriptor failed"))).toHaveLength(2);
+    expect(events.some(e => e.type === "checkpoint.created")).toBe(false);
+    expect(events.find(e => e.type === "permission.request" && (e.req.input as Input).label === "two")!.seq)
+      .toBeGreaterThan(events.find(e => e.type === "tool.result" && e.id === "one")!.seq);
+    expect(await Promise.all([readFile(join(f.root, "a"), "utf8"), readFile(join(f.root, "b"), "utf8")])).toEqual(["one", "two"]);
+  } finally { f.gates.forEach(gate => gate.release()); await f.finished; spy.mockRestore(); }
+});
 
 it.each(["read", "write"] as const)("runs disjoint %s bodies in one controlled tick, retaining result/log order", async kind => {
   const f = await fixture([call("a", "one", kind), call("b", "two", kind)]);
