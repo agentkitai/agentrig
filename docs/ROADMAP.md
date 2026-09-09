@@ -8,8 +8,10 @@ at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
 R17f is delivered in PR #290 at main `4c82ebb`, with green post-merge CI34388378742
 and structure34388378715 ([receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920)).
 R17g is now being implemented in parallel package worktrees, with sequential reviewed merges.
-Supervisor is the first delivery batch ([dispositions](plans/R17g-supervisor.md));
-memory follows its additive event-schema support. Core and CLI work proceed independently.
+Supervisor merged in PR #291 at `528ee21` ([dispositions](plans/R17g-supervisor.md));
+its post-merge checks are tracked on the PR. Memory is the current delivery batch,
+with clean independent reviews and integrated tests ([dispositions](plans/R17g-memory.md)).
+Core implementation and CLI independent reviews proceed in parallel.
 All 96 corrected slots have outcomes across two preserved segments: 67 PASS / 17 FAIL /
 12 BLOCKED, 10,369,886 reported tokens and one unknown call. Neither factor demonstrates the
 required benefit. Recommended automatic index injection defaults off; retrieval, ingestion
@@ -1202,10 +1204,10 @@ The detailed queue is retained until all four package deliveries are verified.
 
 | Package batch | Current status |
 |---|---|
-| Supervisor | Implemented and locally tested; independent review and delivery in progress. [Fragment dispositions](plans/R17g-supervisor.md). |
-| Memory | Implemented and locally tested in its worktree; review in progress, follows shared supervisor schema. |
+| Supervisor | Merged in PR #291 at `528ee21`, exact-head CI and bounded independent reviews green; post-merge receipt on PR. [Fragment dispositions](plans/R17g-supervisor.md). |
+| Memory | Current delivery batch; independent Claude/Codex reviews clean, integrated build/typecheck and 3618 tests pass. [Fragment dispositions](plans/R17g-memory.md). |
 | Core | Claude implementation in progress in a separate worktree. |
-| CLI/evaluation | Parallel implementation in progress in a separate worktree. |
+| CLI/evaluation | Implemented; local build/typecheck and 3633 tests pass. Independent Claude/Codex reviews in progress. |
 
 ### Delivery progress
 
