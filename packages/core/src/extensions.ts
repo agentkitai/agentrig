@@ -187,7 +187,9 @@ export async function loadExtensions(options: {
           if (key !== "safeParse" || typeof value !== "function") return value;
           // a `safeParse` that reports success without `data` would admit an unvalidated input
           return extensionCallback(owner, `${tool.name}.inputSchema`, value.bind(target), undefined, (result) => {
-            z.union([z.object({ success: z.literal(true) }).passthrough().refine((r) => "data" in r, "successful safeParse must carry data"),
+            // Zod's passthrough reconstruction drops unknown keys valued undefined.
+            // Check original key presence, not truthiness or the reconstructed result.
+            z.union([z.object({ success: z.literal(true) }).passthrough().refine(() => Object.prototype.hasOwnProperty.call(result, "data"), "successful safeParse must carry data"),
               z.object({ success: z.literal(false), error: z.unknown() }).passthrough()]).parse(result);
           });
         } });

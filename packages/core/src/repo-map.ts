@@ -240,7 +240,9 @@ function fit(paths: readonly string[], symbols: string[], maxBytes: number): { c
     Buffer.byteLength(`${[BEGIN, "Files:", ...lines].join("\n")}${suffix}`) <= maxBytes;
   let files: readonly string[] = tree;
   if (!fits(tree)) {
-    const deepest = Math.max(0, ...paths.map((path) => path.split("/").length - 1));
+    // File count is not bounded by JavaScript's engine-specific function argument limit.
+    let deepest = 0;
+    for (const path of paths) deepest = Math.max(deepest, path.split("/").length - 1);
     for (let depth = deepest - 1; depth >= 0; depth -= 1) {
       const candidate = summarizeTree(paths, depth);
       if (fits(candidate)) { files = candidate; break; }

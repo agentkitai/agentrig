@@ -182,6 +182,7 @@ export const windowsCoverage = [
   "packages/supervisor/test/diff-review.test.ts",
   "packages/supervisor/test/evidence-grading.test.ts",
   "packages/supervisor/test/followups.test.ts",
+  "packages/core/test/repo-map-large.test.ts",
   "packages/supervisor/test/injection.test.ts",
   "packages/supervisor/test/plan-evidence.test.ts",
 ];

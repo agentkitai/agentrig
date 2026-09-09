@@ -198,3 +198,39 @@ Root's combined source build, typecheck and private-fixture preflight pass after
 all integration changes above. Full suite: **3682 passed / four existing skips /
 233 files** on supervisor/memory main `6fb3413` plus this core batch. The CLI batch
 is reviewed separately and will be integrated from its merge before final delivery.
+
+### Independent reviews and bounded repairs
+
+Claude `1f3832e6-5760-439f-843c-5200cbe3e623` independently passed full3682/4skips,
+build/typecheck/preflight and reproduced one narrow extension callback compatibility
+defect. Codex `01a087a7-e361-7251-a911-193e6d386f96` passed typecheck/static review,
+disclosed sandbox preflight limits, and found two substantive defects. Both reviewed
+`657f757` before its unchanged rebase onto CLI merge `4c1005c`.
+
+The three findings are repaired together, with one scoped independent repair check:
+
+- A throwing host effects descriptor stays **unknown**, hence exclusive to the
+  parallel scheduler, while the existing checkpoint fallback still treats it as
+  mutating. A controlled actual two-disjoint-write test reproduced overlapping
+  bodies before the fix without sleeps; metadata and event ordering now discriminate
+  exclusive scheduling. The restored focused parallel/checkpointer suite passed85.
+- Maximum repository depth is accumulated with a loop, not one function argument
+  per path. A public-map test with200000 virtual file metadata entries reproduced
+  the actual `RangeError` before repair; it now returns a bounded, honestly truncated
+  map. All13 map tests pass; the new control is included in Windows coverage.
+- The extension parser validator checks original own-key presence, accepting
+  explicitly present `data: undefined` while still refusing success without data.
+  A real loader/wrapped-callback oracle failed against the reviewed code, and all30
+  extension-failure tests pass after repair. This does not extend the serialized
+  session-input contract; an initial broader execution assertion was narrowed to
+  the actual callback boundary rather than claim new support for undefined logs.
+
+Clarification of the earlier R13c wording: new failure attribution covers fresh
+external-expansion approval, not every ordinary throwing host onAsk path. Ordinary
+behavior is pre-existing and unchanged. Other review notes (abort-label timing,
+unexercised pin-growth branch, extra lexical whitespace case) were not identified
+as introduced defects and do not start a new general review cycle.
+
+Final combined supervisor/memory/CLI/core build, typecheck and full suite passed
+**3718 tests / four existing conditional skips / 236 files** on main `4c1005c` plus
+these repairs. Exact-head and post-merge hosted checks remain separate delivery gates.

@@ -219,3 +219,14 @@ it("invalid model input remains a validation failure, not an extension fault", a
   expect(f.module.calls.tool).toBe(0);
   await f.extensions.loaded[0]!.commands[0]!.run("", { print() {} }); expect(f.module.calls.command).toBe(1);
 });
+
+it("accepts a successful schema transform whose explicitly present data is undefined", async () => {
+  const f = await fixture('tool.inputSchema=z.object({}).transform(()=>undefined)');
+  const tool = f.extensions.loaded[0]!.tools[0]!;
+  // Actual loader/wrapped callback boundary, not a reconstructed Zod stand-in.
+  // This does not grant undefined tool input a new serialized-session contract.
+  expect(tool.inputSchema.safeParse({})).toEqual({ success: true, data: undefined });
+  expect(tool.inputSchema.safeParse({})).toHaveProperty("data", undefined);
+  await f.extensions.loaded[0]!.commands[0]!.run("", { print() {} });
+  expect(f.module.calls.command).toBe(1);
+});
