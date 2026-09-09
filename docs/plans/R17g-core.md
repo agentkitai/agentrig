@@ -269,3 +269,11 @@ suite passed **3722 tests / four existing local skips /236 files**. The first lo
 full run hit an existing torn-claim diagnostic count mismatch; the second passed,
 and the failed log is retained rather than claimed green. Exact-head and final-main
 post-merge CI remain mandatory for this corrective delivery.
+
+The diagnostic-count mismatch was reproduced on the unchanged older fixture:
+17 of30 rapid external edits reused the directory cache token and missed the new
+corrupt entry. This was not an asynchronous diagnostic callback race. The public
+raw-store contract requires explicit rebuild after external edits; the fixture now
+calls rebuildAttemptIndex after its four direct filesystem mutation boundaries.
+All warning counts and deadlines remain unchanged. Three focused repetitions and
+all26 run-flags tests passed; production caching behavior is unchanged.
