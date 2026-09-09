@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, readFile, writeFile, mkdir, cp, rm, realpath, readdir } from "node:fs/promises";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { mkdtemp, readFile, writeFile, mkdir, cp, rm, realpath, readdir, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,7 +15,11 @@ async function temp() {
   const path = await realpath(await mkdtemp(join(tmpdir(), "agentrig-eval-test-")));
   temps.push(path); return path;
 }
-afterEach(async () => { await Promise.all(temps.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
+const preparations = new Set<Promise<string>>();
+afterEach(async () => {
+  await Promise.allSettled([...preparations]);
+  await Promise.all(temps.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+});
 const worker = (id: string, target: string, kind = "behavior") => spawnSync(process.execPath,
   [checker, "--worker", kind, id, target], { encoding: "utf8", timeout: 30_000 });
 async function external() {
@@ -24,17 +28,45 @@ async function external() {
   await writeFile(join(path, "package.json"), '{"type":"commonjs"}');
   return path;
 }
-async function compiledMechanics() {
-  const path = await temp(), dist = join(path, "packages/memory/dist");
-  await mkdir(dist, { recursive: true });
-  await writeFile(join(path, "package.json"), '{"type":"module"}');
+let mechanicsRoot: string | undefined;
+let mechanicsSetup: Promise<void> | undefined;
+const mechanicsSources: Record<string, string> = {};
+beforeAll(() => {
+  // One owned dependency copy/source compilation per suite, under the existing hook deadline.
+  // Child fixtures resolve this private dependency through ordinary Node parent lookup. Nothing
+  // borrows a repository dist or symlinks into its dependency tree; only the leaf files mutate.
+  mechanicsSetup = prepareMechanics();
+  return mechanicsSetup;
+});
+async function prepareMechanics() {
+  mechanicsRoot = await mkdtemp(join(tmpdir(), "agentrig-eval-mechanics-"));
+  mechanicsRoot = await realpath(mechanicsRoot);
+  await writeFile(join(mechanicsRoot, "package.json"), '{"type":"module"}');
   for (const name of ["page", "search"]) {
     const source = await readFile(join(root, `packages/memory/src/${name}.ts`), "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
-    await writeFile(join(dist, `${name}.js`), compiled.outputText);
+    mechanicsSources[name] = compiled.outputText;
   }
-  await cp(await realpath(join(root, "packages/memory/node_modules/zod")), join(path, "node_modules/zod"), { recursive: true });
-  return path;
+  Object.freeze(mechanicsSources);
+  await cp(await realpath(join(root, "packages/memory/node_modules/zod")), join(mechanicsRoot, "node_modules/zod"), { recursive: true });
+}
+afterAll(async () => {
+  // A timed-out setup is still owned: join its copy before removing its partial directory.
+  await mechanicsSetup?.catch(() => undefined);
+  await Promise.allSettled([...preparations]);
+  if (mechanicsRoot) await rm(mechanicsRoot, { recursive: true, force: true });
+});
+function compiledMechanics(): Promise<string> {
+  const preparing = (async () => {
+    await mechanicsSetup;
+    const path = await mkdtemp(join(mechanicsRoot!, "case-")); temps.push(path);
+    const dist = join(path, "packages/memory/dist"); await mkdir(dist, { recursive: true });
+    for (const [name, source] of Object.entries(mechanicsSources)) await writeFile(join(dist, `${name}.js`), source);
+    return path;
+  })();
+  preparations.add(preparing);
+  void preparing.then(() => preparations.delete(preparing), () => preparations.delete(preparing));
+  return preparing;
 }
 function passed(result: ReturnType<typeof worker>) {
   expect(result.error, result.stderr).toBeUndefined();
@@ -46,6 +78,17 @@ function failed(result: ReturnType<typeof worker>) {
 }
 
 describe("E1 independent outcome checks", () => {
+  it("shares only the private immutable mechanics dependency, never mutable leaves", async () => {
+    const first = await compiledMechanics(), second = await compiledMechanics();
+    expect(first).not.toBe(second);
+    expect((await lstat(join(mechanicsRoot!, "node_modules/zod"))).isSymbolicLink()).toBe(false);
+    await expect(lstat(join(first, "node_modules"))).rejects.toMatchObject({ code: "ENOENT" });
+    const leaf = "packages/memory/dist/page.js", original = await readFile(join(second, leaf), "utf8");
+    await writeFile(join(first, leaf), "throw new Error('isolated leaf mutation');");
+    expect(await readFile(join(second, leaf), "utf8")).toBe(original);
+    expect(Object.isFrozen(mechanicsSources)).toBe(true);
+    passed(worker("A1", second));
+  });
   it("vendors exact upstream bytes and runs all upstream cases separately", async () => {
     for (const [path, expected] of Object.entries({ "index.js": "27f19b757f7c1186b92c405a213bf0dd9b6cbe95",
       "test.js": "0f0242777b6b1ce79853ebc20621ced787c94751", LICENSE: "9af4a67d206f24ecdbb5fdff2839041ca0bbd346" })) {
@@ -98,7 +141,7 @@ describe("E1 independent outcome checks", () => {
     expect(source.split(before)).toHaveLength(2);
     await writeFile(file, source.replace(before, id === "A1" ? "xs.map(String)" : 'return [...out.values()].filter((h) => h.via !== "index").sort'));
     failed(worker(id, path));
-    // Includes isolated source compilation/dependency copy plus bounded worker processes, not a
+    // Includes private mutable leaf creation plus bounded worker processes, not a
     // five-second product latency contract (Windows main CI34039249249 took 6.261s).
   }, 30_000);
 
