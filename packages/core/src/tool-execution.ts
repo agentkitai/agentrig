@@ -27,6 +27,7 @@ import type { PermissionDecisionSource } from "./permission-attribution.js";
 import type { PipelineSchedule } from "./parallel-runtime.js";
 import { isIsolatedTool, bindIsolatedContext } from "./isolated-runtime.js";
 import { bindQuestion, isQuestionTool, questionResultTrust, type QuestionState } from "./question-runtime.js";
+import type { TurnToolCall } from "./turn-strategy.js";
 
 export interface ReplanState { reason: string | null; refusals: number }
 export type SessionHook = (point: HookPoint, ctx: Omit<Parameters<typeof runHooks>[2], "signal">, selectedHooks?: Hook[], failClosed?: boolean) => Promise<AttributedHookResult>;
@@ -175,7 +176,7 @@ export function createToolEmitterFactory(emit: Emit, isEnded: () => boolean) {
   return emitFromTool;
 }
 
-export async function executeTool(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+export async function executeTool(tu: TurnToolCall, context: ToolExecutionContext): Promise<ContentBlock> {
   await context.schedule?.prepare();
   const onAsk = context.config.onAsk;
   if (onAsk !== undefined && context.schedule !== undefined) {
@@ -197,7 +198,7 @@ export async function executeTool(tu: { id: string; name: string; input: unknown
     return { type: "tool_result", toolUseId: tu.id, content: error.message, isError: true, trust: "tool-output" };
   } finally { await flushExtensionFailures(); }
 }
-async function executeToolInner(tu: { id: string; name: string; input: unknown }, context: ToolExecutionContext): Promise<ContentBlock> {
+async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext): Promise<ContentBlock> {
   const { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, emitFromTool, hook, signal, endSignal, raceAbort, now, isEnded } = context;
   const resultBlock = (content: string, isError: boolean, trust: ContentTrust = "external", context?: InstructionContext): ContentBlock =>
     isError

@@ -691,6 +691,26 @@ describe("pre_model and post_model", () => {
     ]));
   });
 
+  it("an arbitrary pre_model rewrite downgrades the whole prompt to one hook-owned data block", async () => {
+    const provider = new FakeProvider([[usage(1, 1), stop("end_turn")]]);
+    const session = runWith(provider, [
+      // not "previous + suffix": there is no way left to say which surviving byte came from which
+      // original source, so per-source blocks would be claims about text this hook may have rewritten
+      { point: "pre_model", handler: () => ({ action: "modify", patch: { system: "ENTIRELY REPLACED" } }) },
+    ]);
+    const events = await collect(session);
+    await session.done;
+    const manifest = events.find((event) => event.type === "context.manifest");
+    if (manifest?.type !== "context.manifest") throw new Error("missing context manifest");
+    const system = manifest.blocks.filter((block) => block.source === "system_prompt");
+    expect(system).toHaveLength(1);
+    expect(system[0]).toMatchObject({ origin: "hook:anonymous:0", authority: "data",
+      reason: "pre_model hook replaced the rendered system prompt" });
+    // a downgrade in resolution, never an upgrade in authority
+    expect(system[0]!.authority).not.toBe("instruction");
+    expect(manifest.blocks.some((block) => block.origin === "agent.config.systemPrompt")).toBe(false);
+  });
+
   it("pre_model reports a patch of the wrong shape", async () => {
     const session = run(
       [[usage(1, 1), stop("end_turn")]],

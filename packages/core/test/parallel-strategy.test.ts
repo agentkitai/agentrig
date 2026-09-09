@@ -75,6 +75,13 @@ it.each([
     expect(f.stages).toEqual(["start:one"]); expect(f.paths).toHaveLength(2);
     // Keep the first actual I/O body live while later admission can finish classifying.
     // Releasing it at paths() time would let a broken classifier accidentally look serial.
+    // The window stays wall-clock on purpose (R10b follow-up, assessed 2026-09-09): admission is
+    // serialized behind `executeParallel`'s prepare mutex, which the held call keeps while it is
+    // parked in `admit`. So no LATER call can be observed being admitted as positive evidence that
+    // the runtime is live rather than slow — a fixture asserting that deadlocks. The only other
+    // observation point is the scheduler's internal `active` map, and exposing it would be new
+    // production API existing solely for this assertion. Overlap and event-order controls below
+    // remain the real checks.
     f.gates[1]!.release(); f.gates[2]!.release();
     await new Promise<void>(resolve => setTimeout(resolve, 100)); f.gates[0]!.release();
     const result = await f.finished; expect(result.summary.reason).toBe("done");

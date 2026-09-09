@@ -30,7 +30,7 @@ import { RepoMapView, type RepoMapOptions } from "./repo-map.js";
 import { readOutputTool, READ_OUTPUT_TOOL } from "./tools/read-output.js";
 import { createSessionLifecycle, abortGraceOf } from "./session-lifecycle.js";
 import { executeTool, createToolEmitterFactory, PLAN_TOOL, type ReplanState } from "./tool-execution.js";
-import { sequential, type TurnStrategy } from "./turn-strategy.js";
+import { sequential, type TurnStrategy, type TurnToolCall } from "./turn-strategy.js";
 import { bindParallelRuntime, executeParallel, type PipelineSchedule } from "./parallel-runtime.js";
 import {
   buildContextManifest,
@@ -782,7 +782,13 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
           }
         };
         {
-          // pre_model: last chance to adjust or refuse the request about to be billed
+          // pre_model: last chance to adjust or refuse the request about to be billed.
+          //
+          // Order, deliberately: observers run against the rendered request, and the authority
+          // remap below runs after them. A hook cannot see the labels its own patch will be given,
+          // which is what stops "read the manifest, then contribute under the authority you just
+          // read". Every contribution is labelled `authority: "data"` with the hook as its origin
+          // whatever the hook returns, so the ordering cannot be used for an upgrade either way.
           const h = await hook("pre_model", { sessionId: id, cwd, turn: turns, request: req });
           if (h.denied !== undefined) {
             await emit({ type: "error", message: `model request refused by hook: ${h.denied}`, fatal: false });
@@ -809,8 +815,14 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
                   },
                 ];
               } else {
-                // An arbitrary replacement destroys recoverable boundaries; representing the whole
-                // rendered value as one hook block is more honest than stale provenance.
+                // A patch that is not "the previous text plus a suffix" is an arbitrary rewrite: it
+                // may have deleted, reordered or edited text from the project prompt, the skill
+                // catalogue and the memory recall alike, and there is no way left to say which
+                // surviving byte came from which of them. So the WHOLE rendered prompt is
+                // downgraded to one hook-owned `data` block rather than keeping per-source blocks
+                // that would now be claims about text this hook may have rewritten. That is a loss
+                // of resolution, not of authority: no block gains any, and `expansion.unknown()`
+                // above has already marked the turn's expansion surface unknown.
                 requestSystemBlocks = [{
                   content: patch.system,
                   source: "system_prompt",
@@ -878,7 +890,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         }));
         await emit({ type: "model.request", tokensIn: estimateTokens(req.system, req.messages) });
 
-        const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
+        const toolUses: TurnToolCall[] = [];
         let usage: Usage = { input: 0, output: 0 };
         let usageReported = false;
         let usageRetried = false;
@@ -1234,7 +1246,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
     }
     return { id, reason, turns, usage: totals };
 
-    function runTool(tu: { id: string; name: string; input: unknown }, schedule?: PipelineSchedule): Promise<ContentBlock> {
+    function runTool(tu: TurnToolCall, schedule?: PipelineSchedule): Promise<ContentBlock> {
       return executeTool(tu, { config, id, cwd, turns, toolsByName, hasPlanTool, replan, emit, questionState,
         ...(schedule === undefined ? {} : { schedule }),
         expansion,
