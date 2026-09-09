@@ -37,6 +37,7 @@ export { writeFileTool } from "./write-file.js";
 export { webFetchTool, type WebFetchOutput } from "./web-fetch.js";
 export { safeSliceEnd } from "./shared.js";
 export { updatePlanTool } from "./update-plan.js";
+export { renderPlanAcceptance, renderPlanItems } from "./update-plan.js";
 export { subagentTool, SUBAGENT_TOOL, type SubagentOptions } from "./subagent.js";
 export * from "./skills.js";
 
