@@ -11,14 +11,20 @@ exact-head Linux/macOS/Windows/structure CI and completed Claude/Codex reviews.
 One diagnostic finding was repaired and passed one scoped independent delta check;
 the final local suite passed 3611 tests with four existing skips. Its
 [fragment table](plans/R17g-supervisor.md) records every outcome. Post-merge
-CI34392795813/structure34392795901 are tracked on that PR before the next merge.
+CI34392795813/structure34392795901 are green.
 
-Memory is the current delivery batch: [fragment table](plans/R17g-memory.md).
+Memory PR #292 merged at `6fb3413d3843fa0e964ec76f4b154406b040237f`:
+[fragment table](plans/R17g-memory.md).
 Both independent reviews are clean. The two memory commits rebased unchanged onto
 the supervisor merge (verified by range-diff); combined build/typecheck and full
-3618-test suite pass, with four existing skips. Hosted CI remains a delivery gate.
-Core is being built with Claude; CLI/evaluation passed 3633 local tests and is in
-its independent review pair. No new issues or live benchmark calls.
+3618-test suite pass, with four existing skips. Exact-head CI34393444926 and
+structure34393444898 passed; post-merge CI34394218642/structure34394218627 are
+monitored on the PR before the next merge.
+CLI/evaluation is the current delivery batch: [fragment tables](plans/R17g-cli.md).
+Its independent Claude/Codex reviews are clean. Core implementation and scoped
+integration checks continue in separate worktrees. No new issues or live benchmark calls.
+CLI's unchanged rebase onto `6fb3413` passed integrated build/typecheck and
+3651 tests across 235 files, with four existing conditional skips.
 
 Builder: **Codex/operator outside AgentRig**, not an `agentrig` conductor; no conductor
 session id or R17a dogfood success is invented. Package helper task `/root/r13f` built
@@ -29,6 +35,11 @@ Memory helper `/root/r17g_memory`; Claude reviewer
 `8cf96304-d4bf-42b3-9635-2c2e1cfba7db`, Codex reviewer
 `01a08777-3df9-72d2-bf13-0dffa43f7e4d`. Claude independently ran behavioral suites;
 Codex performed static/type checks and disclosed sandbox fixture-preflight limits.
+CLI helpers `/root/r13f`, `/root/r17g_memory` and `/root/r5d`; Claude reviewer
+`9bd19d54-3b52-4133-9a50-74f4bfb7a544` independently passed 1365 CLI tests
+(two Docker-conditional skips) and two restored mutation controls. Codex reviewer
+`01a08790-1e42-70f1-bb9c-a77a3bbce590` returned clean static review, disclosing
+fixture-preflight limits rather than claiming behavioral execution.
 
 ## Completed — R17f measurement and defaults (2026-09-09)
 
