@@ -42,6 +42,8 @@ export const AuxiliaryReportSchema = z.object({
   durationMs: z.number().finite().nonnegative(),
   calls: z.array(z.object({
     operation: z.string(), provider: z.string(), model: z.string().optional(),
+    /** Provisional calls have no terminal outcome yet; absent on legacy records. */
+    state: z.enum(["running", "settled"]).optional(),
     outcome: z.enum(["completed", "failed", "aborted", "timeout", "limit"]),
     durationMs: z.number().finite().nonnegative(), usage: Usage.optional(), usageComplete: z.boolean(),
   })),

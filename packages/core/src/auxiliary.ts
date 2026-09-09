@@ -2,6 +2,8 @@ import type { Usage } from "./events.js";
 
 /** Shared accounting contract; these are auxiliary calls, never part of main-agent usage. */
 export interface AuxiliaryCall {
+  /** Absent for legacy calls; running has no terminal outcome yet. */
+  state?: "running" | "settled" | undefined;
   operation: string;
   provider: string;
   model?: string | undefined;

@@ -1,5 +1,6 @@
 import type { HarnessEvent, PlanItem } from "@agentkitai/agentrig-core";
 import { initialPlanEvidence, reducePlanEvidence, type PlanItemEvidence } from "./plan-evidence.js";
+import { auxiliaryDiagnostic } from "./auxiliary.js";
 
 export const MAX_EVIDENCE_EVENTS = 100_000;
 const MAX_REPORT_CHARS = 12_000;
@@ -13,7 +14,7 @@ export interface EvidenceReport {
 }
 
 /** Streaming bounded state, shared by the grader and read-only finished-session report. */
-export function evidenceReportCollector(options: { scope?: "current-run" } = {}) {
+export function evidenceReportCollector(options: { scope?: "current-run"; onFoldError?: (error: unknown) => unknown } = {}) {
   const ledger = initialPlanEvidence();
   let statuses: PlanItem["status"][] = [];
   let hasDeclarations = false;
@@ -24,8 +25,10 @@ export function evidenceReportCollector(options: { scope?: "current-run" } = {})
   let previousSeq = -1;
   let finished = false;
   let startSeq: number | undefined;
+  let foldErrors = 0;
   return {
     observe(event: HarnessEvent): void {
+      try {
       if (++count > MAX_EVIDENCE_EVENTS) { omittedEvents++; finished = false; return; }
       if (count === 1) {
         startSeq = event.seq;
@@ -43,6 +46,13 @@ export function evidenceReportCollector(options: { scope?: "current-run" } = {})
         hasDeclarations = event.items.some(item => item.accept !== undefined);
       }
       reducePlanEvidence(ledger, event);
+      } catch (error) {
+        // Malformed trusted/custom streams must not disable later observations or certify a gap.
+        foldErrors++;
+        ledger.incomplete = true;
+        finished = false;
+        auxiliaryDiagnostic(() => options.onFoldError?.(error));
+      }
     },
     omitEvents(amount: number): void { omittedEvents += amount; finished = false; },
     report(): EvidenceReport {
@@ -79,13 +89,13 @@ export function evidenceReportCollector(options: { scope?: "current-run" } = {})
       }
       const incomplete = ledger.incomplete || omittedEvents > 0 || invalidOrder || omittedRows > 0;
       if (incomplete) {
-        const summary = `unverified: incomplete evidence view (omitted rows ${omittedRows + ledger.omittedItems}; omitted attempts ${ledger.items.reduce((n, item) => n + item.omittedAttempts, 0)}; omitted events ${omittedEvents}; invalid ordering ${invalidOrder})`;
+        const summary = `unverified: incomplete evidence view (omitted rows ${omittedRows + ledger.omittedItems}; omitted attempts ${ledger.items.reduce((n, item) => n + item.omittedAttempts, 0)}; omitted events ${omittedEvents}; invalid ordering ${invalidOrder}; fold errors ${foldErrors})`;
         lines.push(summary);
         gap(summary);
       }
       if (omittedGaps > 0) gaps.push(`unverified: ${omittedGaps} further acceptance gaps omitted`);
       if (ledger.items.length === 0) lines.push("(no current plan declarations observed; not evidence of completion)");
-      return Object.freeze({ text: lines.join("\n"), gaps: Object.freeze(gaps), hasDeclarations, incomplete, finished: finished && !invalidOrder && omittedEvents === 0 });
+      return Object.freeze({ text: lines.join("\n"), gaps: Object.freeze(gaps), hasDeclarations, incomplete, finished: finished && !invalidOrder && omittedEvents === 0 && foldErrors === 0 });
     },
   };
 }

@@ -81,7 +81,7 @@ export class AuxiliaryRun {
     const timer = setTimeout(() => controller.abort(timeout(this.limits.callTimeoutMs)), this.limits.callTimeoutMs);
     const started = performance.now();
     const record: AuxiliaryCall = { operation, provider, ...(model === undefined ? {} : { model }),
-      outcome: "failed", durationMs: 0, usageComplete: false };
+      state: "running", outcome: "failed", durationMs: 0, usageComplete: false };
     this.calls.push(record);
     auxiliaryDiagnostic(() => this.onProgress?.(this.snapshot()));
     let accepting = true;
@@ -122,6 +122,7 @@ export class AuxiliaryRun {
       throw error;
     } finally {
       accepting = false;
+      record.state = "settled";
       record.durationMs = Math.max(0, performance.now() - started);
       clearTimeout(timer);
       this.signal.removeEventListener("abort", abort);

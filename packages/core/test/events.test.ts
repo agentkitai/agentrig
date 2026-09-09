@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { HarnessEvent, Intervention, InterventionType, SupervisorRecord, parseEvent, serializeEvent } from "@agentkitai/agentrig-core";
 
 describe("event schema", () => {
+  it("preserves optional running/settled auxiliary call states without changing legacy outcomes", () => {
+    for (const state of [undefined, "running", "settled"] as const) {
+      const raw = { seq: 1, sessionId: "s", ts: 1, type: "auxiliary.usage", id: "run", final: false,
+        report: { operation: "reviewer", outcome: "completed", durationMs: 0, reportedUsage: { input: 0, output: 0 },
+          unknownUsageCalls: 1, costUsd: null, calls: [{ operation: "review", provider: "fake", outcome: "failed",
+            durationMs: 0, usageComplete: false, ...(state === undefined ? {} : { state }) }] } };
+      const parsed = HarnessEvent.parse(raw);
+      expect(parseEvent(serializeEvent(parsed))).toEqual(raw);
+      expect(HarnessEvent.safeParse({ ...raw, report: { ...raw.report, calls: [{ ...raw.report.calls[0], state: "invented" }] } }).success).toBe(false);
+    }
+  });
   it("round-trips a supervisor outcome and keeps its rung enum in step with the intervention union", () => {
     const raw = {
       seq: 9, sessionId: "s", ts: 1, type: "supervisor.outcome", id: "abc", intervention: "inject_guidance",

@@ -1,12 +1,15 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Current delivery — R17f complete in PR #290; next R17g
+## Current delivery — R17g package follow-up sweep
 
 Roadmap work has resumed under the user's latest authorization. R17e is complete: PR #289 merged
 at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
 ([final receipt](https://github.com/agentkitai/agentrig/pull/289#issuecomment-5591695371)).
-R17f's measured-default implementation and evidence are complete in PR #290; its exact-head,
-merge and post-merge CI receipts are tracked on that delivery PR. R17g's package batches follow.
+R17f is delivered in PR #290 at main `4c82ebb`, with green post-merge CI34388378742
+and structure34388378715 ([receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920)).
+R17g is now being implemented in parallel package worktrees, with sequential reviewed merges.
+Supervisor is the first delivery batch ([dispositions](plans/R17g-supervisor.md));
+memory follows its additive event-schema support. Core and CLI work proceed independently.
 All 96 corrected slots have outcomes across two preserved segments: 67 PASS / 17 FAIL /
 12 BLOCKED, 10,369,886 reported tokens and one unknown call. Neither factor demonstrates the
 required benefit. Recommended automatic index injection defaults off; retrieval, ingestion
@@ -1190,12 +1193,19 @@ concise and place detailed implementation history in dated notes as it is mainta
   capture (memory filing, write calibration, guardrails) and the coding-agent captures (prompt
   composition, hook authority, manifest failure modes, verification lanes).
 
-## Follow-ups / nice to haves — pause after PR #222
+## Follow-ups / nice to haves — R17g sweep in progress
 
-Latest user instruction: finish PR #222 as well, then stop and wait for further
-instructions. PR #219 and PR #220 are delivered. Separately merged
-PR #221's R17 roadmap additions are preserved; R17 work is not started. Earlier whole-queue authorization
-below is historical until the user resumes it.
+The user resumed and authorized the entire roadmap. The old pause after PR #222 is
+historical, not a current gate. One batch PR per package disposes every remaining
+fragment as implemented, already delivered, or explicitly declined with a reason.
+The detailed queue is retained until all four package deliveries are verified.
+
+| Package batch | Current status |
+|---|---|
+| Supervisor | Implemented and locally tested; independent review and delivery in progress. [Fragment dispositions](plans/R17g-supervisor.md). |
+| Memory | Implemented and locally tested in its worktree; review in progress, follows shared supervisor schema. |
+| Core | Claude implementation in progress in a separate worktree. |
+| CLI/evaluation | Parallel implementation in progress in a separate worktree. |
 
 ### Delivery progress
 
@@ -1213,7 +1223,7 @@ in each implementation PR; its linked PR holds the final post-merge receipt.
 - [x] All-unknown capability evidence label — [PR #217](https://github.com/agentkitai/agentrig/pull/217#issuecomment-5569123445).
 - [x] Abort-grace fixture observed readiness — [PR #219 final receipt](https://github.com/agentkitai/agentrig/pull/219#issuecomment-5569398357) ([contract](plans/abort-grace-readiness.md)).
 - [x] Generated-skill serializer session-count cap — [PR #220 final receipt](https://github.com/agentkitai/agentrig/pull/220#issuecomment-5569761339) ([contract](plans/skill-session-count-cap.md)).
-- [ ] Pending-usage display — [PR #222](https://github.com/agentkitai/agentrig/pull/222), reviewed and locally tested; updated-main delivery gates pending.
+- [x] Pending-usage display — [PR #222](https://github.com/agentkitai/agentrig/pull/222), merged at `6ccbd84`; the old pending note was stale.
 
 All other follow-up fragments below remain queued unless explicitly marked done.
 
@@ -1231,11 +1241,10 @@ All other follow-up fragments below remain queued unless explicitly marked done.
 - R15k optional polish: display a brief busy hint for an ignored explicit clipboard
   gesture while a turn or completion is already active; do not queue hidden reads.
 
-The committed milestone sequence is complete. Previously the user authorized working through this entire
-queue in impact/dependency order, parallelizing independent items in worktrees and merging each PR
-with green CI. That continuation is now paused after #222; do not recursively create new
-milestones. Conditional future scenarios need their stated evidence, and live measurements still
-need an explicit budget; neither prevents continuing other actionable entries.
+The user authorized working through this entire queue in impact/dependency order,
+parallelizing independent items in worktrees and merging each reviewed PR with green CI.
+Do not recursively create new milestones. Conditional future scenarios receive explicit
+reasoned dispositions; no further live measurements are needed for this package sweep.
 
 - Improve repo-map breadth when the file list alone exceeds its byte cap (for example, directory
   summaries). Current truncation is explicit; the production 8 KiB budget is unchanged.

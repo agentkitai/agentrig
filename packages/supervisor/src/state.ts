@@ -78,6 +78,10 @@ export function reduce(state: SupervisorState, event: HarnessEvent, opts: StateO
   let pending = pendingWrites.get(state);
   if (pending === undefined) { pending = new Map(); pendingWrites.set(state, pending); }
   if (["turn.start", "turn.end", "session.start", "session.resume", "session.end"].includes(event.type)) pending.clear();
+  // Failed legacy calls have no seq: discard matching IDs conservatively, never credit a late receipt.
+  if (event.type === "tool.denied" || (event.type === "tool.result" && !event.ok && event.toolCallSeq === undefined)) {
+    for (const [seq, call] of pending) if (call.id === event.id) pending.delete(seq);
+  }
   const window = opts.windowSize ?? DEFAULT_WINDOW;
   state.recent.push(event);
   if (state.recent.length > window) state.recent.splice(0, state.recent.length - window);

@@ -3,6 +3,8 @@ import type { Detector } from "../types.js";
 import type { SupervisorState } from "../state.js";
 import { signal } from "../types.js";
 import { verifyCurrentFile } from "../file-verification.js";
+import { realpath } from "node:fs/promises";
+import { posix, win32 } from "node:path";
 
 export interface DriftOptions {
   /** Caller-declared paths allowed independently of any scope declared by the plan. */
@@ -37,7 +39,22 @@ function normalize(p: string): string {
   return segments.join("/");
 }
 
-export function inScope(path: string, scope: string[]): boolean {
+export function inScope(path: string, scope: string[], cwd?: string): boolean {
+  if (cwd !== undefined) {
+    const paths = /^[a-z]:[\\/]|^\\\\/i.test(cwd) ? win32 : posix;
+    const root = paths.resolve(cwd);
+    const local = (value: string): string | undefined => {
+      const relative = paths.relative(root, paths.resolve(root, value.replace(/\\/g, "/")));
+      return relative === ".." || relative.startsWith(`..${paths.sep}`) || paths.isAbsolute(relative) ? undefined : relative;
+    };
+    const target = local(path);
+    if (target === undefined) return false;
+    return scope.some(entry => {
+      // Legacy slash-only scope is the documented whole-task marker, not host filesystem root.
+      const normalized = local(/^[\\/]+$/.test(entry) ? "." : entry);
+      return normalized !== undefined && inScope(target, [normalized]);
+    });
+  }
   const target = normalize(path);
   return scope.some((entry) => {
     const s = normalize(entry);
@@ -79,6 +96,7 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
   const reported = new Set<string>();
   let pending: Array<{ path: string; seq: number; contract: boolean }> = [];
   const verified = new WeakMap<HarnessEvent, string>();
+  let canonicalCwd: string | undefined;
 
   return {
     id: "drift",
@@ -92,6 +110,8 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
         if (bounded.aborted) resolve();
       });
       const check = async (): Promise<void> => {
+        canonicalCwd = undefined;
+        try { canonicalCwd = await realpath(state.cwd!); } catch { return; }
         // One observer event cannot trigger an unbounded file scan.
         for (const change of (state.corroboratedChanges ?? []).slice(0, 32)) {
           if (bounded.aborted) return;
@@ -104,10 +124,10 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
       try { await Promise.race([check(), cancelled]); }
       finally { if (abort !== undefined) bounded.removeEventListener("abort", abort); }
     },
-    observe(event: HarnessEvent, state: SupervisorState) {
+    observe: function observe(event: HarnessEvent, state: SupervisorState): ReturnType<Detector["observe"]> {
       if (event.type === "tool.result") {
         const detected = (state.corroboratedChanges ?? []).flatMap(change => {
-          const found = this.observe(change, state); return found === null ? [] : [found];
+          const found = observe(change, state); return found === null ? [] : [found];
         });
         return detected.length === 0 ? null : signal("drift", Math.max(...detected.map(s => s.confidence)),
           detected.flatMap(s => s.evidence), [Math.min(...detected.map(s => s.window[0])), event.seq]);
@@ -116,8 +136,11 @@ export function driftDetector(opts: DriftOptions = {}): Detector {
       if (!verified.has(event) || !state.corroboratedChanges?.includes(event)) return null;
       const path = verified.get(event)!;
       const scope = [...new Set([...callerScope, ...declaredScope(state.plan)])];
-      const isContract = inScope(path, contract);
-      if (inScope(path, scope) || reported.has(path)) return null;
+      // Verified paths are relative; scopes can use the recorded alias or canonical cwd.
+      const matches = (entries: string[]) => inScope(path, entries, state.cwd) ||
+        (canonicalCwd !== undefined && inScope(path, entries, canonicalCwd));
+      const isContract = matches(contract);
+      if (matches(scope) || reported.has(path)) return null;
       // Ordinary files cannot be called stray when there is no declared boundary. Contract files
       // are different: changing them changes what "passing" means, so they require explicit scope.
       if (scope.length === 0 && !isContract) return null;
