@@ -1,0 +1,113 @@
+{
+  "planned": 96,
+  "completed": 51,
+  "ledger": {
+    "startedAt": 1788930087615,
+    "tokens": 6312295,
+    "unknownCalls": 1,
+    "blocked": "evaluation stopped: provider usage is incomplete"
+  },
+  "groups": [
+    {
+      "supervisor": false,
+      "memory": false,
+      "planned": 24,
+      "completed": 12,
+      "outcomes": {
+        "PASS": 8,
+        "FAIL": 3,
+        "BLOCKED": 1,
+        "SKIP": 0
+      },
+      "notRun": 12,
+      "reportedTokens": {
+        "n": 12,
+        "min": 26972,
+        "median": 153405.5,
+        "max": 222624
+      },
+      "wallMs": {
+        "n": 12,
+        "min": 64368,
+        "median": 142565.5,
+        "max": 243497
+      }
+    },
+    {
+      "supervisor": false,
+      "memory": true,
+      "planned": 24,
+      "completed": 13,
+      "outcomes": {
+        "PASS": 9,
+        "FAIL": 3,
+        "BLOCKED": 1,
+        "SKIP": 0
+      },
+      "notRun": 11,
+      "reportedTokens": {
+        "n": 13,
+        "min": 38678,
+        "median": 131120,
+        "max": 209959
+      },
+      "wallMs": {
+        "n": 13,
+        "min": 54909,
+        "median": 115916,
+        "max": 218922
+      }
+    },
+    {
+      "supervisor": true,
+      "memory": false,
+      "planned": 24,
+      "completed": 13,
+      "outcomes": {
+        "PASS": 9,
+        "FAIL": 3,
+        "BLOCKED": 1,
+        "SKIP": 0
+      },
+      "notRun": 11,
+      "reportedTokens": {
+        "n": 13,
+        "min": 32430,
+        "median": 144293,
+        "max": 212843
+      },
+      "wallMs": {
+        "n": 13,
+        "min": 61570,
+        "median": 102385,
+        "max": 213747
+      }
+    },
+    {
+      "supervisor": true,
+      "memory": true,
+      "planned": 24,
+      "completed": 13,
+      "outcomes": {
+        "PASS": 10,
+        "FAIL": 2,
+        "BLOCKED": 1,
+        "SKIP": 0
+      },
+      "notRun": 11,
+      "reportedTokens": {
+        "n": 13,
+        "min": 40342,
+        "median": 104906,
+        "max": 204347
+      },
+      "wallMs": {
+        "n": 13,
+        "min": 57148,
+        "median": 86968,
+        "max": 182570
+      }
+    }
+  ],
+  "conclusion": "No benefit claim until independent checks, human gates and preregistered paired comparisons are complete."
+}

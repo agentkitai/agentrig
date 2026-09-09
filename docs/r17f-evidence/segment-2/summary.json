@@ -1,0 +1,113 @@
+{
+  "planned": 96,
+  "completed": 45,
+  "ledger": {
+    "startedAt": 1788971604415,
+    "tokens": 4057591,
+    "unknownCalls": 0,
+    "blocked": null
+  },
+  "groups": [
+    {
+      "supervisor": false,
+      "memory": false,
+      "planned": 24,
+      "completed": 12,
+      "outcomes": {
+        "PASS": 9,
+        "FAIL": 1,
+        "BLOCKED": 2,
+        "SKIP": 0
+      },
+      "notRun": 12,
+      "reportedTokens": {
+        "n": 12,
+        "min": 29074,
+        "median": 50615.5,
+        "max": 209640
+      },
+      "wallMs": {
+        "n": 12,
+        "min": 57328,
+        "median": 82207,
+        "max": 200320
+      }
+    },
+    {
+      "supervisor": false,
+      "memory": true,
+      "planned": 24,
+      "completed": 11,
+      "outcomes": {
+        "PASS": 8,
+        "FAIL": 1,
+        "BLOCKED": 2,
+        "SKIP": 0
+      },
+      "notRun": 13,
+      "reportedTokens": {
+        "n": 11,
+        "min": 48962,
+        "median": 62781,
+        "max": 208923
+      },
+      "wallMs": {
+        "n": 11,
+        "min": 68125,
+        "median": 88171,
+        "max": 211426
+      }
+    },
+    {
+      "supervisor": true,
+      "memory": false,
+      "planned": 24,
+      "completed": 11,
+      "outcomes": {
+        "PASS": 7,
+        "FAIL": 2,
+        "BLOCKED": 2,
+        "SKIP": 0
+      },
+      "notRun": 13,
+      "reportedTokens": {
+        "n": 11,
+        "min": 36078,
+        "median": 49643,
+        "max": 191991
+      },
+      "wallMs": {
+        "n": 11,
+        "min": 58673,
+        "median": 81357,
+        "max": 194239
+      }
+    },
+    {
+      "supervisor": true,
+      "memory": true,
+      "planned": 24,
+      "completed": 11,
+      "outcomes": {
+        "PASS": 7,
+        "FAIL": 2,
+        "BLOCKED": 2,
+        "SKIP": 0
+      },
+      "notRun": 13,
+      "reportedTokens": {
+        "n": 11,
+        "min": 42645,
+        "median": 59964,
+        "max": 238628
+      },
+      "wallMs": {
+        "n": 11,
+        "min": 60345,
+        "median": 86929,
+        "max": 166834
+      }
+    }
+  ],
+  "conclusion": "No benefit claim until independent checks, human gates and preregistered paired comparisons are complete."
+}

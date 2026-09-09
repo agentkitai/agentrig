@@ -61,6 +61,22 @@ post-edit diagnostics, or notifications). Its scheduled-ingest opt-out uses
 explicit config provenance as before. SDK `createAgent`/`buildAgent` callers do
 not silently acquire CLI defaults.
 
+### Automatic memory injection is opt-in (R17f)
+
+The recommended CLI profile now sets `memoryIndexInjection: false`. The
+[96-attempt measurement](R17f-RESULTS.md) did not establish the preregistered
+benefit threshold; this conservative policy does not prove memory has no value.
+Only the automatic `memory_index` system-prompt block is disabled. Explicit
+`memory_search` / `memory_read`, their existing startup permission rules, and
+session-end ingestion remain enabled as before.
+
+Set `"memoryIndexInjection": true` in user config, trusted project config, or a
+selected profile to restore automatic index injection. There is no new CLI flag.
+Direct SDK `buildAgent` callers that leave this field unspecified retain their
+previous injection-on behavior; CLI resolved defaults do not silently become SDK
+defaults. LLM supervisor review and automatic abort remain opt-in; free heuristics
+remain on. Security defaults are unchanged.
+
 ### Enforcing sandboxes (approved exception)
 
 Implicit checkpoints and session-end ingest apply only when sandbox is absent or

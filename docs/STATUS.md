@@ -1,6 +1,100 @@
 # Status
 
-## Current — R17e: visible supervisor and memory (2026-09-08)
+## Current — R17f complete in PR #290; next R17g (2026-09-09)
+
+All 96 corrected matrix outcomes are collected: **67 PASS / 17 FAIL / 12 BLOCKED**,
+**10,369,886 reported tokens plus one unknown call**. Evaluator
+`4d41826a0ba064e67dead46125aa6a64e34426b6` stayed unchanged across the first 51 slots
+(6,312,295 tokens, incomplete-usage halt, owned handle40359 joined exit2) and authorized
+remaining 45 slots (4,057,591 tokens, no unknown calls, handle9248 joined exit0).
+The operator missed the first halt for about 9.5 hours; that delay is a monitoring failure,
+not benchmark work. The user authorized a fresh12M, then20M for unattempted-slot continuation.
+Unknown consumption, the old stop reason, chronology and every failed outcome remain preserved.
+
+The earlier protocol-invalid pilot is separate: 306,143 reported tokens plus one unknown
+interrupted call, joined exit143, with its raw interruption receipt and no fabricated final
+results. The missing test-filename instruction was fixed outside the train before the corrected
+run. None of the invalid pilot contributes to the corrected benefit comparison.
+
+Neither factor reaches the unchanged +2-pass threshold; unknown usage independently blocks
+a win. Implemented decision: recommended automatic index injection off, explicit retrieval and
+ingestion on, free heuristics on, LLM review opt-in. Explicit config true and SDK unspecified
+injection stay on. No security default changes. [Results](R17f-RESULTS.md),
+[segmented evidence/provenance](r17f-evidence/aggregate-summary.json), [contract](plans/R17f.md).
+
+Builder: **Claude/operator outside AgentRig**, no conductor session; R17a dogfood remains unmet.
+The matrix used zero children and had one corrected-run halt, plus the separate invalid-pilot
+operator stop. Builder sessions `00089fc1-9e72-4dc2-899d-0ddde8fcbb0c` and memory control
+`a77dc921-e7b3-49fb-83af-60bd6f4e7c5d`; bounded independent reviewer identities and checks
+are in [R17f preparation reviews](reviews/R17f-PREPARATION.md). No new `feel` issue is claimed.
+
+The default-off regression failed first (expected false, received undefined); 85 focused tests
+pass. Build and typecheck passed. The first full run exposed a visibility fixture's old default
+assumption; it now checks both default-off and explicit opt-in while preserving recall assertions.
+The final full suite passes **3600 tests / 4 skips / 232 files**. Independent Claude and Codex
+final-delta reviews are clean; see the review record. Exact-head, merge and post-merge CI
+receipts are maintained on [delivery PR #290](https://github.com/agentkitai/agentrig/pull/290).
+R17g's package batches follow verified delivery, with bounded reviews and sequential merges.
+
+## Preparation history
+
+## Historical — R17f: measured-default preparation (2026-09-09)
+
+R17e is delivered: exact head `2f38017` (CI 34275594904, structure 34275594911 green), merged at
+main `2a8ea5968e665dbf84456b138d8f5219d741c18a` with post-merge CI 34276366300 and structure
+34276366380 green.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/289#issuecomment-5591695371).
+
+Current work is ROADMAP §5 row 17's **R17f — tune or default off**, on branch
+`feat/r17f-measured-defaults` from that main. Builder: **Claude/operator outside AgentRig**; R17a's
+dogfood mandate is unmet for this row and is recorded, not skipped silently. No child or reviewer
+was spawned by the Claude builder, no issue was filed and **no live E3 evaluation call was made**.
+Claude builder session: `00089fc1-9e72-4dc2-899d-0ddde8fcbb0c`.
+
+This commit is the **network-free preparation only; R17f is not done and no product default has
+moved**. `eval/r17f.mjs` reruns E3's own 96-slot matrix under today's defaults: the profile comes
+from the product's own config resolution against an empty home and untrusted cwd (and the run
+refuses to start if the recommended values regressed or if LLM review/abort stopped being opt-in),
+permissions are the real `defaultRules` policy with a session grant registry answered by R17d's
+frozen preset response policy through the actual approval controller, and R17e's intervention,
+recall and index-announcement lines plus `/why` are written into each attempt's evidence. E3's
+frozen corpus is recovered byte-exactly from the published evidence archive, so no training tokens
+are spent and retrieval material is identical. Preparation, isolation, independent checks,
+accounting, reporting and publication are the existing E1/E2 components; `eval/live.mjs` and E3's
+reports, archive and results are unchanged. Budget is the authorized **12,000,000 reported tokens**
+with balanced rounds of 32, no outcome-driven retries, and any unknown-usage call stopping further
+scheduling. The supervisor arm and the assessor are preregistered before collection; A4/X4 stay
+BLOCKED absent a separately attributed authorized assessment. The operator selected the original
+96-slot candidate supervisor-plus-LLM/index-plus-retrieval matrix, without an additional arm or
+spend. Per-call progress, session-only timing and bounded submitted-artifact capture are being
+integrated and tested before freezing collection. Contract and limits: [R17f](plans/R17f.md).
+
+Verification on this branch, private `/var/tmp` TMPDIR, actual preflight: build / test / typecheck
+**0 / 0 / 0** for builder preparation `ce5aeea`, **3580 passed / 4 skipped / 230 files**
+(main `2a8ea59` was 3569 / 4 / 229). Eight
+mutants — removed permission wiring, dropped operation descriptor, unchecked profile, an
+over-authorized token cap, unknown-usage scheduling, removed visibility, skipped corpus
+re-verification and an extra advisory call per cell — were applied one at a time and all eight were
+killed by named tests, with each test subprocess joined and the source restored byte for byte.
+Root owns the independent review of the frozen runner before any spending, the live run,
+publication, CI and merge.
+
+Operator integration passed build/typecheck/full tests: **3584 passed / 4 skipped / 231 files**.
+The fifteen focused benchmark cases cover per-call journaling, conservative headroom, captured
+answers/diffs, separate session timing and balanced-prefix analysis. Two additional removed-guard
+mutants fail as expected and are restored. Docker positive/negative/isolation controls pass
+without models. One Claude and one Codex independent review follow; no live E3 tokens spent yet.
+
+Both independent general reviews are complete. Their four substantive findings were grouped
+and repaired: failed cleanliness verification, wedged permission preview, poisoned progress
+journal/finalization, and an impossible numerical gate caused by mandatory pending prose checks.
+Before collection, primary utility is explicitly the six automatically decidable tasks, while
+all96attempts still run and every task retains its original checks; A4/X4 remain separately
+reported. Build/typecheck/full suite now pass **3591 / 4 skipped / 231 files**;22focused cases
+cover these boundaries and selected LLM-arm accounting. A single focused delta check remains
+before spending. [Review record](reviews/R17f-PREPARATION.md). Live E3 tokens remain0.
+
+## Previous — R17e: visible supervisor and memory (2026-09-08)
 
 Correction to the record below, which was written while #267 was still open and is now stale as a
 statement of current scope: the seventeen-issue sweep is **finished**. All 17 issues are closed,

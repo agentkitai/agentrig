@@ -75,3 +75,10 @@ node --input-type=module -e 'import{readFileSync}from"node:fs";import{gunzipSync
 
 Read [collection notes](E3-COLLECTION-NOTES.md) with results. Limitations discovered during
 collection are disclosed there, not hidden by changing the preregistration or silently rerunning.
+
+## R17f
+
+This page describes E3's own frozen runner, which stays unchanged. R17f reruns the same matrix
+under today's R17b/R17d defaults and R17e's visible interventions with a separate runner,
+`eval/r17f.mjs`; its protocol, settings schema, commands, pre-registration and limits are in
+[plans/R17f.md](plans/R17f.md). E3's reports, archive and results are not rewritten by it.

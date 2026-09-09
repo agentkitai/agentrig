@@ -1,0 +1,24 @@
+{
+  "format": "agentrig-r17f-segmented-publication-v1",
+  "published": [
+    {
+      "files": 1712,
+      "archiveBytes": 7766580,
+      "archiveSha256": "4ff8b680b149f2581413b3933a54a81ec50a52ab8f8ce85b9362e6eb993b4029"
+    },
+    {
+      "files": 1472,
+      "archiveBytes": 5743750,
+      "archiveSha256": "dcc6398d0267f29b2224775a0f1b834eb0de0e06902551c43cf2a65fd0d75e9f"
+    }
+  ],
+  "invalidPilot": {
+    "files": 52,
+    "archiveBytes": 311949,
+    "archiveSha256": "a3d2bbaea15a491bbad639b409569d00d676d489ef438482237a4011b3915ce8",
+    "reportedTokens": 306143,
+    "unknownCalls": 1,
+    "includedInCorrectedAnalysis": false
+  },
+  "note": "Segment raw artifacts are authoritative. Aggregate summary is derived; original unknown call and stop reason remain. No new human judgments."
+}
