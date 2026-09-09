@@ -89,6 +89,17 @@ it.each([301, 302, 303, 307, 308])("refuses %s redirects without hitting their t
   await expect(execute(s.url + "/start")).rejects.toThrow(/redirect/);
   expect(s.hits.map(r => r.url)).toEqual(["/start"]);
 });
+it.each([
+  [300, /multiple choices and named no single destination/],
+  [304, /answered Not Modified and sent no body/],
+])("reports %i as itself rather than as a refused redirect", async (status, expected) => {
+  // both sit in the 3xx range and neither is a redirect: "request the destination URL explicitly"
+  // points at a destination that does not exist
+  const s = await local((_req, res) => { res.statusCode = status; res.end(); });
+  const failure = await execute(s.url).then(() => undefined, (error: Error) => error);
+  expect(failure!.message).toMatch(expected);
+  expect(failure!.message).not.toMatch(/refuses redirects/);
+});
 it.each(["status", "type", "length"])("cancels refused %s response body", async mode => {
   const closed = Promise.withResolvers<void>();
   const s = await local((_req, res) => { res.on("close", () => closed.resolve()); res.statusCode = mode === "status" ? 403 : 200;
@@ -132,4 +143,20 @@ it.each(["caller", "deadline"])("%s abort stops an in-progress body without wait
 it("pre-aborted signal makes no request", async () => {
   const s = await local((_req, res) => res.end()); const signal = AbortSignal.abort();
   await expect(execute(s.url, signal)).rejects.toThrow(); expect(s.hits).toHaveLength(0);
+});
+
+it("keeps a literal '<' as text instead of scanning it as a tag", async () => {
+  // "a < b > c" used to lose " b " to a phantom tag, and a '<' with no '>' after it anywhere
+  // discarded the whole rest of the document. Neither is browser rendering; both are the lexical
+  // rule for a '<' that cannot open a tag.
+  const s = await local((_req, res) => { res.setHeader("content-type", "text/html");
+    res.end("<p>if a < b > c then</p><p>x <3 y</p><p>tail 1<2 and nothing closes this <"); });
+  const result = await execute(s.url);
+  expect(result.output.text).toBe("if a < b > c then x <3 y tail 1<2 and nothing closes this <");
+});
+
+it("a literal '<' inside a suppressed script body still emits nothing", async () => {
+  const s = await local((_req, res) => { res.setHeader("content-type", "text/html");
+    res.end("<script>if (a < b) hidden();</script><p>Visible</p>"); });
+  expect((await execute(s.url)).output.text).toBe("Visible");
 });

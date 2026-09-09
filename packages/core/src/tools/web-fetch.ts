@@ -5,6 +5,22 @@ import type { Tool } from "../tool.js";
 const MAX_BYTES = 1_048_576;
 const MAX_TEXT = 20_000;
 const TIMEOUT_MS = 10_000;
+/**
+ * What this tool does NOT control, kept separate from the policy it does enforce.
+ *
+ * The policy is the tool's own: no cookies (`credentials: "omit"`), no `authorization` or other
+ * caller-supplied headers, no redirect following, `http:`/`https:` only, and no credentials in the
+ * URL. Those hold for every call.
+ *
+ * Transport is the host's. `fetch` uses undici's global dispatcher, so a trusted process that
+ * installed its own — `setGlobalDispatcher`, a mock agent in tests, a proxy agent — decides where
+ * the connection actually goes, and Node's `NODE_USE_ENV_PROXY` / `HTTP(S)_PROXY` environment
+ * opt-in routes it through a proxy that can see and rewrite the exchange. Both are deliberate
+ * trusted-host configuration and neither is inspected here: this tool cannot attest that the bytes
+ * came from the URL it was given. What it does guarantee is that it contributes no credentials of
+ * its own to whatever transport is in force. Destination filtering (private/internal addresses) is
+ * likewise not done here — see the sandbox network policy, which is a separate gate.
+ */
 const UrlInput = z.object({ url: z.string().min(1).max(4096).refine(value => {
   if (/[\u0000-\u0020\u007f]/.test(value)) return false;
   try { const url = new URL(value); return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password; }
@@ -37,6 +53,15 @@ function htmlText(html: string): string {
     if (html[i] !== "<") {
       const end = html.indexOf("<", i); const stop = end < 0 ? html.length : end;
       if (suppressed === undefined) pieces.push(html.slice(i, stop)); i = stop; continue;
+    }
+    // A '<' that cannot open a tag is literal text in HTML — "a < b", "x <3", "1<2". Scanning it
+    // as a tag swallowed everything up to the next '>' (so "a < b > c" lost " b "), and with no '>'
+    // anywhere after it, the `end === html.length` break below discarded the entire rest of the
+    // document. This is the same lexical rule a parser uses for that character; it is not tag
+    // soup recovery, and nothing here is browser rendering.
+    if (!/[a-zA-Z!/?]/.test(html[i + 1] ?? "")) {
+      if (suppressed === undefined) pieces.push("<");
+      i += 1; continue;
     }
     // Scan each tag once, respecting quoted '>' characters. Incomplete tags are omitted.
     let end = i + 1; let quote: string | undefined;
@@ -88,7 +113,13 @@ export function webFetchTool(): Tool<z.infer<typeof UrlInput>, WebFetchOutput> {
       try {
         response = await fetch(url, { method: "GET", redirect: "manual", credentials: "omit", signal,
           headers: { accept: "text/plain, text/html", "user-agent": "agentrig-web-fetch" } });
-        if (response.status >= 300 && response.status < 400) throw new Error("web_fetch refuses redirects; request the destination URL explicitly");
+        // 300 and 304 sit in the 3xx range but are not redirects, and telling their callers to
+        // "request the destination URL explicitly" points at a destination that does not exist:
+        // 300 deliberately offers several with no preferred one, and 304 is the answer to a
+        // conditional request this tool never makes — either way there is no body to return.
+        if (response.status === 300) throw new Error("web_fetch HTTP 300: the server offered multiple choices and named no single destination; request one of them explicitly");
+        if (response.status === 304) throw new Error("web_fetch HTTP 304: the server answered Not Modified and sent no body; web_fetch makes no conditional requests, so this is a cache or intermediary answering, not a redirect");
+        if (response.status > 300 && response.status < 400) throw new Error("web_fetch refuses redirects; request the destination URL explicitly");
         if (!response.ok) throw new Error(`web_fetch HTTP ${response.status}`);
         const mediaType = (response.headers.get("content-type") ?? "").split(";", 1)[0]!.trim().toLowerCase();
         if (mediaType !== "text/plain" && mediaType !== "text/html") throw new Error("web_fetch only accepts text/plain or text/html");
