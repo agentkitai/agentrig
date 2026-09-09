@@ -69,6 +69,7 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
       "Merged pages",
       report.merged.map((m) => `- ${m.from.join(" + ")} → ${m.to}`),
     ),
+    ...section("Skipped merges", (report.skippedMerges ?? []).map(m => `- ${m.from} → ${m.into}: ${m.reason}`)),
     ...section(
       "Removed lines",
       report.removed.map((r) => `- ${r.page}: "${r.line}" (${r.reason})`),
@@ -94,10 +95,11 @@ export function renderReport(report: DreamReport, opts: RenderOptions = {}): str
   const s = opts.structural;
   if (report.procedures !== undefined) {
     out.push(...section("Skill candidates (report only; fresh evidence/effect review required before emission)", report.procedures.candidates.map(candidate =>
-      `- skill-candidate [${candidate.status}] ${candidate.pages.join(", ")}\n`
+      `- skill-candidate [${candidate.status}] ${candidate.pages.join(", ")}\n  primary artifact: ${candidate.artifact.from}\n`
       + renderPromotionProposal(candidate.artifact).replace("→ global", "→ procedure review"))));
     out.push(...section("Procedure refusals", report.procedures.rejected.map(item => `- ${item.pages.join(", ")}: ${item.reason}`)));
     if (report.procedures.refinementError !== undefined) out.push("", `Procedure refinement incomplete; retained candidates are structural/unassessed: ${report.procedures.refinementError}`);
+    if (report.procedures.refinementSkipped !== undefined) out.push("", `Procedure refinement skipped: ${report.procedures.refinementSkipped}; candidates remain structural/unassessed.`);
   }
   if (s !== undefined) {
     out.push(
@@ -140,6 +142,7 @@ export function findingCount(report: DreamReport, structural?: StructuralFinding
     report.contradictions.length +
     report.superseded.length +
     report.merged.length +
+    (report.skippedMerges?.length ?? 0) +
     report.removed.length +
     report.orphans.length +
     report.missingPages.length +

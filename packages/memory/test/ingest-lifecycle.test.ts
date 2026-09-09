@@ -17,6 +17,23 @@ const provider = (stream?: ModelProvider["stream"]): ModelProvider => ({ id: "sc
 });
 const ingest = (opts: Partial<IngestOptions> = {}) => ingestSession({ store, logPath, sessionId: "s1", provider: provider(), ...opts });
 const gate = () => Promise.withResolvers<void>();
+it.each([false, true])("marks a pending call neutral and settles its actual outcome (fails=%s)", async fails => {
+  const run = new MaintenanceRun("ingest");
+  const entered = gate(); const release = gate();
+  const call = run.call("fixture", "fixture", async () => {
+    entered.resolve(); await release.promise;
+    if (fails) throw new Error("fixture failure");
+  });
+  const settled = call.catch(error => error);
+  try {
+    await entered.promise;
+    // Inspect the internal pending record without closing the run or adding a public observer API.
+    expect((run as unknown as { calls: unknown[] }).calls[0]).toMatchObject({ state: "running", usageComplete: false });
+  } finally { release.resolve(); await settled; }
+  expect(run.finish(fails ? new Error("fixture failure") : undefined).calls[0]).toMatchObject({
+    state: "settled", outcome: fails ? "failed" : "completed", usageComplete: false,
+  });
+});
 const backend = (onIngest: MemoryBackend["onIngest"]): MemoryBackend => ({ id: "remote", onIngest, recall: async () => [], promote: async () => {} });
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "agentrig-ingest-lifecycle-"));
@@ -149,6 +166,12 @@ it("formats separate usage, unknown cost, local state, and a nonzero known price
   expect(formatAuxiliaryUsage({ ...report, costUsd: 1.5 })).toContain("cost $1.5");
   expect(formatAuxiliaryUsage({ ...report, costUsd: null, unknownUsageCalls: 2, localCommitState: "completed" }))
     .toContain("2 call(s) with unknown total usage; cost unknown; completed; local writes completed");
+  const pending = { ...report, outcome: "failed" as const, calls: [{ operation: "review", outcome: "failed" as const,
+    state: "running" as const, durationMs: 0, usageComplete: false }] };
+  expect(formatAuxiliaryUsage(pending)).toContain("unfinished; final outcome and total usage unknown");
+  expect(formatAuxiliaryUsage(pending)).not.toContain("; failed");
+  expect(formatAuxiliaryUsage({ ...pending, calls: [{ ...pending.calls[0]!, state: "settled" }] })).toContain("; failed");
+  expect(formatAuxiliaryUsage({ ...report, outcome: "failed" }, { final: false })).toContain("unfinished");
 });
 
 it("counts retry overhead as unknown even when the successful attempt reports usage", async () => {

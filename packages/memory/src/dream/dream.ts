@@ -313,6 +313,11 @@ async function dreamInto(
   const promoted = opts.globalWiki === undefined ? [] : promote;
 
   let procedures: ProcedureDetection | undefined;
+  const refinementSkipped = unreadableAttempts.length > 0 ? "raw scan incomplete"
+    : consolidationError !== undefined ? "consolidation failed"
+    : opts.structuralOnly === true ? "structural-only requested"
+    : opts.provider === undefined ? "assessor unavailable; no provider supplied (no adverse claim judgment)"
+    : pages.length === 0 ? "no pages to assess" : undefined;
   let skillEmission: SkillEmissionReport | undefined;
   if (opts.emitSkills !== undefined) {
     phase("skill-emission");
@@ -330,6 +335,7 @@ async function dreamInto(
       ? await refineProcedureCandidates(candidates, opts.provider!, run)
       : { candidates, rejected: [] };
   }
+  if (procedures !== undefined && refinementSkipped !== undefined) procedures.refinementSkipped = refinementSkipped;
 
   // built from `applied`, never from `consolidation`: the report describes the artifact
   const mergedInto = new Map<string, string[]>();
@@ -345,6 +351,7 @@ async function dreamInto(
     orphans: structural.orphans,
     missingPages: structural.missingPages,
     merged: [...mergedInto.entries()].map(([to, from]) => ({ from: [...from, to], to })),
+    skippedMerges: applied.skippedMerges,
     removed: applied.removedLines.map((r) => {
       const found = consolidation.removed.find((x) => x.page === r.page);
       return { page: r.page, line: r.line, reason: found?.reason ?? "" };

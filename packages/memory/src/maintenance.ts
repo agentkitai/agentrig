@@ -80,7 +80,7 @@ export class MaintenanceRun {
     const timer = setTimeout(() => controller.abort(this.callTimeout(operation)), this.limits.callTimeoutMs);
     const started = performance.now();
     const record: AuxiliaryCall = { operation, provider, ...(model === undefined ? {} : { model }),
-      outcome: "failed", durationMs: 0, usageComplete: false };
+      outcome: "failed", state: "running", durationMs: 0, usageComplete: false };
     this.calls.push(record);
     let accepting = true;
     let reported = false;
@@ -119,6 +119,7 @@ export class MaintenanceRun {
       throw error;
     } finally {
       accepting = false;
+      record.state = "settled";
       record.durationMs = Math.max(0, performance.now() - started);
       clearTimeout(timer);
       this.signal.removeEventListener("abort", abort);
@@ -188,5 +189,6 @@ export class MaintenanceRun {
 }
 
 export function formatAuxiliaryUsage(report: AuxiliaryReport, opts: { final?: boolean } = {}): string {
-  return `auxiliary ${report.operation}: ${report.calls.length} call(s), ${report.reportedUsage.input} input / ${report.reportedUsage.output} output / ${report.reportedUsage.cacheRead ?? 0} cache-read / ${report.reportedUsage.cacheWrite ?? 0} cache-write reported tokens; ${report.unknownUsageCalls} call(s) with unknown total usage; cost ${report.costUsd === null ? "unknown" : `$${report.costUsd}`}; ${opts.final === false ? "unfinished; final outcome and total usage unknown" : report.outcome}${report.localCommitState === undefined ? "" : `; local writes ${report.localCommitState}`}`;
+  const unfinished = opts.final === false || report.calls.some(call => call.state === "running");
+  return `auxiliary ${report.operation}: ${report.calls.length} call(s), ${report.reportedUsage.input} input / ${report.reportedUsage.output} output / ${report.reportedUsage.cacheRead ?? 0} cache-read / ${report.reportedUsage.cacheWrite ?? 0} cache-write reported tokens; ${report.unknownUsageCalls} call(s) with unknown total usage; cost ${report.costUsd === null ? "unknown" : `$${report.costUsd}`}; ${unfinished ? "unfinished; final outcome and total usage unknown" : report.outcome}${report.localCommitState === undefined ? "" : `; local writes ${report.localCommitState}`}`;
 }

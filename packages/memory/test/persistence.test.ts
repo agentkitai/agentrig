@@ -87,6 +87,7 @@ describe("lossless wiki persistence", () => {
     }, { today: fm.updated });
     expect(result.supersededMarked).toHaveLength(1);
     expect(result.mergedPages).toEqual([]);
+    expect(result.skippedMerges).toEqual([{ from: "entities/x.md", into: "entities/y.md", reason: "source has opaque frontmatter; retained without guessing metadata precedence" }]);
     const source = (await store.read("entities/x.md"))!;
     expect(source.body).toContain(`${fact} — superseded`);
     expect(source.extraFrontmatter).toBe(metadata);

@@ -97,6 +97,7 @@ export interface DreamReport {
   orphans: string[];
   missingPages: Array<{ concept: string; mentionedIn: string[] }>;
   merged: Array<{ from: string[]; to: string }>;
+  skippedMerges?: Array<{ from: string; into: string; reason: string }>;
   removed: Array<{ page: string; line: string; reason: string }>;
   promoted: Array<{ from: string; toGlobal: string; evidence: string[];
     claims?: ClaimPromotionAssessment[]; requiresHumanReview?: true; semanticAssessment?: "not-assessed";

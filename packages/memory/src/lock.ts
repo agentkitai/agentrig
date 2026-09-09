@@ -56,7 +56,7 @@ export async function withMemoryLock<T>(root: string, work: () => Promise<T>, op
       if (accessError) accessDeadline ??= performance.now() + 250;
       const retryable = code === "EEXIST" || (accessError && performance.now() < accessDeadline!);
       if (!retryable) throw new Error(`cannot acquire memory lock ${lockPath}: ${(err as Error).message}; check parent-directory permissions${accessError ? " or persistent Windows delete-pending/busy state" : ""}`, { cause: err });
-      if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath} (${code}); check parent-directory permissions; if its owner crashed, stop all writers before removing that lock`);
+      if (performance.now() >= deadline) throw new Error(`timed out waiting for memory lock ${lockPath} (${code}); another writer may still be active: wait for it to finish and retry; check parent-directory permissions; if its owner crashed, stop all writers before removing that lock; lock age alone does not establish a crashed owner`);
       await delay(Math.min(20, Math.max(1, deadline - performance.now())), undefined,
         opts.signal === undefined ? {} : { signal: opts.signal });
     }

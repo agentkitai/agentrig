@@ -11,6 +11,12 @@ function page(slug: string, body: string, type: WikiPage["frontmatter"]["type"] 
 }
 const entry = (p: WikiPage): IndexEntry => ({ path: p.path, slug: p.frontmatter.slug, type: p.frontmatter.type, status: "active", summary: "fixture" });
 const roots: string[] = [];
+it("reports only the handwritten parent and identifies legacy summary regrowth without rewriting tags", () => {
+  expect(writeQualityLint([page("nested", "- Parent claim\n  - Supporting detail\n\t* More detail")]).filter(f => f.kind === "missing-provenance")).toHaveLength(1);
+  const legacy = "- [observed] Retries help (session:s1)\n- [inferred] Model synthesis: Retries help (session:s1)";
+  expect(writeQualityLint([page("history", legacy, "source")])).toMatchObject([{ kind: "restated-claim", reason: expect.stringContaining("legacy") }]);
+  expect(writeQualityLint([page("history", legacy.replace("Retries help (session:s1)\n", "Retries fail (session:s1)\n"), "source")])).toEqual([]);
+});
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 it.each([
@@ -63,6 +69,9 @@ it("preserves legacy report compatibility and makes quality visible to clean/cou
   expect(renderReport(report, { structural })).toContain("semantic truth not assessed");
   const { writeQuality: _quality, ...legacy } = structural;
   expect(isClean(legacy)).toBe(true); expect(findingCount(report, legacy)).toBe(0);
+  const skipped = { ...report, skippedMerges: [{ from: "concepts/a.md", into: "concepts/b.md", reason: "opaque metadata retained" }] };
+  expect(renderReport(skipped)).toContain("concepts/a.md → concepts/b.md: opaque metadata retained");
+  expect(findingCount(skipped)).toBe(1);
 });
 
 it("round-trips ingest provenance without calling model summaries observations or changing raw logs", async () => {

@@ -39,6 +39,7 @@ export function writeQualityLint(pages: WikiPage[], signal?: AbortSignal): Write
   for (const page of [...pages].sort((a, b) => a.path.localeCompare(b.path))) {
     signal?.throwIfAborted();
     let fence: string | undefined;
+    const legacyObservations = new Set(factLines(page.body).filter(f => f.tag === "observed").map(f => f.text));
     for (const block of factBlocks(page.body)) {
       signal?.throwIfAborted();
       const marker = /^\s*(`{3,}|~{3,})/.exec(block.raw)?.[1];
@@ -53,11 +54,16 @@ export function writeQualityLint(pages: WikiPage[], signal?: AbortSignal): Write
         ...(relatedPage === undefined ? {} : { relatedPage }),
       });
       if (!block.fact) {
-        if (/^\s*[-+*]\s+\S/.test(block.raw)) add("missing-provenance", "Possible claim bullet has no stated/observed/inferred tag; inspect before assigning provenance.");
+        // Indented handwritten bullets are supporting structure, not independent claim candidates.
+        if (/^[-+*]\s+\S/.test(block.raw)) add("missing-provenance", "Possible claim bullet has no stated/observed/inferred tag; inspect before assigning provenance.");
         continue;
       }
       const fact = factLines(block.raw)[0];
       if (fact === undefined) continue;
+      if (page.frontmatter.type === "source" && fact.tag === "inferred" && fact.text.startsWith("Model synthesis: ")
+        && legacyObservations.has(fact.text.slice("Model synthesis: ".length))) {
+        add("restated-claim", "Model synthesis repeats a legacy observed source line with the same references; inspect regrowth duplication. Original text and provenance remain unchanged.");
+      }
       const text = claimText(fact.text);
       const prose = proseOnly(text);
       if (fact.tag === "inferred" && !CALIBRATED.test(prose)) {
