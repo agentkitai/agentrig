@@ -6,12 +6,13 @@ delivered** (with concrete evidence), **declined** (with a precise reason), or *
 this package** (with the owning package named). No row is silently checked off, and nothing here
 claims a historical failure's cause.
 
-Local verification: `pnpm build`, `pnpm exec tsc -p packages/core --noEmit`, and the whole repository
+Builder-only verification before root integration: `pnpm build`, `pnpm exec tsc -p packages/core --noEmit`, and the whole repository
 suite under a private `TMPDIR` created with `mktemp -d`, with `node test/fixture-preflight.mjs`
 green in that root. Result: **3649 passed, 3 failed, 4 skipped** — the three failures are all one
 cross-package assertion in `packages/memory/test/checkpoint-ingest.test.ts`, recorded in
 [§4](#4-cross-package-items-not-in-this-diff) with the exact repair, and are outside this diff's
 ownership. `packages/core/test` alone is **1404 passed, 0 failed**.
+Root's integrated changes and verification supersede that preliminary result in §5 below.
 
 Mutation controls are recorded per row. "Mutant killed" means the production change was reverted or
 disabled, the named test failed, and the mutant was restored; the restored tree is what is committed.
@@ -119,3 +120,81 @@ Reported to root rather than edited here, per this batch's ownership rules.
 5. **R14a shared formatter — CLI adoption.** `renderPlanAcceptance` and `renderPlanItems` are now exported
    from core. `packages/cli/src/render.ts:434` still keeps its own copy of the same string; replacing it
    with the core export removes the duplication the row names. Deferred to the CLI batch.
+
+## 5. Root integration and final disposition
+
+The preceding builder receipt is historical, not an unresolved request to the user.
+Root completed cross-package connections in this final core batch rather than open
+another package PR or silently drop a handoff. Supervisor #291 and memory #292 are
+merged; CLI #293 owns the already-reviewed general interface/evaluation batch.
+
+- **R4b/#235 diagnostics:** matching trees now say only that the worktree matches,
+  not that a prior undo ran or recovery originals exist. A hand-restored tree test
+  proves that distinction. Replay is capped at eight entries of 400 UTF-16 units
+  plus fixed truncation/omission labels (total below4096); logged checkpoint refs
+  are explicitly not proof of current retention. This supersedes the earlier
+  builder table's "undo already applied" and "references that do exist" wording.
+- **R12c sandbox consent:** actual ask/final decision events carry tool name/id and
+  decision source; deny, allow and unattended controls run through real sessions.
+  Startup MCP consent has no live session/tool id to invent; CLI's table records
+  that separate contract boundary.
+- **R15h role paths:** fixed refusal explains unsupported symlinked conventional
+  role directories; direct SDK project-root aliases still canonicalize and load.
+  These three integration groups passed90 focused tests after seven fail-first
+  assertions; source build/typecheck passed in their isolated integration worktree.
+- **#129 workspace recovery:** memory's generated handoff manifest is validated
+  before metadata is opened/written. Failure guidance names retained output and
+  the manifest rather than a temp removed in cleanup. Three fail-first assertions,
+  86 recovery/lifecycle/scan tests and build/typecheck passed. Ownership/foreign-file
+  preservation remains intact. Optional lock-wait alignment is declined: finalization
+  already owns independent bounded waits, with no demonstrated mismatch requiring
+  inherited cancellation or altered cleanup timing.
+- **Cross-package undo assertions:** memory checkpoint-ingest tests still require
+  the no-seal refusal and unchanged task/wiki/human/log bytes, while permitting the
+  appended diagnostic context. No restoration or ownership assertion was removed.
+- **R14a formatter adoption:** CLI reexports the exact core acceptance formatter;
+  `/plan` uses the shared item formatter, retaining explicit unverified wording
+  without repeating entirely-undeclared status per step. Identity and actual
+  controller-output assertions failed first, then passed.
+- **Child-grant test polish:** readiness completion avoids constructing later
+  diagnostic snapshots; resolved/rejected-run controls both failed first. The
+  sibling predicate now explains the peer-versus-descendant relationship.
+  Combined CLI/readiness and memory-ingest integration passed19 tests.
+- **R6c generated marker:** the propagation comment explicitly states the strict
+  literal-true event gate, ordinary omission and non-authority meaning. Existing
+  schema controls and CLI option-key controls retain the runtime boundary.
+
+Remaining conditional fragments explicitly retained without speculative expansion:
+
+| Fragment | Disposition |
+|---|---|
+| R4a hash batching / narrower Git environment | Declined without measured hashing bottleneck or a demonstrated unsafe inherited variable requiring a new allowlist; existing isolation and hard ceilings remain. A narrower allowlist could remove required host Git behavior and is not justified by these diagnostics. |
+| R4b repeated scan batching | Declined without a measured large-workspace bottleneck; independent ownership checks stay at each destructive boundary rather than cache potentially stale state. |
+| H6 context-object reduction | Declined optional refactor: current explicit execution dependencies remain useful and no behavioral defect requires regrouping them. |
+| R5d future pin metadata scope | Retained current name/description/input-schema scope; no additional pinned metadata is exposed in this batch, so the stated trigger for expanded scope explanation does not occur. |
+| R12a idle audit sink / standalone fallback separation | Declined new lifecycle/log surface: resets revoke immediately and queue receipts for the next active log; no post-terminal authority replay. Production controller wiring remains explicit; an extra fallback module split adds no current correctness change. |
+| R13c duplicate-request presence accounting | Retained: retry assembly is unchanged by approval-failure diagnostics; old input and neutral output still do not clear restrictions. |
+| H7a pre-model-veto turn pairing | Declined separate lifecycle contract change: this batch distinguishes staged versus attempted continuation without inventing a provider attempt or changing the pre-existing done outcome on veto. |
+
+Final full-suite, independent-review and hosted delivery receipts are maintained by
+root after integration; none is implied by isolated helper tests.
+
+### Historical Windows paired edit/test fixture (#161) — investigated
+
+Original run34027283321, head `bca33488`, Windows job101470401117 timed out the
+paired edit/test case at5013ms against its5000ms deadline, without an assertion
+mismatch. Same-head attempt2/job101471243008 passed both original CLI cases in316ms.
+PR #284 (`4916cf1`) subsequently repaired this exact fixture's structure: separate
+external/non-external cases, one real session per deadline, teardown-owned abort
+and join before fixture deletion. Existing assertions and default timeout remain.
+The current fixture, byte-identical to main `6fb3413`, passed three diagnostic runs
+of four cases each under a verified private TMPDIR; edit/test cases took15–16ms.
+Actual shell output and negative external-expansion denial controls remain.
+Historical cause is unestablished; no further fixture change or timeout inflation
+is justified. This is an explicit investigation outcome, not a new issue or a
+claim that runner contention was proven.
+
+Root's combined source build, typecheck and private-fixture preflight pass after
+all integration changes above. Full suite: **3682 passed / four existing skips /
+233 files** on supervisor/memory main `6fb3413` plus this core batch. The CLI batch
+is reviewed separately and will be integrated from its merge before final delivery.

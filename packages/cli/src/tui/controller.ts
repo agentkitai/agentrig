@@ -15,7 +15,7 @@ import type {
   InputAttachment,
   ProviderSelectionInfo,
 } from "@agentkitai/agentrig-core";
-import { GuidanceLog, PermissionGrantRegistry, sanitizeLine } from "@agentkitai/agentrig-core";
+import { GuidanceLog, PermissionGrantRegistry, renderPlanItems, sanitizeLine } from "@agentkitai/agentrig-core";
 import { MEMORY_RECALL_TOOLS } from "@agentkitai/agentrig-memory";
 import { parseAttachments } from "./attachments.js";
 import { ToolSummaries } from "./tool-summaries.js";
@@ -24,7 +24,7 @@ import { observeStatus } from "./status-snapshot.js";
 import { defaultPermissionScopeAvailable, initialPermissionScope, MAX_SCOPE_TEXT, permissionEffectLines, proposedPermissionGrant,
   type ScopeKind } from "./permission-prompt.js";
 import { AssistantText, AuxiliaryText, MemoryContextText, RecallText, formatUsage, renderChatEvent, renderContextManifest,
-  renderEvent, renderPlanAcceptance, renderWhy } from "../render.js";
+  renderEvent, renderWhy } from "../render.js";
 import {
   COMMANDS,
   RESERVED_COMMAND_NAMES,
@@ -961,7 +961,7 @@ export class TuiController {
         this.print(
           this.state.plan.length === 0
             ? "no plan recorded yet — the agent writes one with update_plan"
-            : this.state.plan.map((i) => `  [${i.status}] ${i.text}\n    ${renderPlanAcceptance(i.accept)}`).join("\n"),
+            : renderPlanItems(this.state.plan),
           "system",
         );
         return true;

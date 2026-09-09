@@ -1,4 +1,4 @@
-import { contentHash, sanitizeLine, safeSliceEnd, type AuxiliaryReport, type EventOf, type GuidanceDecision, type HarnessEvent,
+import { contentHash, renderPlanAcceptance, sanitizeLine, safeSliceEnd, type AuxiliaryReport, type EventOf, type GuidanceDecision, type HarnessEvent,
   type InjectedGuidance, type Intervention, type InterventionCost, type Signal, type TurnExplanation, type Usage,
   type PermissionDecisionSource } from "@agentkitai/agentrig-core";
 import { formatAuxiliaryUsage, MEMORY_RECALL_TOOLS, recallEvidence, type RecallEvidence } from "@agentkitai/agentrig-memory";
@@ -429,10 +429,7 @@ function oneLine(text: string, max = 100): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** Declaration metadata only; no evidence matcher has evaluated this check. */
-export function renderPlanAcceptance(accept: string | undefined): string {
-  return `accept: ${accept === undefined ? "undeclared (unverified)" : `${JSON.stringify(accept)} (declared, unverified)`}`;
-}
+export { renderPlanAcceptance };
 
 /** The interesting part of a tool's input: one argument reads better than a JSON blob. */
 function toolSummary(name: string, input: unknown): string {

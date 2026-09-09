@@ -337,6 +337,8 @@ export function skillTool(source: readonly Skill[] | SkillCatalog): AnyTool {
       }
       // the activation record R9 measures against — only successful loads, so a typo'd lookup
       // does not count as a skill "being used"
+      // The strict event schema accepts only literal true, never false or truthy metadata.
+      // Ordinary skills omit the marker; it is provenance, not permission or execution authority.
       ctx.emit({ type: "skill.used", name: skill.name, invokedBy: "model",
         ...(skill.generated === true ? { generated: true } : {}) });
       return { output: { name: skill.name, path: skill.path }, display: skill.body };

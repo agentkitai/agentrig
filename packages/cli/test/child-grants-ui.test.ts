@@ -91,6 +91,7 @@ it.each(["ordinary", "protocol"])("%s real spawn→TUI filters root nondelegable
     await rendered; expect(visible).toBe(true);
     send("y");
     // Child's second call and its own grandchild inherit the explicitly confirmed child record.
+    // This next root spawn is a peer of the granting child, not one of that child's descendants.
     await waitForTuiState(c, running, "sibling probe approval", state => state.pending?.req.tool === "probe" &&
       state.pending.permissionGrants !== undefined && state.pending.permissionGrants.subject !== child.subject);
     expect(executed).toHaveLength(3);

@@ -14,6 +14,17 @@ function fixture() {
 }
 const pendingRun = () => new Promise<unknown>(() => {});
 
+it.each(["resolved", "rejected"])("does no diagnostic snapshot work after readiness when the run is later %s", async outcome => {
+  const { controller } = fixture();
+  let finish!: () => void;
+  const run = new Promise<void>((resolve, reject) => { finish = outcome === "resolved" ? resolve : () => reject(Error("late failure")); });
+  await waitForTuiState(controller, run, "already ready", () => true);
+  const snapshot = vi.spyOn(controller, "snapshot");
+  finish(); await Promise.resolve(); await Promise.resolve();
+  expect(snapshot).not.toHaveBeenCalled();
+  snapshot.mockRestore(); await controller.shutdown();
+});
+
 it("waits through absent pending and a delayed stage beyond the old 1s budget", async () => {
   vi.useFakeTimers(); const { controller, disposers } = fixture(); let ready = false;
   const waiting = waitForTuiState(controller, pendingRun(), "probe approval", state => state.pending?.req.tool === "probe")
