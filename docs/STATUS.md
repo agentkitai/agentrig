@@ -1,6 +1,26 @@
 # Status
 
-## Current — R17f complete in PR #290; next R17g (2026-09-09)
+## Current — R17g package follow-up sweep (2026-09-09)
+
+R17f is merged at `4c82ebb99b92ecbdb2729f0df1f06457bc7292bf` (PR #290), with green
+post-merge CI34388378742 and structure34388378715. [Final receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920).
+
+Four package worktrees implement the final follow-ups; merges remain sequential.
+Supervisor is first because memory uses its additive auxiliary-call state schema.
+Its [fragment table](plans/R17g-supervisor.md) records implemented changes and explicit
+conditional dispositions. Local build/typecheck and 314 focused tests pass; six
+fail-first controls and two restored fold mutants are recorded. Independent reviews,
+full-suite and hosted landing checks are pending, not implied by local completion.
+Memory is locally implemented and under review; core is being built with Claude;
+CLI/evaluation work continues in parallel. No new issues or live benchmark calls.
+
+Builder: **Codex/operator outside AgentRig**, not an `agentrig` conductor; no conductor
+session id or R17a dogfood success is invented. Package helper task `/root/r13f` built
+supervisor. AgentRig child count zero; external helper/review identities and actual
+usage receipts are recorded on delivery PRs, not counted as AgentRig routing data.
+Core Claude builder session `4f6c0844-94e5-419c-bb4c-04fe8c6ad8e4` is separate work.
+
+## Completed — R17f measurement and defaults (2026-09-09)
 
 All 96 corrected matrix outcomes are collected: **67 PASS / 17 FAIL / 12 BLOCKED**,
 **10,369,886 reported tokens plus one unknown call**. Evaluator
