@@ -250,3 +250,67 @@ describe("core grant enforcement and audit", () => {
     const { events } = await collect(resumed); expect(executed).toHaveLength(1); expect(events.some(e => e.type === "tool.denied")).toBe(true); expect(fresh.list()).toEqual([]);
   });
 });
+
+it("a grant queued by a concurrent call is drained, not reported as the queue changing", async () => {
+  // R10 admits parallel tool calls against one shared registry: while this flush is awaiting its
+  // appends, another call's approval can legitimately queue a receipt. That used to fail the
+  // flushing call with "audit changed while flushing" — a refusal for someone else's work.
+  const r = registry();
+  const first = r.grant(spec(r));
+  const events: unknown[] = [];
+  let second: unknown;
+  await r.flush(async (event) => {
+    events.push(event);
+    second ??= r.grant(spec(r, { operation: { tool: "other", class: "read" } }));
+  });
+  expect(second).toBeDefined();
+  expect(events).toEqual([{ type: "permission.granted", grant: first }, { type: "permission.granted", grant: second }]);
+  // and the queue really is empty, so the next flush has nothing to do
+  await r.flush(async (event) => { events.push(event); });
+  expect(events).toHaveLength(2);
+});
+
+it("a queue that never empties still fails closed rather than draining forever", async () => {
+  const r = new PermissionGrantRegistry({ maxGrants: 4096, maxPending: 8 });
+  r.beginRun("session-one");
+  r.grant(spec(r));
+  let appended = 0;
+  // one new receipt for every one drained: the bound is what ends this, not convergence
+  await expect(r.flush(async () => { appended++; r.grant(spec(r)); }))
+    .rejects.toThrow("permission audit changed while flushing; retry before dispatch");
+  expect(appended).toBe(9);
+});
+
+it("the full-queue refusal names the depth, the limit and what actually unblocks it", () => {
+  const r = new PermissionGrantRegistry({ maxGrants: 8, maxPending: 2 });
+  r.beginRun("session-one");
+  r.grant(spec(r)); r.grant(spec(r));
+  const failure = (() => { try { r.grant(spec(r)); } catch (error) { return error as Error; } return undefined; })();
+  expect(failure!.message).toContain("2 of 2 receipts are still unlogged and this change needs 1 more");
+  expect(failure!.message).toContain("flushed to the session log and then explicitly reset");
+  // never "raise the limit": a queue that will not empty is a host that is not draining it
+  expect(failure!.message).toContain("not that the limit is too small");
+});
+
+it("says so when a configured child registry is dropped because the parent has none", async () => {
+  const store = await fixture(); const r = new PermissionGrantRegistry(); const id = store.create(); r.beginSession(id);
+  const executed: string[] = [];
+  const permissions = new RulePolicy([{ tool: "subagent", decision: "allow" }]);
+  // the child config carries a registry; the PARENT agent has none, so there is no live view to
+  // derive a child view from and the configured one is dropped rather than promoted
+  const subagent = subagentTool({ createAgent, childConfig: () => ({ provider: new Provider([]), tools: [tool(executed)],
+    permissions, permissionGrants: r, store, systemPrompt: "child", origin: "subagent" }) });
+  let turn = 0;
+  const provider: ModelProvider = { id: "fake", model: "fake", capabilities: new Provider([]).capabilities,
+    async *stream(): AsyncIterable<ModelEvent> {
+      if (turn++ === 0) yield { type: "tool_use", id: "spawn", name: "subagent", input: { task: "status" } };
+      yield { type: "stop", reason: turn === 1 ? "tool_use" : "end_turn" };
+    } };
+  const { events } = await collect(createAgent({ provider, tools: [subagent], permissions, store, systemPrompt: "parent" })
+    .run("spawn", { id, cwd: store.root }));
+  const result = events.find(e => e.type === "tool.result" && e.id === "spawn");
+  expect(result).toBeDefined();
+  // dropping it silently reads exactly like inheriting it
+  expect((result as { display: string }).display).toContain("configured child permission-grant registry was ignored");
+  expect((result as { display: string }).display).toContain("no live grant registry to derive a child view from");
+});

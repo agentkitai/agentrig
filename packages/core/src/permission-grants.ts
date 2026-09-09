@@ -114,9 +114,12 @@ export class PermissionGrantRegistry {
     return this.live(grant) && (grant.subject === this.subject || (grant.delegable && this.ancestors.includes(grant.subject)));
   }
   private reserve(count: number): void {
-    if (this.state.pending.length + count > (this.state.limits.maxPending ?? 1024)) {
+    const limit = this.state.limits.maxPending ?? 1024;
+    if (this.state.pending.length + count > limit) {
       this.state.auditBlocked = true;
-      throw new Error("permission audit queue is full; grants blocked until flush and explicit reset");
+      throw new Error(`permission audit queue is full: ${this.state.pending.length} of ${limit} receipts are still unlogged and this change needs ${count} more. `
+        + "Grants stay blocked until the queue is flushed to the session log and then explicitly reset; nothing queued is discarded. "
+        + "A queue that never empties means the host is not draining it, not that the limit is too small.");
     }
   }
   beginSession(sessionId: string): void {
@@ -178,12 +181,19 @@ export class PermissionGrantRegistry {
   /** The head stays queued until append succeeds. Serialized across shared parent/child calls. */
   async flush(emit: (event: PermissionGrantEvent) => Promise<unknown>): Promise<void> {
     const work = async (): Promise<void> => {
-      const count = this.state.pending.length;
-      for (let i = 0; i < count; i++) {
-        const event = this.state.pending[0]; if (event === undefined) break;
+      // Bounded by the queue limit rather than by a snapshot taken on entry. Since R10 admits
+      // parallel tool calls, ANOTHER call's grant can legitimately land in this shared queue while
+      // this flush is awaiting its appends; a snapshot count then reported that as "changed while
+      // flushing" and failed a call that had done nothing wrong. Every receipt in the queue is
+      // bound for the same log, so this drains it rather than fighting over who queued what.
+      // The bound is what stops an endlessly granting caller from holding the drain open, and
+      // reaching it is still the fail-closed refusal it has always been: retry before dispatch.
+      const limit = this.state.limits.maxPending ?? 1024;
+      for (let appended = 0; appended <= limit; appended++) {
+        const event = this.state.pending[0]; if (event === undefined) return;
         await emit(structuredClone(event)); this.state.pending.shift();
       }
-      if (this.state.pending.length > 0) throw new Error("permission audit changed while flushing; retry before dispatch");
+      throw new Error("permission audit changed while flushing; retry before dispatch");
     };
     const promise = (this.state.draining ?? Promise.resolve()).then(work); this.state.draining = promise;
     try { await promise; } finally { if (this.state.draining === promise) this.state.draining = undefined; }
