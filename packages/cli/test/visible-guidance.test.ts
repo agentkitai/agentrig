@@ -190,8 +190,9 @@ it("never reports guidance the session ended before delivering as injected", asy
   await controller.shutdown();
 });
 
-it("shows the recall and the injected index on the headless run surface too", async () => {
-  await writeFile(join(memoryRoot, "config.json"), JSON.stringify({ ingestOnEnd: false, dreamOnEnd: false }));
+it.each([undefined, true])("shows headless recall with memoryIndexInjection=%s and only announces an injected index", async (memoryIndexInjection) => {
+  await writeFile(join(memoryRoot, "config.json"), JSON.stringify({ ingestOnEnd: false, dreamOnEnd: false,
+    ...(memoryIndexInjection === undefined ? {} : { memoryIndexInjection }) }));
   await mkdir(join(root, "home"), { recursive: true });
   let turn = 0;
   const server = createServer(async (request, response) => {
@@ -218,7 +219,8 @@ it("shows the recall and the injected index on the headless run surface too", as
       signal: new AbortController().signal, timeoutMs: 20_000, maxBytes: 262_144,
       errorMessage: "headless visibility fixture failed",
     });
-    expect(output).toMatch(/✻ memory in the prompt: index injected — \d+ B/);
+    if (memoryIndexInjection === true) expect(output).toMatch(/✻ memory in the prompt: index injected — \d+ B/);
+    else expect(output).not.toContain("✻ memory in the prompt: index injected");
     expect(output).toContain('✻ memory recall (memory_search) "retry"');
     expect(output).toMatch(/concepts\/retry-policy\.md \[(index|bm25|both)\]/);
     expect(output).toContain("Retries apply per request, not per batch");

@@ -9,9 +9,9 @@ import { loadRunConfig, parseConfigText } from "../src/config.ts";
 import { buildProgram } from "../src/program.ts";
 
 /**
- * R17f preparation: `memoryIndexInjection` is the one config key that turns automatic index
- * injection off *without* touching explicit retrieval or session-end ingestion. Nothing here
- * changes a default — unspecified is still ON — and nothing reaches the network: the main and
+ * R17f: recommended CLI configuration disables automatic index injection without touching
+ * explicit retrieval or session-end ingestion. Direct SDK unspecified remains ON for compatibility.
+ * Nothing reaches the network: the main and
  * memory role providers are both replaced with fixtures before a session runs.
  */
 
@@ -136,16 +136,20 @@ it("rejects a non-boolean memoryIndexInjection at the config boundary", () => {
   expect(() => parseConfigText("fixture", JSON.stringify({ memoryIndexInjectionn: false }))).toThrow("Unrecognized setting");
 });
 
-it("carries a configured opt-out from trusted project config into the built prompt", async () => {
+it("defaults recommended injection off and preserves explicit project/profile opt-in", async () => {
   const cwd = join(root, "project");
   const home = join(root, "home");
   await Promise.all([mkdir(join(cwd, ".agentrig"), { recursive: true }), mkdir(join(home, ".agentrig"), { recursive: true })]);
   await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: { [cwd]: true } }), "utf8");
   const runCommand = () => buildProgram().commands.find(command => command.name() === "run")!;
 
-  // no config: the recommended profile leaves the key unset, which is ON
+  // No config: the measured recommended policy disables automatic index injection.
   const bare = await loadRunConfig(runCommand(), {}, { cwd, home, env: {}, interactive: false });
-  expect(bare.memoryIndexInjection).toBeUndefined();
+  expect(bare.memoryIndexInjection).toBe(false);
+  const defaultBuild = await build(bare as Partial<AgentBuildOptions>);
+  await runOnce(defaultBuild.built);
+  expect(defaultBuild.systems[0]).not.toContain(INDEX_HEADER);
+  expect(memoryToolNames(defaultBuild.built)).toEqual(expect.arrayContaining(["memory_read", "memory_search"]));
 
   await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ memoryIndexInjection: false }), "utf8");
   const resolved = await loadRunConfig(runCommand(), {}, { cwd, home, env: {}, interactive: false });
@@ -156,11 +160,18 @@ it("carries a configured opt-out from trusted project config into the built prom
   expect(built.memoryIndex).toBe("");
   expect(systems[0]).not.toContain(INDEX_HEADER);
 
-  // a project profile is the same path, and an unrelated command is unaffected
-  await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ profiles: { quiet: { memoryIndexInjection: false } } }), "utf8");
+  await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ memoryIndexInjection: true }), "utf8");
+  const optIn = await loadRunConfig(runCommand(), {}, { cwd, home, env: {}, interactive: false });
+  expect(optIn.memoryIndexInjection).toBe(true);
+  const enabled = await build(optIn as Partial<AgentBuildOptions>);
+  await runOnce(enabled.built);
+  expect(enabled.systems[0]).toContain(INDEX_HEADER);
+
+  // A selected profile can opt back in without changing the bare recommended default.
+  await writeFile(join(cwd, ".agentrig", "config.json"), JSON.stringify({ profiles: { recall: { memoryIndexInjection: true } } }), "utf8");
   const command = runCommand();
-  expect((await loadRunConfig(command, { profile: "quiet" }, { cwd, home, env: {}, interactive: false })).memoryIndexInjection).toBe(false);
-  expect((await loadRunConfig(command, {}, { cwd, home, env: {}, interactive: false })).memoryIndexInjection).toBeUndefined();
+  expect((await loadRunConfig(command, { profile: "recall" }, { cwd, home, env: {}, interactive: false })).memoryIndexInjection).toBe(true);
+  expect((await loadRunConfig(command, {}, { cwd, home, env: {}, interactive: false })).memoryIndexInjection).toBe(false);
 });
 
 it("keeps the key out of the CLI surface", () => {

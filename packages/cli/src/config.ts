@@ -351,7 +351,7 @@ export async function loadRunConfig(
     if (options.notice) options.notice(note); else console.error(note);
   }
   const recommendedDefaults: ConfigValues = {
-    supervise: true, checkpoints: true, ingestOnEnd: true, notifications: "bell", toolSummaries: true,
+    supervise: true, checkpoints: true, ingestOnEnd: true, memoryIndexInjection: false, notifications: "bell", toolSummaries: true,
     diagnostics: DiagnosticsConfigSchema.parse([
       { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false", "--listFiles"] },
       { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "--", "{path}"] },

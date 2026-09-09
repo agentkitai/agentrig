@@ -1,0 +1,791 @@
+{
+  "format": "agentrig-r17f-derived-continuation-summary-v1",
+  "authority": "Derived analysis of separately preserved raw segments; not a canonical runner results.json. Interrupted chronology and unknown usage are retained.",
+  "continuation": {
+    "recordedAt": "2026-09-09T16:33:24.412Z",
+    "kind": "explicit-user-authorized-unattempted-slot-continuation",
+    "authorization": "User raised corrected-run total to 20M and explicitly directed resumption after the incomplete-usage halt.",
+    "originalRoot": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-corrected-20260909",
+    "continuationRoot": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-continuation-20260909",
+    "evaluatorRevision": "4d41826a0ba064e67dead46125aa6a64e34426b6",
+    "slots": [
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95
+    ],
+    "authorizedTotal": 20000000,
+    "previousReportedTokens": 6312295,
+    "previousUnknownCalls": 1,
+    "unknownReserve": 1178000,
+    "segmentCap": 12000000,
+    "originalHashes": {
+      "results": "fd850135cd058be86da1f9ae81237ec10bcf1e7a8d944f25266d339694980b6a",
+      "calls": "48b6f47ced08f035686127d546abad9da8bd3a62a8f6730f07bf659636bdd98e",
+      "protocol": "d870014589e35ee8c65e82ccdde6a419dab690967ec3a751f503a43e49fc37ee"
+    },
+    "operatorScriptSha256": "ee2ae25c7e82e8a4eef5432e65d07c8212ce958c211ad672ac4063320f61c2f0",
+    "limitations": "Unknown consumption remains unknown, not zero. Reserve is scheduling only, not measured usage or a remote billing guarantee. Original 51 outcomes, including all failures, remain unchanged. No attempt or failed provider call is retried. Interrupted chronology remains disclosed; aggregate benefit analysis retains unknownCalls=1.",
+    "settings": {
+      "worker": "sha256:c995261c83a33afebec75396ee4ac9260cc224d16bf2da11d9b2c41e0d2f05d8",
+      "checker": "sha256:33443f68f312abe4f1e88e16be7c88407d7173e80d7e55dfb0a12a5541e733e5",
+      "source": "/var/tmp/agentrig-r17f-work.ZhA9M7/is-number-source",
+      "memoryCorpus": "/var/tmp/agentrig-r17f-work.ZhA9M7/frozen-corpus",
+      "output": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-continuation-20260909",
+      "arm": "heuristics+llm",
+      "dependencies": "offline-image",
+      "rounds": 3,
+      "maxMinutes": 720,
+      "totalTokens": 12000000
+    }
+  },
+  "segments": [
+    {
+      "segment": 1,
+      "root": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-corrected-20260909",
+      "closure": {
+        "root": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-corrected-20260909",
+        "handle": 40359,
+        "joined": true,
+        "exitCode": 2,
+        "joinedAt": "2026-09-09T16:35:30.078Z",
+        "hashes": {
+          "results.json": "fd850135cd058be86da1f9ae81237ec10bcf1e7a8d944f25266d339694980b6a",
+          "calls.json": "48b6f47ced08f035686127d546abad9da8bd3a62a8f6730f07bf659636bdd98e",
+          "protocol.json": "d870014589e35ee8c65e82ccdde6a419dab690967ec3a751f503a43e49fc37ee"
+        }
+      },
+      "hashes": {
+        "protocol": "d870014589e35ee8c65e82ccdde6a419dab690967ec3a751f503a43e49fc37ee",
+        "results": "fd850135cd058be86da1f9ae81237ec10bcf1e7a8d944f25266d339694980b6a",
+        "calls": "48b6f47ced08f035686127d546abad9da8bd3a62a8f6730f07bf659636bdd98e"
+      },
+      "ledger": {
+        "startedAt": 1788930087615,
+        "tokens": 6312295,
+        "unknownCalls": 1,
+        "blocked": "evaluation stopped: provider usage is incomplete"
+      },
+      "completed": 51,
+      "createdSlots": [
+        "001-A1-s0m0-r1",
+        "002-A1-s0m1-r1",
+        "003-A1-s1m0-r1",
+        "004-A1-s1m1-r1",
+        "005-A2-s0m1-r1",
+        "006-A2-s1m0-r1",
+        "007-A2-s1m1-r1",
+        "008-A2-s0m0-r1",
+        "009-A3-s1m0-r1",
+        "010-A3-s1m1-r1",
+        "011-A3-s0m0-r1",
+        "012-A3-s0m1-r1",
+        "013-A4-s1m1-r1",
+        "014-A4-s0m0-r1",
+        "015-A4-s0m1-r1",
+        "016-A4-s1m0-r1",
+        "017-X1-s0m0-r1",
+        "018-X1-s0m1-r1",
+        "019-X1-s1m0-r1",
+        "020-X1-s1m1-r1",
+        "021-X2-s0m1-r1",
+        "022-X2-s1m0-r1",
+        "023-X2-s1m1-r1",
+        "024-X2-s0m0-r1",
+        "025-X3-s1m0-r1",
+        "026-X3-s1m1-r1",
+        "027-X3-s0m0-r1",
+        "028-X3-s0m1-r1",
+        "029-X4-s1m1-r1",
+        "030-X4-s0m0-r1",
+        "031-X4-s0m1-r1",
+        "032-X4-s1m0-r1",
+        "033-A1-s0m1-r2",
+        "034-A1-s1m0-r2",
+        "035-A1-s1m1-r2",
+        "036-A1-s0m0-r2",
+        "037-A2-s1m0-r2",
+        "038-A2-s1m1-r2",
+        "039-A2-s0m0-r2",
+        "040-A2-s0m1-r2",
+        "041-A3-s1m1-r2",
+        "042-A3-s0m0-r2",
+        "043-A3-s0m1-r2",
+        "044-A3-s1m0-r2",
+        "045-A4-s0m0-r2",
+        "046-A4-s0m1-r2",
+        "047-A4-s1m0-r2",
+        "048-A4-s1m1-r2",
+        "049-X1-s0m1-r2",
+        "050-X1-s1m0-r2",
+        "051-X1-s1m1-r2"
+      ]
+    },
+    {
+      "segment": 2,
+      "root": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-continuation-20260909",
+      "closure": {
+        "root": "/var/tmp/agentrig-r17f-work.ZhA9M7/live-r17f-continuation-20260909",
+        "handle": 9248,
+        "joined": true,
+        "exitCode": 0,
+        "joinedAt": "2026-09-09T17:57:33.023Z",
+        "hashes": {
+          "results.json": "461fd4e68330601fd23d6e730478f8680b1d2efcbdcf4edbb1eb762266731501",
+          "calls.json": "56dfc6585c69b38cf383050e8fbcb8d4fa364385908529b74d78adca4a849660",
+          "protocol.json": "e3e91c717de0714c3f152e956af34169e477cd134c45c9242f18af1225738d54"
+        }
+      },
+      "hashes": {
+        "protocol": "e3e91c717de0714c3f152e956af34169e477cd134c45c9242f18af1225738d54",
+        "results": "461fd4e68330601fd23d6e730478f8680b1d2efcbdcf4edbb1eb762266731501",
+        "calls": "56dfc6585c69b38cf383050e8fbcb8d4fa364385908529b74d78adca4a849660"
+      },
+      "ledger": {
+        "startedAt": 1788971604415,
+        "tokens": 4057591,
+        "unknownCalls": 0,
+        "blocked": null
+      },
+      "completed": 45,
+      "createdSlots": [
+        "052-X1-s0m0-r2",
+        "053-X2-s1m0-r2",
+        "054-X2-s1m1-r2",
+        "055-X2-s0m0-r2",
+        "056-X2-s0m1-r2",
+        "057-X3-s1m1-r2",
+        "058-X3-s0m0-r2",
+        "059-X3-s0m1-r2",
+        "060-X3-s1m0-r2",
+        "061-X4-s0m0-r2",
+        "062-X4-s0m1-r2",
+        "063-X4-s1m0-r2",
+        "064-X4-s1m1-r2",
+        "065-A1-s1m0-r3",
+        "066-A1-s1m1-r3",
+        "067-A1-s0m0-r3",
+        "068-A1-s0m1-r3",
+        "069-A2-s1m1-r3",
+        "070-A2-s0m0-r3",
+        "071-A2-s0m1-r3",
+        "072-A2-s1m0-r3",
+        "073-A3-s0m0-r3",
+        "074-A3-s0m1-r3",
+        "075-A3-s1m0-r3",
+        "076-A3-s1m1-r3",
+        "077-A4-s0m1-r3",
+        "078-A4-s1m0-r3",
+        "079-A4-s1m1-r3",
+        "080-A4-s0m0-r3",
+        "081-X1-s1m0-r3",
+        "082-X1-s1m1-r3",
+        "083-X1-s0m0-r3",
+        "084-X1-s0m1-r3",
+        "085-X2-s1m1-r3",
+        "086-X2-s0m0-r3",
+        "087-X2-s0m1-r3",
+        "088-X2-s1m0-r3",
+        "089-X3-s0m0-r3",
+        "090-X3-s0m1-r3",
+        "091-X3-s1m0-r3",
+        "092-X3-s1m1-r3",
+        "093-X4-s0m1-r3",
+        "094-X4-s1m0-r3",
+        "095-X4-s1m1-r3",
+        "096-X4-s0m0-r3"
+      ]
+    }
+  ],
+  "summary": {
+    "all": {
+      "planned": 96,
+      "completed": 96,
+      "ledger": {
+        "startedAt": 1788930087615,
+        "tokens": 10369886,
+        "unknownCalls": 1,
+        "blocked": "segment 1: evaluation stopped: provider usage is incomplete"
+      },
+      "groups": [
+        {
+          "supervisor": false,
+          "memory": false,
+          "planned": 24,
+          "completed": 24,
+          "outcomes": {
+            "PASS": 17,
+            "FAIL": 4,
+            "BLOCKED": 3,
+            "SKIP": 0
+          },
+          "notRun": 0,
+          "reportedTokens": {
+            "n": 24,
+            "min": 26972,
+            "median": 88574,
+            "max": 222624
+          },
+          "wallMs": {
+            "n": 24,
+            "min": 57328,
+            "median": 96803.5,
+            "max": 243497
+          }
+        },
+        {
+          "supervisor": false,
+          "memory": true,
+          "planned": 24,
+          "completed": 24,
+          "outcomes": {
+            "PASS": 17,
+            "FAIL": 4,
+            "BLOCKED": 3,
+            "SKIP": 0
+          },
+          "notRun": 0,
+          "reportedTokens": {
+            "n": 24,
+            "min": 38678,
+            "median": 93271,
+            "max": 209959
+          },
+          "wallMs": {
+            "n": 24,
+            "min": 54909,
+            "median": 90819.5,
+            "max": 218922
+          }
+        },
+        {
+          "supervisor": true,
+          "memory": false,
+          "planned": 24,
+          "completed": 24,
+          "outcomes": {
+            "PASS": 16,
+            "FAIL": 5,
+            "BLOCKED": 3,
+            "SKIP": 0
+          },
+          "notRun": 0,
+          "reportedTokens": {
+            "n": 24,
+            "min": 32430,
+            "median": 78792,
+            "max": 212843
+          },
+          "wallMs": {
+            "n": 24,
+            "min": 58673,
+            "median": 89294,
+            "max": 213747
+          }
+        },
+        {
+          "supervisor": true,
+          "memory": true,
+          "planned": 24,
+          "completed": 24,
+          "outcomes": {
+            "PASS": 17,
+            "FAIL": 4,
+            "BLOCKED": 3,
+            "SKIP": 0
+          },
+          "notRun": 0,
+          "reportedTokens": {
+            "n": 24,
+            "min": 40342,
+            "median": 84266,
+            "max": 238628
+          },
+          "wallMs": {
+            "n": 24,
+            "min": 57148,
+            "median": 86948.5,
+            "max": 182570
+          }
+        }
+      ],
+      "conclusion": "No benefit claim until independent checks, human gates and preregistered paired comparisons are complete."
+    },
+    "balancedCount": 96,
+    "balancedRounds": 3,
+    "partialRerun": false,
+    "primaryTasks": [
+      "A1",
+      "A2",
+      "A3",
+      "X1",
+      "X2",
+      "X3"
+    ],
+    "proseObservations": [
+      {
+        "key": "013-A4-s1m1-r1",
+        "task": "A4",
+        "repeat": 1,
+        "position": 0,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 201740,
+        "wallMs": 83458
+      },
+      {
+        "key": "014-A4-s0m0-r1",
+        "task": "A4",
+        "repeat": 1,
+        "position": 1,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 208640,
+        "wallMs": 135638
+      },
+      {
+        "key": "015-A4-s0m1-r1",
+        "task": "A4",
+        "repeat": 1,
+        "position": 2,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 209959,
+        "wallMs": 88436
+      },
+      {
+        "key": "016-A4-s1m0-r1",
+        "task": "A4",
+        "repeat": 1,
+        "position": 3,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 210801,
+        "wallMs": 87662
+      },
+      {
+        "key": "029-X4-s1m1-r1",
+        "task": "X4",
+        "repeat": 1,
+        "position": 0,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 70190,
+        "wallMs": 92880
+      },
+      {
+        "key": "030-X4-s0m0-r1",
+        "task": "X4",
+        "repeat": 1,
+        "position": 1,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 26972,
+        "wallMs": 64368
+      },
+      {
+        "key": "031-X4-s0m1-r1",
+        "task": "X4",
+        "repeat": 1,
+        "position": 2,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 38678,
+        "wallMs": 54909
+      },
+      {
+        "key": "032-X4-s1m0-r1",
+        "task": "X4",
+        "repeat": 1,
+        "position": 3,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 32430,
+        "wallMs": 64053
+      },
+      {
+        "key": "045-A4-s0m0-r2",
+        "task": "A4",
+        "repeat": 2,
+        "position": 0,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 207286,
+        "wallMs": 90966
+      },
+      {
+        "key": "046-A4-s0m1-r2",
+        "task": "A4",
+        "repeat": 2,
+        "position": 1,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 193242,
+        "wallMs": 118826
+      },
+      {
+        "key": "047-A4-s1m0-r2",
+        "task": "A4",
+        "repeat": 2,
+        "position": 2,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 212843,
+        "wallMs": 102385
+      },
+      {
+        "key": "048-A4-s1m1-r2",
+        "task": "A4",
+        "repeat": 2,
+        "position": 3,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 204347,
+        "wallMs": 83165
+      },
+      {
+        "key": "061-X4-s0m0-r2",
+        "task": "X4",
+        "repeat": 2,
+        "position": 0,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 33926,
+        "wallMs": 79132
+      },
+      {
+        "key": "062-X4-s0m1-r2",
+        "task": "X4",
+        "repeat": 2,
+        "position": 1,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 48962,
+        "wallMs": 88171
+      },
+      {
+        "key": "063-X4-s1m0-r2",
+        "task": "X4",
+        "repeat": 2,
+        "position": 2,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 39300,
+        "wallMs": 71396
+      },
+      {
+        "key": "064-X4-s1m1-r2",
+        "task": "X4",
+        "repeat": 2,
+        "position": 3,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 81439,
+        "wallMs": 116453
+      },
+      {
+        "key": "077-A4-s0m1-r3",
+        "task": "A4",
+        "repeat": 3,
+        "position": 0,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 208923,
+        "wallMs": 103741
+      },
+      {
+        "key": "078-A4-s1m0-r3",
+        "task": "A4",
+        "repeat": 3,
+        "position": 1,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 191991,
+        "wallMs": 90926
+      },
+      {
+        "key": "079-A4-s1m1-r3",
+        "task": "A4",
+        "repeat": 3,
+        "position": 2,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "FAIL",
+        "reportedTokens": 238628,
+        "wallMs": 91089
+      },
+      {
+        "key": "080-A4-s0m0-r3",
+        "task": "A4",
+        "repeat": 3,
+        "position": 3,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "FAIL",
+        "reportedTokens": 209640,
+        "wallMs": 68848
+      },
+      {
+        "key": "093-X4-s0m1-r3",
+        "task": "X4",
+        "repeat": 3,
+        "position": 0,
+        "supervisor": false,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 55399,
+        "wallMs": 81114
+      },
+      {
+        "key": "094-X4-s1m0-r3",
+        "task": "X4",
+        "repeat": 3,
+        "position": 1,
+        "supervisor": true,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 41365,
+        "wallMs": 70380
+      },
+      {
+        "key": "095-X4-s1m1-r3",
+        "task": "X4",
+        "repeat": 3,
+        "position": 2,
+        "supervisor": true,
+        "memory": true,
+        "outcome": "BLOCKED",
+        "reportedTokens": 42645,
+        "wallMs": 63180
+      },
+      {
+        "key": "096-X4-s0m0-r3",
+        "task": "X4",
+        "repeat": 3,
+        "position": 3,
+        "supervisor": false,
+        "memory": false,
+        "outcome": "BLOCKED",
+        "reportedTokens": 29074,
+        "wallMs": 57328
+      }
+    ],
+    "partialObservations": [],
+    "balancedGroups": [
+      {
+        "supervisor": false,
+        "memory": false,
+        "planned": 24,
+        "completed": 24,
+        "outcomes": {
+          "PASS": 17,
+          "FAIL": 4,
+          "BLOCKED": 3,
+          "SKIP": 0
+        },
+        "notRun": 0,
+        "reportedTokens": {
+          "n": 24,
+          "min": 26972,
+          "median": 88574,
+          "max": 222624
+        },
+        "wallMs": {
+          "n": 24,
+          "min": 57328,
+          "median": 96803.5,
+          "max": 243497
+        }
+      },
+      {
+        "supervisor": false,
+        "memory": true,
+        "planned": 24,
+        "completed": 24,
+        "outcomes": {
+          "PASS": 17,
+          "FAIL": 4,
+          "BLOCKED": 3,
+          "SKIP": 0
+        },
+        "notRun": 0,
+        "reportedTokens": {
+          "n": 24,
+          "min": 38678,
+          "median": 93271,
+          "max": 209959
+        },
+        "wallMs": {
+          "n": 24,
+          "min": 54909,
+          "median": 90819.5,
+          "max": 218922
+        }
+      },
+      {
+        "supervisor": true,
+        "memory": false,
+        "planned": 24,
+        "completed": 24,
+        "outcomes": {
+          "PASS": 16,
+          "FAIL": 5,
+          "BLOCKED": 3,
+          "SKIP": 0
+        },
+        "notRun": 0,
+        "reportedTokens": {
+          "n": 24,
+          "min": 32430,
+          "median": 78792,
+          "max": 212843
+        },
+        "wallMs": {
+          "n": 24,
+          "min": 58673,
+          "median": 89294,
+          "max": 213747
+        }
+      },
+      {
+        "supervisor": true,
+        "memory": true,
+        "planned": 24,
+        "completed": 24,
+        "outcomes": {
+          "PASS": 17,
+          "FAIL": 4,
+          "BLOCKED": 3,
+          "SKIP": 0
+        },
+        "notRun": 0,
+        "reportedTokens": {
+          "n": 24,
+          "min": 40342,
+          "median": 84266,
+          "max": 238628
+        },
+        "wallMs": {
+          "n": 24,
+          "min": 57148,
+          "median": 86948.5,
+          "max": 182570
+        }
+      }
+    ],
+    "comparisons": [
+      {
+        "factor": "supervisor",
+        "other": "memory",
+        "otherOn": false,
+        "pairs": 18,
+        "additionalPasses": -1,
+        "medianTokenRatio": 0.8895612708018155,
+        "medianSessionLatencyRatio": 0.909151543908968,
+        "lanesKnown": false,
+        "newFailures": true,
+        "pending": false,
+        "numericalThresholdMet": false
+      },
+      {
+        "factor": "supervisor",
+        "other": "memory",
+        "otherOn": true,
+        "pairs": 18,
+        "additionalPasses": 0,
+        "medianTokenRatio": 0.8673006615132249,
+        "medianSessionLatencyRatio": 0.8315695847818706,
+        "lanesKnown": false,
+        "newFailures": true,
+        "pending": false,
+        "numericalThresholdMet": false
+      },
+      {
+        "factor": "memory",
+        "other": "supervisor",
+        "otherOn": false,
+        "pairs": 18,
+        "additionalPasses": 0,
+        "medianTokenRatio": 1.0530291056066114,
+        "medianSessionLatencyRatio": 0.936099447612738,
+        "lanesKnown": false,
+        "newFailures": false,
+        "pending": false,
+        "numericalThresholdMet": false
+      },
+      {
+        "factor": "memory",
+        "other": "supervisor",
+        "otherOn": true,
+        "pairs": 18,
+        "additionalPasses": 1,
+        "medianTokenRatio": 1.0266778353132298,
+        "medianSessionLatencyRatio": 0.8562179035839664,
+        "lanesKnown": false,
+        "newFailures": false,
+        "pending": false,
+        "numericalThresholdMet": false
+      }
+    ],
+    "interpretation": "Primary utility compares the six automatically decidable tasks only. A4/X4 prose gates remain separate and unmodified; their independent regression/scope failures still veto a win. Numerical thresholds do not prove general benefit or replace missing prose assessments. Report interactions, actual intervention/retrieval use and frozen E3 limitations."
+  }
+}

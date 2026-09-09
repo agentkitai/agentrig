@@ -48,15 +48,6 @@ normally.
   memory and the configured ingest role. This can make a separately accounted
   model call. Failure is reported without changing the successful main task;
   an unavailable provider is not a successful ingest.
-- **Automatic memory index injection**: on, unchanged. When a memory directory is
-  in use, its `index.md` is injected into the system prompt as a `memory_index`
-  block. The new config-only key `"memoryIndexInjection": false` disables **that
-  block only**: the `memory_search` / `memory_read` tools, their startup allow
-  rules and `ingestOnEnd` keep working, so the agent can still retrieve memory
-  explicitly and the session still compounds into the wiki. There is no CLI flag,
-  and leaving the key unset is the current behaviour. This key exists so R17f can
-  turn injection off from one measured value; **the default stays ON until that
-  measured decision**, and nothing in this repository has changed it.
 - **Supervisor heuristics**: `supervise: true`. LLM review and automatic abort
   are still separate explicit choices, not newly enabled.
 - **Tool summaries**: `toolSummaries: true`; expanded event output remains
@@ -69,6 +60,22 @@ Heartbeat retains its existing constrained behavior (no mutation/checkpoint,
 post-edit diagnostics, or notifications). Its scheduled-ingest opt-out uses
 explicit config provenance as before. SDK `createAgent`/`buildAgent` callers do
 not silently acquire CLI defaults.
+
+### Automatic memory injection is opt-in (R17f)
+
+The recommended CLI profile now sets `memoryIndexInjection: false`. The
+[96-attempt measurement](R17f-RESULTS.md) did not establish the preregistered
+benefit threshold; this conservative policy does not prove memory has no value.
+Only the automatic `memory_index` system-prompt block is disabled. Explicit
+`memory_search` / `memory_read`, their existing startup permission rules, and
+session-end ingestion remain enabled as before.
+
+Set `"memoryIndexInjection": true` in user config, trusted project config, or a
+selected profile to restore automatic index injection. There is no new CLI flag.
+Direct SDK `buildAgent` callers that leave this field unspecified retain their
+previous injection-on behavior; CLI resolved defaults do not silently become SDK
+defaults. LLM supervisor review and automatic abort remain opt-in; free heuristics
+remain on. Security defaults are unchanged.
 
 ### Enforcing sandboxes (approved exception)
 

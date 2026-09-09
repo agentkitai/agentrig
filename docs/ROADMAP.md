@@ -6,11 +6,12 @@ Roadmap work has resumed under the user's latest authorization. R17e is complete
 at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
 ([final receipt](https://github.com/agentkitai/agentrig/pull/289#issuecomment-5591695371)).
 R17f's measured-default decision follows, then R17g's package follow-up batches.
-**R17f is not done**: its first collection was stopped for a prompt-contract defect after two
-attempts started.306,143reported tokens plus one unknown interrupted call are retained;
-no feature conclusion or default change follows from invalid measurements. The original test
-filename instruction is restored and tested. A corrected run within the remaining original
-budget awaits authorization ([record](plans/R17f.md)).
+**R17f implementation/final verification is pending in PR #290; it is not delivered yet.**
+All 96 corrected slots have outcomes across two preserved segments: 67 PASS / 17 FAIL /
+12 BLOCKED, 10,369,886 reported tokens and one unknown call. Neither factor demonstrates the
+required benefit. Recommended automatic index injection defaults off; retrieval, ingestion
+and free heuristics stay on, LLM review stays opt-in. The invalid pilot remains separate.
+[Results, interruption and limitations](R17f-RESULTS.md); [contract](plans/R17f.md).
 Use bounded reviews, focused repair checks and sequential green-CI merges. Historical pause and
 pending-delivery notes below are not current instructions. [Current status](STATUS.md).
 
@@ -993,7 +994,7 @@ strong and their feel numbers were fought over; this band does the same, in meas
 | R17c *(done)* | **Feel budgets in CI**: measured on the fake provider and asserted like the viewport height: cold start to prompt under 400 ms, first streamed token within one tick of provider first byte, permission prompts per E1 task, turns to done per E1 task, TUI frame cost per event. A regression fails the build; the numbers print in `agentrig doctor` | cli + core + .github |
 | R17d *(done)* | **Permission friction**: measure prompts per E1 task under the R17b defaults, then reduce them without widening authority: read-class tools inside the trusted root auto-allow; the first `bash` ask offers the exact argv-prefix grant (R12b) as the default key; repeated identical asks within a session collapse into one scoped decision. Target and result recorded; the injection fixture suite (R13e) must stay green | core + cli |
 | R17e *(done — PR #289, merged at `2a8ea59` with green post-merge CI)* | **Visible supervisor and memory**: each intervention and each recall renders as one transcript line the user can read (what it noticed, what it did, what it cost); `/why` on the last turn explains any injected guidance; memory recall shows the page and the claim, not a count. Nothing is added to the model prompt that is not also visible | cli + supervisor + memory |
-| R17f *(preparation committed; not done)* | **Tune or default off**: rerun the E3 matrix under the R17b/R17d defaults and the visible interventions. If supervisor-on does not beat plain on independent outcomes, its LLM-backed ladder steps default off and only the free heuristics stay; if memory-on does not, ingest stays on and injection defaults off. Either way the result and the default are recorded, and E3's limitations still apply | supervisor + memory + docs |
+| R17f *(96 outcomes collected; implementation/final verification pending)* | **Tune or default off**: [results](R17f-RESULTS.md) do not demonstrate the required benefit; recommended injection defaults off, ingest/retrieval/heuristics stay on and LLM review stays opt-in. PR #290 is not yet delivered; interrupted collection and unknown usage remain disclosed | supervisor + memory + docs |
 | R17g | **Follow-ups sweep**: after R17a–R17f, the follow-ups list at the end of this document is worked as one batch PR per package, each bullet either done or explicitly declined with a reason, and the list is reset. It is last because none of it changes feel | all |
 
 Acceptance: R17a — STATUS names `agentrig` as the builder for every R17 PR, or the `feel`
@@ -1010,15 +1011,13 @@ main `2a8ea59` with post-merge CI 34276366300 / structure 34276366380 green. It 
 Claude/operator outside AgentRig, so R17a's dogfood gate is unmet for it and named here rather
 than silently skipped. Contract, limits and mutation receipts: [R17e](plans/R17e.md).
 
-R17f's network-free preparation is committed on `feat/r17f-measured-defaults`: a bounded runner
-(`eval/r17f.mjs`) that measures the resolved R17b profile, the real permission policy under
-R17d's frozen preset response policy, and R17e's visible lines, reusing E1/E2 preparation,
-isolation, independent checks, accounting and publication. E3's runner, reports and archive are
-unchanged, and its frozen corpus is recovered from the published archive rather than retrained.
-The supervisor arm and the assessor are preregistered before any call, and the LLM-ladder arm's
-budget arithmetic is reported rather than silently substituted. **No live call has been made, no
-result exists and no default has moved**; the row closes on collected, reviewed evidence.
-Contract, commands and limits: [R17f](plans/R17f.md). Also built outside AgentRig.
+R17f has collected all 96 corrected outcomes using the resolved R17b profile, R17d's real
+permission/grant policy and R17e's visible events. Frozen E3 tasks/corpus and independent checks
+are retained. Two raw segments preserve the incomplete-call stop and authorized unattempted-slot
+continuation; no canonical uninterrupted run or human judgment is invented. The unchanged
+decision rule selects recommended injection off with retrieval/ingest/heuristics retained and
+LLM review opt-in. [Results](R17f-RESULTS.md), [contract](plans/R17f.md). Built outside AgentRig;
+final PR #290 verification/merge and post-merge CI remain pending before R17g delivery.
 
 Renunciation: no new capability in this band. Every row makes something that exists default,
 measured, visible or cheaper. Security defaults move only toward less prompting for

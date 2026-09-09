@@ -1,32 +1,43 @@
 # Status
 
-## Current — R17f collection interrupted; correcting the protocol (2026-09-09)
+## Current — R17f measured-default implementation; final verification pending (2026-09-09)
 
-Frozen evaluator `04072b177510d88820926605fd73e122ba00e0a4` passed the bounded reviews below,
-including focused Codex delta `01a082ff-ffe6-7313-9e5c-d6a7d46850d1`. Collection began
-2026-09-08T21:53:46Z (September9local). Monitoring caught an omitted original E3 instruction:
-allowed regression-test filename patterns were not disclosed, so attempt001 failed a hidden
-filename rule. The operator stopped the invalid collection during attempt002, joined the
-owned process at exit143 and observed no remaining Docker containers. No model benefit/loss
-is inferred from these invalid measurements, and no result is retroactively changed.
+All 96 corrected matrix outcomes are collected: **67 PASS / 17 FAIL / 12 BLOCKED**,
+**10,369,886 reported tokens plus one unknown call**. Evaluator
+`4d41826a0ba064e67dead46125aa6a64e34426b6` stayed unchanged across the first 51 slots
+(6,312,295 tokens, incomplete-usage halt, owned handle40359 joined exit2) and authorized
+remaining 45 slots (4,057,591 tokens, no unknown calls, handle9248 joined exit0).
+The operator missed the first halt for about 9.5 hours; that delay is a monitoring failure,
+not benchmark work. The user authorized a fresh12M, then20M for unattempted-slot continuation.
+Unknown consumption, the old stop reason, chronology and every failed outcome remain preserved.
 
-**306,143reported tokens; one interrupted call has unknown consumption.** All raw evidence is
-retained outside the checkout. The process did not produce final results/calls files; an
-operator interruption receipt explicitly records that gap. A corrected matrix is requested,
-not yet authorized, with **10,515,857tokens** remaining after charging the known usage and
-reserving1,178,000for the unknown call against the same12Mallowance. No additional budget
-is requested, and the reserve is not claimed as measured usage or a guaranteed billing bound.
+The earlier protocol-invalid pilot is separate: 306,143 reported tokens plus one unknown
+interrupted call, joined exit143, with its raw interruption receipt and no fabricated final
+results. The missing test-filename instruction was fixed outside the train before the corrected
+run. None of the invalid pilot contributes to the corrected benefit comparison.
 
-The original instruction is restored and covered by a fail-first actual-request test;
-graceful operator cancellation/finalization is also tested.24focused cases pass; full and
-focused independent repair checks follow. Builder remains Claude/operator outside AgentRig,
-no conductor session or new `feel` issue. R17f remains incomplete, defaults unchanged.
-The separate memory-control helper is preparing an explicit opt-out without changing the
-current default; it has no access to benchmark results and has made no live evaluation calls.
+Neither factor reaches the unchanged +2-pass threshold; unknown usage independently blocks
+a win. Implemented decision: recommended automatic index injection off, explicit retrieval and
+ingestion on, free heuristics on, LLM review opt-in. Explicit config true and SDK unspecified
+injection stay on. No security default changes. [Results](R17f-RESULTS.md),
+[segmented evidence/provenance](r17f-evidence/aggregate-summary.json), [contract](plans/R17f.md).
+
+Builder: **Claude/operator outside AgentRig**, no conductor session; R17a dogfood remains unmet.
+The matrix used zero children and had one corrected-run halt, plus the separate invalid-pilot
+operator stop. Builder sessions `00089fc1-9e72-4dc2-899d-0ddde8fcbb0c` and memory control
+`a77dc921-e7b3-49fb-83af-60bd6f4e7c5d`; bounded independent reviewer identities and checks
+are in [R17f preparation reviews](reviews/R17f-PREPARATION.md). No new `feel` issue is claimed.
+
+The default-off regression failed first (expected false, received undefined); 85 focused tests
+pass. Build and typecheck passed. The first full run exposed a visibility fixture's old default
+assumption; it now checks both default-off and explicit opt-in while preserving recall assertions.
+The final full suite passes **3600 tests / 4 skips / 232 files**. **PR #290 remains unmerged;
+scoped final-delta review, exact final-head and post-merge CI remain pending.**
+After delivery, continue R17g's package batches with bounded reviews and sequential merges.
 
 ## Preparation history
 
-## Current — R17f: measured-default preparation (2026-09-09)
+## Historical — R17f: measured-default preparation (2026-09-09)
 
 R17e is delivered: exact head `2f38017` (CI 34275594904, structure 34275594911 green), merged at
 main `2a8ea5968e665dbf84456b138d8f5219d741c18a` with post-merge CI 34276366300 and structure

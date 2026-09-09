@@ -42,5 +42,27 @@ the selected LLM arm's auxiliary pairing. No optional review comment became a ne
 or nested roadmap gate. The conservative token headroom and zero-tolerance unknown-call
 stop remain deliberate, disclosed limitations; a partial rerun is possible.
 
-A single focused independent delta check follows this grouped repair; its receipt will be
-recorded before collection. No repeated general review is required for delivery metadata.
+A single focused Codex delta check, session `01a082ff-ffe6-7313-9e5c-d6a7d46850d1`, verified
+the grouped repair on `04072b1` with executable probes. All four findings passed; no full-suite
+claim is attributed to that sandboxed delta. Root's build/typecheck/full suite at that head
+passed **3591 tests / 4 skips / 231 files**.
+
+## Protocol correction and injection-control verification
+
+The invalid pilot exposed a missing original E3 test-filename instruction despite the initial
+reviews. It was restored verbatim and tested over the actual provider request, failing before
+the repair. Graceful cancellation/final accounting and the separate index-injection control
+were included in one bounded scoped review of `4d41826a0ba064e67dead46125aa6a64e34426b6`:
+
+- Claude Code `48c0fa45-1c76-4456-882c-33338220937e`: no material defects; actual
+  build/typecheck/preflight, 24 focused runtime/injection tests and 139 neighboring cases.
+- Codex `01a08311-2cb0-7743-8656-c07d932286b1`: no material defects; syntax/diff checks.
+  Its sandbox denied host fixture writes; it did not claim Vitest or build execution.
+- Root's combined build/typecheck/full suite: **3599 passed / 4 skipped / 232 files**.
+  These verify the frozen collection/control head, not the later default-selection changes.
+
+[Scoped-review receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5592593005).
+The separate injection-control builder was Claude session `a77dc921-e7b3-49fb-83af-60bd6f4e7c5d`.
+No conductor session is invented. Later final default/publication verification belongs to the
+delivery receipt; it is pending here, and unchanged preparation does not require more general
+review rounds. [Collected results and limitations](../R17f-RESULTS.md).

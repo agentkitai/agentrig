@@ -1,0 +1,19 @@
+Executed checks:
+- Read both files; read `eval/r17f.mjs` (`Settings`, `attemptKey`, `run`'s `slots`/`signal` contract, `measurementSignals`, results/calls shape), `eval/summarize-live.mjs` (`Results`, `summarize`), `eval/r17f-budget.mjs` and `packages/cli/src/evaluation-budget.ts` (headroom, `guard`, parent-signal wiring).
+- `node --test resume-remaining.test.mjs` → 4/4 pass (243ms).
+- Inspected the closed collection read-only: `calls.json` (678 calls, exactly one `complete:false`, id `2cde70bd…`, `endedAt` present, `usage:null`), `results.json` (51 completed, last key `051-X1-s1m1-r2`, tokens 6312295, unknownCalls 1, planned 96), `protocol.json` settings, and the 104 entries in the old root (51 attempt dirs + 51 workspace dirs + config-home + config-cwd — no `052-*`).
+- Did **not** execute `resume-remaining.mjs`; no provider calls; no writes.
+
+Verified correct on the four requested properties:
+- **Resume ordinals.** `run` treats `dependencies.slots` as 0-based indices into `schedule()` (`attemptKey` renders ordinal+1), so `51..95` are exactly the 45 unattempted slots after keys `001…051`. `expected` is built with the same index base and compared against both `results.completed` (order- and duplicate-sensitive) and the filesystem dir set (regex correctly excludes `-workspace` and `.receipt.json` entries; 3-digit zero pad makes lexicographic sort == ordinal order). No renumbering, no reordering, no retry of the failed/unknown attempt.
+- **Prior usage preservation.** 6312295 + 1178000 + 12000000 = 19490295 ≤ 20M, and 1178000 is exactly the segment ledger's own `headroom` (`min(1_178_000, ceil(12e6/10))`). `segmentCap` 12M is also the schema max (`R17F_TOTAL_TOKENS`). Old root is only read + SHA-256'd; the receipt keeps `previousReportedTokens`/`previousUnknownCalls` and states the unknown stays unknown, not zero. Frozen revision pinned; 51 outcomes untouched.
+- **Exclusive output.** `writeFile(..., {flag:'wx'})` plus `run`'s non-recursive `mkdir(newRoot)` — no resume-in-place, no overwrite.
+- **Cancellation.** Same shape as the frozen runner's own entry: `measurementSignals(controller)` → `dependencies.signal` → `EvaluationBudget` parent-abort listener; `dispose()` in `finally`; `run` still publishes results/calls and sets `exitCode = 2` on abort.
+
+Two minor defects (neither affects measurement integrity):
+
+1. **`main()` has no failure wrapper, so pre-run failures exit 1 with an unhandled-rejection trace instead of the runner's `BLOCKED …` + exit 2 convention** (`resume-remaining.mjs:32-50`). `continuationPlan` throws and the `wx` receipt `EEXIST` both escape past top-level await; `r17f.mjs:292-296` wraps the equivalent path in `catch { console.error('BLOCKED: …'); process.exitCode = 2 }`. It fails loudly either way, but an operator/harness keying on the joined exit-2 signal will see a different code for "refused to continue" than for "halted mid-run."
+
+2. **The receipt is written before `run`'s preflight, so a benign preflight failure burns both fixed names** (`resume-remaining.mjs:46` before `:48`). A dirty worktree or failed revision check aborts inside `run` after `mkdir(newRoot)`, leaving both `continuation-receipt.json` and the continuation root present; the `wx` guard then blocks a corrected relaunch under the same hardcoded names, forcing a manual rename with no documented procedure. Writing the receipt after `run`'s protocol.json exists, or deriving the root name per-launch, avoids it.
+
+Coverage note (not a defect in the shipped logic): every property in item 1/2 above lives in `main`, which is unexported and untested — the suite exercises `continuationPlan` only, so receipt exclusivity, the `output`/`totalTokens` override, and signal wiring rest on inspection alone.
