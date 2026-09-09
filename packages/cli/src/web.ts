@@ -21,7 +21,8 @@ function header(req: IncomingMessage, name: string): string | undefined {
 
 /** One authenticated connection owns one existing ACP runtime, including its closing phase. */
 export async function serveWeb(options: { host: string; port: number; run(input: Readable, output: Writable): Promise<void> }) {
-  addressSchema.parse(options);
+  if (!addressSchema.safeParse(options).success)
+    throw new Error("Web bind refused: use host 127.0.0.1 and an integer port from 0 to 65535 (0 selects an available port).");
   const token = randomBytes(32).toString("base64url"); const secret = Buffer.from(token);
   const sockets = new Set<Socket>(); let authority = ""; let closing = false;
   let active: { socket: WebSocket; done: Promise<void>; close(): void } | undefined;

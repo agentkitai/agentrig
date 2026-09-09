@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import ts from "typescript";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const checker = join(root, "eval/check.mjs");
@@ -21,6 +22,18 @@ async function external() {
   const path = await temp();
   await cp(fixture, path, { recursive: true });
   await writeFile(join(path, "package.json"), '{"type":"commonjs"}');
+  return path;
+}
+async function compiledMechanics() {
+  const path = await temp(), dist = join(path, "packages/memory/dist");
+  await mkdir(dist, { recursive: true });
+  await writeFile(join(path, "package.json"), '{"type":"module"}');
+  for (const name of ["page", "search"]) {
+    const source = await readFile(join(root, `packages/memory/src/${name}.ts`), "utf8");
+    const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
+    await writeFile(join(dist, `${name}.js`), compiled.outputText);
+  }
+  await cp(await realpath(join(root, "packages/memory/node_modules/zod")), join(path, "node_modules/zod"), { recursive: true });
   return path;
 }
 function passed(result: ReturnType<typeof worker>) {
@@ -75,33 +88,28 @@ describe("E1 independent outcome checks", () => {
     failed(worker("X4", path));
   });
 
-  it.each(["A1", "A2"])("%s passes real built code and detects its seeded regression", async (id) => {
-    passed(worker(id, root));
-    const path = await temp();
+  it.each(["A1", "A2"])("%s passes isolated source compilation and detects its seeded regression", async (id) => {
+    const path = await compiledMechanics();
+    passed(worker(id, path));
     const dist = join(path, "packages/memory/dist");
-    await mkdir(dist, { recursive: true });
-    // Copy the built leaf dependencies; link-free local node_modules resolution for zod.
-    await cp(join(root, "packages/memory/dist"), dist, { recursive: true });
-    await writeFile(join(path, "package.json"), '{"type":"module"}');
-    const zod = await realpath(join(root, "packages/memory/node_modules/zod"));
-    await cp(zod, join(path, "node_modules/zod"), { recursive: true });
     const file = join(dist, id === "A1" ? "page.js" : "search.js");
     const source = await readFile(file, "utf8");
     const before = id === "A1" ? "xs.map(item)" : "return [...out.values()].sort";
     expect(source.split(before)).toHaveLength(2);
     await writeFile(file, source.replace(before, id === "A1" ? "xs.map(String)" : 'return [...out.values()].filter((h) => h.via !== "index").sort'));
     failed(worker(id, path));
-    // Includes a real dist/dependency copy plus two bounded worker processes, not a
+    // Includes isolated source compilation/dependency copy plus bounded worker processes, not a
     // five-second product latency contract (Windows main CI34039249249 took 6.261s).
   }, 30_000);
 
   it("A3 requires a real extraction and compatible identities, not just passing old tests", async () => {
-    failed(worker("A3", root));
+    const compiled = await compiledMechanics();
+    failed(worker("A3", compiled));
     const path = await temp();
     await mkdir(join(path, "packages/memory/dist"), { recursive: true });
     await mkdir(join(path, "packages/memory/src"), { recursive: true });
     await writeFile(join(path, "package.json"), '{"type":"module"}');
-    const pageJs = await readFile(join(root, "packages/memory/dist/page.js"), "utf8");
+    const pageJs = await readFile(join(compiled, "packages/memory/dist/page.js"), "utf8");
     const start = pageJs.indexOf("export function wikilinks(");
     const end = pageJs.indexOf("\n}", start) + 2;
     expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
@@ -183,7 +191,8 @@ describe("E1 workspace and outcome mechanics", () => {
     await writeFile(join(path, "package.json"), '{"type":"commonjs","scripts":{"test":"true"}}');
     git("add", "--all"); commit();
     result = check();
-    expect(result.status).toBe(1); expect(JSON.parse(result.stdout).scope).toBe("FAIL");
+    expect(result.status).toBe(1); expect(JSON.parse(result.stdout)).toMatchObject({ scope: "FAIL",
+      behavior: "NOT_RUN", regression: "NOT_RUN", submittedTests: "NOT_RUN" });
   }, 30_000); // Four real checker subprocess trees plus Git commits exceed 5s on Windows runners.
 
   it("end-to-end X4 remains BLOCKED until a real human assesses the explanation", async () => {

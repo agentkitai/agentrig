@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
 import { Usage, usageUsd, type AuxiliaryReport, type HarnessEvent, type Pricing } from "@agentkitai/agentrig-core";
 
@@ -13,6 +13,7 @@ export const ScheduleReceipt = z.object({
   version: z.literal(1), seq: Count.positive(), ts: Count.max(8_640_000_000_000_000), minute: Count,
   entry: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u), source: z.enum(["schedule", "heartbeat"]),
   sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/u).nullable(),
+  // Includes startup hook/MCP/skill failures as well as session-end maintenance failures.
   outcome: z.enum(["done", "budget", "aborted", "error"]), maintenanceFailed: z.boolean(),
   accounting: ScheduledAccounting.nullable(),
 }).strict();
@@ -26,7 +27,10 @@ const Uncertain = z.object({ version: z.literal(1), uncertain: z.literal(true) }
 const uncertaintyText = "Scheduled outcome receipts are missing or uncertain. Stop scheduler writers, inspect raw session logs, then remove only .agentrig/schedule-report-uncertain.json. Do not retry model execution.";
 function decode<T>(schema: z.ZodType<T>, text: string, kind: string): T {
   try { return schema.parse(JSON.parse(text)); }
-  catch { throw new Error(`malformed scheduled ${kind}; retained without overwrite`); }
+  catch {
+    const file = kind === "acknowledgement" ? "schedule.ack.json" : kind === "receipt" ? "schedule.log" : "schedule-report-uncertain.json";
+    throw new Error(`malformed scheduled ${kind}; retained without overwrite; stop writers and inspect .agentrig/${file}`);
+  }
 }
 
 /** Operational retention only. Cooperating writers, not an attestation of external edits. */
@@ -49,12 +53,16 @@ export class ScheduleReports {
 
   private async readFile(path: string, cap: number): Promise<string | null> {
     let file;
-    try { file = await open(path, "r"); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+    try { file = await open(path, "r"); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw new Error(`cannot read scheduled state .agentrig/${basename(path)}; stop writers and inspect access permissions`, { cause: error });
+    }
     try {
       const bytes = Buffer.alloc(cap + 1); let size = 0;
       while (size < bytes.length) { const r = await file.read(bytes, size, bytes.length - size, size); if (r.bytesRead === 0) break; size += r.bytesRead; }
       if (size > cap) throw new Error("scheduled report state exceeds its byte bound");
-      return new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, size));
+      try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, size)); }
+      catch { throw new Error(`invalid UTF-8 in scheduled state .agentrig/${basename(path)}; retained without overwrite`); }
     } finally { await file.close(); }
   }
 
@@ -83,7 +91,7 @@ export class ScheduleReports {
     const { lock } = await this.paths(true);
     let file;
     try { file = await open(lock, "wx", 0o600); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("scheduled reports busy; stop writers before recovering the report lock"); throw error; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("scheduled reports busy; stop writers before recovering .agentrig/schedule-report.lock; acknowledgement is .agentrig/schedule.ack.json"); throw error; }
     try { return await work(); } finally { await file.close(); await unlink(lock); }
   }
 
@@ -105,7 +113,8 @@ export class ScheduleReports {
     const marker = await this.readFile(paths.uncertain, 512);
     const uncertain = marker !== null;
     if (marker !== null) decode(Uncertain, marker, "uncertainty marker");
-    if (await this.readFile(paths.log, CAP) === null) {
+    const logExists = await lstat(paths.log).then(() => true, error => { if (error.code === "ENOENT") return false; throw error; });
+    if (!logExists) {
       const ack = await this.readFile(paths.ack, 1024);
       if (ack !== null && decode(Ack, ack, "acknowledgement").through > 0) throw new Error("scheduled log missing for acknowledged history");
       return { through: 0, failures: 0, omitted: false, uncertain, since: null, text: uncertain ? uncertaintyText : null };

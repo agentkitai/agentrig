@@ -23,12 +23,18 @@ export const TuiSettingsSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["keybindings"], message: "history keys must be distinct after defaults" });
 });
 export type TuiSettings = z.input<typeof TuiSettingsSchema>;
+/** Fixed SDK/startup diagnostic; schema details may contain untrusted unknown field names. */
+export function parseTuiSettings(input?: TuiSettings): TuiSettings {
+  const parsed = TuiSettingsSchema.safeParse(input ?? {});
+  if (!parsed.success) throw new Error("Invalid TUI settings. Use theme dark/light, unique single-letter permission keys, distinct up/down/ctrl-p/ctrl-n history keys, and optional ctrl-g abort.");
+  return parsed.data;
+}
 const palettes = Object.freeze({
   dark: Object.freeze({ event: "gray", you: "cyan", system: "gray", assistant: "white", error: "red", prompt: "green", status: "gray", warning: "yellow" }),
   light: Object.freeze({ event: "black", you: "blue", system: "black", assistant: "black", error: "red", prompt: "blue", status: "black", warning: "magenta" }),
 });
 export function resolveTuiSettings(input?: TuiSettings) {
-  const parsed = TuiSettingsSchema.parse(input ?? {}), theme = parsed.theme ?? "dark";
+  const parsed = parseTuiSettings(input), theme = parsed.theme ?? "dark";
   return Object.freeze({ theme, palette: palettes[theme], keybindings: Object.freeze({
     permission: Object.freeze(permissionKeys(parsed.keybindings?.permission)),
     historyPrevious: parsed.keybindings?.historyPrevious ?? "up", historyNext: parsed.keybindings?.historyNext ?? "down",

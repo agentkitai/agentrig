@@ -232,7 +232,8 @@ export class TuiController {
     finally { this.inputAbort = undefined; this.inputWork = undefined; }
   }
   async pasteImage(): Promise<void> {
-    if (!this.inputAvailable() || this.inputHandlers === undefined) return;
+    if (!this.inputAvailable()) { this.print("Clipboard gesture ignored while work or a prompt is active; no clipboard read was queued.", "system"); return; }
+    if (this.inputHandlers === undefined) return;
     if (this.stagedImages.length >= 2) { this.print("At most two staged clipboard images (8 MiB aggregate).","error"); return; }
     const abort = new AbortController(); this.inputAbort = abort;
     const work = this.inputHandlers.clipboard(abort.signal); this.inputWork = work;

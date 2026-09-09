@@ -20,12 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: 22
           cache: pnpm
@@ -59,7 +59,7 @@ jobs:
             await writeFile(join(output, "job.json"), JSON.stringify({ lane: "scripted-structure", evaluatorRevision: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID, artifactReceipt: receipt }));
             if (!receipt.complete || receipt.missing.length) process.exitCode = 1;
           '
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: scripted-structure-${{ github.run_id }}-${{ github.run_attempt }}

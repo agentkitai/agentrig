@@ -6,7 +6,7 @@ import { z } from "zod";
 import { CommandPrefixSchema, DiagnosticsConfigSchema, REASONING_EFFORTS } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
-import { NotificationMode, NotificationIdleSeconds } from "./tui/notifications.js";
+import { NotificationMode, NotificationIdleSeconds } from "./notification-config.js";
 import { TuiSettingsSchema } from "./tui/settings.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.

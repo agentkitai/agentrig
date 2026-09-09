@@ -100,3 +100,21 @@ it("requires explicit supervisor, abort and checkpoint opt-ins before restoratio
   expect(()=>validateAbortRestores({...valid,sandbox:"workspace-write"})).toThrow("--sandbox none");
   expect(()=>validateAbortRestores({})).not.toThrow();
 });
+
+it.each([undefined, false])("omits unused restoration adapters when abort restores is %s", async enabled => {
+  const b = await built(); const restoreCheckpoint = vi.fn(); const onRestore = vi.fn();
+  const oldStream = b.provider.stream.bind(b.provider); let turn = 0;
+  b.provider.stream = async function*(request, signal): AsyncIterable<ModelEvent> {
+    if (turn++ === 0) yield* oldStream(request, signal);
+    else { await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true }); }); yield { type: "stop", reason: "end_turn" }; }
+  };
+  const options = supervisorOptions({ opts: { supervisorAbort: true, ...(enabled === undefined ? {} : { supervisorAbortRestores: enabled }) },
+    task: "fixture", budget: { maxTurns: 2 }, memoryIndex: "", provider: b.provider, soft: 0.99, turnsRemaining: 1,
+    restoreCheckpoint, onRestore });
+  expect(options.abortRestores).toBe(false);
+  expect(options).not.toHaveProperty("restoreCheckpoint"); expect(options).not.toHaveProperty("onRestore");
+  const session = b.agent.run("write", { cwd: root }); const attached = supervise(session, { ...options, ladder: { ladder: ["abort"] } });
+  expect((await session.done).reason).toBe("aborted"); await attached.done;
+  expect(await readFile(join(root, "file.txt"), "utf8")).toBe("after");
+  expect(restoreCheckpoint).not.toHaveBeenCalled(); expect(onRestore).not.toHaveBeenCalled();
+});

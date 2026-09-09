@@ -64,8 +64,11 @@ Its optional root-alias note was treated as material to our precedence contract:
 CLI/config/builder alias fixture first failed because package/home became equal priority.
 The builder now maps all resolved roots explicitly before deduplication; relative/absolute
 alias controls pass and project definitions still win. No second broad review was run.
-Nested skill filename casing and more prominent hardlink-source guidance remain optional END
-follow-ups; source hardlinks are deliberately refused, including pnpm-linked files.
+Nested skill filename casing was delivered in [PR #214](https://github.com/agentkitai/agentrig/pull/214).
+Source hardlinks are deliberately refused, including files linked into pnpm's store:
+installation requires a privately owned source tree of ordinary files, not a shared
+package-store checkout. Copy or export the intended source into an independent tree
+before installation; do not weaken the hardlink guard or modify package-store files.
 
 Final updated-main build/typecheck/full suite after the alias fix passes 2,502 tests plus two
 skips across 142 files (four workers, 34 seconds); all 28 focused package cases are included.

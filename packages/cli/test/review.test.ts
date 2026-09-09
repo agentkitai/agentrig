@@ -32,6 +32,22 @@ async function repo() {
   return { root, git };
 }
 describe("R15e actual diff review", () => {
+  it("known input refusals stay actionable without exposing unknown provider or process errors", async () => {
+    const provider = vi.fn(() => fake().provider); const process = vi.fn(reviewProcess);
+    for (const [options, expected] of [
+      [{ base: "main", pr: "1" }, "review accepts --base or --pr, not both"],
+      [{ comment: true }, "--comment requires --pr"],
+      [{ pr: "secret-token" }, "--pr requires a positive PR number"],
+      [{ base: "secret\u001b[31m" }, "unsupported base ref spelling"],
+    ] as const) {
+      const message = await reviewChanges("/unused", { ...defaults, ...options }, signal(), { provider, process }).then(() => "unexpected success", reviewFailure);
+      expect(message).toBe(expected); expect(message).not.toContain("secret");
+    }
+    expect(provider).not.toHaveBeenCalled(); expect(process).not.toHaveBeenCalled();
+    expect(reviewFailure(new Error("provider secret-token"))).not.toContain("secret-token");
+    try { reviewArguments("--unknown secret-token"); throw new Error("accepted invalid arguments"); }
+    catch (error) { expect(reviewFailure(error)).toBe("usage: /review [--base ref | --pr n] [--comment]"); }
+  });
   it("actual CLI uses the local OpenAI adapter, no main or unrelated role construction", async () => {
     const { root } = await repo(); await writeFile(join(root, "a.ts"), "return 2;\n"); const requests: unknown[] = [];
     const server = createServer(async (request, response) => {

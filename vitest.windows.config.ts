@@ -56,6 +56,7 @@ export const windowsCoverage = [
   "packages/cli/test/mcp-serve-cli.test.ts",
   "packages/cli/test/mcp-serve-runtime.test.ts",
   "packages/cli/test/mcp-serve.test.ts",
+  "packages/cli/test/mcp-error-notice.test.ts",
   "packages/cli/test/memory-ingest-lifecycle.test.ts",
   "packages/cli/test/memory-promotion.test.ts",
   "packages/cli/test/net-permission.test.ts",
@@ -72,6 +73,7 @@ export const windowsCoverage = [
   "packages/cli/test/provider-probe.test.ts",
   "packages/cli/test/provider-selection.test.ts",
   "packages/cli/test/question-acp.test.ts",
+  "packages/cli/test/question-deadline.test.ts",
   "packages/cli/test/questions.test.ts",
   "packages/cli/test/render.test.ts",
   "packages/cli/test/review.test.ts",
@@ -179,6 +181,7 @@ export const windowsCoverage = [
   "packages/supervisor/test/detectors.test.ts",
   "packages/supervisor/test/diff-review.test.ts",
   "packages/supervisor/test/evidence-grading.test.ts",
+  "packages/supervisor/test/followups.test.ts",
   "packages/supervisor/test/injection.test.ts",
   "packages/supervisor/test/plan-evidence.test.ts",
 ];

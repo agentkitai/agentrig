@@ -26,6 +26,7 @@ export async function pack(root, destination) {
     try { stat = await lstat(path); } catch (error) { if (optional && error.code === 'ENOENT') return; throw error; }
     if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error(`invalid evidence file: ${relative}`);
     const bytes = await readFile(path);
+    if (bytes.length > 8 * 1024 * 1024) throw new Error('evidence file exceeds 8 MiB');
     total += bytes.length;
     if (total > 128 * 1024 * 1024) throw new Error('evidence bundle exceeds 128 MiB');
     files[relative] = { sha256: sha256(bytes), bytes: bytes.length, base64: bytes.toString('base64') };
@@ -46,9 +47,9 @@ export async function pack(root, destination) {
   await take('calls.json', true); await take('progress.jsonl', true); await take('attempts.jsonl', true);
   const results = JSON.parse(Buffer.from(files['results.json'].base64, 'base64').toString());
   const protocol = z.object({ revision: z.string().regex(/^[a-f0-9]{40}$/) }).passthrough().parse(JSON.parse(Buffer.from(files['protocol.json'].base64, 'base64').toString()));
-  const summary = summarize(results);
   // Enumerate all created slot directories, including a partially collected blocked attempt.
   const names = (await readdir(root)).filter(n => /^\d{3}-(?:A|X)[1-4]-s[01]m[01]-r[1-3]$/.test(n)).sort();
+  const summary = summarize(results, names);
   for (const key of names) { await tree(key); await take(`${key}-workspace.receipt.json`, true); }
   for (const name of ['training', 'corpus']) {
     try { await tree(name); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -79,5 +80,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     if (process.argv.length !== 4) throw new Error('usage: node eval/pack-live.mjs CLOSED_EVIDENCE_ROOT NEW_PUBLICATION_DIRECTORY');
     console.log(JSON.stringify(await pack(process.argv[2], process.argv[3])));
-  } catch (error) { console.error(error.message); process.exitCode = 2; }
+  } catch { console.error('Unable to pack evidence. Usage: node eval/pack-live.mjs CLOSED_EVIDENCE_ROOT NEW_PUBLICATION_DIRECTORY'); process.exitCode = 2; }
 }

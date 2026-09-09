@@ -102,6 +102,7 @@ it.each([false, true])("actual empty CLI heartbeat has one request, no tools or 
     const store = new SessionStore({ root: join(f.project, ".agentrig/raw/sessions") });
     const sessions = await store.list(); expect(sessions).toHaveLength(1);
     const events = await store.readAll(sessions[0]!.id);
+    expect(events.some(e => e.type === "question.asked" || e.type === "question.answered")).toBe(false);
     expect(events.filter(e => e.type === "model.request")).toHaveLength(1);
     expect(events).toContainEqual(expect.objectContaining({ type: "run.scheduled", source: "heartbeat" }));
     expect(renderEvent(events.find(e => e.type === "run.scheduled")!)).toContain("heartbeat UTC-minute=");
@@ -141,6 +142,7 @@ it("nonempty heartbeat uses the configured budget without treating checklist pro
       expect(opts.maxTurns).toBe("2"); expect(opts.heartbeat).toBe("checklist");
       const built = await buildAgent(opts);
       expect(built.tools.some(tool => tool.name === "bash")).toBe(true);
+      expect(built.tools.some(tool => tool.name === "ask_user")).toBe(false);
       built.provider.stream = async function* () {
         requests++; yield { type: "tool_use", id: `call${requests}`, name: "bash", input: { command: "echo SHOULD_NOT_RUN" } };
         yield { type: "stop", reason: "tool_use" };

@@ -1,11 +1,11 @@
 import { access, lstat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { z } from "zod";
+import type { z } from "zod";
 import { ownedProcess } from "../owned-process.js";
 import type { TuiController, TuiState } from "./controller.js";
 
-export const NotificationMode = z.enum(["off", "bell", "desktop", "both"]);
-export const NotificationIdleSeconds = z.number().int().min(1).max(3600);
+import { NotificationMode, NotificationIdleSeconds } from "../notification-config.js";
+export { NotificationMode, NotificationIdleSeconds } from "../notification-config.js";
 export interface NotificationOptions { notifications?: z.infer<typeof NotificationMode>; notificationIdleSeconds?: number; headless?: boolean }
 type Kind = "permission" | "question" | "supervisor" | "end";
 const messages: Record<Kind, string> = { permission: "A permission answer is needed", question: "A question answer is needed",

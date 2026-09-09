@@ -61,6 +61,8 @@ export const RUN_NUMERIC_DEFAULTS = {
 } as const;
 
 export interface RunOptions extends AgentBuildOptions, SupervisorFlags {
+  /** Validated schedule CLI/config option; not a provider option. */
+  heartbeatMaxTurns?: string | number;
   outputSchema?: string;
   outputMode?: "prompted" | "native";
   answerPolicy?: string;
@@ -293,6 +295,8 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
   validateAbortRestores(o);
   if (o.supervisorAbortRestores === true && w.restoreCheckpoint === undefined) throw new Error("supervisor abort restoration is missing its guarded adapter");
   const reviewProvider = w.reviewProvider ?? w.provider;
+  // Deduplicate only consecutive identical corrupt-entry sets, not newly unreadable history.
+  let previousAttemptWarning: string | undefined;
   return {
     budget: {
       soft: w.soft,
@@ -304,8 +308,8 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
     },
     capabilities: { abort: o.supervisorAbort === true },
     abortRestores: o.supervisorAbortRestores === true,
-    ...(w.restoreCheckpoint === undefined ? {} : {restoreCheckpoint:w.restoreCheckpoint}),
-    ...(w.onRestore === undefined ? {} : {onRestore:w.onRestore}),
+    ...(o.supervisorAbortRestores !== true || w.restoreCheckpoint === undefined ? {} : {restoreCheckpoint:w.restoreCheckpoint}),
+    ...(o.supervisorAbortRestores !== true || w.onRestore === undefined ? {} : {onRestore:w.onRestore}),
     drift: {
       scope: o.driftScope ?? [],
       ...(o.driftContract === undefined ? {} : { contract: o.driftContract }),
@@ -328,7 +332,10 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
             const ledger = await new FileRawStore({ root: o.memory }).readAttempts(sessionId, {
               signal, maxEntries: 128, maxFileBytes: 64 * 1024, maxTotalBytes: 2 * 1024 * 1024,
             });
-            if (ledger.corrupt.length > 0) maintenanceDiagnostic(() => {
+            const warningKey = ledger.corrupt.length === 0 ? undefined : JSON.stringify(ledger.corrupt);
+            const repeated = warningKey === previousAttemptWarning;
+            previousAttemptWarning = warningKey;
+            if (warningKey !== undefined && !repeated) maintenanceDiagnostic(() => {
               const warning = new Error(`attempt ledger is incomplete; reviewing readable attempts only: ${ledger.corrupt.join(", ")}`);
               if (w.onError !== undefined) return w.onError("attempts", warning);
               process.emitWarning(warning.message, { code: "AGENTRIG_ATTEMPT_INCOMPLETE" });
@@ -480,8 +487,10 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
             memoryIndex,
             provider,
             reviewProvider: providers.supervisor,
-            restoreCheckpoint: checkpointRestorer(opts.root),
-            onRestore: result => printError(`supervisor abort-restore: ${result.message}`),
+            ...(opts.supervisorAbortRestores !== true ? {} : {
+              restoreCheckpoint: checkpointRestorer(opts.root),
+              onRestore: (result: import("@agentkitai/agentrig-core").UndoResult) => printError(`supervisor abort-restore: ${result.message}`),
+            }),
             soft: supervisorSoft,
             turnsRemaining: supervisorTurnsRemaining,
             ...(interactive

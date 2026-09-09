@@ -23,6 +23,23 @@ afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { rec
 async function fixture() { const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-nightly-"))); roots.push(root); return root; }
 const options = (root: string) => ({ output: join(root, "run"), workerImage: image, checkerImage: image });
 
+it("keeps the audited action runtime pins and Windows fixture phase ordering", async () => {
+  for (const name of ["ci", "nightly-structure"]) {
+    const workflow = await readFile(new URL(`../../../.github/workflows/${name}.yml`, import.meta.url), "utf8");
+    expect(workflow).toContain("actions/checkout@v7.0.1");
+    expect(workflow).toContain("actions/setup-node@v7.0.0");
+    expect(workflow).toContain("pnpm/action-setup@v6.1.0");
+    expect(workflow).toContain("actions/upload-artifact@v7.0.1");
+    expect(workflow).toContain("node-version: 22");
+    if (name === "nightly-structure") expect(workflow).toContain("timeout-minutes: 30");
+    else {
+      const windows = workflow.slice(workflow.indexOf("  windows-sandbox-none:"));
+      expect(windows.indexOf("packages-runtime.test.ts --maxWorkers=1")).toBeLessThan(windows.indexOf("packages.test.ts --maxWorkers=1"));
+      expect(windows.indexOf("packages.test.ts --maxWorkers=1")).toBeLessThan(windows.indexOf("--config vitest.windows.config.ts"));
+    }
+  }
+});
+
 /** Trusted actual host E1/checker fixture transport, explicitly not portable OS isolation. */
 function transport(): EvaluationTransport {
   const base = evaluationTransport();
@@ -43,8 +60,9 @@ it("requires exact positive/negative outcomes, complete usage and a genuinely pe
     const test = { name: name!, task: task!, expected: expected! };
     const result = { results: [{ outcome: expected, task, usageComplete: true }], cancelled: false, unknownCalls: 0, evidenceLane: "scripted" };
     const report = { task, outcome: expected, evidenceLane: "scripted" };
-    const checks = { task, outcome: expected, manual: "PENDING", behavior: "PASS", regression: "PASS", scope: "PASS" };
+    const checks = { task, outcome: expected, manual: "PENDING", behavior: "PASS", regression: name === "broken" ? "FAIL" : "PASS", scope: "PASS" };
     expect(() => assertNightlyOutcome(test, result, report, checks)).not.toThrow();
+    if (name === "broken") expect(() => assertNightlyOutcome(test, result, report, { ...checks, regression: "PASS" })).toThrow("regression");
     for (const changed of [{ ...result, results: [] }, { ...result, unknownCalls: 1 }, { ...result, cancelled: true },
       { ...result, results: [{ outcome: expected === "PASS" ? "BLOCKED" : "PASS", task, usageComplete: true }] }])
       expect(() => assertNightlyOutcome(test, changed, report, checks)).toThrow();
@@ -124,6 +142,22 @@ it("cancellation waits for the owned transport to settle before publishing a ter
   try { expect(JSON.parse(await readFile(join(root, "run", "artifacts", "nightly-summary.json"), "utf8")).status).toBe("RUNNING"); }
   finally { release(); }
   expect(await running).toMatchObject({ status: "FAIL", cancelled: true, phase: "preflight" });
+});
+
+it("persists the current RUNNING phase before entering source preparation", async () => {
+  const root = await fixture(); let entered!: () => void, release!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const base = transport();
+  const running = runNightly(options(root), { transport: { ...base, async command(command, args, opts) {
+    if (args[0] === "clone") { entered(); await held; throw new Error("controlled source preparation failure"); }
+    return base.command(command, args, opts);
+  } } });
+  try {
+    await ready;
+    expect(JSON.parse(await readFile(join(root, "run", "artifacts", "nightly-summary.json"), "utf8")))
+      .toMatchObject({ status: "RUNNING", phase: "source preparation" });
+  } finally { release(); await running; }
 });
 
 it("a config cannot select evidence provenance and invalid trusted lane refuses before execution", async () => {

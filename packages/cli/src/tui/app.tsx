@@ -103,6 +103,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
   useEffect(
     () =>
       controller.subscribe((next) => {
+        completionHint.current = "";
         if (paste.isPasting || paste.hasPendingMarker || buf.hasPendingDraw) {
           deferredState.current = next;
         } else {
@@ -132,7 +133,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
     const composerAction = (action: OrdinaryInputAction): void => {
       const current = controller.snapshot();
       const protectedInput = questionAtInput !== null || current.question !== null || current.escalation !== null || current.pending !== null;
-      const edit = (text: string): void => { recall.current.reset(); completionHint.current = ""; slashActive.current = !protectedInput; slashIndex.current = 0; buf.set(text); };
+      const edit = (text: string, gesture: "text" | "edit" = "text"): void => { recall.current.reset(); completionHint.current = ""; slashActive.current = !protectedInput; slashIndex.current = 0; buf.set(text, undefined, gesture); };
       const matches = protectedInput ? [] : suggestions(buf.value);
       if (action.type === "up" || action.type === "down") {
         if (matches.length) {
@@ -156,7 +157,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
         if (!protectedInput) edit(buf.value + "\n");
       } else if (action.type === "paste-image") {
         if (!protectedInput) void controller.pasteImage();
-      } else if (action.type === "backspace") edit(removeLastGrapheme(buf.value));
+      } else if (action.type === "backspace") edit(removeLastGrapheme(buf.value), "edit");
       else if (action.type === "append") edit(buf.value + action.text);
       else if (action.type === "enter") {
         const line = buf.value;
@@ -178,7 +179,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       const pending = controller.snapshot().pending;
       if (pending === null) return;
       const pressed = action.type === "append" && /^[a-zA-Z]$/.test(action.text) ? action.text.toLowerCase() : undefined;
-      buf.touch(); // coalesce scope edits and controller redraws at the input quiet point
+      buf.touch(action.type === "backspace" ? "edit" : "text"); // coalesce scope edits at the input quiet point
       if (pending.scope !== undefined) {
         if (action.type === "escape") controller.cancelPermissionScope();
         else if (pending.scope.preview) {
@@ -206,8 +207,15 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       } else if (controller.snapshot().pending !== null) permissionAction(action);
       else composerAction(action);
     };
+    const framingWasOpen = paste.isPasting || paste.hasPendingMarker;
     const decoded = paste.feed(raw);
     if (decoded.protocol) {
+      // Unmatched closing markers may accompany ordinary edit keys. Only those keys may
+      // retain a deadline; closing a real paste or split marker always starts a fresh quiet wait.
+      const editOnly = !framingWasOpen && decoded.segments.length > 0 && decoded.segments.every(segment => {
+        const actions = ordinaryInputActions(segment.text);
+        return !segment.pasted && actions.length > 0 && actions.every(action => action.type === "backspace");
+      });
       // A paste cannot answer a permission prompt accidentally. Protocol chunks are still consumed
       // so a later 201~ restores ordinary input correctly.
       for (const segment of decoded.segments) {
@@ -226,7 +234,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       // There is deliberately no timer while a paste or possible split marker remains open. Even a
       // long delivery pause is not proof that the terminal has finished writing the paste.
       if (paste.isPasting || paste.hasPendingMarker) buf.hold();
-      else buf.touch();
+      else buf.touch(editOnly ? "edit" : "text");
       return;
     }
 
@@ -312,7 +320,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
       <Static items={state.lines}>
         {(l) => (
           <Text key={l.key} color={palette[l.tone]}>
-            {markdown(l, columns, !plain)}
+            {markdown(l, columns, !plain, palette.assistant)}
           </Text>
         )}
       </Static>
@@ -361,7 +369,7 @@ export function App({ controller, onMounted, onInput, history: suppliedHistory, 
         <Box marginTop={1} flexDirection="column">
           <Text color={palette.warning}>{fitToRows(`Question: ${state.question.request.prompt}\n${state.question.request.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}`, columns, Math.max(2, Math.min(7, rows - 3)))}</Text>
           <Text>{fitToRows(`answer: ${input}`, columns, 2)}</Text>
-          <Text dimColor>{fitToRows(`Enter a number or free text; clarification is not permission.${state.queuedQuestions ? ` ${state.queuedQuestions} more waiting.` : ""}`, columns, 2)}</Text>
+          <Text dimColor>{fitToRows(`1–4 alone select options; other text (including /commands) is literal. For numeric text, write “value 2”. Answers are not permission.${state.queuedQuestions ? ` ${state.queuedQuestions} more waiting.` : ""}`, columns, 2)}</Text>
         </Box>
       ) : state.escalation !== null ? (
         <Box marginTop={1} flexDirection="column">

@@ -152,7 +152,7 @@ function rawEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hoo
 }
 
 function buildEntry(name: string, entry: ProviderEntry, opts: ProviderOptions, hooks: ProviderHooks): ModelProvider {
-  if (opts.dailyCap !== undefined && hooks.meter === undefined) throw new Error("--daily-cap requires metered session execution; this standalone model path is unsupported");
+  if (opts.dailyCap !== undefined && hooks.meter === undefined) throw new Error("--daily-cap (trusted dailyCap config) requires metered session execution; this standalone model path is unsupported");
   if (opts.dailyCap !== undefined && (entry.provider === "openai-chatgpt" ||
     (entry.baseUrl !== undefined && entry.baseUrl !== (entry.provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"))))
     throw new Error("--daily-cap refuses providers/endpoints without the supported configured output envelope");
@@ -184,7 +184,7 @@ export function buildProviders(opts: ProviderOptions, hooks: ProviderHooks = {})
   // From cache, or built and cached — unwrapped, so `get` and `forRole` can each name the failure
   // their own way without one wrapping the other's message.
   const construct = (name: string, effort?: ReasoningEffort): ModelProvider => {
-    const key = JSON.stringify([name, effort ?? null]);
+    const key = JSON.stringify([name, effort ?? entries[name]?.reasoningEffort ?? null]);
     let provider = built.get(key);
     if (provider === undefined) {
       if (built.size >= 128) throw new Error("provider variant capacity exceeded (128)");

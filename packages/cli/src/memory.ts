@@ -47,7 +47,13 @@ export async function memoryResetDreamStamp(opts: MemoryOptions & { confirm?: bo
     return;
   }
   await withMaintenanceSignal(async signal => {
-    const result = await resetDreamStamp(wiki, { signal });
+    let result;
+    try { result = await resetDreamStamp(wiki, { signal }); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new Error("Dream stamp reset needs an existing wiki. Pass --dir for its parent memory directory; stop running/scheduled dreams first. No missing directory was initialized.", { cause: error });
+      throw error;
+    }
     console.log(result.status === "absent" ? "No dream scheduling stamp; nothing changed."
       : `Dream scheduling stamp reset; the next scheduled dream is due. Previous stamp preserved at ${result.backup}`);
   });
@@ -275,8 +281,8 @@ async function promoteWithSignal(path: string, opts: MemoryPromoteOptions, signa
     process.exitCode = 1;
     return;
   }
-  console.log(renderPromotionProposal(proposal));
   if (opts.confirm !== true) {
+    console.log(renderPromotionProposal(proposal));
     console.log("Review these excerpts and the claim's meaning; --confirm additionally runs a bounded memory-role effect assessment before shared-scope promotion. Nothing was published.");
     return;
   }
@@ -286,8 +292,11 @@ async function promoteWithSignal(path: string, opts: MemoryPromoteOptions, signa
     return;
   }
   let publicationStarted = false;
+  let assessorReady = false;
   try {
-    const guardrailIndex = await reviewPromotionEffects([proposal], { provider: buildRoleProvider(opts, memoryRole(opts)), signal,
+    const provider = buildRoleProvider(opts, memoryRole(opts));
+    assessorReady = true;
+    const guardrailIndex = await reviewPromotionEffects([proposal], { provider, signal,
       ...(opts.guardrailLimits === undefined ? {} : { limits: opts.guardrailLimits }), onUsage: report => console.error(formatAuxiliaryUsage(report)) });
     const current = await (await openStore(opts.dir)).read(path);
     if (current === null || current.version !== page.version) throw new Error("wiki page changed during effect assessment; review the current page again");
@@ -308,7 +317,9 @@ async function promoteWithSignal(path: string, opts: MemoryPromoteOptions, signa
       frontmatter: { ...page.frontmatter, sources: proposal.publicationSources } });
     console.log(`promoted ${page.path} to ${backend.id} shared scope`);
   } catch (err) {
-    console.error(`${publicationStarted ? "promotion failed; the backend may have accepted a partial update" : "not eligible; effect assessment or revalidation failed, nothing published"}: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`${publicationStarted ? "promotion failed; the backend may have accepted a partial update" : !assessorReady
+      ? "effect assessment unavailable; check memory-provider credentials/configuration, nothing published (not an adverse claim judgment)"
+      : "effect assessment or revalidation failed, nothing published"}: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;
   }
 }

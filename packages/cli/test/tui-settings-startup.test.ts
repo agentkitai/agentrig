@@ -72,7 +72,7 @@ it.each(["ordinary", "protocol"])("trusted user config reaches actual startup an
 }, 15_000);
 it("invalid direct startup settings fail before provider construction or mounting", async () => {
   Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
-  await expect(startTui({ root: "/unused", tui: { keybindings: { permission: { allowOnce: "n" } } } })).rejects.toThrow();
+  await expect(startTui({ root: "/unused", tui: { keybindings: { permission: { allowOnce: "n" } } } })).rejects.toThrow("Invalid TUI settings");
   expect(harness.builds).toBe(0); expect(harness.mounts).toBe(0);
 });
 it("configuration rejects arbitrary key sequences and unknown nested fields without echoing values", () => {

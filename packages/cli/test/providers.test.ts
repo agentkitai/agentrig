@@ -50,6 +50,21 @@ describe("resolveProviderEntries", () => {
 });
 
 describe("buildProviders", () => {
+  it("standalone daily cap refusal names both trusted config and CLI without constructing a provider", () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    expect(() => buildRoleProvider({ ...base, dailyCap: 1 }, "memory")).toThrow("--daily-cap (trusted dailyCap config) requires metered session execution");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("coalesces explicit configured effort with the default adapter without sharing other efforts", () => {
+    const meter = vi.fn<NonNullable<import("../src/provider.ts").ProviderHooks["meter"]>>(provider => provider);
+    const set = buildProviders(base, { meter });
+    const before = meter.mock.calls.length;
+    expect(set.get("cloud", "max")).toBe(set.main);
+    expect(meter.mock.calls).toHaveLength(before);
+    expect(set.get("cloud", "low")).not.toBe(set.main);
+    expect(set.get("cloud", "low")).toBe(set.get("cloud", "low"));
+    expect(meter.mock.calls).toHaveLength(before + 1);
+  });
   it("builds one instance per entry and shares it across roles", () => {
     const set = buildProviders(base);
     expect(set.main).toBe(set.supervisor);

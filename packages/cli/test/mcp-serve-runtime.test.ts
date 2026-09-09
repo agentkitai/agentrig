@@ -62,6 +62,19 @@ it("refuses remote serving dependencies before builder, provider or network work
   } finally { await rt.close(); }
 });
 
+it("advisory blocks retain Unicode code points at the chunk boundary", async () => {
+  const f = await fixture({ yolo: true });
+  const task = "x".repeat(15_999) + "😀" + "tail";
+  try {
+    await f.rt.run({ task }, new AbortController().signal);
+    const blocks = f.requests[0]!.messages[0]!.content;
+    const text = blocks.flatMap(block => block.type === "text" ? [block.text] : []);
+    expect(text.join("")).toBe(task);
+    expect(text.every(part => part.isWellFormed())).toBe(true);
+    for (const block of blocks) expect(block).toMatchObject({ trust: "external", context: { authority: "advisory" } });
+  } finally { await f.rt.close(); }
+});
+
 it("configured denies are preserved and smaller configured turn/token limits reach actual model requests", async () => {
   const f = await fixture({ yolo: true, deny: ["write"], maxTurns: "1", maxTokens: "50" });
   const result = await f.rt.run({ task: "write", maxTurns: 20, maxTokens: 8192 }, new AbortController().signal) as { reason: string; turns: number };

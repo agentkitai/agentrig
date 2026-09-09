@@ -75,6 +75,11 @@ authorize work. Reconnect
 to create sessions after the session cap. The v1 prompt response follows controller
 settlement and update flush; cancellation uses existing runtime joining guarantees,
 not a claim that arbitrary uncooperative host code/remote work has physically stopped.
+Cancellation races with completion: a task already settled before the cancel handler
+observes it may return its completed result. Cancellation is not rollback, and a
+late permission reply cannot retroactively authorize a cancelled task. The 32-block
+prompt limit counts resource-link/advisory blocks as well as text; links are never
+automatically fetched to evade those bounds.
 Generic harness budget stops map to `max_turn_requests`; `_meta.agentrig.reason`
 preserves the actual harness terminal reason. See [R8a details](plans/R8a.md).
 

@@ -103,6 +103,18 @@ describe("InputBuffer", () => {
     expect(h.scheduled(), "a paste chunk did not push the deadline out").toBeGreaterThan(first);
   });
 
+  it("held large-grapheme edit gestures keep a draw deadline while framed paste remains held", () => {
+    const h = harness(); const cluster = "👨‍👩‍👧‍👦";
+    h.buffer.set(cluster.repeat(20)); h.quiet();
+    h.buffer.set(cluster.repeat(19), undefined, "edit"); const first = h.scheduled();
+    for (let i = 18; i > 10; i--) h.buffer.set(cluster.repeat(i), undefined, "edit");
+    expect(h.scheduled()).toBe(first);
+    h.quiet(); expect(h.drawn.at(-1)).toBe(cluster.repeat(11));
+    h.buffer.set("pasted".repeat(20)); h.buffer.hold();
+    h.quiet(); expect(h.drawn.at(-1)).toBe(cluster.repeat(11));
+    h.buffer.touch(); h.quiet(); expect(h.drawn.at(-1)).toBe("pasted".repeat(20));
+  });
+
   it("drops pending work when disposed, and stays disposed", () => {
     const h = harness();
     const ran: string[] = [];

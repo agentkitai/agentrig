@@ -17,6 +17,13 @@ vi.mock("node:fs/promises", async importOriginal => {
 
 const roots: string[] = [];
 const formats: ExportFormat[] = ["jsonl", "sharegpt", "md"];
+it("counts a credential matching both token and assignment rules once", () => {
+  for (const text of ['api_key=sk-1234567890abcd', 'api_key="sk-1234567890abcd"', "token=opaque-token"]) {
+    const result = redactExportMessages([{ role: "assistant", content: [{ type: "text", text }] }]);
+    expect(result.redactions).toBe(1);
+    expect(result.messages[0]!.content[0]).toMatchObject({ text: "[redacted]" });
+  }
+});
 afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true }); });
 async function fixture(messages: Message[] = [{ role: "assistant", content: [{ type: "text", text: "answer" }] }]) {
   const root = await fs.mkdtemp(join(tmpdir(), "agentrig-export-")); roots.push(root);

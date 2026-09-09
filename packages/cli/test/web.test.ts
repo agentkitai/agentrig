@@ -17,7 +17,9 @@ async function refused(server: {url: string; token: string}, options: { origin?:
   });
 }
 it.each(["0.0.0.0", "localhost", "::1", "127.0.0.2", "example.test"])("refuses nonliteral bind %s before runtime", async host => {
-  await expect(serveWeb({ host, port: 0, run: async () => { throw Error("must not start"); } })).rejects.toThrow();
+  const run = vi.fn(async () => {});
+  await expect(serveWeb({ host, port: 0, run })).rejects.toThrow("Web bind refused: use host 127.0.0.1 and an integer port from 0 to 65535");
+  expect(run).not.toHaveBeenCalled();
 });
 it("requires bearer AND exact Origin/Host before creating ACP; fixed assets contain no secret", async () => {
   let runs = 0; const server = await serveWeb({ host: "127.0.0.1", port: 0, run: async () => { runs++; } });
