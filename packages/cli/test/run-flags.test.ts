@@ -224,6 +224,9 @@ describe("supervisorOptions", () => {
     await raw.addAttempt({ id: "current", sessionId: "current", ts: 1, hypothesis: "test", actions: "test", outcome: "success", evidence: [] });
     const torn = join(root, "raw/attempts/torn.json");
     await writeFile(torn, "");
+    // These are external ledger edits, not addAttempt writes. Directory timestamps can remain
+    // identical across fast changes; use the public rebuild contract rather than a clock delay.
+    await raw.rebuildAttemptIndex();
     const onError = vi.fn(async () => { throw new Error("broken UI"); });
     const reviewed = wiring({ opts: { supervisorReview: true, memory: root }, onError });
     expect((await reviewed.attempts!("current", new AbortController().signal)).map(a => a.id)).toEqual(["current"]);
@@ -232,11 +235,14 @@ describe("supervisorOptions", () => {
     expect(onError).toHaveBeenCalledTimes(1);
     const another = join(root, "raw/attempts/another-torn.json");
     await writeFile(another, "");
+    await raw.rebuildAttemptIndex();
     await reviewed.attempts!("current", new AbortController().signal);
     expect(onError).toHaveBeenCalledTimes(2);
     await rm(torn); await rm(another);
+    await raw.rebuildAttemptIndex();
     await reviewed.attempts!("current", new AbortController().signal);
     await writeFile(torn, "");
+    await raw.rebuildAttemptIndex();
     await reviewed.attempts!("current", new AbortController().signal);
     expect(onError).toHaveBeenCalledTimes(3);
     await new Promise<void>(resolve => setImmediate(resolve));
