@@ -95,6 +95,7 @@ export async function lastDreamAt(wikiRoot: string, opts: MemoryLockOptions = {}
     .then(bytes => bytes.toString("utf8")).catch((error: NodeJS.ErrnoException) => {
       opts.signal?.throwIfAborted();
       if (error.code === "ENOENT") return "";
+      error.message += "; scheduling stamp could not be read; stop running/scheduled dreams and inspect the stamp; for a regular file, preserve it with agentrig memory reset-dream-stamp --dir <memory-directory> --confirm (use the memory directory containing this wiki)";
       throw error;
     });
   opts.signal?.throwIfAborted();

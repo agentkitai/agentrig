@@ -13,6 +13,7 @@ are assigned to their existing package batch, not silently claimed complete here
 | END fragment | Disposition and evidence |
 |---|---|
 | Persistence #130: metadata-skipped merges | Implemented: `dream/apply.ts` records `skippedMerges`; `types.ts`, `dream/dream.ts`, `dream/report.ts` propagate, render and count them. `persistence.test.ts` checks source retention and exact reason; `write-quality.test.ts` checks legacy report compatibility/render/count. Opaque metadata is never merged speculatively. |
+| Scheduler stamp-reset diagnostic | Implemented memory-owned seam: `dream/dream.ts:lastDreamAt` appends the existing reset command to non-ENOENT read failures while preserving error identity/code and absent-stamp behavior. `dream-metadata.test.ts` pins the hint and real backup/no-overwrite recovery. Missing-root CLI errors remain CLI-owned; reset never initializes a missing wiki. |
 | Persistence: contention guidance | Implemented in `lock.ts`: distinguish a possibly active writer, recommend wait/retry, and require stopping writers before crashed-owner recovery; age alone proves nothing. `dream-lifecycle.test.ts` holds the actual lock and checks refusal. No lock stealing or timeout change. |
 | Persistence: append-cache optimization | Declined: `raw.ts` already maintains a bounded disposable index with immutable originals and separate rebuild/query budgets; no measured append bottleneck justifies a second incremental consistency path. `persistence.test.ts` retains scoped queries, torn/corrupt entries and bounded rebuild controls. |
 | Persistence: more lock configuration | Declined: store `lockTimeoutMs`, ingest `lockTimeoutMs`, dream `lockTimeoutMs` and per-operation `MemoryLockOptions.timeoutMs` already cover current callers. No demonstrated caller requires another configuration surface. |
@@ -62,3 +63,7 @@ the running-state renderer check failed the neutral pending-output test (1 failu
 Those controls establish discrimination for the stated behavior, not semantic
 correctness of model judgments or untested host platforms. Root owns bounded
 independent review, exact-head/full CI, sequential merge and post-main verification.
+
+Root then assigned the memory-owned stamp-read hint. Its new oversized-stamp
+assertion failed before the change and passed afterward; 38 metadata/runtime tests,
+memory build/typecheck and diff whitespace checks passed on that final delta.

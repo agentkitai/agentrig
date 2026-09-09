@@ -19,6 +19,7 @@ afterEach(async () => { vi.restoreAllMocks(); await fs.rm(root, { recursive: tru
 it("archives an oversized stamp byte-for-byte outside the scan tree, then allows dreaming again", async () => {
   const bytes = Buffer.alloc(8192, 0xab); await fs.writeFile(stamp, bytes);
   await expect(lastDreamAt(wiki.root)).rejects.toThrow("exceeds 4096 bytes");
+  await expect(lastDreamAt(wiki.root)).rejects.toThrow("agentrig memory reset-dream-stamp --dir <memory-directory> --confirm");
   const before = await fs.stat(stamp);
   const result = await resetDreamStamp(wiki.root);
   expect(result.status).toBe("reset"); if (result.status !== "reset") throw new Error("missing backup");
