@@ -302,8 +302,23 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
   const operation = tool.operation?.(input);
   const proposal = proposedFileDiff(tool, input);
   const checkpointers = (config.hooks ?? []).filter(isCheckpointerHook);
-  const declaredEffect = context.schedule !== undefined || checkpointers.length > 0
-    ? typeof tool.effects === "function" ? tool.effects(input) : tool.effects : undefined;
+  let declaredEffect: "read-only" | "workspace" | "background" | undefined;
+  if (context.schedule !== undefined || checkpointers.length > 0) {
+    if (typeof tool.effects !== "function") declaredEffect = tool.effects;
+    else try {
+      declaredEffect = tool.effects(input);
+    } catch (error) {
+      // An extension's descriptor already has its own disabling receipt; leave that path alone.
+      if (error instanceof ExtensionHandlerError) throw error;
+      // A trusted host descriptor that throws is a defect in the tool, not evidence that the call
+      // is harmless. Localize it here: the effect falls back to the conservative "workspace", so
+      // the checkpointer still snapshots and the scheduler still serializes, instead of one broken
+      // descriptor ending the turn before a call that has not even been authorized yet.
+      await emit({ type: "error", fatal: false,
+        message: `${tu.name} effects descriptor failed (${error instanceof Error ? error.message : String(error)}); treating the call as potentially mutating` });
+      declaredEffect = "workspace";
+    }
+  }
   const isolated = isIsolatedTool(tool);
   await context.schedule?.admit({ cwd, permission: permClass, effects: hasDiagnostics(tool) ? undefined : declaredEffect, paths: declaredPaths, isolated });
   const permReq: PermissionRequest = {
@@ -400,7 +415,13 @@ async function executeToolInner(tu: { id: string; name: string; input: unknown }
       return resultBlock(`checkpoint failed; tool blocked: ${checkpoint.denied}`, true);
     }
   }
-  if (checkpointers.length > 0 && signal.aborted) return resultBlock("aborted before tool execution", true);
+  if (checkpointers.length > 0 && signal.aborted) {
+    // The checkpoint gate passed and then the run was aborted, so this call is refused after
+    // approval like any other blocked call. Without the receipt the log shows an authorized tool
+    // that simply has no result, and a reader cannot tell it from a lost append.
+    await emit({ type: "tool.denied", id: tu.id, name: tu.name });
+    return resultBlock("aborted before tool execution", true);
+  }
   if (!isolated) context.schedule?.authorized();
   const callEvent = await emit({ type: "tool.call", id: tu.id, name: tu.name, input, inputHash: contentHash(input),
     ...(inputContext === undefined ? {} : { context: inputContext }) });

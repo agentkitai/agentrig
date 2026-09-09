@@ -288,6 +288,13 @@ export function createAgent(config: AgentConfig): Agent {
   if (config.sandbox !== undefined && config.sandbox.mode !== "none" && (config.hooks?.length ?? 0) > 0) {
     throw new Error("sandbox modes cannot contain host-process hooks; remove hooks (including ingest/dream-on-end) or explicitly select sandbox none");
   }
+  if ((config.hooks ?? []).filter(isCheckpointerHook).length > 1) {
+    // Two instances do not checkpoint twice: each keeps its OWN leases, owned state and uncertainty
+    // set, so the second one's `lease` finds the first one's lock directory and reports "another
+    // session or retained lock exists; stop writers before manual recovery" — a diagnostic that
+    // sends the operator looking for a stray process instead of at their own hook list.
+    throw new Error("only one Checkpointer may be configured; remove the duplicate hook instance");
+  }
   if (config.tools.some((tool) => tool.name === READ_OUTPUT_TOOL)) {
     throw new Error(`${READ_OUTPUT_TOOL} is reserved for immutable session-log output artifacts; remove the custom tool`);
   }

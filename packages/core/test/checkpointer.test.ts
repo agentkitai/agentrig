@@ -1005,3 +1005,71 @@ it("prune failure cannot publish a seal and successful seal observes already-pru
     expect(refsAtSeal).not.toMatch(/atomicprune\/[12](?:\n|$)/);
   } finally {await cp.endSession(ctx.sessionId);}
 });
+
+it("refuses two configured checkpointers instead of reporting a stray lock holder", () => {
+  // Each instance keeps its own leases/owned state, so the second one's `lease` finds the first's
+  // lock directory and reports "another session or retained lock exists" — which sends the operator
+  // hunting for a process rather than at their own hook list.
+  const build = (hooks: Checkpointer[]) => createAgent({
+    provider: new FakeProvider([]), tools: [], permissions: new RulePolicy([], "allow"), hooks,
+    systemPrompt: "test", store: new SessionStore({ root: join(root, ".agentrig", "sessions") }),
+  });
+  expect(() => build([new Checkpointer(), new Checkpointer()])).toThrow(/only one Checkpointer/);
+  expect(() => build([new Checkpointer()])).not.toThrow();
+});
+
+it("names the path when a listed file is a directory in the worktree", async () => {
+  await initRepo();
+  // Git still lists `tracked.txt`; the worktree has a directory there. A nested repository looks
+  // exactly the same from the capture loop, and the operator has to be told which path to inspect.
+  await rm(join(root, "tracked.txt"));
+  await mkdir(join(root, "tracked.txt"));
+  const tool = writeTool();
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("write", { cwd: root, id: "file_to_dir" });
+  const events = await collect(session);
+  await session.done;
+  const failure = events.find(e => e.type === "error" && e.message.includes("core:checkpointer"));
+  expect(failure).toBeDefined();
+  expect((failure as { message: string }).message).toContain('checkpoint path "tracked.txt" is a directory');
+  expect((failure as { message: string }).message).toContain("nested repository or submodule");
+  expect(events.filter(e => e.type === "tool.denied" && e.id === "a")).toHaveLength(1);
+  // the tool never ran: a blocked checkpoint blocks the write
+  await expect(readFile(join(root, "new.txt"), "utf8")).rejects.toThrow();
+});
+
+it("records a denial when the run aborts after the checkpoint and before the call", async () => {
+  await initRepo();
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [writeTool()])
+    .run("write", { cwd: root, id: "late_abort_denial" });
+  const events: HarnessEvent[] = [];
+  for await (const event of session.events) {
+    events.push(event);
+    // the narrow window this covers: the snapshot is durable, the tool has not been called
+    if (event.type === "checkpoint.created") session.control.abort();
+  }
+  await session.done;
+  expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
+  // the snapshot is durable and the tool never ran, so every abort in this window — whether the
+  // hook runner reports it or the post-gate check catches it — must leave a denial receipt
+  expect(events.filter(e => e.type === "error" && e.message.includes("aborted"))).not.toEqual([]);
+  expect(events.filter(e => e.type === "tool.denied" && e.id === "a")).toHaveLength(1);
+  // an authorized tool with no result and no receipt is indistinguishable from a lost append
+  expect(events.some(e => e.type === "tool.call" && e.id === "a")).toBe(false);
+  await expect(readFile(join(root, "new.txt"), "utf8")).rejects.toThrow();
+});
+
+it("a throwing effects descriptor is contained, and the call is treated as mutating", async () => {
+  await initRepo();
+  const tool: AnyTool = { ...writeTool(), effects: () => { throw new Error("descriptor defect"); } };
+  const session = agent([[call("a", "write", { path: "new.txt", content: "x" }), stop("tool_use")], [stop("end_turn")]], [tool])
+    .run("write", { cwd: root, id: "throwing_effects" });
+  const events = await collect(session);
+  await session.done;
+  // not a fatal turn: the run continues, the descriptor failure is visible, and the conservative
+  // "workspace" effect means the checkpoint is still taken before the write lands
+  expect(events.filter(e => e.type === "error" && e.message.includes("effects descriptor failed"))).toHaveLength(1);
+  expect(events.some(e => e.type === "checkpoint.created")).toBe(true);
+  expect(events.find(e => e.type === "tool.result" && e.id === "a")).toMatchObject({ ok: true });
+  expect(await readFile(join(root, "new.txt"), "utf8")).toBe("x");
+});
