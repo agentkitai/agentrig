@@ -83,6 +83,12 @@ export class OtlpExporter {
             if (Number.isFinite(seconds)) delay = Math.max(0, seconds);
           }
         } else {
+          // Deliberate (R8c follow-up, decided 2026-09-09): a 200 without a JSON
+          // `ExportTraceServiceResponse` is NOT treated as a successful export. Some collectors
+          // answer an empty body, and accepting that would mean counting spans as `exported` on a
+          // response that acknowledged nothing — a delivery claim the wire never made — or adding
+          // a third public counter dimension for "sent, unacknowledged". The conservative reading
+          // stays: this counts as failed. That is not a claim the collector stored nothing.
           if ((response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase() !== "application/json") {
             await response.body?.cancel(); throw new Error("invalid response");
           }
