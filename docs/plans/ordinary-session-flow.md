@@ -7,9 +7,9 @@ new feature band or another general roadmap sweep.
 
 ## Observed failure
 
-The answer's final turn ended at1789019002168; session.end followed at1789019302256:
-300088ms later. The user's terminal reported20 ingest calls,45001 reported tokens,
-one unknown-usage call, overall timeout300000ms and local writes not-started.
+The answer's final turn ended at 1789019002168; session.end followed at 1789019302256:
+300,088 ms later. The user's terminal reported 20 ingest calls, 45,001 reported tokens,
+one unknown-usage call, overall timeout 300,000 ms and local writes not-started.
 Those maintenance numbers are console evidence; they are not fabricated canonical
 auxiliary events in the raw log. The attempted child was approved, then refused
 by the retained shared checkpoint lock before dispatch.
@@ -22,7 +22,7 @@ by the retained shared checkpoint lock before dispatch.
   This is model guidance, not a keyword classifier or guarantee of model judgment.
   Child permission, checkpoints and inherited authority stay unchanged.
 - Automatic CLI session-end ingestion uses a local bounded latest-run eligibility
-  check and a30s/15s-per-call/4-call default budget. Read-only successful query runs
+  check and a 30s/15s-per-call/4-call default budget. Read-only successful query runs
   can defer with a visible reason and explicit manual-capture path. Unknown/failed
   dispatched work remains eligible. Eligibility is a spending heuristic, never
   permission or proof that a conversation contains no valuable lesson.
