@@ -225,10 +225,12 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       "This is THE way to run a child from here: it inherits this session's provider, permissions, " +
       "skills and tools, its start and end are recorded in this session's log, and the supervisor " +
       "knows it is running. Never launch a nested `agentrig run` from bash for that — it gets none " +
-      "of this wiring and this session cannot see it. Use it both to keep bulk work out of this " +
-      "conversation (a broad search, reading many files for one answer) and to delegate a whole " +
-      "job to an isolated worker (implement something, review something). The subagent sees none " +
-      "of this conversation, so the task must stand alone." + (opts.isolation === "worktree"
+      "of this wiring and this session cannot see it. Delegation is optional, not a prerequisite for answering: " +
+      "handle straightforward explanations and targeted lookups directly. Use a child only for a concrete " +
+      "bounded independent subtask when context isolation or independent work offers a clear benefit " +
+      "over the handoff cost, such as a substantial investigation, implementation or review. " +
+      "Provide self-contained inputs and an expected result; the subagent sees none of this conversation. " +
+      "Do not duplicate the same work in parent and child or bypass permissions or configured limits." + (opts.isolation === "worktree"
         ? " This worker uses a separate Git worktree and returns a retained patch candidate; inspect and apply it separately with authorized parent tools. No automatic parent edits."
         : "") + " " + roleGuidance,
     inputSchema: inputSchema(opts.providerChoices),
