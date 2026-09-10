@@ -12,6 +12,8 @@ it.each([40, 80, 120])("preserves every permission explanation at %s columns", w
 });
 
 it("uses spare width for a long column before falling back to labelled rows", () => {
+  expect(markdownTable(["A", "B"], [["x", "12345"]], 9)).toContain(" │ ");
+  expect(markdownTable(["A", "B"], [["x", "12345"]], 8)).not.toContain(" │ ");
   expect(markdownTable(["A", "B"], [["x", "A moderately long explanation"]], 40))
     .toBe("A │ B                            \n──┼──────────────────────────────\nx │ A moderately long explanation");
   expect(markdownTable(["A", "B"], [["x", "A moderately long explanation"]], 15))
