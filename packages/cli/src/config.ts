@@ -329,9 +329,15 @@ export async function loadRunConfig(
   const user = boundary.userStateSafe
     ? await readConfigFile(join(home, ".agentrig", "config.json"))
     : undefined;
+  const profile = typeof defaults.profile === "string" ? defaults.profile : undefined;
+  const cli = explicitCliValues(cmd, defaults);
+  // Decide whether a trust UI is possible using only already trusted user/argv state.
+  // YOLO never means trusting repository configuration automatically.
+  const beforeTrust = { ...withoutProfiles(user), ...(profile === undefined ? {} : user?.profiles?.[profile]), ...cli };
+  const unattended = beforeTrust.yolo === true || beforeTrust.dangerouslySkipPermissions === true;
   const trust = await resolveProjectTrust(cwd, {
     home,
-    interactive: options.interactive === true,
+    interactive: options.interactive === true && !unattended,
     explicitTrust: defaults.trust === true,
     ...(options.confirmTrust === undefined ? {} : { confirm: options.confirmTrust }),
     ...(options.notice === undefined ? {} : { notice: options.notice }),
@@ -339,8 +345,6 @@ export async function loadRunConfig(
   const project = trust.trusted
     ? await readConfigFile(join(trust.projectRoot, ".agentrig", "config.json"))
     : undefined;
-  const profile = typeof defaults.profile === "string" ? defaults.profile : undefined;
-  const cli = explicitCliValues(cmd, defaults);
   const selected = (file: ConfigFile | undefined): ConfigValues | undefined =>
     profile === undefined ? undefined : file?.profiles?.[profile];
   const configHas = (key: keyof ConfigValues): boolean =>

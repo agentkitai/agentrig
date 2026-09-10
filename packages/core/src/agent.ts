@@ -105,6 +105,10 @@ export interface AgentConfig {
   /** Trusted SDK scheduling seam; sequential by default. Never selected by model content. */
   turnStrategy?: TurnStrategy;
   permissions: PermissionPolicy;
+  /** Trusted host choice, never inferred from tool output or restored from a transcript.
+   * Unattended honors policy allows after external input, denies unresolved asks and sandbox
+   * escalation, and never invokes human approval/question callbacks. It grants no base authority. */
+  approvalMode?: "interactive" | "unattended";
   /** Optional OS sandbox, applied after permission approval as an independent execution boundary. */
   sandbox?: SandboxConfig;
   /** A string remains supported; labelled blocks produce a source-accurate context manifest. */

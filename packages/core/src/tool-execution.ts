@@ -17,6 +17,7 @@ import { contentHash } from "./session-store.js";
 import { mergePatches, type AttributedHookResult, type Hook, type HookPoint, type runHooks } from "./hooks.js";
 import { combinedContext, ADVISORY_CONTEXT } from "./context-principals.js";
 import { bindExpansionRestriction, expansionSurface, type externalExpansion } from "./external-expansion.js";
+import { bindApprovalMode } from "./approval-mode.js";
 import { isCheckpointerHook } from "./checkpointer.js";
 import { outputArtifactMarker } from "./tools/read-output.js";
 import { sanitizeLine } from "./tools/skills.js";
@@ -58,7 +59,7 @@ interface ToolExecutionContext {
   questionState?: QuestionState;
   schedule?: PipelineSchedule;
   expansion?: ReturnType<typeof externalExpansion>;
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "permissionGrants" | "toolAllowlist" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "approvalMode" | "permissionGrants" | "toolAllowlist" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   grantSessionId?: string;
   cwd: string;
@@ -380,7 +381,7 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
       else if (authorization.viewExpired) decisionSource = { kind: "boundary", reason: "grant-view-expired" };
     }
   }
-  if (freshExpansion && decision !== "deny") {
+  if (freshExpansion && decision !== "deny" && config.approvalMode !== "unattended") {
     decision = "ask"; decisionSource = { kind: "boundary", reason: "external-input-expansion" };
   }
   await emit({ type: "permission.decision", d: decision, toolUseId: tu.id, tool: tu.name, source: decisionSource });
@@ -390,12 +391,12 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
   // auditing why a call was blocked has to be able to tell them apart.
   let approvalFailure: unknown;
   if (decision === "ask") {
-    decision = config.onAsk === undefined ? "deny" : freshExpansion
+    decision = config.onAsk === undefined || config.approvalMode === "unattended" ? "deny" : freshExpansion
       ? await raceAbort(Promise.resolve().then(() => config.onAsk!(permReq, askContext)), "fresh external-input approval")
         .catch((error: unknown) => { approvalFailure = error; return "deny" as const; })
       : await config.onAsk(permReq, askContext);
     if (freshExpansion && (decision !== "allow" || signal.aborted || isEnded())) decision = "deny";
-    decisionSource = config.onAsk === undefined ? { kind: "unattended" }
+    decisionSource = config.onAsk === undefined || config.approvalMode === "unattended" ? { kind: "unattended" }
       : approvalFailure === undefined ? { kind: "approval-handler" }
       : { kind: "boundary", reason: signal.aborted || isEnded() ? "approval-aborted" : "approval-handler-failed" };
     if (approvalFailure !== undefined) {
@@ -465,7 +466,8 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
   };
   if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);
   if (hasDiagnostics(tool)) diagnosticContext(ctx);
-  bindQuestion(tool, ctx, tu.id, context.questionState ?? {}, async payload => { if (!isEnded()) await emit(payload); }, config.onQuestion);
+  bindQuestion(tool, ctx, tu.id, context.questionState ?? {}, async payload => { if (!isEnded()) await emit(payload); },
+    config.approvalMode === "unattended" ? undefined : config.onQuestion);
   const t0 = now();
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;
@@ -484,6 +486,7 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
       }
       context.expansion?.dispatched(surface);
       bindExpansionRestriction(ctx, context.expansion?.restricted() ?? true);
+      bindApprovalMode(ctx, config.approvalMode);
       bindPermissionView(ctx, config.permissionGrants);
       return tool.execute(input, ctx);
     };
@@ -527,11 +530,11 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
       await emit({ type: "permission.request", req: escalationReq });
       await emit({ type: "permission.decision", d: "ask", toolUseId: tu.id, tool: tu.name,
         source: { kind: "boundary", reason: "sandbox-escalation" } });
-      const escalationDecision = config.onAsk === undefined
+      const escalationDecision = config.onAsk === undefined || config.approvalMode === "unattended"
         ? "deny"
         : await config.onAsk(escalationReq, askContext);
       await emit({ type: "permission.decision", d: escalationDecision, toolUseId: tu.id, tool: tu.name,
-        source: config.onAsk === undefined ? { kind: "unattended" } : { kind: "approval-handler" } });
+        source: config.onAsk === undefined || config.approvalMode === "unattended" ? { kind: "unattended" } : { kind: "approval-handler" } });
       if (escalationDecision !== "allow") {
         sandboxRetryDenied = true;
         throw err;

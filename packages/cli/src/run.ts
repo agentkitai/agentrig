@@ -194,16 +194,18 @@ export function permissionWarning(
   if (mode !== "none") {
     return (
       `permissions are OFF${denied}, but the ${mode} sandbox is ON for ${cwd}. ` +
-      `Built-in writes and shell launches use the boundary; unsupported tools require separate ` +
-      `outside-sandbox approval. Host hooks and MCP startup are refused in this mode. ` +
+      `Built-in writes and shell launches use the boundary; outside-sandbox escalation is denied without prompting. ` +
+      `Host hooks and MCP startup are refused in this mode. ` +
       `SDK code and session bookkeeping remain trusted host operations. The session log records every call.`
     );
   }
   // the cwd is named because "skip permissions" is abstract and "it may delete anything under
   // /Users/you/work" is not
   return (
-    `permissions are OFF${denied}: every tool call is allowed without asking, including writing ` +
-    `and deleting outside ${cwd} and running any shell command. --sandbox workspace-write confines ` +
+    `permissions are OFF${denied}: unattended tool authority includes writing ` +
+    `and deleting outside ${cwd} and running any shell command, including after external input. ` +
+    `Unresolved permissions, changed MCP definitions and sandbox escalation are denied without prompting; ` +
+    `project trust and required missing information are not invented. --sandbox workspace-write confines ` +
     `supported tool effects; it does not isolate trusted SDK code. The session log still ` +
     `records every call.`
   );

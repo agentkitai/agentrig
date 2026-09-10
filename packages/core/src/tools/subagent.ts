@@ -5,6 +5,7 @@ import type { Usage } from "../events.js";
 import type { AnyTool, ToolContext, ToolResult } from "../tool.js";
 import { currentSandboxPolicy, SandboxDeniedError } from "../sandbox.js";
 import { inheritExpansionRestriction } from "../external-expansion.js";
+import { inheritedApprovalMode } from "../approval-mode.js";
 import { childPermissionView } from "../child-permissions.js";
 import { markIsolatedTool, isolatedContext } from "../isolated-runtime.js";
 import { prepareSubagentWorktree } from "../subagent-worktree.js";
@@ -334,6 +335,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
       const ignoredGrantRegistry = permissionGrants === undefined && _configuredGrants !== undefined;
       const child = opts.createAgent({
         ...childConfig,
+        ...(inheritedApprovalMode(ctx) === undefined ? {} : { approvalMode: inheritedApprovalMode(ctx)! }),
         ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
         ...(role === undefined ? {} : { systemPrompt: rolePrompt(config.systemPrompt, role) }),
         ...(permissionGrants === undefined ? {} : { permissionGrants }),

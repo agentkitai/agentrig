@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createAgent, RulePolicy, SessionStore, PermissionGrantRegistry, summarizeOlderTurns, HarnessEvent, SandboxDeniedError, subagentTool,
   type AgentConfig, type AnyTool, type ModelEvent, type ModelProvider, type ModelRequest, type PermissionRequest, type Session } from "@agentkitai/agentrig-core";
@@ -49,6 +49,23 @@ it.each(["exec", "network", "outside", "unknown"])("same %s action is allowed wh
   expect(external.invoked).toEqual([]);
   expect(b.events).toContainEqual(expect.objectContaining({ type: "permission.expansion", name, decision: "deny" }));
   expect(b.events).toContainEqual(expect.objectContaining({ type: "tool.denied", name }));
+});
+
+it.each(["exec", "network", "outside", "unknown"])("unattended host authority allows approved %s after external input without asking", async name => {
+  const f = await fixture([call("document"), call(name)]);
+  const onAsk = vi.fn(async () => "deny" as const);
+  const { events } = await run(f, { approvalMode: "unattended", onAsk });
+  expect(f.invoked).toEqual([name]);
+  expect(onAsk).not.toHaveBeenCalled();
+  expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", name, decision: "allow" }));
+});
+
+it.each(["deny", "ask"] as const)("unattended mode never overrides base %s or invokes the approval handler", async decision => {
+  const f = await fixture([call("document"), call("exec")]);
+  const onAsk = vi.fn(async () => "allow" as const);
+  await run(f, { approvalMode: "unattended", permissions: new RulePolicy([{ tool: "exec", decision }], "allow"), onAsk });
+  expect(f.invoked).toEqual([]);
+  expect(onAsk).not.toHaveBeenCalled();
 });
 
 it("allows a canonically contained new file but requires approval through an outside directory alias", async () => {
@@ -153,6 +170,16 @@ it("no-new-input boundaries retain restriction and forged context metadata canno
   state.input([{ type: "text", text: "generic tool output", trust: "tool-output" }]); state.beginRequest(); expect(state.needs("exec")).toBe(true);
   state.user(""); state.beginRequest(); expect(state.needs("exec")).toBe(true);
   state.user("actual fresh input"); state.beginRequest(); expect(state.needs("exec")).toBe(false);
+});
+
+it("real child inherits unattended mode even when its factory supplies an interactive asker", async () => {
+  const parent = await fixture([call("document"), call("subagent", { task: "execute" })]);
+  const child = await fixture([call("document"), call("exec")]); child.config.store = parent.config.store;
+  const onAsk = vi.fn(async () => "deny" as const);
+  parent.config.tools.push(subagentTool({ childConfig: () => ({ ...child.config, approvalMode: "interactive", onAsk }), createAgent }));
+  await run(parent, { approvalMode: "unattended", onAsk });
+  expect(child.invoked).toEqual(["exec"]);
+  expect(onAsk).not.toHaveBeenCalled();
 });
 
 it.each(["clean", "external", "copied-options"])("real child inherits only live parent restriction: %s", async mode => {
