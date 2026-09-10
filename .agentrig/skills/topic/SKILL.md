@@ -222,6 +222,7 @@ Non-blocking defects get documented issues; optional suggestions do not consume 
   reviewer; mechanical deltas require explicit self-verification evidence, not another review.
   For a focused review, prepare one fresh reviewer-owned worktree at NEW and a unique base ref
   at OLD. Record paths/SHAs before install; use an independent install and preflighted TMPDIR.
+  First apply shipping policy §3's ancestry check and history-rewrite rule.
   Derive BRANCH, OLD, NEW and a unique BASE inside the preparation call; fetch the PR branch.
   Then `WT=$(mktemp -d); OUT=$(mktemp -d); git worktree add --detach "$WT" "$NEW";
   git -C "$WT" branch "$BASE" "$OLD"; REVHEAD=$NEW`.

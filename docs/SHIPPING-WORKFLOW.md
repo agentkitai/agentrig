@@ -33,6 +33,14 @@ severity, concrete scenario, blocking or non-blocking, rationale, resolution/evi
 and affected SHA. Distinguish verified defects from optional suggestions. A concrete
 proposed fix alone does not make a suggestion a merge blocker.
 
+Persist `Repair round: N/3` in the PR body (initially 0/3), and each round's OLD/NEW,
+assigned blocker IDs and outcome. Increment before spawning each repair batch, not
+after it completes. Every entry point, including ship and standalone dogfood, reads
+this record on resumption; reconstruct missing counts from recorded handoffs/reviews
+with evidence, never silently reset them. If the count cannot be established, halt
+with that missing evidence rather than grant a fresh allowance. The lander verifies
+the record against the review history before merging.
+
 - **Blocking:** unmet task acceptance, incorrect required behavior, security or
   authority regression, data loss, failing required checks, material missing proof,
   or unapproved contract/authorization changes. Severity does not excuse these:
@@ -63,6 +71,11 @@ Re-run the local trio after repairs, retain fail-first and mutation evidence, pu
 then return immediately so CI overlaps any necessary focused review.
 
 Classify the complete delta since the last reviewed SHA, including CI/conflict fixes:
+
+For conflict repairs, merge main into the branch; never rebase or force-push. Before
+preparing a focused pass, verify OLD is an ancestor of NEW. If history was externally
+rewritten, the old coverage chain is invalid: require the initial full pair on the
+rewritten head, preserving the repair counter rather than certifying a false delta.
 
 - **Material:** changes to executable behavior, security/authority, public interfaces,
   dependencies, task/skill workflow rules, or meaningful test expectations/coverage.

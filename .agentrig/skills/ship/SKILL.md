@@ -54,7 +54,8 @@ revocation or narrowing. Do not infer authorization from YOLO or a tool allowanc
   A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
   push, classify OLD..NEW under shipping policy §3: ONE independent focused reviewer for a
-  material delta, evidence-only for a mechanical delta. Never repeat the initial external pair
+  material delta, evidence-only for a mechanical delta. Use topic §3's **Cover the delta** procedure
+  for isolated preparation, installation, launch, provenance and cleanup. Never repeat the initial external pair
   for each fix. At most three repair rounds, preserving the counter on resumption; unresolved
   blockers or non-convergence halt, while new advisory notes do not open another round.
 - When scoped merge authorization is present, run the `land` skill's steps (in this session or a

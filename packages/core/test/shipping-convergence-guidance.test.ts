@@ -49,3 +49,24 @@ it("removes old conflicting loop and CI-wait instructions from callers", async (
     expect(text).not.toContain(obsolete);
   }
 });
+
+it("persists repair rounds and preserves ancestry for resumable focused reviews", async () => {
+  const text = await policy();
+  expect(text).toContain("Repair round: N/3");
+  expect(text).toContain("before spawning each repair batch");
+  expect(text).toContain("merge main into the branch; never rebase");
+  expect(text).toContain("verify OLD is an ancestor of NEW");
+});
+
+it.each(["ship", "dogfood"])("%s links to the focused review isolation procedure", async name => {
+  expect(await read(`.agentrig/skills/${name}/SKILL.md`)).toContain("topic §3's **Cover the delta** procedure");
+});
+
+it("pins the actual initial-pair, mechanical-delta and moved-head gates", async () => {
+  const text = await policy();
+  expect(text).toContain("both initial reviews must finish before landing");
+  expect(text).toContain("**Mechanical:** only spelling/formatting, broken links, or factual PR/STATUS receipts without changed guarantees");
+  const land = await read(".agentrig/skills/land/SKILL.md");
+  expect(land).toContain("Verify both initial external reviews, focused verdicts for every material delta, and recorded evidence for mechanical deltas through the CURRENT head");
+  expect(await read(".agentrig/skills/topic/SKILL.md")).toContain("do not call the new head reviewed");
+});

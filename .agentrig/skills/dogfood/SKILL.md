@@ -159,6 +159,8 @@ Batch blocking fixes with fail-first proof and meaningful mutations, re-run the 
 push, and report OLD/NEW immediately. Do not add deferred polish to the batch. The conductor (or
 standalone author) classifies the whole delta: ONE independent focused review for material
 changes, self-verified evidence for mechanical changes. No per-commit full/dual review loop.
+Use topic §3's **Cover the delta** procedure for isolated preparation, installation, launch,
+provenance and cleanup; the standalone author owns that procedure without becoming a topic train.
 Carry the initial pair and subsequent delta evidence through the current head. At most three
 repair rounds; unresolved blockers halt, never become landable just by filing issues.
 Deferred non-blocking defects require issues; advisory suggestions do not.
