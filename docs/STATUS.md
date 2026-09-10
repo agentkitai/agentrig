@@ -1,6 +1,6 @@
 # Status
 
-## Checkpoints opt-in — implemented, delivery checks pending
+## Checkpoints opt-in — implemented, delivery PR #303
 
 User-directed correction after session `c63e2c62` approved a background test but
 the implicitly installed checkpoint hook refused it. Normal CLI sessions now leave
@@ -9,7 +9,9 @@ Permissions, sandboxes, grants, existing recovery and undo validation are unchan
 New coverage exercises config/profile/TUI/resume defaults and the built CLI's edit,
 diagnostic and approved background-job workflow. Builder: Codex/operator outside
 AgentRig. The interrupted session's branch and test file are preserved untouched.
-Independent review, exact-head and post-merge receipts will be recorded on the PR.
+Build/typecheck and 3,787 tests passed locally. Independent Claude and Codex passes
+found no material blockers; the stale runtime-evidence paragraph was corrected.
+Exact-head and post-merge receipts: [PR #303](https://github.com/agentkitai/agentrig/pull/303).
 The evaluator's current-default guard follows the new opt-in default; historical
 E3/R17f measurements and their recorded checkpoint-enabled profiles are untouched.
 

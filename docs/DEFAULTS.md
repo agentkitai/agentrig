@@ -131,12 +131,13 @@ Run it with `agentrig --profile quiet` or `agentrig run --profile quiet "task"`.
 
 `recommended-runtime.test.ts` runs the built CLI against a local deterministic
 provider in a fresh repository, with separate empty home and **no config files**.
-Transport selection and one explicit write approval are fixture inputs, not
-feature opt-ins. It checks checkpoint creation, an honest post-edit diagnostics
-line (exec remains denied unattended), completed session-end ingest and raw
+Transport selection and explicit write/bash approvals are fixture inputs, not
+feature opt-ins. It checks the absence of checkpoint events, an approved background
+command's completed output, an honest post-edit diagnostics line (checker exec
+remains denied unattended), completed session-end ingest and raw
 Markdown preservation; the existing TUI Markdown renderer is asserted separately.
-The committed `docs/plans/R17b-repair-smoke.py` runs the real TUI in a PTY,
-declines project trust and diagnostic exec approval, and checks its final rendered
+The historical `docs/plans/R17b-repair-smoke.py` ran the checkpoint-on R17b TUI in a PTY,
+declining project trust and diagnostic exec approval, and checked its final rendered
 frame plus canonical session events. Round-3 reproduction commands and receipts are in
 [`plans/R17b-round3.md`](plans/R17b-round3.md); old smoke receipts are historical,
 not independently reproduced reviewer evidence. Both fixtures use a local
