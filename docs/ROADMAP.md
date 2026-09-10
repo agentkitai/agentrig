@@ -1,12 +1,15 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Ordinary-query improvements — authorized, in progress
+## Ordinary-query improvements — implemented, delivery in progress
 
-1. Readable answers: complete tables and nonduplicated matching file citations.
-   Implementation and regression tests added; delivery/review/CI pending.
+1. **Done: readable answers**, merged in [PR #299](https://github.com/agentkitai/agentrig/pull/299):
+   complete tables and nonduplicated matching file citations. Independent reviews
+   and exact-head CI passed; post-merge receipt is recorded on the PR.
    [Contract](plans/readable-answers.md).
-2. Proportional planning, targeted documentation/read guidance and clearer usage:
-   separate follow-through, measured without claiming fake-provider quality gains.
+2. **Implemented: query efficiency**, proportional planning, targeted documentation/read
+   guidance and current-run model-request counts distinct from session totals.
+   [Contract and historical baseline](plans/query-efficiency.md). Review/CI delivery
+   receipts follow in its separate PR; fake-provider savings are not live quality evidence.
 
 Direct user authorization after session `5ea07c07`; two bounded PRs, sequential
 merges, not a new roadmap hierarchy. Builder: Codex/operator outside AgentRig.

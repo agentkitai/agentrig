@@ -847,15 +847,19 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
         if (hasPlanTool && turnsThisRun === 1) {
           // A resumed conversation that already declared a plan does not need the worked examples
           // and the field-length rules again — it has them in its own history. Every load-bearing
-          // clause stays in both: revise before continuing, keep a check per item, checks are
-          // declarations rather than proof, and this is not consent.
+          // clause stays in both: plan substantial work, keep a check per item, checks are
+          // declarations rather than proof, and this is not consent. The model decides whether
+          // ordinary work needs a plan; the independent supervisor replan gate is unchanged.
           const declaredPlan = messages.some(message => message.role === "assistant"
             && message.content.some(block => block.type === "tool_use" && block.name === PLAN_TOOL));
           const instruction = declaredPlan
-            ? "Acceptance planning: this conversation already declared a plan. Before continuing, call update_plan with the complete revised plan, keeping an accept check on every item. " +
+            ? "Acceptance planning: this conversation already declared a plan. For continuing multi-step work, call update_plan with the complete revised plan, keeping an accept check on every item. A simple follow-up question does not need a plan update. " +
+              "Explicit user/skill planning requirements and supervisor-required replanning still apply. " +
               "These remain declared checks, not verified evidence; marking an item done does not prove its check passed. " +
               "This planning request does not grant permission or represent new user consent."
-            : "Acceptance planning: before starting or continuing this task, call update_plan with the complete plan. " +
+            : "Acceptance planning: use planning proportional to the task. For a straightforward question or small direct task, answer without update_plan unless planning is explicitly required. " +
+              "For multi-step implementation, investigation or risky changes, call update_plan with the complete plan before substantive work. " +
+              "Explicit user/skill planning requirements and supervisor-required replanning still apply. " +
               "Include an accept field for every item: a concrete observable check such as 'pnpm test exits 0' or 'the endpoint returns 401 without a token'. " +
               "Keep each check nonblank and at most 1024 characters. These are declared checks, not verified evidence; marking an item done does not prove its check passed. " +
               "This planning request does not grant permission or represent new user consent.";

@@ -1,12 +1,24 @@
 # Status
 
-## Readable ordinary-query answers — implementation, delivery pending
+## Query efficiency — implemented, delivery verification in progress
+
+Proportional planning permits simple questions without plan ceremony; explicit
+planning and supervisor-required replans remain. Focused/batched-read and concise
+answer guidance, routed spec sections and per-run root request counts are added.
+[Contract and baseline](plans/query-efficiency.md). Builder: Codex/operator with
+helper `/root/query_efficiency`, outside AgentRig. Build/typecheck and 3,776 tests
+passed before presentation integration; final integrated review/test/CI and bounded
+live smoke receipts are recorded in the delivery PR, not assumed here.
+
+## Readable ordinary-query answers — done, merged PR #299
 
 Natural-width tables fall back to complete labelled rows; matching local citations
 display a full path/line once. Source/structure/output safety bounds and immutable
 raw logs remain unchanged. [Contract](plans/readable-answers.md). Builder:
-Codex/operator outside AgentRig. Fail-first tests added; final review/CI receipts
-will be recorded on the delivery PR. Query efficiency follows in a separate PR.
+Codex/operator outside AgentRig. Fail-first and restored mutation tests passed;
+3,777 tests, independent Claude/Codex reviews and exact-head CI green. Final
+[delivery/post-merge receipts](https://github.com/agentkitai/agentrig/pull/299).
+Query efficiency follows in a separate PR.
 
 ## Worktree checkpoint correction — implemented, delivery PR #298 (2026-09-10)
 

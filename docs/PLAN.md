@@ -203,8 +203,11 @@ type HarnessEvent =
 
 R14a adds optional `PlanItem.accept`: a nonblank observable acceptance declaration of at most
 1024 characters, shared by the event and update_plan tool schemas. The first actual model request
-of each run (including resume) with that tool asks for a check per item, without replacing custom
-prompts or manufacturing fresh user consent. Tool/session/plan displays retain declarations and mark missing or declared checks
+of each run (including resume) with that tool gives proportional planning guidance: multi-step
+or risky work gets a plan with a check per item; straightforward queries can omit planning unless
+explicitly required. Supervisor-required replanning remains enforced. This does not replace custom
+prompts or manufacture fresh user consent. See [query effort](plans/query-efficiency.md).
+Tool/session/plan displays retain declarations and mark missing or declared checks
 unverified. Status done is not proof; evidence association/grading remain R14b/R14c. See [R14a](plans/R14a.md).
 
 R14b adds internal foreground command outcome receipts to canonical tool results and a bounded

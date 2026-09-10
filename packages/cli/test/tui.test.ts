@@ -295,9 +295,25 @@ describe("TuiController", () => {
 
     expect(text(c)).toContain("do the thing");
     expect(text(c)).toContain("done after");
+    expect(text(c)).toContain("1 model request(s) this run; session totals: 1 loop turn(s)");
     expect(text(c)).toContain("3.3M in (2.9M cached) / 12.3k out");
     expect(c.snapshot().status).toBe("idle");
     expect(c.snapshot().sessionId).not.toBeNull();
+  });
+
+  it("counts current-run model requests separately from cumulative resumed loop turns", async () => {
+    const c = makeController([[stop("end_turn")], [stop("end_turn")]]);
+    await c.submit("first question");
+    await c.submit("second question");
+    expect(text(c)).toContain("1 model request(s) this run; session totals: 2 loop turn(s)");
+  });
+
+  it("does not count a hook-refused loop turn as a model request", async () => {
+    const provider = new FakeProvider([[stop("end_turn")]]);
+    const c = makeControllerWith(provider, {}, [{ point: "pre_model", handler: () => ({ action: "deny", reason: "fixture refusal" }) }]);
+    await c.submit("question");
+    expect(provider.requests).toHaveLength(0);
+    expect(text(c)).toContain("0 model request(s) this run; session totals: 1 loop turn(s)");
   });
 
   it("shows the model's reply — the whole point, and the one thing it used to drop", async () => {
