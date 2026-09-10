@@ -15,7 +15,7 @@ async function fixture() {
   await exec("git", ["init", "-q"], { cwd: root });
   await writeFile(join(root, "file"), "before"); await exec("git", ["add", "file"], { cwd: root });
   await exec("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"], { cwd: root });
-  const path = join(root, ".git", "agentrig-checkpoint.lock");
+  const path = join(root, ".git", "agentrig-worktree-checkpoint.lock");
   const ctx = { point: "pre_tool" as const, cwd: root, sessionId: "lock_fixture", turn: 1,
     signal: new AbortController().signal, emitCheckpoint: async () => {} };
   return { root, path, ctx };
@@ -32,7 +32,7 @@ it("new leases record bounded owner identity and remove only their own metadata 
     await cp.handler(f.ctx);
     const bytes = await readFile(join(f.path, "owner.json"), "utf8");
     expect(Buffer.byteLength(bytes)).toBeLessThanOrEqual(4096);
-    expect(JSON.parse(bytes)).toMatchObject({ version: 1, pid: process.pid, sessionId: "lock_fixture", repo: f.root });
+    expect(JSON.parse(bytes)).toMatchObject({ version: 2, pid: process.pid, sessionId: "lock_fixture", repo: f.root, gitDir: join(f.root, ".git"), commonDir: join(f.root, ".git") });
   } finally { await cp.endSession(f.ctx.sessionId); }
 });
 
@@ -117,4 +117,56 @@ it("an owned lock containing unexpected data is not cleaned up", async () => {
   await expect(cp.endSession(f.ctx.sessionId)).rejects.toThrow("lease replaced");
   expect(await readFile(join(f.path, "owner.json"))).toEqual(owner);
   expect(await readFile(join(f.path, "foreign"), "utf8")).toBe("KEEP");
+});
+
+it("legacy common locks block every worktree, including after a new lease was acquired", async () => {
+  const f = await fixture(); const linked = join(f.root, "linked");
+  await exec("git", ["worktree", "add", "--detach", linked, "HEAD"], { cwd: f.root });
+  await writeFile(join(f.root, ".gitignore"), "linked/\n");
+  const cp = new Checkpointer(); await cp.handler(f.ctx);
+  const legacy = join(f.root, ".git", "agentrig-checkpoint.lock"); await mkdir(legacy);
+  try {
+    expect(await inspectCheckpointLock(linked)).toMatchObject({ path: legacy, scope: "legacy-repository", state: "legacy-empty" });
+    await expect(new Checkpointer().handler({ ...f.ctx, cwd: linked })).rejects.toThrow("legacy repository-wide lock");
+    await expect(cp.handler({ ...f.ctx, turn: 2 })).rejects.toThrow("legacy repository-wide lock");
+    expect(await readFile(join(f.path, "owner.json"), "utf8")).toContain('"version":2');
+  } finally { await cp.endSession(f.ctx.sessionId); }
+});
+
+it("recovery in one worktree preserves a sibling live lease and requires that worktree's token", async () => {
+  const f = await fixture(); const linked = join(f.root, "linked");
+  await exec("git", ["worktree", "add", "--detach", linked, "HEAD"], { cwd: f.root });
+  await writeFile(join(f.root, ".gitignore"), "linked/\n");
+  const cp = new Checkpointer(); await cp.handler(f.ctx);
+  try {
+    const own = await inspectCheckpointLock(f.root);
+    const sibling = await inspectCheckpointLock(linked); await mkdir(sibling.path);
+    const old = await inspectCheckpointLock(linked);
+    await expect(recoverCheckpointLock(linked, { expectedToken: own.token!, confirmQuiescent: true, acknowledgeLegacyEmpty: true })).rejects.toThrow("identity changed");
+    const result = await recoverCheckpointLock(linked, { expectedToken: old.token!, confirmQuiescent: true, acknowledgeLegacyEmpty: true });
+    expect(await realpath(result.preservedAt)).toBe(result.preservedAt);
+    expect(await inspectCheckpointLock(f.root)).toEqual(own);
+    await cp.handler({ ...f.ctx, turn: 2 });
+    expect((await inspectCheckpointLock(linked)).state).toBe("missing");
+  } finally { await cp.endSession(f.ctx.sessionId); }
+});
+
+it("nested directories resolve to the same worktree owner", async () => {
+  const f = await fixture(); const nested = join(f.root, "nested"); await mkdir(nested);
+  const cp = new Checkpointer(); await cp.handler(f.ctx);
+  try {
+    expect(await inspectCheckpointLock(nested)).toEqual(await inspectCheckpointLock(f.root));
+    await expect(new Checkpointer().handler({ ...f.ctx, cwd: nested, sessionId: "other" })).rejects.toThrow("another session");
+  } finally { await cp.endSession(f.ctx.sessionId); }
+});
+
+it("version-one owner evidence stays readable without treating its live PID as recoverable", async () => {
+  const f = await fixture(); const cp = new Checkpointer(); await cp.handler(f.ctx);
+  const { gitDir: _gitDir, ...owner } = JSON.parse(await readFile(join(f.path, "owner.json"), "utf8"));
+  await cp.endSession(f.ctx.sessionId);
+  const legacy = join(f.root, ".git", "agentrig-checkpoint.lock"); await mkdir(legacy);
+  await writeFile(join(legacy, "owner.json"), JSON.stringify({ ...owner, version: 1 }));
+  const seen = await inspectCheckpointLock(f.root);
+  expect(seen).toMatchObject({ scope: "legacy-repository", state: "live-owner", owner: { version: 1, pid: process.pid } });
+  await expect(recoverCheckpointLock(f.root, { expectedToken: seen.token!, confirmQuiescent: true })).rejects.toThrow("owner death not established");
 });

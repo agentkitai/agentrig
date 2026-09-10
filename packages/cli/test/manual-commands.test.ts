@@ -334,6 +334,24 @@ it.each([false, true])("checkpoint diff validates its recorded run and refuses a
   const output = (await manualDiff(cwd, "checkpoint", new AbortController().signal, options)).join("\n");
   expect(output).toContain("-checkpoint-before"); expect(output).toContain("+checkpoint-after"); expect(calls).toBe(2);
   if (checkpoint?.type !== "checkpoint.created") throw Error("missing checkpoint");
+  // A consistent foreign worktree prefix is not authority for this workspace.
+  const foreign = "foreign_checkpoint";
+  const sourceBytes = await readFile(store.pathFor(session.id));
+  for (const event of events) {
+    const { sessionId: _id, seq: _seq, ts: _ts, ...payload } = event;
+    if (payload.type === "checkpoint.created" || payload.type === "checkpoint.sealed") {
+      const suffix = payload.type === "checkpoint.created" ? `${payload.turn}` : `sealed/${payload.turn}`;
+      const ref = `refs/agentrig/worktrees/${"0".repeat(64)}/${foreign}/${suffix}`;
+      await git(["update-ref", ref, payload.commit]);
+      await store.append(foreign, { ...payload, ref });
+    } else await store.append(foreign, payload);
+  }
+  const foreignBytes = await readFile(store.pathFor(foreign));
+  await expect(manualDiff(cwd, "checkpoint", new AbortController().signal, { ...options, session: foreign }))
+    .rejects.toThrow("checkpoint worktree namespace mismatch");
+  expect(await readFile(store.pathFor(session.id))).toEqual(sourceBytes);
+  expect(await readFile(store.pathFor(foreign))).toEqual(foreignBytes);
+  expect(await readFile(join(cwd, "a.txt"), "utf8")).toBe("checkpoint-after\n");
   await git(["update-ref", "-d", checkpoint.ref]);
   await expect(manualDiff(cwd, "checkpoint", new AbortController().signal, options)).rejects.toThrow("checkpoint turn 1 is unavailable (pruned or missing); only the last two mutating-turn refs are retained");
   await git(["update-ref", checkpoint.ref, "HEAD"]);

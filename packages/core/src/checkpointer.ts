@@ -6,21 +6,39 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
 import { assertSessionId } from "./session-store.js";
+import { worktreeCheckpointNamespace } from "./checkpoint-refs.js";
 import { acquireCheckpointLock, assertCheckpointLock, inspectLockPath, recoverLockPath, releaseCheckpointLock,
   type CheckpointRecoveryOptions } from "./checkpoint-lock.js";
 
-async function checkpointLockPath(cwd: string, signal?: AbortSignal): Promise<string> {
+async function checkpointLockPaths(cwd: string, signal?: AbortSignal) {
   const repo = await realpath(cwd);
-  const common = (await git(repo, ["rev-parse", "--git-common-dir"], undefined, signal)).stdout.trim();
-  return join(await realpath(resolve(repo, common)), "agentrig-checkpoint.lock");
+  const locate = async (flag: string) => realpath(resolve(repo, (await git(repo, ["rev-parse", flag], undefined, signal)).stdout.trim()));
+  const commonDir = await locate("--git-common-dir");
+  const gitDir = await locate("--git-dir");
+  return { path: join(gitDir, "agentrig-worktree-checkpoint.lock"), legacy: join(commonDir, "agentrig-checkpoint.lock"), commonDir };
+}
+async function hasLegacyLock(path: string): Promise<boolean> {
+  try { await lstat(path); return true; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+}
+async function assertNoLegacyLock(path: string): Promise<void> {
+  if (await hasLegacyLock(path)) throw new Error(`checkpoint ownership uncertain: legacy repository-wide lock at ${JSON.stringify(path)}; stop older AgentRig writers and inspect before explicit recovery`);
+}
+export async function checkpointNamespaceForRepo(cwd: string, signal?: AbortSignal): Promise<string> {
+  return worktreeCheckpointNamespace(dirname((await checkpointLockPaths(cwd, signal)).path));
 }
 /** Read-only operator evidence; no model/config loading or proof of quiescence. */
 export async function inspectCheckpointLock(cwd: string, signal?: AbortSignal) {
-  signal?.throwIfAborted(); return inspectLockPath(await checkpointLockPath(cwd, signal));
+  signal?.throwIfAborted();
+  const paths = await checkpointLockPaths(cwd, signal);
+  const legacy = await hasLegacyLock(paths.legacy);
+  return { ...await inspectLockPath(legacy ? paths.legacy : paths.path), scope: legacy ? "legacy-repository" as const : "worktree" as const };
 }
 /** Explicit operator recovery only; callers must keep all common-directory writers stopped. */
 export async function recoverCheckpointLock(cwd: string, options: CheckpointRecoveryOptions) {
-  options.signal?.throwIfAborted(); return recoverLockPath(await checkpointLockPath(cwd, options.signal), options);
+  options.signal?.throwIfAborted();
+  const paths = await checkpointLockPaths(cwd, options.signal);
+  return recoverLockPath(await hasLegacyLock(paths.legacy) ? paths.legacy : paths.path, options);
 }
 
 /** Events the built-in checkpointer may append through its deliberately narrow hook seam. */
@@ -280,7 +298,7 @@ async function snapshot(ctx: HookContext, checkpointer: Checkpointer): Promise<v
   });
   if (sparse.stdout.trim() === "true") throw new Error("checkpoint does not support sparse checkouts");
   await checkpointer.lease(repo, ctx);
-  const ref = `refs/agentrig/${ctx.sessionId}/${ctx.turn}`;
+  const ref = `${await checkpointNamespaceForRepo(repo, ctx.signal)}/${ctx.sessionId}/${ctx.turn}`;
   const previous = await existingCheckpoint(repo, ref, ctx.signal);
   if (previous !== undefined) {
     await ctx.emitCheckpoint({ type: "checkpoint.created", turn: ctx.turn, ref, ...previous });
@@ -335,7 +353,7 @@ export class Checkpointer implements Hook {
   /** Every started per-session Git/verification promise that has not settled yet, including work a
    * caller abandoned. `attempts` alone only ever holds the newest turn's snapshot. */
   private readonly running = new Map<string, Set<Promise<void>>>();
-  private readonly leases = new Map<string, { path: string; repo: string; token: string }>();
+  private readonly leases = new Map<string, { path: string; legacy: string; repo: string; token: string }>();
   private readonly assertQuiescent: ((ctx: HookContext) => Promise<void>) | undefined;
   private readonly owned = new Map<string, CheckpointState>();
   private readonly uncertain = new Set<string>();
@@ -389,6 +407,7 @@ export class Checkpointer implements Hook {
     if (ctx.toolEffect === "background" || ctx.hasBackgroundWork?.()) throw new Error("checkpoint ownership uncertain: background work must stop before mutation");
     const lease = this.leases.get(ctx.sessionId);
     if (lease) {
+      await assertNoLegacyLock(lease.legacy);
       await assertCheckpointLock(lease.path, lease.token);
     }
     if (this.assertQuiescent) {
@@ -404,12 +423,14 @@ export class Checkpointer implements Hook {
   }
 
   async lease(repo: string, ctx: HookContext): Promise<void> {
-    const path = await checkpointLockPath(repo, ctx.signal);
+    const { path, legacy, commonDir } = await checkpointLockPaths(repo, ctx.signal);
     const existing = this.leases.get(ctx.sessionId);
     if (existing?.path === path && existing.repo === repo) return;
     if (existing !== undefined) throw new Error("checkpoint session changed repositories");
-    const token = await acquireCheckpointLock(path, repo, ctx.sessionId);
-    this.leases.set(ctx.sessionId, { path, repo, token });
+    await assertNoLegacyLock(legacy);
+    const token = await acquireCheckpointLock(path, repo, ctx.sessionId, commonDir);
+    this.leases.set(ctx.sessionId, { path, legacy, repo, token });
+    await assertNoLegacyLock(legacy);
     ctx.signal.throwIfAborted();
   }
 
@@ -468,12 +489,13 @@ export class Checkpointer implements Hook {
       "session-end hooks such as memory ingest may change covered files, including tracked or unignored wiki files. " +
       "Later changes were not adopted. See docs/plans/R4b.md for checkpoint coverage limits.",
     );
-    const ref = `refs/agentrig/${ctx.sessionId}/sealed/${ctx.turn}`;
+    const namespace = worktreeCheckpointNamespace(dirname(lease.path));
+    const ref = `${namespace}/${ctx.sessionId}/sealed/${ctx.turn}`;
     const env = {...gitEnvironment(),GIT_AUTHOR_NAME:"AgentRig",GIT_AUTHOR_EMAIL:"checkpoint@agentrig.invalid",GIT_COMMITTER_NAME:"AgentRig",GIT_COMMITTER_EMAIL:"checkpoint@agentrig.invalid"};
     const commit = (await git(lease.repo,["commit-tree",owned.tree,"-m",`AgentRig ownership ${ctx.sessionId}`],env,ctx.signal)).stdout.trim();
     // Atomically publish the seal ref and prune: no pruning failure may follow
     // the durable sealed event, and a failed transaction retains recovery refs.
-    const prefix = `refs/agentrig/${ctx.sessionId}/`;
+    const prefix = `${namespace}/${ctx.sessionId}/`;
     const refs = (await git(lease.repo,["for-each-ref","--format=%(refname) %(objectname) %(symref)",prefix],undefined,ctx.signal)).stdout.split("\n")
       .map(line => line.split(" "))
       .filter((parts): parts is [string,string,string] => parts.length === 3 && parts[2] === "" && /^\d+$/.test(parts[0]!.slice(prefix.length)))

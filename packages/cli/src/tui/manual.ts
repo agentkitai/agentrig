@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
-import { sanitizeLine, type PermissionPolicy, type PermissionRequest, type SessionStore } from "@agentkitai/agentrig-core";
+import { resolve } from "node:path";
+import { checkpointNamespace, worktreeCheckpointNamespace, sanitizeLine, type PermissionPolicy, type PermissionRequest, type SessionStore } from "@agentkitai/agentrig-core";
 import { diagnose, type DoctorOptions } from "../doctor.js";
 import { captureLocalDiff, gitRevision } from "../local-diff.js";
 import { reviewProcess, type ReviewProcess } from "../review-process.js";
@@ -65,7 +66,8 @@ export async function manualDiff(cwd: string, args: string, signal: AbortSignal,
     if (events.at(-1)?.type !== "session.end") throw new Error("checkpoint diff requires a closed conversation");
     const turn = args.split(" ")[1];
     const checkpoint = events.filter(event => event.type === "checkpoint.created" && (turn === undefined || event.turn === Number(turn))).at(-1);
-    if (checkpoint?.type !== "checkpoint.created" || checkpoint.ref !== `refs/agentrig/${checkpoint.sessionId}/${checkpoint.turn}`)
+    const namespace = checkpoint?.type === "checkpoint.created" ? checkpointNamespace(checkpoint.ref, checkpoint.sessionId, checkpoint.turn) : undefined;
+    if (checkpoint?.type !== "checkpoint.created" || namespace === undefined)
       throw new Error("no matching recorded checkpoint");
     const after = events.slice(events.indexOf(checkpoint) + 1);
     const boundary = after.findIndex(event => event.sessionId === checkpoint.sessionId &&
@@ -73,8 +75,10 @@ export async function manualDiff(cwd: string, args: string, signal: AbortSignal,
     if (boundary < 0 || after[boundary]?.type !== "session.end") throw new Error("checkpoint run is unverified");
     const seal = after.slice(0, boundary).find(event => event.type === "checkpoint.sealed" &&
       event.sessionId === checkpoint.sessionId && event.seq > checkpoint.seq && event.turn >= checkpoint.turn &&
-      event.ref === `refs/agentrig/${checkpoint.sessionId}/sealed/${event.turn}`);
+      checkpointNamespace(event.ref, checkpoint.sessionId, event.turn, true) === namespace);
     if (seal?.type !== "checkpoint.sealed" || await realpath(seal.repo) !== root) throw new Error("checkpoint repository is unverified");
+    if (namespace !== "refs/agentrig" && namespace !== worktreeCheckpointNamespace(await realpath(resolve(root, (await git(["rev-parse", "--git-dir"])).trim()))))
+      throw new Error("checkpoint worktree namespace mismatch");
     const verify = async () => {
       const ref = (await git(["for-each-ref", "--format=%(symref) %(objectname)", checkpoint.ref])).trimEnd();
       if (ref === "") throw new Error(`checkpoint turn ${checkpoint.turn} is unavailable (pruned or missing); only the last two mutating-turn refs are retained`);

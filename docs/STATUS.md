@@ -1,5 +1,22 @@
 # Status
 
+## Worktree checkpoint correction — implemented, delivery PR #298 (2026-09-10)
+
+Replaced the repository-wide lease with worktree-local ownership and refs under
+direct user authorization. Real concurrent SDK tests verify separate worktrees,
+identical session IDs, independent undo and same-worktree refusal. Full local
+integration passed 3,767 tests/four existing skips before the GC repair.
+Independent Claude/Codex full reviews completed; Claude reproduced sibling Git
+garbage collection deleting private-ref objects. The repair uses globally visible
+worktree-qualified refs, with fail-first tests for both GC directions and foreign
+namespace refusal. Targeted repaired tests pass; final full-suite, focused review
+and CI receipts are recorded on the PR as they complete.
+[Contract](plans/worktree-checkpoints.md). [PR #298](https://github.com/agentkitai/agentrig/pull/298)
+records independent reviews, final test counts and exact-head/post-merge CI receipts
+as completed; this entry does not preclaim pending checks.
+Builder: Codex/operator outside AgentRig. The previous real-lock recovery is complete and
+#295 closed; its operator receipt is on the issue. No new issue or feature band.
+
 ## Ordinary-session correction — implementation complete, delivery PR #297 (2026-09-10)
 
 Implemented direct-answer delegation guidance, bounded automatic memory capture,

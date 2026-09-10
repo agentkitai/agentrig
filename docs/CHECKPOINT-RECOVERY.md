@@ -1,8 +1,10 @@
 # Checkpoint lock inspection and explicit recovery
 
 Checkpoints deliberately refuse a mutation while ownership is uncertain. The lock
-is `agentrig-checkpoint.lock` in Git's **canonical common directory**, shared by
-every linked worktree, not just the current checkout. A directory's age, an empty
+is `agentrig-worktree-checkpoint.lock` in Git's **canonical worktree Git directory**
+(`git rev-parse --git-dir`). Each linked worktree has its own owner; the main
+worktree does too. Separate worktrees can checkpoint/edit/undo concurrently, even
+the same filename. A directory's age, an empty
 `git status`, or the absence of a command named AgentRig does not prove quiescence.
 Do not disable checkpoints, delete the lock recursively, kill an unfamiliar process,
 or retry mutations to bypass this refusal.
@@ -13,9 +15,9 @@ or retry mutations to bypass this refusal.
 agentrig checkpoints lock inspect --cwd /absolute/path/to/worktree
 ```
 
-The result names the exact lock path, its observed state and an identity token.
-New leases contain a bounded `owner.json`: hostname, PID, session ID, canonical
-repository/common-directory paths, random nonce and creation timestamp. No command
+The result names the exact lock path, its scope, observed state and identity token.
+New version-2 leases contain a bounded `owner.json`: hostname, PID, session ID,
+canonical repository/worktree-Git/common-directory paths, nonce and timestamp. No command
 line, credentials or model task is recorded. Owner metadata is local cooperative
 diagnostic evidence, not tamper-proof authority. The timestamp never determines
 whether recovery is allowed. Inspection reads at most two directory names and
@@ -32,7 +34,9 @@ echoing their contents. `legacy-empty` means **unknown ownership**, not stale.
 ## Review, stop writers, then explicitly preserve the lock
 
 First identify and join owned sessions/processes and stop all other cooperating
-writers across the repository's linked worktrees. Checkpoint recovery cannot
+writers in the affected worktree. Independent writers in other worktrees need not
+stop for a worktree-scoped lock. For `legacy-repository` scope, stop writers across
+all linked worktrees. Checkpoint recovery cannot
 establish the absence of arbitrary external writers. If you cannot establish
 quiescence, stop here. Keep writers stopped through the command and inspection of
 its result. Obtain a fresh inspection and review the exact path and metadata.
@@ -71,6 +75,28 @@ rename cannot roll back the completed filesystem change. External rename races
 cannot be made transactional by an ordinary filesystem API: post-rename identity
 checks detect uncertainty and preserve evidence, not undo a competing writer's work.
 Legacy applications do not know the new metadata; keep them stopped during recovery.
+
+## Upgrade and legacy evidence
+
+Stop older AgentRig versions before upgrading; mixed-version concurrent writing
+is unsupported. An existing `agentrig-checkpoint.lock` in the common Git directory
+is never silently ignored, stolen or migrated. Inspection prioritizes it with
+`scope: "legacy-repository"`; explicit recovery uses the same reviewed token and
+preservation rules. Its presence blocks new checkpoint writes in every worktree,
+including at subsequent ownership guards. These checks do not make a race with
+an old binary transactional: old versions cannot recognize new worktree leases.
+
+New snapshots and seals use
+`refs/agentrig/worktrees/<sha256(canonical-git-dir)>/<session>/...`. These are shared
+Git refs with distinct worktree prefixes: garbage collection from any worktree
+retains their objects, while undo/diff require the current worktree's prefix.
+Old `refs/agentrig/...` receipts remain readable by guarded undo and
+checkpoint diff; their recorded repository and object checks still apply. New
+retention never prunes old refs or another worktree's refs, and raw logs are never
+rewritten. Checkpoint and seal namespaces must match. Shared branch/object changes
+still use Git's own locking; force-updating another worktree's checked-out branch,
+external edits in the same worktree and deleting/moving active worktrees are not
+made safe by checkpoint isolation.
 
 ## Trusted SDK surface
 
