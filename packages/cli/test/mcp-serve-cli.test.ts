@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,9 @@ const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
 it("existing 2024 core client calls the real CLI over OS pipes; configured allow works without minting exec consent", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "agentrig-mcp-cli-")); cleanup.push(() => rm(cwd, { recursive: true, force: true }));
+  // Node canonicalizes its cwd. Keep scoped session paths in the same spelling
+  // (macOS /var aliases /private/var); this fixture does not grant outside reads.
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), "agentrig-mcp-cli-"))); cleanup.push(() => rm(cwd, { recursive: true, force: true }));
   const home = `${cwd}-home`; await mkdir(home); cleanup.push(() => rm(home, { recursive: true, force: true }));
   // Isolate main-loop assertions from the recommended session-end auxiliary call.
   await mkdir(join(home, ".agentrig"), { recursive: true });
