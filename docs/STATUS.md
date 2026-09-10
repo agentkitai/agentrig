@@ -1,12 +1,16 @@
 # Status
 
-## Worktree checkpoint correction — in progress (2026-09-10)
+## Worktree checkpoint correction — implemented, delivery PR #298 (2026-09-10)
 
-User-authorized replacement of the repository-wide lease with worktree-local
-ownership and refs. Parallel agents must remain independent while same-worktree
-and undo safety stay intact. [Contract](plans/worktree-checkpoints.md).
-Builder: Codex/operator outside AgentRig; one delivery PR with independent reviews
-and exact-head/post-merge CI. The previous real-lock recovery is now complete and
+Replaced the repository-wide lease with worktree-local ownership and refs under
+direct user authorization. Real concurrent SDK tests verify separate worktrees,
+identical session IDs, independent undo and same-worktree refusal. Full local
+integration passed 3,766 tests/four existing skips before the final additional
+version-1 owner compatibility test; restored final focused tests pass 19 cases.
+[Contract](plans/worktree-checkpoints.md). [PR #298](https://github.com/agentkitai/agentrig/pull/298)
+records independent reviews, final test counts and exact-head/post-merge CI receipts
+as completed; this entry does not preclaim pending checks.
+Builder: Codex/operator outside AgentRig. The previous real-lock recovery is complete and
 #295 closed; its operator receipt is on the issue. No new issue or feature band.
 
 ## Ordinary-session correction — implementation complete, delivery PR #297 (2026-09-10)
