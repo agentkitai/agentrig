@@ -1,6 +1,6 @@
 # Status
 
-## Windows integration-test lifecycle repair — implemented, delivery checks pending
+## Windows integration-test lifecycle repair — implemented
 
 Post-merge CI for the report-only PR #301 failed on two different five-second
 integration deadlines: evaluator X4 on attempt 1, checkpoint-lock recovery on
