@@ -1,5 +1,13 @@
 # Status
 
+## Readable ordinary-query answers — implementation, delivery pending
+
+Natural-width tables fall back to complete labelled rows; matching local citations
+display a full path/line once. Source/structure/output safety bounds and immutable
+raw logs remain unchanged. [Contract](plans/readable-answers.md). Builder:
+Codex/operator outside AgentRig. Fail-first tests added; final review/CI receipts
+will be recorded on the delivery PR. Query efficiency follows in a separate PR.
+
 ## Worktree checkpoint correction — implemented, delivery PR #298 (2026-09-10)
 
 Replaced the repository-wide lease with worktree-local ownership and refs under

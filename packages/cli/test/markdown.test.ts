@@ -34,14 +34,13 @@ it("table layout sizes for the longest observed cell, not the shortest header", 
   expect(a).not.toBe(b);
 });
 
-it.each([
-  [80, 38, "A long explanation that makes column …"],
-  [120, 58, "A long explanation that makes column widths observable at…"],
-] as const)("golden ANSI final reply at %s columns", (width, cellWidth, detail) => {
+it.each([80, 120])("golden ANSI final reply at %s columns", width => {
+  const detail = "A long explanation that makes column widths observable at both terminal sizes.";
+  const table = width === 80 ? `Item: code\nDetail: ${detail}`
+    : "Item │ Detail" + " ".repeat(detail.length - 6) + "\n"
+      + "─────┼" + "─".repeat(detail.length + 1) + "\ncode │ " + detail;
   const expected = "\u001b[1;36m# \u001b[0m\u001b[1;36mResult\u001b[0m\n\n• \u001b[1mReady\u001b[0m\n• \u001b[3mNext\u001b[0m\n\n"
-    + "Item │ Detail" + " ".repeat(cellWidth - 6) + "\n"
-    + "─────┼" + "─".repeat(cellWidth + 1) + "\ncode │ " + detail
-    + "\n[table display elided; original text retained]\n\n\u001b[90m┌─ js\u001b[0m\n"
+    + table + "\n\n\u001b[90m┌─ js\u001b[0m\n"
     + "\u001b[35mconst\u001b[0m answer = \u001b[33m42\u001b[0m;\n\u001b[90m└─\u001b[0m";
   expect(renderMarkdown(source, width, true)).toBe(expected);
 });
