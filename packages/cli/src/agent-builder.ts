@@ -671,6 +671,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     hooks.push(
       ingestOnSessionEnd({
         dir: opts.memory,
+        policy: "automatic",
         sessionDir: opts.root,
         provider: providers.memory,
         ...(opts.ingestLimits === undefined ? {} : { limits: opts.ingestLimits }),
