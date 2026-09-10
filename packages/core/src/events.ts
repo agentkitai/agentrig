@@ -404,14 +404,14 @@ export const EventPayload = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("checkpoint.created"),
     turn: z.number().int().positive(),
-    ref: z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
+    ref: z.string().regex(/^refs\/(?:worktree\/)?agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
     commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     tree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
   }),
   z.object({ type: z.literal("checkpoint.warning"), message: z.string() }),
   z.object({
     type: z.literal("checkpoint.sealed"), turn: z.number().int().positive(),
-    ref: z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/sealed\/[1-9][0-9]*$/),
+    ref: z.string().regex(/^refs\/(?:worktree\/)?agentrig\/[A-Za-z0-9_-]{1,128}\/sealed\/[1-9][0-9]*$/),
     commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     tree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     repo: z.string().min(1), excludes: z.array(z.string()), head: z.string().min(1),
@@ -419,7 +419,7 @@ export const EventPayload = z.discriminatedUnion("type", [
   }),
   z.object({
     type:z.literal("checkpoint.restored"),targetSession:z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),turn:z.number().int().positive(),
-    ref:z.string().regex(/^refs\/agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
+    ref:z.string().regex(/^refs\/(?:worktree\/)?agentrig\/[A-Za-z0-9_-]{1,128}\/[1-9][0-9]*$/),
     tree:z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),recovery:z.string().min(1),
   }),
   z.object({ type: z.literal("permission.request"), req: PermissionRequest }),

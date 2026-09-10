@@ -26,5 +26,5 @@ it("actual CLI inspection is offline and recovery requires both explicit legacy 
   expect(await readFile(join(root, ".agentrig", "config.json"), "utf8")).toBe("MUST NOT LOAD INVALID PROVIDER CONFIG");
   expect(run).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
   const binary = await exec(process.execPath, [resolve("packages/cli/dist/index.js"), "checkpoints", "lock", "inspect", "--cwd", root]);
-  expect(JSON.parse(binary.stdout)).toEqual({ path: lock, state: "missing" });
+  expect(JSON.parse(binary.stdout)).toEqual({ path: join(root, ".git", "agentrig-worktree-checkpoint.lock"), state: "missing", scope: "worktree" });
 });

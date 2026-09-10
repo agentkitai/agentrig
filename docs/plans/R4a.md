@@ -1,5 +1,10 @@
 # R4a — opt-in pre-mutation checkpoints
 
+Historical implementation record. Its repository-wide lock and shared new-ref
+namespace below are superseded by the user-approved
+[worktree isolation correction](worktree-checkpoints.md). The original delivery
+evidence is retained; coverage, same-worktree ownership and fail-closed rules remain.
+
 Fresh branch `feat/r4a-checkpoints-current` from updated main `56b4d8a`, after E3 PR #134
 exact-head CI 34006960314 and post-merge CI 34007074990 passed all platforms. The old PR #109
 and its worktree are preserved. Selected hook/event tests are ported from that reviewed work;

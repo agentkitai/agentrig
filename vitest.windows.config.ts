@@ -35,6 +35,8 @@ export const windowsCoverage = [
   "packages/cli/test/checkpoint-undo.test.ts",
   "packages/cli/test/checkpoint-recovery.test.ts",
   "packages/core/test/checkpoint-lock.test.ts",
+  "packages/core/test/checkpoint-worktrees.test.ts",
+  "packages/core/test/checkpoint-legacy.test.ts",
   "packages/cli/test/child-grants-startup.test.ts",
   "packages/cli/test/child-grants-ui.test.ts",
   "packages/cli/test/ci-run.test.ts",

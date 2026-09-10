@@ -7,6 +7,7 @@ import { Checkpointer, checkpointState, git, gitEnvironment, inside, sameCheckpo
 import { SessionStore, assertSessionId } from "./session-store.js";
 import type { HookContext } from "./hooks.js";
 import { sanitizeLine } from "./tools/skills.js";
+import { checkpointNamespace } from "./checkpoint-refs.js";
 
 interface Entry { path: string; mode: string; oid: string }
 
@@ -107,7 +108,8 @@ export async function undoSession(store: SessionStore, sessionId: string, option
     if (run.some(event=>event.seq>seal.seq && event.type!=="session.end" && event.type!=="error")) throw new Error("activity followed the ownership seal");
     const checkpoint = run.filter(event=>event.type==="checkpoint.created").filter(event=>options.toTurn===undefined || event.turn===options.toTurn).at(-1);
     if (!checkpoint) throw new Error("no checkpoint for that turn in the latest run; earlier resumed runs are not owned by this seal");
-    if (checkpoint.ref !== `refs/agentrig/${sessionId}/${checkpoint.turn}` || seal.ref !== `refs/agentrig/${sessionId}/sealed/${seal.turn}`) throw new Error("checkpoint namespace mismatch");
+    const namespace = checkpointNamespace(checkpoint.ref, sessionId, checkpoint.turn);
+    if (namespace === undefined || checkpointNamespace(seal.ref, sessionId, seal.turn, true) !== namespace) throw new Error("checkpoint namespace mismatch");
     const repo = await realpath((await git(options.cwd??process.cwd(),["rev-parse","--show-toplevel"],undefined,signal)).stdout.trim());
     if (repo !== await realpath(seal.repo) || repo===dirname(repo) || repo===await realpath(homedir())) throw new Error("undo repository does not match a safe recorded workspace");
     const storeRoot = await realpath(store.root);

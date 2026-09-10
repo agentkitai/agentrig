@@ -306,7 +306,7 @@ R4a adds opt-in `hooks: [new Checkpointer()]` for pre-mutation Git snapshots. Th
 safety hook runs separately after final permission approval and fails closed on errors/timeouts.
 Permission classes do not establish tool effects: only trusted `read-only` declarations skip it;
 unknown effects and foreground shell calls require capture. Raw worktree trees are retained under
-`refs/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
+`refs/worktree/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
 `checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
 background-work refusal, coverage exclusions and host quiescence preconditions are specified in
 [R4a](plans/R4a.md). R4b exposes config `checkpoints: true` in run/TUI (R17b makes it implicit for sandbox absent/none),
@@ -319,6 +319,13 @@ files. Displaced originals and a manifest remain in a Git-metadata recovery dire
 Older unsealed runs refuse. TUI starts a fresh conversation after undo; explicit resume does not
 replay tools. See [R4b](plans/R4b.md) for cooperative-writer and partial-failure limits.
 Supervisor restoration remains R4c.
+
+The user-approved worktree correction supersedes R4a's repository-wide lease:
+locks and new refs are worktree-local, preserving independent parallel agents.
+Same-worktree ownership, external-change refusal and undo checks remain. Legacy
+refs stay readable and retained shared locks require explicit recovery, not silent
+bypass. See [worktree checkpoints](plans/worktree-checkpoints.md) and
+[recovery](CHECKPOINT-RECOVERY.md) for upgrade and cooperative-writer limits.
 
 ### 2.8 Context management
 

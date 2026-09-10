@@ -421,14 +421,14 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   const checkpointLock = program.command("checkpoints").description("Inspect or explicitly recover checkpoint ownership; no model calls")
-    .command("lock").description("Shared Git-common-directory lock; recovery requires stopped writers");
+    .command("lock").description("Worktree checkpoint ownership; legacy shared locks are reported separately");
   checkpointLock.command("inspect").description("Read exact lock identity and owner evidence; age does not prove stale ownership")
     .option("--cwd <dir>", "repository or worktree directory", process.cwd())
     .action(async (options: { cwd: string }) => { console.log(JSON.stringify(await inspectCheckpointLock(options.cwd), null, 2)); });
   checkpointLock.command("recover").description("Preserve a reviewed lock by rename; never kills owners or deletes recovery evidence")
     .option("--cwd <dir>", "repository or worktree directory", process.cwd())
     .requiredOption("--expected-token <sha256>", "exact token from a fresh inspect; not authority or proof of quiescence")
-    .option("--confirm-quiescent", "I stopped all writers across every linked worktree and will keep them stopped")
+    .option("--confirm-quiescent", "I stopped affected-worktree writers (all worktrees for a legacy repository lock)")
     .option("--acknowledge-legacy-empty", "I reviewed this empty legacy lock; its owner cannot be identified")
     .action(async (options: { cwd: string; expectedToken: string; confirmQuiescent?: boolean; acknowledgeLegacyEmpty?: boolean }) => {
       console.log(JSON.stringify(await recoverCheckpointLock(options.cwd, { expectedToken: options.expectedToken,

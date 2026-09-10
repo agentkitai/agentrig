@@ -4,10 +4,12 @@ import { lstat, mkdir, mkdtemp, open, opendir, realpath, rename, rmdir, unlink }
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-const Owner = z.object({ version: z.literal(1), nonce: z.string().uuid(), pid: z.number().int().positive().safe(),
+const OwnerFields = z.object({ nonce: z.string().uuid(), pid: z.number().int().positive().safe(),
   host: z.string().min(1).max(255).refine(value => !/[\u0000-\u001f\u007f-\u009f]/.test(value)), sessionId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
   repo: z.string().min(1).max(4096), commonDir: z.string().min(1).max(4096), createdAt: z.number().int().nonnegative().safe(),
 }).strict();
+const Owner = z.discriminatedUnion("version", [OwnerFields.extend({ version: z.literal(1) }),
+  OwnerFields.extend({ version: z.literal(2), gitDir: z.string().min(1).max(4096) })]);
 type Owner = z.infer<typeof Owner>;
 export interface CheckpointLockInspection {
   path: string;
@@ -26,8 +28,8 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 const identity = (stat: Awaited<ReturnType<typeof lstat>>) => [String(stat.dev), String(stat.ino), String(stat.birthtimeMs), String(stat.ctimeMs), String(stat.mtimeMs)];
 const problem = (path: string, reason: string) => new Error(`checkpoint lock ${JSON.stringify(path)}: ${reason}; stop all repository/worktree writers before explicit recovery`);
 
-/** Internal path is derived from canonical Git common-dir, never accepted from owner metadata. */
-async function readLock(path: string, commonDir = dirname(path)) {
+/** Internal path is derived from Git metadata, never accepted from owner metadata. */
+async function readLock(path: string, ownerDir = dirname(path)) {
   if (await realpath(dirname(path)) !== dirname(path)) throw problem(path, "common directory changed");
   let directory;
   try { directory = await lstat(path); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
@@ -52,7 +54,7 @@ async function readLock(path: string, commonDir = dirname(path)) {
       if (JSON.stringify(identity(before)) !== JSON.stringify(identity(after)) || JSON.stringify(identity(before)) !== JSON.stringify(identity(named))) throw problem(path, "owner changed while reading");
       ownerIdentity = identity(after);
     } finally { await file.close(); }
-    if (owner.commonDir !== commonDir) throw problem(path, "owner common-directory identity mismatch");
+    if ((owner.version === 1 ? owner.commonDir : owner.gitDir) !== ownerDir) throw problem(path, "owner Git-directory identity mismatch");
   }
   const after = await lstat(path);
   if (JSON.stringify(identity(directory)) !== JSON.stringify(identity(after))) throw problem(path, "directory changed while inspecting");
@@ -69,7 +71,7 @@ export async function inspectLockPath(path: string): Promise<CheckpointLockInspe
   return { path, token: lock.token, state: lock.owner === undefined ? "legacy-empty" : ownerState(lock.owner),
     ...(lock.owner === undefined ? {} : { owner: Object.freeze({ ...lock.owner }) }) };
 }
-export async function acquireCheckpointLock(path: string, repo: string, sessionId: string): Promise<string> {
+export async function acquireCheckpointLock(path: string, repo: string, sessionId: string, commonDir: string): Promise<string> {
   try { await mkdir(path, { mode: 0o700 }); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -77,8 +79,8 @@ export async function acquireCheckpointLock(path: string, repo: string, sessionI
     try { const seen = await inspectLockPath(path); details = `${seen.state}${seen.owner ? ` (pid ${seen.owner.pid}, session ${JSON.stringify(seen.owner.sessionId)})` : ""}`; } catch { /* preserve fixed safe refusal */ }
     throw new Error(`checkpoint ownership uncertain: another session or retained lock exists at ${JSON.stringify(path)}; ${details}; inspect with checkpoints lock inspect, then stop writers before explicit recovery`);
   }
-  const owner = Owner.parse({ version: 1, nonce: randomUUID(), pid: process.pid, host: hostname(), sessionId,
-    repo, commonDir: dirname(path), createdAt: Date.now() });
+  const owner = Owner.parse({ version: 2, nonce: randomUUID(), pid: process.pid, host: hostname(), sessionId,
+    repo, commonDir, gitDir: dirname(path), createdAt: Date.now() });
   const bytes = JSON.stringify(owner) + "\n";
   if (Buffer.byteLength(bytes) > 4096) throw problem(path, "owner metadata exceeds 4096 bytes; new lock retained");
   const file = await open(join(path, "owner.json"), "wx", 0o600);

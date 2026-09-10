@@ -111,7 +111,6 @@ describe("worktree-scoped checkpoint ownership", () => {
         await first.finish();
         const created = first.events.filter(event => event.type === "checkpoint.created");
         expect(created).toHaveLength(1);
-        expect(created[0]!.ref).toBe("refs/worktree/agentrig/same_id/1");
         expect(first.events.filter(event => event.type === "checkpoint.sealed")).toHaveLength(1);
         // Undo in one worktree must succeed while another worktree's writer is still active.
         expect((await undoSession(first.store, "same_id", { cwd: left })).restored).toBe(true);
@@ -123,6 +122,7 @@ describe("worktree-scoped checkpoint ownership", () => {
         expect(secondCreated).toHaveLength(1);
         expect(secondCreated[0]!.ref).toBe(created[0]!.ref);
         expect(secondCreated[0]!.tree).not.toBe(created[0]!.tree);
+        expect(created[0]!.ref).toBe("refs/worktree/agentrig/same_id/1");
         expect(second.events.filter(event => event.type === "checkpoint.sealed")).toHaveLength(1);
         expect((await undoSession(second.store, "same_id", { cwd: right })).restored).toBe(true);
         expect(await readFile(join(right, "tracked.txt"), "utf8")).toBe("right before\n");

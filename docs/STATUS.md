@@ -1,5 +1,14 @@
 # Status
 
+## Worktree checkpoint correction — in progress (2026-09-10)
+
+User-authorized replacement of the repository-wide lease with worktree-local
+ownership and refs. Parallel agents must remain independent while same-worktree
+and undo safety stay intact. [Contract](plans/worktree-checkpoints.md).
+Builder: Codex/operator outside AgentRig; one delivery PR with independent reviews
+and exact-head/post-merge CI. The previous real-lock recovery is now complete and
+#295 closed; its operator receipt is on the issue. No new issue or feature band.
+
 ## Ordinary-session correction — implementation complete, delivery PR #297 (2026-09-10)
 
 Implemented direct-answer delegation guidance, bounded automatic memory capture,

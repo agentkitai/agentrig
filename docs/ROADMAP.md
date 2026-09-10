@@ -1,5 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+## Current work — parallel-worktree checkpoints
+
+User-approved correction: independent checkpoint locks/refs per worktree, including
+concurrent edits to the same filename and independent guarded undo. Same-worktree
+safety remains; historical checkpoints and legacy-lock recovery are preserved.
+[Contract](plans/worktree-checkpoints.md). One corrective PR; #295's original lock
+has been recovered and the issue closed. This does not reopen the completed sweep.
+
 ## Ordinary-session correction — implemented in PR #297
 
 User-approved follow-through from real query `b87bf90b`: direct-answer delegation

@@ -215,7 +215,7 @@ describe("Checkpointer", () => {
     expect(events.filter(e=>e.type==="checkpoint.sealed")).toHaveLength(1);
     const store = new SessionStore({root:join(root,".agentrig","sessions")});
     const history = await readFile(store.pathFor(session.id));
-    const refs = await git("for-each-ref","--format=%(refname) %(objectname)","refs/agentrig");
+    const refs = await git("for-each-ref","--format=%(refname) %(objectname)","refs/worktree/agentrig");
     const result = await undoSession(store,session.id,{cwd:root,toTurn:1});
     expect(result.restored).toBe(true);
     expect(await readFile(join(root,"tracked.txt"))).toEqual(before);
@@ -224,7 +224,7 @@ describe("Checkpointer", () => {
     expect(await readFile(join(root,"ignored.txt"),"utf8")).toBe("ignored external bytes");
     expect(await readFile(join(root,".git","index"))).toEqual(index);
     expect(await git("rev-parse","HEAD")).toBe(head); expect(await git("log","--format=%H")).toBe(log);
-    expect(await git("for-each-ref","--format=%(refname) %(objectname)","refs/agentrig")).toBe(refs);
+    expect(await git("for-each-ref","--format=%(refname) %(objectname)","refs/worktree/agentrig")).toBe(refs);
     expect(await readFile(store.pathFor(session.id))).toEqual(history);
     expect((await store.readAll(result.auditId!)).map(e=>e.type)).toEqual(["session.start","checkpoint.restored","session.end"]);
     expect(await readFile(join(result.recovery!,"manifest.json"),"utf8")).toContain("undo_raw");
@@ -258,7 +258,7 @@ describe("Checkpointer", () => {
     await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("non-session changes");
     await writeFile(join(root,".git","index"),index);
     const lease = join(root,".git","agentrig-checkpoint.lock"); await mkdir(lease);
-    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("another session");
+    await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("legacy repository-wide lock");
     await rm(lease,{recursive:true});
     const release = await store.acquireLock(session.id);
     await expect(undoSession(store,session.id,{cwd:root})).rejects.toThrow("locked");
@@ -298,8 +298,8 @@ describe("Checkpointer", () => {
     ], [bashTool(), unknown]).run("change", { cwd: root, id: "effects" });
     const events = await collect(session); await session.done;
     expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(2);
-    expect(await git("show", "refs/agentrig/effects/1:tracked.txt")).toBe("committed");
-    expect(await git("show", "refs/agentrig/effects/2:tracked.txt")).toBe("shell");
+    expect(await git("show", "refs/worktree/agentrig/effects/1:tracked.txt")).toBe("committed");
+    expect(await git("show", "refs/worktree/agentrig/effects/2:tracked.txt")).toBe("shell");
     expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("custom");
   });
 
@@ -338,16 +338,16 @@ describe("Checkpointer", () => {
     const session = agent([[call("write", "write", { path: "after.txt", content: "after" }), usage, stop("tool_use")], [usage, stop("end_turn")]],
       [writeTool()]).run("write", { cwd: root, id: "raw_bytes" });
     await collect(session); await session.done;
-    const { stdout } = await execFile("git", ["show", "refs/agentrig/raw_bytes/1:tracked.txt"], { cwd: root, encoding: "buffer" });
+    const { stdout } = await execFile("git", ["show", "refs/worktree/agentrig/raw_bytes/1:tracked.txt"], { cwd: root, encoding: "buffer" });
     expect(stdout).toEqual(Buffer.from("raw\r\nbytes\r\n"));
     expect(await readFile(join(root, ".git", "index"))).toEqual(index);
     expect(await readFile(join(root, "ignored.txt"), "utf8")).toBe("secret excluded");
-    await expect(git("show", "refs/agentrig/raw_bytes/1:ignored.txt")).rejects.toThrow();
+    await expect(git("show", "refs/worktree/agentrig/raw_bytes/1:ignored.txt")).rejects.toThrow();
     await rm(join(root, "tracked.txt"));
     const removed = agent([[call("write", "write", { path: "after.txt", content: "next" }), usage, stop("tool_use")], [usage, stop("end_turn")]], [writeTool()])
       .run("write", { cwd: root, id: "deleted" });
     await collect(removed); await removed.done;
-    await expect(git("show", "refs/agentrig/deleted/1:tracked.txt")).rejects.toThrow();
+    await expect(git("show", "refs/worktree/agentrig/deleted/1:tracked.txt")).rejects.toThrow();
   });
 
   it("holds an exclusive session lease and refuses known external uncertainty even later in a turn", async () => {
@@ -368,7 +368,7 @@ describe("Checkpointer", () => {
     const cp = new Checkpointer({ assertQuiescent: async () => { if (++calls === 2) await writeFile(join(root, "tracked.txt"), "concurrent edit"); } });
     const ctx = { point: "pre_tool" as const, sessionId: "changed", cwd: root, turn: 1, signal: new AbortController().signal, emitCheckpoint: async () => {} };
     await expect(cp.handler(ctx)).rejects.toThrow("worktree changed while checkpointing");
-    await expect(git("show-ref", "--verify", "refs/agentrig/changed/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/changed/1")).rejects.toThrow();
     await cp.endSession("changed");
   });
 
@@ -377,7 +377,7 @@ describe("Checkpointer", () => {
     const s = agent([[call("w", "write", { path: "before.txt", content: "after" }), usage, stop("tool_use")], [usage, stop("end_turn")]], [writeTool()])
       .run("write", { cwd: root, id: "unborn" });
     await collect(s); await s.done;
-    expect(await git("show", "refs/agentrig/unborn/1:before.txt")).toBe("before");
+    expect(await git("show", "refs/worktree/agentrig/unborn/1:before.txt")).toBe("before");
     await expect(git("rev-parse", "--verify", "HEAD")).rejects.toThrow();
   });
 
@@ -508,21 +508,22 @@ describe("Checkpointer", () => {
     await initRepo(); const cp = new Checkpointer();
     const ctx = { point: "pre_tool" as const, sessionId: "replaced", cwd: root, turn: 1, signal: new AbortController().signal, emitCheckpoint: async () => {} };
     await cp.handler(ctx);
-    const path = join(root, ".git", "agentrig-checkpoint.lock");
+    const path = join(root, ".git", "agentrig-worktree-checkpoint.lock");
     await rename(path, path + ".original"); await mkdir(path); await writeFile(join(path, "user-data"), "keep");
     await expect(cp.handler(ctx)).rejects.toThrow("lease replaced");
     await expect(cp.endSession(ctx.sessionId)).rejects.toThrow("lease replaced");
     expect(await readFile(join(path, "user-data"), "utf8")).toBe("keep");
   });
 
-  it("shares the exclusive lease with linked worktrees without touching their HEADs", async () => {
+  it("keeps independent leases in linked worktrees without touching their HEADs", async () => {
     await initRepo(); const linked = join(root, "linked"); await git("worktree", "add", "--detach", linked, "HEAD");
     await writeFile(join(root, ".gitignore"), "linked/\n");
     const cp = new Checkpointer(); const ctx = { point: "pre_tool" as const, sessionId: "primary", cwd: root, turn: 1, signal: new AbortController().signal, emitCheckpoint: async () => {} };
     await cp.handler(ctx);
-    await expect(new Checkpointer().handler({ ...ctx, sessionId: "linked", cwd: linked })).rejects.toThrow("ownership uncertain");
+    const other = new Checkpointer();
+    await other.handler({ ...ctx, sessionId: "linked", cwd: linked });
     await cp.endSession("primary");
-    const other = new Checkpointer(); await other.handler({ ...ctx, sessionId: "linked", cwd: linked }); await other.endSession("linked");
+    await other.endSession("linked");
     expect((await execFile("git", ["rev-parse", "HEAD"], { cwd: linked })).stdout.trim()).toBe(await git("rev-parse", "HEAD"));
   });
   it("creates one namespaced snapshot before the first write-class tool in each turn without touching HEAD, index, or worktree", async () => {
@@ -549,19 +550,19 @@ describe("Checkpointer", () => {
     const checkpoints = events.filter((event) => event.type === "checkpoint.created");
     expect(checkpoints).toHaveLength(2);
     expect(checkpoints.map((event) => event.type === "checkpoint.created" && event.ref)).toEqual([
-      "refs/agentrig/session_one/1",
-      "refs/agentrig/session_one/2",
+      "refs/worktree/agentrig/session_one/1",
+      "refs/worktree/agentrig/session_one/2",
     ]);
     const firstCheckpoint = events.findIndex((event) => event.type === "checkpoint.created" && event.turn === 1);
     const firstWrite = events.findIndex((event) => event.type === "tool.call" && event.name === "write");
     expect(firstCheckpoint).toBeGreaterThan(-1);
     expect(firstCheckpoint).toBeLessThan(firstWrite);
 
-    expect(await git("show", "refs/agentrig/session_one/1:tracked.txt")).toBe("dirty before turn one");
-    expect(await git("show", "refs/agentrig/session_one/1:untracked.txt")).toBe("untracked before turn one");
-    expect(await git("show", "refs/agentrig/session_one/2:tracked.txt")).toBe("first write");
-    expect(await git("show", "refs/agentrig/session_one/2:second.txt")).toBe("second write");
-    const checkpointPaths = await git("ls-tree", "-r", "--name-only", "refs/agentrig/session_one/1");
+    expect(await git("show", "refs/worktree/agentrig/session_one/1:tracked.txt")).toBe("dirty before turn one");
+    expect(await git("show", "refs/worktree/agentrig/session_one/1:untracked.txt")).toBe("untracked before turn one");
+    expect(await git("show", "refs/worktree/agentrig/session_one/2:tracked.txt")).toBe("first write");
+    expect(await git("show", "refs/worktree/agentrig/session_one/2:second.txt")).toBe("second write");
+    const checkpointPaths = await git("ls-tree", "-r", "--name-only", "refs/worktree/agentrig/session_one/1");
     expect(checkpointPaths).not.toContain(".agentrig/");
     expect(await git("rev-parse", "HEAD")).toBe(headBefore);
     expect(await git("log", "--format=%H")).toBe(logBefore);
@@ -700,7 +701,7 @@ describe("Checkpointer", () => {
     await session.done;
 
     expect(events.some((event) => event.type === "checkpoint.created")).toBe(false);
-    await expect(git("show-ref", "--verify", "refs/agentrig/reads_only/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/reads_only/1")).rejects.toThrow();
   });
 
   it("does not checkpoint a denied write", async () => {
@@ -723,7 +724,7 @@ describe("Checkpointer", () => {
 
     expect(events.some((event) => event.type === "checkpoint.created")).toBe(false);
     expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("committed\n");
-    await expect(git("show-ref", "--verify", "refs/agentrig/denied_write/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/denied_write/1")).rejects.toThrow();
   });
 
   it("degrades outside git to one warning for the session, never an error", async () => {
@@ -758,10 +759,10 @@ describe("Checkpointer", () => {
       await session.done;
 
       const expectedHash = await git("hash-object", "binary.dat");
-      expect(await git("rev-parse", "refs/agentrig/binary_and_link/1:binary.dat")).toBe(expectedHash);
+      expect(await git("rev-parse", "refs/worktree/agentrig/binary_and_link/1:binary.dat")).toBe(expectedHash);
       if (process.platform !== "win32") {
-        expect(await git("cat-file", "-p", "refs/agentrig/binary_and_link/1:outside-link")).toBe(outside);
-        expect(await git("ls-tree", "refs/agentrig/binary_and_link/1", "outside-link")).toContain("120000");
+        expect(await git("cat-file", "-p", "refs/worktree/agentrig/binary_and_link/1:outside-link")).toBe(outside);
+        expect(await git("ls-tree", "refs/worktree/agentrig/binary_and_link/1", "outside-link")).toContain("120000");
       }
     } finally {
       await rm(outside, { force: true });
@@ -783,21 +784,21 @@ describe("Checkpointer", () => {
       emitCheckpoint: async (event: CheckpointHookEvent) => { emitted.push(event); },
     };
     await checkpointer.handler(context);
-    const original = await git("rev-parse", "refs/agentrig/resumed/1");
+    const original = await git("rev-parse", "refs/worktree/agentrig/resumed/1");
     await checkpointer.endSession("resumed");
     await writeFile(join(root, "tracked.txt"), "new dirty state\n");
     await new Checkpointer().handler(context);
 
-    expect(await git("rev-parse", "refs/agentrig/resumed/1")).toBe(original);
+    expect(await git("rev-parse", "refs/worktree/agentrig/resumed/1")).toBe(original);
     expect(emitted.at(-1)?.commit).toBe(original);
-    expect(await git("show", "refs/agentrig/resumed/1:tracked.txt")).toBe("committed");
+    expect(await git("show", "refs/worktree/agentrig/resumed/1:tracked.txt")).toBe("committed");
   });
 
   it("rejects a symbolic checkpoint ref without moving the target branch", async () => {
     await initRepo();
     const head = await git("rev-parse", "HEAD");
-    await git("symbolic-ref", "refs/agentrig/symbolic/1", "refs/heads/master").catch(async () => {
-      await git("symbolic-ref", "refs/agentrig/symbolic/1", "refs/heads/main");
+    await git("symbolic-ref", "refs/worktree/agentrig/symbolic/1", "refs/heads/master").catch(async () => {
+      await git("symbolic-ref", "refs/worktree/agentrig/symbolic/1", "refs/heads/main");
     });
     const context = {
       point: "pre_tool" as const,
@@ -835,7 +836,7 @@ describe("Checkpointer", () => {
     await session.done;
 
     expect(events.some(e => e.type === "tool.denied")).toBe(true);
-    await expect(git("show-ref", "--verify", "refs/agentrig/sparse/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/sparse/1")).rejects.toThrow();
     expect(await readFile(join(root, "hidden", "file.txt"), "utf8")).toBe("dirty hidden\n");
   });
 
@@ -861,8 +862,8 @@ describe("Checkpointer", () => {
       await session.done;
 
       expect(events.some(e => e.type === "tool.denied")).toBe(true);
-      await expect(git("show-ref", "--verify", "refs/agentrig/submodule/1")).rejects.toThrow();
-      await expect(git("rev-parse", "refs/agentrig/submodule/1:sub/nested.txt")).rejects.toThrow();
+      await expect(git("show-ref", "--verify", "refs/worktree/agentrig/submodule/1")).rejects.toThrow();
+      await expect(git("rev-parse", "refs/worktree/agentrig/submodule/1:sub/nested.txt")).rejects.toThrow();
     } finally {
       await rm(child, { recursive: true, force: true });
     }
@@ -883,12 +884,12 @@ describe("Checkpointer", () => {
     };
 
     await expect(new Checkpointer().handler(context)).rejects.toThrow();
-    await expect(git("show-ref", "--verify", "refs/agentrig/corrupt_head/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/corrupt_head/1")).rejects.toThrow();
   });
 
   it("fails closed when the checkpoint ref cannot be updated", async () => {
     await initRepo();
-    await git("update-ref", "refs/agentrig/ref_failure/1/child", "HEAD");
+    await git("update-ref", "refs/worktree/agentrig/ref_failure/1/child", "HEAD");
     const context = {
       point: "pre_tool" as const,
       sessionId: "ref_failure",
@@ -901,7 +902,7 @@ describe("Checkpointer", () => {
     };
 
     await expect(new Checkpointer().handler(context)).rejects.toThrow();
-    await expect(git("show-ref", "--verify", "refs/agentrig/ref_failure/1")).rejects.toThrow();
+    await expect(git("show-ref", "--verify", "refs/worktree/agentrig/ref_failure/1")).rejects.toThrow();
   });
 
   it.skipIf(process.platform === "win32")(
@@ -931,7 +932,7 @@ describe("Checkpointer", () => {
 
       const checkpoint = new Checkpointer();
       await checkpoint.handler(context);
-      expect(await git("show", "refs/agentrig/worktree_churn/1:churn.txt")).toBe("dirty");
+      expect(await git("show", "refs/worktree/agentrig/worktree_churn/1:churn.txt")).toBe("dirty");
       expect(await readFile(join(root, "sentinel.txt"), "utf8")).toBe("start\n");
       await checkpoint.endSession(context.sessionId);
     },
@@ -956,9 +957,9 @@ describe("Checkpointer", () => {
     };
 
     await expect(checkpointer.handler(context)).rejects.toThrow("session disk full");
-    const original = await git("rev-parse", "refs/agentrig/append_failure/1");
+    const original = await git("rev-parse", "refs/worktree/agentrig/append_failure/1");
     await expect(checkpointer.handler(context)).resolves.toEqual({ action: "continue" });
-    expect(await git("rev-parse", "refs/agentrig/append_failure/1")).toBe(original);
+    expect(await git("rev-parse", "refs/worktree/agentrig/append_failure/1")).toBe(original);
     expect(appends).toBe(2);
   });
 });
@@ -970,8 +971,8 @@ it("sealing retains only the last two turn refs and preserves last retained undo
   turns.push([stop("end_turn")]);
   const session = agent(turns, [writeTool()]).run("change", {cwd: root, id: "retention"});
   const events = await collect(session); await session.done;
-  const refs = (await git("for-each-ref", "--format=%(refname)", "refs/agentrig/retention/")).split("\n");
-  expect(refs).toEqual(["refs/agentrig/retention/4", "refs/agentrig/retention/5", "refs/agentrig/retention/sealed/6"]);
+  const refs = (await git("for-each-ref", "--format=%(refname)", "refs/worktree/agentrig/retention/")).split("\n");
+  expect(refs).toEqual(["refs/worktree/agentrig/retention/4", "refs/worktree/agentrig/retention/5", "refs/worktree/agentrig/retention/sealed/6"]);
   expect(await git("rev-parse", "HEAD")).toBe(branch);
   expect(events.filter(e => e.type === "checkpoint.created")).toHaveLength(5);
   const store = new SessionStore({root: join(root, ".agentrig", "sessions")});
@@ -987,16 +988,16 @@ it("prune failure cannot publish a seal and successful seal observes already-pru
   let refsAtSeal: string | undefined;
   const ctx = {point:"pre_tool" as const, sessionId:"atomicprune", cwd:root, turn:1,
     signal:new AbortController().signal, emitCheckpoint:async(e:CheckpointHookEvent)=>{
-      if(e.type==="checkpoint.sealed") refsAtSeal=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+      if(e.type==="checkpoint.sealed") refsAtSeal=await git("for-each-ref","--format=%(refname)","refs/worktree/agentrig/atomicprune/");
       events.push(e);
     }};
   try {
     for(let turn=1;turn<=4;turn++) {ctx.turn=turn;await cp.handler(ctx);await writeFile(join(root,"tracked.txt"),`turn ${turn}`);await cp.afterTool(ctx);}
-    const lock=join(root,".git","refs","agentrig","atomicprune","1.lock");
+    const lock=join(root,".git","refs","worktree","agentrig","atomicprune","1.lock");
     await writeFile(lock,"locked");
     await expect(cp.seal(ctx)).rejects.toThrow();
     expect(events.some(e=>e.type==="checkpoint.sealed")).toBe(false);
-    const failedRefs=await git("for-each-ref","--format=%(refname)","refs/agentrig/atomicprune/");
+    const failedRefs=await git("for-each-ref","--format=%(refname)","refs/worktree/agentrig/atomicprune/");
     expect(failedRefs.split("\n")).toHaveLength(4);
     expect(failedRefs).not.toContain("/sealed/");
     await rm(lock);
@@ -1118,7 +1119,7 @@ it("replays the recorded seal refusal and recorded references when undo has no s
   expect(failure!.message).toContain("recorded refusal: checkpoint seal failed:");
   expect(failure!.message).toContain("session-end hooks such as memory ingest may change covered files");
   // Recorded references are named without claiming their present retention or safe restoration.
-  expect(failure!.message).toMatch(/recorded checkpoint \(current retention not checked; not restorable without a seal\): turn 1 at refs\/agentrig\/undo_seal_refused\/1/);
+  expect(failure!.message).toMatch(/recorded checkpoint \(current retention not checked; not restorable without a seal\): turn 1 at refs\/worktree\/agentrig\/undo_seal_refused\/1/);
   expect(await readFile(join(root, "tracked.txt"), "utf8")).toBe("written by session-end maintenance");
 });
 
@@ -1145,7 +1146,7 @@ it("bounds recorded refusal replay and names omissions without altering the jour
   await store.append(id, { type: "session.start", task: "fixture", cwd: root, provider: "fixture", model: "fixture" });
   for (let i = 0; i < 40; i++) {
     await store.append(id, { type: "error", fatal: false, message: "checkpoint seal failed: " + "x".repeat(1500) + "\u001b[31m" });
-    await store.append(id, { type: "checkpoint.created", turn: i + 1, ref: `refs/agentrig/${"x".repeat(128)}/${i + 1}`, tree: "a".repeat(40), commit: "b".repeat(40) });
+    await store.append(id, { type: "checkpoint.created", turn: i + 1, ref: `refs/worktree/agentrig/${"x".repeat(128)}/${i + 1}`, tree: "a".repeat(40), commit: "b".repeat(40) });
   }
   await store.append(id, { type: "session.end", reason: "done" });
   const before = await readFile(store.pathFor(id)); const error = await undoSession(store, id).catch(error => error as Error);
