@@ -423,7 +423,7 @@ Global is a **separate wiki**, not a label on project pages. Teams running the p
 **Ingest** — triggered by the `session_end` hook, or `agentrig memory ingest <path>` for docs. Plan → reserve → generate → integrate:
 
 Ordinary-session correction: CLI automatic session-end capture now uses a bounded
-latest-run spending heuristic and30s/15s-per-call/4-call defaults. Successful
+latest-run spending heuristic and 30s/15s-per-call/4-call defaults. Successful
 read-only queries and captures whose complete evidence cannot fit defer visibly,
 retaining raw logs for explicit manual ingest. This is not a claim that those
 conversations have no durable knowledge. Manual ingest and SDK hook defaults remain

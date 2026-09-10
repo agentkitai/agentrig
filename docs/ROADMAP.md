@@ -1,11 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Current work — ordinary-session correction
+## Ordinary-session correction — implemented in PR #297
 
 User-approved follow-through from real query `b87bf90b`: direct-answer delegation
 guidance without startup modes, bounded/deferred automatic ingestion, visible
 maintenance phase, and explicit safe checkpoint recovery (#295).
-[Contract and verification](plans/ordinary-session-flow.md). One corrective PR;
+[Contract and verification](plans/ordinary-session-flow.md), [delivery and CI receipts](https://github.com/agentkitai/agentrig/pull/297).
+Implementation and independent reviews are complete; the user's original lock still
+requires explicit recovery after all writers stop. One corrective PR;
 the completed R17g sweep below is not reopened or expanded into nested milestones.
 
 ## Current checkpoint — R17g delivered; real-task validation incomplete
@@ -1238,3 +1240,9 @@ operator helpers outside AgentRig, with no invented conductor or routing data.
 New observed validation follow-up: [feel #295](https://github.com/agentkitai/agentrig/issues/295),
 retained checkpoint ownership/recovery workflow. It is not a reopened R17g feature
 sweep; [the bounded validation report](plans/post-r17-validation.md) defines what failed.
+
+Optional robustness note from PR #297 review: a disk/write failure during new lock
+metadata creation can retain an incomplete lock. Keep failing closed. Any future
+cleanup must prove ownership and preserve unknown/replaced contents, not blindly
+unlink after a failed acquisition. This does not block ordinary-session delivery
+and is not another repair train or newly opened issue.

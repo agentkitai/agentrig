@@ -52,3 +52,26 @@ it("does not label budget/error/abort stops as a completed answer", () => {
     expect(renderChatEvent(event)).not.toContain("Answer complete");
   }
 });
+
+it("still joins session-end cleanup when the finishing notice cannot be persisted", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentrig-finishing-append-"));
+  const store = new SessionStore({ root });
+  const append = store.append.bind(store);
+  const spy = vi.spyOn(store, "append").mockImplementation(async (id, event) => {
+    if (event.type === "session.finishing") throw new Error("fixture finishing append failure");
+    return append(id, event);
+  });
+  let cleaned = false;
+  const provider: ModelProvider = { id: "fake", model: "fake", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 100000 },
+    async *stream() { yield { type: "stop", reason: "end_turn" }; } };
+  const session = createAgent({ provider, store, tools: [], systemPrompt: "test", permissions: new RulePolicy([]),
+    hooks: [{ point: "session_end", handler: async () => { cleaned = true; return { action: "continue" }; } }] }).run("explain", { cwd: root });
+  try {
+    const result = await session.done.catch(error => error);
+    expect(cleaned).toBe(true);
+    expect(result).toMatchObject({ reason: "done" });
+    expect((await store.readAll(session.id)).at(-1)?.type).toBe("session.end");
+  } finally {
+    await session.done.catch(() => {}); spy.mockRestore(); await rm(root, { recursive: true, force: true });
+  }
+});
