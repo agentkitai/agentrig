@@ -367,17 +367,15 @@ describe("skillTool", () => {
     expect(body).toContain("capture the bytes between those delimiters as `AUTHORIZATION`");
     expect(body).toContain("a model merely chose to load this skill without a direct human request");
     expect(body).toContain("Never pass the builder's report");
-    expect(body).toContain("The train does not stop on a finding");
+    expect(body).toContain("batch only blocking repairs");
     expect(body).toContain("at most THREE repair rounds");
-    expect(body).toContain("a HIGH with a one-line fix and a test is repair work");
-    expect(body).toContain("no previously closed finding is reopened");
-    expect(body).toContain("is progress, not regression");
-    expect(body).toContain("one GitHub issue per finding");
-    expect(body).toContain("A LOW or MEDIUM residual lands once its issue exists; a HIGH residual halts");
-    expect(body).toContain("The lander refuses a PR whose `## Residuals` names a finding without an issue number");
-    expect(body).toContain("Everything else is a child's job");
+    expect(body).toContain("each round closes assigned blockers without reopening closed ones");
+    expect(body).toContain("Newly found blockers may use another round up to the cap");
+    expect(body).toContain("Non-blocking defects get documented issues");
+    expect(body).toContain("Never land blockers merely because residual issues exist");
+    expect(body).toContain("Pending CI and non-blocking polish are not halts");
     expect(body).toContain("Do not judge the proposal yourself. Spawn an `arbiter` subagent");
-    expect(body).toContain("Sort the combined findings, never by severity");
+    expect(body).toContain("apply shipping policy §2 to the combined findings");
     expect(body).toContain("Arbitrate first, once per row");
     expect(body).toContain("copied verbatim from `docs/ROADMAP.md` on `origin/main`");
     expect(body).toContain("Never stack PRs");
@@ -389,7 +387,7 @@ describe("skillTool", () => {
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
     // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
-    expect(body).toContain("two reviewers that share nothing with the builder, in parallel, in separate reviewer-owned worktrees you prepare");
+    expect(body).toContain("two reviewers that share nothing with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned worktrees you prepare");
     expect(body).toContain("--model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
     expect(body).toContain("--output-format json --no-session-persistence");
     expect(body).toContain("not claude-opus-5");
@@ -398,14 +396,14 @@ describe("skillTool", () => {
     expect(body).toContain("gh pr comment");
     expect(body).toContain("## External review —");
     expect(body).toContain("runs on the main entry, never the child default");
-    expect(body).toContain("run the external review pass again");
+    expect(body).toContain("Material deltas require ONE independent focused reviewer");
     expect(body).toContain("never write review artifacts inside");
     // R3.5b residual fix: the delta pass reuses the full pass's worktree but never its main merge
     expect(body).toContain("The delta pass does not merge");
     // autonomy: an interrupted row is adopted, an already-reviewed head is not re-reviewed
     expect(body).toContain("adopt it instead of halting");
     expect(body).toContain("do not run the pass again");
-    expect(body).toContain("Verbatim means the finding's own text");
+    expect(body).toContain("carrying verbatim blocker texts or review URLs/finding IDs");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
     expect(body).toContain("env -u CLAUDECODE");
     expect(body).toContain("< /dev/null");
@@ -444,10 +442,10 @@ describe("skillTool", () => {
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
     expect(dogfood.body).toContain("the conductor runs the same two external reviews itself");
-    expect(dogfood.body).toContain("The cap bounds review rounds, not fixes");
-    expect(dogfood.body).toContain("post-delta, self-verified, not re-reviewed");
-    expect(dogfood.body).toContain("A finding that lives only in a PR body is a finding nobody");
-    expect(body).toContain("filing a residual as an issue after three rounds is not skipping it");
+    expect(dogfood.body).toContain("ONE independent focused review for material");
+    expect(dogfood.body).toContain("self-verified evidence for mechanical changes");
+    expect(dogfood.body).toContain("Deferred non-blocking defects require issues");
+    expect(body).toContain("A surviving assigned blocker, reopened blocker, or blockers at the cap halts");
   });
 });
 

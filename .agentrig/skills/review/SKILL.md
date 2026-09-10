@@ -5,6 +5,9 @@ description: Independent adversarial review of one PR on its final head - isolat
 
 # Review flow — the independent final review of a pull request
 
+Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
+CI scheduling, finding disposition, material-delta and convergence rules govern this flow.
+
 You are the reviewer of record, not the author and not the merger. Assume the author is wrong
 until the code proves otherwise; assume the PR body overstates until you have verified its claims.
 Run this in a session that shares no context with the run that wrote the PR.
@@ -38,12 +41,17 @@ Run this in a session that shares no context with the run that wrote the PR.
 - `pnpm build`, `pnpm test`, `pnpm typecheck` — run each separately, judge each by its EXIT CODE.
   Piping through `grep`/`tail` returns the pipe's status and has masked real failures; an empty
   log with exit 0 means the command never ran, not that it passed.
-- Also confirm CI is green on the ACTUAL head SHA, both platforms — a green run on a stale head
-  proves nothing.
+- Record CI state on the ACTUAL head SHA. Return the code verdict while hosted CI is pending;
+  do not wait for it. The lander requires every required check green before merging.
+- On a focused material-delta pass, run affected tests and relevant mutations instead of repeating
+  the whole trio; the author still runs the full trio and hosted CI still checks the final head.
+  Record exact commands, exits and any environment limitation; do not call a blocked check passed.
 
 ## 4. Read the whole diff against the repo's invariants
 
-`git diff origin/main...origin/<branch>` — all of it, not the files the PR body mentions.
+Initial pass: `git diff origin/main...origin/<branch>` — all of it, not the files the PR body mentions.
+Focused pass: `git diff OLD NEW` and direct interactions only, with explicit OLD/NEW in the verdict;
+verify assigned blocker closure and new direct regressions, not optional cleanup of unchanged code.
 
 - New event type ⇒ zod variant + `renderEvent` case + round-trip test; fields added, never
   repurposed or removed.
@@ -83,7 +91,9 @@ Run this in a session that shares no context with the run that wrote the PR.
 ## 6. Verdict
 
 - Findings: file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario, a proposed fix.
-  Distinguish "must fix before merge" from test gaps from cosmetic notes.
+  Classify blocking/non-blocking with the scenario and shipping policy §2 rationale. Distinguish
+  unmet acceptance or safety gates from minor deferrable defects and advisory polish. Uncertain
+  impact remains blocking; a small fix or LOW severity is not proof of safe deferral.
 - A pass verdict lists what you probed and which mutants you ran — "looks good" with no evidence
   is not a review.
 - Report which of the PR body's claims you verified, and any you could not.

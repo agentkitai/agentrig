@@ -1296,3 +1296,9 @@ metadata creation can retain an incomplete lock. Keep failing closed. Any future
 cleanup must prove ownership and preserve unknown/replaced contents, not blindly
 unlink after a failed acquisition. This does not block ordinary-session delivery
 and is not another repair train or newly opened issue.
+
+Shipping-workflow advisory followups from PR #307: validate overlap and review-round
+counts on a subsequent live AgentRig shipment; consider a separate rule for unassigned
+material pushes during a frozen review batch and explicit counting for coverage-only
+passes. These are optional workflow clarifications, not new acceptance criteria or
+another repair train. Current scope, review coverage, and merge gates remain binding.

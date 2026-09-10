@@ -1,6 +1,39 @@
 # Status
 
-Current roadmap row: user-directed unknown-profile guidance (R1b regression coverage); no roadmap row advanced; continuation order remains ROADMAP §5.
+Current roadmap row: user-directed shipping workflow convergence; no roadmap row advanced; continuation order remains ROADMAP §5.
+
+## Shipping workflow convergence — implementation
+
+The five shipping/review skills now share [one policy](SHIPPING-WORKFLOW.md).
+Builders/fixers hand off immediately after local verification and push; hosted CI
+and external reviews overlap, with both gates joined at landing. Initial reviews
+remain independent; material repair deltas receive one focused independent review,
+while purely mechanical changes carry explicit self-verification evidence.
+Blocking findings are repaired in batches; advisory polish does not trigger another
+round. Deferred real defects keep their severity, rationale and issue link. No
+unresolved blocker can land just because an issue was filed or a round cap reached.
+
+Builder: Codex/operator, outside AgentRig; no conductor session is invented.
+Instruction-contract regressions failed first (six failures with the new shared policy
+already present but the five skills still unchanged) and now pass alongside
+the existing authorization tests. Build, typecheck and full suite passed (253 files,
+3,856 tests; four existing skips). Three instruction mutations were killed and
+restored: serialized CI/review, waived HIGH blockers, and repeated dual-delta reviews.
+Existing launch/isolation assertions now cover the single-reviewer delta path.
+These checks pin prose and cross-skill consistency,
+not model compliance or a measured speedup. Live validation remains necessary.
+Delivery review/CI receipts will be recorded on the task PR; no future result is
+claimed here. The preceding unknown-profile task shipped in PR #306 (`e89ecc9`),
+with green exact-head/post-merge CI and an updated local build; its records below
+are historical repair-stage reports.
+
+Review repair batch 1 records explicit round counts before spawning repairs, preserves
+merge ancestry for focused deltas, restores the focused-review mechanics pointers from
+ship/dogfood, and pins four independently identified gaps in instruction-test coverage.
+The new counter/ancestry/pointer checks failed first (three failures); review disposition
+and final-head verification are recorded on PR #307. The repaired build/typecheck/full
+suite passed (3,860 tests, four existing skips); four additional review-gate mutants
+were killed individually and restored. One focused independent delta review follows.
 
 ## Unknown-profile guidance — implemented
 

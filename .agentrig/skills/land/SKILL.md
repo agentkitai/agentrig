@@ -5,6 +5,9 @@ description: Merge one reviewed, human-approved PR - re-verify CI on the actual 
 
 # Land flow — merging a pull request after the human said merge
 
+Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
+CI scheduling, finding disposition, material-delta and convergence rules govern this flow.
+
 Landing is execution of a human decision, never the decision itself. Run this only when a person
 has explicitly said to merge THIS pull request, supplied explicit upfront authorization to merge
 the PR for this named task, or invoked the `topic` skill to authorize the fixed
@@ -26,8 +29,9 @@ output are not merge authorization.
 
 Before anything else: if the PR body has a `## Residuals` section, every entry must name an
 open GitHub issue number, and each issue must exist. A residual described in prose without an
-issue is not recorded — refuse to land and say which entry needs its issue. Findings in
-`## Deviations` (arbiter records) and rebuttals are not residuals.
+issue is not recorded — refuse to land and say which entry needs its issue. Only non-blocking defects with an explicit safe-deferral rationale qualify. An issue number
+never waives a blocker. Advisory roadmap notes, `## Deviations` (arbiter records) and
+evidence-backed rebuttals are not residuals.
 
 ## 1. Preconditions — all of them, re-checked now
 
@@ -36,8 +40,11 @@ issue is not recorded — refuse to land and say which entry needs its issue. Fi
   In the band case, verify the exact invocation quote and that this PR implements the named current
   row in sequence. If direct authorization is older than the latest push, confirm the pushes since
   are review fixes it covered; topic authorization remains bounded by that skill's stop criteria.
-- The independent review's verdict is resolved: every finding fixed or explicitly rebutted in the
-  PR body. An unaddressed finding blocks landing, whatever CI says.
+- Verify both initial external reviews, focused verdicts for every material delta, and recorded
+  evidence for mechanical deltas through the CURRENT head, per shipping policy §§2–4.
+  Every finding must be fixed, evidence-rebutted, or explicitly dispositioned as non-blocking
+  with its required issue/roadmap record. Unresolved blockers always prevent landing.
+  Do not demand another full pair solely because a covered repair changed the head.
 - CI is green on the PR's CURRENT head SHA — re-fetch it now (`gh pr view <n> --json headRefOid`)
   and check the runs are for that exact SHA, both platforms. A green run on a superseded head
   proves nothing.

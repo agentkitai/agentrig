@@ -14,18 +14,16 @@ it.each(["topic", "dogfood"])("%s permits explicit mutation tools without plan m
   expect(text).toContain("--disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)'");
 });
 
-it("topic launches Codex in its own tree and temp root for full and delta passes", async () => {
+it("topic launches the initial pair in separate trees and temp roots", async () => {
   const text = await skill("topic");
   expect(text).toContain('REVHEAD=$(git -C "$WT" rev-parse HEAD)');
   expect(text).toContain('git worktree add --detach "$CODEX_WT" "$REVHEAD"');
-  expect(text).toContain('git worktree add --detach "$CODEX_WT" "$NEW"');
   expect(text).toContain("cd <CODEX_WT> && TMPDIR=<OUT>/codex-tmp codex review");
   expect(text).toContain("TMPDIR=<OUT>/claude-tmp claude -p");
   expect(text).not.toContain("cd <WT> && codex review");
   expect(text).toContain("m.length!==1||m[0]!==\"claude-opus-5\"");
   expect(text).toContain('End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`');
   expect(text).toContain("the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta)");
-  expect(text).toContain("REVHEAD=$NEW;");
   expect(text).toContain("One `bash` call for preparation, then one call per install.");
   expect(text.replace(/\s+/g, " ")).toContain("Record these paths and the post-merge review SHA BEFORE installing dependencies.");
   expect(text).toContain("in separate calls, each with `timeoutMs` at least 600000");
@@ -39,8 +37,8 @@ it("topic launches Codex in its own tree and temp root for full and delta passes
  */
 async function deltaPass() {
   const text = await skill("topic");
-  const start = text.indexOf("- **Re-review the delta**");
-  const end = text.indexOf("\n- **Convergence**", start);
+  const start = text.indexOf("- **Cover the delta**");
+  const end = text.indexOf("\n- **Converge:**", start);
   expect(start, "delta bullet").toBeGreaterThanOrEqual(0);
   expect(end, "convergence bullet after the delta bullet").toBeGreaterThan(start);
   return text.slice(start, end).replace(/\s+/g, " ");
@@ -48,22 +46,25 @@ async function deltaPass() {
 
 it("the delta bullet is pinned apart from the full-pass preparation", async () => {
   const delta = await deltaPass();
-  expect(delta).toContain("run the external review pass again (§2 step 4) over the delta only");
-  expect(delta).not.toContain("End preparation with");
-  expect(delta).not.toContain("One `bash` call for preparation, then one call per install.");
+  expect(delta).toContain("Material deltas require ONE independent focused reviewer");
+  expect(delta).toContain('git worktree add --detach "$WT" "$NEW"');
+  expect(delta).toContain("The delta pass does not merge main");
+  expect(delta).toContain("restored tracked/index state");
+  expect(delta).toContain("A dead focused review after retry halts");
+  expect(delta).not.toContain("$CODEX_WT");
 });
 
 it("delta preparation ends by echoing what the next calls must be given", async () => {
-  expect(await deltaPass()).toContain("End the command with `echo ");
+  expect(await deltaPass()).toContain("End preparation with `echo ");
 });
 
-it("the delta echo tuple carries REVHEAD with the three paths", async () => {
-  expect(await deltaPass()).toContain('echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`, record the paths/SHA');
+it("the delta echo tuple carries the one tree, output, reviewed head and unique base", async () => {
+  expect(await deltaPass()).toContain('echo "$WT" "$OUT" "$REVHEAD" "$BASE"`, record the paths/SHA/ref');
 });
 
-it("delta dependencies install in two separate calls under the full pass's limits", async () => {
+it("delta dependencies install separately with a deadline and a successful exit gate", async () => {
   expect(await deltaPass()).toContain(
-    "install dependencies in two separate calls with the same per-install timeout and exit-code requirements as §2 step 4.");
+    "Install dependencies in a separate call with timeoutMs at least 600000; require exit code zero before launch");
 });
 
 it("ship and standalone dogfood preserve separate trees and explicit launch locations", async () => {

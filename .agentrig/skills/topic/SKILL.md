@@ -5,6 +5,9 @@ description: Run one authorized roadmap band as a sequential release train - dog
 
 # Topic flow — one authorized roadmap band, landed row by row
 
+Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
+CI scheduling, finding disposition, material-delta and convergence rules govern this flow.
+
 You are the conductor, not the builder, fixer, or merger. Use the `subagent` tool for those
 children; do not do their work in this parent session. Reviews are external CLI jobs you start and
 wait on (§2 step 4), never a child and never your own reading of the diff. Keep your own turns few.
@@ -35,8 +38,8 @@ Never guess a role name after an unknown-role refusal. Provider routing remains 
   or substitute a row at expansion time; a row you believe is wrong goes through the deviation path
   in §3, and a child that rewrites its row without an arbiter record has produced a HIGH finding. If the band or
   invocation sentence is ambiguous, stop and ask the human before any child or branch is created.
-- If a row already has an open PR from an interrupted run, adopt it instead of halting: verify CI is
-  green on its current head, treat it as the builder's output, and continue at §2 step 4. If its
+- If a row already has an open PR from an interrupted run, adopt it instead of halting: record current-head CI state, recover its review/disposition ledger and repair counter,
+  treat it as the builder's output, and continue at §2 step 4 without waiting for pending CI. If its
   description lacks the verbatim authorization quote, the first fixer adds it. Never spawn a second
   builder over an adopted PR. A half-pushed branch with no PR gets ONE continuation builder from
   whatever it pushed, exactly as §2 step 3 says. A train halts for a human only on §5's list.
@@ -60,7 +63,7 @@ For each recorded row, in order:
    never begin while the prior land check is pending.
 2. Spawn a builder subagent with a self-contained task containing the exact roadmap-row contract
    (the verbatim row text from §1, quoted, never summarized), `AUTHORIZATION`, and: “Follow the dogfood skill. Start from current `origin/main`. Put the quoted
-   authorization verbatim in the PR description. Report the PR, current head SHA and CI. You are a
+   authorization verbatim in the PR description. Report the PR, current head SHA and CI state immediately; do not wait for hosted CI. You are a
    topic child: stop at the PR and skip the external reviews — an independent review follows.”
    The dogfood child stops at its PR and never merges. Record the session id
    printed by the `subagent` tool result immediately (the same id is in the parent's spawn event);
@@ -83,11 +86,14 @@ For each recorded row, in order:
    the human with both the proposal and the rejection. One arbitration per row; a second
    `DEVIATION REQUESTED` on the same row halts.
 4. Run the **external review pass** on the PR's current head: two reviewers that share nothing
-   with the builder, in parallel, in separate reviewer-owned worktrees you prepare. First check whether it already ran:
+   with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned
+   worktrees you prepare. Start the CI watch and reviews as soon as the PR is available; green
+   hosted CI is a landing gate, not a review-start gate. First check whether it already ran:
    if the PR carries two comments whose heading starts with `## External review —` and whose body
    names the CURRENT head SHA, one from Claude Code and one from Codex, do not run the pass again —
-   read those two comments as its result and continue at **Combine**. Comments naming an older head
-   are stale and are ignored. Never pass the builder's report,
+   read those two comments as its result and continue at **Combine**. For older heads, recover
+   the review ledger and inspect uncovered deltas under shipping policy §3 instead of restarting
+   the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
    only evidence.
    - **Prepare.** One `bash` call for preparation, then one call per install. Every value
@@ -110,7 +116,9 @@ For each recorded row, in order:
      `OUT=$(mktemp -d)`
      holds every output file; never write review artifacts inside either tree. Create independent
      temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
-     command-local `TMPDIR` below, never change the operator's global environment.
+     command-local `TMPDIR` below, never change the operator's global environment. Before testing,
+     run fixture preflight in each reviewer environment; use a fresh temp root outside Git
+     ancestry per docs/TESTING.md, or record the environment limitation without disabling checks.
      End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`. Record these paths and
      the post-merge review SHA BEFORE installing dependencies. Run `cd <WT> && pnpm install`
      and `cd <CODEX_WT> && pnpm install` in separate calls, each with `timeoutMs` at least 600000;
@@ -147,8 +155,8 @@ For each recorded row, in order:
      cd <CODEX_WT> && TMPDIR=<OUT>/codex-tmp codex review --base review-base-NN > "<OUT>/codex.md" 2> "<OUT>/codex.err"
      ```
      Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
-     standard is Claude's brief and step 5's sorting, where a Codex finding without a proposed fix
-     is still repair work.
+     standard is Claude's brief and step 5's disposition. A missing proposed fix does not waive
+     a real blocker or turn an optional suggestion into repair work.
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
      loop). Record both job ids from the `bash` results immediately, along with each job's start
      time beside its id, and restate them in your own reply text on every turn you poll — tool
@@ -172,8 +180,9 @@ For each recorded row, in order:
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
      cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only
      after jobs are joined, plus the shared `review-base-NN` ref. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
-     it no longer equals `HEAD`, the author pushed during the pass — the pass is stale: remove the
-     worktree and `review-base-NN`, then rerun it on the current head. Compose each comment body
+     it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
+     head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
+     policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
      with its heading first —
      `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
      (the same for Codex, with its own heading and `<OUT>/codex.md`) — then post each with
@@ -186,110 +195,70 @@ For each recorded row, in order:
      and the same scenario), and sort the union under step 5. Claude's review must also name
      `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
      asserted to be at `HEAD` (before the merge on a full pass).
-5. Record every child session id from its tool result and restate it in your own reply text in that
-   same turn; tool results older than five turns may be elided from context. Bind the verdict to
-   `HEAD` (Claude's self-reported SHA and the re-read PR head must both equal it); a head that
-   changes other than through §3's loop is stale — rerun the pass on the new head rather than
-   halting. Sort the combined findings, never by severity:
-   every finding that carries a concrete proposed fix is repair work for §3; a finding it labels contract or
-   authorization (an unapproved deviation) goes to the arbiter first (§3); a claim it could not
-   verify is a finding whose fix is reproducible evidence in the PR body or deletion of the claim;
-   a finding with no proposed fix is repair work too — the fixer's task is "find the fix or explain
-   in the PR body exactly why none exists", and only a HIGH that the fixer reports unfixable halts.
-   The bound on this train is rounds and convergence (§3), never the severity of a fixable defect:
-   a HIGH with a one-line fix and a test is repair work.
-   Distinguish verified defects from optional suggestions: a preference or nice-to-have with no
-   concrete failure against the row contract is advisory, not a new acceptance criterion or repair
-   round. Record advisory followups at the end of the roadmap when useful, without manufacturing
-   an issue for every suggestion. Do not relabel a real LOW defect as advisory to evade repair.
+5. Record every child session id from its tool result and restate it in your own reply text in that same turn. Bind each verdict to
+   its recorded SHA and apply shipping policy §2 to the combined findings. Distinguish verified
+   defects from optional suggestions: optional polish is advisory, not a new acceptance criterion or repair
+   round. Record advisory followups at the end of the roadmap when useful. Do not relabel a real LOW defect
+   as advisory. A concrete proposed fix alone does not mandate another repair round.
 
-## 3. Repair until clean — a bounded, converging loop
+## 3. Repair blockers — a bounded, converging loop
 
-The train does not stop on a finding. It stops when it has run out of rounds, when a round stops
-converging, or when something needs a human. Per row, at most THREE repair rounds:
+Follow shipping policy §§2–3: at most THREE repair rounds, retaining the counter on restart.
+Collect both initial verdicts, disposition all findings, and batch only blocking repairs.
+Non-blocking defects get documented issues; optional suggestions do not consume rounds.
 
-- **Arbitrate first, once per row**, if any finding is a contract or authorization one: spawn an
-  `arbiter` subagent (on the main entry, as in §2 step 3) with the deviation exactly as the review
-  described it, the row text from §1, and `AUTHORIZATION`; record its id. On `VERDICT: APPROVE` the fixer's task carries the
-  verdict block, the arbiter's session id, and "record it under `## Deviations` in the PR body and
-  make the roadmap edit match its RECORD line"; on `VERDICT: REJECT` it carries "revert to the row
-  as written" with the rejection; on "needs the human", halt. This shares the
-  one-arbitration-per-row budget with the builder's `DEVIATION REQUESTED` path.
-- **Fix**: spawn one fix subagent on the same PR branch, scoped verbatim to every open finding and
-  no unrelated code changes. Verbatim means the finding's own text: paste each open finding from the
-  review comments into the task, or give the comment URLs with the finding numbers — never your own
-  restatement, which the R4a continuation fixer found did not match the comments. Its brief carries the same sentence the builder's does — “You are a
-  topic child: stop at the push and skip the external reviews — an independent delta review
-  follows” — because the dogfood skill's §8 otherwise tells it to arrange its own reviews and wait
-  on them. Tell it not to rebut or skip a finding, to add fail-first proof where
-  behavior changes (reuse the reviewer's exact mutant as the fail-first check when one was given),
-  run the green trio, push, update the PR description with every finding and its resolution, and
-  report the old/new head SHAs. Record its id. If it dies at budget, spawn ONE continuation fixer
-  from its pushed branch carrying the same findings; a second death halts. A merge conflict is the
-  fixer's to resolve (merge `main` in, never rebase); red CI on the new head is a finding for the
-  next round, not a halt.
-- **Re-review the delta**: run the external review pass again (§2 step 4) over the delta only, in
-  fresh separate reviewer-owned worktrees and an output directory. One `bash` call re-derives everything it needs, since
-  nothing from §2 step 4's shell — `$BRANCH` included — survives into this call:
-  `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName); NEW=<NEW>; OLD=<OLD>;
-  git fetch origin main "$BRANCH"; WT=$(mktemp -d); OUT=$(mktemp -d); echo "$WT" "$OUT";
-  git worktree add "$WT" "$NEW"; git -C "$WT" branch -f review-base-NN "$OLD";
-  [ "$(git -C "$WT" rev-parse HEAD)" = "$NEW" ] || stop the pass (the worktree is not at NEW;
-  remove the worktree and `review-base-NN` before stopping);
-  CODEX_WT=$(mktemp -d); echo "$CODEX_WT"; git worktree add --detach "$CODEX_WT" "$NEW";
-  REVHEAD=$NEW; mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`.
-  End the command with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`, record the paths/SHA,
-  then install dependencies in two separate calls with the same per-install timeout and
-  exit-code requirements as §2 step 4. Substitute all paths literally as in §2 step 4,
-  using `<WT>` only for Claude and `<CODEX_WT>` only for Codex, with their own TMPDIRs. Assert
-  both trees are clean at NEW before launch; apply the same restore/join/provenance checks and
-  two-tree cleanup as the full pass. `<NEW>` and `<OLD>` above are the literal old/new
-  head SHAs the fixer reported in its handoff; the conductor writes them in by hand the same way it
-  writes in `NN`, because neither survives from one `bash` call to the next either. Brief the
-  Claude job with the PR number and the old/new head SHAs: "review only the changes OLD..NEW under
-  the review skill's standards; never assume the previous review's findings — verify the code as
-  it is now. You are already in an isolated worktree at NEW (not merged with origin/main), with
-  dependencies installed: skip the review skill's section 2 and verify that state yourself." The
-  delta pass does not merge `origin/main` (the full pass already did; CI tests the merged state).
-  Codex takes no wording either way — it runs `codex review --base review-base-NN` unchanged, with
-  `review-base-NN` now sitting at OLD. Codex's diff is exactly OLD..NEW when the fixer did not
-  merge `origin/main`; if NEW contains such a merge, Codex also sees main's changes — findings on
-  files the fixer's own commits did not touch are noted in the PR comment, not opened as findings.
-  Neither reviewer ever sees either author's report. Post both as PR comments headed
-  `## External review — Claude Code (claude-opus-5) — head NEW — delta OLD..NEW` and
-  `## External review — Codex — head NEW — delta OLD..NEW`. Staleness here is the same re-read
-  check as the full review: re-read the PR head before posting, and if it no longer equals NEW,
-  or Claude's self-reported SHA does not equal NEW, the pass is stale: remove the worktree and
-  `review-base-NN`, then rerun it on the current head. A clean, fully verified delta verdict from
-  both reviewers lands (§4). Findings on the delta open the next round.
-- **Convergence** is measured on the findings a round was given, never by counting: a round
-  converges when every finding it started with is closed and no previously closed finding is
-  reopened. A NEW finding the delta review raises in code the fix touched is progress, not
-  regression — it goes to the next round, however many there are, until the round cap. The only
-  non-converging round is one that leaves a given finding open or reopens a closed one: that halts
-  with the full trace, because repeating it would be the #82 treadmill. The R3a train halted on
-  "started with one, ended with one" when the one it ended with was new; that reading is wrong.
-- **After the third round**, whatever the delta review still finds becomes **one GitHub issue
-  per finding**, never a note in the PR body: the last fixer files each with `gh issue create`
-  (title `[review residual] <one line>`, label `review-residual`, body: severity, file:line, the
-  concrete scenario, the reviewer's proposed fix, the PR number, the head SHA, the reviewer
-  (Claude Code or Codex) and its PR-comment URL), then lists the issue numbers under `## Residuals` in the PR body. A LOW or MEDIUM
-  residual lands once its issue exists; a HIGH residual halts. The lander refuses a PR whose
-  `## Residuals` names a finding without an issue number.
-- The train never rebuts, downgrades, waives, or silently skips a review finding; filing a
-  residual as an issue after three rounds is not skipping it, it is the bound doing its job with
-  a place the finding can be picked up from.
+- **Arbitrate first, once per row** for contract/authorization findings, using the proposal,
+  original row, and `AUTHORIZATION`. The arbiter uses the main entry as in §2 step 3.
+  Carry APPROVE's verdict/session and RECORD into PR/roadmap; REJECT means restore the contract.
+  "Needs the human" halts. This shares the builder-deviation arbitration allowance.
+- **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
+  URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
+  "Follow dogfood. You are a topic child: run local proof, push, report OLD/NEW and current CI
+  immediately; do not wait for hosted CI, run private external reviews, or fix advisory polish."
+  Require fail-first/mutation proof, full local trio, and updated disposition ledger. Record its
+  session id. A budget death permits one continuation from pushed state; a second death halts.
+  CI failures and merge conflicts are repair work on the same branch, never a gate bypass.
+- **Cover the delta** under shipping policy §3. Material deltas require ONE independent focused
+  reviewer; mechanical deltas require explicit self-verification evidence, not another review.
+  For a focused review, prepare one fresh reviewer-owned worktree at NEW and a unique base ref
+  at OLD. Record paths/SHAs before install; use an independent install and preflighted TMPDIR.
+  First apply shipping policy §3's ancestry check and history-rewrite rule.
+  Derive BRANCH, OLD, NEW and a unique BASE inside the preparation call; fetch the PR branch.
+  Then `WT=$(mktemp -d); OUT=$(mktemp -d); git worktree add --detach "$WT" "$NEW";
+  git -C "$WT" branch "$BASE" "$OLD"; REVHEAD=$NEW`.
+  Assert `git -C "$WT" rev-parse HEAD` equals NEW and tracked/index state is clean.
+  The delta pass does not merge main. Create the selected reviewer's private TMPDIR outside Git
+  ancestry. End preparation with `echo "$WT" "$OUT" "$REVHEAD" "$BASE"`, record the paths/SHA/ref
+  before install, and substitute literal paths in later calls (shell state does not persist).
+  Install dependencies in a separate call with timeoutMs at least 600000; require exit code zero
+  before launch. On failure, join the install and retain recorded paths for cleanup.
+  Use §2 step 4's selected reviewer's command/tool allowances and model assertion where applicable,
+  with OLD as the diff base. For Claude, brief OLD/NEW, blocker URLs, affected checks/mutations and
+  direct interactions; for Codex use `codex review --base <unique-old-ref>`.
+  Do not hand over the fixer's reasoning as evidence. Record start time/job id and use the same
+  timeout, one-retry, restore/join and SHA checks as the initial pass, applied to this one job.
+  A dead focused review after retry halts; it is not replaced by self-review.
+  Post its verdict as `## Focused review — <reviewer> — head NEW — delta OLD..NEW`.
+  Join subprocesses and verify restored tracked/index state before cleanup. Re-read the PR head;
+  any uncovered delta still needs classification and coverage before landing.
+- **Converge:** each round closes assigned blockers without reopening closed ones. Newly found
+  blockers may use another round up to the cap; advisory/non-blocking notes do not. A surviving
+  assigned blocker, reopened blocker, or blockers at the cap halts with the trace. Never land
+  blockers merely because residual issues exist. Preserve all review URLs, SHA ranges, deferred
+  defect issues and mechanical-delta evidence for the lander.
 
 ## 4. Conditional land and continue
 
-- After a clean full review, or a clean one-time delta review, independently confirm CI is green on
+- After the initial pair and all required delta coverage have resolved blocking findings,
+  independently confirm CI is green on
   the PR's actual current head SHA. Then spawn a land subagent with the exact band, row, predecessor
   merge SHA, PR number, and: “Land PR #NN following the land skill. The human authorized this row as
   part of BAND with the following exact invocation: `AUTHORIZATION`. Preserve that quote verbatim
   in the PR description and squash-merge commit body.” Record the lander id from the tool result.
 - The land child must perform every land-skill precondition, squash, and watch `main` CI on the exact
-  merge commit. A conflict, stale/red head CI, failed precondition, or red post-merge `main` halts the
-  train. Never start the next row until that child reports the merge SHA and green `main` CI.
+  merge commit. A conflict or stale/red head CI returns to bounded repair before landing;
+  pending CI is waited on, never bypassed. Failed authorization, exhausted repair/verification
+  budgets, or red post-merge `main` halts the train. Never start the next row until that child reports the merge SHA and green `main` CI.
 - Once green, start the next row from the newly merged `origin/main` without pausing for another
   merge word. The original invocation already supplied the bounded human decision for every row.
 
@@ -308,9 +277,10 @@ Always report:
 - every finding and whether it was fixed, per repair round, with the convergence count for each
   round, plus the exact halt reason and resumable session id when a child exhausted its budget.
 
-The only halts left are: the arbiter answers "needs the human"; a HIGH the fixer reports
-unfixable or that survives three rounds; a round that does not converge; a child that dies twice;
-the child pool exhausted; a red post-merge `main`. Everything else is a child's job.
+Halts include: missing/ambiguous or revoked authorization; arbiter needs the human; an unfixable
+blocker, non-convergence or blockers at the three-round cap; an incomplete required review after
+its retry; a child that dies twice; exhausted child capacity/budget; red post-merge `main`.
+Pending CI and non-blocking polish are not halts. Never waive a required check to continue.
 
 Do not claim a train completed unless every row landed sequentially and `main` CI was green on the
 last merge commit. Do not merge anything after a stop condition.

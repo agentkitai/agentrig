@@ -5,6 +5,9 @@ description: Orchestrate one change end to end - build, independently review, re
 
 # Ship flow — one command from task to merge decision
 
+Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
+CI scheduling, finding disposition, material-delta and convergence rules govern this flow.
+
 You are the conductor, not a performer. The building happens in a subagent and the reviewing in
 external CLI jobs you run; your job is sequencing and relaying results faithfully. Merge remains
 a human decision, but that decision may be supplied up front, not only after the review.
@@ -26,7 +29,9 @@ revocation or narrowing. Do not infer authorization from YOLO or a tool allowanc
   on APPROVE spawn a continuation builder on the same branch carrying the verdict block and the
   arbiter's session id; on REJECT spawn one carrying the rejection and "build the row as
   written", or stop for the human if the builder said the row as written is infeasible.
-- Its report should name the PR it opened, the head SHA, and CI state on that head. If it died
+- Its report should name the PR it opened, the head SHA, and CI state on that head.
+  Explicitly tell builders and fixers: return immediately after push/PR, without waiting for
+  hosted CI; the conductor starts review and CI monitoring concurrently. If it died
   at its turn budget instead, report its session id so the human can resume it
   (`agentrig sessions resume <id>`), and stop — do not re-spawn a fresh builder over a
   half-pushed branch.
@@ -42,24 +47,21 @@ revocation or narrowing. Do not infer authorization from YOLO or a tool allowanc
 ## 3. Resolve the verdict, then honor the merge decision
 
 - Present the verdict verbatim-in-substance: every finding with its severity, or the pass with
-  its evidence, plus PR number, CI state, and the URLs of the two external review comments (four
-  after a delta). This is a progress report, not an unconditional stop.
-- A fixable verdict does not wait for the human: when the pass returns findings that carry concrete
-  fixes, or stopped on a merge conflict, spawn the fix subagent scoped to exactly those findings on
-  the same branch, then the delta re-review of what changed — the same external pass over OLD..NEW
-  as `topic` §3 describes — and loop the two under `topic` §3's bounded converging rules (at most
-  three rounds, each must close the last round's findings) without asking. Present the verdict and
-  proceed to landing only when the review/residual requirements are satisfied; a `topic` §5 halt
-  still stops the workflow even when merging was authorized.
+  its evidence, plus PR number, CI state, and the initial review URLs and any focused delta review URL. This is a progress report, not an unconditional stop.
+- Apply shipping policy §2 to every finding. Batch blocking repairs only; defer non-blocking
+  defects with issue links and advisory polish to the roadmap when useful. Contract or
+  authorization findings still go to an arbiter before the fixer.
+  A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
+- Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
+  push, classify OLD..NEW under shipping policy §3: ONE independent focused reviewer for a
+  material delta, evidence-only for a mechanical delta. Use topic §3's **Cover the delta** procedure
+  for isolated preparation, installation, launch, provenance and cleanup. Never repeat the initial external pair
+  for each fix. At most three repair rounds, preserving the counter on resumption; unresolved
+  blockers or non-convergence halt, while new advisory notes do not open another round.
 - When scoped merge authorization is present, run the `land` skill's steps (in this session or a
   land subagent) without asking for a second approval. Pass the verbatim human quote, task scope
   and PR number; require green exact-head CI and watch post-merge CI before reporting completion.
   Otherwise report the reviewed PR and wait for explicit merge authorization.
-  Severity never decides fixability: any
-  finding with a concrete proposed fix is fixer work. A contract or authorization finding goes to
-  an `arbiter` subagent first, exactly as `topic` §3 does, and the fixer carries the verdict.
-  Residual findings after the third round are filed as GitHub issues, one per finding, in
-  `topic` §3's `review-residual` format, and listed by number under `## Residuals` in the PR body.
 - No answer is an answer: never treat silence, a timeout, or your own confidence as approval.
   A run awaiting missing authorization is a reviewed PR awaiting authorization, not a completed
   end-to-end shipment. An authorized run is complete only after land reports green post-merge CI.
@@ -69,5 +71,5 @@ revocation or narrowing. Do not infer authorization from YOLO or a tool allowanc
 - Keep your own turns few — the work happens in the children. If a child fails, relay its actual
   failure; never paper over a red trio or a review finding to make the cycle look complete.
 - Every child has its own session log; name the session ids and the URLs of the two external
-  review comments (four after a delta) in your final report so the full audit trail is one
+  initial review comments and any focused delta review in your final report so the full audit trail is one
   `sessions show` away.
