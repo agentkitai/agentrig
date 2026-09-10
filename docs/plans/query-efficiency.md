@@ -63,8 +63,11 @@ plan. Existing bounded-refusal self-release and no-plan-tool fallback remain
 unchanged. TUI and headless tests distinguish requests from denied turns and
 resumed-session totals.
 
-Live-model before/after quality and efficiency remains unmeasured by this change.
-A subsequent authorized comparison should use identical repository revisions,
+The implementation itself did not establish live-model quality or efficiency.
+A subsequent [bounded real-task check](query-quality-evaluation.md) records six
+questions, one incomplete implementation and three rejected-candidate confirmations.
+It found accurate completed answers but no consistent presentation improvement;
+it is not a controlled causal benchmark. A future controlled comparison should use identical repository revisions,
 questions, model/effort and cache conditions, recording root requests, reported
 uncached/cache-read/cache-write input, output, latency and independently checked
 answer/citation correctness. Do not advertise the scripted 50% request reduction

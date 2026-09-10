@@ -1,14 +1,27 @@
 # Status
 
-## Query efficiency — implemented, delivery verification in progress
+## Bounded ordinary-query evaluation — complete, report-only (2026-09-10)
+
+Six read-only probes: five correct supported answers, one budget-limited lookup;
+three completed answers overlong. One small implementation attempt produced a
+valid test but stopped at fresh-consent denial, so is incomplete. Three confirmation
+queries did not justify retaining a candidate prompt refinement; it was removed.
+No runtime/security changes and no new roadmap hierarchy.
+[Protocol, measurements, independent scoring and limitations](plans/query-quality-evaluation.md).
+Builder: Codex/operator outside AgentRig; checker `/root/eval_quality`. AgentRig
+attempt session IDs are recorded in the report. Delivery review/CI receipts are
+recorded on this report's PR, not preclaimed here.
+
+## Query efficiency — done, merged PR #300
 
 Proportional planning permits simple questions without plan ceremony; explicit
 planning and supervisor-required replans remain. Focused/batched-read and concise
 answer guidance, routed spec sections and per-run root request counts are added.
 [Contract and baseline](plans/query-efficiency.md). Builder: Codex/operator with
-helper `/root/query_efficiency`, outside AgentRig. Build/typecheck and 3,776 tests
-passed before presentation integration; final integrated review/test/CI and bounded
-live smoke receipts are recorded in the delivery PR, not assumed here.
+helper `/root/query_efficiency`, outside AgentRig. Build/typecheck and 3,784 tests
+passed at delivery, with independent Claude/Codex reviews and green exact-head and
+post-merge CI. [Final delivery receipt](https://github.com/agentkitai/agentrig/pull/300#issuecomment-5616111079).
+The bounded live follow-up above does not establish general production savings.
 
 ## Readable ordinary-query answers — done, merged PR #299
 

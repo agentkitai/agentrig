@@ -1,15 +1,22 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Ordinary-query improvements — implemented, delivery in progress
+## Ordinary-query improvements — delivered; bounded quality check complete
 
 1. **Done: readable answers**, merged in [PR #299](https://github.com/agentkitai/agentrig/pull/299):
    complete tables and nonduplicated matching file citations. Independent reviews
    and exact-head CI passed; post-merge receipt is recorded on the PR.
    [Contract](plans/readable-answers.md).
-2. **Implemented: query efficiency**, proportional planning, targeted documentation/read
+2. **Done: query efficiency**, merged in [PR #300](https://github.com/agentkitai/agentrig/pull/300): proportional planning, targeted documentation/read
    guidance and current-run model-request counts distinct from session totals.
-   [Contract and historical baseline](plans/query-efficiency.md). Review/CI delivery
-   receipts follow in its separate PR; fake-provider savings are not live quality evidence.
+   [Contract and historical baseline](plans/query-efficiency.md).
+   [Independent review, exact-head and post-merge receipts](https://github.com/agentkitai/agentrig/pull/300#issuecomment-5616111079).
+   Fake-provider savings are not live quality evidence.
+
+**Bounded follow-up evaluation complete:** six questions and one implementation
+probe, followed by three confirmations of one candidate prompt. Five initial
+answers were correct; one lookup and the implementation were incomplete. The
+candidate did not establish consistent improvement and was rejected. No runtime
+change or new band. [Results and limits](plans/query-quality-evaluation.md).
 
 Direct user authorization after session `5ea07c07`; two bounded PRs, sequential
 merges, not a new roadmap hierarchy. Builder: Codex/operator outside AgentRig.

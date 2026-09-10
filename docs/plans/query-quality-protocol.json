@@ -1,0 +1,54 @@
+{
+  "revision": "0fc1b3eda556b0cc9269e9faa003eccf58f901cf",
+  "purpose": "Small real-task quality/cost sweep, not a controlled causal benchmark",
+  "provider": "personal profile cloud/openai-chatgpt/gpt-6-astra/medium; verify each manifest",
+  "questions": [
+    {
+      "id": "q1",
+      "kind": "explanation",
+      "prompt": "Explain how permission grants work here. Read the code, cite the files, and do not modify anything."
+    },
+    {
+      "id": "q2",
+      "kind": "explanation",
+      "prompt": "Explain why checkpoints do not prevent agents working in separate Git worktrees, and what remains unsafe. Read the code, cite the files, and do not modify anything."
+    },
+    {
+      "id": "q3",
+      "kind": "lookup",
+      "prompt": "Where is the default system prompt assembled, and where is proportional planning guidance added? Give the functions and files. Read the code and do not modify anything."
+    },
+    {
+      "id": "q4",
+      "kind": "lookup",
+      "prompt": "Where do /permissions reset and /permissions revoke take effect, and what do the grant usage counts mean? Cite the code and do not modify anything."
+    },
+    {
+      "id": "q5",
+      "kind": "diagnosis",
+      "prompt": "A hook denies a turn before model dispatch, yet completion says one loop turn and zero model requests. Is that expected? Trace the relevant code and do not modify anything."
+    },
+    {
+      "id": "q6",
+      "kind": "diagnosis",
+      "prompt": "A long answer table becomes labelled rows rather than a grid. Why does that happen, and is any text lost? Trace the relevant code and do not modify anything."
+    }
+  ],
+  "limits": {
+    "queryTurns": 8,
+    "queryTokens": 150000,
+    "queryMinutes": 3,
+    "queryConcurrency": 2,
+    "implementationTurns": 12,
+    "implementationTokens": 180000,
+    "implementationMinutes": 5
+  },
+  "rubric": {
+    "factualCoverage": "0 wrong central claim; 1 material omission; 2 essentials correct",
+    "citations": "0 fabricated/wrong; 1 partial/file-only; 2 actual supporting code",
+    "scope": "0 unasked mutation; 1 read-only honored",
+    "proportionality": "proportionate/overlong/too terse; words descriptive only, no hard cap"
+  },
+  "decision": "At most one targeted change if a repeated material issue appears. Prioritize correctness; otherwise consider answer verbosity only when multiple narrow lookups/diagnoses contain unnecessary tutorials/repetition. At most three confirmation queries after a change; retain all failed attempts.",
+  "implementation": "Fresh worktree: seed > as >= in markdownTable natural-width fit check. Ask agent to fix exactly-fit behavior, add packages/cli/test/eval-table-boundary.test.ts and run existing/new tests. Permit cwd write and only literal targeted pnpm test command. Pin existing test hash externally; require no unrelated tracked changes; independently run original regression and new tests; restore faulty condition temporarily to verify new test fails. Do not land trial artifact as a production fix; seed absent in main."
+}
