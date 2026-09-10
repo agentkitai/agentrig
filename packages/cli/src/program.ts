@@ -1,4 +1,11 @@
 import { Command, InvalidArgumentError } from "commander";
+import { readFileSync } from "node:fs";
+import { z } from "zod";
+
+// Both source and bundled entries live one directory below the package manifest.
+const packageVersion = z.object({ version: z.string().min(1) }).parse(
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")),
+).version;
 import { createInterface } from "node:readline/promises";
 import { CommandPrefixSchema, SessionStore, sanitizeLine } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
@@ -152,7 +159,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
   const executeRun = dependencies.run ?? runCommand;
   const executeTui = dependencies.tui ?? startTui;
   const program = new Command();
-  program.name("agentrig").description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
+  program.name("agentrig").version(packageVersion).description("AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory");
   /**
    * `--profile` is ALSO registered on the root, so it can precede a subcommand — the shape an
    * alias produces (`alias rigp='agentrig --profile personal'` broke every subcommand with

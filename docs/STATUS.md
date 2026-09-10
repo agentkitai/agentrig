@@ -1,5 +1,33 @@
 # Status
 
+## CLI package version — implemented, delivery PR #304
+
+User-directed continuation on `fix/cli-version`, preserving the unfinished version
+regressions. `--version` (and Commander's `-V`) prints the installed CLI package's
+validated manifest version and exits before action dispatch, provider/session startup
+or config loading. The manifest is resolved relative to the module, not the launch cwd;
+no version literal is copied into source or baked into the bundle.
+
+Tests cover action non-dispatch, offline built CLI execution with no session files,
+help compatibility, and a relocated package with a different prerelease version and
+an unrelated cwd manifest. The existing root-option allowlist explicitly admits
+`--version`; the Windows include list now includes these regressions. The original
+offline guard was corrected to allow Yoga's embedded WASM `data:` fetch while keeping
+network requests denied. Original fail-first: two failures. Removed-registration
+mutant: four failures; hardcoded-current-version mutant: relocated-package failure.
+Both mutants were restored. Build and typecheck passed. The initial full test run
+was blocked by `/tmp/.git` preflight; a clean temporary directory under `/home/amit`
+passed preflight and exposed the expected root-option allowlist update. Final local
+suite passed: build/typecheck/test exit 0, 247 files and 3,791 tests passed (four
+existing skips). Independent Claude Code and Codex reviews approved the implementation;
+review limits and final-head/post-merge receipts are recorded on
+[PR #304](https://github.com/agentkitai/agentrig/pull/304). First-head Windows CI caught
+an `ERR_MODULE_NOT_FOUND` in the relocated-package fixture: linking the entire
+`node_modules` tree did not preserve dependency resolution there. The fixture now
+links Yoga's canonical package directory directly; production code and the credential-free
+subprocess environment are unchanged. This CI failure is the fail-first evidence for
+the fixture repair; the normal offline version/help test passed on that Windows run.
+
 ## Checkpoints opt-in — implemented, delivery PR #303
 
 User-directed correction after session `c63e2c62` approved a background test but
