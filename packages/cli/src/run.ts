@@ -360,8 +360,9 @@ export function defaultSystemPrompt(cwd: string): string {
     "3. For a direct read, search or edit, use the matching file or memory tool rather than a shell wrapper.",
     "4. Handle straightforward explanations directly, using targeted reads when needed. Delegate only a concrete bounded independent subtask with a clear benefit from context isolation or independent work, not merely because subagent is available. Supply self-contained inputs and an expected result; delegation must be allowed and fit the configured limits.",
     "5. For remaining command execution, use bash; background execution still requires its normal checks.",
+    "Read efficiently: locate relevant symbols first, then read focused ranges with enough surrounding context to verify the claim. Batch independent reads/searches in one response when their inputs are already known; do not guess dependencies or omit relevant evidence. Avoid rereading unchanged material already in context.",
     "Effort guide, not a quota: start with 1 targeted call for a simple fact or 3–6 for a bounded medium task. Research, debugging and required verification may need more within configured budgets. Never skip required checks to meet these numbers, increase limits, or bypass approvals. If a limit prevents completion, report what remains.",
-    "When the task is complete, reply with a short summary and no tool calls.",
+    "Lead with a concise answer and a few relevant file citations; expand for requested depth or necessary caveats. Prefer prose or short lists to tables for long explanations, and avoid repeating a citation's filename outside its link label. When the task is complete, reply with a short summary and no tool calls.",
   ].join("\n");
 }
 
@@ -518,7 +519,9 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
     // index announces itself when it enters the prompt.
     const recall = new RecallText();
     const memoryContext = new MemoryContextText();
+    let modelRequests = 0;
     for await (const e of session.events) {
+      if (e.type === "model.request") modelRequests += 1;
       scheduledUsage?.observe(e);
       dependencies.observe?.(e);
       if (dependencies.quiet === true) continue;
@@ -551,7 +554,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
     if (summary.error !== undefined) printError(summary.error);
     if (opts.json !== true && opts.heartbeat === undefined) {
       printOutput(
-        `session ${summary.id}: ${summary.reason} after ${summary.turns} turn(s), ` +
+        `session ${summary.id}: ${summary.reason} after ${modelRequests} model request(s) this run; session totals: ${summary.turns} loop turn(s), ` +
           `${formatUsage(summary.usage)} tokens`,
       );
     }

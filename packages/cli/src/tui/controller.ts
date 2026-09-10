@@ -1414,12 +1414,16 @@ export class TuiController {
 
   private async drive(session: Session): Promise<void> {
     try {
-      for await (const e of session.events) this.consume(e);
+      let modelRequests = 0;
+      for await (const e of session.events) {
+        if (e.type === "model.request") modelRequests += 1;
+        this.consume(e);
+      }
       for (const line of this.toolSummaries.finish()) this.print(line.text, line.tone);
       const summary = await session.done;
       this.set({ turns: summary.turns });
       this.print(
-        `${summary.reason} after ${summary.turns} turn(s), ${formatUsage(summary.usage)}`,
+        `${summary.reason} after ${modelRequests} model request(s) this run; session totals: ${summary.turns} loop turn(s), ${formatUsage(summary.usage)}`,
         summary.reason === "done" ? "system" : "error",
       );
       if (summary.error !== undefined) this.print(summary.error, "error");

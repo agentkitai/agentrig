@@ -68,6 +68,48 @@ it("the instruction is absent without a plan tool, and a model may answer withou
   }
 });
 
+it("lets the model omit ceremony for a simple question but keeps implementation and explicit replanning obligations", async () => {
+  const f = await fixture([[stop]]);
+  const session = createAgent(f.config).run("Explain permission grants without modifying files", { cwd: f.root });
+  await session.done;
+  const prompt = f.requests[0]!.system;
+  expect(prompt).toContain("For a straightforward question or small direct task, answer without update_plan");
+  expect(prompt).toContain("For multi-step implementation, investigation or risky changes, call update_plan");
+  expect(prompt).toContain("Explicit user/skill planning requirements and supervisor-required replanning still apply");
+  expect(prompt).not.toContain("before starting or continuing this task, call update_plan");
+  expect(f.requests).toHaveLength(1);
+});
+
+// A scripted overhead comparison, NOT a prediction of live model judgment, accuracy or latency.
+it.each(["Explain permission grants", "Locate the checkpoint ownership implementation"])("measures removable planning round trips for %s with a fake provider", async task => {
+  const observation = { name: "inspect", description: "read fixture source", permission: "read" as const,
+    effects: "read-only" as const, inputSchema: z.object({}),
+    execute: async () => ({ output: "fixture source evidence", display: "fixture source evidence" }) };
+  const observed: Array<{ requests: number; requestBytes: number; reads: number; plans: number }> = [];
+  for (const planned of [true, false]) {
+    const f = await fixture([
+      ...(planned ? [call("update_plan", { items: [{ id: "a", text: "inspect", status: "in_progress", accept: "cite fixture source" }] })] : []),
+      call("inspect", {}),
+      ...(planned ? [call("update_plan", { items: [{ id: "a", text: "inspect", status: "done", accept: "cite fixture source" }] })] : []),
+      [{ type: "text_delta", text: "Answer citing fixture source." }, stop],
+    ]);
+    f.config.tools.push(observation);
+    const session = createAgent(f.config).run(task, { cwd: f.root });
+    expect((await session.done).reason).toBe("done");
+    const events = await f.config.store.readAll(session.id);
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", ok: true, display: "fixture source evidence" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "model.delta", text: "Answer citing fixture source." }));
+    observed.push({ requests: events.filter(e => e.type === "model.request").length,
+      requestBytes: f.requests.reduce((sum, request) => sum + Buffer.byteLength(JSON.stringify(request)), 0),
+      reads: events.filter(e => e.type === "tool.call" && e.name === "inspect").length,
+      plans: events.filter(e => e.type === "plan.updated").length });
+  }
+  expect(observed.map(({ requests, reads, plans }) => ({ requests, reads, plans }))).toEqual([
+    { requests: 4, reads: 1, plans: 2 }, { requests: 2, reads: 1, plans: 0 },
+  ]);
+  expect(observed[1]!.requestBytes).toBeLessThan(observed[0]!.requestBytes);
+});
+
 it("canonical and tool schemas share bounded optional checks without interpreting check text as a command", () => {
   const tool = updatePlanTool();
   expect(PlanItem.parse(items[1])).toEqual(items[1]);
@@ -93,6 +135,8 @@ it("a resumed run with a declared plan gets the short instruction, keeping every
   expect(fresh).toContain("Include an accept field for every item");
   // the worked examples and field bounds are already in this conversation's own history
   expect(again).toContain("Acceptance planning: this conversation already declared a plan");
+  expect(again).toContain("A simple follow-up question does not need a plan update");
+  expect(again).toContain("Explicit user/skill planning requirements and supervisor-required replanning still apply");
   expect(again).not.toContain("pnpm test exits 0'");
   expect(again).not.toContain("at most 1024 characters");
   expect(again.length).toBeLessThan(fresh.length);

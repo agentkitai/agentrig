@@ -1,8 +1,14 @@
 # AgentRig — agentic harness with a built-in supervisor loop and LLM Wiki memory
 
-Read `docs/PLAN.md` before doing anything. It is the spec: package interfaces, the event schema,
-the memory design, the supervisor design, and the milestone order. `docs/STATUS.md` says which
-milestone is current. ROADMAP §5 is the authoritative continuation order. Work on the assigned
+Read this file as the mandatory orientation. `docs/PLAN.md` remains the architecture spec;
+read the relevant sections and linked feature contract before changing behavior, and consult them
+for questions about intended behavior. Do not read the entire spec for an unrelated narrow query.
+Route by topic: core → the matching PLAN §2 subsection (permissions §2.4, events §2.5,
+loop §2.6, hooks/checkpoints §2.7; messages/providers/tools/context have their own subsections);
+memory → §3; supervisor/replanning → §4; CLI/TUI → §5; package boundaries → §§0–1.
+Read multiple sections when the task crosses their boundaries; if scope is unclear, expand the read.
+For implementation, read `docs/STATUS.md` and the assigned ROADMAP row/plan before starting.
+ROADMAP §5 is the authoritative continuation order. Work on the assigned
 row only; independent rows may run in parallel in separate Git worktrees when authorized. Each
 row gets its own PR, updated against current main with green exact-head CI before merge; serialize
 merges and verify green post-merge CI before the next merge. Do not pull dependent work forward.
