@@ -217,6 +217,8 @@ export function permissionWarning(
  * work there.
  */
 export interface SupervisorFlags {
+  yolo?: boolean;
+  dangerouslySkipPermissions?: boolean;
   supervise?: boolean;
   superviseExplicit?: boolean;
   checkpointsExplicit?: boolean;
@@ -346,7 +348,10 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
           },
         }
       : {}),
-    ...(w.onEscalate === undefined ? {} : { onEscalate: w.onEscalate }),
+    // An unattended operator is not a human escalation capability. Omitting the
+    // handler lets the normal ladder skip this rung without inventing an answer;
+    // guidance/replanning, review and explicitly enabled abort remain available.
+    ...(skipsPermissions(o) || w.onEscalate === undefined ? {} : { onEscalate: w.onEscalate }),
     ...(w.onError === undefined ? {} : { onError: w.onError }),
   };
 }
