@@ -59,7 +59,7 @@ interface ToolExecutionContext {
   questionState?: QuestionState;
   schedule?: PipelineSchedule;
   expansion?: ReturnType<typeof externalExpansion>;
-  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "approvalMode" | "permissionGrants" | "toolAllowlist" | "onAsk" | "onQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
+  config: Pick<AgentConfig, "hooks" | "origin" | "permissions" | "approvalMode" | "permissionGrants" | "toolAllowlist" | "onAsk" | "onQuestion" | "onUnattendedQuestion" | "sandbox" | "store" | "trustedProjectRoot">;
   id: string;
   grantSessionId?: string;
   cwd: string;
@@ -467,7 +467,10 @@ async function executeToolInner(tu: TurnToolCall, context: ToolExecutionContext)
   if (isolated) bindIsolatedContext(ctx, () => context.schedule?.authorized(), [config.store.root]);
   if (hasDiagnostics(tool)) diagnosticContext(ctx);
   bindQuestion(tool, ctx, tu.id, context.questionState ?? {}, async payload => { if (!isEnded()) await emit(payload); },
-    config.approvalMode === "unattended" ? undefined : config.onQuestion);
+    config.approvalMode === "unattended" ? config.onUnattendedQuestion === undefined ? undefined : async (request, signal) => {
+      const reply = await config.onUnattendedQuestion!(request, signal);
+      return reply?.source === "human" ? null : reply;
+    } : config.onQuestion);
   const t0 = now();
   let sandboxDenialRecorded = false;
   let sandboxRetryDenied = false;

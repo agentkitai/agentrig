@@ -96,6 +96,9 @@ export interface AgentConfig {
   observeSession?: (session: Session) => void;
   /** Explicit clarification handler, never a permission grant or implicit supervisor policy. */
   onQuestion?: import("./questions.js").QuestionHandler;
+  /** Explicit trusted noninteractive answer policy for unattended runs. Must honor cancellation;
+   * human-sourced replies are refused. Never inferred from onQuestion or inherited tool output. */
+  onUnattendedQuestion?: import("./questions.js").QuestionHandler;
   /** Current build's extension receipts, not replayed authorization or repeated activation. */
   extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
   /** Trusted host opt-in for this run only; unambiguous explicit hook ids, never tool grants. */

@@ -387,6 +387,7 @@ export interface AgentExtras {
   /** Trusted host user-state override, never model/project credential material. */
   mcpCredentialRoot?: string;
   onQuestion?: import("@agentkitai/agentrig-core").QuestionHandler;
+  onUnattendedQuestion?: import("@agentkitai/agentrig-core").QuestionHandler;
   permissionGrants?: import("@agentkitai/agentrig-core").PermissionGrantRegistry;
   /** Trusted host override for isolated state; never loaded from project config. */
   mcpPinRoot?: string;
@@ -484,6 +485,7 @@ export function subagentOptions(w: SubagentWiring): SubagentOptions {
         repoMap: w.opts.repoMap === false ? false : {},
         ...(w.extras.onAsk === undefined ? {} : { onAsk: w.extras.onAsk }),
         ...(w.extras.onQuestion === undefined ? {} : { onQuestion: w.extras.onQuestion }),
+        ...(w.extras.onUnattendedQuestion === undefined ? {} : { onUnattendedQuestion: w.extras.onUnattendedQuestion }),
         systemPrompt: (ctx: { cwd: string }) => promptBlocks({
           system: [
             "You are a subagent. You have been given one self-contained task and none of the",
@@ -841,6 +843,7 @@ export async function buildAgent(opts: AgentBuildOptions, extras: AgentExtras = 
     maxTokensPerTurn,
     ...(extras.onAsk === undefined ? {} : { onAsk: extras.onAsk }),
     ...(extras.onQuestion === undefined ? {} : { onQuestion: extras.onQuestion }),
+    ...(extras.onUnattendedQuestion === undefined ? {} : { onUnattendedQuestion: extras.onUnattendedQuestion }),
   });
 
   telemetry = acquireOtel(opts, extras.onNotice ?? console.error);

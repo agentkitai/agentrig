@@ -455,6 +455,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
       signal,
       ...(outputContract === undefined ? {} : { outputContract }),
       onQuestion,
+      onUnattendedQuestion: onQuestion,
       ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
       ...(dependencies.onAsk === undefined ? {} : { onAsk: dependencies.onAsk, onStartupAsk: dependencies.onAsk }),
       onHookError: (m) => { maintenanceFailed = true; printError(m); },
