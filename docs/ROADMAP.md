@@ -1,6 +1,6 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## Current delivery — R17g final core/integration closeout
+## Current checkpoint — R17g delivered; real-task validation incomplete
 
 Roadmap work has resumed under the user's latest authorization. R17e is complete: PR #289 merged
 at main `2a8ea59` with green post-merge CI 34276366300 and structure 34276366380
@@ -11,12 +11,19 @@ R17g's follow-up disposition work is complete across four package batches.
 Supervisor PR #291 (`528ee21`) and memory PR #292 (`6fb3413`) have green exact-head
 and post-merge receipts. CLI PR #293 (`4c1005c`) is merged with clean reviews and
 exact-head checks; its post-merge Windows run failed on test deadlines. Core/final
-integration #294 also owns those fixture repairs and must restore green main;
-the failed historical checks remain disclosed. Core/final integration
-is this delivery, with all three independent-review findings repaired and3722 local
-tests passing. [Package outcomes and delivery records](#follow-ups--nice-to-haves--r17g-closeout)
+integration [PR #294](https://github.com/agentkitai/agentrig/pull/294) merged at
+`c047637` and restored green main: post-merge CI34401015942 and structure34401015845
+passed on the first attempt. The failed historical checks remain disclosed.
+All three independent-review findings were repaired and3722 local tests passed.
+[Final receipt](https://github.com/agentkitai/agentrig/pull/294#issuecomment-5608346600).
+[Package outcomes and delivery records](#follow-ups--nice-to-haves--r17g-closeout)
 replace the old queue; its original text is preserved in the linked archive.
 No AgentRig conductor or R17a dogfood success is claimed for these operator-built batches.
+A bounded docs task through AgentRig on September10 made no edits: a fresh-consent
+boundary denied a headless Git command and a pre-existing shared checkpoint lock
+blocked the first edit. [Validation evidence](plans/post-r17-validation.md) and
+[feel #295](https://github.com/agentkitai/agentrig/issues/295) record the limits.
+This is not a new feature band or a successful autonomous-development demonstration.
 All 96 corrected slots have outcomes across two preserved segments: 67 PASS / 17 FAIL /
 12 BLOCKED, 10,369,886 reported tokens and one unknown call. Neither factor demonstrates the
 required benefit. Recommended automatic index injection defaults off; retrieval, ingestion
@@ -1005,7 +1012,7 @@ strong and their feel numbers were fought over; this band does the same, in meas
 | R17d *(done)* | **Permission friction**: measure prompts per E1 task under the R17b defaults, then reduce them without widening authority: read-class tools inside the trusted root auto-allow; the first `bash` ask offers the exact argv-prefix grant (R12b) as the default key; repeated identical asks within a session collapse into one scoped decision. Target and result recorded; the injection fixture suite (R13e) must stay green | core + cli |
 | R17e *(done — PR #289, merged at `2a8ea59` with green post-merge CI)* | **Visible supervisor and memory**: each intervention and each recall renders as one transcript line the user can read (what it noticed, what it did, what it cost); `/why` on the last turn explains any injected guidance; memory recall shows the page and the claim, not a count. Nothing is added to the model prompt that is not also visible | cli + supervisor + memory |
 | R17f *(done in [PR #290](https://github.com/agentkitai/agentrig/pull/290))* | **Tune or default off**: [96-attempt results](R17f-RESULTS.md) do not demonstrate the required benefit; recommended injection defaults off, ingest/retrieval/heuristics stay on and LLM review stays opt-in. Interrupted collection and unknown usage remain disclosed; landing/CI receipts are on the PR | supervisor + memory + docs |
-| R17g *(disposition complete; final core delivery)* | **Follow-ups sweep**: four package batches, every END fragment implemented/already delivered or explicitly declined with a reason. The active queue is reset; original history and complete outcome tables remain linked at END. Delivery checks and final merge receipts are recorded per package PR; this is not a claim of AgentRig dogfood success | all |
+| R17g *(done — PRs #291–#294; final main `c047637` green)* | **Follow-ups sweep**: four package batches, every END fragment implemented/already delivered or explicitly declined with a reason. The active queue is reset; original history and complete outcome tables remain linked at END. Delivery checks and final merge receipts are recorded per package PR; this is not a claim of AgentRig dogfood success | all |
 
 Acceptance: R17a — STATUS names `agentrig` as the builder for every R17 PR, or the `feel`
 issue that blocked it. R17b — a fresh clone with no config runs a task and the transcript shows
@@ -1212,10 +1219,14 @@ the original failures, caveats, links and partial-delivery notes.
 |---|---|
 | Supervisor | Done: [PR #291](https://github.com/agentkitai/agentrig/pull/291), `528ee21`, green exact-head and post-merge CI. [Outcomes](plans/R17g-supervisor.md). |
 | Memory | Done: [PR #292](https://github.com/agentkitai/agentrig/pull/292), `6fb3413`, green exact-head and post-merge CI; one same-commit Windows timeout rerun is disclosed on the PR. [Outcomes](plans/R17g-memory.md). |
-| CLI/evaluation | Merged: [PR #293](https://github.com/agentkitai/agentrig/pull/293), `4c1005c`, clean independent reviews and exact-head CI; final post-merge receipt on the PR. [Outcomes](plans/R17g-cli.md). |
-| Core / final integration | Implementation and follow-up dispositions complete in this final delivery. [Outcomes, integrations and review repairs](plans/R17g-core.md); exact-head/merge/post-merge receipts belong to its delivery PR. |
+| CLI/evaluation | Done: [PR #293](https://github.com/agentkitai/agentrig/pull/293), `4c1005c`, clean independent reviews and exact-head CI; its failed post-merge run remains disclosed, repaired by #294 with green final main. [Outcomes](plans/R17g-cli.md). |
+| Core / final integration | Done: [PR #294](https://github.com/agentkitai/agentrig/pull/294), `c047637`, green exact-head and post-merge CI. [Outcomes, integrations and review repairs](plans/R17g-core.md); [final receipt](https://github.com/agentkitai/agentrig/pull/294#issuecomment-5608346600). |
 
-**Active follow-up queue: empty after this delivery.** Optional declined expansions
+**Original follow-up queue: closed by this delivery.** Optional declined expansions
 remain documented in the package tables, not silently rescheduled. This closeout
 does not claim R17a dogfood success: these batches were built by Claude/Codex and
 operator helpers outside AgentRig, with no invented conductor or routing data.
+
+New observed validation follow-up: [feel #295](https://github.com/agentkitai/agentrig/issues/295),
+retained checkpoint ownership/recovery workflow. It is not a reopened R17g feature
+sweep; [the bounded validation report](plans/post-r17-validation.md) defines what failed.

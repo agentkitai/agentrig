@@ -1,11 +1,27 @@
 # Status
 
-## Current — R17g final core/integration delivery (2026-09-09)
+## Current — delivery complete; bounded real-task validation (2026-09-10)
+
+All four R17g PRs #291–#294 are merged. Final main `c04763765d59e3addb180df745f08b8bfc6802b4`
+passed post-merge CI34401015942 and structure34401015845 (first attempt).
+[Final receipt](https://github.com/agentkitai/agentrig/pull/294#issuecomment-5608346600).
+
+The September10 docs-authoring validation did not deliver edits through AgentRig.
+Operator-aborted session `256d75ee` exposed an inherited personal-profile YOLO setting;
+corrected session `0df428f3` kept permission checks on but encountered a headless
+fresh-consent denial and a pre-existing shared checkpoint lock. Neither changed
+tracked files. Both processes were joined. [Evidence and accounting](plans/post-r17-validation.md).
+Builder for this documentation correction: **Codex/operator outside AgentRig**;
+blocking [feel #295](https://github.com/agentkitai/agentrig/issues/295), no conductor
+or retroactive R17a pass claimed. The original END sweep remains closed; this is
+one new observed workflow follow-up, not a new feature train.
+
+## Completed — R17g final core/integration delivery (2026-09-09)
 
 R17f is merged at `4c82ebb99b92ecbdb2729f0df1f06457bc7292bf` (PR #290), with green
 post-merge CI34388378742 and structure34388378715. [Final receipt](https://github.com/agentkitai/agentrig/pull/290#issuecomment-5606771920).
 
-Four package worktrees implement the final follow-ups; merges remain sequential.
+Four package worktrees implemented the final follow-ups and were merged sequentially.
 Supervisor PR #291 merged at `528ee21494aaf36dc2d66b703f71d2da569c6f5c` after green
 exact-head Linux/macOS/Windows/structure CI and completed Claude/Codex reviews.
 One diagnostic finding was repaired and passed one scoped independent delta check;
@@ -30,16 +46,18 @@ Windows run timed out a different unchanged memory symlink-preservation case;
 one same-commit failed-job rerun then timed out the compound scheduler and E1 A3
 fixtures. That post-merge run remains failed. PR #294 is also the corrective PR:
 it splits independent scheduler cases and shares immutable E1 dependency setup,
-preserving assertions and deadlines. Its own exact-head and final post-merge checks
-must pass; no historical failed run is relabeled green.
+preserving assertions and deadlines. Its exact-head and final post-merge checks
+passed; no historical failed run is relabeled green.
 
-Core/final integration is the last package delivery: [complete outcomes](plans/R17g-core.md).
+Core/final integration was the last package delivery: [complete outcomes](plans/R17g-core.md).
 This includes the bounded undo/consent fixes, workspace recovery manifest validation,
 shared CLI plan formatting and test-only integration required by core changes.
 Root's final combined build/typecheck/preflight and full suite passed **3722 tests /
 four existing conditional skips /236 files**. All three findings from the independent
 review pair were repaired together, followed by one scoped repair check. The delivery
-PR owns exact-head, merge and post-merge receipts; these are not inferred from local tests.
+PR #294 records exact-head CI34399357770 attempt2 / structure34399357910 and
+merge `c047637` with post-merge CI34401015942 / structure34401015845 green;
+these are not inferred from local tests.
 The END queue is reset with every disposition recorded and its original text archived.
 No new issues or live benchmark calls were made during this sweep.
 
