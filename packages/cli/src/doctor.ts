@@ -387,7 +387,8 @@ export async function diagnose(options: DoctorOptions = {}): Promise<DoctorResul
     checks.push(line("pass", "config:profile", `active profile ${JSON.stringify(profile)} exists`));
   } else {
     configInvalid = true;
-    checks.push(line("fail", "config:profile", `active profile ${display(profile)} does not exist — add it under profiles or remove --profile ${display(profile)}`));
+    const names = [...new Set([...Object.keys(user?.profiles ?? {}), ...Object.keys(project?.profiles ?? {})])].sort();
+    checks.push(line("fail", "config:profile", `active profile ${display(profile)} does not exist — add it under profiles or remove --profile ${display(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.map(display).join(", ")}`));
   }
 
   let effective: ConfigValues & Record<string, unknown> = {

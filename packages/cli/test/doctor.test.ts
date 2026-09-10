@@ -235,6 +235,47 @@ describe("agentrig doctor", () => {
     expect(find(result.lines, "config:profile")).toContain('add it under profiles or remove --profile "missing"');
   });
 
+  it.each([true, false])("unknown doctor profile lists escaped sorted unique names only (leading=%s)", async leading => {
+    const f = fixture();
+    const name = 'line\n\u001b[31m"quoted"\u202e\u2069';
+    const escapedName = '"line\\n\\u001b[31m\\"quoted\\"\\u202e\\u2069"';
+    const requested = 'typo\n\u001b[32m\u202a\u2066';
+    const escapedRequested = '"typo\\n\\u001b[32m\\u202a\\u2066"';
+    f.files.set(USER_CONFIG, JSON.stringify({ system: "private-base", profiles: { zebra: { model: "private-model" }, shared: {} } }));
+    f.files.set(PROJECT_CONFIG, JSON.stringify({ profiles: { shared: { system: "private-profile" }, [name]: {}, alpha: {} } }));
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation(line => void lines.push(String(line)));
+    const previousExitCode = process.exitCode;
+    try {
+      await buildProgram({ doctor: f.options }).parseAsync([
+        ...(leading ? ["--profile", requested] : []), "doctor", ...(!leading ? ["--profile", requested] : []),
+      ], { from: "user" });
+      expect(find(lines, "config:profile")).not.toMatch(/[\u0000-\u001f\u202a-\u202e\u2066-\u2069]/u);
+      expect(find(lines, "config:profile")).toBe(`fail config:profile — active profile ${escapedRequested} does not exist — add it under profiles or remove --profile ${escapedRequested}; available profiles: "alpha", ${escapedName}, "shared", "zebra"`);
+      expect(lines.join("\n")).not.toContain("private-");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      spy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([undefined, {}])("unknown doctor profile reports no names for absent/empty maps: %j", async profiles => {
+    const f = fixture();
+    f.files.set(USER_CONFIG, JSON.stringify({ profiles }));
+    const result = await diagnose({ ...f.options, cli: { profile: "missing" } });
+    expect(find(result.lines, "config:profile")).toContain('; available profiles: (none)');
+  });
+
+  it("doctor still requires a file-defined recommended profile", async () => {
+    const f = fixture();
+    const missing = await diagnose({ ...f.options, cli: { profile: "recommended" } });
+    expect(find(missing.lines, "config:profile")).toBe('fail config:profile — active profile "recommended" does not exist — add it under profiles or remove --profile "recommended"; available profiles: (none)');
+    f.files.set(USER_CONFIG, JSON.stringify({ profiles: { recommended: {} } }));
+    expect(find((await diagnose({ ...f.options, cli: { profile: "recommended" } })).lines, "config:profile"))
+      .toBe('pass config:profile — active profile "recommended" exists');
+  });
+
   it("reports effective provider/model and the winning precedence layers", async () => {
     const f = fixture();
     f.files.set(USER_CONFIG, JSON.stringify({ provider: "openai", model: "user", profiles: { work: { model: "user-profile" } } }));

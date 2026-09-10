@@ -265,6 +265,13 @@ function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   return values;
 }
 
+/** Match doctor's display guarantee without coupling config loading to diagnostics. */
+function displayProfileName(value: string): string {
+  return JSON.stringify(value).replace(/[\u202a-\u202e\u2066-\u2069]/giu, (character) =>
+    `\\u${character.codePointAt(0)!.toString(16).padStart(4, "0")}`,
+  );
+}
+
 /**
  * Pure precedence contract: defaults < user base < user profile < project base < project profile
  * < environment < explicitly typed CLI flags. Objects and arrays are replaced, never appended.
@@ -275,7 +282,7 @@ export function resolveConfig<T extends Record<string, unknown>>(input: ResolveC
     const names = [...new Set([...Object.keys(user?.profiles ?? {}), ...Object.keys(project?.profiles ?? {})])].sort();
     if (!names.includes(profile)) {
       throw new Error(
-        `unknown config profile ${JSON.stringify(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.join(", ")}`,
+        `unknown config profile ${displayProfileName(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.map(displayProfileName).join(", ")}`,
       );
     }
   }

@@ -169,8 +169,35 @@ describe("resolveConfig precedence (pure)", () => {
 
   it("rejects an unknown profile and lists the profiles that exist", () => {
     expect(() => resolveConfig({ defaults: {}, user: file({ profiles: { fast: {} } }), project: file({ profiles: { careful: {} } }), profile: "missing" })).toThrow(
-      /unknown config profile "missing"; available profiles: careful, fast/,
+      /unknown config profile "missing"; available profiles: "careful", "fast"/,
     );
+  });
+
+  it("unknown profile diagnostics list sorted unique names, never config values", () => {
+    expect(() => resolveConfig({
+      defaults: { system: "private-default" },
+      user: file({ system: "private-user", profiles: { zebra: { model: "private-model" }, shared: {} } }),
+      project: file({ system: "private-project", profiles: { shared: { system: "private-profile" }, alpha: {} } }),
+      env: { model: "private-env" }, cli: { system: "private-cli" }, profile: "typo",
+    })).toThrow(new Error('unknown config profile "typo"; available profiles: "alpha", "shared", "zebra"'));
+  });
+
+  it.each(["requested", "available"])("escapes terminal controls and bidi in %s profile names", position => {
+    const name = 'line\n\u001b[31m"quoted"\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069';
+    const escaped = '"line\\n\\u001b[31m\\"quoted\\"\\u202a\\u202b\\u202c\\u202d\\u202e\\u2066\\u2067\\u2068\\u2069"';
+    let message = "";
+    try {
+      resolveConfig({ defaults: {}, user: file({ profiles: { [position === "available" ? name : "safe"]: { system: "private" } } }), profile: position === "requested" ? name : "typo" });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).not.toMatch(/[\u0000-\u001f\u202a-\u202e\u2066-\u2069]/u);
+    expect(message).toBe(`unknown config profile ${position === "requested" ? escaped : '"typo"'}; available profiles: ${position === "available" ? escaped : '"safe"'}`);
+  });
+
+  it.each([undefined, file({ profiles: {} })])("unknown profile without available names reports (none): %j", user => {
+    expect(() => resolveConfig({ defaults: {}, user, profile: "missing" }))
+      .toThrow(new Error('unknown config profile "missing"; available profiles: (none)'));
   });
 
   it("replaces allow/deny arrays at each layer rather than appending them", () => {
@@ -473,6 +500,42 @@ describe("both agent entry points use config", () => {
     await configAt(cwd, { skillDiscovery: false });
     await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test", "--skill-discovery"]);
     expect(received?.skills).toContain(join(cwd, ".agentrig", "skills"));
+  });
+
+  it("profile help explains discovery without promising config values", () => {
+    const check = (cmd: Command): void => {
+      const profile = cmd.options.find(option => option.long === "--profile");
+      if (profile) {
+        expect(profile.description).toContain("unknown names list available profiles (names only)");
+        expect(profile.description).toContain(cmd.name() === "doctor"
+          ? "doctor checks file-defined profiles, including recommended"
+          : ["review", "login"].includes(cmd.name())
+            ? "built-in recommended is accepted with a note and no run defaults"
+            : "run commands also accept built-in recommended");
+      }
+      for (const child of cmd.commands) check(child);
+    };
+    check(buildProgram());
+  });
+
+  it.each([true, false])("unknown profile reaches CLI diagnostics before dispatch (leading=%s)", async leading => {
+    const { cwd, home } = await fixture();
+    await configAt(home, { system: "private-base", profiles: { fast: { model: "private-model" } } });
+    const run = vi.fn();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const previousExitCode = process.exitCode;
+    try {
+      await buildProgram({ config: { cwd, home, env: {} }, run }).parseAsync([
+        "node", "agentrig", ...(leading ? ["--profile", "typo"] : []),
+        "run", "test", ...(!leading ? ["--profile", "typo"] : []),
+      ]);
+      expect(error.mock.calls).toEqual([['unknown config profile "typo"; available profiles: "fast"']]);
+      expect(process.exitCode).toBe(1);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+      error.mockRestore();
+    }
   });
 
   it("honours --profile through Commander without another layer masking it", async () => {
