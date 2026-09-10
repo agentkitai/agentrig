@@ -11,7 +11,7 @@ On profile-aware non-run commands (for example `review` and `doctor`), the built
 defaults do not apply. A user-defined profile with that name still overlays
 normally.
 
-## What is on
+## Default behavior
 
 - **Markdown rendering** in the TUI, including code fences. The existing Ctrl+O
   plain/expanded view is still available. The line-oriented `run` transcript and
@@ -40,10 +40,11 @@ normally.
   and navigation keys. Nothing makes headless runs into interactive sessions.
 - **Notifications**: `notifications: "bell"`; the existing 30-second idle threshold
   and mounted TTY gating remain. Desktop notifications are not enabled implicitly.
-- **Git checkpoints**: `checkpoints: true`, active when the workspace is a Git
-  repository, with a concise checkpoint-created notice in the default transcript.
-  Existing outside-repository warning/no-op and ownership refusals
-  remain; no auto-init or relaxed restore checks.
+- **Git checkpoints**: `checkpoints: false` by default. Ordinary editing, diagnostics
+  and background tests do not acquire a checkpoint lease or pass a snapshot gate.
+  Opt in with `checkpoints: true` in trusted config if you need guarded session undo;
+  that mode requires a cooperative, quiescent worktree and refuses background commands.
+  Existing snapshots, lock recovery and strict undo checks remain supported.
 - **Session-end memory ingest**: `ingestOnEnd: true`, using existing `.agentrig`
   memory and the configured ingest role. Automatic capture first performs a bounded,
   model-free latest-run eligibility check. Successful read-only explanation runs
@@ -88,8 +89,8 @@ remain on. Security defaults are unchanged.
 
 ### Enforcing sandboxes (approved exception)
 
-Implicit checkpoints and session-end ingest apply only when sandbox is absent or
-`none`. Enforcing sandboxes visibly omit these two implicit host-process hooks,
+Implicit session-end ingest applies only when sandbox is absent or
+`none`. Enforcing sandboxes visibly omit this implicit host-process hook,
 including through the mounted UI notice path. Explicit `checkpoints: true` or
 `ingestOnEnd: true` still reaches the **existing fail-closed startup error**.
 This does not provide sandbox-safe hook execution. The zero-config sandbox was
@@ -106,7 +107,7 @@ config (`.agentrig/config.json`), optionally under a named profile:
 | --- | --- | --- |
 | `--supervise` | `"supervise": true` | Heuristics on |
 | `--no-supervise` | `"supervise": false` | Explicit config opt-out |
-| `--checkpoints` | `"checkpoints": true` | On in repositories, subject to sandbox exception |
+| `--checkpoints` | `"checkpoints": true` | Opt-in; off by default, enforcing sandbox still refuses |
 | `--ingest-on-end` | `"ingestOnEnd": true` | On, subject to sandbox exception |
 | `--no-ingest-on-end` | `"ingestOnEnd": false` | Explicit config opt-out |
 | `--notifications <mode>` | `"notifications": "off" / "bell" / "desktop" / "both"` | Bell, existing idle/TTY gating |

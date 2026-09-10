@@ -1,5 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+## User-directed checkpoint correction — implemented, delivery pending
+
+Automatic snapshots are opt-in again. Normal edits, diagnostics and background
+tests must not depend on checkpoint ownership; explicit checkpoint mode retains
+its strict recovery and undo guarantees. This supersedes R17b's checkpoint-on
+default below, not its permission/security defaults. No new roadmap band.
+See [defaults](DEFAULTS.md) and [status](STATUS.md) for behavior and delivery.
+
 ## Ordinary-query improvements — delivered; bounded quality check complete
 
 1. **Done: readable answers**, merged in [PR #299](https://github.com/agentkitai/agentrig/pull/299):

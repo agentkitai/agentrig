@@ -21,20 +21,20 @@ async function resolved(argv: string[] = [], config?: object, protocolNotice = f
 }
 it('zero-config recommended profile enables existing conveniences without moving authority', async () => {
   const opts = await resolved();
-  expect(opts).toMatchObject({ supervise: true, checkpoints: true, ingestOnEnd: true, memory: '.agentrig', notifications: 'bell' });
+  expect(opts).toMatchObject({ supervise: true, checkpoints: false, checkpointsExplicit: false, ingestOnEnd: true, memory: '.agentrig', notifications: 'bell' });
   expect(opts.diagnostics).toEqual([expect.objectContaining({parser: "tsc", args: ["--noEmit", "--pretty", "false", "--listFiles"]})]);
   expect(opts.yolo).not.toBe(true); expect(opts.allow).toEqual([]); expect(opts.sandbox).toBe("none");
   expect(opts.supervisorReview).not.toBe(true); expect(opts.supervisorAbort).not.toBe(true);
 });
 it('recommended is a built-in profile and explicit false/empty config wins', async () => {
-  expect(await resolved(['--profile', 'recommended'])).toMatchObject({ supervise: true, checkpoints: true });
+  expect(await resolved(['--profile', 'recommended'])).toMatchObject({ supervise: true, checkpoints: false });
   expect(await resolved([], { supervise: false, checkpoints: false, ingestOnEnd: false, notifications: 'off', diagnostics: [], toolSummaries: false }))
     .toMatchObject({ supervise: false, checkpoints: false, ingestOnEnd: false, notifications: 'off', diagnostics: [], verbose: true });
 });
 it.each(['read-only', 'workspace-write'])('implicit host hooks are visibly omitted under %s, explicit opt-ins are retained for the core refusal', async sandbox => {
   const notice = vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(await resolved(['--sandbox', sandbox])).toMatchObject({ checkpoints: false, ingestOnEnd: false, defaultHookNotice: expect.stringContaining('omitted implicit') });
-  expect(notice.mock.calls.flat().join('\n')).toContain('recommended profile: omitted implicit checkpoints and session-end ingest');
+  expect(notice.mock.calls.flat().join('\n')).toContain('recommended profile: omitted implicit session-end ingest');
   expect(await resolved(['--sandbox', sandbox], { checkpoints: true, ingestOnEnd: true })).toMatchObject({ checkpoints: true, ingestOnEnd: true });
 });
 it('migrated toggles are config-only and top-level help remains below forty options', () => {
@@ -60,7 +60,7 @@ it.each(['checkpoints', 'ingestOnEnd'])('explicit %s still hits the unchanged co
 it('a protocol adapter redacting arbitrary notices cannot hide the static omission from operator stderr', async () => {
   const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
   await resolved(['--sandbox', 'workspace-write'], undefined, true);
-  expect(stderr.mock.calls.flat().join('\n')).toContain('recommended profile: omitted implicit checkpoints and session-end ingest');
+  expect(stderr.mock.calls.flat().join('\n')).toContain('recommended profile: omitted implicit session-end ingest');
 });
 
 it('implicit defaults cannot arm destructive abort restore; explicit user sources can', async () => {
@@ -83,13 +83,23 @@ it.each([true, false])('evaluation accepts presentation-only toolSummaries=%s', 
   expect(() => validateEvaluationProfile({ toolSummaries: value })).not.toThrow();
 });
 
-it.each([{args: ['tui']}, {args: ['sessions', 'resume', 'fixture']}])('real $args handler receives recommended checkpoints', async ({args}) => {
+it.each([{args: ['tui']}, {args: ['sessions', 'resume', 'fixture']}])('real $args handler leaves checkpoints opt-in', async ({args}) => {
   const root = await mkdtemp(join(tmpdir(), 'agentrig-entry-defaults-')); roots.push(root);
   const cwd = join(root, 'project'), home = join(root, 'home');
   await mkdir(cwd); await mkdir(home);
   let received: {checkpoints?: boolean} | undefined;
   await buildProgram({config: {cwd, home, env: {}}, tui: async opts => { received = opts; }, run: async (_task, opts) => { received = opts; }}).parseAsync(['node', 'agentrig', ...args]);
-  expect(received?.checkpoints).toBe(true);
+  expect(received?.checkpoints).toBe(false);
+});
+
+it('checkpoint opt-in survives user defaults and named profiles without broadening permissions', async () => {
+  for (const config of [{ checkpoints: true }, { profiles: { personal: { checkpoints: true } } }]) {
+    const opts = await resolved('profiles' in config ? ['--profile', 'personal'] : [], config);
+    expect(opts).toMatchObject({ checkpoints: true, checkpointsExplicit: true, allow: [], sandbox: 'none' });
+    expect(opts.yolo).not.toBe(true);
+  }
+  expect(await resolved(['--profile', 'personal'], { profiles: { personal: {} } }))
+    .toMatchObject({ checkpoints: false, checkpointsExplicit: false });
 });
 
 it.each([undefined, '{"references":[]}', '{"references":[],"include":["*.ts"]}', '{/* "references": [] */ "include":["*.ts"]}'])('implicit tsc remains available with config %s', async text => {

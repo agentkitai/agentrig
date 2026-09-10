@@ -351,7 +351,7 @@ export async function loadRunConfig(
     if (options.notice) options.notice(note); else console.error(note);
   }
   const recommendedDefaults: ConfigValues = {
-    supervise: true, checkpoints: true, ingestOnEnd: true, memoryIndexInjection: false, notifications: "bell", toolSummaries: true,
+    supervise: true, checkpoints: false, ingestOnEnd: true, memoryIndexInjection: false, notifications: "bell", toolSummaries: true,
     diagnostics: DiagnosticsConfigSchema.parse([
       { parser: "tsc", extensions: [".ts", ".tsx", ".mts", ".cts"], executable: "tsc", args: ["--noEmit", "--pretty", "false", "--listFiles"] },
       { parser: "ruff-json", extensions: [".py", ".pyi"], executable: "ruff", args: ["check", "--output-format=json", "--", "{path}"] },
@@ -379,7 +379,6 @@ export async function loadRunConfig(
   if (recommended && resolved.sandbox !== undefined && resolved.sandbox !== "none") {
     // Do not launder explicit hook opt-ins into a successful enforcing-sandbox launch.
     const omitted: string[] = [];
-    if (!configHas("checkpoints") && cli.checkpoints === undefined) { resolved.checkpoints = false; omitted.push("checkpoints"); }
     if (!configHas("ingestOnEnd") && cli.ingestOnEnd === undefined) { resolved.ingestOnEnd = false; omitted.push("session-end ingest"); }
     if (omitted.length) {
       defaultHookNotice = `recommended profile: omitted implicit ${omitted.join(" and ")} under enforcing sandbox ${resolved.sandbox}; explicit hook opt-ins retain the fail-closed startup error.`;

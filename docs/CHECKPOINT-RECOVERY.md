@@ -1,5 +1,10 @@
 # Checkpoint lock inspection and explicit recovery
 
+Automatic checkpoints are now opt-in (`checkpoints: true` in trusted config).
+Ordinary sessions do not acquire a checkpoint lease. They also do not produce
+snapshots for `/undo`. This guide applies to explicitly checkpointed sessions and
+retained locks from older versions; upgrading does not delete locks or snapshots.
+
 Checkpoints deliberately refuse a mutation while ownership is uncertain. The lock
 is `agentrig-worktree-checkpoint.lock` in Git's **canonical worktree Git directory**
 (`git rev-parse --git-dir`). Each linked worktree has its own owner; the main
