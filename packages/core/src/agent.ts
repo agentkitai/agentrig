@@ -96,6 +96,9 @@ export interface AgentConfig {
   observeSession?: (session: Session) => void;
   /** Explicit clarification handler, never a permission grant or implicit supervisor policy. */
   onQuestion?: import("./questions.js").QuestionHandler;
+  /** Explicit trusted noninteractive answer policy for unattended runs. Must honor cancellation;
+   * human-sourced replies are refused. Never inferred from onQuestion or inherited tool output. */
+  onUnattendedQuestion?: import("./questions.js").QuestionHandler;
   /** Current build's extension receipts, not replayed authorization or repeated activation. */
   extensions?: { loaded: import("./extensions.js").ExtensionReceipt[]; failed: import("./extensions.js").FailedExtension[] };
   /** Trusted host opt-in for this run only; unambiguous explicit hook ids, never tool grants. */
@@ -105,6 +108,10 @@ export interface AgentConfig {
   /** Trusted SDK scheduling seam; sequential by default. Never selected by model content. */
   turnStrategy?: TurnStrategy;
   permissions: PermissionPolicy;
+  /** Trusted host choice, never inferred from tool output or restored from a transcript.
+   * Unattended honors policy allows after external input, denies unresolved asks and sandbox
+   * escalation, and never invokes human approval/question callbacks. It grants no base authority. */
+  approvalMode?: "interactive" | "unattended";
   /** Optional OS sandbox, applied after permission approval as an independent execution boundary. */
   sandbox?: SandboxConfig;
   /** A string remains supported; labelled blocks produce a source-accurate context manifest. */

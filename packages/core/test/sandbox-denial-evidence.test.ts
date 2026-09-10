@@ -22,7 +22,7 @@ async function providerFixture(backend: "docker" | "seatbelt", text: string, std
     : new class extends SeatbeltSandboxProvider { protected override wrap() { return invocation(); } }();
 }
 
-async function sessionFixture(provider: SandboxProvider, name: string, input: unknown, mode: "workspace-write" | "read-only" = "workspace-write", answer: "allow" | "deny" | "unattended" = "deny") {
+async function sessionFixture(provider: SandboxProvider, name: string, input: unknown, mode: "workspace-write" | "read-only" = "workspace-write", answer: "allow" | "deny" | "unattended" = "deny", approvalMode?: "unattended") {
   let turn = 0; const asks: string[] = [];
   const model: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100_000 },
     async *stream(): AsyncIterable<ModelEvent> {
@@ -32,6 +32,7 @@ async function sessionFixture(provider: SandboxProvider, name: string, input: un
     } };
   const store = new SessionStore({ root: join(root, "logs") });
   const session = createAgent({ provider: model, tools: builtinTools(), store, systemPrompt: "fixture", repoMap: false,
+    ...(approvalMode === undefined ? {} : { approvalMode }),
     sandbox: { mode, provider }, permissions: new RulePolicy([{ class: "exec", decision: "allow" }, { class: "write", decision: "allow" }]),
     ...(answer === "unattended" ? {} : { onAsk: async (req: import("@agentkitai/agentrig-core").PermissionRequest) => { asks.push(req.origin ?? "ordinary"); return answer; } }),
   }).run("perform the requested operation", { cwd: root });
@@ -118,6 +119,13 @@ it.each(["allow", "deny", "unattended"] as const)("correlates real sandbox escal
   expect(result.events.filter(e => e.type === "tool.call")).toHaveLength(1);
   if (answer === "allow") expect(await readFile(join(root, "inside.txt"), "utf8")).toBe("allowed only on explicit retry");
   else await expect(readFile(join(root, "inside.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("unattended mode refuses sandbox escape even with an approving UI handler installed", async () => {
+  const result = await sessionFixture(new NoneSandboxProvider(), "write_file", { path: "blocked.txt", content: "forbidden" }, "read-only", "allow", "unattended");
+  expect(result.asks).toEqual([]);
+  expect(result.events).toContainEqual(expect.objectContaining({ type: "permission.decision", d: "deny", source: { kind: "unattended" } }));
+  await expect(readFile(join(root, "blocked.txt"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("the exported legacy compatibility shim cannot turn claimed stderr into authority", async () => {

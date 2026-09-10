@@ -18,6 +18,29 @@ import type { TuiOptions } from "../src/tui/start.tsx";
 
 const dirs: string[] = [];
 
+it.each(["yolo", "dangerouslySkipPermissions"])("%s from a trusted profile suppresses trust prompts without trusting project config", async key => {
+  const { cwd, home } = await fixture();
+  await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: {} }));
+  await configAt(home, { profiles: { personal: { [key]: true } } });
+  await configAt(cwd, { model: "must-not-load" });
+  const confirmTrust = vi.fn(async () => true);
+  const resolved = await loadRunConfig(new Command("tui"), { profile: "personal" }, { cwd, home, env: {}, interactive: true, confirmTrust });
+  expect(confirmTrust).not.toHaveBeenCalled();
+  expect(resolved.trustedProjectRoot).toBeUndefined();
+  expect(resolved.model).not.toBe("must-not-load");
+  expect(resolved[key as "yolo" | "dangerouslySkipPermissions"]).toBe(true);
+});
+
+it("explicitly disabling the profile's yolo restores interactive trust prompting", async () => {
+  const { cwd, home } = await fixture();
+  await writeFile(join(home, ".agentrig", "trust.json"), JSON.stringify({ projects: {} }));
+  await configAt(home, { profiles: { personal: { yolo: true } } });
+  const cmd = new Command("tui").option("--no-yolo"); cmd.parseOptions(["--no-yolo"]);
+  const confirmTrust = vi.fn(async () => false);
+  await loadRunConfig(cmd, { ...cmd.opts(), profile: "personal" }, { cwd, home, env: {}, interactive: true, confirmTrust });
+  expect(confirmTrust).toHaveBeenCalledOnce();
+});
+
 it("tracks scheduled ingestion opt-out sources without mistaking a shared default false for consent", async () => {
   const { cwd, home } = await fixture();
   const cmd = new Command().option("--ingest-on-end").option("--no-ingest-on-end");

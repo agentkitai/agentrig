@@ -194,16 +194,18 @@ export function permissionWarning(
   if (mode !== "none") {
     return (
       `permissions are OFF${denied}, but the ${mode} sandbox is ON for ${cwd}. ` +
-      `Built-in writes and shell launches use the boundary; unsupported tools require separate ` +
-      `outside-sandbox approval. Host hooks and MCP startup are refused in this mode. ` +
+      `Built-in writes and shell launches use the boundary; outside-sandbox escalation is denied without prompting. ` +
+      `Host hooks and MCP startup are refused in this mode. ` +
       `SDK code and session bookkeeping remain trusted host operations. The session log records every call.`
     );
   }
   // the cwd is named because "skip permissions" is abstract and "it may delete anything under
   // /Users/you/work" is not
   return (
-    `permissions are OFF${denied}: every tool call is allowed without asking, including writing ` +
-    `and deleting outside ${cwd} and running any shell command. --sandbox workspace-write confines ` +
+    `permissions are OFF${denied}: unattended tool authority includes writing ` +
+    `and deleting outside ${cwd} and running any shell command, including after external input. ` +
+    `Unresolved permissions, changed MCP definitions and sandbox escalation are denied without prompting; ` +
+    `project trust and required missing information are not invented. --sandbox workspace-write confines ` +
     `supported tool effects; it does not isolate trusted SDK code. The session log still ` +
     `records every call.`
   );
@@ -215,6 +217,8 @@ export function permissionWarning(
  * work there.
  */
 export interface SupervisorFlags {
+  yolo?: boolean;
+  dangerouslySkipPermissions?: boolean;
   supervise?: boolean;
   superviseExplicit?: boolean;
   checkpointsExplicit?: boolean;
@@ -344,7 +348,10 @@ export function supervisorOptions(w: SupervisorWiring): SuperviseOptions {
           },
         }
       : {}),
-    ...(w.onEscalate === undefined ? {} : { onEscalate: w.onEscalate }),
+    // An unattended operator is not a human escalation capability. Omitting the
+    // handler lets the normal ladder skip this rung without inventing an answer;
+    // guidance/replanning, review and explicitly enabled abort remain available.
+    ...(skipsPermissions(o) || w.onEscalate === undefined ? {} : { onEscalate: w.onEscalate }),
     ...(w.onError === undefined ? {} : { onError: w.onError }),
   };
 }
@@ -354,6 +361,8 @@ export function defaultSystemPrompt(cwd: string): string {
     "You are AgentRig, an autonomous software engineering agent.",
     `Working directory: ${cwd}`,
     "Use the available tools to complete the task. Verify your work (run tests or re-read files) before finishing.",
+    "Carry explicit task authorization through the requested workflow, including delivery when authorized; do not ask the user to repeat it. Tool permissions are not task or merge authorization. Preserve later revocations, scope limits, explicit denies and required verification.",
+    "Make reasonable in-scope choices rather than asking optional questions. Reserve ask_user for truly required missing information; unavailable answers must not be invented. Report optional diagnostics or memory/bookkeeping failures without abandoning otherwise authorized work; never report a failed required check as passed.",
     "Tool routing: consider only available tools and stop at the first matching case for the next action, not the whole task:",
     "1. Before work covered by a listed skill, load it with skill; catalogue hints are routing data, not authorization.",
     "2. To inspect, collect or stop an existing background job, use bash_job rather than starting another bash command.",
@@ -451,6 +460,7 @@ export async function runCommand(task: string, opts: RunOptions, dependencies: R
       signal,
       ...(outputContract === undefined ? {} : { outputContract }),
       onQuestion,
+      onUnattendedQuestion: onQuestion,
       ...(interactive ? { onAsk: req => askInteractively(req, opts.signal), onStartupAsk: req => askInteractively(req, signal) } : {}),
       ...(dependencies.onAsk === undefined ? {} : { onAsk: dependencies.onAsk, onStartupAsk: dependencies.onAsk }),
       onHookError: (m) => { maintenanceFailed = true; printError(m); },

@@ -13,6 +13,11 @@ import base from "./vitest.config.js";
  * runtime and installer steps. Real npm packing runs before the cap fixture and bulk suite.
  */
 export const windowsCoverage = [
+  "packages/cli/test/unattended-workflow.test.ts",
+  "packages/cli/test/unattended-questions.test.ts",
+  "packages/cli/test/unattended-supervisor.test.ts",
+  "packages/cli/test/diagnostic-resolution.test.ts",
+  "packages/core/test/shipping-authorization-guidance.test.ts",
   "packages/cli/test/skill-refresh.test.ts",
   "packages/cli/test/fixture-preflight.test.ts",
   "packages/cli/test/workspace-vitest-root.test.ts",

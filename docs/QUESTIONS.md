@@ -11,6 +11,10 @@ then clarification, then supervisor escalation. Questions have a separate bounde
 queue; answering one never approves tools, grants standing permission, or submits
 a new task. Cancellation and shutdown close pending questions.
 
+Explicit YOLO/skip-permissions runs do not open TUI/ACP human clarification
+dialogs. Reserve questions for genuinely required information; an unanswered
+required question still fails promptly rather than inventing an answer.
+
 Headless `run` defaults to `--answer-policy fail`. An operator may explicitly select:
 
 - `--answer-policy first-option`: choose option 1, recorded as automated.
@@ -38,6 +42,13 @@ Sources are `human`, `first-option`, `file`, and `supervisor`. The handler is an
 explicit trusted-host policy; there is no automatic supervisor answerer. Honor
 the signal and use the runtime request ID, not a model-generated correlation ID.
 An arbitrary tool named `ask_user` does not receive this private runtime seam.
+
+With trusted SDK `approvalMode: "unattended"`, `onQuestion` is not called.
+An operator may separately supply `onUnattendedQuestion` for a noninteractive
+policy. Headless `run` wires its explicit answer policy to this seam for both
+parent and children. There is no default automatic choice. Replies claiming
+`source: "human"` on this seam are refused; automated answers remain external
+advisory content. A trusted host must not put a human dialog inside this policy.
 
 ## ACP extension v1
 

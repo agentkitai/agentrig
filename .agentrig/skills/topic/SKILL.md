@@ -198,6 +198,10 @@ For each recorded row, in order:
    in the PR body exactly why none exists", and only a HIGH that the fixer reports unfixable halts.
    The bound on this train is rounds and convergence (§3), never the severity of a fixable defect:
    a HIGH with a one-line fix and a test is repair work.
+   Distinguish verified defects from optional suggestions: a preference or nice-to-have with no
+   concrete failure against the row contract is advisory, not a new acceptance criterion or repair
+   round. Record advisory followups at the end of the roadmap when useful, without manufacturing
+   an issue for every suggestion. Do not relabel a real LOW defect as advisory to evade repair.
 
 ## 3. Repair until clean — a bounded, converging loop
 

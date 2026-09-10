@@ -1,6 +1,6 @@
 ---
 name: dogfood
-description: The end-to-end shipping flow for any feature, fix, or issue - fresh branch, green trio by exit codes, PR, two parallel external reviews, fix all findings fail-first, stop at the PR.
+description: Build and verify one change - fresh branch, green trio, PR; children hand off, standalone runs review and land only with explicit task merge authorization.
 ---
 
 # Dogfood flow — how a change ships in this repository
@@ -164,6 +164,10 @@ describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
 
 ## 9. Fix everything both reviews found
 
+- Distinguish verified defects from optional suggestions. A preference or nice-to-have with no
+  concrete failure against the task contract is advisory, not a new acceptance criterion or repair
+  round. Record advisory followups at the end of the roadmap when useful; do not manufacture an
+  issue for every suggestion. This does not downgrade an actual LOW defect or waive any finding.
 - Fix majors AND minors, each with a fail-first regression test — reuse the reviewer's exact
   mutant as the fail-first check where one was given.
 - A finding you believe is wrong is rebutted in the PR body with the reason, never silently
@@ -171,10 +175,17 @@ describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
   format), never a paragraph. Re-run the full green trio, push, and update the PR body so it
   describes the final state (a body that describes the pre-review code is stale documentation).
 
-## 10. Stop at the PR
+## 10. Handoff or authorized landing
 
-- **Never merge.** Report the PR number, what shipped, what the reviews found and how each
-  finding was resolved, then stop. Merging is a human decision.
+- Builder children never merge: report the PR number/head, verification and findings to the
+  `ship` or `topic` conductor. This is a builder handoff, not completion of the overall workflow;
+  the conductor owns independent review and authorized landing.
+- Standalone, if the human explicitly authorized merging the PR for this named task, finish the
+  independent reviews and required repairs, then continue with the land skill without asking for
+  a second approval. Carry the verbatim authorization and task-to-PR binding; all land preconditions,
+  exact-head CI and post-merge CI remain mandatory. Without that authorization, stop at the reviewed PR
+  and report that merge authorization is still required. Tool permissions and YOLO are not human
+  merge authorization; later revocation or narrowing wins.
 - When the supervisor's budget warning arrives, stop starting work: finish the current change,
   run the trio, update STATUS, commit, push, open or update the PR. A pushed branch with an
   honest PR body beats a perfect uncommitted worktree.

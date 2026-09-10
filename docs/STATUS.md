@@ -1,5 +1,21 @@
 # Status
 
+## Unattended workflow — implemented, delivery PR #305
+
+One user-directed correction spanning approval authority, actual child inheritance,
+startup trust, MCP/sandbox/clarification boundaries, local TypeScript diagnostics
+and authorized shipping. Explicit YOLO no longer turns into fresh human consent
+after external input; explicit denials and isolation boundaries remain.
+[Contract, risks and test scope](plans/unattended-workflow.md).
+Builder: Codex/operator with `unattended_diagnostics` and `unattended_shipping`
+helpers, outside AgentRig. Existing AgentRig session `86ce6bc6` is preserved.
+Initial core regression was fail-first (5 failing cases); combined workflow,
+diagnostics and shipping mutation controls fail as intended after restoration.
+Independent review findings, exact-head and post-merge CI receipts are tracked on
+[PR #305](https://github.com/agentkitai/agentrig/pull/305); future results are not
+claimed complete in this implementation record. The pre-review full suite passed
+3,818 tests before the additional question-policy and supervisor fixtures.
+
 ## CLI package version — implemented, delivery PR #304
 
 User-directed continuation on `fix/cli-version`, preserving the unfinished version
