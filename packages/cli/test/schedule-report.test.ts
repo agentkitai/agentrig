@@ -104,18 +104,22 @@ it("replaces auxiliary snapshots and keeps unknown costs, missing final usage, c
 
 it.each([[undefined, false], [false, false], [true, false], [true, true]] as const)("actual CLI ingests the actual session once with a custom memory root (explicit ingest=%s, failed maintenance=%s)", async (ingestOnEnd, failedMaintenance) => {
   const f = await fixture(); const memory = join(f.root, "custom-memory");
-  await f.schedules.add({ id: "one", cron: "30 12 * * *", task: "finish cleanly", flags: { maxTurns: 1 } });
+  // The injected config directory does not change the runtime's cwd. Keep real tool writes
+  // inside this fixture so the narrow write_file allow rule retains its cwd-only scope.
+  vi.spyOn(process, "cwd").mockReturnValue(f.project);
+  await f.schedules.add({ id: "one", cron: "30 12 * * *", task: "Write capture.txt, then finish cleanly", flags: { maxTurns: 2 } });
   await writeFile(join(f.project, ".agentrig/config.json"), JSON.stringify({ memory, ...(ingestOnEnd === undefined ? {} : { ingestOnEnd }),
-    repoMap: false, packages: false, extensionDiscovery: false, skillDiscovery: false, ingestLimits: { maxCalls: 1 }, priceIn: "1", priceOut: "2" }));
+    allow: ["write_file"], checkpoints: false, repoMap: false, packages: false, extensionDiscovery: false, skillDiscovery: false, ingestLimits: { maxCalls: 1 }, priceIn: "1", priceOut: "2" }));
   vi.stubEnv("OPENAI_API_KEY", "fixture-not-a-credential"); vi.stubEnv("LORE_API_URL", ""); vi.stubEnv("LORE_API_KEY", "");
   vi.spyOn(console, "log").mockImplementation(() => {}); vi.spyOn(console, "error").mockImplementation(() => {});
   let calls = 0;
   const server = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume actual adapter request */ }
     calls++;
-    const content = calls === 1 ? "Nothing further is required." : JSON.stringify({ facts: [], ...(!failedMaintenance ? { nothingDurable: true } : {}) });
+    const content = calls === 2 ? "Nothing further is required." : JSON.stringify({ facts: [], ...(!failedMaintenance ? { nothingDurable: true } : {}) });
+    const delta = calls === 1 ? { tool_calls: [{ index: 0, id: "capture-write", type: "function", function: { name: "write_file", arguments: JSON.stringify({ path: join(f.project, "capture.txt"), content: "durable work\n" }) } }] } : { content };
     res.setHeader("content-type", "text/event-stream");
-    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: "stop" }] })}\n\ndata: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`);
+    res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: calls === 1 ? "tool_calls" : "stop" }] })}\n\ndata: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 2 } })}\n\ndata: [DONE]\n\n`);
   });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
@@ -123,17 +127,20 @@ it.each([[undefined, false], [false, false], [true, false], [true, true]] as con
     const deps = { config: { cwd: f.project, home: f.home }, scheduleNow: () => now };
     const args = ["schedule", "tick", "--execute", "--trust", "--provider", "openai", "--model", "fixture", "--base-url", `http://127.0.0.1:${address.port}/v1`];
     await buildProgram(deps).parseAsync(args, { from: "user" });
-    expect(calls).toBe(ingestOnEnd === false ? 1 : 2); expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(failedMaintenance ? 1 : 0);
+    expect(calls).toBe(ingestOnEnd === false ? 2 : 3); expect(process.exitCode ?? 0, vi.mocked(console.error).mock.calls.flat().join("\n")).toBe(failedMaintenance ? 1 : 0);
     const receipt = ScheduleReceipt.parse(JSON.parse(await readFile(join(f.project, ".agentrig/schedule.log"), "utf8")));
-    expect(receipt).toMatchObject({ outcome: "done", source: "schedule", maintenanceFailed: failedMaintenance, accounting: { main: { usage, complete: true } } });
+    expect(receipt).toMatchObject({ outcome: "done", source: "schedule", maintenanceFailed: failedMaintenance, accounting: { main: { usage: { input: 20, output: 4 }, complete: true } } });
     expect((await f.reports.notice()).failures).toBe(failedMaintenance ? 1 : 0);
     const store = new SessionStore({ root: join(f.project, ".agentrig/raw/sessions") });
-    expect((await store.readAll(receipt.sessionId!)).at(-1)).toMatchObject({ type: "session.end" });
+    const events = await store.readAll(receipt.sessionId!);
+    expect(events.at(-1)).toMatchObject({ type: "session.end" });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "capture-write", permission: "write", ok: true }));
+    expect(await readFile(join(f.project, "capture.txt"), "utf8")).toBe("durable work\n");
     if (ingestOnEnd !== false && !failedMaintenance) {
       expect(await readFile(join(memory, "wiki/sources", `session-${receipt.sessionId}.md`), "utf8")).toContain(receipt.sessionId!);
       expect(receipt.accounting?.auxiliary.usage?.input).toBe(10);
     } else await expect(readFile(join(memory, "wiki/sources", `session-${receipt.sessionId}.md`))).rejects.toMatchObject({ code: "ENOENT" });
-    await buildProgram(deps).parseAsync(args, { from: "user" }); expect(calls).toBe(ingestOnEnd === false ? 1 : 2);
+    await buildProgram(deps).parseAsync(args, { from: "user" }); expect(calls).toBe(ingestOnEnd === false ? 2 : 3);
     expect((await readFile(join(f.project, ".agentrig/schedule.log"), "utf8")).trim().split("\n")).toHaveLength(1);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

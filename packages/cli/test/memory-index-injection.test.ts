@@ -50,7 +50,7 @@ afterEach(async () => {
 });
 
 /** One built agent whose two live roles are fixtures, plus the system prompts it actually sent. */
-async function build(overrides: Partial<AgentBuildOptions> = {}) {
+async function build(overrides: Partial<AgentBuildOptions> = {}, captureWork = false) {
   const built = await buildAgent({
     root: join(root, "sessions"), provider: "anthropic", model: "fixture", sandbox: "none",
     yolo: true, repoMap: false, memory: memoryRoot, ingestOnEnd: true,
@@ -66,6 +66,11 @@ async function build(overrides: Partial<AgentBuildOptions> = {}) {
       return;
     }
     systems.push(request.system);
+    if (captureWork && systems.length === 1) {
+      yield { type: "tool_use", id: "capture-write", name: "write_file", input: { path: "capture.txt", content: "durable work\n" } };
+      yield { type: "stop", reason: "tool_use" };
+      return;
+    }
     yield { type: "text_delta", text: "done" };
     yield { type: "usage", usage: { input: 10, output: 5 } };
     yield { type: "stop", reason: "end_turn" };
@@ -75,8 +80,8 @@ async function build(overrides: Partial<AgentBuildOptions> = {}) {
   return { built, systems };
 }
 
-async function runOnce(built: Awaited<ReturnType<typeof build>>["built"]): Promise<HarnessEvent[]> {
-  const session = built.agent.run("say hi", { cwd: root });
+async function runOnce(built: Awaited<ReturnType<typeof build>>["built"], task = "say hi"): Promise<HarnessEvent[]> {
+  const session = built.agent.run(task, { cwd: root });
   const events: HarnessEvent[] = [];
   for await (const event of session.events) events.push(event);
   await session.done;
@@ -101,14 +106,17 @@ it.each([
 
 it("drops the injected index when memoryIndexInjection is false, and nothing else", async () => {
   const on = await build();
-  const off = await build({ memoryIndexInjection: false });
-  await runOnce(off.built);
+  const off = await build({ memoryIndexInjection: false }, true);
+  const events = await runOnce(off.built, "Write capture.txt with durable work, then finish");
+  expect(events).toContainEqual(expect.objectContaining({ type: "tool.result", id: "capture-write", permission: "write", ok: true }));
 
   // the prompt: no index block at all, not an empty or renamed one
   expect(off.built.memoryIndex).toBe("");
-  expect(off.systems).toHaveLength(1);
-  expect(off.systems[0]).not.toContain(INDEX_HEADER);
-  expect(off.systems[0]).not.toContain("concepts/retry-policy.md");
+  expect(off.systems).toHaveLength(2);
+  for (const system of off.systems) {
+    expect(system).not.toContain(INDEX_HEADER);
+    expect(system).not.toContain("concepts/retry-policy.md");
+  }
   // and the index is not even read, so a large wiki costs nothing here
   expect(vi.mocked(indexInjection).mock.calls).toHaveLength(1); // the `on` build only
 
