@@ -91,6 +91,9 @@ it("times out an uncooperative iterator and closes it without awaiting a hung re
 });
 
 it.each(["parent", "overall"])("propagates %s cancellation to a stalled provider and skips later phases", async kind => {
+  // Filesystem preparation must not consume the deadline before the provider starts.
+  // Advance both the timer and the monotonic deadline clock only after the barrier.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   const controller = new AbortController(); let started!: () => void;
   const ready = new Promise<void>(resolve => { started = resolve; }); let signal: AbortSignal | undefined;
   const p: ModelProvider = { ...provider(), stream(_request, nextSignal) {
@@ -101,10 +104,20 @@ it.each(["parent", "overall"])("propagates %s cancellation to a stalled provider
   const running = runDream({ ...options(), provider: p, autoApply: true, signal: controller.signal,
     limits: { timeoutMs: kind === "overall" ? 1000 : 5000, callTimeoutMs: 5000 },
     onPhase: phase => phases.push(phase), onUsage: report => reports.push(report) });
-  const rejection = expect(running).rejects.toMatchObject({ name: kind === "overall" ? "TimeoutError" : "AbortError" });
-  await ready; if (kind === "parent") controller.abort(); await rejection;
-  expect(signal?.aborted).toBe(true); expect(phases).not.toContain("apply"); expect(phases).not.toContain("install");
-  expect(reports[0]!.outcome).toBe(kind === "overall" ? "timeout" : "aborted"); await absent(output);
+  const settled = running.then(() => { throw new Error("stalled provider unexpectedly completed"); }, error => error);
+  try {
+    await Promise.race([ready, settled.then(error => { throw error; })]);
+    if (kind === "parent") controller.abort();
+    else await vi.advanceTimersByTimeAsync(1000);
+    expect(signal?.aborted).toBe(true);
+    expect(await settled).toMatchObject({ name: kind === "overall" ? "TimeoutError" : "AbortError" });
+    expect(phases).not.toContain("apply"); expect(phases).not.toContain("install");
+    expect(reports[0]!.outcome).toBe(kind === "overall" ? "timeout" : "aborted"); await absent(output);
+  } finally {
+    controller.abort();
+    await settled.catch(() => {});
+    vi.useRealTimers();
+  }
 });
 
 it.each(["input", "output", "events"])("stops on a model %s cap instead of applying a structural fallback", async kind => {

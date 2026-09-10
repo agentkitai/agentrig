@@ -142,14 +142,14 @@ it("measures today's resolved defaults instead of restating them, and refuses a 
   const root = await temp("agentrig-r17f-profile-");
   await mkdir(join(root, "home")); await mkdir(join(root, "cwd"));
   const profile = await runner.measuredProfile(join(root, "cwd"), join(root, "home"));
-  expect(profile).toMatchObject({ supervise: true, checkpoints: true, ingestOnEnd: true,
+  expect(profile).toMatchObject({ supervise: true, checkpoints: false, ingestOnEnd: true,
     notifications: "bell", toolSummaries: true });
   // R17f's whole question presumes these two are still opt-in; if they ship on, stop.
   expect(profile.supervisorReview).toBeUndefined();
   expect(profile.supervisorAbort).toBeUndefined();
   const regressed = async () => ({ supervise: false });
   await expect(runner.measuredProfile(join(root, "cwd"), join(root, "home"), regressed)).rejects.toThrow(/not what R17f expects/);
-  const shipped = async () => ({ supervise: true, checkpoints: true, ingestOnEnd: true, notifications: "bell",
+  const shipped = async () => ({ supervise: true, checkpoints: false, ingestOnEnd: true, notifications: "bell",
     toolSummaries: true, supervisorReview: true });
   await expect(runner.measuredProfile(join(root, "cwd"), join(root, "home"), shipped)).rejects.toThrow(/opt-in/);
 });

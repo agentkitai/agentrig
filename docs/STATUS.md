@@ -1,5 +1,25 @@
 # Status
 
+## Checkpoints opt-in — implemented, delivery PR #303
+
+User-directed correction after session `c63e2c62` approved a background test but
+the implicitly installed checkpoint hook refused it. Normal CLI sessions now leave
+checkpointing off; explicit trusted config still enables the existing strict mode.
+Permissions, sandboxes, grants, existing recovery and undo validation are unchanged.
+New coverage exercises config/profile/TUI/resume defaults and the built CLI's edit,
+diagnostic and approved background-job workflow. Builder: Codex/operator outside
+AgentRig. The interrupted session's branch and test file are preserved untouched.
+Build/typecheck and 3,787 tests passed locally. Independent Claude and Codex passes
+found no material blockers; the stale runtime-evidence paragraph was corrected.
+Exact-head and post-merge receipts: [PR #303](https://github.com/agentkitai/agentrig/pull/303).
+The evaluator's current-default guard follows the new opt-in default; historical
+E3/R17f measurements and their recorded checkpoint-enabled profiles are untouched.
+Windows CI exposed a test-only dream cancellation race: its one-second deadline
+could expire during filesystem preparation, leaving a provider-start barrier
+unresolved. The fixture now controls the timer/monotonic clock after provider start,
+races startup against settlement, and aborts/joins before restoring timers. No
+production deadlines changed. The disabled-overall-timer mutant fails as expected.
+
 ## Windows integration-test lifecycle repair — implemented
 
 Post-merge CI for the report-only PR #301 failed on two different five-second

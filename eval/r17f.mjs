@@ -57,7 +57,7 @@ export const Settings = z.object({
  */
 export async function measuredProfile(cwd, home, load = loadRunConfig) {
   const resolved = await load(new Command('run'), {}, { cwd, home, env: {}, interactive: false });
-  const expected = { supervise: true, checkpoints: true, ingestOnEnd: true, notifications: 'bell', toolSummaries: true };
+  const expected = { supervise: true, checkpoints: false, ingestOnEnd: true, notifications: 'bell', toolSummaries: true };
   const mismatched = Object.entries(expected).filter(([key, value]) => resolved[key] !== value);
   if (mismatched.length) throw new Error(`recommended defaults are not what R17f expects: ${JSON.stringify(mismatched)}`);
   if (resolved.supervisorReview === true || resolved.supervisorAbort === true)
