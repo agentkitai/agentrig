@@ -58,8 +58,10 @@ model will follow the guidance or preserve factual/citation quality.
 
 Acceptance tests verify fresh/resumed guidance, optional legacy acceptance fields,
 platform attribution and unchanged permission refusal. Existing real-runtime
-force-replan tests verify blocked ordinary tools and release only through a genuine
-plan. TUI tests distinguish requests from denied turns and resumed-session totals.
+force-replan tests verify blocked ordinary tools and release through a genuine
+plan. Existing bounded-refusal self-release and no-plan-tool fallback remain
+unchanged. TUI and headless tests distinguish requests from denied turns and
+resumed-session totals.
 
 Live-model before/after quality and efficiency remains unmeasured by this change.
 A subsequent authorized comparison should use identical repository revisions,

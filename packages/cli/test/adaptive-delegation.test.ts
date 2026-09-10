@@ -15,15 +15,15 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-it("headless completion distinguishes current requests from cumulative resumed turns and usage", async () => {
+it.each([false, true])("headless completion distinguishes requests from loop turns (hook refusal=%s)", async refused => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-request-summary-"))); roots.push(root);
   vi.stubEnv("ANTHROPIC_API_KEY", "inert-fixture-key");
   const options = { root, provider: "anthropic", model: "fixture", headless: true, packages: false,
     extensionDiscovery: false, skillDiscovery: false, repoMap: false,
     maxTurns: "3", maxTokensPerTurn: "128", supervisorSoft: "0.8", supervisorTurnsRemaining: "15",
     dreamEverySessions: "10", dreamEveryHours: "24" } as RunOptions;
-  const built = await buildAgent(options);
-  vi.spyOn(built.provider, "stream").mockImplementation(async function* (): AsyncIterable<ModelEvent> {
+  const built = await buildAgent(options, { extraHooks: refused ? [{ point: "pre_model", handler: () => ({ action: "deny", reason: "fixture refusal" }) }] : [] });
+  const stream = vi.spyOn(built.provider, "stream").mockImplementation(async function* (): AsyncIterable<ModelEvent> {
     yield { type: "usage", usage: { input: 10, cacheRead: 20, output: 3 } };
     yield { type: "stop", reason: "end_turn" };
   });
@@ -33,6 +33,12 @@ it("headless completion distinguishes current requests from cumulative resumed t
   try {
     const first = await runCommand("first", options);
     expect(first).toBeDefined();
+    if (refused) {
+      expect(stream).not.toHaveBeenCalled();
+      expect(log.mock.calls.map(args => args.join(" ")).join("\n"))
+        .toContain("0 model request(s) this run; session totals: 1 loop turn(s)");
+      return;
+    }
     await runCommand("follow-up", { ...options, resume: first!.id });
     const output = log.mock.calls.map(args => args.join(" ")).join("\n");
     expect(output).toContain("1 model request(s) this run; session totals: 1 loop turn(s), 30 in (20 cached) / 3 out");
