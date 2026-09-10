@@ -75,7 +75,7 @@ describe("permissionWarning", () => {
     expect(permissionWarning({ yolo: true, sandbox: "none" }, "/work")).toContain("--sandbox workspace-write");
     const bounded = permissionWarning({ yolo: true, sandbox: "workspace-write" }, "/work");
     expect(bounded).toContain("workspace-write sandbox is ON");
-    expect(bounded).toContain("unsupported tools require separate");
+    expect(bounded).toContain("outside-sandbox escalation is denied without prompting");
     expect(bounded).toContain("Host hooks and MCP startup are refused");
     expect(bounded).not.toContain("recommended unattended posture");
   });

@@ -231,7 +231,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       .option("--deny <rule>", "deny a tool name or permission class (repeatable)", collect, [])
       .option(
         "--dangerously-skip-permissions",
-        "allow every tool call without asking, including outside the working directory; --deny still applies",
+        "unattended tool authority, including after external input and outside cwd; denies, sandbox and trust still apply",
       )
       .option("--yolo", "alias for --dangerously-skip-permissions")
       .option("--sandbox-network", "allow network inside an enforcing sandbox; does not grant tool permission")

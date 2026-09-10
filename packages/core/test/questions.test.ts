@@ -10,7 +10,7 @@ import { askUserTool, createAgent, messagesFromEvents, parallel, QUESTION_TIMEOU
 const roots: string[] = [];
 afterEach(async () => { vi.useRealTimers(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const question = { prompt: "Which format?", options: ["Text", "JSON"] };
-async function fixture(onQuestion?: QuestionHandler, laterEffect = false, concurrent = false, startupDelayMs = 0) {
+async function fixture(onQuestion?: QuestionHandler, laterEffect = false, concurrent = false, startupDelayMs = 0, approvalMode?: "unattended") {
   const root = await mkdtemp(join(tmpdir(), "agentrig-questions-")); roots.push(root);
   const store = new SessionStore({ root: join(root, "logs") });
   const requests: ModelRequest[] = []; let effects = 0;
@@ -25,12 +25,20 @@ async function fixture(onQuestion?: QuestionHandler, laterEffect = false, concur
       } else yield { type: "stop", reason: "end_turn" };
     } };
   const agent = createAgent({ provider, store, systemPrompt: "fixture", repoMap: false,
+    ...(approvalMode === undefined ? {} : { approvalMode }),
     permissions: new RulePolicy([{ class: "read", decision: "allow" }, { class: "exec", decision: "allow" }]),
     ...(onQuestion === undefined ? {} : { onQuestion }), ...(concurrent ? { turnStrategy: parallel({ maxConcurrency: 4 }) } : {}),
     tools: [askUserTool(), { name: "effect", description: "effect", inputSchema: z.object({}), permission: "exec",
       execute: async () => { effects++; return { output: "effect", display: "effect" }; } }] });
   return { root, store, requests, agent, effects: () => effects };
 }
+
+it("unattended required questions fail clearly without opening a UI or inventing an answer", async () => {
+  const handler = vi.fn(async () => ({ source: "human" as const, answer: { option: 0 } }));
+  const f = await fixture(handler, true, false, 0, "unattended");
+  expect((await f.agent.run("choose then execute", { cwd: f.root }).done).reason).toBe("error");
+  expect(handler).not.toHaveBeenCalled(); expect(f.effects()).toBe(0);
+});
 
 it.each(["human", "first-option", "file", "supervisor"] as const)("actual %s answer resumes with source retained in history", async source => {
   const f = await fixture(async () => ({ source, answer: { option: 1 } }));

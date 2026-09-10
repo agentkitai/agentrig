@@ -19,8 +19,11 @@ normally.
 - **Post-edit diagnostics**: existing `tsc` parser for `.ts`, `.tsx`, `.mts`, `.cts`
   (`tsc --noEmit --pretty false --listFiles`) and existing Ruff JSON parser for `.py`, `.pyi`
   (`ruff check --output-format=json -- {path}`, for roots with `pyproject.toml`,
-  `ruff.toml` or `.ruff.toml`). These use installed executables on PATH;
-  no package installation, checker discovery, new parser or approval bypass.
+  `ruff.toml` or `.ruff.toml`). Implicit TypeScript defaults prefer the nearest
+  installed `node_modules/typescript/bin/tsc` within the trusted project, invoked
+  with the running Node executable. Discovery never ascends or follows a compiler
+  link outside that trusted root. Otherwise PATH remains the fallback; explicit
+  checker configurations and Ruff are unchanged. No installation or approval bypass.
   TypeScript remains enabled without a root tsconfig, including references-only
   roots and JSONC; absent project/unsupported output is incomplete, not clean.
   The compiler's file list must include the touched file before this default
@@ -128,6 +131,25 @@ Example explicit opt-out profile:
 Run it with `agentrig --profile quiet` or `agentrig run --profile quiet "task"`.
 
 ## Evidence and limitation
+
+### Explicit unattended operation
+
+`--yolo` and `--dangerously-skip-permissions` (including trusted profiles) carry
+unattended authority through parent/child tools, diagnostics and bookkeeping,
+including after external input. Default sessions still use `ask`; no new startup
+session type is required. This deliberately increases prompt-injection exposure:
+external content stays untrusted, but it does not revoke the operator's blanket
+tool authority. Do not expose a YOLO MCP server to untrusted clients.
+
+Explicit denies still win. Sandbox escape, changed MCP definitions and unresolved
+permissions are refused without opening a human dialog. Untrusted project config
+is skipped, not automatically trusted. Required missing information fails honestly
+unless a separately configured noninteractive answer policy supplies it; optional
+questions should not interrupt work. Explicit checkpoint mode retains its strict
+guards; normal sessions leave it off. Scoped task/merge authorization is separate
+from tool permissions: shipping skills reuse explicit upfront authorization for
+the matching task, never infer it from YOLO or green CI.
+See [workflow contract and verification](plans/unattended-workflow.md).
 
 `recommended-runtime.test.ts` runs the built CLI against a local deterministic
 provider in a fresh repository, with separate empty home and **no config files**.

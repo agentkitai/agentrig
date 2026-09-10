@@ -131,6 +131,14 @@ See [R15b](plans/R15b.md) for parser, output, cancellation and cooperative write
 
 ### 2.4 Permissions
 
+The user-directed [unattended workflow amendment](plans/unattended-workflow.md)
+supersedes R13c's mandatory fresh human consent under explicit CLI YOLO/skip-permissions.
+Trusted SDK `approvalMode: "unattended"` keeps existing policy allows after external
+input, preserves denials/audit/sandbox boundaries, and never opens human approval
+callbacks. It does not itself grant policy authority. Interactive defaults retain
+the fresh-consent guard. Provenance is unchanged; unattended mode accepts greater
+prompt-injection exposure, not proof that external content is safe.
+
 R16b captures bounded actual builtin edit/write before/after observations in
 canonical tool results, distinct from labelled input-only permission proposals.
 The CLI shares one bounded diff renderer without rereading files; unknown or

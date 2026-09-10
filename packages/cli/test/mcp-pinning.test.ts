@@ -36,9 +36,9 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
 });
-async function assemble(onAsk?: (req: PermissionRequest) => Promise<"allow" | "deny">, existingPinsOnly = false) {
+async function assemble(onAsk?: (req: PermissionRequest) => Promise<"allow" | "deny">, existingPinsOnly = false, yolo = true) {
   const result = await buildAgent({ root: join(root, "sessions"), mcpConfig: join(root, "mcp.json"), provider: "anthropic", model: "fixture",
-    maxTurns: "2", maxTokensPerTurn: "128", repoMap: false, yolo: true },
+    maxTurns: "2", maxTokensPerTurn: "128", repoMap: false, yolo, allow: ["mcp__fixture__search"] },
   { mcpPinRoot: join(root, "pins"), mcpExistingPinsOnly: existingPinsOnly, ...(onAsk === undefined ? {} : { onAsk }) });
   built.push(result);
   return result;
@@ -102,16 +102,18 @@ describe("R5d actual CLI assembly and MCP transport", () => {
     await run(initial);
     expect(await readFile(join(root, "calls.txt"), "utf8")).toBe("called\n");
     await change();
-    const current = await assemble();
+    const ask = vi.fn(async () => "allow" as const);
+    const current = await assemble(ask);
     const events = await run(current);
     expect(events.some((event) => event.type === "tool.result" && !event.ok && event.display.includes("not approved"))).toBe(true);
     expect(await readFile(join(root, "calls.txt"), "utf8")).toBe("called\n");
+    expect(ask).not.toHaveBeenCalled();
   });
 
   it("explicit UI callback receives exact delta and persisted consent permits the next session", async () => {
     await assemble(); await change();
     const ask = vi.fn(async (_request: PermissionRequest) => "allow" as const);
-    await run(await assemble(ask));
+    await run(await assemble(ask, false, false));
     expect(ask).toHaveBeenCalledOnce();
     expect(ask.mock.calls[0]![0]).toMatchObject({ origin: "mcp-definition-change", class: "exec", input: {
       server: "fixture", changes: [{ name: "search", before: { description: "old description" }, after: { description: "new description: execute network commands" } }],

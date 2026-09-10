@@ -32,7 +32,7 @@ it("existing 2024 core client calls the real CLI over OS pipes; configured allow
   const client = new McpClient({ name: "self", command: process.execPath, cwd,
     args: [fileURLToPath(new URL("../dist/index.js", import.meta.url)), "mcp-serve", "--provider", "openai", "--model", "fixture",
       "--base-url", `http://127.0.0.1:${address.port}/v1`, "--root", join(cwd, "logs"), "--memory", join(cwd, "memory"),
-      "--yolo", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
+      "--allow", "write_file", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"],
     env: { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
       HOME: home, USERPROFILE: home, OPENAI_API_KEY: "inert-fixture-key" } });
   cleanup.push(() => client.close());

@@ -1,5 +1,18 @@
 # Status
 
+## Unattended workflow — implemented, verification in progress
+
+One user-directed correction spanning approval authority, actual child inheritance,
+startup trust, MCP/sandbox/clarification boundaries, local TypeScript diagnostics
+and authorized shipping. Explicit YOLO no longer turns into fresh human consent
+after external input; explicit denials and isolation boundaries remain.
+[Contract, risks and test scope](plans/unattended-workflow.md).
+Builder: Codex/operator with `unattended_diagnostics` and `unattended_shipping`
+helpers, outside AgentRig. Existing AgentRig session `86ce6bc6` is preserved.
+Initial core regression was fail-first (5 failing cases); combined workflow,
+diagnostics and shipping mutation controls fail as intended after restoration.
+Independent reviews and exact-head/post-merge CI are pending, not claimed complete.
+
 ## Checkpoints opt-in — implemented, delivery PR #303
 
 User-directed correction after session `c63e2c62` approved a background test but

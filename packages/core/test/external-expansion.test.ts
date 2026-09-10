@@ -199,7 +199,8 @@ it.each(["clean", "external", "copied-options"])("real child inherits only live 
   expect(childEvents.some(e => e.type === "permission.expansion" && e.decision === "deny")).toBe(mode !== "clean");
 });
 
-it.each(["standing", "scoped", "overlapping"])("a live %s deny cannot be overridden by a willing fresh approval handler or blanket allow", async kind => {
+it.each((["interactive", "unattended"] as const).flatMap(approvalMode =>
+  ["standing", "scoped", "overlapping"].map(kind => ({ approvalMode, kind }))))("a live $kind deny wins under $approvalMode with a willing handler and blanket allow", async ({ approvalMode, kind }) => {
   const f = await fixture([call("document"), call("exec")]);
   const registry = new PermissionGrantRegistry(); registry.beginSession("run");
   if (kind === "overlapping") registry.grant({ subject: registry.subject, operation: { tool: "exec", class: "exec" }, resource: "*", constraints: {},
@@ -209,7 +210,7 @@ it.each(["standing", "scoped", "overlapping"])("a live %s deny cannot be overrid
     duration: { kind: "session", id: "run" }, delegable: false, decision: "deny" });
   if (kind === "overlapping") expect(registry.decide({ tool: "exec", class: "exec", input: {}, cwd: f.cwd })).toBe("allow");
   let asks = 0;
-  const { events } = await run(f, { permissionGrants: registry, onAsk: async () => { asks++; return "allow"; } });
+  const { events } = await run(f, { approvalMode, permissionGrants: registry, onAsk: async () => { asks++; return "allow"; } });
   expect(asks).toBe(0); expect(f.invoked).toEqual([]);
   expect(events).toContainEqual(expect.objectContaining({ type: "permission.expansion", decision: "deny" }));
   const grants = registry.inspect();

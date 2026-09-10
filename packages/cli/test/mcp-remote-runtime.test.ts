@@ -8,7 +8,7 @@ import { SessionStore, mcpToolName, compactWithProvenance, type ModelEvent, type
 import { buildAgent, type BuiltAgent } from "../src/agent-builder.js";
 import { composeSkillInvocation } from "../src/tui/commands.js";
 
-it("actual CLI remote skill remains external through provider/storage/resume/summary; YOLO cannot authorize its new exec", async () => {
+it("remote skill remains external through provider/storage/resume/summary; YOLO cannot override an explicit exec deny", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentrig-remote-runtime-"));
   const methods: string[] = [];
   const telemetry: string[] = [];
@@ -37,7 +37,7 @@ it("actual CLI remote skill remains external through provider/storage/resume/sum
     // No pre-Ink callback means no queued deadlock and no discovery traffic on default ask.
     const denied = await buildAgent(options, { mcpPinRoot: join(root, "pins") }); connections.push(denied);
     expect(methods).toEqual([]); expect(denied.mcp).toHaveLength(0);
-    const built = await buildAgent({ ...options, yolo: true }, { mcpPinRoot: join(root, "pins") }); connections.push(built);
+    const built = await buildAgent({ ...options, yolo: true, deny: ["bash"] }, { mcpPinRoot: join(root, "pins") }); connections.push(built);
     const name = mcpToolName("remote", "$prompt_review");
     const skill = built.skills.find(s => s.name === name)!;
     expect(skill.remote?.permission).toBe("net");
