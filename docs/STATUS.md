@@ -4,6 +4,21 @@ Current roadmap row: user-directed unknown-profile guidance (R1b regression cove
 
 ## Unknown-profile guidance — implemented
 
+Bounded repair round 2 (session `52fd8b99`) closes all three residuals from
+[Claude delta review](https://github.com/agentkitai/agentrig/pull/306#issuecomment-5620769274):
+resolver requested/available names escape bidi controls via a small config-local formatter,
+without importing doctor; independent diagnostic assertions reject raw C0/bidi characters
+and use literal escaped fixtures; `review` and `mcp login` help clarifies that built-in
+recommended is accepted with a note and no run defaults. Other unknown names list names only.
+Doctor's normal output/newlines and recommended semantics remain unchanged.
+Fail-first exited 1 (two resolver safety failures and help); restored focused suite exited 0
+(142 tests). Five meaningful mutants each exited 1 and were restored: requested-name escaping,
+available-name escaping, doctor bidi escaping, review help, login help.
+`pnpm build`, `TMPDIR=/home/amit/agentrig-fix306-round2-tmp pnpm test`, and `pnpm typecheck`
+each exited 0 (252 files, 3,847 passed / 4 skipped). Logs are in that TMPDIR.
+Same PR #306/branch; parent handles final-head review/CI and merge. No external reviews
+or merge were invoked by this repair child.
+
 Unknown-profile guidance now quotes/escapes available names in the resolver and adds a
 sorted, unique, names-only list to doctor's separate diagnostic. Empty lists remain `(none)`;
 configuration values, precedence, trust boundaries, and built-in `recommended` semantics are
