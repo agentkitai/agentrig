@@ -4,20 +4,20 @@ Current roadmap row: user-directed unknown-profile guidance (R1b regression cove
 
 ## Unknown-profile guidance — implemented
 
-The resolver already reported the requested profile and sorted, deduplicated available
-profile names. This task preserves that implementation and adds exact diagnostics
-coverage for layered profiles, private config values, absent/empty profile maps, and
-root/subcommand CLI propagation (failure exit status, no run dispatch). Every existing
-`--profile` option now explains that unknown names list available profiles, names only.
-No config values are added to diagnostics and no configuration or trust behavior changes.
+Unknown-profile guidance now quotes/escapes available names in the resolver and adds a
+sorted, unique, names-only list to doctor's separate diagnostic. Empty lists remain `(none)`;
+configuration values, precedence, trust boundaries, and built-in `recommended` semantics are
+unchanged. Help distinguishes run commands' built-in `recommended` from doctor's file-defined
+profile checks. Regressions cover resolver escaping (newline/ANSI/quotes), doctor behavior
+for both flag placements, duplicates/order, no-value output, empty/absent maps, and doctor's
+existing `recommended` behavior, alongside the original loader/trust/TUI coverage.
 
-Fail-first: the help regression failed against the old help (63 other tests passed).
-Focused suite: 64 passed. Mutants exposing config values, removing name deduplication,
-and removing the empty-list marker each failed with exit 1 and were restored.
-Local build, typecheck, and full tests exited 0: 252 files, 3,840 tests passed,
-four existing skips. Tests used a clean command-local TMPDIR to satisfy fixture preflight.
-Builder AgentRig session: `023c3a5d`. Independent review and exact-head CI remain
-parent-owned handoff checks; this entry does not claim their completion.
+Review repair verification (session `69654553`, parent builder `023c3a5d`): added tests failed
+first (10 failures); five restored mutants (raw resolver/doctor names, duplicate doctor names,
+value leakage, omitted doctor guidance) each failed. Restored focused run passed 141 tests.
+`pnpm build`, `TMPDIR=/home/amit/agentrig-fix306-tmp pnpm test` (252 files, 3,846 passed,
+4 skipped), and `pnpm typecheck` each exited 0. PR #306 remains unmerged pending parent
+independent re-review and exact-head CI verification; no roadmap row advanced.
 
 ## Unattended workflow — implemented, delivery PR #305
 
