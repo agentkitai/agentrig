@@ -251,12 +251,13 @@ describe("argv parsing", () => {
     }
   });
 
-  it("dual registration is confined to --profile — no other flag moved to the root", () => {
+  it("root flags are limited to --version and deliberately dual-registered --profile", () => {
     // Every root option is scanned out of argv anywhere it appears, swallowing the same flag
     // from subcommands (the shipped regression this file exists for). --profile accepts that
-    // deliberately, with optsWithGlobals recovery; anything else appearing here is a regression.
+    // deliberately, with optsWithGlobals recovery. --version exits without action dispatch;
+    // no other command flag belongs here.
     const rootFlags = buildProgram().options.map((o) => o.long);
-    expect(rootFlags).toEqual(["--profile"]);
+    expect(rootFlags).toEqual(["--version", "--profile"]);
   });
 
   it("bare agentrig reaches the TUI", async () => {

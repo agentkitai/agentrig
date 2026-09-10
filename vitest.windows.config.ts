@@ -73,6 +73,7 @@ export const windowsCoverage = [
   "packages/cli/test/post-edit-diagnostics.test.ts",
   "packages/cli/test/procedure-candidates.test.ts",
   "packages/cli/test/program.test.ts",
+  "packages/cli/test/version.test.ts",
   "packages/cli/test/prompt-composer.test.ts",
   "packages/cli/test/prompt-history-startup.test.ts",
   "packages/cli/test/prompt-history.test.ts",
