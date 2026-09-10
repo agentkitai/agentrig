@@ -36,6 +36,7 @@ source labels remain intact. Interactive sessions keep R13c's fresh-consent guar
 | Sandbox | Denied effects return refusal, no escape dialog | No automatic unsandboxed retry |
 | MCP | Changed pinned definitions refused without a dialog | Definition pinning and startup policy |
 | Questions | No human callback; configured noninteractive policy only | No fabricated answer or task success when required information is missing |
+| Supervisor | Omit human escalation; keep automated guidance/replanning and configured controls | No fake human answer or disabling supervision |
 | Diagnostics | Trusted installed TypeScript entrypoint preferred over PATH | Ordinary exec/sandbox checks, honest unavailable/incomplete results |
 | Memory | Ordinary authorized tool dispatch, existing bounded maintenance | No implicit grants or false success for failed bookkeeping |
 | Review/delivery | Reuse explicit upfront authorization for matching task | Required independent reviews, tests, exact-head and post-merge CI, revocation |

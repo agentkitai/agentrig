@@ -145,7 +145,8 @@ Explicit denies still win. Sandbox escape, changed MCP definitions and unresolve
 permissions are refused without opening a human dialog. Untrusted project config
 is skipped, not automatically trusted. Required missing information fails honestly
 unless a separately configured noninteractive answer policy supplies it; optional
-questions should not interrupt work. Explicit checkpoint mode retains its strict
+questions should not interrupt work. Supervisor human escalation is omitted;
+automated guidance/replanning and configured controls remain. Explicit checkpoint mode retains its strict
 guards; normal sessions leave it off. Scoped task/merge authorization is separate
 from tool permissions: shipping skills reuse explicit upfront authorization for
 the matching task, never infer it from YOLO or green CI.
