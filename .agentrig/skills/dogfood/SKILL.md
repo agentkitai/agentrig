@@ -5,6 +5,9 @@ description: Build and verify one change - fresh branch, green trio, PR; childre
 
 # Dogfood flow — how a change ships in this repository
 
+Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md) before acting. Its shared
+CI scheduling, finding disposition, material-delta and convergence rules govern this flow.
+
 Follow every step, in order. The steps encode failures that already happened once; skipping one
 tends to reproduce the failure that created it.
 
@@ -97,6 +100,9 @@ the reasoning), `## Deviations` (every approved contract change with its arbiter
 session id, or "none"), verification (test count, what the new tests pin, which mutants were
 killed), and known caveats. If the implementation diverged from the issue, say where and why.
 
+Children return immediately after push/PR with current CI state, including pending; do not
+wait for hosted CI. Standalone authors start §8 while CI runs and join the gates at landing.
+
 ## 8. Two external reviews, in parallel, as background jobs
 
 **Under `ship` or `topic`, skip this section entirely** — as a builder, a continuation builder,
@@ -142,38 +148,20 @@ builder's model; a child running the pair too would double every pass for no ext
 task text says when you are a child. Standalone dogfood keeps both reviews because nothing else
 reviews it.
 
-Staleness, bounded: if you push more commits after a review ran, the review is stale for the
-**delta only** — re-review the diff since the last reviewed commit, never the whole branch again,
-and never a fresh full dual review per commit. A fix-only commit that addresses review findings
-is verified by its fail-first regression tests, not by another review round. Cap the cycle at
-**one delta re-review** after the findings round — ONE reviewer over the delta, never a fresh dual
-round. **The cap bounds review rounds, not fixes**: whatever that delta reviewer finds is never
-re-reviewed by a second agent — §9's "fix everything" applies to the findings round only. A LOW
-with a concrete fix may still be fixed after the delta round when the fix carries a fail-first
-test and a killed mutant: commit it separately, label it in the PR body as
-**post-delta, self-verified, not re-reviewed**, and let the human see that label at merge. Anything the delta
-reviewer finds that you do not fix — a MEDIUM or HIGH (which needs eyes a self-check cannot
-give), or a LOW you judge inherent — becomes **one GitHub issue per finding** via
-`gh issue create` (title `[review residual] <one line>`, label `review-residual`, body: severity,
-file:line, scenario, proposed fix, PR number, head SHA, reviewer session id), listed by number
-under `## Residuals` in the PR body. A finding that lives only in a PR body is a finding nobody
-will act on. Under `topic` the loop in that skill applies instead. Per-commit full-review loops have burned
-hours of budget on nits without converging: the #82 run spent two hours on a skill file because
-"fix everything" and "one delta round" were read as compatible; PR #90 is the shape this rule
-describes — three LOWs fixed post-delta with tests, one inherent LOW recorded.
+## 9. Disposition findings and repair blockers
 
-## 9. Fix everything both reviews found
+Follow shipping policy §§2–3 for all standalone and child flows. Distinguish verified defects
+from optional suggestions: the latter are advisory, not a new acceptance criterion or repair
+round. Record advisory followups at the end of the roadmap when useful. Do not relabel a real LOW defect
+as advisory. Record every finding's disposition and evidence in the PR body.
 
-- Distinguish verified defects from optional suggestions. A preference or nice-to-have with no
-  concrete failure against the task contract is advisory, not a new acceptance criterion or repair
-  round. Record advisory followups at the end of the roadmap when useful; do not manufacture an
-  issue for every suggestion. This does not downgrade an actual LOW defect or waive any finding.
-- Fix majors AND minors, each with a fail-first regression test — reuse the reviewer's exact
-  mutant as the fail-first check where one was given.
-- A finding you believe is wrong is rebutted in the PR body with the reason, never silently
-  skipped. A finding you accept but do not fix in this PR is an issue (§8's `review-residual`
-  format), never a paragraph. Re-run the full green trio, push, and update the PR body so it
-  describes the final state (a body that describes the pre-review code is stale documentation).
+Batch blocking fixes with fail-first proof and meaningful mutations, re-run the full green trio,
+push, and report OLD/NEW immediately. Do not add deferred polish to the batch. The conductor (or
+standalone author) classifies the whole delta: ONE independent focused review for material
+changes, self-verified evidence for mechanical changes. No per-commit full/dual review loop.
+Carry the initial pair and subsequent delta evidence through the current head. At most three
+repair rounds; unresolved blockers halt, never become landable just by filing issues.
+Deferred non-blocking defects require issues; advisory suggestions do not.
 
 ## 10. Handoff or authorized landing
 
