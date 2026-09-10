@@ -74,6 +74,7 @@ export interface PendingEscalation {
 
 export type TuiActivity =
   | { kind: "thinking"; startedAt: number }
+  | { kind: "maintenance"; startedAt: number }
   | { kind: "tool"; id: string; name: string; startedAt: number; detail?: string };
 
 /** A subagent this session spawned, as its own log recorded it: id, label, and how it ended. */
@@ -1442,6 +1443,10 @@ export class TuiController {
   }
 
   private trackActivity(e: HarnessEvent): void {
+    if (e.type === "session.finishing") {
+      this.set({ activity: { kind: "maintenance", startedAt: e.ts } });
+      return;
+    }
     if (e.type === "model.request") {
       this.set({ activity: { kind: "thinking", startedAt: e.ts } });
       return;

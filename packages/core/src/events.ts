@@ -315,6 +315,8 @@ export const EventPayload = z.discriminatedUnion("type", [
     /** Cumulative completed turns, additive so pre-R1.5c logs remain readable. */
     turns: z.number().int().nonnegative().optional(),
   }),
+  /** Runtime-only: model work has stopped; owned maintenance/cleanup is not yet settled. */
+  z.object({ type: z.literal("session.finishing"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
   z.object({ type: z.literal("session.end"), reason: z.enum(["done", "aborted", "error", "budget"]) }),
   /** Trusted evaluation coordinator receipt, not tool/observer-emittable or a model grade. */
   z.object({ type: z.literal("eval.result"), task: z.string().min(1).max(64),

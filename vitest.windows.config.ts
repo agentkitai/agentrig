@@ -95,6 +95,8 @@ export const windowsCoverage = [
   "packages/cli/test/transcript-diff.test.ts",
   "packages/cli/test/tui-readiness.test.ts",
   "packages/cli/test/tui-status.test.ts",
+  "packages/cli/test/session-finishing.test.ts",
+  "packages/cli/test/adaptive-delegation.test.ts",
   "packages/cli/test/tui-settings.test.ts",
   "packages/cli/test/tui-settings-ui.test.ts",
   "packages/cli/test/tui-settings-startup.test.ts",

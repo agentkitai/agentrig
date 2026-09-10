@@ -1219,6 +1219,7 @@ function runSession(config: AgentConfig, task: string, opts: RunOptions, selecti
       // It runs BEFORE `session.end` is written, so a hook can still append to the log; `ended`
       // is not yet set for the same reason. Failures are reported, never fatal: a session that
       // finished its work has finished it, whatever the ingest does afterwards.
+      await emit({ type: "session.finishing", reason });
       await hook("session_end", {
         sessionId: id,
         cwd,

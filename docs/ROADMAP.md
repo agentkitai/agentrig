@@ -1,5 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+## Current work — ordinary-session correction
+
+User-approved follow-through from real query `b87bf90b`: direct-answer delegation
+guidance without startup modes, bounded/deferred automatic ingestion, visible
+maintenance phase, and explicit safe checkpoint recovery (#295).
+[Contract and verification](plans/ordinary-session-flow.md). One corrective PR;
+the completed R17g sweep below is not reopened or expanded into nested milestones.
+
 ## Current checkpoint — R17g delivered; real-task validation incomplete
 
 Roadmap work has resumed under the user's latest authorization. R17e is complete: PR #289 merged

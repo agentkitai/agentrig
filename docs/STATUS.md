@@ -1,5 +1,15 @@
 # Status
 
+## In progress — ordinary-session flow (2026-09-10)
+
+The user authorized handling unnecessary delegation, expensive post-answer ingest,
+unclear running status and retained checkpoint recovery after session `b87bf90b`.
+[Bounded corrective contract](plans/ordinary-session-flow.md). One integrated PR;
+independent worktrees for memory policy, delegation guidance and recovery, with
+root integration/status. Builder: Codex/operator outside AgentRig; #295 remains
+unresolved until its recovery checks and actual safe recovery are verified.
+The historical R17g delivery below remains complete; no feature-band expansion.
+
 ## Current — delivery complete; bounded real-task validation (2026-09-10)
 
 All four R17g PRs #291–#294 are merged. Final main `c04763765d59e3addb180df745f08b8bfc6802b4`
