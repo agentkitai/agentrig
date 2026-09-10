@@ -17,6 +17,15 @@ This is CI recovery for the merged report, not another query-prompt experiment o
 roadmap band. Exact-head reviews/CI and post-merge receipts go on the repair PR as
 completed; no additional blind rerun loop.
 
+The first repair-head Windows run passed those cases but exposed another default
+five-second timeout in manual compaction and a conservation fixture's lock wait
+exhaustion. The Windows lane now uses two file workers and a 30-second default
+integration budget, preserving explicit test overrides and its complete include
+list. Only the conservation worker opts into 20-second store/ingest/pin lock waits;
+production defaults, ownership checks and two-process overlap remain unchanged.
+This addresses the repeated runner-budget pattern without serializing the actual
+concurrent-writer test or adding another round of per-case deadline exceptions.
+
 ## Bounded ordinary-query evaluation — complete, report-only (2026-09-10)
 
 Six read-only probes: five correct supported answers, one budget-limited lookup;

@@ -3,10 +3,13 @@ import { FileMemoryStore, addPin, ingestSession } from "../../dist/index.js";
 import { readFile, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const [root, logPath, name, mode] = process.argv.slice(2);
+// This fixture checks concurrent conservation/ownership, not the production 5s wait default.
+// Keep its wait bounded below the parent test's 30s deadline on loaded Windows runners.
+const lockTimeoutMs = 20_000;
 process.send({ ready: true });
 process.once("message", async () => {
   try {
-    const store = new FileMemoryStore({ root });
+    const store = new FileMemoryStore({ root, lockTimeoutMs });
     const canonicalRoot = await realpath(root);
     let calls = 0; let skipped = 0;
     // Conservation alone can pass by lucky scheduling. Also prove that each process owns
@@ -39,10 +42,10 @@ process.once("message", async () => {
             facts: [{ pageType: "concept", slug: "shared", tag: "observed", text }] }) };
           yield { type: "stop", reason: "end_turn" };
         } };
-      const result = await ingestSession({ store, provider, sessionId, logPath });
+      const result = await ingestSession({ store, provider, sessionId, logPath, lockTimeoutMs });
       if (result.skipped) { skipped++; continue; }
       await addPin(root, { page: "concepts/shared.md", kind: "addition", claim: text, anchor: "",
-        provenance: "human", created: "2026-09-05", status: "active" });
+        provenance: "human", created: "2026-09-05", status: "active" }, { timeoutMs: lockTimeoutMs });
     }
     process.send({ done: true, calls, skipped });
   } catch (error) { process.send({ error: String(error) }); }
