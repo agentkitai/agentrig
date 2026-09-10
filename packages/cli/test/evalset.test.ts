@@ -247,7 +247,7 @@ describe("E1 workspace and outcome mechanics", () => {
     const result = spawnSync(process.execPath, [checker, receiptPath], { encoding: "utf8", timeout: 30_000 });
     expect(result.status).toBe(2);
     expect(JSON.parse(result.stdout)).toMatchObject({ behavior: "PASS", regression: "PASS", scope: "PASS", manual: "PENDING", outcome: "BLOCKED" });
-  });
+  }, 30_000); // Real Git/checker startup is not a five-second latency contract on Windows.
 
   it("records reported worker signals as BLOCKED, but ordinary numeric exits as FAIL", async () => {
     const path = await external();

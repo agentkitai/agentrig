@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import base from "../../../vitest.config.js";
-import windows from "../../../vitest.windows.config.js";
+import windows, { windowsCoverage } from "../../../vitest.windows.config.js";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const vitestBin = fileURLToPath(new URL("../../../node_modules/vitest/vitest.mjs", import.meta.url));
@@ -33,4 +33,12 @@ it.each(["0", "1"])("discovers a repository test when vitest runs from the CLI w
 it("pins the repository root in the shared config and inherits it into the Windows lane", () => {
   expect(base.root).toBe(resolve(repository));
   expect(windows.root).toBe(base.root);
+});
+
+it("bounds Windows file parallelism and integration time without changing coverage or shared defaults", () => {
+  expect(windows.test!.maxWorkers).toBe(2);
+  expect(windows.test!.testTimeout).toBe(30_000);
+  expect(windows.test!.include).toEqual(windowsCoverage);
+  expect(base.test!.maxWorkers).toBeUndefined();
+  expect(base.test!.testTimeout).toBeUndefined();
 });

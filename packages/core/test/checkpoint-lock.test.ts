@@ -4,12 +4,60 @@ import { mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } fr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it as test } from "vitest";
 import { Checkpointer, createAgent, inspectCheckpointLock, recoverCheckpointLock, RulePolicy, SessionStore, writeFileTool,
   type ModelProvider } from "@agentkitai/agentrig-core";
 
 const exec = promisify(execFile); const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const pending = new Set<Promise<void>>();
+// Real Git/session integrations need the same bounded budget as checkpointer.test.ts.
+// Vitest timing out does not cancel the async body: retain it for teardown to join.
+function it(name: string, body: () => Promise<void>) {
+  test(name, () => {
+    const work = body(); pending.add(work);
+    void work.then(() => pending.delete(work), () => pending.delete(work));
+    return work;
+  }, 30_000);
+}
+async function joinBeforeCleanup(work: readonly Promise<unknown>[], cleanup: () => Promise<void>) {
+  await Promise.allSettled(work);
+  await cleanup();
+}
+afterEach(async () => {
+  await joinBeforeCleanup([...pending], async () => {
+    for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  });
+}, 30_000);
+
+it("teardown joins an outstanding fixture process before deleting its working directory", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-checkpoint-lock-"))); roots.push(root);
+  const child = exec(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume(); process.stdin.on('end', () => require('node:fs').writeFileSync('joined', 'yes'));"], { cwd: root, timeout: 20_000 });
+  let exited = false;
+  const joined = child.then(() => { exited = true; });
+  let cleaned = false;
+  const cleanup = joinBeforeCleanup([joined], async () => {
+    expect(exited).toBe(true);
+    expect(await readFile(join(root, "joined"), "utf8")).toBe("yes");
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    cleaned = true;
+  });
+  // Observe rejection now as well as in finally, including under the no-join mutant.
+  void cleanup.catch(() => {});
+  try {
+    await new Promise<void>((resolve, reject) => {
+      child.child.stdout!.once("data", () => resolve());
+      child.child.once("error", reject);
+      child.child.once("close", () => reject(new Error("fixture exited before readiness")));
+    });
+    expect(cleaned).toBe(false);
+  } finally {
+    child.child.stdin!.end();
+    await joined;
+    await cleanup;
+  }
+  expect(cleaned).toBe(true);
+  await expect(realpath(root)).rejects.toMatchObject({ code: "ENOENT" });
+});
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-checkpoint-lock-"))); roots.push(root);
   await exec("git", ["init", "-q"], { cwd: root });
@@ -77,7 +125,7 @@ it("a joined exited owner can be recovered without deleting metadata and the nex
   const recovered = await recoverCheckpointLock(f.root, { expectedToken: seen.token!, confirmQuiescent: true });
   expect(await readFile(join(recovered.preservedAt, "owner.json"))).toEqual(bytes);
   await editAndSeal(f.root);
-}, 15_000);
+});
 
 it("changed directory identity, cancellation and unknown contents never become recovery authority", async () => {
   const f = await fixture(); await mkdir(f.path); const seen = await inspectCheckpointLock(f.root);

@@ -12,6 +12,14 @@ pnpm exec vitest run --config vitest.windows.config.ts   # the Windows CI includ
 pnpm exec vitest run --config vitest.web.config.ts       # the Chromium lane
 ```
 
+The Windows include-list lane uses two file workers and a 30-second default test
+budget for real-process/filesystem integrations. Explicit per-test deadlines still
+apply; shared Linux/macOS defaults and production operation deadlines do not move.
+The real-process memory-conservation fixture opts into bounded 20-second lock
+waits rather than testing the production five-second default under unrelated suite
+load. Both writer processes still overlap and must demonstrate actual lock ownership.
+Neither change skips assertions or replaces the separately measured feel budgets.
+
 `vitest.config.ts` pins `root` to its own directory, so the repository-relative `include` resolves
 the same way from anywhere. A workspace-local run works without `--root`:
 

@@ -1,5 +1,31 @@
 # Status
 
+## Windows integration-test lifecycle repair — implemented
+
+Post-merge CI for the report-only PR #301 failed on two different five-second
+integration deadlines: evaluator X4 on attempt 1, checkpoint-lock recovery on
+the single diagnostic rerun. The latter also removed a fixture while async work
+was still active (`EBUSY`). Both failures remain recorded in
+[CI 34467603344](https://github.com/agentkitai/agentrig/actions/runs/34467603344).
+The repair gives these real-Git integration tests bounded 30-second test budgets
+and joins checkpoint test bodies before fixture deletion. A real-process barrier
+regression fails without the join. Existing outcome/security assertions and all
+production deadlines remain unchanged. The X4 delay control fails at five seconds
+and passes at 30; the temporary delay is not shipped.
+Builder: Codex/operator with helper `/root/eval_quality`, outside AgentRig.
+This is CI recovery for the merged report, not another query-prompt experiment or
+roadmap band. Exact-head reviews/CI and post-merge receipts go on the repair PR as
+completed; no additional blind rerun loop.
+
+The first repair-head Windows run passed those cases but exposed another default
+five-second timeout in manual compaction and a conservation fixture's lock wait
+exhaustion. The Windows lane now uses two file workers and a 30-second default
+integration budget, preserving explicit test overrides and its complete include
+list. Only the conservation worker opts into 20-second store/ingest/pin lock waits;
+production defaults, ownership checks and two-process overlap remain unchanged.
+This addresses the repeated runner-budget pattern without serializing the actual
+concurrent-writer test or adding another round of per-case deadline exceptions.
+
 ## Bounded ordinary-query evaluation — complete, report-only (2026-09-10)
 
 Six read-only probes: five correct supported answers, one budget-limited lookup;
