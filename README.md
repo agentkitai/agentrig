@@ -218,8 +218,9 @@ command failures stay ordinary tool failures, even if they print “Read-only fi
 only independently established broker/policy/launcher refusals trigger sandbox-denial consent.
 See [H7b](docs/plans/H7b.md) for this conservative evidence boundary.
 Built-in file writes and shell launches use Docker on Linux or Seatbelt on macOS. Unsupported
-tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval, even with
-`--yolo`; headless runs deny that escalation. Host hooks, including explicit `"ingestOnEnd": true` and
+tools (including memory writes and network-backed memory searches) require explicit outside-sandbox approval.
+Headless runs without an approval handler and explicit `--yolo`/skip-permissions runs deny
+that escalation without prompting; YOLO never silently escapes the sandbox. Host hooks, including explicit `"ingestOnEnd": true` and
 `--dream-on-end`, and stdio MCP startup are refused with an enforcing sandbox selected. Remote
 MCP uses trusted host HTTP, not OS-contained execution, and requires explicit `--sandbox-network`
 as well as network permission. Use

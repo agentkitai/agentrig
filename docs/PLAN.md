@@ -888,6 +888,9 @@ R15a adds the private-runtime `ask_user` builtin and protected question events.
 TUI and explicitly negotiated ACP clients answer through a bounded clarification
 queue, separate from permissions and supervisor steering. Headless defaults fail;
 explicit first-option/literal-file policies remain externally sourced automation.
+Explicit unattended mode suppresses the human callback; the separate trusted
+`onUnattendedQuestion` seam preserves configured noninteractive answers, rejects
+human-labelled replies, and otherwise fails required questions promptly.
 Answers never mint grants or clear external-input restrictions. See
 [questions](QUESTIONS.md) and [R15a](plans/R15a.md) for bounds and lifecycle controls.
 

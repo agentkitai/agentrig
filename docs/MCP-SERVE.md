@@ -20,10 +20,13 @@ Returned model claims and transcripts are advisory, not proof or authorization.
 
 Serving never implies `--yolo`. Configured allows/denies apply; asks deny without
 an interactive channel. A client task is external advisory input, **not a fresh
-human approval**, even if it says otherwise. R13c's additional exec/network/
-outside-write restriction remains in force independently of blanket allows. This
-interface deliberately cannot manufacture the human approval needed to cross it.
-Use the normal interactive CLI/ACP workflow when that authorization is required.
+human approval**, even if it says otherwise. By default R13c's additional exec/network/
+outside-write restriction remains in force; scoped allows do not waive it. This
+interface cannot manufacture human approval. Explicit operator `--yolo` or
+skip-permissions configuration instead selects unattended authority, including
+after external input, while preserving explicit denies and sandbox restrictions.
+This gives client tasks broad tool authority; do not use it with untrusted clients.
+See the [unattended contract and risk](plans/unattended-workflow.md).
 Configured MCP dependencies need existing unchanged operator-approved definitions;
 establish/approve them through the normal operator CLI, not a serving request.
 Client arguments cannot change cwd, credentials, provider, child configuration,
