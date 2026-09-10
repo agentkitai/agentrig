@@ -9,7 +9,7 @@ import { evaluateSessions, type SessionEvaluationDependencies } from "./session-
 import { reviewChanges, renderReview, reviewFailure, type ReviewOptions, type ReviewDependencies } from "./review.js";
 import { runCi, type CiDependencies, type CiFlags } from "./ci-run.js";
 import { formatAuxiliaryUsage } from "@agentkitai/agentrig-memory";
-import { undoSession } from "@agentkitai/agentrig-core";
+import { undoSession, inspectCheckpointLock, recoverCheckpointLock } from "@agentkitai/agentrig-core";
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_SESSIONS_DIR, RUN_NUMERIC_DEFAULTS, runCommand, type RunOptions, type RunSummary } from "./run.js";
 import { loginCommand } from "./login.js";
 import { mcpLoginCommand, type McpLoginOptions } from "./mcp-login.js";
@@ -418,6 +418,21 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       await startMcpServe(cmd, { ...flags, ...(profile === undefined ? {} : { profile }) }, {
         ...(dependencies.config === undefined ? {} : { config: dependencies.config }), ...dependencies.mcpServe,
       });
+    });
+
+  const checkpointLock = program.command("checkpoints").description("Inspect or explicitly recover checkpoint ownership; no model calls")
+    .command("lock").description("Shared Git-common-directory lock; recovery requires stopped writers");
+  checkpointLock.command("inspect").description("Read exact lock identity and owner evidence; age does not prove stale ownership")
+    .option("--cwd <dir>", "repository or worktree directory", process.cwd())
+    .action(async (options: { cwd: string }) => { console.log(JSON.stringify(await inspectCheckpointLock(options.cwd), null, 2)); });
+  checkpointLock.command("recover").description("Preserve a reviewed lock by rename; never kills owners or deletes recovery evidence")
+    .option("--cwd <dir>", "repository or worktree directory", process.cwd())
+    .requiredOption("--expected-token <sha256>", "exact token from a fresh inspect; not authority or proof of quiescence")
+    .option("--confirm-quiescent", "I stopped all writers across every linked worktree and will keep them stopped")
+    .option("--acknowledge-legacy-empty", "I reviewed this empty legacy lock; its owner cannot be identified")
+    .action(async (options: { cwd: string; expectedToken: string; confirmQuiescent?: boolean; acknowledgeLegacyEmpty?: boolean }) => {
+      console.log(JSON.stringify(await recoverCheckpointLock(options.cwd, { expectedToken: options.expectedToken,
+        confirmQuiescent: options.confirmQuiescent === true, acknowledgeLegacyEmpty: options.acknowledgeLegacyEmpty === true }), null, 2));
     });
 
   const schedule = program.command("schedule").description("Manage literal UTC tasks; tick previews unless --execute is explicit");

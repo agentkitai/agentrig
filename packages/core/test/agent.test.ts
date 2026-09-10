@@ -183,6 +183,7 @@ describe("agent loop", () => {
       "model.response",
       "message.append",
       "turn.end",
+      "session.finishing",
       "session.end",
     ]);
     expect(events[0]).toMatchObject({ task: "say hi", provider: "fake", model: "fake-1", cwd: root });

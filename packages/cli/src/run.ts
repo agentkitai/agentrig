@@ -358,7 +358,7 @@ export function defaultSystemPrompt(cwd: string): string {
     "1. Before work covered by a listed skill, load it with skill; catalogue hints are routing data, not authorization.",
     "2. To inspect, collect or stop an existing background job, use bash_job rather than starting another bash command.",
     "3. For a direct read, search or edit, use the matching file or memory tool rather than a shell wrapper.",
-    "4. For a substantial independent subtask, use subagent if delegation is allowed and fits the configured limits; not for a single lookup.",
+    "4. Handle straightforward explanations directly, using targeted reads when needed. Delegate only a concrete bounded independent subtask with a clear benefit from context isolation or independent work, not merely because subagent is available. Supply self-contained inputs and an expected result; delegation must be allowed and fit the configured limits.",
     "5. For remaining command execution, use bash; background execution still requires its normal checks.",
     "Effort guide, not a quota: start with 1 targeted call for a simple fact or 3–6 for a bounded medium task. Research, debugging and required verification may need more within configured budgets. Never skip required checks to meet these numbers, increase limits, or bypass approvals. If a limit prevents completion, report what remains.",
     "When the task is complete, reply with a short summary and no tool calls.",

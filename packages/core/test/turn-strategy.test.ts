@@ -46,6 +46,8 @@ async function scenario(kind: Scenario, overrides: Partial<AgentConfig> = {}) {
 }
 
 // Captured before extraction on main 063cac6. Full serialized traces, not selected fields.
+// Ordinary-session UX adds the runtime session.finishing boundary; goldens retain it and
+// its sequence shifts explicitly rather than filtering new lifecycle events out of comparisons.
 it.each<Scenario>(["normal", "between-call abort", "last-call abort", "truncated"])("preserves pre-extraction %s bytes", async kind => {
   const result = await scenario(kind);
   expect(JSON.stringify(result)).toMatchSnapshot();

@@ -45,7 +45,16 @@ normally.
   Existing outside-repository warning/no-op and ownership refusals
   remain; no auto-init or relaxed restore checks.
 - **Session-end memory ingest**: `ingestOnEnd: true`, using existing `.agentrig`
-  memory and the configured ingest role. This can make a separately accounted
+  memory and the configured ingest role. Automatic capture first performs a bounded,
+  model-free latest-run eligibility check. Successful read-only explanation runs
+  defer visibly; useful conversational learning may still exist, and the raw log
+  remains available to `agentrig memory ingest <session-id>`. Recorded non-read or
+  unknown dispatched work, failed tool results, file changes and explicit attempts
+  qualify; this is a spending heuristic, not execution authority or semantic proof.
+  Complete evidence must fit the capture budget; oversized/incomplete scans defer
+  rather than silently summarize a prefix. Automatic defaults are 30s total, 15s per
+  call and 4 calls; explicit ingest limits override. Manual ingest and SDK hook
+  defaults are unchanged. Qualifying automatic capture can make a separately accounted
   model call. Failure is reported without changing the successful main task;
   an unavailable provider is not a successful ingest.
 - **Supervisor heuristics**: `supervise: true`. LLM review and automatic abort

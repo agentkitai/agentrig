@@ -176,6 +176,7 @@ interface is where it plugs in.
 ```ts
 type HarnessEvent =
   | { type: 'session.start'; id: string; task: string; cwd: string; provider: string; ts: number }
+  | { type: 'session.finishing'; reason: 'done' | 'aborted' | 'error' | 'budget'; ts: number } // runtime-only: model work settled, session_end maintenance still pending
   | { type: 'session.end'; reason: 'done' | 'aborted' | 'error' | 'budget'; ts: number }
   | { type: 'run.scheduled'; entryId: string; minute: number; source?: 'heartbeat' }
   | { type: 'turn.start'; n: number } | { type: 'turn.end'; n: number }
@@ -420,6 +421,13 @@ Global is a **separate wiki**, not a label on project pages. Teams running the p
 ### 3.2 Operations
 
 **Ingest** — triggered by the `session_end` hook, or `agentrig memory ingest <path>` for docs. Plan → reserve → generate → integrate:
+
+Ordinary-session correction: CLI automatic session-end capture now uses a bounded
+latest-run spending heuristic and 30s/15s-per-call/4-call defaults. Successful
+read-only queries and captures whose complete evidence cannot fit defer visibly,
+retaining raw logs for explicit manual ingest. This is not a claim that those
+conversations have no durable knowledge. Manual ingest and SDK hook defaults remain
+unchanged; explicit limits override. See [contract](plans/ordinary-session-flow.md).
 
 1. Read the source under a *coverage plan*: bounded spans, each either inspected or explicitly closed as "nothing durable here", so a long session can't silently lose its middle when context runs out.
 2. Propose page targets (create vs. update). Reserve them in `index.md` as `status: planned` placeholders using an atomic conditional write, with the LLM call *outside* any lock. Two concurrent sessions then converge on one `auth-module` page instead of forking `auth` vs `auth-module`.

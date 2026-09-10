@@ -53,11 +53,13 @@ export function statusLine(
     if (state.model !== null) parts.push(safe(state.model));
     parts.push(safe(state.sessionId ?? "no session"));
   }
-  parts.push(state.status);
+  parts.push(state.status === "running" && state.activity?.kind === "maintenance" ? "finishing" : state.status);
   if (state.activity !== null) {
     const elapsed = Math.max(0, Math.floor((now - state.activity.startedAt) / 1_000));
     if (state.activity.kind === "thinking") {
       parts.push(`thinking ${elapsed}s`);
+    } else if (state.activity.kind === "maintenance") {
+      parts.push(`session maintenance ${elapsed}s`);
     } else {
       const detail = state.activity.detail === undefined ? "" : ` ${state.activity.detail}`;
       parts.push(`${state.activity.name}${detail} ${elapsed}s`);

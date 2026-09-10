@@ -9,6 +9,7 @@ import { DreamLimitsSchema, lastDreamAt, runDream } from "./dream/dream.js";
 import { findingCount } from "./dream/report.js";
 import type { MemoryBackend } from "./backend.js";
 import type { ScanLimits } from "./scan.js";
+import { automaticIngestDecision, AUTOMATIC_INGEST_LIMITS } from "./automatic-ingest.js";
 
 /**
  * The `session_end` integrations PLAN §3.2 and §3.7 both specify and which M3 and M5 each left
@@ -35,18 +36,21 @@ export interface SessionEndIngestOptions {
   onSettled?: (report: AuxiliaryReport | undefined) => void;
   onBackendError?: (operation: string, error: Error) => void;
   limits?: Partial<IngestLimits>;
+  /** Opt-in spend heuristic; default all preserves SDK capture. Manual ingest is unaffected. */
+  policy?: "all" | "automatic";
   maxSpanChars?: number;
   maxTokens?: number;
 }
 
 /** Distils the session that just ended into the wiki. */
 export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
+  const limits = opts.policy === "automatic" ? { ...AUTOMATIC_INGEST_LIMITS, ...opts.limits } : opts.limits;
   return {
     point: "session_end",
     id: "memory:ingest",
     // ingest is a multi-call distillation over a whole transcript; the default 30s is too tight
     // Outer hook timeout includes cleanup headroom; it is not the model-work budget.
-    timeoutMs: Math.min(2_147_483_647, Math.max(10 * 60_000, (opts.limits?.timeoutMs ?? 300_000) + 60_000)),
+    timeoutMs: Math.min(2_147_483_647, Math.max(opts.policy === "automatic" ? 0 : 10 * 60_000, (limits?.timeoutMs ?? 300_000) + 60_000)),
     handler: async (ctx: HookContext): Promise<HookResult> => {
       let auxiliary: AuxiliaryReport | undefined;
       try {
@@ -66,6 +70,13 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
         if (!exists) return { action: "continue" };
 
         if (ctx.signal.aborted) return { action: "continue" };
+        if (opts.policy === "automatic") {
+          const deferred = await automaticIngestDecision(logPath, limits ?? {}, ctx.signal, opts.maxSpanChars, opts.backend === undefined ? 0 : 1);
+          if (deferred !== undefined) {
+            maintenanceDiagnostic(() => opts.onDone?.(`automatic memory ingest deferred: ${deferred}; use manual memory ingest to capture this session`));
+            return { action: "continue" };
+          }
+        }
         const store = new FileMemoryStore({ root: join(opts.dir, "wiki") });
         const result = await ingestSession({
           store,
@@ -73,7 +84,7 @@ export function ingestOnSessionEnd(opts: SessionEndIngestOptions): Hook {
           sessionId: ctx.sessionId,
           logPath,
           signal: ctx.signal,
-          ...(opts.limits === undefined ? {} : { limits: opts.limits }),
+          ...(limits === undefined ? {} : { limits }),
           ...(opts.maxSpanChars === undefined ? {} : { maxSpanChars: opts.maxSpanChars }),
           ...(opts.maxTokens === undefined ? {} : { maxTokens: opts.maxTokens }),
           ...(opts.onBackendError === undefined ? {} : { onBackendError: opts.onBackendError }),

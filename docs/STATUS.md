@@ -1,5 +1,20 @@
 # Status
 
+## Ordinary-session correction — implementation complete, delivery PR #297 (2026-09-10)
+
+Implemented direct-answer delegation guidance, bounded automatic memory capture,
+visible finishing maintenance and explicit preserved-lock recovery after session
+`b87bf90b`. [Contract](plans/ordinary-session-flow.md) and [delivery PR #297](https://github.com/agentkitai/agentrig/pull/297)
+record exact-head review/CI and merge receipts. Full integration passed 3,756 tests
+with four existing skips before the final append-failure regression was added.
+Independent Claude `b1d15a82-adce-4636-b031-eb64bf8b418d` and Codex
+`01a089f4-be67-7633-aa08-3d7070956cad` passed the full review with restored mutants.
+The finishing-notice append failure was repaired with a fail-first cleanup test;
+focused repair verification and final checks are recorded on the PR.
+Builder: Codex/operator outside AgentRig. The user's real checkpoint lock remains
+untouched pending stopped-writers confirmation; #295 stays open for that recovery.
+The historical R17g delivery below remains complete; no feature-band expansion.
+
 ## Current — delivery complete; bounded real-task validation (2026-09-10)
 
 All four R17g PRs #291–#294 are merged. Final main `c04763765d59e3addb180df745f08b8bfc6802b4`

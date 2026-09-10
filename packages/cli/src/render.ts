@@ -73,6 +73,7 @@ export function renderEvent(e: HarnessEvent): string {
     case "session.fork": return `${p} parent=${e.parent} atSeq=${e.atSeq}`;
     case "session.resume": return `${p} ${e.provider}/${e.model} cwd=${e.cwd} task=${JSON.stringify(e.task)}${e.maintenance === undefined ? "" : ` maintenance=${e.maintenance}`}${e.advisoryContext === undefined ? "" : ` advisory-context=${e.advisoryContext.length}`}`;
     case "run.scheduled": return `${p} ${e.source === "heartbeat" ? "heartbeat" : `schedule=${e.entryId}`} UTC-minute=${e.minute} (advisory task)`;
+    case "session.finishing": return `${p} reason=${e.reason}; finishing session maintenance`;
     case "session.end": return `${p} reason=${e.reason}`;
     case "output.validated": return `${p} ${e.mode} ${e.attempt} valid=${e.valid} category=${e.category} schema=${e.digest}`;
     case "question.asked": return `${p} ${e.id} ${JSON.stringify(e.question.prompt)} options=${JSON.stringify(e.question.options)}`;
@@ -510,6 +511,8 @@ export function renderChatEvent(e: HarnessEvent): string | null {
       return `↻ Response truncated; continuing (${e.attempt}/${e.maxAttempts}, turn ${e.n})`;
     case "permission.decision":
       return e.source === undefined || e.d === "ask" ? null : `permission ${permissionExplanation(e)}`;
+    case "session.finishing":
+      return `${e.reason === "done" ? "Answer complete" : `Task ${e.reason}`}; finishing session maintenance (not idle yet)`;
     case "session.end":
       // "done" is already said by the summary line; anything else is why it stopped
       return e.reason === "done" ? null : `— session ${e.reason}`;
