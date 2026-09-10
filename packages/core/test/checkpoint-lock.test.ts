@@ -31,7 +31,7 @@ afterEach(async () => {
 
 it("teardown joins an outstanding fixture process before deleting its working directory", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-checkpoint-lock-"))); roots.push(root);
-  const child = exec(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume(); process.stdin.on('end', () => require('node:fs').writeFileSync('joined', 'yes'));"], { cwd: root });
+  const child = exec(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume(); process.stdin.on('end', () => require('node:fs').writeFileSync('joined', 'yes'));"], { cwd: root, timeout: 20_000 });
   let exited = false;
   const joined = child.then(() => { exited = true; });
   let cleaned = false;
