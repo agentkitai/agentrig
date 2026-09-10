@@ -1,6 +1,6 @@
 # Status
 
-## CLI package version — implemented, delivery in progress
+## CLI package version — implemented, delivery PR #304
 
 User-directed continuation on `fix/cli-version`, preserving the unfinished version
 regressions. `--version` (and Commander's `-V`) prints the installed CLI package's
@@ -19,8 +19,14 @@ Both mutants were restored. Build and typecheck passed. The initial full test ru
 was blocked by `/tmp/.git` preflight; a clean temporary directory under `/home/amit`
 passed preflight and exposed the expected root-option allowlist update. Final local
 suite passed: build/typecheck/test exit 0, 247 files and 3,791 tests passed (four
-existing skips). Independent Claude Code/Codex reviews and exact-head/post-merge
-CI receipts will be recorded on the delivery PR.
+existing skips). Independent Claude Code and Codex reviews approved the implementation;
+review limits and final-head/post-merge receipts are recorded on
+[PR #304](https://github.com/agentkitai/agentrig/pull/304). First-head Windows CI caught
+an `ERR_MODULE_NOT_FOUND` in the relocated-package fixture: linking the entire
+`node_modules` tree did not preserve dependency resolution there. The fixture now
+links Yoga's canonical package directory directly; production code and the credential-free
+subprocess environment are unchanged. This CI failure is the fail-first evidence for
+the fixture repair; the normal offline version/help test passed on that Windows run.
 
 ## Checkpoints opt-in — implemented, delivery PR #303
 

@@ -14,7 +14,11 @@ it("reads the installed package's version rather than a baked-in literal or cwd 
     const installed = join(cwd, "installed");
     await mkdir(installed);
     await cp(fileURLToPath(new URL("../dist", import.meta.url)), join(installed, "dist"), { recursive: true });
-    await symlink(fileURLToPath(new URL("../node_modules", import.meta.url)), join(installed, "node_modules"), "junction");
+    await mkdir(join(installed, "node_modules"));
+    // Link the external startup dependency's canonical directory, not node_modules:
+    // pnpm's relative links can resolve against the relocated junction on Windows.
+    const yoga = await realpath(fileURLToPath(new URL("../node_modules/yoga-layout", import.meta.url)));
+    await symlink(yoga, join(installed, "node_modules/yoga-layout"), "junction");
     await writeFile(join(installed, "package.json"), JSON.stringify({ ...manifest, version: "9.8.7-version-test.1" }));
     await writeFile(join(cwd, "package.json"), JSON.stringify({ version: "1.2.3-wrong-cwd" }));
     const result = spawnSync(process.execPath, [join(installed, "dist/index.js"), "--version"], {
