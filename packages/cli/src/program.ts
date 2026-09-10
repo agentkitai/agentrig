@@ -181,7 +181,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
    * `--` are never scanned. `enablePositionalOptions()` would remove the whole class but forbids
    * the pinned bare-launch shape `agentrig --yolo`, so it is not worth that trade.
    */
-  program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); unknown names list available profiles (names only)");
+  program.option("--profile <name>", "named config profile to overlay (may precede the subcommand); run commands also accept built-in recommended; other unknown names list available profiles (names only)");
   /** The entry points whose actions resolve config and therefore honour --profile. */
   const PROFILE_AWARE = new Set(["run", "tui", "doctor", "resume", "tick", "eval", "review", "acp", "web", "mcp-serve"]);
   program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -213,7 +213,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
 
   function withRunOptions(cmd: Command, maxTurnsDefault: string): Command {
     return withProviderOptions(cmd)
-      .option("--profile <name>", "named config profile to overlay; unknown names list available profiles (names only)")
+      .option("--profile <name>", "named config profile to overlay; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
       .option("--trust", "load project instructions and config for this run only")
       .option("--headless", "never prompt; `ask` permissions resolve to deny (also implied when stdin is not a TTY)")
       .option("--json", "emit raw event JSONL to stdout")
@@ -377,7 +377,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   withProviderOptions(program.command("review").description("One bounded advisory diff review; costs supervisor-role tokens, never runs tests"))
-    .option("--profile <name>", "named config profile; unknown names list available profiles (names only)")
+    .option("--profile <name>", "named config profile; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
     .option("--trust", "load trusted project config")
     .option("--base <ref>", "review resolved commit-to-HEAD changes (default: tracked HEAD-to-worktree)")
     .option("--pr <number>", "read a GitHub PR using gh; requires exec and net authorization")
@@ -541,7 +541,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .command("login <server>").description("Explicit OAuth login; print the validated browser URL, never invoke a model")
     .requiredOption("--mcp-config <path>", "JSON configuration containing the remote OAuth server")
     .option("--trust", "load project configuration for this invocation only")
-    .option("--profile <name>", "named configuration profile; unknown names list available profiles (names only)")
+    .option("--profile <name>", "named configuration profile; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
     .option("--allow <rule>", "network policy allow rule (repeatable)", collect, [])
     .option("--deny <rule>", "network policy deny rule (repeatable)", collect, [])
     .option("--headless", "do not prompt for network consent")
@@ -647,7 +647,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .option("-p, --provider <provider>", "provider override to diagnose")
     .option("-m, --model <model>", "model override to diagnose")
     .option("--base-url <url>", "server base URL override to diagnose (OpenAI-compatible servers; also honoured by anthropic and openai-chatgpt entries)")
-    .option("--profile <name>", "named config profile to diagnose; unknown names list available profiles (names only)")
+    .option("--profile <name>", "named config profile to diagnose; doctor checks file-defined profiles, including recommended; unknown names list available profiles (names only)")
     .option("--memory <dir>", "memory directory override")
     .option("--mcp-config <path>", "MCP config override")
     .action(async (opts: DoctorCliValues, cmd: Command) => {

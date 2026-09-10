@@ -169,7 +169,7 @@ describe("resolveConfig precedence (pure)", () => {
 
   it("rejects an unknown profile and lists the profiles that exist", () => {
     expect(() => resolveConfig({ defaults: {}, user: file({ profiles: { fast: {} } }), project: file({ profiles: { careful: {} } }), profile: "missing" })).toThrow(
-      /unknown config profile "missing"; available profiles: careful, fast/,
+      /unknown config profile "missing"; available profiles: "careful", "fast"/,
     );
   });
 
@@ -179,7 +179,13 @@ describe("resolveConfig precedence (pure)", () => {
       user: file({ system: "private-user", profiles: { zebra: { model: "private-model" }, shared: {} } }),
       project: file({ system: "private-project", profiles: { shared: { system: "private-profile" }, alpha: {} } }),
       env: { model: "private-env" }, cli: { system: "private-cli" }, profile: "typo",
-    })).toThrow(new Error('unknown config profile "typo"; available profiles: alpha, shared, zebra'));
+    })).toThrow(new Error('unknown config profile "typo"; available profiles: "alpha", "shared", "zebra"'));
+  });
+
+  it("escapes requested and available profile names as JSON strings", () => {
+    const name = 'line\n\u001b[31m"quoted"';
+    expect(() => resolveConfig({ defaults: {}, user: file({ profiles: { [name]: { system: "private" } } }), profile: name + "typo" }))
+      .toThrow(new Error(`unknown config profile ${JSON.stringify(name + "typo")}; available profiles: ${JSON.stringify(name)}`));
   });
 
   it.each([undefined, file({ profiles: {} })])("unknown profile without available names reports (none): %j", user => {
@@ -492,7 +498,12 @@ describe("both agent entry points use config", () => {
   it("profile help explains discovery without promising config values", () => {
     const check = (cmd: Command): void => {
       const profile = cmd.options.find(option => option.long === "--profile");
-      if (profile) expect(profile.description).toContain("unknown names list available profiles (names only)");
+      if (profile) {
+        expect(profile.description).toContain("unknown names list available profiles (names only)");
+        expect(profile.description).toContain(cmd.name() === "doctor"
+          ? "doctor checks file-defined profiles, including recommended"
+          : "run commands also accept built-in recommended");
+      }
       for (const child of cmd.commands) check(child);
     };
     check(buildProgram());
@@ -509,7 +520,7 @@ describe("both agent entry points use config", () => {
         "node", "agentrig", ...(leading ? ["--profile", "typo"] : []),
         "run", "test", ...(!leading ? ["--profile", "typo"] : []),
       ]);
-      expect(error.mock.calls).toEqual([['unknown config profile "typo"; available profiles: fast']]);
+      expect(error.mock.calls).toEqual([['unknown config profile "typo"; available profiles: "fast"']]);
       expect(process.exitCode).toBe(1);
       expect(run).not.toHaveBeenCalled();
     } finally {

@@ -275,7 +275,7 @@ export function resolveConfig<T extends Record<string, unknown>>(input: ResolveC
     const names = [...new Set([...Object.keys(user?.profiles ?? {}), ...Object.keys(project?.profiles ?? {})])].sort();
     if (!names.includes(profile)) {
       throw new Error(
-        `unknown config profile ${JSON.stringify(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.join(", ")}`,
+        `unknown config profile ${JSON.stringify(profile)}; available profiles: ${names.length === 0 ? "(none)" : names.map(name => JSON.stringify(name)).join(", ")}`,
       );
     }
   }
