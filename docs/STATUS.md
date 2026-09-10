@@ -14,6 +14,11 @@ found no material blockers; the stale runtime-evidence paragraph was corrected.
 Exact-head and post-merge receipts: [PR #303](https://github.com/agentkitai/agentrig/pull/303).
 The evaluator's current-default guard follows the new opt-in default; historical
 E3/R17f measurements and their recorded checkpoint-enabled profiles are untouched.
+Windows CI exposed a test-only dream cancellation race: its one-second deadline
+could expire during filesystem preparation, leaving a provider-start barrier
+unresolved. The fixture now controls the timer/monotonic clock after provider start,
+races startup against settlement, and aborts/joins before restoring timers. No
+production deadlines changed. The disabled-overall-timer mutant fails as expected.
 
 ## Windows integration-test lifecycle repair — implemented
 
