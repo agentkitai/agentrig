@@ -8,6 +8,7 @@ import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentk
 import { resolveProjectBoundary, resolveProjectTrust } from "./trust.js";
 import { NotificationMode, NotificationIdleSeconds } from "./notification-config.js";
 import { TuiSettingsSchema } from "./tui/settings.js";
+import { resolveDefaultDiagnostics } from "./diagnostic-resolution.js";
 
 // Re-exported so downstream CLI code imports the reasoning-effort type from one place.
 export type { ReasoningEffort } from "@agentkitai/agentrig-core";
@@ -376,8 +377,8 @@ export async function loadRunConfig(
     const pythonProject = await Promise.all(["ruff.toml", ".ruff.toml", "pyproject.toml"].map(async name => {
       try { await readFile(join(cwd, name), "utf8"); return true; } catch { return false; }
     }));
-    resolved.diagnostics = recommendedDefaults.diagnostics?.filter(check =>
-      check.parser === "tsc" || pythonProject.some(Boolean));
+    resolved.diagnostics = await resolveDefaultDiagnostics(recommendedDefaults.diagnostics!.filter(check =>
+      check.parser === "tsc" || pythonProject.some(Boolean)), cwd, trust.trusted ? trust.projectRoot : undefined);
   }
   let defaultHookNotice: string | undefined;
   if (recommended && resolved.sandbox !== undefined && resolved.sandbox !== "none") {
