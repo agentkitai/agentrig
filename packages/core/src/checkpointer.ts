@@ -1,11 +1,27 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, open, readlink, realpath, rm, rmdir } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readlink, realpath, rm } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
 import { assertSessionId } from "./session-store.js";
+import { acquireCheckpointLock, assertCheckpointLock, inspectLockPath, recoverLockPath, releaseCheckpointLock,
+  type CheckpointRecoveryOptions } from "./checkpoint-lock.js";
+
+async function checkpointLockPath(cwd: string, signal?: AbortSignal): Promise<string> {
+  const repo = await realpath(cwd);
+  const common = (await git(repo, ["rev-parse", "--git-common-dir"], undefined, signal)).stdout.trim();
+  return join(await realpath(resolve(repo, common)), "agentrig-checkpoint.lock");
+}
+/** Read-only operator evidence; no model/config loading or proof of quiescence. */
+export async function inspectCheckpointLock(cwd: string, signal?: AbortSignal) {
+  signal?.throwIfAborted(); return inspectLockPath(await checkpointLockPath(cwd, signal));
+}
+/** Explicit operator recovery only; callers must keep all common-directory writers stopped. */
+export async function recoverCheckpointLock(cwd: string, options: CheckpointRecoveryOptions) {
+  options.signal?.throwIfAborted(); return recoverLockPath(await checkpointLockPath(cwd, options.signal), options);
+}
 
 /** Events the built-in checkpointer may append through its deliberately narrow hook seam. */
 export type CheckpointHookEvent =
@@ -319,7 +335,7 @@ export class Checkpointer implements Hook {
   /** Every started per-session Git/verification promise that has not settled yet, including work a
    * caller abandoned. `attempts` alone only ever holds the newest turn's snapshot. */
   private readonly running = new Map<string, Set<Promise<void>>>();
-  private readonly leases = new Map<string, { path: string; repo: string; ino: number; dev: number }>();
+  private readonly leases = new Map<string, { path: string; repo: string; token: string }>();
   private readonly assertQuiescent: ((ctx: HookContext) => Promise<void>) | undefined;
   private readonly owned = new Map<string, CheckpointState>();
   private readonly uncertain = new Set<string>();
@@ -361,9 +377,7 @@ export class Checkpointer implements Hook {
     this.uncertain.delete(sessionId);
     const lease = this.leases.get(sessionId);
     if (lease !== undefined) {
-      const current = await lstat(lease.path);
-      if (!current.isDirectory() || current.ino !== lease.ino || current.dev !== lease.dev) throw new Error("checkpoint lease replaced; refusing cleanup");
-      await rmdir(lease.path); // never recursively remove contents we did not create
+      await releaseCheckpointLock(lease.path, lease.token);
       this.leases.delete(sessionId);
     }
   }
@@ -375,8 +389,7 @@ export class Checkpointer implements Hook {
     if (ctx.toolEffect === "background" || ctx.hasBackgroundWork?.()) throw new Error("checkpoint ownership uncertain: background work must stop before mutation");
     const lease = this.leases.get(ctx.sessionId);
     if (lease) {
-      const current = await lstat(lease.path);
-      if (!current.isDirectory() || current.ino !== lease.ino || current.dev !== lease.dev) throw new Error("checkpoint lease replaced");
+      await assertCheckpointLock(lease.path, lease.token);
     }
     if (this.assertQuiescent) {
       let abort: () => void = () => {};
@@ -391,17 +404,12 @@ export class Checkpointer implements Hook {
   }
 
   async lease(repo: string, ctx: HookContext): Promise<void> {
-    const common = (await git(repo, ["rev-parse", "--git-common-dir"], undefined, ctx.signal)).stdout.trim();
-    const path = join(await realpath(resolve(repo, common)), "agentrig-checkpoint.lock");
+    const path = await checkpointLockPath(repo, ctx.signal);
     const existing = this.leases.get(ctx.sessionId);
     if (existing?.path === path && existing.repo === repo) return;
     if (existing !== undefined) throw new Error("checkpoint session changed repositories");
-    try { await mkdir(path, { mode: 0o700 }); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("checkpoint ownership uncertain: another session or retained lock exists; stop writers before manual recovery");
-      throw error;
-    }
-    const stat = await lstat(path);
-    this.leases.set(ctx.sessionId, { path, repo, ino: stat.ino, dev: stat.dev });
+    const token = await acquireCheckpointLock(path, repo, ctx.sessionId);
+    this.leases.set(ctx.sessionId, { path, repo, token });
     ctx.signal.throwIfAborted();
   }
 

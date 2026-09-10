@@ -1,0 +1,30 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, expect, it, vi } from "vitest";
+import { buildProgram } from "../src/program.js";
+
+const exec = promisify(execFile); const roots: string[] = [];
+afterEach(async () => { vi.restoreAllMocks(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+it("actual CLI inspection is offline and recovery requires both explicit legacy acknowledgments", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-recovery-cli-"))); roots.push(root);
+  await exec("git", ["init", "-q"], { cwd: root });
+  const lock = join(root, ".git", "agentrig-checkpoint.lock"); await mkdir(lock);
+  await mkdir(join(root, ".agentrig")); await writeFile(join(root, ".agentrig", "config.json"), "MUST NOT LOAD INVALID PROVIDER CONFIG");
+  const output = vi.spyOn(console, "log").mockImplementation(() => {}); const fetch = vi.spyOn(globalThis, "fetch");
+  const run = vi.fn(async () => {});
+  await buildProgram({ run }).parseAsync(["checkpoints", "lock", "inspect", "--cwd", root], { from: "user" });
+  const seen = JSON.parse(String(output.mock.calls.at(-1)![0])); expect(seen).toMatchObject({ path: lock, state: "legacy-empty" });
+  const args = ["checkpoints", "lock", "recover", "--cwd", root, "--expected-token", seen.token];
+  await expect(buildProgram({ run }).parseAsync(args, { from: "user" })).rejects.toThrow("stopped-writers");
+  await expect(buildProgram({ run }).parseAsync([...args, "--confirm-quiescent"], { from: "user" })).rejects.toThrow("legacy acknowledgment");
+  await buildProgram({ run }).parseAsync([...args, "--confirm-quiescent", "--acknowledge-legacy-empty"], { from: "user" });
+  const result = JSON.parse(String(output.mock.calls.at(-1)![0])); expect(result.path).toBe(lock);
+  expect(await realpath(result.preservedAt)).toBe(result.preservedAt);
+  expect(await readFile(join(root, ".agentrig", "config.json"), "utf8")).toBe("MUST NOT LOAD INVALID PROVIDER CONFIG");
+  expect(run).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+  const binary = await exec(process.execPath, [resolve("packages/cli/dist/index.js"), "checkpoints", "lock", "inspect", "--cwd", root]);
+  expect(JSON.parse(binary.stdout)).toEqual({ path: lock, state: "missing" });
+});
