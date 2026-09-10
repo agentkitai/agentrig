@@ -38,5 +38,6 @@ it("never hides a different citation target or arbitrary link label", () => {
     "[policy.ts:12](packages/core/src/grants.ts#L12)",
     "[explanation](packages/core/src/grants.ts#L12)",
     "[grants.ts:12](https://example.test/grants.ts#L12)",
+    "[grants.ts:12](//example.test/grants.ts#L12)",
   ]) expect(renderMarkdown(source, 80, false)).toContain(" (");
 });
