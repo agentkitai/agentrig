@@ -102,20 +102,17 @@ export function markdownTable(header: string[], rows: string[][], columns: numbe
   const values = [header, ...rows].map(row => row.map(plain));
   const count = header.length;
   if (!count) return "";
-  const available = Math.max(1, Math.floor((width - (count - 1) * 3) / count));
-  if (available < 3 || count * 4 > width) {
-    return values.map(row => row.map((cell, i) => `${plain(header[i] ?? String(i + 1))}: ${cell}`).join("\n")).join("\n\n")
+  const sizes = header.map((_cell, index) => Math.max(1, ...values.map(row => stringWidth(row[index] ?? ""))));
+  // Give columns their content width. If the complete table cannot fit, let the
+  // terminal wrap labelled records instead of silently clipping ordinary cells.
+  if (sizes.reduce((sum, size) => sum + size, 0) + (count - 1) * 3 > width) {
+    return (rows.length ? rows.map(row => header.map((label, i) => `${plain(label)}: ${plain(row[i] ?? "")}`).join("\n")).join("\n\n")
+      : header.map(plain).join("\n"))
       + (omitted ? "\n[table rows/columns omitted]" : "");
   }
-  const sizes = header.map((_cell, index) => Math.max(1, Math.min(available, Math.max(...values.map(row => stringWidth(row[index] ?? ""))))));
-  const fit = (text: string, size: number) => {
-    let value = "", used = 0; const truncated = stringWidth(text) > size;
-    for (const char of text) { const next = stringWidth(char); if (used + next > size - (truncated ? 1 : 0)) break; value += char; used += next; }
-    if (truncated) { value += "…"; used++; omitted = true; }
-    return value + " ".repeat(Math.max(0, size - used));
-  };
+  const fit = (text: string, size: number) => text + " ".repeat(Math.max(0, size - stringWidth(text)));
   const lines = values.map(row => sizes.map((size, i) => fit(row[i] ?? "", size)).join(" │ "));
   lines.splice(1, 0, sizes.map(size => "─".repeat(size)).join("─┼─"));
-  if (omitted) lines.push("[table display elided; original text retained]");
+  if (omitted) lines.push("[table rows/columns omitted]");
   return lines.join("\n");
 }

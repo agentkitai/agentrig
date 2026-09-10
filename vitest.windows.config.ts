@@ -55,6 +55,7 @@ export const windowsCoverage = [
   "packages/cli/test/live-evaluation.test.ts",
   "packages/cli/test/maintenance-runtime.test.ts",
   "packages/cli/test/markdown.test.ts",
+  "packages/cli/test/readable-answer.test.ts",
   "packages/cli/test/mcp-login.test.ts",
   "packages/cli/test/mcp-pinning.test.ts",
   "packages/cli/test/mcp-remote-runtime.test.ts",

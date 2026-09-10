@@ -75,6 +75,16 @@ export function renderMarkdown(source: string, columns: number, color = process.
       case "heading": return paint("#".repeat((token as Tokens.Heading).depth) + " ", [1, 36]) + children(token as Tokens.Heading, [1, 36]) + checked("\n\n");
       case "link": {
         const link = token as Tokens.Link;
+        // Compact only a mechanically matching local citation. Never hide an
+        // arbitrary label/target mismatch, remote URL, or different line number.
+        const citation = /^([A-Za-z0-9_./-]+)#L([1-9][0-9]*)(?:-L([1-9][0-9]*))?$/.exec(link.href);
+        if (citation && !citation[1]!.startsWith("//")) {
+          const path = citation[1]!;
+          const range = citation[2]! + (citation[3] ? `–${citation[3]}` : "");
+          const label = link.text.replace(/(?<=\d)-(?=\d)/g, "–");
+          if (label === `${path}:${range}` || label === `${path.split("/").at(-1)}:${range}`)
+            return paint(`${path}:${range}`, [4]);
+        }
         return children(link, [4]) + (link.text === link.href ? "" : paint(` (${link.href})`, [90]));
       }
       case "image": { const image = token as Tokens.Image; return paint(`[image: ${image.text}] (${image.href})`, [90]); }

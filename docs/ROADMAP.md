@@ -1,5 +1,16 @@
 # AgentRig roadmap — reliability and measured benefit first
 
+## Ordinary-query improvements — authorized, in progress
+
+1. Readable answers: complete tables and nonduplicated matching file citations.
+   Implementation and regression tests added; delivery/review/CI pending.
+   [Contract](plans/readable-answers.md).
+2. Proportional planning, targeted documentation/read guidance and clearer usage:
+   separate follow-through, measured without claiming fake-provider quality gains.
+
+Direct user authorization after session `5ea07c07`; two bounded PRs, sequential
+merges, not a new roadmap hierarchy. Builder: Codex/operator outside AgentRig.
+
 ## Parallel-worktree checkpoints — implemented in PR #298
 
 User-approved correction: independent checkpoint locks/refs per worktree, including
