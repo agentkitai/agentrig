@@ -173,6 +173,20 @@ describe("resolveConfig precedence (pure)", () => {
     );
   });
 
+  it("unknown profile diagnostics list sorted unique names, never config values", () => {
+    expect(() => resolveConfig({
+      defaults: { system: "private-default" },
+      user: file({ system: "private-user", profiles: { zebra: { model: "private-model" }, shared: {} } }),
+      project: file({ system: "private-project", profiles: { shared: { system: "private-profile" }, alpha: {} } }),
+      env: { model: "private-env" }, cli: { system: "private-cli" }, profile: "typo",
+    })).toThrow(new Error('unknown config profile "typo"; available profiles: alpha, shared, zebra'));
+  });
+
+  it.each([undefined, file({ profiles: {} })])("unknown profile without available names reports (none): %j", user => {
+    expect(() => resolveConfig({ defaults: {}, user, profile: "missing" }))
+      .toThrow(new Error('unknown config profile "missing"; available profiles: (none)'));
+  });
+
   it("replaces allow/deny arrays at each layer rather than appending them", () => {
     const resolved = resolveConfig({ defaults: {}, user: file({ allow: ["read", "grep"] }), project: file({ allow: ["bash"], deny: ["rm"] }) });
     expect(resolved.allow).toEqual(["bash"]);
@@ -473,6 +487,35 @@ describe("both agent entry points use config", () => {
     await configAt(cwd, { skillDiscovery: false });
     await buildProgram(deps).parseAsync(["node", "agentrig", "run", "test", "--skill-discovery"]);
     expect(received?.skills).toContain(join(cwd, ".agentrig", "skills"));
+  });
+
+  it("profile help explains discovery without promising config values", () => {
+    const check = (cmd: Command): void => {
+      const profile = cmd.options.find(option => option.long === "--profile");
+      if (profile) expect(profile.description).toContain("unknown names list available profiles (names only)");
+      for (const child of cmd.commands) check(child);
+    };
+    check(buildProgram());
+  });
+
+  it.each([true, false])("unknown profile reaches CLI diagnostics before dispatch (leading=%s)", async leading => {
+    const { cwd, home } = await fixture();
+    await configAt(home, { system: "private-base", profiles: { fast: { model: "private-model" } } });
+    const run = vi.fn();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const previousExitCode = process.exitCode;
+    try {
+      await buildProgram({ config: { cwd, home, env: {} }, run }).parseAsync([
+        "node", "agentrig", ...(leading ? ["--profile", "typo"] : []),
+        "run", "test", ...(!leading ? ["--profile", "typo"] : []),
+      ]);
+      expect(error.mock.calls).toEqual([['unknown config profile "typo"; available profiles: fast']]);
+      expect(process.exitCode).toBe(1);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+      error.mockRestore();
+    }
   });
 
   it("honours --profile through Commander without another layer masking it", async () => {

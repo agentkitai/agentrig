@@ -1,5 +1,24 @@
 # Status
 
+Current roadmap row: user-directed unknown-profile guidance (R1b regression coverage); no roadmap row advanced; continuation order remains ROADMAP §5.
+
+## Unknown-profile guidance — implemented
+
+The resolver already reported the requested profile and sorted, deduplicated available
+profile names. This task preserves that implementation and adds exact diagnostics
+coverage for layered profiles, private config values, absent/empty profile maps, and
+root/subcommand CLI propagation (failure exit status, no run dispatch). Every existing
+`--profile` option now explains that unknown names list available profiles, names only.
+No config values are added to diagnostics and no configuration or trust behavior changes.
+
+Fail-first: the help regression failed against the old help (63 other tests passed).
+Focused suite: 64 passed. Mutants exposing config values, removing name deduplication,
+and removing the empty-list marker each failed with exit 1 and were restored.
+Local build, typecheck, and full tests exited 0: 252 files, 3,840 tests passed,
+four existing skips. Tests used a clean command-local TMPDIR to satisfy fixture preflight.
+Builder AgentRig session: `023c3a5d`. Independent review and exact-head CI remain
+parent-owned handoff checks; this entry does not claim their completion.
+
 ## Unattended workflow — implemented, delivery PR #305
 
 One user-directed correction spanning approval authority, actual child inheritance,
