@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Hook, HookContext, HookResult } from "./hooks.js";
 import { assertSessionId } from "./session-store.js";
-import { CHECKPOINT_NAMESPACE } from "./checkpoint-refs.js";
+import { worktreeCheckpointNamespace } from "./checkpoint-refs.js";
 import { acquireCheckpointLock, assertCheckpointLock, inspectLockPath, recoverLockPath, releaseCheckpointLock,
   type CheckpointRecoveryOptions } from "./checkpoint-lock.js";
 
@@ -23,6 +23,9 @@ async function hasLegacyLock(path: string): Promise<boolean> {
 }
 async function assertNoLegacyLock(path: string): Promise<void> {
   if (await hasLegacyLock(path)) throw new Error(`checkpoint ownership uncertain: legacy repository-wide lock at ${JSON.stringify(path)}; stop older AgentRig writers and inspect before explicit recovery`);
+}
+export async function checkpointNamespaceForRepo(cwd: string, signal?: AbortSignal): Promise<string> {
+  return worktreeCheckpointNamespace(dirname((await checkpointLockPaths(cwd, signal)).path));
 }
 /** Read-only operator evidence; no model/config loading or proof of quiescence. */
 export async function inspectCheckpointLock(cwd: string, signal?: AbortSignal) {
@@ -295,7 +298,7 @@ async function snapshot(ctx: HookContext, checkpointer: Checkpointer): Promise<v
   });
   if (sparse.stdout.trim() === "true") throw new Error("checkpoint does not support sparse checkouts");
   await checkpointer.lease(repo, ctx);
-  const ref = `${CHECKPOINT_NAMESPACE}/${ctx.sessionId}/${ctx.turn}`;
+  const ref = `${await checkpointNamespaceForRepo(repo, ctx.signal)}/${ctx.sessionId}/${ctx.turn}`;
   const previous = await existingCheckpoint(repo, ref, ctx.signal);
   if (previous !== undefined) {
     await ctx.emitCheckpoint({ type: "checkpoint.created", turn: ctx.turn, ref, ...previous });
@@ -486,12 +489,13 @@ export class Checkpointer implements Hook {
       "session-end hooks such as memory ingest may change covered files, including tracked or unignored wiki files. " +
       "Later changes were not adopted. See docs/plans/R4b.md for checkpoint coverage limits.",
     );
-    const ref = `${CHECKPOINT_NAMESPACE}/${ctx.sessionId}/sealed/${ctx.turn}`;
+    const namespace = worktreeCheckpointNamespace(dirname(lease.path));
+    const ref = `${namespace}/${ctx.sessionId}/sealed/${ctx.turn}`;
     const env = {...gitEnvironment(),GIT_AUTHOR_NAME:"AgentRig",GIT_AUTHOR_EMAIL:"checkpoint@agentrig.invalid",GIT_COMMITTER_NAME:"AgentRig",GIT_COMMITTER_EMAIL:"checkpoint@agentrig.invalid"};
     const commit = (await git(lease.repo,["commit-tree",owned.tree,"-m",`AgentRig ownership ${ctx.sessionId}`],env,ctx.signal)).stdout.trim();
     // Atomically publish the seal ref and prune: no pruning failure may follow
     // the durable sealed event, and a failed transaction retains recovery refs.
-    const prefix = `${CHECKPOINT_NAMESPACE}/${ctx.sessionId}/`;
+    const prefix = `${namespace}/${ctx.sessionId}/`;
     const refs = (await git(lease.repo,["for-each-ref","--format=%(refname) %(objectname) %(symref)",prefix],undefined,ctx.signal)).stdout.split("\n")
       .map(line => line.split(" "))
       .filter((parts): parts is [string,string,string] => parts.length === 3 && parts[2] === "" && /^\d+$/.test(parts[0]!.slice(prefix.length)))

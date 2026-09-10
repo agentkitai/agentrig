@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { chmod, copyFile, lstat, mkdir, mkdtemp, realpath, rename, symlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
-import { Checkpointer, checkpointState, git, gitEnvironment, inside, sameCheckpointState } from "./checkpointer.js";
+import { Checkpointer, checkpointNamespaceForRepo, checkpointState, git, gitEnvironment, inside, sameCheckpointState } from "./checkpointer.js";
 import { SessionStore, assertSessionId } from "./session-store.js";
 import type { HookContext } from "./hooks.js";
 import { sanitizeLine } from "./tools/skills.js";
@@ -112,6 +112,7 @@ export async function undoSession(store: SessionStore, sessionId: string, option
     if (namespace === undefined || checkpointNamespace(seal.ref, sessionId, seal.turn, true) !== namespace) throw new Error("checkpoint namespace mismatch");
     const repo = await realpath((await git(options.cwd??process.cwd(),["rev-parse","--show-toplevel"],undefined,signal)).stdout.trim());
     if (repo !== await realpath(seal.repo) || repo===dirname(repo) || repo===await realpath(homedir())) throw new Error("undo repository does not match a safe recorded workspace");
+    if (namespace !== "refs/agentrig" && namespace !== await checkpointNamespaceForRepo(repo, signal)) throw new Error("checkpoint worktree namespace mismatch");
     const storeRoot = await realpath(store.root);
     if (seal.excludes.length!==1 || seal.excludes[0]!==storeRoot || inside(storeRoot,repo)) throw new Error("session-store exclusion changed; refusing undo");
     const ctx: HookContext = {point:"pre_tool",sessionId,cwd:repo,turn:seal.turn,signal,checkpointExcludes:seal.excludes};

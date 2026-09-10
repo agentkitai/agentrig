@@ -306,7 +306,7 @@ R4a adds opt-in `hooks: [new Checkpointer()]` for pre-mutation Git snapshots. Th
 safety hook runs separately after final permission approval and fails closed on errors/timeouts.
 Permission classes do not establish tool effects: only trusted `read-only` declarations skip it;
 unknown effects and foreground shell calls require capture. Raw worktree trees are retained under
-`refs/worktree/agentrig/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
+`refs/agentrig/worktrees/<sha256(canonical-git-dir)>/<session>/<turn>` with `checkpoint.created` events; non-Git directories receive a
 `checkpoint.warning`. HEAD, index and worktree are unchanged. The cooperative writer lease,
 background-work refusal, coverage exclusions and host quiescence preconditions are specified in
 [R4a](plans/R4a.md). R4b exposes config `checkpoints: true` in run/TUI (R17b makes it implicit for sandbox absent/none),

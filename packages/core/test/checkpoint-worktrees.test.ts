@@ -1,12 +1,12 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  Checkpointer, createAgent, RulePolicy, SessionStore, undoSession,
+  Checkpointer, createAgent, RulePolicy, SessionStore, undoSession, worktreeCheckpointNamespace,
   type AnyTool, type HarnessEvent, type ModelEvent, type ModelProvider, type ModelRequest,
 } from "@agentkitai/agentrig-core";
 
@@ -120,9 +120,12 @@ describe("worktree-scoped checkpoint ownership", () => {
         await second.finish();
         const secondCreated = second.events.filter(event => event.type === "checkpoint.created");
         expect(secondCreated).toHaveLength(1);
-        expect(secondCreated[0]!.ref).toBe(created[0]!.ref);
+        expect(secondCreated[0]!.ref).not.toBe(created[0]!.ref);
         expect(secondCreated[0]!.tree).not.toBe(created[0]!.tree);
-        expect(created[0]!.ref).toBe("refs/worktree/agentrig/same_id/1");
+        const leftNamespace = worktreeCheckpointNamespace(await realpath(resolve(left, await git(left, "rev-parse", "--git-dir"))));
+        const rightNamespace = worktreeCheckpointNamespace(await realpath(resolve(right, await git(right, "rev-parse", "--git-dir"))));
+        expect(created[0]!.ref).toBe(`${leftNamespace}/same_id/1`);
+        expect(secondCreated[0]!.ref).toBe(`${rightNamespace}/same_id/1`);
         expect(second.events.filter(event => event.type === "checkpoint.sealed")).toHaveLength(1);
         expect((await undoSession(second.store, "same_id", { cwd: right })).restored).toBe(true);
         expect(await readFile(join(right, "tracked.txt"), "utf8")).toBe("right before\n");
@@ -140,6 +143,7 @@ describe("worktree-scoped checkpoint ownership", () => {
 
   it("still refuses a second writer in the same worktree without disturbing the first owner", async () => {
     const { left } = await fixture();
+    const baseline = await readFile(join(left, "tracked.txt"));
     const first = writer(left, "owner", "owned change", "owner");
     let second: ReturnType<typeof writer> | undefined;
     try {
@@ -154,7 +158,7 @@ describe("worktree-scoped checkpoint ownership", () => {
       await first.finish();
       expect(first.events.filter(event => event.type === "checkpoint.sealed")).toHaveLength(1);
       expect((await undoSession(first.store, "owner", { cwd: left })).restored).toBe(true);
-      expect(await readFile(join(left, "tracked.txt"), "utf8")).toBe("committed\n");
+      expect(await readFile(join(left, "tracked.txt"))).toEqual(baseline);
     } finally {
       first.release(); second?.release();
       await Promise.all([first.finish(), second?.finish()]);

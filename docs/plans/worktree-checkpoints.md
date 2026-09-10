@@ -9,10 +9,12 @@ One corrective PR, not a new roadmap band. Builder: Codex/operator outside Agent
 - Each canonical worktree Git directory owns its own
   `agentrig-worktree-checkpoint.lock`, including the primary worktree. Directory
   aliases/subdirectory launches must not produce another ownership domain.
-- New snapshots, seals and retention use Git's per-worktree
-  `refs/worktree/agentrig/<session>/...`. Even identical session IDs in separate
+- New snapshots, seals and retention use globally visible, worktree-qualified
+  `refs/agentrig/worktrees/<sha256(canonical-git-dir)>/<session>/...`. Even identical session IDs in separate
   session stores must not reuse or prune a sibling's checkpoint.
-  [Git documents this per-worktree namespace](https://git-scm.com/docs/git-worktree#_refs).
+  Shared visibility keeps all checkpoint objects reachable during Git garbage
+  collection from any worktree. Git-private `refs/worktree/...` are not used:
+  independent review reproduced sibling garbage collection deleting their objects.
 - Separate worktrees may write the same relative filename simultaneously. One
   worktree may undo while another remains active. Actual dirty baselines, HEAD,
   index, seals, refs and file contents must remain independent.
@@ -38,6 +40,8 @@ Negative controls cover same-worktree contention, copied recovery tokens, legacy
 locks, mixed-ref receipts and external changes. Existing restore/retention/CLI tests
 remain active; new paths enter Windows coverage. Runtime mutation probes restore
 the broad lock/shared refs or remove safety checks and must fail the relevant tests.
+Actual garbage collection from both primary and linked worktrees must preserve
+each checkpoint's commits, trees and blobs, and both independent undos.
 
 Run build, typecheck and full tests; one independent Claude/Codex review pair,
 focused repairs only, then exact-head CI, merge and post-merge CI. Do not modify

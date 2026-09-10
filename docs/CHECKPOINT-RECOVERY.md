@@ -86,8 +86,11 @@ preservation rules. Its presence blocks new checkpoint writes in every worktree,
 including at subsequent ownership guards. These checks do not make a race with
 an old binary transactional: old versions cannot recognize new worktree leases.
 
-New snapshots and seals use `refs/worktree/agentrig/<session>/...`, which Git stores
-per worktree. Old `refs/agentrig/...` receipts remain readable by guarded undo and
+New snapshots and seals use
+`refs/agentrig/worktrees/<sha256(canonical-git-dir)>/<session>/...`. These are shared
+Git refs with distinct worktree prefixes: garbage collection from any worktree
+retains their objects, while undo/diff require the current worktree's prefix.
+Old `refs/agentrig/...` receipts remain readable by guarded undo and
 checkpoint diff; their recorded repository and object checks still apply. New
 retention never prunes old refs or another worktree's refs, and raw logs are never
 rewritten. Checkpoint and seal namespaces must match. Shared branch/object changes

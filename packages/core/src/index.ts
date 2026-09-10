@@ -20,7 +20,7 @@ export * from "./sandbox.js";
 export * from "./sandbox-providers.js";
 export * from "./hooks.js";
 export { Checkpointer, isCheckpointerHook, inspectCheckpointLock, recoverCheckpointLock, type CheckpointHookEvent, type CheckpointState } from "./checkpointer.js";
-export { checkpointNamespace } from "./checkpoint-refs.js";
+export { checkpointNamespace, worktreeCheckpointNamespace } from "./checkpoint-refs.js";
 export type { CheckpointLockInspection, CheckpointRecoveryOptions } from "./checkpoint-lock.js";
 export { undoSession, type UndoResult } from "./checkpoint-undo.js";
 export * from "./agent.js";

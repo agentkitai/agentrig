@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
-import { checkpointNamespace, sanitizeLine, type PermissionPolicy, type PermissionRequest, type SessionStore } from "@agentkitai/agentrig-core";
+import { resolve } from "node:path";
+import { checkpointNamespace, worktreeCheckpointNamespace, sanitizeLine, type PermissionPolicy, type PermissionRequest, type SessionStore } from "@agentkitai/agentrig-core";
 import { diagnose, type DoctorOptions } from "../doctor.js";
 import { captureLocalDiff, gitRevision } from "../local-diff.js";
 import { reviewProcess, type ReviewProcess } from "../review-process.js";
@@ -76,6 +77,8 @@ export async function manualDiff(cwd: string, args: string, signal: AbortSignal,
       event.sessionId === checkpoint.sessionId && event.seq > checkpoint.seq && event.turn >= checkpoint.turn &&
       checkpointNamespace(event.ref, checkpoint.sessionId, event.turn, true) === namespace);
     if (seal?.type !== "checkpoint.sealed" || await realpath(seal.repo) !== root) throw new Error("checkpoint repository is unverified");
+    if (namespace !== "refs/agentrig" && namespace !== worktreeCheckpointNamespace(await realpath(resolve(root, (await git(["rev-parse", "--git-dir"])).trim()))))
+      throw new Error("checkpoint worktree namespace mismatch");
     const verify = async () => {
       const ref = (await git(["for-each-ref", "--format=%(symref) %(objectname)", checkpoint.ref])).trimEnd();
       if (ref === "") throw new Error(`checkpoint turn ${checkpoint.turn} is unavailable (pruned or missing); only the last two mutating-turn refs are retained`);

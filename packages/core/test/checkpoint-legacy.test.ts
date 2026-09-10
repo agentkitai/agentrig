@@ -1,12 +1,12 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  Checkpointer, createAgent, RulePolicy, SessionStore, undoSession,
+  Checkpointer, createAgent, RulePolicy, SessionStore, undoSession, worktreeCheckpointNamespace,
   type AnyTool, type HarnessEvent, type ModelEvent, type ModelProvider, type ModelRequest,
 } from "@agentkitai/agentrig-core";
 
@@ -83,16 +83,31 @@ async function copyReceipts(
 }
 
 describe("checkpoint namespace compatibility", () => {
+  it("refuses a matching receipt pair from another worktree namespace without changing evidence", async () => {
+    const { repo, store, events } = await fixture();
+    const other = worktreeCheckpointNamespace(join(root, "another-git-dir"));
+    await copyReceipts(repo, store, events, "other", { created: other, sealed: other });
+    const sourceBytes = await readFile(store.pathFor("source"));
+    const otherBytes = await readFile(store.pathFor("other"));
+    const refsBefore = await git(repo, "for-each-ref", "--format=%(refname) %(objectname)");
+    await expect(undoSession(store, "other", { cwd: repo })).rejects.toThrow("checkpoint worktree namespace mismatch");
+    expect(await readFile(join(repo, "tracked.txt"), "utf8")).toBe("after");
+    expect(await git(repo, "for-each-ref", "--format=%(refname) %(objectname)")).toBe(refsBefore);
+    expect(await readFile(store.pathFor("source"))).toEqual(sourceBytes);
+    expect(await readFile(store.pathFor("other"))).toEqual(otherBytes);
+  });
+
   it("restores legacy receipts without migrating refs or rewriting source evidence", async () => {
     const { repo, store, events } = await fixture();
     const sourceBytes = await readFile(store.pathFor("source"));
     await copyReceipts(repo, store, events, "legacy", { created: "refs/agentrig", sealed: "refs/agentrig" });
     // Seed modern names even on the old implementation, so this control proves preservation
-    // both before and after the format change (Git itself supports worktree-local refs).
+    // both before and after the format change.
+    const modern = worktreeCheckpointNamespace(await realpath(join(repo, ".git")));
     for (const event of events) {
       if (event.type !== "checkpoint.created" && event.type !== "checkpoint.sealed") continue;
       const suffix = event.type === "checkpoint.created" ? `${event.turn}` : `sealed/${event.turn}`;
-      await git(repo, "update-ref", `refs/worktree/agentrig/modern/${suffix}`, event.commit);
+      await git(repo, "update-ref", `${modern}/modern/${suffix}`, event.commit);
     }
     const refsBefore = await git(repo, "for-each-ref", "--format=%(refname) %(objectname)");
     const legacyBytes = await readFile(store.pathFor("legacy"));
@@ -114,9 +129,10 @@ describe("checkpoint namespace compatibility", () => {
   for (const direction of ["legacy-created", "legacy-sealed"] as const) {
     it(`refuses mixed namespace receipts (${direction}) before changing files or refs`, async () => {
       const { repo, store, events } = await fixture();
+      const modern = worktreeCheckpointNamespace(await realpath(join(repo, ".git")));
       await copyReceipts(repo, store, events, "mixed", {
-        created: direction === "legacy-created" ? "refs/agentrig" : "refs/worktree/agentrig",
-        sealed: direction === "legacy-sealed" ? "refs/agentrig" : "refs/worktree/agentrig",
+        created: direction === "legacy-created" ? "refs/agentrig" : modern,
+        sealed: direction === "legacy-sealed" ? "refs/agentrig" : modern,
       });
       const sourceBytes = await readFile(store.pathFor("source"));
       const mixedBytes = await readFile(store.pathFor("mixed"));

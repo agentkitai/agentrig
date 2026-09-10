@@ -5,8 +5,12 @@
 Replaced the repository-wide lease with worktree-local ownership and refs under
 direct user authorization. Real concurrent SDK tests verify separate worktrees,
 identical session IDs, independent undo and same-worktree refusal. Full local
-integration passed 3,766 tests/four existing skips before the final additional
-version-1 owner compatibility test; restored final focused tests pass 19 cases.
+integration passed 3,767 tests/four existing skips before the GC repair.
+Independent Claude/Codex full reviews completed; Claude reproduced sibling Git
+garbage collection deleting private-ref objects. The repair uses globally visible
+worktree-qualified refs, with fail-first tests for both GC directions and foreign
+namespace refusal. Targeted repaired tests pass; final full-suite, focused review
+and CI receipts are recorded on the PR as they complete.
 [Contract](plans/worktree-checkpoints.md). [PR #298](https://github.com/agentkitai/agentrig/pull/298)
 records independent reviews, final test counts and exact-head/post-merge CI receipts
 as completed; this entry does not preclaim pending checks.
