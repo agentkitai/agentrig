@@ -1,12 +1,13 @@
 # AgentRig roadmap — reliability and measured benefit first
 
-## User-directed unattended workflow correction — implementation under verification
+## User-directed unattended workflow correction — implemented in PR #305
 
 One delivery PR, no new band: consistent explicit unattended authority from startup
 through tools/children/bookkeeping, trusted local compiler discovery, and reuse of
 upfront task-specific merge authorization. Default ask, explicit denies, sandbox
 boundaries and project trust remain. [Contract and risks](plans/unattended-workflow.md),
-[status](STATUS.md). Reviews, exact-head CI and post-merge verification remain required.
+[status](STATUS.md). Reviews, exact-head CI and post-merge verification are recorded
+on [PR #305](https://github.com/agentkitai/agentrig/pull/305), not assumed from implementation.
 
 ## User-directed checkpoint correction — implemented in PR #303
 
