@@ -377,7 +377,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     });
 
   withProviderOptions(program.command("review").description("One bounded advisory diff review; costs supervisor-role tokens, never runs tests"))
-    .option("--profile <name>", "named config profile; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
+    .option("--profile <name>", "named config profile; built-in recommended is accepted with a note and no run defaults; other unknown names list available profiles (names only)")
     .option("--trust", "load trusted project config")
     .option("--base <ref>", "review resolved commit-to-HEAD changes (default: tracked HEAD-to-worktree)")
     .option("--pr <number>", "read a GitHub PR using gh; requires exec and net authorization")
@@ -541,7 +541,7 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
     .command("login <server>").description("Explicit OAuth login; print the validated browser URL, never invoke a model")
     .requiredOption("--mcp-config <path>", "JSON configuration containing the remote OAuth server")
     .option("--trust", "load project configuration for this invocation only")
-    .option("--profile <name>", "named configuration profile; run commands also accept built-in recommended; other unknown names list available profiles (names only)")
+    .option("--profile <name>", "named configuration profile; built-in recommended is accepted with a note and no run defaults; other unknown names list available profiles (names only)")
     .option("--allow <rule>", "network policy allow rule (repeatable)", collect, [])
     .option("--deny <rule>", "network policy deny rule (repeatable)", collect, [])
     .option("--headless", "do not prompt for network consent")

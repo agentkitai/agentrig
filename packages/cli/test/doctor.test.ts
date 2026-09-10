@@ -237,8 +237,10 @@ describe("agentrig doctor", () => {
 
   it.each([true, false])("unknown doctor profile lists escaped sorted unique names only (leading=%s)", async leading => {
     const f = fixture();
-    const name = 'line\n\u001b[31m"quoted"';
-    const requested = 'typo\n\u001b[32m';
+    const name = 'line\n\u001b[31m"quoted"\u202e\u2069';
+    const escapedName = '"line\\n\\u001b[31m\\"quoted\\"\\u202e\\u2069"';
+    const requested = 'typo\n\u001b[32m\u202a\u2066';
+    const escapedRequested = '"typo\\n\\u001b[32m\\u202a\\u2066"';
     f.files.set(USER_CONFIG, JSON.stringify({ system: "private-base", profiles: { zebra: { model: "private-model" }, shared: {} } }));
     f.files.set(PROJECT_CONFIG, JSON.stringify({ profiles: { shared: { system: "private-profile" }, [name]: {}, alpha: {} } }));
     const lines: string[] = [];
@@ -248,7 +250,8 @@ describe("agentrig doctor", () => {
       await buildProgram({ doctor: f.options }).parseAsync([
         ...(leading ? ["--profile", requested] : []), "doctor", ...(!leading ? ["--profile", requested] : []),
       ], { from: "user" });
-      expect(find(lines, "config:profile")).toBe(`fail config:profile — active profile ${JSON.stringify(requested)} does not exist — add it under profiles or remove --profile ${JSON.stringify(requested)}; available profiles: "alpha", ${JSON.stringify(name)}, "shared", "zebra"`);
+      expect(find(lines, "config:profile")).not.toMatch(/[\u0000-\u001f\u202a-\u202e\u2066-\u2069]/u);
+      expect(find(lines, "config:profile")).toBe(`fail config:profile — active profile ${escapedRequested} does not exist — add it under profiles or remove --profile ${escapedRequested}; available profiles: "alpha", ${escapedName}, "shared", "zebra"`);
       expect(lines.join("\n")).not.toContain("private-");
       expect(process.exitCode).toBe(1);
     } finally {

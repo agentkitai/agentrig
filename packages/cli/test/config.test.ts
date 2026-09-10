@@ -182,10 +182,17 @@ describe("resolveConfig precedence (pure)", () => {
     })).toThrow(new Error('unknown config profile "typo"; available profiles: "alpha", "shared", "zebra"'));
   });
 
-  it("escapes requested and available profile names as JSON strings", () => {
-    const name = 'line\n\u001b[31m"quoted"';
-    expect(() => resolveConfig({ defaults: {}, user: file({ profiles: { [name]: { system: "private" } } }), profile: name + "typo" }))
-      .toThrow(new Error(`unknown config profile ${JSON.stringify(name + "typo")}; available profiles: ${JSON.stringify(name)}`));
+  it.each(["requested", "available"])("escapes terminal controls and bidi in %s profile names", position => {
+    const name = 'line\n\u001b[31m"quoted"\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069';
+    const escaped = '"line\\n\\u001b[31m\\"quoted\\"\\u202a\\u202b\\u202c\\u202d\\u202e\\u2066\\u2067\\u2068\\u2069"';
+    let message = "";
+    try {
+      resolveConfig({ defaults: {}, user: file({ profiles: { [position === "available" ? name : "safe"]: { system: "private" } } }), profile: position === "requested" ? name : "typo" });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).not.toMatch(/[\u0000-\u001f\u202a-\u202e\u2066-\u2069]/u);
+    expect(message).toBe(`unknown config profile ${position === "requested" ? escaped : '"typo"'}; available profiles: ${position === "available" ? escaped : '"safe"'}`);
   });
 
   it.each([undefined, file({ profiles: {} })])("unknown profile without available names reports (none): %j", user => {
@@ -502,7 +509,9 @@ describe("both agent entry points use config", () => {
         expect(profile.description).toContain("unknown names list available profiles (names only)");
         expect(profile.description).toContain(cmd.name() === "doctor"
           ? "doctor checks file-defined profiles, including recommended"
-          : "run commands also accept built-in recommended");
+          : ["review", "login"].includes(cmd.name())
+            ? "built-in recommended is accepted with a note and no run defaults"
+            : "run commands also accept built-in recommended");
       }
       for (const child of cmd.commands) check(child);
     };
