@@ -214,9 +214,13 @@ describe("R2b sandbox providers", () => {
           () => bashJobTool(registry).execute({ id: id!, action: "status", ...(waitMs === undefined ? {} : { waitMs }) }, ctx),
           policy,
         )();
-      // give the early line time to arrive, then drain it while the job is still running
-      await new Promise((r) => setTimeout(r, 150));
-      const early = await status();
+      // Wait for readiness, not a fixed process-startup delay. Each poll drains new output.
+      const deadline = Date.now() + 2_000;
+      let early = await status();
+      while (!early.output.output.includes("Read-only file system") && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+        early = await status();
+      }
       expect(early.output.running).toBe(true);
       expect(early.output.output).toContain("Read-only file system");
       // The exit poll sees no new output and reports only the ordinary failed exit.

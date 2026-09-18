@@ -2,6 +2,10 @@
 
 Current roadmap row: user-directed shipping workflow convergence; no roadmap row advanced; continuation order remains ROADMAP §5.
 
+## Portable real-process test fixtures (2026-09-10)
+
+Sandbox background-output coverage now polls readiness within a two-second deadline instead of assuming process startup within 150ms; running-state, exit-code, drained-output and no-new-event assertions remain intact. The sibling repeated-denial test needs no timing change (multiple wrappers finish under its existing five-second limit). The real npm-pack test normalizes array and package-name-keyed JSON with `Object.values` and requires exactly one entry. Local macOS uses Node 26/npm 12, unlike Linux CI's Node 22/npm 10; both runtime pairs pass the focused fixtures. No product behavior, fixture-preflight contract, skips or test timeouts changed.
+
 ## Shipping workflow convergence — implementation
 
 The five shipping/review skills now share [one policy](SHIPPING-WORKFLOW.md).

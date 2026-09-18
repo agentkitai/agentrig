@@ -129,7 +129,9 @@ it("accepts actual npm pack --ignore-scripts output with identical selected cont
     : await run("npm", ["pack", "--ignore-scripts", "--offline", "--no-update-notifier", "--json", "--pack-destination", ".."], options);
   expect(result.infrastructure, `npm pack: ${Date.now() - startedAt}ms; ${process.platform}; Node ${process.version}; code=${result.code}; infrastructure=${result.infrastructure}`).toBe(false);
   expect(result.code).toBe(0);
-  const packed = JSON.parse(result.stdout) as Array<{ filename: string }>;
+  // npm 10 returns an array; npm 12 keys entries by package name.
+  const packed = Object.values(JSON.parse(result.stdout)) as Array<{ filename: string }>;
+  expect(packed).toHaveLength(1);
   const installed = await addPackage({ projectRoot: f.cwd, source: join(f.root, packed[0]!.filename) });
   expect(await readFile(join(installed.destination, "skills", "guide.md"))).toEqual(await readFile(join(f.source, "skills", "guide.md")));
   expect((await inspectPackages(f.cwd)).errors).toEqual([]);
