@@ -19,8 +19,9 @@ Never guess a role name after an unknown-role refusal. Provider routing remains 
 
 The two initial external review comments must each start with this exact heading form:
 `## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA;
-post one for Claude Code and one for Codex. No alternate heading is valid for posting,
+Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
+The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
+No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
@@ -184,6 +185,14 @@ For each recorded row, in order:
      ```
      A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
      are dead), never a review to use.
+   - **Assert the Codex model from stderr:**
+     After the Codex job exits successfully, extract its actual model from the CLI stderr header:
+     ```
+     node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const m=[...s.matchAll(/^model:[ \t]*(.*)$/gm)].map(x=>x[1].trim());if(m.length!==1||!/^gpt-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m[0])){console.error("missing, malformed or ambiguous Codex model");process.exit(2)}process.stdout.write(m[0])' "<OUT>/codex.err" > "<OUT>/codex-model.txt"
+     ```
+     Missing, malformed or ambiguous model provenance halts the pass; never guess or post a placeholder.
+     Require exit zero before composing a comment. Retain stderr as provenance and record the
+     validated model with the job receipt. Join jobs and clean owned trees before halting.
    - **Provenance.** Join both jobs and their subprocesses, then confirm both reviewer trees have
      the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
@@ -195,8 +204,16 @@ For each recorded row, in order:
      policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
      with its heading first (replace HEAD and MAIN with the recorded full SHAs before posting) —
      `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
-     (the same for Codex, with its own heading and `<OUT>/codex.md`) — then post each with
-     `gh pr comment NN --body-file "<OUT>/claude-comment.md"` (and the Codex equivalent), and
+     For Codex, in the posting call read the validated model file (never infer the model from
+     the verdict text). Replace HEAD and MAIN below with the same recorded full SHAs:
+     ```
+     CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
+     [ -n "$CODEX_MODEL" ] || exit 2
+     { echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/codex.md"; } > "<OUT>/codex-comment.md"
+     ```
+     The conductor posts both independently obtained verdicts, not either isolated reviewer:
+     `gh pr comment NN --body-file "<OUT>/claude-comment.md"` and
+     `gh pr comment NN --body-file "<OUT>/codex-comment.md"`, and
      record both comment URLs — they stand in for reviewer session ids. A body over 60,000
      characters is split into numbered comments `(1/2)`, `(2/2)`. Then
      `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`.

@@ -15,8 +15,9 @@ tends to reproduce the failure that created it.
 
 The two initial external review comments must each start with this exact heading form:
 `## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA;
-post one for Claude Code and one for Codex. No alternate heading is valid for posting,
+Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
+The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
+No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
