@@ -1,0 +1,24 @@
+.agentrig/skills/dogfood/SKILL.md
+  h_26c5a60a657125 18-20
+.agentrig/skills/land/SKILL.md
+  h_26c5a60a657125 32-34
+.agentrig/skills/review/SKILL.md
+  h_26c5a60a657125 19-21,25-29
+.agentrig/skills/ship/SKILL.md
+  h_26c5a60a657125 25-27
+.agentrig/skills/topic/SKILL.md
+  h_26c5a60a657125 22-24,188-195,207-216
+packages/cli/test/shipping-instruction-contract.test.ts
+  h_26c5a60a657125 1-4,11-13,26,45-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "e7c352c7ea44fb3c47306e604b26254b06ccdc36",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
