@@ -15,6 +15,15 @@ Builder, fixer, lander and arbiter are jobs/skills, not configured agent-role na
 these generic children, omit the `agent` field entirely and put the job in `task`/`label`.
 Never guess a role name after an unknown-role refusal. Provider routing remains as specified below.
 
+## Initial full review heading contract
+
+The two initial external review comments must each start with this exact heading form:
+`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA;
+post one for Claude Code and one for Codex. No alternate heading is valid for posting,
+acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
+elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+
 ## 1. Lock the authorization and train
 
 - The latest human-authored task must expressly invoke `topic` for the named band. In the TUI this
@@ -89,8 +98,9 @@ For each recorded row, in order:
    with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned
    worktrees you prepare. Start the CI watch and reviews as soon as the PR is available; green
    hosted CI is a landing gate, not a review-start gate. First check whether it already ran:
-   if the PR carries two comments whose heading starts with `## External review —` and whose body
-   names the CURRENT head SHA, one from Claude Code and one from Codex, do not run the pass again —
+   if the PR carries two comments with the complete initial full review heading defined above,
+   naming the CURRENT head SHA in the heading, one from Claude Code and one from Codex,
+   do not run the pass again —
    read those two comments as its result and continue at **Combine**. For older heads, recover
    the review ledger and inspect uncovered deltas under shipping policy §3 instead of restarting
    the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
@@ -183,7 +193,7 @@ For each recorded row, in order:
      it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
      head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
      policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
-     with its heading first —
+     with its heading first (replace HEAD and MAIN with the recorded full SHAs before posting) —
      `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
      (the same for Codex, with its own heading and `<OUT>/codex.md`) — then post each with
      `gh pr comment NN --body-file "<OUT>/claude-comment.md"` (and the Codex equivalent), and
