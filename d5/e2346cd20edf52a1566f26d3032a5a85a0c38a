@@ -1,0 +1,21 @@
+packages/cli/test/packages-runtime.test.ts
+  s_8d1c90343ae8c2::t_38709146628e91 132-134
+packages/core/test/sandbox.test.ts
+  s_8d1c90343ae8c2::t_25e2e98417044c 217-223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "d5e2346cd20edf52a1566f26d3032a5a85a0c38a",
+  "prompts": {},
+  "sessions": {
+    "s_8d1c90343ae8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db835971-94d7-448e-9cf3-647b88c7dc60",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
