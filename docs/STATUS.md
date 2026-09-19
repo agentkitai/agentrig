@@ -2,6 +2,17 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Historical MAIN in rerun matching — issue #313, implemented pending review
+
+Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
+Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
+additional equality gate against current origin/main. Moved main follows the existing
+conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+coverage pins this clarification at the operative rerun check and rejects removal, current-main
+equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
+this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted
+CI remain pending; local proof receipts are recorded in the PR.
+
 ## Operative review cleanup wiring — issue #316, implemented pending review
 
 Instruction-contract tests now pin topic's initial provenance and focused-delta cleanup

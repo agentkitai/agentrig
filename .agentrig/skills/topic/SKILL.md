@@ -119,7 +119,11 @@ For each recorded row, in order:
    if the PR carries two comments with the complete initial full review heading defined above,
    naming the CURRENT head SHA in the heading, one from Claude Code and one from Codex,
    do not run the pass again —
-   read those two comments as its result and continue at **Combine**. For older heads, recover
+   read those two comments as its result and continue at **Combine**.
+   The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base
+   reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing
+   conflict and material-delta rules in shipping policy §3, not a redundant initial pair.
+   For older heads, recover
    the review ledger and inspect uncovered deltas under shipping policy §3 instead of restarting
    the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
    reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
