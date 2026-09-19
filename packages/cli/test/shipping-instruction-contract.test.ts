@@ -16,11 +16,14 @@ elsewhere in the body. This form is for the initial full pair, not focused delta
 
 function assertHeadingContract(text: string): void {
   expect(text).toContain(rule);
-  // Inspect every review-heading literal, not only the normative example: a second,
-  // conflicting posting example must not pass because the right one is also present.
-  const literals = [...text.matchAll(/[`"](## [^`"\n]*review[^`"\n]*)[`"]/gi)].map(match => match[1]!);
+  // Inspect quoted review H2s, including alternate posting families. Only the
+  // literal ledger allowlist is exempt from complete comment-heading validation.
+  const ledgerHeadings: readonly string[] = ["## Review disposition"];
+  const literals = [...text.matchAll(/[`"](## [^`"\n]*\breview\b[^`"\n]*)[`"]/gi)].map(match => match[1]!);
+  expect(text).not.toMatch(/[`"]## Initial independent review[^`"\n]*[`"]/i);
   expect(literals.length).toBeGreaterThan(0);
   for (const literal of literals) {
+    if (ledgerHeadings.includes(literal)) continue;
     // The separate delta-review protocol is outside the initial full-pair contract.
     if (literal === "## Focused review — <reviewer> — head NEW — delta OLD..NEW") continue;
     expect(literal).toMatch(/^## External review — (?:<reviewer>|Claude Code|Codex) \((?:<model>|[\w.-]+|\$CODEX_MODEL)\) — head (?:<SHA>|HEAD) — merged with origin\/main (?:<MAIN>|MAIN) — full$/);
@@ -33,8 +36,26 @@ for (const skill of skills) {
   it(`${skill} prescribes and accepts only the complete initial review heading`, () => {
     assertHeadingContract(text);
   });
+  it.each(["`", '"'])(`${skill} allows a quoted Review disposition ledger reference (%s)`, quote => {
+    assertHeadingContract(text);
+    const fixture = `${text}\nCheck the PR body's ${quote}## Review disposition${quote} ledger is complete.`;
+    assertHeadingContract(fixture);
+  });
+  it.each(["Independent", "Peer", "Adversarial", "Review verdict", "External review pair"])(
+    `${skill} rejects alternate %s review-comment headings in either quote style`, family => {
+      for (const quote of ["`", '"']) {
+        const name = family.includes("review") || family.includes("Review") ? family : `${family} review`;
+        const alternative = `\nPost each comment with ${quote}## ${name} — <reviewer> (<model>) — head <SHA>${quote}.`;
+        expect(() => assertHeadingContract(text + alternative)).toThrow();
+      }
+    },
+  );
+  it(`${skill} accepts the complete focused review heading`, () => {
+    assertHeadingContract(`${text}\nPost \`## Focused review — <reviewer> — head NEW — delta OLD..NEW\`.`);
+  });
   it.each([
     ["alternate prescribed heading", '\nPost each comment with `## Initial independent review — <reviewer> (<model>) — head <SHA>`.' ],
+    ["malformed focused heading", '\nPost a delta verdict with `## Focused review — <reviewer> — head NEW`.' ],
     ["alternate accepted heading", '\nAccept `## External review — <reviewer> (<model>) — head <SHA>` as the initial pair.' ],
     ["prefix-only rerun acceptance", '\nSkip reruns if the heading starts with `## External review —`.' ],
   ])(`${skill} rejects %s even with the canonical example present`, (_name, alternative) => {
