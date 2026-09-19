@@ -104,8 +104,10 @@ pnpm build && pnpm test && pnpm typecheck
   ideas, caveats a future reader would trip on — and the "Current roadmap row" line at the top,
   which names the row this PR completes and the next one. Update `docs/ROADMAP.md` if a row's
   contract moved, and mark the row you are completing `*(done)*` in its table cell (`| R2b
-  *(done)* |`): `grep -E '^\| (H|E|R)[0-9]' docs/ROADMAP.md | grep -vE '\(done([),;]|[[:space:]])'` is the live backlog, and
-  a row left unmarked is a row the next train may rebuild.
+  *(done)* |`): `grep -E '^\| (H|E|R)[0-9]' docs/ROADMAP.md | grep -vE '^\| [^|]*\(done([),;]|[[:space:]])' | grep -vE '^\| [^|]*\(gate, not a PR\)'` is the actionable backlog.
+  Both exclusions inspect only the row-label cell, never body references to done work or gates.
+  Explicit gate-only labels are not expandable delivery rows: R17a remains open and unmarked,
+  not delivered or waived. Other unmarked rows remain candidates under ROADMAP §5.
 
 ## 6. Commit and push
 

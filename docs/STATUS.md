@@ -1,6 +1,18 @@
 # Status
 
-Current roadmap row: user-directed shipping workflow follow-ups row 2 (PR #308 residuals); next authorized row: review scratch cleanup; no roadmap row advanced; continuation order remains ROADMAP §5.
+Current roadmap row: user-directed shipping workflow follow-ups row 4 (roadmap backlog hygiene, PR #317), implemented pending review and exact-head CI/landing; final row of this authorized train, no next row authorized here; continuation order remains ROADMAP §5.
+
+## Shipping workflow follow-ups — roadmap backlog hygiene
+
+PR #317 adds 13 evidence-backed delivery-marker suffixes without changing ROADMAP row contracts.
+The documented actionable-backlog command checks done variants and the explicit gate-only
+classification only in row labels, retaining open H/E/R rows whose prose mentions done work or
+gates. R17a remains open, unmarked and non-expandable; its historical unmet gate is unchanged.
+Pinned H6/E3/E2 evidence links are corrected in the PR. The conductor's initial two-file scope
+was not a human restriction; approved arbitration permits this required STATUS bookkeeping
+within the human's docs-only scope. Row-specific proof uses scratch fail-first assertions, not
+runtime or committed source-test changes. H5b/H5c attribution polish remains deferred in #318.
+Review and CI receipts belong to the PR; no merge or future CI outcome is claimed here.
 
 ## Shipping workflow follow-ups — PR #308 residuals
 
