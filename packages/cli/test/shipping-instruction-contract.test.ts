@@ -50,6 +50,10 @@ function assertRerun(text: string): void {
   const slice = text.split("First check whether it already ran:")[1]?.split("continue at **Combine**")[0];
   expect(slice).toContain("with the complete initial full review heading defined above");
   expect(slice).toContain("naming the CURRENT head SHA in the heading");
+  // Bounded prose contract, not general language inference: these alternative
+  // acceptance markers are forbidden in the rerun bullet even when both required
+  // phrases remain. Word boundaries avoid matching e.g. "or" inside "Codex".
+  expect(slice).not.toMatch(/\bor\b|\balternatively\b|\balso\s+accept\b|\bprefix\b|\banywhere\s+in\s+the\s+body\b/i);
 }
 
 it("topic rerun acceptance requires the complete heading and CURRENT SHA within that heading", () => {
@@ -58,6 +62,33 @@ it("topic rerun acceptance requires the complete heading and CURRENT SHA within 
    which identify the CURRENT head SHA anywhere in the comment, one from Claude Code and one
    from Codex, do not run the pass again —`);
   expect(mutant).not.toBe(topic);
+  expect(() => assertRerun(mutant)).toThrow();
+});
+
+it.each([
+  ["named N1 mutant", "or alternatively whose heading begins with the external review prefix with the SHA anywhere in the body"],
+  ["or", "or accept a shortened heading"],
+  ["alternatively", "alternatively accept a shortened heading"],
+  ["also accept", "also accept a shortened heading"],
+  ["prefix", "accept a heading matching the external review prefix"],
+  ["anywhere in the body", "accept a comment with the SHA anywhere in the body"],
+])("topic rejects additive rerun acceptance: %s", (_name, alternative) => {
+  assertRerun(topic);
+  const mutant = topic.replace("do not run the pass again", `${alternative}, do not run the pass again`);
+  expect(mutant).not.toBe(topic);
+  expect(mutant).toContain("with the complete initial full review heading defined above");
+  expect(mutant).toContain("naming the CURRENT head SHA in the heading");
+  expect(() => assertRerun(mutant)).toThrow();
+});
+
+it.each([
+  ["removed", ""],
+  ["reworded", "with an initial review heading"],
+])("topic rejects a %s complete-heading requirement", (_name, replacement) => {
+  assertRerun(topic);
+  const mutant = topic.replace("with the complete initial full review heading defined above", replacement);
+  expect(mutant).not.toBe(topic);
+  expect(mutant).toContain("naming the CURRENT head SHA in the heading");
   expect(() => assertRerun(mutant)).toThrow();
 });
 
