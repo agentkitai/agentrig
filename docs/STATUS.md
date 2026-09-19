@@ -2,6 +2,17 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## User-directed test fixture isolation — implemented, pending review
+
+Vitest sets `GIT_TRACE2_EVENT=0` in the test process environment; Windows/web inheritance
+is asserted. Under the PR #325 human amendment, the sole product change resets the same
+variable in `gitEnvironment()` after stripping `GIT_*`, isolating checkpointer,
+checkpoint-undo and subagent-worktree Git children from host trace2 targets. Caller-built
+environments omitting the setting are not guaranteed isolated. A real Checkpointer regression
+uses a temporary HOME trace2 target with a positive control, alongside the retained environment
+regression. Repair round 1 closes F1/F2 and advisory F3/F4, pending focused review and exact-head
+CI; no preflight semantics change. This maintenance task does not advance ROADMAP §5.
+
 ## Shadow provenance checker — issue #319, implemented pending review
 
 Immutable result spawn facts and the identity-bound SDK checker are now joined by the

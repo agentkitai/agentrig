@@ -13,6 +13,8 @@ export default defineConfig({
   root: dirname(fileURLToPath(import.meta.url)),
   test: {
     include: ["packages/*/test/**/*.test.ts"],
+    // Host trace2.eventTarget hooks (e.g. git-ai) can mutate fixture refs during teardown.
+    env: { GIT_TRACE2_EVENT: "0" },
     // Ink disables the render path the TUI frame tests assert on whenever `CI` is set, which is
     // every GitHub Actions step. See the setup file for what that hid.
     setupFiles: ["./test/setup-no-ci.ts"],

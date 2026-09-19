@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import base from "../../../vitest.config.js";
+import web from "../../../vitest.web.config.js";
 import windows, { windowsCoverage } from "../../../vitest.windows.config.js";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
@@ -41,4 +42,10 @@ it("bounds Windows file parallelism and integration time without changing covera
   expect(windows.test!.include).toEqual(windowsCoverage);
   expect(base.test!.maxWorkers).toBeUndefined();
   expect(base.test!.testTimeout).toBeUndefined();
+});
+
+it("inherits trace2 isolation into Windows and web configs", () => {
+  expect(base.test!.env).toEqual({ GIT_TRACE2_EVENT: "0" });
+  expect(windows.test!.env).toEqual(base.test!.env);
+  expect(web.test!.env).toEqual(base.test!.env);
 });

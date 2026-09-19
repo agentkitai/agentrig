@@ -141,6 +141,36 @@ const readTool = (): AnyTool => ({
 });
 
 describe("Checkpointer", () => {
+  it("does not emit host trace2 events through Checkpointer git children", async () => {
+    await initRepo();
+    const home = await mkdtemp(join(tmpdir(), "agentrig-trace2-home-"));
+    const target = join(home, "events.jsonl");
+    try {
+      await writeFile(join(home, ".gitconfig"), `[trace2]\n eventTarget = ${JSON.stringify(target.replaceAll("\\", "/"))}\n`);
+      vi.stubEnv("HOME", home);
+      vi.stubEnv("USERPROFILE", home);
+      vi.stubEnv("XDG_CONFIG_HOME", home);
+      // Positive control: the temporary host config really emits events without the override.
+      const control = { ...process.env };
+      for (const name of Object.keys(control)) if (name.startsWith("GIT_")) delete control[name];
+      await execFile("git", ["rev-parse", "--git-dir"], { cwd: root, env: control });
+      expect((await readFile(target, "utf8")).length).toBeGreaterThan(0);
+      await rm(target);
+
+      const session = agent([
+        [call("trace", "write", { path: "tracked.txt", content: "changed\n" }), stop("tool_use")],
+        [stop("end_turn")],
+      ], [writeTool()]).run("write", { cwd: root, id: "trace2_isolation" });
+      const events = await collect(session);
+      await session.done;
+      expect(events.some(event => event.type === "checkpoint.created")).toBe(true);
+      await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it("refuses an ignored unowned file colliding with a restoration target",async()=>{
     await initRepo();await writeFile(join(root,"lost.txt"),"before");await writeFile(join(root,".gitignore"),"\n");
     const tool:AnyTool={name:"remove",description:"remove",permission:"write",inputSchema:z.object({}),execute:async()=>{await rm(join(root,"lost.txt"));await writeFile(join(root,".gitignore"),"lost.txt\n");return {output:null,display:"done"};}};
