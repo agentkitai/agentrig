@@ -134,3 +134,56 @@ it.each([
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// These are prose contracts, not evidence of agent compliance or workflow speedup.
+const cleanupRule = "After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.";
+const arbitrationRule = "the topic skill permits one arbitration per row; a conductor that disagrees with a focused reviewer's non-blocking classification records the disagreement in the ledger and either accepts it or halts for the human, without a second arbitration.";
+const cleanupSteps = [
+  "1. Join every job and subprocess, including installs, retries and mutations.",
+  "2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.",
+  "3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.",
+  "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots and `OUT`; never the author's tree or old unowned scratch.",
+];
+function assertCleanup(text: string): void {
+  expect(text).toContain(cleanupRule);
+}
+function assertCleanupOrder(text: string): void {
+  const section = text.split("## Review scratch cleanup")[1]?.split("## 1.")[0] ?? "";
+  let previous = -1;
+  for (const step of cleanupSteps) {
+    const position = section.indexOf(step);
+    expect(position).toBeGreaterThan(previous);
+    previous = position;
+  }
+  expect(section).toContain("For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`.");
+}
+for (const skill of ["topic", "ship", "dogfood"]) {
+  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  it(`${skill} binds cleanup ownership, evidence and order for initial and focused reviews`, () => {
+    assertCleanup(text);
+    for (const phrase of ["the review output directory (`OUT`) and ", "the reviewer temporary roots in addition to ", "after recording its results in the PR body", "only after joining every job and verifying restored tracked/index state", "never touches the author's tree"]) {
+      const mutant = text.replace(phrase, "");
+      expect(mutant).not.toBe(text);
+      expect(() => assertCleanup(mutant)).toThrow();
+    }
+  });
+}
+it("topic cleanup procedure orders join, restoration and persisted evidence before owned removal", () => {
+  assertCleanupOrder(topic);
+  for (const step of cleanupSteps) expect(() => assertCleanupOrder(topic.replace(step, ""))).toThrow();
+  const swapped = topic.replace(cleanupSteps[0]!, "SWAP").replace(cleanupSteps[3]!, cleanupSteps[0]!).replace("SWAP", cleanupSteps[3]!);
+  expect(() => assertCleanupOrder(swapped)).toThrow();
+  expect(() => assertCleanupOrder(topic.replace("never the author's tree or old unowned scratch", "including the author's tree and old scratch"))).toThrow();
+});
+it("topic caps arbitration and explicitly dispositions focused classification disagreement without weakening gates", () => {
+  const assertArbitration = (text: string): void => {
+    expect(text).toContain(arbitrationRule);
+    expect(text).toContain("If that allowance is already used, halt for the human; do not spawn a second arbiter.");
+    expect(text).toContain("This disagreement rule does not reclassify blocking findings: all HIGH findings, unmet acceptance, uncertain impact and unresolved blockers still block landing under shipping policy §2.");
+    expect(text).toContain("Pending CI and non-blocking polish are not halts by themselves; unresolved classification disagreement may halt for the human.");
+  };
+  assertArbitration(topic);
+  for (const phrase of [arbitrationRule, "without a second arbitration", "records the disagreement in the ledger", "either accepts it or halts for the human", "If that allowance is already used, halt for the human; do not spawn a second arbiter.", "all HIGH findings, unmet acceptance, uncertain impact and unresolved blockers still block landing"]) {
+    expect(() => assertArbitration(topic.replace(phrase, ""))).toThrow();
+  }
+});
