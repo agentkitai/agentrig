@@ -137,6 +137,7 @@ it.each([
 
 // These are prose contracts, not evidence of agent compliance or workflow speedup.
 const cleanupRule = "After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.";
+const cleanupMapping = "Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.";
 const arbitrationRule = "the topic skill permits one arbitration per row; a conductor that disagrees with a focused reviewer's non-blocking classification records the disagreement in the ledger and either accepts it or halts for the human, without a second arbitration.";
 const cleanupSteps = [
   "1. Join every job and subprocess, including installs, retries and mutations.",
@@ -145,7 +146,8 @@ const cleanupSteps = [
   "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots and `OUT`; never the author's tree or old unowned scratch.",
 ];
 function assertCleanup(text: string): void {
-  expect(text).toContain(cleanupRule);
+  expect(text).toContain(`Human cleanup contract (verbatim):\n\n> ${cleanupRule}`);
+  expect(text).toContain(cleanupMapping);
 }
 function assertCleanupOrder(text: string): void {
   const section = text.split("## Review scratch cleanup")[1]?.split("## 1.")[0] ?? "";
@@ -161,6 +163,12 @@ for (const skill of ["topic", "ship", "dogfood"]) {
   const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   it(`${skill} binds cleanup ownership, evidence and order for initial and focused reviews`, () => {
     assertCleanup(text);
+    const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`");
+    expect(wrongPass).not.toBe(text);
+    expect(() => assertCleanup(wrongPass)).toThrow();
+    for (const phrase of [cleanupMapping, "initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`", "only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted"]) {
+      expect(() => assertCleanup(text.replace(phrase, ""))).toThrow();
+    }
     for (const phrase of ["the review output directory (`OUT`) and ", "the reviewer temporary roots in addition to ", "after recording its results in the PR body", "only after joining every job and verifying restored tracked/index state", "never touches the author's tree"]) {
       const mutant = text.replace(phrase, "");
       expect(mutant).not.toBe(text);
