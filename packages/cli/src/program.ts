@@ -7,7 +7,7 @@ const packageVersion = z.object({ version: z.string().min(1) }).parse(
   JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")),
 ).version;
 import { createInterface } from "node:readline/promises";
-import { CommandPrefixSchema, SessionStore, sanitizeLine } from "@agentkitai/agentrig-core";
+import { checkSessionProvenance, CommandPrefixSchema, SessionStore, sanitizeLine } from "@agentkitai/agentrig-core";
 import { DreamLimitsSchema, IngestLimitsSchema, ScanLimitsSchema } from "@agentkitai/agentrig-memory";
 import { renderEvent } from "./render.js";
 import { forkSession, replaySession, searchSessions, showSessionEvidence } from "./sessions.js";
@@ -714,6 +714,16 @@ export function buildProgram(dependencies: ProgramDependencies = {}): Command {
       catch (error) { console.error(`usage: ${String(error)}`); process.exitCode = 1; }
     });
   const sessions = program.command("sessions").description("Inspect session event logs");
+
+  sessions.command("provenance <parentSessionId>")
+    .description("Advisory spawn-log provenance report; no provider or delivery gate")
+    .option("-r, --root <dir>", "sessions directory", DEFAULT_SESSIONS_DIR)
+    .requiredOption("--receipt <json-file>", "JSON {childSessionId, evidence: {repository, pullRequest, run}}; evidence values are trusted captured GitHub JSON strings")
+    .action(async (parentSessionId: string, opts: { root: string; receipt: string }) => {
+      const capture = JSON.parse(readFileSync(opts.receipt, "utf8"));
+      console.log(JSON.stringify(await checkSessionProvenance(new SessionStore({ root: opts.root }),
+        { parentSessionId, childSessionId: capture?.childSessionId }, capture?.evidence), null, 2));
+    });
 
   sessions.command("export <id>")
     .description("Export finished materialized messages with heuristic redaction (unknown secrets may remain); no config/providers")

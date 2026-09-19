@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -245,3 +246,24 @@ describe("children rendering (R3d)", () => {
     ]);
   });
 });
+
+ it("executes sessions provenance against durable logs and captured PR body", async () => {
+   const store = new SessionStore({ root });
+   await store.append("parent-session", { type: "subagent.spawn", id: "child-session", task: "recorded task" });
+   const repositoryUrl = "https://github.com/agentkitai/agentrig";
+   const receipt = { parentSessionId: "parent-session", childSessionId: "child-session", task: "recorded task",
+     repositoryUrl, pullRequestUrl: `${repositoryUrl}/pull/323`, runUrl: `${repositoryUrl}/actions/runs/123` };
+   const path = join(root, "capture.json");
+   const evidence = { repository: JSON.stringify({ url: repositoryUrl }),
+     pullRequest: JSON.stringify({ url: receipt.pullRequestUrl, body: "```subagent-provenance\n" + JSON.stringify(receipt) + "\n```" }),
+     run: JSON.stringify({ url: receipt.runUrl }) };
+   await writeFile(path, JSON.stringify({ childSessionId: "child-session", evidence }));
+   const run = (parent: string) => spawnSync(process.execPath, ["packages/cli/dist/index.js", "sessions", "provenance", parent,
+     "--root", root, "--receipt", path], { encoding: "utf8" });
+   const good = run("parent-session");
+   expect(good.status, good.stderr).toBe(0);
+   expect(JSON.parse(good.stdout)).toEqual({ matches: true, discrepancies: [] });
+   const missing = run("missing");
+   expect(missing.status).toBe(0); // advisory, not a delivery gate
+   expect(JSON.parse(missing.stdout).matches).toBe(false);
+ });

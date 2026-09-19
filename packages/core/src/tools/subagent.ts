@@ -1,3 +1,4 @@
+import type { SessionStore } from "../session-store.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { abortGraceOf, usageTokens, usageUsd, type Agent, type AgentConfig, type Budget, type Pricing } from "../agent.js";
@@ -217,7 +218,7 @@ interface SubagentTool extends AnyTool {
    *
    * The PR body is the sole receipt ledger. This narrow reader requires exactly one fenced
    * `subagent-provenance` JSON object with parentSessionId, childSessionId, repositoryUrl,
-   * pullRequestUrl and runUrl. Other claims are unsupported, not implicitly verified. Broader
+   * pullRequestUrl and runUrl, plus an optional task compared to the observed spawn label/task. Other claims are unsupported, not implicitly verified. Broader
    * receipt parsing/rendering is deferred. No persisted second ledger or workflow gate exists.
    * Captured URLs establish identity only, not CI success, freshness, approval or independence.
    */
@@ -242,7 +243,7 @@ function checkProvenance(spawn: SpawnCapture | undefined, github: unknown): Prov
   const repository = parseCapture(inputs.success ? inputs.data.repository : undefined);
   const pr = parseCapture(inputs.success ? inputs.data.pullRequest : undefined);
   const run = parseCapture(inputs.success ? inputs.data.run : undefined);
-  if (spawn === undefined) flag("spawn", "missing actual result from this tool invocation; copied or reconstructed results are unsupported");
+  if (spawn === undefined) flag("spawn", "missing unambiguous observed spawn; use an original result or the parent durable spawn log");
   const repositoryUrl = repository?.url;
   const repositoryValid = repositoryUrl !== undefined && /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repositoryUrl);
   if (!repositoryValid) flag("repositoryUrl", "missing or unsupported captured repository URL");
@@ -266,7 +267,12 @@ function checkProvenance(spawn: SpawnCapture | undefined, github: unknown): Prov
   if (receipt === undefined) flag("receipt", "PR body must contain exactly one supported subagent-provenance JSON object");
   else {
     for (const field of Object.keys(receipt)) {
-      if (!(ReceiptFields as readonly string[]).includes(field)) flag(field, "unsupported receipt claim");
+      if (field !== "task" && !(ReceiptFields as readonly string[]).includes(field)) flag(field, "unsupported receipt claim");
+    }
+    if (receipt.task !== undefined) {
+      if (typeof receipt.task !== "string" || receipt.task.length === 0) flag("task", "missing or unsupported receipt value");
+      else if (spawn === undefined) flag("task", "no captured evidence for receipt value");
+      else if (receipt.task !== spawn.task) flag("task", "receipt differs from captured evidence");
     }
     const expected = { parentSessionId: spawn?.parentSessionId, childSessionId: spawn?.childSessionId,
       repositoryUrl, pullRequestUrl: pr?.url, runUrl: run?.url };
@@ -278,6 +284,33 @@ function checkProvenance(spawn: SpawnCapture | undefined, github: unknown): Prov
     }
   }
   return { matches: discrepancies.length === 0, discrepancies };
+}
+
+/** Resolve an explicitly selected child from the parent's durable physical spawn log.
+ * Evidence is trusted operator-captured GitHub JSON, never fetched or inferred from a receipt.
+ * Reopening a store works without a live tool or result identity. Reports are advisory only.
+ */
+export async function checkSessionProvenance(
+  store: SessionStore,
+  selection: unknown,
+  evidence: unknown,
+): Promise<ProvenanceReport> {
+  const parsed = z.object({ parentSessionId: z.string().min(1), childSessionId: z.string().min(1) }).strict().safeParse(selection);
+  if (!parsed.success) return { matches: false, discrepancies: [{ field: "receipt", reason: "Expected explicit {parentSessionId, childSessionId} selection." }] };
+  const { parentSessionId, childSessionId } = parsed.data;
+  let spawn: SpawnCapture | undefined;
+  try {
+    const events = await store.readAll(parentSessionId);
+    const candidates = events.filter(event => event.type === "subagent.spawn" && event.id === childSessionId);
+    const candidate = candidates[0];
+    if (candidates.length === 1 && candidate?.type === "subagent.spawn" &&
+        events.every(event => event.sessionId === parentSessionId)) {
+      spawn = { parentSessionId, childSessionId: candidate.id, task: candidate.task };
+    }
+  } catch {
+    // Missing, invalid or unreadable logs never turn receipt claims into observations.
+  }
+  return checkProvenance(spawn, evidence);
 }
 
 export function subagentTool(opts: SubagentOptions): SubagentTool {

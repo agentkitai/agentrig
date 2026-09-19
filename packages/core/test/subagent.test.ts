@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  checkSessionProvenance,
   createAgent,
   RulePolicy,
   SessionStore,
@@ -1365,6 +1366,45 @@ describe("shadow provenance checker", () => {
       repositoryUrl, pullRequestUrl, runUrl };
     return { tool, result, spawn, receipt };
   }
+
+  it.each([`${repositoryUrl}/issues/319`, "https://github.com/agentkitai/otherrep/pull/319"])("rejects captured PR path %s", async url => {
+    const { tool, result, receipt } = await observed();
+    const evidence = captures({ ...receipt, pullRequestUrl: url });
+    evidence.pullRequest = JSON.stringify({ ...JSON.parse(evidence.pullRequest), url });
+    const report = tool.checkProvenance(result, evidence);
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toContain("pullRequestUrl");
+  });
+
+  it("resolves provenance from durable parent spawn events without a result identity", async () => {
+    const store = new SessionStore({ root });
+    const { receipt, spawn } = await observed();
+    const request = { parentSessionId: receipt.parentSessionId, childSessionId: receipt.childSessionId };
+    expect((await checkSessionProvenance(store, request, captures(receipt))).matches).toBe(false);
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: spawn.id, task: spawn.task });
+    expect(await checkSessionProvenance(new SessionStore({ root }), request, captures(receipt)))
+      .toEqual({ matches: true, discrepancies: [] });
+    const wrong = { ...receipt, childSessionId: store.create() };
+    expect((await checkSessionProvenance(store,
+      { ...request, childSessionId: wrong.childSessionId }, captures(wrong))).matches).toBe(false);
+    expect((await checkSessionProvenance(store, { ...request, parentSessionId: "other-parent" }, captures(receipt))).matches).toBe(false);
+    expect((await checkSessionProvenance(store, {}, captures(receipt))).matches).toBe(false);
+  });
+
+  it("binds two invocations of the SAME tool to their own child and task", async () => {
+    const { tool, ctx } = bareTool(new ScriptedProvider([[say("one"), stop("end_turn")], [say("two"), stop("end_turn")]]));
+    ctx.sessionId = "parent-session";
+    const first = await tool.execute({ task: "first" }, ctx);
+    const second = await tool.execute({ task: "second" }, ctx);
+    const receipt = (result: typeof first, task: string) => ({ ...(result.output as { spawn: { parentSessionId: string; childSessionId: string } }).spawn, task,
+      repositoryUrl, pullRequestUrl, runUrl });
+    expect(tool.checkProvenance(first, captures(receipt(first, "first"))).matches).toBe(true);
+    expect(tool.checkProvenance(second, captures(receipt(second, "second"))).matches).toBe(true);
+    expect(tool.checkProvenance(first, captures(receipt(second, "second"))).matches).toBe(false);
+    expect(tool.checkProvenance(second, captures(receipt(first, "first"))).matches).toBe(false);
+    const report = tool.checkProvenance(first, captures(receipt(first, "changed")));
+    expect(report.discrepancies.map(item => item.field)).toContain("task");
+  });
 
   it("reports BOTH a different well-formed child ID and an invented right-host repository", async () => {
     const { tool, result, receipt } = await observed();
