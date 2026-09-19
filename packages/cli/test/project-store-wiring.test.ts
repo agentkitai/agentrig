@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 
 // Execute the real setup in a disposable checkout, never deliberately leak into this checkout.
 // Separate child runs prevent one store's leak from masking a missing path in the guard.
-it.each([null, "", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"])(
+it.each([null, "equal-removal-sentinels", ...["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"].flatMap(base => ["raw/sessions", "wiki"].map(store => `${base}.agentrig/${store}`))])(
   "setup teardown detects only changed stores (store=%s)",
   (base) => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "agentrig-store-wiring-")));
@@ -16,13 +16,24 @@ it.each([null, "", "packages/cli/", "packages/core/", "packages/memory/", "packa
       for (const name of ["setup-no-ci.ts", "project-store.ts"]) {
         copyFileSync(new URL(`../../../test/${name}`, import.meta.url), join(root, "test", name));
       }
+      const equalRemovalSentinels = base === "equal-removal-sentinels";
+      if (equalRemovalSentinels) {
+        // Keep the real setup/afterAll wiring; stub only the inventory boundary.
+        // Both scans return identical evidence, so equality alone cannot reject it.
+        writeFileSync(join(root, "test", "project-store.ts"), `
+          export function snapshotStore() {
+            console.log('SENTINEL_SCAN');
+            return { '.': 'removed-during-inventory' };
+          }
+        `);
+      }
       symlinkSync(fileURLToPath(new URL("../../../node_modules", import.meta.url)),
         join(root, "node_modules"), process.platform === "win32" ? "junction" : "dir");
       writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
       writeFileSync(join(root, "vitest.config.mjs"), `export default { test: {
         include: ['probe.test.js'], setupFiles: ['./test/setup-no-ci.ts'],
       } };`);
-      const store = base === null ? null : join(root, base, ".agentrig/raw/sessions");
+      const store = base === null || equalRemovalSentinels ? null : join(root, base);
       writeFileSync(join(root, "probe.test.js"), `
         import { it, expect } from 'vitest';
         import { mkdirSync } from 'node:fs';
@@ -38,11 +49,16 @@ it.each([null, "", "packages/cli/", "packages/core/", "packages/memory/", "packa
       const output = result.stdout + result.stderr;
       expect(result.error, output).toBeUndefined();
       expect(result.signal, output).toBeNull();
-      expect(result.status, output).toBe(store === null ? 0 : 1);
+      expect(result.status, output).toBe(base === null ? 0 : 1);
       // The fixture itself passes: the failure must come from the registered teardown guard.
       expect(output).toMatch(/Tests\s+1 passed/);
-      if (store !== null) expect(output).toContain("test suite must leave project session stores untouched");
-      else expect(output).not.toContain("test suite must leave project session stores untouched");
+      if (equalRemovalSentinels) {
+        // Ten guarded roots, in both before and after inventories.
+        expect(output.match(/SENTINEL_SCAN/g)).toHaveLength(20);
+        expect(output).toContain("removed-during-inventory");
+        expect(output).not.toContain("test suite must leave project session stores and wiki untouched");
+      } else if (store !== null) expect(output).toContain("test suite must leave project session stores and wiki untouched");
+      else expect(output).not.toContain("test suite must leave project session stores and wiki untouched");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

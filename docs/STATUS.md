@@ -167,8 +167,10 @@ roadmap advancement; local proof is recorded in the PR, independent review and C
 
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.
 Recorded MAIN is historical provenance for the origin/main merge base reviewed, not an
-additional equality gate against current origin/main. Moved main follows the existing
-conflict/material-delta policy rather than causing a redundant initial pair. Instruction-contract
+additional equality gate against current origin/main. Moved main alone does not stale reviews
+or require a redundant initial pair;
+[SHIPPING-WORKFLOW §1](SHIPPING-WORKFLOW.md#1-ci-and-review-are-independent-tracks) remains authoritative for
+CI staleness and conflict/material-delta routing. Instruction-contract
 coverage pins this clarification at the operative rerun check and rejects removal, current-main
 equality, redundant-pair and lost-routing mutants. No heading, landing gate or runtime change;
 this maintenance task does not advance ROADMAP §5. Independent review and exact-head hosted
@@ -7054,3 +7056,19 @@ Recorded rather than built, each with a working path in the meantime:
 1. Sandboxing: none + allowlists for v1, Docker later
 2. Git-based checkpoint rollback: opt-in or assumed
 3. Dogfood repo after AgentRig itself
+
+## Project-store guard follow-ups — issues #355, #356, #357, #364
+
+The suite-wide read-only inventories now include checkout wiki directories as well as
+session stores. Explicit tmpdir memory fixtures prevent empty checkout wiki creation.
+Mid-inventory ENOENT reports the affected path as removed-during-inventory; the inventory
+regression is included in the Windows lane. TESTING documents attribution limits and safe
+remedies. The historical #313 summary points to SHIPPING-WORKFLOW §1 for CI staleness.
+No product behavior or ROADMAP §5 advancement. Independent review and exact-head CI
+remain pending; local fail-first, mutation and trio receipts are recorded in the PR.
+
+Repair round 1 fixes the historical #313 anchor and pins both its exact destination and
+existing shipping heading in a section-scoped regression. A child-process wiring case
+returns identical removal sentinels in both scans and requires rejection independently
+of inventory differences. Broken-anchor fail-first and sentinel-loop-removal mutation
+receipts, plus restored controls and full trio, are recorded in PR #370.
