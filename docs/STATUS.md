@@ -2,6 +2,18 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Review and cleanup skill wording sweep (#341, #342, #348, #349, #351, #365)
+
+Instruction-only cleanup: topic enumerates optional conductor-trio trees/temporary roots on
+all cleanup paths, joins Codex retries before shared-tree proof and posting, and composes
+canonical initial review headings with normalized bodies and exact first-line assertions.
+Ship/topic persist finding dispositions, incremented repair round, OLD/blocker IDs and
+residual issue links before spawning a fixer. Dogfood/ship use registered worktree removal
+then pruning; dogfood's operative review, repair and landing sections require phase handoff
+and builder cleanup before conductor work. Contract tests cover ordered persistence,
+executable posting snippets and removed/moved operative instructions. No runtime or roadmap
+scope changes; prose contracts constrain instructions, not proof of agent compliance.
+
 ## Review-residual docs precision sweep — issues #326, #333, #336, #352, #353
 
 Maintenance only; no roadmap advancement or product changes. Trace2 isolation wording

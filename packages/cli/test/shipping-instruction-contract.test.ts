@@ -206,11 +206,11 @@ const cleanupSteps = [
   "1. Join every job and subprocess, including installs, retries and mutations.",
   "2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.",
   "3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.",
-  "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots and `OUT`; never the author's tree or old unowned scratch.",
+  "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-trio tree and conductor-trio temporary root, and `OUT`; never the author's tree or old unowned scratch.",
 ];
 function assertCleanup(text: string): void {
   expect(text).toContain(`Human cleanup contract (verbatim):\n\n> ${cleanupRule}`);
-  expect(text).toContain(cleanupMapping);
+  expect(text).toContain(text.includes("Both also remove any recorded owned conductor-trio tree") ? cleanupMapping.replace("Both remove", "Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove") : cleanupMapping);
 }
 function assertCleanupOrder(text: string): void {
   const section = text.split("## Review scratch cleanup")[1]?.split("## 1.")[0] ?? "";
@@ -229,7 +229,7 @@ for (const skill of ["topic", "ship", "dogfood"]) {
     const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`");
     expect(wrongPass).not.toBe(text);
     expect(() => assertCleanup(wrongPass)).toThrow();
-    for (const phrase of [cleanupMapping, "initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`", "only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted"]) {
+    for (const phrase of [text.includes("Both also remove") ? cleanupMapping.replace("Both remove", "Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove") : cleanupMapping, "initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`", "only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted"]) {
       expect(() => assertCleanup(text.replace(phrase, ""))).toThrow();
     }
     for (const phrase of ["the review output directory (`OUT`) and ", "the reviewer temporary roots in addition to ", "after recording its results in the PR body", "only after joining every job and verifying restored tracked/index state", "never touches the author's tree"]) {
@@ -247,9 +247,9 @@ it("topic cleanup procedure orders join, restoration and persisted evidence befo
   expect(() => assertCleanupOrder(topic.replace("never the author's tree or old unowned scratch", "including the author's tree and old scratch"))).toThrow();
 });
 // Pin the operative procedure points, not just the shared declaration above.
-const initialCleanup = "cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,\n     including BOTH reviewer trees, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`.";
-const initialRemoval = "Then, subject to **Review scratch cleanup**,\n     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;\n     remove the recorded owned reviewer temporary roots and `OUT` as well.";
-const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root and `OUT`.";
+const initialCleanup = "cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,\n     including BOTH reviewer trees, any conductor-trio tree and conductor-trio temporary root, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`.";
+const initialRemoval = "Then, subject to **Review scratch cleanup**,\n     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;\n     remove any recorded owned conductor-trio tree and conductor-trio temporary root, the reviewer temporary roots and `OUT` as well.";
+const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root, any conductor-trio tree and conductor-trio temporary root, and `OUT`.";
 const cleanupPointer = "Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.";
 
 const cleanupWiring: ReadonlyArray<readonly [string, string, string, string, string, string]> = [

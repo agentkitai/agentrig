@@ -31,16 +31,16 @@ Human cleanup contract (verbatim):
 
 > After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
 
-Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
+Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
 
 Apply this sequence to successful, failed, retried, stale and interrupted passes alike, including every abbreviated cleanup instruction below:
 
 1. Join every job and subprocess, including installs, retries and mutations.
 2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.
 3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.
-4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots and `OUT`; never the author's tree or old unowned scratch.
+4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-trio tree and conductor-trio temporary root, and `OUT`; never the author's tree or old unowned scratch.
 
-For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
+For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`. Also remove any recorded owned conductor-trio tree and conductor-trio temporary root. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
 
 ## 1. Lock the authorization and train
 
@@ -144,10 +144,10 @@ For each recorded row, in order:
      `git -C "$WT" branch -f review-base-NN origin/main` (create it inside the worktree so
      `git -C "$WT"` sees it); assert
      `[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ] || stop the pass (the worktree is not at the
-     PR head)` (remove the worktree and `review-base-NN` before stopping), and record
+     PR head)` (remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping), and record
      `MAIN=$(git rev-parse origin/main)`. Then `git -C "$WT" merge --no-edit origin/main` (a
-     conflict is a finding for §3 — record which files and stop the pass; remove the worktree and
-     `review-base-NN` before stopping). A pass that stopped before both reviews completed is not a
+     conflict is a finding for §3 — record which files and stop the pass; remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
+     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping). A pass that stopped before both reviews completed is not a
      pass: the pass after a conflict-stopped one is a full pass on the new head, never a delta.
      `WT` belongs exclusively to Claude. Create Codex's independent tree at the same resulting
      commit: `REVHEAD=$(git -C "$WT" rev-parse HEAD)`; `CODEX_WT=$(mktemp -d)`;
@@ -201,9 +201,14 @@ For each recorded row, in order:
      in the Codex reviewer worktree or a second fresh worktree at the same commit (`REVHEAD`).
      Use the independent install from Prepare for `CODEX_WT`; a second tree requires its own
      `pnpm install --frozen-lockfile` with exit zero, no shared node_modules or build output.
-     Record any second tree and its temporary root for **Review scratch cleanup**.
-     Join the Codex job and its subprocesses before executing in its tree, or use the second
-     tree to run concurrently without writers sharing a checkout. Assert unchanged HEAD at
+     Record every extra conductor-trio tree and conductor-trio temporary root (including exact-head proof trees) for **Review scratch cleanup**.
+     Join the Codex job and its subprocesses, including any retry, before executing in its tree, or use the second
+     tree to run concurrently without writers sharing a checkout. If using CODEX_WT, defer
+     the trio until the Wait, model and restoration checks resolve all retry decisions and
+     all Codex attempts and subprocesses have completed. A later retry invalidates prior
+     shared-tree proof: join it, verify restoration, then rerun the trio before posting
+     the result. A separate trio tree may run concurrently, but posting still waits for
+     all retries and proof jobs to finish and restoration to be verified. Assert unchanged HEAD at
      `REVHEAD` and restored tracked/index state before and after proof. Record both PR HEAD
      and reviewed SHA REVHEAD; a different post-merge commit is not exact-head proof for HEAD.
      If they differ, retain the integration result and run the trio in a fresh tree at HEAD
@@ -226,9 +231,9 @@ For each recorded row, in order:
      `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/codex.md`, or an
      empty `<OUT>/claude.md` after the extraction step below — `bash_job` showing no output is
      normal because the jobs write to files) is retried ONCE on the same head; both reviewers dead
-     on the same head halts the train (remove the worktree and `review-base-NN` first). A pass with
-     one surviving review is not a pass — halt with the surviving review posted (remove the
-     worktree and `review-base-NN` first); the train never lands on one reviewer.
+     on the same head halts the train (remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** first). A pass with
+     one surviving review is not a pass — halt with the surviving review posted (remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root,
+     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** first); the train never lands on one reviewer.
    - **Assert the model and extract the Claude review:**
      ```
      node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}process.stdout.write(String(r.result??""))' "<OUT>/claude.json" > "<OUT>/claude.md"
@@ -248,19 +253,27 @@ For each recorded row, in order:
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
      cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,
-     including BOTH reviewer trees, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
+     including BOTH reviewer trees, any conductor-trio tree and conductor-trio temporary root, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
      it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
      head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
      policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
-     with its heading first (replace HEAD and MAIN with the recorded full SHAs before posting) —
-     `{ echo "## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"`
+     with the canonical heading as its FIRST LINE, not a prefix check. Strip leading blanks
+     and duplicate leading external-review headings from the reviewer body; retain the verdict.
+     Replace HEAD and MAIN with the recorded full SHAs before executing these posting snippets.
+     Assert the exact first line with `head -1` BEFORE either `gh pr comment` call:
+     ```sh
+CLAUDE_HEADING="## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"
+{ echo "$CLAUDE_HEADING"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/claude.md"; } > "<OUT>/claude-comment.md"
+[ "$(head -1 "<OUT>/claude-comment.md")" = "$CLAUDE_HEADING" ] || exit 2
+     ```
      For Codex, in the posting call read the validated model file (never infer the model from
      the verdict text). Replace HEAD and MAIN below with the same recorded full SHAs:
      ```
-     CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
-     [ -n "$CODEX_MODEL" ] || exit 2
-     [ -s "<OUT>/codex-trio.md" ] || exit 2
-     { echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/codex.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
+CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
+[ -n "$CODEX_MODEL" ] || exit 2
+[ -s "<OUT>/codex-trio.md" ] || exit 2
+{ echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/codex.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
+[ "$(head -1 "<OUT>/codex-comment.md")" = "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full" ] || exit 2
      ```
      The conductor posts both independently obtained verdicts, not either isolated reviewer:
      `gh pr comment NN --body-file "<OUT>/claude-comment.md"` and
@@ -269,7 +282,7 @@ For each recorded row, in order:
      characters is split into numbered comments `(1/2)`, `(2/2)`. Read/combine the verdicts and persist
      their receipts first. Then, subject to **Review scratch cleanup**,
      `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;
-     remove the recorded owned reviewer temporary roots and `OUT` as well.
+     remove any recorded owned conductor-trio tree and conductor-trio temporary root, the reviewer temporary roots and `OUT` as well.
    - **Combine.** Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's, if present, so findings are
      repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
      and the same scenario), and sort the union under step 5. Claude's review must also name
@@ -297,6 +310,15 @@ This disagreement rule does not reclassify blocking findings: all HIGH findings,
   If that allowance is already used, halt for the human; do not spawn a second arbiter.
   Focused non-blocking classification disagreement follows the ledger/accept-or-halt rule above,
   not another arbitration under shipping policy §2.
+Before calling a fixer, perform this ordered persistence gate (including on resumption):
+
+1. Persist the PR body with `gh pr edit NN --body-file <ledger-file>`: update
+   `## Review disposition` with every finding, its severity and disposition; increment
+   `Repair round: N/3` (at most 3, never reset on restart), recording OLD and assigned blocker IDs.
+   Update `## Residuals` with deferred defect issue links or none. Require edit success before proceeding;
+   a private note or an instruction for the fixer to update it later is not persistence.
+2. Only then call the fixer described below, carrying that persisted ledger and counter.
+
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
   "Follow dogfood. You are a topic child: run local proof, push, report OLD/NEW and current CI
@@ -327,7 +349,7 @@ This disagreement rule does not reclassify blocking findings: all HIGH findings,
   Post its verdict as `## Focused review — <reviewer> — head NEW — delta OLD..NEW`.
   Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,
   persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary
-  root and `OUT`. Re-read the PR head;
+  root, any conductor-trio tree and conductor-trio temporary root, and `OUT`. Re-read the PR head;
   any uncovered delta still needs classification and coverage before landing.
 - **Converge:** each round closes assigned blockers without reopening closed ones. Newly found
   blockers may use another round up to the cap; advisory/non-blocking notes do not. A surviving

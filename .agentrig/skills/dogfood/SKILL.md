@@ -61,6 +61,10 @@ use fresh reviewer-owned trees. For each §9 repair, attach the existing branch 
 worktree per §1, push and record a new phase handoff, then repeat cleanup before resuming
 review. Do not retain the builder tree while waiting for CI, merge authorization or landing.
 
+Remove registered worktrees with `git worktree remove <path>`, then `git worktree prune`
+after the recorded handoff and join/state/proof checks. Never use bare directory deletion
+for a worktree; remove the owned proof TMPDIR separately.
+
 ## 2. Implement
 
 Repository rules that bind (each has bitten before):
@@ -145,7 +149,9 @@ session id, or "none"), verification (test count, what the new tests pin, which 
 killed), and known caveats. If the implementation diverged from the issue, say where and why.
 
 Children return immediately after push/PR with current CI state, including pending; do not
-wait for hosted CI. Standalone authors start §8 while CI runs and join the gates at landing.
+wait for hosted CI. Standalone authors record the phase handoff in the PR body, then
+remove the owned builder worktree and proof TMPDIR under §1 before starting §8
+while CI runs; join the gates at landing.
 
 ## 8. Two external reviews, in parallel, as background jobs
 
@@ -163,6 +169,9 @@ its author-tree proof is not independent evidence. Preserve each reviewer enviro
 and require the author's trio, the independent trio and exact-head CI green for landing.
 Never halt solely because Codex cannot run the suite; actual failures and missing proof
 still follow the shared landing gates.
+
+After §7's persisted phase handoff and builder cleanup, conduct reviews from
+outside the removed builder tree using fresh reviewer-owned worktrees.
 
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
@@ -207,8 +216,10 @@ from optional suggestions: the latter are advisory, not a new acceptance criteri
 round. Record advisory followups at the end of the roadmap when useful. Do not relabel a real LOW defect
 as advisory. Record every finding's disposition and evidence in the PR body.
 
+For every repair, attach the existing branch in an owned worktree per §1.
 Batch blocking fixes with fail-first proof and meaningful mutations, re-run the full green trio,
-push, and report OLD/NEW immediately. Do not add deferred polish to the batch. The conductor (or
+push, record a new phase handoff in the PR body, and repeat builder worktree and proof TMPDIR cleanup
+under §1 before resuming review; report OLD/NEW immediately. Do not add deferred polish to the batch. The conductor (or
 standalone author) classifies the whole delta: ONE independent focused review for material
 changes, self-verified evidence for mechanical changes. No per-commit full/dual review loop.
 Use topic §3's **Cover the delta** procedure for isolated preparation, installation, launch,
@@ -222,6 +233,9 @@ Deferred non-blocking defects require issues; advisory suggestions do not.
 - Builder children never merge: report the PR number/head, verification and findings to the
   `ship` or `topic` conductor. This is a builder handoff, not completion of the overall workflow;
   the conductor owns independent review and authorized landing.
+- Standalone conductor/landing work runs outside the removed builder tree after §7/§9
+  handoff and cleanup. Do not retain or recreate the builder tree while waiting for CI,
+  merge authorization or landing; only an actual repair attaches it again under §1.
 - Standalone, if the human explicitly authorized merging the PR for this named task, finish the
   independent reviews and required repairs, then continue with the land skill without asking for
   a second approval. Carry the verbatim authorization and task-to-PR binding; all land preconditions,

@@ -63,6 +63,10 @@ leftovers after landing under the same checks; never remove the author checkout 
   (`agentrig sessions resume <id>`), and stop — do not re-spawn a fresh builder over a
   half-pushed branch.
 
+Remove registered worktrees with `git worktree remove <path>`, then `git worktree prune`
+after the recorded handoff and join/state/proof checks. Never use bare directory deletion
+for a worktree; remove the owned proof TMPDIR separately.
+
 ## 2. Review, independently
 
 - Run the external review pass exactly as `topic` §2 step 4 prescribes: two external reviewers
@@ -87,6 +91,15 @@ still follow the shared landing gates.
   defects with issue links and advisory polish to the roadmap when useful. Contract or
   authorization findings still go to an arbiter before the fixer.
   A fixable verdict does not wait for the human: perform authorized blocking repairs unasked.
+Before calling a fixer, perform this ordered persistence gate (including on resumption):
+
+1. Persist the PR body with `gh pr edit NN --body-file <ledger-file>`: update
+   `## Review disposition` with every finding, its severity and disposition; increment
+   `Repair round: N/3` (at most 3, never reset on restart), recording OLD and assigned blocker IDs.
+   Update `## Residuals` with deferred defect issue links or none. Require edit success before proceeding;
+   a private note or an instruction for the fixer to update it later is not persistence.
+2. Only then call the fixer described below, carrying that persisted ledger and counter.
+
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and
   push, classify OLD..NEW under shipping policy §3: ONE independent focused reviewer for a
   material delta, evidence-only for a mechanical delta. Use topic §3's **Cover the delta** procedure
