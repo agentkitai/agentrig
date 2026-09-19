@@ -40,6 +40,13 @@ Use topic's **Review scratch cleanup** sequence for every initial and focused pa
 
 ## 1. Build
 
+Apply dogfood §1 to builders, continuation builders and fixers in every handoff: use an
+owned worktree created from `origin/main` for new work, or attach/reuse the existing branch's
+owned worktree for continuations and repairs. Never change the author checkout's branch.
+Require the worktree path in the PR body and remove it after recording handoff, with all jobs
+joined, tracked/index state restored and proof persisted. The conductor removes recorded owned
+leftovers after landing under the same checks; never remove the author checkout or unowned trees.
+
 - Spawn a subagent with a self-contained task: the issue/roadmap row to implement, plus
   "Follow the dogfood skill. You are a ship child: stop at the PR and skip the external reviews —
   an independent review follows." Include everything it needs in the task text — a subagent

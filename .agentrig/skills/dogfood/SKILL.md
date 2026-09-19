@@ -33,9 +33,23 @@ Use topic's **Review scratch cleanup** sequence for every initial and focused pa
 
 ## 1. Branch
 
-- `git fetch origin main` and branch from `origin/main`: `feat/<slug>`, `fix/<slug>`, or
-  `docs/<slug>`. Never work on main. Never stack new work on a branch whose PR is still open —
-  say so and stop instead.
+- Builders, continuation builders and fixers work only in an owned worktree, not the
+  author checkout. Run `git fetch origin main`; for new work create the owned worktree
+  from `origin/main`: `git worktree add <path> -b <branch> origin/main`, using a
+  `feat/<slug>`, `fix/<slug>`, or `docs/<slug>` branch. Run implementation and proof
+  commands inside that worktree. Never change the author checkout's branch.
+- For fixers or continuation builders preserving existing work, attach the existing branch
+  with `git worktree add <path> <branch>` instead of creating/resetting it. If it is already
+  attached to a recorded owned worktree, reuse that worktree only after its prior jobs have
+  joined and ownership has been handed off; never detach or repurpose the author checkout.
+  Never work on main. Never stack new work on a branch whose PR is still open — say so and
+  stop instead; continuing or fixing that same PR is not stacking new work.
+- Record the owned worktree path in the PR body. Builders and fixers remove their owned
+  worktree after handoff is recorded in the PR body and the branch is pushed: join every job,
+  verify restored tracked/index state (all intended edits committed, no probe changes left),
+  and persist proof results before removing the worktree and their proof TMPDIR. Do not wait
+  for hosted CI. The conductor removes any recorded owned leftovers after landing, after
+  the same join/state checks; never remove the author checkout or an unowned worktree.
 - Scope to ONE issue or one roadmap row. If the work grows mid-flight, finish the scoped part and
   note the rest for a new issue.
 

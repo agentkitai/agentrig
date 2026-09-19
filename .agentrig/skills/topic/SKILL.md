@@ -83,6 +83,13 @@ For a focused pass remove its one worktree and unique `BASE` instead of the init
 
 ## 2. Build and independently review one row
 
+Apply dogfood §1 to builders, continuation builders and fixers in every handoff: use an
+owned worktree created from `origin/main` for new work, or attach/reuse the existing branch's
+owned worktree for continuations and repairs. Never change the author checkout's branch.
+Require the worktree path in the PR body and remove it after recording handoff, with all jobs
+joined, tracked/index state restored and proof persisted. The conductor removes recorded owned
+leftovers after landing under the same checks; never remove the author checkout or unowned trees.
+
 For each recorded row, in order:
 
 1. Fetch current `origin/main`, confirm it contains the preceding row's merge (unless this is the
