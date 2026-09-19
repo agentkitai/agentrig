@@ -2,6 +2,15 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Operative review cleanup wiring — issue #316, implemented pending review
+
+Instruction-contract tests now pin topic's initial provenance and focused-delta cleanup
+passages at their procedure points, plus the complete ship/dogfood cleanup pointer paragraphs.
+Removal, rewording and the reviewer's reverting mutants are rejected even when an unchanged
+copy remains elsewhere. Skill text and runtime behavior are unchanged; this maintenance task
+does not advance ROADMAP §5. Local proof and cleanup receipts belong to the PR; independent
+review and exact-head hosted CI remain pending.
+
 ## User-directed test fixture isolation — implemented, pending review
 
 Vitest sets `GIT_TRACE2_EVENT=0` in the test process environment; Windows/web inheritance
