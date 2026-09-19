@@ -113,6 +113,31 @@ it.each([
   expect(() => assertRerun(mutant)).toThrow();
 });
 
+const historicalMainRule = "The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base\n   reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing\n   conflict and material-delta rules in shipping policy §3, not a redundant initial pair.";
+
+function assertHistoricalMain(text: string): void {
+  const rerun = text.split("First check whether it already ran:")[1]?.split("- **Prepare.**")[0];
+  assertRerun(text);
+  expect(rerun).toContain(historicalMainRule);
+}
+
+it("topic rerun treats MAIN as historical provenance, not a current-main equality gate", () => {
+  assertHistoricalMain(topic);
+});
+
+it.each([
+  ["removed clarification", ""],
+  ["current-main equality gate", historicalMainRule.replace("need not equal", "must equal")],
+  ["redundant pair on moved main", historicalMainRule.replace("not a redundant initial pair", "requiring a redundant initial pair")],
+  ["lost conflict/delta routing", historicalMainRule.replace("conflict and material-delta rules in shipping policy §3", "rerun matching alone")],
+])("topic rejects %s at the operative rerun check", (_name, replacement) => {
+  assertHistoricalMain(topic);
+  const mutant = topic.replace(historicalMainRule, replacement);
+  expect(mutant).not.toBe(topic);
+  // A surviving copy outside the rerun check cannot satisfy this contract.
+  expect(() => assertHistoricalMain(`${mutant}\n${historicalMainRule}`)).toThrow();
+});
+
 it("topic captures and validates Codex stderr provenance before its concrete canonical posting template", () => {
   const slice = topic.split("**Assert the Codex model from stderr:**")[1]?.split("**Combine.**")[0];
   expect(slice).toContain('"<OUT>/codex.err" > "<OUT>/codex-model.txt"');
