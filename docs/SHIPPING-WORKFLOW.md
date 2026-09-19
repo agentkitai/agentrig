@@ -94,6 +94,16 @@ count; non-blocking observations go to §2, not another repair batch. Initial fu
 reviews keep the green trio; focused reviews run the affected checks and mutations,
 with the author's full trio and exact-head hosted CI still required for landing.
 
+The conductor trio is the Codex trio evidence for the initial full pass, provided it
+runs independently of the author on the same reviewed head using topic §2 step 4's
+install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
+limitations such as denied sockets, npm cache or GitHub access are an environment limitation
+per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
+and exact-head CI are green. Never halt solely because Codex cannot run the suite.
+This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
+keep that limitation alongside the conductor's results. Real test failures, missing independent
+proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+
 Per PR, at most THREE repair rounds, not a target. Normally there is one batched fix
 and at most one focused review. Each round must close its assigned blockers without
 reopening closed ones. A new blocker may use the next round; an unresolved assigned
