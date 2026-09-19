@@ -1,0 +1,21 @@
+.agentrig/skills/topic/SKILL.md
+  s_8d1c90343ae8c2::t_26e3ccd747840f 28-40,213-214,231-234,252-254,259-261,290-292,333
+packages/cli/test/shipping-instruction-contract.test.ts
+  s_8d1c90343ae8c2::t_414f7b9c52a9f3 137-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5dd739be1792df5e6c65cc2b318cc5ab09c2c2b8",
+  "prompts": {},
+  "sessions": {
+    "s_8d1c90343ae8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db835971-94d7-448e-9cf3-647b88c7dc60",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
