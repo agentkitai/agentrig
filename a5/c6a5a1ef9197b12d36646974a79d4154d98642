@@ -1,0 +1,19 @@
+docs/STATUS.md
+  s_8d1c90343ae8c2::t_f71e68925c32fb 3,5-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a5c6a5a1ef9197b12d36646974a79d4154d98642",
+  "prompts": {},
+  "sessions": {
+    "s_8d1c90343ae8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db835971-94d7-448e-9cf3-647b88c7dc60",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
