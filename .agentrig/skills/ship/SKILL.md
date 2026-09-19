@@ -64,6 +64,14 @@ Use topic's **Review scratch cleanup** sequence for every initial and focused pa
   Never review in this session and never pass the builder's report to either reviewer; the PR and
   the code are their only inputs.
 
+Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
+same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
+The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;
+its author-tree proof is not independent evidence. Preserve each reviewer environment limitation
+and require the author's trio, the independent trio and exact-head CI green for landing.
+Never halt solely because Codex cannot run the suite; actual failures and missing proof
+still follow the shared landing gates.
+
 ## 3. Resolve the verdict, then honor the merge decision
 
 - Present the verdict verbatim-in-substance: every finding with its severity, or the pass with

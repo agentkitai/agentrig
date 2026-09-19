@@ -3,6 +3,16 @@ H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123�
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Initial review trio evidence — issue #337, implemented pending review
+
+The initial external pass now includes conductor-run independent build/test/typecheck proof
+in the reviewed-head worktree (or a fresh same-commit tree), with install/preflight isolation,
+separate exits, counts and UTC times posted with the initial verdict. Shipping, land, ship
+and standalone dogfood accept this as the Codex trio evidence while preserving sandbox
+limitations and all real failure, review and exact-head CI gates. Instruction-contract tests
+pin execution, acceptance and delegation at their operative sections. No runtime changes or
+roadmap advancement; local proof is recorded in the PR, independent review and CI pending.
+
 ## Historical MAIN in rerun matching — issue #313, implemented pending review
 
 Topic's rerun check still matches the CURRENT head SHA in the complete canonical heading.

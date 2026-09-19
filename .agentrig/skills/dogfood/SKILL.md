@@ -134,6 +134,14 @@ into a private review loop the conductor cannot see: the R4a fixer spent thirty 
 minutes waiting on three rounds of self-arranged reviews and widened its diff on their findings,
 with the train's own external review pass still to come. A topic child's job ends at the push and the report.
 
+Follow topic §2 step 4's conductor trio and shipping policy §3: the independently run,
+same-head conductor checks supply the Codex trio evidence in the initial comment provenance.
+The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;
+its author-tree proof is not independent evidence. Preserve each reviewer environment limitation
+and require the author's trio, the independent trio and exact-head CI green for landing.
+Never halt solely because Codex cannot run the suite; actual failures and missing proof
+still follow the shared landing gates.
+
 Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
 loop, never a foreground command that a timeout can kill):
 

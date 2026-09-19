@@ -189,6 +189,27 @@ For each recorded row, in order:
      Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
      standard is Claude's brief and step 5's disposition. A missing proposed fix does not waive
      a real blocker or turn an optional suggestion into repair work.
+   - **Conductor trio — initial pass.** The conductor runs the full trio, not the author,
+     in the Codex reviewer worktree or a second fresh worktree at the same commit (`REVHEAD`).
+     Use the independent install from Prepare for `CODEX_WT`; a second tree requires its own
+     `pnpm install --frozen-lockfile` with exit zero, no shared node_modules or build output.
+     Record any second tree and its temporary root for **Review scratch cleanup**.
+     Join the Codex job and its subprocesses before executing in its tree, or use the second
+     tree to run concurrently without writers sharing a checkout. Assert unchanged HEAD at
+     `REVHEAD` and restored tracked/index state before and after proof. Record both PR HEAD
+     and reviewed SHA REVHEAD; a different post-merge commit is not exact-head proof for HEAD.
+     If they differ, retain the integration result and run the trio in a fresh tree at HEAD
+     with its own install/preflight before claiming same-head evidence.
+     Use command-local TMPDIR outside Git ancestry and run fixture preflight per docs/TESTING.md
+     in the actual execution environment before testing; a denied sandbox run moves to a
+     capable runner, never a preflight bypass. Run `pnpm build`, `pnpm test`, `pnpm typecheck`
+     separately, capturing each exit code (not a chained command's aggregate exit). Record all
+     three exits, test/file counts (N/A for commands without tests), UTC start/end times per
+     command, runner/worktree, TMPDIR, install/preflight results and reviewed SHA in
+     `<OUT>/codex-trio.md` for the Codex comment's provenance. Label these as conductor-run
+     checks, distinct from Codex's own checks and limitations; retain failed attempts too.
+     This is part of the initial pass, not a post-review verification supplement. Apply shipping
+     policy §3's environment-limitation rule; do not turn a sandbox denial into a code blocker.
    - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
      loop). Record both job ids from the `bash` results immediately, along with each job's start
      time beside its id, and restate them in your own reply text on every turn you poll — tool
@@ -230,7 +251,7 @@ For each recorded row, in order:
      ```
      CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
      [ -n "$CODEX_MODEL" ] || exit 2
-     { echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/codex.md"; } > "<OUT>/codex-comment.md"
+     { echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/codex.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
      ```
      The conductor posts both independently obtained verdicts, not either isolated reviewer:
      `gh pr comment NN --body-file "<OUT>/claude-comment.md"` and

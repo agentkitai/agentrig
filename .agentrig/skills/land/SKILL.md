@@ -64,6 +64,16 @@ evidence-backed rebuttals are not residuals.
   (dogfood §5). An unmarked row is a row the next train rebuilds: stop and report which row needs
   its marker — the author flow adds it, never the lander.
 
+Under shipping policy §3, the conductor trio is the Codex trio evidence for the initial full pass, provided it
+runs independently of the author on the same reviewed head using topic §2 step 4's
+install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
+limitations such as denied sockets, npm cache or GitHub access are an environment limitation
+per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
+and exact-head CI are green. Never halt solely because Codex cannot run the suite.
+This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
+keep that limitation alongside the conductor's results. Real test failures, missing independent
+proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+
 One permitted flake re-run: a failure that is green on the base branch, names nothing the diff
 touches, and passed for this same commit before may be re-run ONCE; a second failure is real and
 blocks.
