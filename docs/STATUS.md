@@ -1,8 +1,12 @@
 # Status
 
-Current roadmap row: user-directed shipping workflow convergence; no roadmap row advanced; continuation order remains ROADMAP §5.
+Current roadmap row: user-directed shipping workflow follow-ups row 2 (PR #308 residuals); next authorized row: review scratch cleanup; no roadmap row advanced; continuation order remains ROADMAP §5.
 
-## Portable real-process test fixtures (2026-09-10)
+## Shipping workflow follow-ups — PR #308 residuals
+
+The adjacent sandbox exit-drain test now polls readiness within two seconds and asserts that the denial line was drained while the job is still running. Existing exit-code, final-output, empty subsequent-drain and sibling event-count assertions remain unchanged. No runtime code, test timeout or skip changed. The portable-fixture receipt below is corrected to its original shipping date, 2026-09-18.
+
+## Portable real-process test fixtures (2026-09-18)
 
 Sandbox background-output coverage now polls readiness within a two-second deadline instead of assuming process startup within 150ms; running-state, exit-code, drained-output and no-new-event assertions remain intact. The sibling repeated-denial test needs no timing change (multiple wrappers finish under its existing five-second limit). The real npm-pack test normalizes array and package-name-keyed JSON with `Object.values` and requires exactly one entry. Local macOS uses Node 26/npm 12, unlike Linux CI's Node 22/npm 10; both runtime pairs pass the focused fixtures. No product behavior, fixture-preflight contract, skips or test timeouts changed.
 
