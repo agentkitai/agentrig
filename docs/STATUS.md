@@ -2,6 +2,13 @@
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## User-directed test fixture isolation — implemented, pending review
+
+Vitest now sets `GIT_TRACE2_EVENT=0` to override host trace2 hooks that mutate fixture
+repositories. A regression checks the test environment and inheritance through a spawned Git
+child; Windows/web inherit the base setting. No product code or preflight semantics change.
+This maintenance task does not advance the ROADMAP continuation order.
+
 ## Shadow provenance checker — issue #319, implemented pending review
 
 Immutable result spawn facts and the identity-bound SDK checker are now joined by the

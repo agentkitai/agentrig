@@ -33,6 +33,11 @@ Use repository-relative paths to avoid ambiguous matches; Vitest's substring fil
 same root. Before this was pinned, a workspace-local run exited 1 with `No test files found`
 ([feel #245](https://github.com/agentkitai/agentrig/issues/245)).
 
+Vitest sets `GIT_TRACE2_EVENT=0` for tests and inherited Git children, including the Windows
+and web configs. This overrides host `trace2.eventTarget` hooks such as git-ai, which can
+write `refs/notes/ai` in fixture repositories and race teardown (`ENOTEMPTY`). It does not
+change the fixture preflight or product Git behavior.
+
 ## The fixture preflight
 
 `test/fixture-preflight.mjs` runs before the suite in `pnpm test` and is silent unless it finds
