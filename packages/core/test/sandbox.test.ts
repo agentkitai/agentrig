@@ -257,8 +257,15 @@ describe("R2b sandbox providers", () => {
           () => bashJobTool(registry).execute({ id, action: "status", ...(waitMs === undefined ? {} : { waitMs }) }, ctx),
           policy,
         )();
-      await new Promise((r) => setTimeout(r, 120));
-      await status(); // drains the early denial line while the job runs
+      // Drain the denial before exit, even when process startup is slow.
+      const deadline = Date.now() + 2_000;
+      let early = await status();
+      while (!early.output.output.includes("Read-only file system") && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+        early = await status();
+      }
+      expect(early.output.running).toBe(true);
+      expect(early.output.output).toContain("Read-only file system");
       const exited = await status(2_000);
       expect(exited.output.exitCode).toBe(1);
       expect(exited.output.output).toContain("FINAL-STDOUT-LINE");
