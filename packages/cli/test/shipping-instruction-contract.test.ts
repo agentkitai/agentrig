@@ -183,6 +183,43 @@ it("topic cleanup procedure orders join, restoration and persisted evidence befo
   expect(() => assertCleanupOrder(swapped)).toThrow();
   expect(() => assertCleanupOrder(topic.replace("never the author's tree or old unowned scratch", "including the author's tree and old scratch"))).toThrow();
 });
+// Pin the operative procedure points, not just the shared declaration above.
+const initialCleanup = "cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,\n     including BOTH reviewer trees, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`.";
+const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root and `OUT`.";
+const cleanupPointer = "Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then remove only their recorded owned proof TMPDIR before handoff; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.";
+
+const cleanupWiring = [
+  ["topic initial provenance", topic, "**Provenance.**", "**Combine.**", initialCleanup,
+    "cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only after jobs are joined, plus the shared `review-base-NN` ref."],
+  ["topic focused delta", topic, "- **Cover the delta**", "- **Converge:**", focusedCleanup,
+    "Join subprocesses and verify restored tracked/index state before cleanup."],
+  ...["ship", "dogfood"].map(skill => [
+    `${skill} pointer`,
+    readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"),
+    "## Review scratch cleanup", "## 1.", cleanupPointer, "",
+  ]),
+];
+
+for (const [name, text, start, end, passage, reverted] of cleanupWiring) {
+  const assertWiring = (candidate: string): void => {
+    expect(candidate.split(start!)[1]?.split(end!)[0]).toContain(passage!);
+  };
+  it(`${name} pins the operative cleanup wiring`, () => {
+    assertWiring(text!);
+  });
+  it.each([
+    ["reviewer reverting mutant", reverted!],
+    ["removed passage", ""],
+    ["reworded reference", passage!.replace("**Review scratch cleanup**", "the cleanup guidance")],
+  ])(`${name} rejects %s even if the passage survives elsewhere`, (_label, replacement) => {
+    assertWiring(text!);
+    const mutant = text!.replace(passage!, replacement);
+    expect(mutant).not.toBe(text);
+    // A copy outside the operative bullet/section cannot satisfy the contract.
+    expect(() => assertWiring(`${mutant}\n${passage}`)).toThrow();
+  });
+}
+
 it("topic caps arbitration and explicitly dispositions focused classification disagreement without weakening gates", () => {
   const assertArbitration = (text: string): void => {
     expect(text).toContain(arbitrationRule);
