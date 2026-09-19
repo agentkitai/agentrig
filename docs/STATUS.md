@@ -1,4 +1,5 @@
 # Status
+H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
