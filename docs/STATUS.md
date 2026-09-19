@@ -18,6 +18,17 @@ All 342 instruction-contract cases pass and five named repair mutants are killed
 Full build/test/typecheck proof and per-finding dispositions are in the PR ledger;
 focused delta review and exact-head CI remain conductor-owned.
 
+PR #358 repair round 2/3 addresses focused-review F1/F2/F3: command negation
+must govern the command predicate (not an earlier unrelated or conflicting verb);
+pronoun-subject worktree carveouts fail while an explicit conductor-only exemption
+passes. Cleanup checks every removal and recognizes before the/prior to handoff,
+including fronted timing and valid prohibitions. New fixtures failed first on the
+round-1 guards (53 failures); all 403 instruction-contract cases now pass. Three
+named reverted-guard mutants are killed (48/12/12 failures). Only tests and this
+status record changed; the bounded prose grammar is not a general language parser.
+Final full-trio receipts and finding dispositions are recorded in the PR ledger;
+no roadmap advancement, skill edits, runtime changes, or delivery claims.
+
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.

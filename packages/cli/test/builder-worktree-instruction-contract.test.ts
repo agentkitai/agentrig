@@ -17,13 +17,14 @@ const contracts = [
   ] })),
 ];
 
-// Bounded prose grammar, not a general natural-language parser. A fresh action
-// after a conjunction/comma or temporal lead-in starts its own negation scope.
-// In particular, an unrelated earlier "never run" cannot excuse a later command.
-const actionClauses = (text: string) => text.split(
-  /[.;!\n]|\b(?:but|however|instead)\b|(?:,|\b(?:and(?: then)?|then)\b|\b(?:before|until)\s+you\b)\s*(?=(?:must\s+)?(?:run|use|remove)\b)/i,
-);
-const prohibited = (prefix: string) => /\b(?:never|do not|must not|avoid|forbidden to|prohibited to|no builder may)\b/i.test(prefix);
+// Bounded predicate grammar, not a general natural-language parser. Negation
+// must govern the command's predicate, not merely occur earlier in its clause.
+const actionClauses = (text: string) => text.split(/[.;!\n:—]|\s-\s|\b(?:but|however|instead)\b/i);
+const prohibited = (prefix: string) => {
+  // A coordinated command list shares its predicate ("never run X or Y").
+  const predicate = prefix.replace(/`git\s+[^`]+`\s+or\s+/gi, "").replace(/`\s*$/, "").trim();
+  return /\b(?:(?:never|do not|must not)\s+(?:(?:run|use)\s*|change the author checkout's branch with\s*|be moved with\s*)?|avoid\s+(?:(?:running|using)\s+)?|(?:forbidden|prohibited) to (?:run|use)\s+|no builder may (?:run|use)\s+)$/i.test(predicate + " ");
+};
 const checkPrescriptions = (text: string) => {
   for (const clause of actionClauses(text)) {
     for (const command of clause.matchAll(/git\s+(?:switch|checkout)\s+(?!-{1,2}(?:detach|help)\b|--\s)\S+/g)) {
@@ -34,8 +35,10 @@ const checkPrescriptions = (text: string) => {
 const checkForce = (operative: string) => {
   for (const clause of operative.split(/[.;!]/)) {
     // Scoping the steps away from conductors is not a builder-rule exception.
-    // Require the worktree subject in the same sentence, not elsewhere in §1.
-    if (!/\bworktree\b/i.test(clause)) continue;
+    // Pronoun subjects still refer to these requirements; exempt only an
+    // explicit conductor-only subject, never an inconvenient-builder carveout.
+    if (/^\s*these (?:steps|rules|requirements) do not apply to the conductor\s*$/i.test(clause)) continue;
+    if (!/\b(?:worktree|these (?:requirements|steps|rules)|this (?:rule|requirement))\b/i.test(clause)) continue;
     expect(clause).not.toMatch(/\b(?:advisory[ -]only|optional|(?:does not|do not|need not) apply|unless inconvenient|where practical|is a recommendation)\b/i);
   }
 };
@@ -61,6 +64,10 @@ for (const { skill, start, end, phrases } of contracts) {
     expect(() => check(read(skill) + `\n${prohibition}`)).not.toThrow();
   });
   it.each([
+    "These requirements are advisory only.",
+    "This rule does not apply when inconvenient.",
+    "These steps are optional.",
+    "These rules need not apply.",
     "These worktree requirements are advisory only.",
     "These worktree requirements are advisory-only.",
     "The owned worktree rule is optional.",
@@ -76,6 +83,15 @@ for (const { skill, start, end, phrases } of contracts) {
     expect(() => check(text.replace(operative, `${operative}\n${carveout}\n`))).toThrow();
   });
   it.each([
+    "Builders never work on main, so in the author checkout run `git switch -c docs/task`.",
+    "Never remove the proof TMPDIR, and builders run `git checkout -b docs/task` there.",
+    "Never reuse a stale tree, so run `git switch -c docs/task` in the author checkout.",
+    "Avoid deleting logs and builders must run `git checkout -b docs/task`.",
+    "No builder may remove logs while maintainers run `git switch -c docs/task`.",
+    "Never remove logs then the fixer should use `git checkout -b docs/task`.",
+    "Never forget to run `git switch -c docs/task`.",
+    "Never refuse to use `git checkout -b docs/task`.",
+    "Avoid failing to run `git switch -c docs/task`.",
     "Never run the builder loop before you run `git checkout -b docs/task` in the author checkout.",
     "Never run the builder loop and then run `git switch docs/task` in the author checkout.",
     "Do not use the author tree, run `git switch -c docs/task` first.",
@@ -132,12 +148,14 @@ function checkCleanup(text: string): void {
   const operative = section(text, "## Review scratch cleanup", "## 1.");
   expect(operative).toContain("after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1");
   expect(operative).not.toContain("remove only their recorded owned proof TMPDIR");
-  // Keep a fronted timing condition attached to its removal action.
-  const cleanup = operative.replace(/(^|[.;!])\s*before handoff([^,.;]*),\s*remove\b/gi, "$1 remove before handoff$2");
+  // Preserve fronted timing even for negated actions; inspect every removal,
+  // since an unrelated preceding prohibition must not excuse the next verb.
+  const early = /\b(?:before (?:the )?handoff|prior to (?:the )?handoff)\b/i;
+  const cleanup = operative.replace(/(^|[.;!:—])\s*((?:before|prior to) (?:the )?handoff[^,.;]*),\s*((?:(?:never|do not)\s+)?remove)\b/gi, "$1 $3 $2");
   for (const clause of actionClauses(cleanup)) {
-    const removal = /\bremove\b/i.exec(clause);
-    if (removal && /\bbefore handoff\b/i.test(clause)) {
-      expect(prohibited(clause.slice(0, removal.index))).toBe(true);
+    for (const removal of clause.matchAll(/\bremove\b/gi)) {
+      const after = clause.slice(removal.index + removal[0].length).split(/\bremove\b/i)[0]!;
+      if (early.test(after)) expect(prohibited(clause.slice(0, removal.index))).toBe(true);
     }
   }
 }
@@ -148,6 +166,13 @@ for (const skill of ["dogfood", "ship"]) {
     expect(() => checkCleanup(text)).not.toThrow();
   });
   it.each([
+    "Never remove the author checkout: remove the owned worktree before handoff.",
+    "Never remove the author checkout — remove the owned worktree before handoff.",
+    "Never remove the author checkout - remove the owned worktree before handoff.",
+    "Remove the owned worktree before the handoff is recorded in the PR body.",
+    "Remove the owned worktree prior to handoff.",
+    "Prior to the handoff, remove the owned worktree.",
+    "Never remove logs while builders remove the owned worktree before the handoff.",
     "Remove the owned worktree before handoff is recorded in the PR body.",
     "Before handoff is recorded in the PR body, remove the owned worktree.",
     "Never remove the proof TMPDIR before handoff and remove the owned worktree before handoff.",
@@ -159,6 +184,10 @@ for (const skill of ["dogfood", "ship"]) {
   it.each([
     "Builders must never remove the owned worktree before handoff.",
     "Do not remove the owned worktree before handoff.",
+    "Never remove the owned worktree before the handoff.",
+    "Do not remove the owned worktree prior to handoff.",
+    "Before the handoff, never remove the owned worktree.",
+    "Prior to handoff, do not remove the owned worktree.",
   ])(`${skill} accepts natural cleanup prohibitions: %s`, instruction => {
     expect(() => checkCleanup(read(skill).replace("## 1.", `${instruction}\n\n## 1.`))).not.toThrow();
   });
