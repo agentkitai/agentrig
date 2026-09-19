@@ -16,9 +16,12 @@ elsewhere in the body. This form is for the initial full pair, not focused delta
 
 function assertHeadingContract(text: string): void {
   expect(text).toContain(rule);
-  // Inspect every review-heading literal, not only the normative example: a second,
-  // conflicting posting example must not pass because the right one is also present.
-  const literals = [...text.matchAll(/[`"](## [^`"\n]*review[^`"\n]*)[`"]/gi)].map(match => match[1]!);
+  // Inspect review-comment heading families, not ledger references such as
+  // `## Review disposition`. A conflicting posting example must still fail.
+  const literals = [...text.matchAll(/[`"](## (?:External|Focused) review —[^`"\n]*)[`"]/gi)].map(match => match[1]!);
+  // Keep the existing forbidden alternate prescribed heading pinned separately;
+  // it is not part of either review-comment heading family scanned above.
+  expect(text).not.toMatch(/[`"]## Initial independent review[^`"\n]*[`"]/i);
   expect(literals.length).toBeGreaterThan(0);
   for (const literal of literals) {
     // The separate delta-review protocol is outside the initial full-pair contract.
@@ -33,8 +36,14 @@ for (const skill of skills) {
   it(`${skill} prescribes and accepts only the complete initial review heading`, () => {
     assertHeadingContract(text);
   });
+  it.each(["`", '"'])(`${skill} allows a quoted Review disposition ledger reference (%s)`, quote => {
+    assertHeadingContract(text);
+    const fixture = `${text}\nCheck the PR body's ${quote}## Review disposition${quote} ledger is complete.`;
+    assertHeadingContract(fixture);
+  });
   it.each([
     ["alternate prescribed heading", '\nPost each comment with `## Initial independent review — <reviewer> (<model>) — head <SHA>`.' ],
+    ["malformed focused heading", '\nPost a delta verdict with `## Focused review — <reviewer> — head NEW`.' ],
     ["alternate accepted heading", '\nAccept `## External review — <reviewer> (<model>) — head <SHA>` as the initial pair.' ],
     ["prefix-only rerun acceptance", '\nSkip reruns if the heading starts with `## External review —`.' ],
   ])(`${skill} rejects %s even with the canonical example present`, (_name, alternative) => {

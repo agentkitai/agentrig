@@ -65,6 +65,17 @@ Sandbox background-output coverage now polls readiness within a two-second deadl
 
 ## Shipping workflow convergence — implementation
 
+Issue #312 narrows the quoted H2 scan to the `## External review —` and
+`## Focused review —` comment-heading families, so references to the
+`## Review disposition` PR-body ledger are not mistaken for posting instructions.
+Backtick- and double-quoted ledger fixtures failed first for all five skills
+(10 failures), then passed with the narrowed scan. Existing assertions remain,
+including an explicit guard for the forbidden alternate prescribed heading;
+malformed focused-review fixtures add coverage. Three scan/guard mutations were
+killed and restored. Build, typecheck and the full suite passed (254 files passed,
+one skipped; 3,952 tests passed, six skipped). This is test-only coverage, not a
+shipping-policy change. Review and exact-head hosted CI remain delivery gates.
+
 The five shipping/review skills now share [one policy](SHIPPING-WORKFLOW.md).
 Builders/fixers hand off immediately after local verification and push; hosted CI
 and external reviews overlap, with both gates joined at landing. Initial reviews
