@@ -1,0 +1,16 @@
+.agentrig/skills/dogfood/SKILL.md
+  h_26c5a60a657125 107-110
+docs/STATUS.md
+  h_26c5a60a657125 3-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "636c71778deccf9be79fe8108d3a5b7053bac969",
+  "prompts": {},
+  "humans": {
+    "h_26c5a60a657125": {
+      "author": "Amit Paz <amit.p@mstone.ai>"
+    }
+  }
+}
