@@ -41,3 +41,33 @@ for (const { skill, start, end, phrases } of contracts) {
     expect(() => checkPrescriptions(text + `\nIn the author checkout, run \`${command}\`.\n`)).toThrow();
   });
 }
+
+const standalonePhrases = [
+  "Standalone handoff is the recorded transition from builder to conductor, not a handoff to another agent",
+  "At §7, after pushing and persisting proof, record this phase handoff in the PR body",
+  "remove the owned builder worktree and proof TMPDIR under the same join/state/ownership checks above before starting §8",
+  "Run conductor work from outside the removed tree; reviews use fresh reviewer-owned trees",
+  "For each §9 repair, attach the existing branch in an owned worktree per §1",
+  "push and record a new phase handoff, then repeat cleanup before resuming review",
+  "Do not retain the builder tree while waiting for CI, merge authorization or landing",
+];
+function assertStandalone(text: string): void {
+  const operative = section(text, "## 1.", "## 2.").replace(/\s+/g, " ");
+  for (const phrase of standalonePhrases) expect(operative).toContain(phrase);
+}
+it("dogfood defines standalone phase handoff and repeated repair cleanup in branch setup", () => {
+  assertStandalone(read("dogfood"));
+});
+it.each(standalonePhrases)("rejects standalone lifecycle deletion: %s", phrase => {
+  const text = read("dogfood").replace(/\s+/g, " ");
+  assertStandalone(text);
+  expect(() => assertStandalone(`${text.replace(phrase, "")}\n${phrase}`)).toThrow();
+});
+for (const skill of ["dogfood", "ship"]) {
+  it(`${skill} removes both builder resources only after persisted handoff`, () => {
+    const operative = section(read(skill), "## Review scratch cleanup", "## 1.");
+    expect(operative).toContain("after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1");
+    expect(operative).not.toContain("before handoff");
+    expect(operative).not.toContain("remove only their recorded owned proof TMPDIR");
+  });
+}

@@ -12,6 +12,11 @@ the path and handoff before builder cleanup; conductors remove owned leftovers a
 Instruction contracts fail first against the previous instructions, pin the operative rules,
 and reject removed rules and author-tree branch-creation prescriptions. No runtime changes or
 roadmap advancement; local proof is recorded in the PR, independent review and hosted CI pending.
+Repair round 1 addresses only blocking F5/F6: cleanup pointers now remove both owned builder
+resources after pushed, recorded handoff; standalone authors record a builder-to-conductor
+phase handoff at §7 and repeat attach/push/handoff/cleanup for §9 repairs. Proof persistence,
+joined jobs, restored state and ownership checks remain required. Fail-first instruction tests
+pin the lifecycle and retain branch-prescription fixtures; F1/F3/F4 remain deferred to #344–#346.
 
 ## Initial review trio evidence — issue #337, implemented pending review
 
