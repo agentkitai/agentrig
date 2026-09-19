@@ -247,7 +247,7 @@ const initialRemoval = "Then, subject to **Review scratch cleanup**,\n     `git 
 const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root and `OUT`.";
 const cleanupPointer = "Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.";
 
-const cleanupWiring = [
+const cleanupWiring: ReadonlyArray<readonly [string, string, string, string, string, string]> = [
   ["topic initial provenance", topic, "**Provenance.**", "**Combine.**", initialCleanup,
     "cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only after jobs are joined, plus the shared `review-base-NN` ref."],
   ["topic initial removal", topic, "**Provenance.**", "**Combine.**", initialRemoval,
@@ -258,28 +258,28 @@ const cleanupWiring = [
     `${skill} pointer`,
     readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"),
     "## Review scratch cleanup", "## 1.", cleanupPointer, "Use topic's cleanup sequence for every pass.",
-  ]),
+  ] as const),
 ];
 
 for (const [name, text, start, end, passage, reverted] of cleanupWiring) {
   const assertWiring = (candidate: string): void => {
-    expect(candidate.split(start!)[1]?.split(end!)[0]).toContain(passage!);
+    expect(candidate.split(start)[1]?.split(end)[0]).toContain(passage);
   };
   it(`${name} uses a distinct nonempty cleanup revert`, () => {
-    expect(reverted!.trim()).not.toBe("");
+    expect(reverted.trim()).not.toBe("");
     expect(reverted).not.toBe(passage);
-    expect(reverted).not.toBe(passage!.replace("**Review scratch cleanup**", "the cleanup guidance"));
+    expect(reverted).not.toBe(passage.replace("**Review scratch cleanup**", "the cleanup guidance"));
   });
   it(`${name} pins the operative cleanup wiring`, () => {
-    assertWiring(text!);
+    assertWiring(text);
   });
   it.each([
-    ["generic cleanup revert", reverted!],
+    ["generic cleanup revert", reverted],
     ["removed passage", ""],
-    ["reworded reference", passage!.replace("**Review scratch cleanup**", "the cleanup guidance")],
+    ["reworded reference", passage.replace("**Review scratch cleanup**", "the cleanup guidance")],
   ])(`${name} rejects %s even if the passage survives elsewhere`, (_label, replacement) => {
-    assertWiring(text!);
-    const mutant = text!.replace(passage!, replacement);
+    assertWiring(text);
+    const mutant = text.replace(passage, replacement);
     expect(mutant).not.toBe(text);
     // A copy outside the operative bullet/section cannot satisfy the contract.
     expect(() => assertWiring(`${mutant}\n${passage}`)).toThrow();
