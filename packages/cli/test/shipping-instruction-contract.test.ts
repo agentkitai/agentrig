@@ -16,8 +16,12 @@ elsewhere in the body. This form is for the initial full pair, not focused delta
 
 function assertHeadingContract(text: string): void {
   expect(text).toContain(rule);
-  // Inspect quoted review H2s, including inflected alternate posting families.
-  // Accept the literal ledger allowlist and complete canonical External/Focused forms.
+  // Bounded quoted-H2 vocabulary: review/reviews/reviewer/reviewers, not general
+  // English morphology. Alternate inflected forms (Independent reviews, Reviewer
+  // verdict, Reviewers notes) are rejected; Reviewed by / Reviewing report and
+  // synonyms are deliberately outside this scanner, not authorized headings.
+  // Accept only the literal ledger allowlist below and complete canonical
+  // External/Focused forms checked below; the ledger exemption is exact, not a prefix.
   const ledgerHeadings: readonly string[] = ["## Review disposition"];
   const literals = [...text.matchAll(/[`"](## [^`"\n]*\breview(?:s|er|ers)?\b[^`"\n]*)[`"]/gi)].map(match => match[1]!);
   expect(text).not.toMatch(/[`"]## Initial independent review[^`"\n]*[`"]/i);
@@ -125,7 +129,7 @@ it.each([
   expect(() => assertRerun(mutant)).toThrow();
 });
 
-const historicalMainRule = "The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base\n   reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing\n   conflict and material-delta rules in shipping policy §3, not a redundant initial pair.";
+const historicalMainRule = "The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base\n   reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing\n   conflict and material-delta rules in shipping policy §3; a clean advance re-verifies exact-head CI\n   under shipping policy §1’s CI-staleness rule, not a redundant initial pair.";
 
 function assertHistoricalMain(text: string): void {
   const rerun = text.split("First check whether it already ran:")[1]?.split("- **Prepare.**")[0];
@@ -141,6 +145,7 @@ it.each([
   ["removed clarification", ""],
   ["current-main equality gate", historicalMainRule.replace("need not equal", "must equal")],
   ["redundant pair on moved main", historicalMainRule.replace("not a redundant initial pair", "requiring a redundant initial pair")],
+  ["lost clean-main CI-staleness routing", historicalMainRule.replace("a clean advance re-verifies exact-head CI\n   under shipping policy §1’s CI-staleness rule", "clean advances need no CI re-verification")],
   ["lost conflict/delta routing", historicalMainRule.replace("conflict and material-delta rules in shipping policy §3", "rerun matching alone")],
 ])("topic rejects %s at the operative rerun check", (_name, replacement) => {
   assertHistoricalMain(topic);

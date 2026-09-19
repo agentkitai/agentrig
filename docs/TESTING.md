@@ -36,9 +36,10 @@ same root. Before this was pinned, a workspace-local run exited 1 with `No test 
 Vitest sets `GIT_TRACE2_EVENT=0` in the test process environment (including the inherited
 Windows/web configs). Product Git children using `gitEnvironment()` also reset it after
 stripping inherited `GIT_*` variables, so checkpointer, checkpoint-undo and subagent-worktree
-Git calls are isolated from host trace2 targets. Caller-built environments omitting the setting
+Git calls are isolated from host trace2 event targets. Caller-built environments omitting the setting
 are not guaranteed isolated. The override disables host `trace2.eventTarget` hooks such as
 git-ai, which can write `refs/notes/ai` in fixture repositories and race teardown (`ENOTEMPTY`).
+It does not disable `trace2.normalTarget` or `trace2.perfTarget`.
 This is separate from fixture ancestry and does not change the preflight check.
 
 ## The fixture preflight
