@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  checkSessionProvenance,
   createAgent,
   RulePolicy,
   SessionStore,
@@ -1342,5 +1343,143 @@ describe("provider choice on the spawn tool", () => {
     // the named choice threads through the re-wrap; an unnamed grandchild gets undefined, which
     // the CLI maps to the subagents role
     expect(seen).toEqual(["cloud", undefined]);
+  });
+});
+
+
+describe("shadow provenance checker", () => {
+  const repositoryUrl = "https://github.com/agentkitai/agentrig";
+  const pullRequestUrl = `${repositoryUrl}/pull/319`;
+  const runUrl = `${repositoryUrl}/actions/runs/123456`;
+  const captures = (receipt: unknown) => ({
+    repository: JSON.stringify({ url: repositoryUrl }),
+    pullRequest: JSON.stringify({ url: pullRequestUrl,
+      body: `## Review disposition ledger\n\n\`\`\`subagent-provenance\n${JSON.stringify(receipt)}\n\`\`\`` }),
+    run: JSON.stringify({ url: runUrl }),
+  });
+
+  async function observed() {
+    const { tool, ctx, emitted } = bareTool(new ScriptedProvider([[say("done"), stop("end_turn")]]));
+    const result = await tool.execute({ task: "check receipts", label: "builder" }, ctx);
+    const spawn = emitted.find(event => event.type === "subagent.spawn") as { id: string; task: string };
+    const receipt = { parentSessionId: ctx.sessionId, childSessionId: spawn.id,
+      repositoryUrl, pullRequestUrl, runUrl };
+    return { tool, result, spawn, receipt };
+  }
+
+  it.each([`${repositoryUrl}/issues/319`, "https://github.com/agentkitai/otherrep/pull/319"])("rejects captured PR path %s", async url => {
+    const { tool, result, receipt } = await observed();
+    const evidence = captures({ ...receipt, pullRequestUrl: url });
+    evidence.pullRequest = JSON.stringify({ ...JSON.parse(evidence.pullRequest), url });
+    const report = tool.checkProvenance(result, evidence);
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toContain("pullRequestUrl");
+  });
+
+  it("resolves provenance from durable parent spawn events without a result identity", async () => {
+    const store = new SessionStore({ root });
+    const { receipt, spawn } = await observed();
+    const request = { parentSessionId: receipt.parentSessionId, childSessionId: receipt.childSessionId };
+    expect((await checkSessionProvenance(store, request, captures(receipt))).matches).toBe(false);
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: spawn.id, task: spawn.task });
+    expect(await checkSessionProvenance(new SessionStore({ root }), request, captures(receipt)))
+      .toEqual({ matches: true, discrepancies: [] });
+    const wrong = { ...receipt, childSessionId: store.create() };
+    expect((await checkSessionProvenance(store,
+      { ...request, childSessionId: wrong.childSessionId }, captures(wrong))).matches).toBe(false);
+    expect((await checkSessionProvenance(store, { ...request, parentSessionId: "other-parent" }, captures(receipt))).matches).toBe(false);
+    expect((await checkSessionProvenance(store, {}, captures(receipt))).matches).toBe(false);
+  });
+
+  it("binds two invocations of the SAME tool to their own child and task", async () => {
+    const { tool, ctx } = bareTool(new ScriptedProvider([[say("one"), stop("end_turn")], [say("two"), stop("end_turn")]]));
+    ctx.sessionId = "parent-session";
+    const first = await tool.execute({ task: "first" }, ctx);
+    const second = await tool.execute({ task: "second" }, ctx);
+    const receipt = (result: typeof first, task: string) => ({ ...(result.output as { spawn: { parentSessionId: string; childSessionId: string } }).spawn, task,
+      repositoryUrl, pullRequestUrl, runUrl });
+    expect(tool.checkProvenance(first, captures(receipt(first, "first"))).matches).toBe(true);
+    expect(tool.checkProvenance(second, captures(receipt(second, "second"))).matches).toBe(true);
+    expect(tool.checkProvenance(first, captures(receipt(second, "second"))).matches).toBe(false);
+    expect(tool.checkProvenance(second, captures(receipt(first, "first"))).matches).toBe(false);
+    const report = tool.checkProvenance(first, captures(receipt(first, "changed")));
+    expect(report.discrepancies.map(item => item.field)).toContain("task");
+  });
+
+  it("reports BOTH a different well-formed child ID and an invented right-host repository", async () => {
+    const { tool, result, receipt } = await observed();
+    const differentId = new SessionStore({ root }).create();
+    expect(differentId).not.toBe(receipt.childSessionId);
+    const report = tool.checkProvenance(result, captures({ ...receipt, childSessionId: differentId,
+      repositoryUrl: "https://github.com/agentkitai/invented-repository" }));
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toEqual(["childSessionId", "repositoryUrl"]);
+  });
+
+  it("accepts only receipt facts copied from the actual spawn and captured GitHub evidence", async () => {
+    const { tool, result, spawn, receipt } = await observed();
+    expect(result.output.spawn).toEqual({ parentSessionId: receipt.parentSessionId,
+      childSessionId: spawn.id, task: spawn.task });
+    expect(Object.isFrozen(result.output.spawn)).toBe(true);
+    expect(tool.checkProvenance(result, captures(receipt))).toEqual({ matches: true, discrepancies: [] });
+  });
+
+  it.each(["parentSessionId", "pullRequestUrl", "runUrl"] as const)("compares exact %s, not shape or host", async field => {
+    const { tool, result, receipt } = await observed();
+    const report = tool.checkProvenance(result, captures({ ...receipt, [field]: `${receipt[field]}9` }));
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toContain(field);
+  });
+
+  it("flags missing and unsupported claims rather than silently accepting them", async () => {
+    const { tool, result, receipt } = await observed();
+    const { runUrl: _run, ...incomplete } = receipt;
+    const report = tool.checkProvenance(result, captures({ ...incomplete, reviewerApproved: true }));
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toEqual(["reviewerApproved", "runUrl"]);
+    expect(tool.checkProvenance(result, captures(null)).matches).toBe(false);
+  });
+
+  it("requires captured evidence and exactly one supported receipt in the PR body", async () => {
+    const { tool, result, receipt } = await observed();
+    const evidence = captures(receipt);
+    for (const repository of [undefined, "not JSON", "{}", JSON.stringify({ url: "https://example.com/agentkitai/agentrig" })]) {
+      expect(tool.checkProvenance(result, { ...evidence, repository }).matches).toBe(false);
+    }
+    for (const body of ["", "```subagent-provenance\nnot JSON\n```",
+      `${JSON.parse(evidence.pullRequest).body}\n${JSON.parse(evidence.pullRequest).body}`]) {
+      expect(tool.checkProvenance(result, { ...evidence, pullRequest: JSON.stringify({ url: pullRequestUrl, body }) }).matches).toBe(false);
+    }
+    for (const key of ["pullRequest", "run"] as const) {
+      expect(tool.checkProvenance(result, { ...evidence, [key]: undefined }).matches).toBe(false);
+    }
+  });
+
+  it("does not accept a fabricated/copied result or borrow another invocation's child", async () => {
+    const first = await observed();
+    const second = await observed();
+    expect(first.tool.checkProvenance({ ...first.result }, captures(first.receipt)).matches).toBe(false);
+    expect(first.tool.checkProvenance(second.result, captures(second.receipt)).matches).toBe(false);
+    expect(first.tool.checkProvenance(first.result, captures(second.receipt)).matches).toBe(false);
+  });
+
+  it("does not trust edits to the exposed spawn fields", async () => {
+    const { tool, result, receipt } = await observed();
+    const invented = new SessionStore({ root }).create();
+    result.output.spawn = { ...result.output.spawn, childSessionId: invented };
+    expect(tool.checkProvenance(result, captures({ ...receipt, childSessionId: invented })).matches).toBe(false);
+    expect(tool.checkProvenance(result, captures(receipt)).matches).toBe(true);
+  });
+
+  it("does not accept mutually consistent links from a different repository in GitHub captures", async () => {
+    const { tool, result, receipt } = await observed();
+    const foreign = "https://github.com/agentkitai/other";
+    const claimed = { ...receipt, pullRequestUrl: `${foreign}/pull/319`, runUrl: `${foreign}/actions/runs/123456` };
+    const evidence = captures(claimed);
+    evidence.pullRequest = JSON.stringify({ ...JSON.parse(evidence.pullRequest), url: claimed.pullRequestUrl });
+    evidence.run = JSON.stringify({ url: claimed.runUrl });
+    const report = tool.checkProvenance(result, evidence);
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toEqual(["pullRequestUrl", "runUrl"]);
   });
 });

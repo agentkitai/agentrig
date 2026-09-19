@@ -1,6 +1,27 @@
 # Status
 
-Current roadmap row: user-directed shipping workflow follow-ups row 4 (roadmap backlog hygiene, PR #317), implemented pending review and exact-head CI/landing; final row of this authorized train, no next row authorized here; continuation order remains ROADMAP §5.
+Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
+
+## Shadow provenance checker — issue #319, implemented pending review
+
+Immutable result spawn facts and the identity-bound SDK checker are now joined by the
+identity-free core `checkSessionProvenance(store, {parentSessionId, childSessionId}, evidence)`:
+it resolves the child only from the parent's durable physical `subagent.spawn` log. Missing,
+ambiguous or unreadable observations are not success. The thin CLI
+`agentrig sessions provenance <parentSessionId> --receipt <json-file> --root <sessions-dir>`
+prints this advisory report without providers or delivery gates. The input file contains
+`{childSessionId, evidence: {repository, pullRequest, run}}`, with evidence values being trusted
+operator-captured GitHub JSON stdout, not claims reconstructed from the receipt. The captured
+PR body remains the sole receipt authority; the input file is an observation bundle, not a
+second editable ledger. Optional task claims compare against the observed spawn label/task.
+CI success, freshness and review approval are not inferred from URL identity.
+
+Repair tests cover both independently essential URL checks, a reopened durable store and
+real CLI dispatch, same-tool two-invocation identity, and task mismatch. Wrong-path and
+same-length foreign-repository mutants each fail their dedicated assertion and were restored.
+Broader receipt rendering remains deferred; no permissions, skills or event schema changed.
+Local proof and train shadow-exercise coordination are recorded in the PR ledger; no hosted
+CI, future review or merge outcome is claimed here.
 
 ## Shipping workflow follow-ups — roadmap backlog hygiene
 
