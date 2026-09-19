@@ -129,7 +129,8 @@ For each recorded row, in order:
    read those two comments as its result and continue at **Combine**.
    The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base
    reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing
-   conflict and material-delta rules in shipping policy §3, not a redundant initial pair.
+   conflict and material-delta rules in shipping policy §3; a clean advance re-verifies exact-head CI
+   under shipping policy §1’s CI-staleness rule, not a redundant initial pair.
    For older heads, recover
    the review ledger and inspect uncovered deltas under shipping policy §3 instead of restarting
    the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
