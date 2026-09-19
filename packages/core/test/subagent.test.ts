@@ -1391,6 +1391,31 @@ describe("shadow provenance checker", () => {
     expect((await checkSessionProvenance(store, {}, captures(receipt))).matches).toBe(false);
   });
 
+  it("selects the named durable spawn among multiple parent children", async () => {
+    const store = new SessionStore({ root });
+    const { receipt, spawn } = await observed();
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: store.create(), task: "sibling" });
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: spawn.id, task: spawn.task });
+    const request = { parentSessionId: receipt.parentSessionId, childSessionId: spawn.id };
+    expect(await checkSessionProvenance(new SessionStore({ root }), request, captures(receipt)))
+      .toEqual({ matches: true, discrepancies: [] });
+    // Keep the honest receipt unchanged: selection is independently authoritative.
+    const absent = await checkSessionProvenance(store, { ...request, childSessionId: store.create() }, captures(receipt));
+    expect(absent.matches).toBe(false);
+    expect(absent.discrepancies.map(item => item.field)).toContain("spawn");
+  });
+
+  it("rejects duplicate durable spawn IDs as ambiguous", async () => {
+    const store = new SessionStore({ root });
+    const { receipt, spawn } = await observed();
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: spawn.id, task: spawn.task });
+    await store.append(receipt.parentSessionId, { type: "subagent.spawn", id: spawn.id, task: spawn.task });
+    const report = await checkSessionProvenance(new SessionStore({ root }),
+      { parentSessionId: receipt.parentSessionId, childSessionId: spawn.id }, captures(receipt));
+    expect(report.matches).toBe(false);
+    expect(report.discrepancies.map(item => item.field)).toContain("spawn");
+  });
+
   it("binds two invocations of the SAME tool to their own child and task", async () => {
     const { tool, ctx } = bareTool(new ScriptedProvider([[say("one"), stop("end_turn")], [say("two"), stop("end_turn")]]));
     ctx.sessionId = "parent-session";

@@ -16,10 +16,10 @@ elsewhere in the body. This form is for the initial full pair, not focused delta
 
 function assertHeadingContract(text: string): void {
   expect(text).toContain(rule);
-  // Inspect quoted review H2s, including alternate posting families. Only the
-  // literal ledger allowlist is exempt from complete comment-heading validation.
+  // Inspect quoted review H2s, including inflected alternate posting families.
+  // Accept the literal ledger allowlist and complete canonical External/Focused forms.
   const ledgerHeadings: readonly string[] = ["## Review disposition"];
-  const literals = [...text.matchAll(/[`"](## [^`"\n]*\breview\b[^`"\n]*)[`"]/gi)].map(match => match[1]!);
+  const literals = [...text.matchAll(/[`"](## [^`"\n]*\breview(?:s|er|ers)?\b[^`"\n]*)[`"]/gi)].map(match => match[1]!);
   expect(text).not.toMatch(/[`"]## Initial independent review[^`"\n]*[`"]/i);
   expect(literals.length).toBeGreaterThan(0);
   for (const literal of literals) {
@@ -41,7 +41,7 @@ for (const skill of skills) {
     const fixture = `${text}\nCheck the PR body's ${quote}## Review disposition${quote} ledger is complete.`;
     assertHeadingContract(fixture);
   });
-  it.each(["Independent", "Peer", "Adversarial", "Review verdict", "External review pair"])(
+  it.each(["Independent", "Peer", "Adversarial", "Review verdict", "External review pair", "Independent reviews", "Reviewer verdict"])(
     `${skill} rejects alternate %s review-comment headings in either quote style`, family => {
       for (const quote of ["`", '"']) {
         const name = family.includes("review") || family.includes("Review") ? family : `${family} review`;
@@ -68,13 +68,16 @@ const topic = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", i
 const review = readFileSync(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url), "utf8");
 
 function assertRerun(text: string): void {
-  const slice = text.split("First check whether it already ran:")[1]?.split("continue at **Combine**")[0];
+  const slice = text.split("First check whether it already ran:")[1]?.split("- **Prepare.**")[0];
   expect(slice).toContain("with the complete initial full review heading defined above");
   expect(slice).toContain("naming the CURRENT head SHA in the heading");
   // Bounded prose contract, not general language inference: these alternative
   // acceptance markers are forbidden in the rerun bullet even when both required
   // phrases remain. Word boundaries avoid matching e.g. "or" inside "Codex".
-  expect(slice).not.toMatch(/\bor\b|\balternatively\b|\balso\s+accept\b|\bprefix\b|\banywhere\s+in\s+the\s+body\b/i);
+  // This exact evidence-isolation sentence contains a benign "or", not an
+  // acceptance alternative. Exempt only its literal text, not the surrounding tail.
+  const acceptance = slice?.replace("Never pass the builder's report,\n   reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their\n   only evidence.", "");
+  expect(acceptance).not.toMatch(/\bor\b|\balternatively\b|\balso\s+accept\b|\bprefix\b|\banywhere\s+in\s+the\s+body\b/i);
 }
 
 it("topic rerun acceptance requires the complete heading and CURRENT SHA within that heading", () => {
@@ -99,6 +102,15 @@ it.each([
   expect(mutant).not.toBe(topic);
   expect(mutant).toContain("with the complete initial full review heading defined above");
   expect(mutant).toContain("naming the CURRENT head SHA in the heading");
+  expect(() => assertRerun(mutant)).toThrow();
+});
+
+it("topic rejects alternate acceptance in the rerun tail before Prepare", () => {
+  assertRerun(topic);
+  const alternative = "Alternatively, two comments whose heading begins with the external review prefix and that name the CURRENT head SHA anywhere in the body are also accepted; do not run the pass again.";
+  const mutant = topic.replace("   - **Prepare.**", `   ${alternative}\n   - **Prepare.**`);
+  expect(mutant).not.toBe(topic);
+  expect(mutant).toContain(historicalMainRule);
   expect(() => assertRerun(mutant)).toThrow();
 });
 
@@ -231,18 +243,21 @@ it("topic cleanup procedure orders join, restoration and persisted evidence befo
 });
 // Pin the operative procedure points, not just the shared declaration above.
 const initialCleanup = "cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,\n     including BOTH reviewer trees, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`.";
+const initialRemoval = "Then, subject to **Review scratch cleanup**,\n     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;\n     remove the recorded owned reviewer temporary roots and `OUT` as well.";
 const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root and `OUT`.";
 const cleanupPointer = "Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.";
 
 const cleanupWiring = [
   ["topic initial provenance", topic, "**Provenance.**", "**Combine.**", initialCleanup,
     "cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only after jobs are joined, plus the shared `review-base-NN` ref."],
+  ["topic initial removal", topic, "**Provenance.**", "**Combine.**", initialRemoval,
+    "Then `git worktree remove --force <WT>`."],
   ["topic focused delta", topic, "- **Cover the delta**", "- **Converge:**", focusedCleanup,
     "Join subprocesses and verify restored tracked/index state before cleanup."],
   ...["ship", "dogfood"].map(skill => [
     `${skill} pointer`,
     readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"),
-    "## Review scratch cleanup", "## 1.", cleanupPointer, "",
+    "## Review scratch cleanup", "## 1.", cleanupPointer, "Use topic's cleanup sequence for every pass.",
   ]),
 ];
 
@@ -250,11 +265,16 @@ for (const [name, text, start, end, passage, reverted] of cleanupWiring) {
   const assertWiring = (candidate: string): void => {
     expect(candidate.split(start!)[1]?.split(end!)[0]).toContain(passage!);
   };
+  it(`${name} uses a distinct nonempty cleanup revert`, () => {
+    expect(reverted!.trim()).not.toBe("");
+    expect(reverted).not.toBe(passage);
+    expect(reverted).not.toBe(passage!.replace("**Review scratch cleanup**", "the cleanup guidance"));
+  });
   it(`${name} pins the operative cleanup wiring`, () => {
     assertWiring(text!);
   });
   it.each([
-    ["reviewer reverting mutant", reverted!],
+    ["generic cleanup revert", reverted!],
     ["removed passage", ""],
     ["reworded reference", passage!.replace("**Review scratch cleanup**", "the cleanup guidance")],
   ])(`${name} rejects %s even if the passage survives elsewhere`, (_label, replacement) => {
