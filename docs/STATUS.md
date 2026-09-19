@@ -29,6 +29,19 @@ status record changed; the bounded prose grammar is not a general language parse
 Final full-trio receipts and finding dispositions are recorded in the PR ledger;
 no roadmap advancement, skill edits, runtime changes, or delivery claims.
 
+PR #358 final bounded repair round 3/3 addresses focused-review G1–G4:
+fronted cleanup timing applies across intervening subjects and contrast clauses,
+with every removal predicate checked independently; singular/plural conductor-only
+exemptions remain valid without exempting builder-mixed scope. Plural worktrees,
+pronoun advisory language, and definite rule/requirement carveouts are rejected.
+Negated avoidance of a checkout/switch is not mistaken for a prohibition, while
+existing accepted prohibitions and same-clause affirmative detections are retained.
+New fixtures failed first on the old guards (40 failures); all 469 instruction-
+contract cases pass. Four named reverted-guard mutants are killed (14/6/15/9
+failures). Full-trio receipts and individual G1–G4 dispositions are in the PR
+ledger. Test-only scope plus this status entry; no skills changed. Review, exact-
+head CI, and any authorized landing remain conductor-owned; repair budget is 3/3.
+
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
