@@ -251,6 +251,7 @@ For each recorded row, in order:
      ```
      CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
      [ -n "$CODEX_MODEL" ] || exit 2
+     [ -s "<OUT>/codex-trio.md" ] || exit 2
      { echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; cat "<OUT>/codex.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
      ```
      The conductor posts both independently obtained verdicts, not either isolated reviewer:

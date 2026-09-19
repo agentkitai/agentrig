@@ -5,6 +5,13 @@ Current roadmap row: user-directed shadow provenance checker (issue #319, PR #32
 
 ## Initial review trio evidence — issue #337, implemented pending review
 
+PR #340 repair round 1 addresses only blocking review findings 1–2: operative phrase
+contracts now pin independent-author/same-head proof and reject author-tree substitution;
+the Codex posting snippet exits before comment construction when trio evidence is missing
+or empty. Instruction tests exercise absent, empty and present proof plus the precise
+proviso-removal mutations. Focused review and exact-head CI remain required; no runtime
+changes, nonblocking repair work or roadmap advancement.
+
 The initial external pass now includes conductor-run independent build/test/typecheck proof
 in the reviewed-head worktree (or a fresh same-commit tree), with install/preflight isolation,
 separate exits, counts and UTC times posted with the initial verdict. Shipping, land, ship
