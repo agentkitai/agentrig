@@ -1,4 +1,13 @@
 # Status
+
+## Instruction-contract guard sweep (#344–#347)
+
+Test-only guard repair: builder-worktree contract fixtures distinguish quoted branch
+prohibitions from prescriptions, reject adjacent advisory/exception carveouts, cover
+non-creating author-tree switches/checkouts, and accept negated premature cleanup
+while retaining the positive persisted-handoff requirement. Four independent
+reverted-guard mutants fail; no skill instructions or runtime behavior changed.
+
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
