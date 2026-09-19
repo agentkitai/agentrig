@@ -63,6 +63,7 @@ export function gitEnvironment(): NodeJS.ProcessEnv {
   // to the plumbing calls that intentionally use it below.
   for (const name of Object.keys(env)) if (name.startsWith("GIT_")) delete env[name];
   env.GIT_NO_REPLACE_OBJECTS = "1";
+  env.GIT_TRACE2_EVENT = "0";
   // Classification of the only fail-open case below relies on Git's stable English diagnostic.
   env.LC_ALL = "C";
   return env;
