@@ -65,16 +65,18 @@ Sandbox background-output coverage now polls readiness within a two-second deadl
 
 ## Shipping workflow convergence — implementation
 
-Issue #312 narrows the quoted H2 scan to the `## External review —` and
-`## Focused review —` comment-heading families, so references to the
-`## Review disposition` PR-body ledger are not mistaken for posting instructions.
-Backtick- and double-quoted ledger fixtures failed first for all five skills
-(10 failures), then passed with the narrowed scan. Existing assertions remain,
-including an explicit guard for the forbidden alternate prescribed heading;
-malformed focused-review fixtures add coverage. Three scan/guard mutations were
-killed and restored. Build, typecheck and the full suite passed (254 files passed,
-one skipped; 3,952 tests passed, six skipped). This is test-only coverage, not a
-shipping-policy change. Review and exact-head hosted CI remain delivery gates.
+Issue #312 repair round 1 follows the explicit human contract amendment after
+Claude C1 exposed lost alternate-posting rejection. Quoted review H2s are checked
+against complete External/Focused comment headings, with the literal ledger
+allowlist containing exactly `## Review disposition`. Independent, Peer,
+Adversarial and other em-dash alternate headings are rejected in both quote
+styles across all five skills; complete focused headings and ledger references
+are accepted. The added alternate fixtures failed first (25 failed / 80 passed),
+then all 105 focused tests passed. Removing the ledger allowlist entry failed its
+10 ledger fixtures; the Independent posting mutant is killed both against
+origin/main and the repair. No runtime or shipping-policy change; the historical
+arbiter rejection is superseded by the human amendment. Focused independent
+review and exact-head hosted CI remain delivery gates; proof lives in PR #330.
 
 The five shipping/review skills now share [one policy](SHIPPING-WORKFLOW.md).
 Builders/fixers hand off immediately after local verification and push; hosted CI
