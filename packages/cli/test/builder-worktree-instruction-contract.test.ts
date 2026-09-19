@@ -17,16 +17,27 @@ const contracts = [
   ] })),
 ];
 
-// Deliberately bounded prose guard, not a natural-language parser. Negation must
-// govern this command clause, not an earlier sentence or a contrasting clause.
+// Bounded prose grammar, not a general natural-language parser. A fresh action
+// after a conjunction/comma or temporal lead-in starts its own negation scope.
+// In particular, an unrelated earlier "never run" cannot excuse a later command.
+const actionClauses = (text: string) => text.split(
+  /[.;!\n]|\b(?:but|however|instead)\b|(?:,|\b(?:and(?: then)?|then)\b|\b(?:before|until)\s+you\b)\s*(?=(?:must\s+)?(?:run|use|remove)\b)/i,
+);
+const prohibited = (prefix: string) => /\b(?:never|do not|must not|avoid|forbidden to|prohibited to|no builder may)\b/i.test(prefix);
 const checkPrescriptions = (text: string) => {
-  for (const clause of text.split(/[.;!\n]|\b(?:but|however|instead)\b/i)) {
-    if (/^\s*(?:never|do not)\s+(?:run|use)\b/i.test(clause)) continue;
-    expect(clause).not.toMatch(/git\s+(?:switch|checkout)\s+(?!-{1,2}(?:detach|help)\b|--\s)\S+/);
+  for (const clause of actionClauses(text)) {
+    for (const command of clause.matchAll(/git\s+(?:switch|checkout)\s+(?!-{1,2}(?:detach|help)\b|--\s)\S+/g)) {
+      expect(prohibited(clause.slice(0, command.index))).toBe(true);
+    }
   }
 };
 const checkForce = (operative: string) => {
-  expect(operative).not.toMatch(/\b(?:advisory only|does not apply|do not apply|unless inconvenient)\b/i);
+  for (const clause of operative.split(/[.;!]/)) {
+    // Scoping the steps away from conductors is not a builder-rule exception.
+    // Require the worktree subject in the same sentence, not elsewhere in §1.
+    if (!/\bworktree\b/i.test(clause)) continue;
+    expect(clause).not.toMatch(/\b(?:advisory[ -]only|optional|(?:does not|do not|need not) apply|unless inconvenient|where practical|is a recommendation)\b/i);
+  }
 };
 for (const { skill, start, end, phrases } of contracts) {
   const check = (text: string) => {
@@ -37,6 +48,12 @@ for (const { skill, start, end, phrases } of contracts) {
   };
   it(`${skill} pins owned builder worktrees at delegation/branch setup`, () => check(read(skill)));
   it.each([
+    "Never change the author checkout's branch with `git switch docs/task`.",
+    "Builders must never run `git switch docs/task` in the author checkout.",
+    "Avoid `git checkout docs/task` in the author checkout.",
+    "No builder may run `git checkout docs/task` there.",
+    "The author checkout must not be moved with `git switch docs/task`.",
+    "It is forbidden to run `git switch docs/task` in the author checkout.",
     "Never run `git switch -c docs/task` or `git checkout -b docs/task` in the author checkout.",
     "Do not run `git switch docs/task` or `git checkout docs/task` in the author checkout.",
     "Never change the author checkout's branch; never run `git switch -c` or `git checkout -b` there.",
@@ -45,6 +62,11 @@ for (const { skill, start, end, phrases } of contracts) {
   });
   it.each([
     "These worktree requirements are advisory only.",
+    "These worktree requirements are advisory-only.",
+    "The owned worktree rule is optional.",
+    "The owned worktree rule need not apply.",
+    "Use an owned worktree where practical.",
+    "The owned worktree rule is a recommendation.",
     "The owned worktree rule does not apply when a worktree is inconvenient.",
     "These worktree requirements do not apply when a worktree is inconvenient.",
     "Use an owned worktree unless inconvenient.",
@@ -54,10 +76,20 @@ for (const { skill, start, end, phrases } of contracts) {
     expect(() => check(text.replace(operative, `${operative}\n${carveout}\n`))).toThrow();
   });
   it.each([
+    "Never run the builder loop before you run `git checkout -b docs/task` in the author checkout.",
+    "Never run the builder loop and then run `git switch docs/task` in the author checkout.",
+    "Do not use the author tree, run `git switch -c docs/task` first.",
+    "Never run `git switch -c forbidden` in the author checkout and run `git switch docs/task` there.",
+    "Builders must never run `git checkout forbidden` and must run `git checkout docs/task` there.",
     "Never run `git switch -c forbidden`; run `git switch docs/task`.",
     "Do not run `git checkout -b forbidden`, but run `git checkout docs/task`.",
   ])(`${skill} rejects a prescription after a prohibition: %s`, prescription => {
     expect(() => check(read(skill) + `\n${prescription}`)).toThrow();
+  });
+  it(`${skill} accepts a conductor-only scope exemption`, () => {
+    const text = read(skill);
+    const operative = text.split(start)[1]!.split(end)[0]!;
+    expect(() => check(text.replace(operative, `${operative} These steps do not apply to the conductor.`))).not.toThrow();
   });
   it.each(phrases)(`${skill} rejects removal of %s despite an out-of-section copy`, phrase => {
     const text = read(skill);
@@ -100,12 +132,35 @@ function checkCleanup(text: string): void {
   const operative = section(text, "## Review scratch cleanup", "## 1.");
   expect(operative).toContain("after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1");
   expect(operative).not.toContain("remove only their recorded owned proof TMPDIR");
+  // Keep a fronted timing condition attached to its removal action.
+  const cleanup = operative.replace(/(^|[.;!])\s*before handoff([^,.;]*),\s*remove\b/gi, "$1 remove before handoff$2");
+  for (const clause of actionClauses(cleanup)) {
+    const removal = /\bremove\b/i.exec(clause);
+    if (removal && /\bbefore handoff\b/i.test(clause)) {
+      expect(prohibited(clause.slice(0, removal.index))).toBe(true);
+    }
+  }
 }
 for (const skill of ["dogfood", "ship"]) {
   it(`${skill} removes both builder resources only after persisted handoff`, () => checkCleanup(read(skill)));
   it(`${skill} accepts negated premature cleanup`, () => {
     const text = read(skill).replace("## 1.", "Never remove the owned worktree before handoff is recorded in the PR body.\n\n## 1.");
     expect(() => checkCleanup(text)).not.toThrow();
+  });
+  it.each([
+    "Remove the owned worktree before handoff is recorded in the PR body.",
+    "Before handoff is recorded in the PR body, remove the owned worktree.",
+    "Never remove the proof TMPDIR before handoff and remove the owned worktree before handoff.",
+    "Do not remove the proof TMPDIR before handoff, remove the owned worktree before handoff.",
+  ])(`${skill} rejects affirmative cleanup additions: %s`, instruction => {
+    const text = read(skill).replace("## 1.", `${instruction}\n\n## 1.`);
+    expect(() => checkCleanup(text)).toThrow();
+  });
+  it.each([
+    "Builders must never remove the owned worktree before handoff.",
+    "Do not remove the owned worktree before handoff.",
+  ])(`${skill} accepts natural cleanup prohibitions: %s`, instruction => {
+    expect(() => checkCleanup(read(skill).replace("## 1.", `${instruction}\n\n## 1.`))).not.toThrow();
   });
   it(`${skill} rejects premature cleanup with positive pointer removed`, () => {
     const text = read(skill).replace("after the branch is pushed and handoff is recorded in the PR body, remove", "before handoff, remove");

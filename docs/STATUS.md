@@ -8,6 +8,16 @@ non-creating author-tree switches/checkouts, and accept negated premature cleanu
 while retaining the positive persisted-handoff requirement. Four independent
 reverted-guard mutants fail; no skill instructions or runtime behavior changed.
 
+PR #358 repair round 1/3 addresses both initial independent reviews: added fail-first
+natural prohibitions, same-clause affirmative commands, hyphenated/advisory
+optionality, conductor-only exemptions, and affirmative premature-cleanup additions
+(including mixed negation and fronted timing). Action boundaries limit command
+negation; sentence-local worktree force checks preserve conductor exemptions;
+cleanup retains positive requirements while rejecting contradictory additions.
+All 342 instruction-contract cases pass and five named repair mutants are killed.
+Full build/test/typecheck proof and per-finding dispositions are in the PR ledger;
+focused delta review and exact-head CI remain conductor-owned.
+
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
