@@ -25,6 +25,23 @@ No alternate heading is valid for posting,
 acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
 
+## Review scratch cleanup
+
+Human cleanup contract (verbatim):
+
+> After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
+
+Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
+
+Apply this sequence to successful, failed, retried, stale and interrupted passes alike, including every abbreviated cleanup instruction below:
+
+1. Join every job and subprocess, including installs, retries and mutations.
+2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.
+3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.
+4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots and `OUT`; never the author's tree or old unowned scratch.
+
+For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
+
 ## 1. Lock the authorization and train
 
 - The latest human-authored task must expressly invoke `topic` for the named band. In the TUI this
@@ -197,8 +214,8 @@ For each recorded row, in order:
      the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) and clean tracked/index state. Any unrestored mutant, changed
      HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
      dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
-     cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only
-     after jobs are joined, plus the shared `review-base-NN` ref. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
+     cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,
+     including BOTH reviewer trees, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
      it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
      head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
      policy §3; never silently certify a different head or restart both reviews by default. Compose each comment body
@@ -215,8 +232,10 @@ For each recorded row, in order:
      `gh pr comment NN --body-file "<OUT>/claude-comment.md"` and
      `gh pr comment NN --body-file "<OUT>/codex-comment.md"`, and
      record both comment URLs — they stand in for reviewer session ids. A body over 60,000
-     characters is split into numbered comments `(1/2)`, `(2/2)`. Then
-     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`.
+     characters is split into numbered comments `(1/2)`, `(2/2)`. Read/combine the verdicts and persist
+     their receipts first. Then, subject to **Review scratch cleanup**,
+     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;
+     remove the recorded owned reviewer temporary roots and `OUT` as well.
    - **Combine.** Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's, if present, so findings are
      repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
      and the same scenario), and sort the union under step 5. Claude's review must also name
@@ -234,10 +253,16 @@ Follow shipping policy §§2–3: at most THREE repair rounds, retaining the cou
 Collect both initial verdicts, disposition all findings, and batch only blocking repairs.
 Non-blocking defects get documented issues; optional suggestions do not consume rounds.
 
+The human-directed classification rule is explicit: the topic skill permits one arbitration per row; a conductor that disagrees with a focused reviewer's non-blocking classification records the disagreement in the ledger and either accepts it or halts for the human, without a second arbitration.
+This disagreement rule does not reclassify blocking findings: all HIGH findings, unmet acceptance, uncertain impact and unresolved blockers still block landing under shipping policy §2.
+
 - **Arbitrate first, once per row** for contract/authorization findings, using the proposal,
   original row, and `AUTHORIZATION`. The arbiter uses the main entry as in §2 step 3.
   Carry APPROVE's verdict/session and RECORD into PR/roadmap; REJECT means restore the contract.
   "Needs the human" halts. This shares the builder-deviation arbitration allowance.
+  If that allowance is already used, halt for the human; do not spawn a second arbiter.
+  Focused non-blocking classification disagreement follows the ledger/accept-or-halt rule above,
+  not another arbitration under shipping policy §2.
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
   URLs/finding IDs, authorization, prior reviewed SHA and repair counter. Its brief says:
   "Follow dogfood. You are a topic child: run local proof, push, report OLD/NEW and current CI
@@ -266,7 +291,9 @@ Non-blocking defects get documented issues; optional suggestions do not consume 
   timeout, one-retry, restore/join and SHA checks as the initial pass, applied to this one job.
   A dead focused review after retry halts; it is not replaced by self-review.
   Post its verdict as `## Focused review — <reviewer> — head NEW — delta OLD..NEW`.
-  Join subprocesses and verify restored tracked/index state before cleanup. Re-read the PR head;
+  Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,
+  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary
+  root and `OUT`. Re-read the PR head;
   any uncovered delta still needs classification and coverage before landing.
 - **Converge:** each round closes assigned blockers without reopening closed ones. Newly found
   blockers may use another round up to the cap; advisory/non-blocking notes do not. A surviving
@@ -307,7 +334,7 @@ Always report:
 Halts include: missing/ambiguous or revoked authorization; arbiter needs the human; an unfixable
 blocker, non-convergence or blockers at the three-round cap; an incomplete required review after
 its retry; a child that dies twice; exhausted child capacity/budget; red post-merge `main`.
-Pending CI and non-blocking polish are not halts. Never waive a required check to continue.
+Pending CI and non-blocking polish are not halts by themselves; unresolved classification disagreement may halt for the human. Never waive a required check to continue.
 
 Do not claim a train completed unless every row landed sequentially and `main` CI was green on the
 last merge commit. Do not merge anything after a stop condition.
