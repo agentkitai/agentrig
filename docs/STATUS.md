@@ -1,4 +1,47 @@
 # Status
+
+## Instruction-contract guard sweep (#344–#347)
+
+Test-only guard repair: builder-worktree contract fixtures distinguish quoted branch
+prohibitions from prescriptions, reject adjacent advisory/exception carveouts, cover
+non-creating author-tree switches/checkouts, and accept negated premature cleanup
+while retaining the positive persisted-handoff requirement. Four independent
+reverted-guard mutants fail; no skill instructions or runtime behavior changed.
+
+PR #358 repair round 1/3 addresses both initial independent reviews: added fail-first
+natural prohibitions, same-clause affirmative commands, hyphenated/advisory
+optionality, conductor-only exemptions, and affirmative premature-cleanup additions
+(including mixed negation and fronted timing). Action boundaries limit command
+negation; sentence-local worktree force checks preserve conductor exemptions;
+cleanup retains positive requirements while rejecting contradictory additions.
+All 342 instruction-contract cases pass and five named repair mutants are killed.
+Full build/test/typecheck proof and per-finding dispositions are in the PR ledger;
+focused delta review and exact-head CI remain conductor-owned.
+
+PR #358 repair round 2/3 addresses focused-review F1/F2/F3: command negation
+must govern the command predicate (not an earlier unrelated or conflicting verb);
+pronoun-subject worktree carveouts fail while an explicit conductor-only exemption
+passes. Cleanup checks every removal and recognizes before the/prior to handoff,
+including fronted timing and valid prohibitions. New fixtures failed first on the
+round-1 guards (53 failures); all 403 instruction-contract cases now pass. Three
+named reverted-guard mutants are killed (48/12/12 failures). Only tests and this
+status record changed; the bounded prose grammar is not a general language parser.
+Final full-trio receipts and finding dispositions are recorded in the PR ledger;
+no roadmap advancement, skill edits, runtime changes, or delivery claims.
+
+PR #358 final bounded repair round 3/3 addresses focused-review G1–G4:
+fronted cleanup timing applies across intervening subjects and contrast clauses,
+with every removal predicate checked independently; singular/plural conductor-only
+exemptions remain valid without exempting builder-mixed scope. Plural worktrees,
+pronoun advisory language, and definite rule/requirement carveouts are rejected.
+Negated avoidance of a checkout/switch is not mistaken for a prohibition, while
+existing accepted prohibitions and same-clause affirmative detections are retained.
+New fixtures failed first on the old guards (40 failures); all 469 instruction-
+contract cases pass. Four named reverted-guard mutants are killed (14/6/15/9
+failures). Full-trio receipts and individual G1–G4 dispositions are in the PR
+ledger. Test-only scope plus this status entry; no skills changed. Review, exact-
+head CI, and any authorized landing remain conductor-owned; repair budget is 3/3.
+
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
