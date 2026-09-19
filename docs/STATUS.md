@@ -34,6 +34,12 @@ skipped deletion, removed `afterAll`, and all five independently omitted store p
 killed (eight mutation probes); production guard behavior is unchanged. Final repair gates
 and handoff are recorded in PR #354.
 
+Repair round 2/3 (O1/O2): the workspace Vitest config regression now pins the actual
+base `test.setupFiles` to `["./test/setup-no-ci.ts"]`, closing the outermost guard
+registration hole. Deleting that config property fails the new assertion; the config
+is restored unchanged before final verification. PR #354 records final gate receipts
+and an updated final-head handoff. Only this section and the regression test change.
+
 ## Review-residual test pin sweep — #324, #328, #329, #331, #334
 
 Implemented test-only follow-ups, pending independent review and exact-head hosted CI:

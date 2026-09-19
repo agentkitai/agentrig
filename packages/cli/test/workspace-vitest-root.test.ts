@@ -44,6 +44,10 @@ it("bounds Windows file parallelism and integration time without changing covera
   expect(base.test!.testTimeout).toBeUndefined();
 });
 
+it("registers the shared setup that guards project session stores", () => {
+  expect(base.test!.setupFiles).toEqual(["./test/setup-no-ci.ts"]);
+});
+
 it("inherits trace2 isolation into Windows and web configs", () => {
   expect(base.test!.env).toEqual({ GIT_TRACE2_EVENT: "0" });
   expect(windows.test!.env).toEqual(base.test!.env);
