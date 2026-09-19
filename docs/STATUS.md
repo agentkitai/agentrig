@@ -3,6 +3,21 @@ H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123�
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Builders work in owned worktrees — issue #338, implemented pending review
+
+Dogfood §1 now requires builders, continuation builders and fixers to use owned worktrees,
+creating new branches from origin/main or attaching an existing branch for continued work.
+Ship/topic delegate that rule without changing the author checkout's branch. PR bodies record
+the path and handoff before builder cleanup; conductors remove owned leftovers after landing.
+Instruction contracts fail first against the previous instructions, pin the operative rules,
+and reject removed rules and author-tree branch-creation prescriptions. No runtime changes or
+roadmap advancement; local proof is recorded in the PR, independent review and hosted CI pending.
+Repair round 1 addresses only blocking F5/F6: cleanup pointers now remove both owned builder
+resources after pushed, recorded handoff; standalone authors record a builder-to-conductor
+phase handoff at §7 and repeat attach/push/handoff/cleanup for §9 repairs. Proof persistence,
+joined jobs, restored state and ownership checks remain required. Fail-first instruction tests
+pin the lifecycle and retain branch-prescription fixtures; F1/F3/F4 remain deferred to #344–#346.
+
 ## Initial review trio evidence — issue #337, implemented pending review
 
 PR #340 repair round 1 addresses only blocking review findings 1–2: operative phrase

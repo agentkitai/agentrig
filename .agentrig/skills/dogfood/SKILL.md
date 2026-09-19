@@ -29,15 +29,37 @@ Human cleanup contract (verbatim):
 
 Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
 
-Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then remove only their recorded owned proof TMPDIR before handoff; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.
+Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.
 
 ## 1. Branch
 
-- `git fetch origin main` and branch from `origin/main`: `feat/<slug>`, `fix/<slug>`, or
-  `docs/<slug>`. Never work on main. Never stack new work on a branch whose PR is still open —
-  say so and stop instead.
+- Builders, continuation builders and fixers work only in an owned worktree, not the
+  author checkout. Run `git fetch origin main`; for new work create the owned worktree
+  from `origin/main`: `git worktree add <path> -b <branch> origin/main`, using a
+  `feat/<slug>`, `fix/<slug>`, or `docs/<slug>` branch. Run implementation and proof
+  commands inside that worktree. Never change the author checkout's branch.
+- For fixers or continuation builders preserving existing work, attach the existing branch
+  with `git worktree add <path> <branch>` instead of creating/resetting it. If it is already
+  attached to a recorded owned worktree, reuse that worktree only after its prior jobs have
+  joined and ownership has been handed off; never detach or repurpose the author checkout.
+  Never work on main. Never stack new work on a branch whose PR is still open — say so and
+  stop instead; continuing or fixing that same PR is not stacking new work.
+- Record the owned worktree path in the PR body. Builders and fixers remove their owned
+  worktree after handoff is recorded in the PR body and the branch is pushed: join every job,
+  verify restored tracked/index state (all intended edits committed, no probe changes left),
+  and persist proof results before removing the worktree and their proof TMPDIR. Do not wait
+  for hosted CI. The conductor removes any recorded owned leftovers after landing, after
+  the same join/state checks; never remove the author checkout or an unowned worktree.
 - Scope to ONE issue or one roadmap row. If the work grows mid-flight, finish the scoped part and
   note the rest for a new issue.
+
+Standalone handoff is the recorded transition from builder to conductor, not a handoff to
+another agent. At §7, after pushing and persisting proof, record this phase handoff in the
+PR body; remove the owned builder worktree and proof TMPDIR under the same join/state/ownership
+checks above before starting §8. Run conductor work from outside the removed tree; reviews
+use fresh reviewer-owned trees. For each §9 repair, attach the existing branch in an owned
+worktree per §1, push and record a new phase handoff, then repeat cleanup before resuming
+review. Do not retain the builder tree while waiting for CI, merge authorization or landing.
 
 ## 2. Implement
 
