@@ -3,6 +3,29 @@ H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123�
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Isolate test session stores — issue #339, implemented pending review
+
+The CLI OTEL headless test now supplies the fixture session root to both telemetry-enabled
+and disabled runs. Two missing `--root` arguments wrote two 2639-byte `SECRET_TASK` logs and
+snapshots to the checkout's default store. Shared OTEL flags (including ACP/MCP callers) and
+the invalid project-config invocation use the same isolated root. CLI/core OTEL fixtures now
+resolve `mkdtemp` paths through `realpath`. Core was already isolated, not a source of leaks.
+
+The shared Vitest setup takes read-only before/after inventories of checkout and package
+default session stores for every test file. Inventories cover nested artifacts, snapshots,
+and content hashes, detecting additions, deletions, and same-size rewrites without printing
+session content. Helper tests pin these cases and symlink non-traversal. The headless test
+asserts both real logs and snapshots exist in its fixture: isolation, not suppressed persistence.
+The guard failed on unchanged main OTEL fixtures. Removing either fixed run root and replacing
+hashing with size-only checks were separately killed by the regression tests.
+
+No product/default changes, deletion of project sessions, or global TMPDIR override. Tests use
+caller-selected external TMPDIR per `docs/TESTING.md`. The guard compares persisted state, not
+transient writes restored before teardown; it does not follow symlinks. Concurrent genuine
+writes to guarded stores fail the suite rather than being removed; parallel workers can report
+another file's leak. Existing bytes are inventoried, never modified. Roadmap continuation and
+the current roadmap row above are unchanged: this is an independent test-hygiene follow-up.
+
 ## Review-residual test pin sweep — #324, #328, #329, #331, #334
 
 Implemented test-only follow-ups, pending independent review and exact-head hosted CI:

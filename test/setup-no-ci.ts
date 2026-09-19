@@ -13,3 +13,17 @@ for (const key of Object.keys(process.env)) {
     delete process.env[key];
   }
 }
+
+// Every test file gets a read-only before/after guard. Anchor to this checkout,
+// not process.cwd(): tests may chdir, and Vitest runs files in parallel workers.
+// Never delete leaks here; a failure must preserve evidence (and genuine sessions).
+import { afterAll, expect } from "vitest";
+import { fileURLToPath } from "node:url";
+import { snapshotStore } from "./project-store.js";
+
+const projectStores = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"]
+  .map((base) => fileURLToPath(new URL(`../${base}.agentrig/raw/sessions`, import.meta.url)));
+const before = projectStores.map(snapshotStore);
+afterAll(() => {
+  expect(projectStores.map(snapshotStore), "test suite must leave project session stores untouched").toEqual(before);
+});

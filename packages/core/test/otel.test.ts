@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ const span = (): OtlpSpan => ({ traceId: "a".repeat(32), spanId: "b".repeat(16),
 function capture() { const spans: OtlpSpan[] = []; const counters = { dropped: 0, failed: 0, partial: 0, incomplete: 0, exported: 0 };
   const sink = new OtelSink({ push: s => spans.push(s), close: async () => {}, counters }); return { spans, sink }; }
 async function run(observe?: (s: Session) => void, denied = false) {
-  const root = await mkdtemp(join(tmpdir(), "otel-core-")); roots.push(root); let call = 0;
+  const root = await realpath(await mkdtemp(join(tmpdir(), "otel-core-"))); roots.push(root); let call = 0;
   const provider: ModelProvider = { id: "SECRET_PROVIDER", model: "SECRET_MODEL", capabilities: { tools: true, parallelTools: true, caching: false, contextWindow: 100000 },
     async *stream() { if (call++ === 0) {
       yield { type: "tool_use", id: "SECRET_CALL", name: "SECRET_TOOL", input: { value: "SECRET_INPUT" } };
@@ -70,7 +70,7 @@ it("bounds active sessions/spans and marks unfinished observations incomplete on
   expect(JSON.stringify(spans)).not.toContain("SECRET");
 });
 it("actual post-edit checker span is nested under its mutation call", async () => {
-  const root = await mkdtemp(join(tmpdir(), "otel-checker-")); roots.push(root); let turn = 0;
+  const root = await realpath(await mkdtemp(join(tmpdir(), "otel-checker-"))); roots.push(root); let turn = 0;
   const { spans, sink } = capture();
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: true, parallelTools: false, caching: false, contextWindow: 100000 },
     async *stream() { if (turn++ === 0) { yield { type: "tool_use", id: "edit", name: "write_file", input: { path: "target.ts", content: "const x = 1;" } }; yield { type: "stop", reason: "tool_use" }; }
@@ -84,7 +84,7 @@ it("actual post-edit checker span is nested under its mutation call", async () =
   expect(calls[0]!.parentSpanId).toBe(calls[1]!.spanId); // checker completes before parent
 });
 it("actual cancellation exports aborted outcome without turning it into completion", async () => {
-  const root = await mkdtemp(join(tmpdir(), "otel-abort-")); roots.push(root); const { spans, sink } = capture();
+  const root = await realpath(await mkdtemp(join(tmpdir(), "otel-abort-"))); roots.push(root); const { spans, sink } = capture();
   let entered!: () => void; const ready = new Promise<void>(r => { entered = r; });
   const provider: ModelProvider = { id: "fixture", model: "fixture", capabilities: { tools: false, parallelTools: false, caching: false, contextWindow: 1000 },
     async *stream(_req, signal) { entered(); await new Promise<void>(r => { signal?.addEventListener("abort", () => r(), { once: true }); });

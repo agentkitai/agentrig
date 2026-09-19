@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
@@ -20,7 +20,7 @@ afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCo
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "agentrig-otel-cli-")); roots.push(root);
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentrig-otel-cli-"))); roots.push(root);
   const home = join(root, "home"); const cwd = join(root, "project"); await mkdir(home); await mkdir(cwd);
   const bodies: string[] = []; const server = createServer((req, res) => { let body = "";
     req.on("data", chunk => { body += chunk; }); req.on("end", () => { bodies.push(body); res.setHeader("content-type", "application/json"); res.end("{}"); }); });
@@ -34,20 +34,24 @@ async function fixture() {
   const opts = { root: join(root, "logs"), provider: "anthropic", model: "fixture", maxTurns: "3", maxTokensPerTurn: "100",
     repoMap: false, extensionDiscovery: false, skillDiscovery: false, otelEndpoint: endpoint };
   const spans = () => bodies.flatMap(body => JSON.parse(body).resourceSpans.flatMap((r: any) => r.scopeSpans.flatMap((s: any) => s.spans)));
-  return { root, home, cwd, endpoint, bodies, opts, spans, flags: ["--otel-endpoint", endpoint, "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"] };
+  return { root, home, cwd, endpoint, bodies, opts, spans, flags: ["--root", opts.root, "--otel-endpoint", endpoint, "--trust", "--no-repo-map", "--no-skill-discovery", "--no-extension-discovery"] };
 }
 it("actual headless command exports only with explicit flag; environment and project config cannot enable it", async () => {
   const f = await fixture();
   vi.stubEnv("OTEL_EXPORTER_OTLP_ENDPOINT", f.endpoint);
-  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} } }).parseAsync(["run", "SECRET_TASK", "--headless", "--no-repo-map"], { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} } }).parseAsync(["run", "SECRET_TASK", "--root", f.opts.root, "--headless", "--no-repo-map"], { from: "user" });
   expect(f.bodies).toHaveLength(0);
+  expect((await readdir(f.opts.root)).filter(name => name.endsWith(".jsonl"))).toHaveLength(1);
   await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} } }).parseAsync(["run", "SECRET_TASK", "--headless", ...f.flags], { from: "user" });
   expect(f.spans().filter((s: any) => s.name === "session")).toHaveLength(1);
   expect(f.spans().find((s: any) => s.name === "session").attributes).toContainEqual({ key: "agentrig.outcome", value: { stringValue: "done" } });
   expect(f.bodies.join("")).not.toContain("SECRET");
+  const stored = await readdir(f.opts.root);
+  expect(stored.filter(name => name.endsWith(".jsonl"))).toHaveLength(2);
+  expect(stored.filter(name => name.endsWith(".snapshot.json"))).toHaveLength(2);
   await mkdir(join(f.cwd, ".agentrig"), { recursive: true }); await writeFile(join(f.cwd, ".agentrig/config.json"), JSON.stringify({ otelEndpoint: f.endpoint }));
   const before = f.bodies.length;
-  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} } }).parseAsync(["run", "x", "--trust", "--headless"], { from: "user" });
+  await buildProgram({ config: { cwd: f.cwd, home: f.home, env: {} } }).parseAsync(["run", "x", "--root", f.opts.root, "--trust", "--headless"], { from: "user" });
   expect(process.exitCode).toBe(1); expect(f.bodies.length).toBe(before);
 });
 it("actual builder refuses no-network even with YOLO before provider/session/network work", async () => {
