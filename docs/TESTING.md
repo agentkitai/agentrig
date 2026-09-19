@@ -42,6 +42,29 @@ git-ai, which can write `refs/notes/ai` in fixture repositories and race teardow
 It does not disable `trace2.normalTarget` or `trace2.perfTarget`.
 This is separate from fixture ancestry and does not change the preflight check.
 
+## Suite-wide project-store guard
+
+`test/setup-no-ci.ts` takes read-only recursive inventories before and after every test
+file of `.agentrig/raw/sessions` and `.agentrig/wiki` under the repository root and each
+of `packages/cli`, `packages/core`, `packages/memory`, and `packages/supervisor`. This
+catches tests that accidentally use checkout defaults, including an empty wiki directory.
+Inventories include directories (even empty ones), file content hashes, symlink targets
+without following links, and special entries. No session content is printed or modified.
+Mid-scan disappearance is recorded at the affected path as `removed-during-inventory`
+instead of an opaque ENOENT; an initially absent root is normal. Other I/O errors still fail.
+The recursive inventory regression also runs in the Windows include-list lane.
+
+The guard proves before/after equality, not ownership of writes, and is not a continuous
+filesystem monitor. Concurrent legitimate checkout sessions or memory maintenance can
+change an inventoried store and fail unrelated test files; an append or removal during
+inventory may likewise fail. Do not disable the guard or delete genuine stores to get green.
+Run tests in a separate clean checkout/worktree with no agent writing those stores, or
+finish/pause the legitimate writer first. For a real test leak, give that test explicit
+session **and memory** paths in its owned `mkdtemp` fixture outside Git ancestry, with
+owner-scoped teardown; do not rely on `--root` alone to relocate memory. Preserve failed
+inventory evidence and investigate paths before removing anything. This guard is separate
+from the ancestry preflight below and neither bypasses nor repairs it.
+
 ## The fixture preflight
 
 `test/fixture-preflight.mjs` runs before the suite in `pnpm test` and is silent unless it finds

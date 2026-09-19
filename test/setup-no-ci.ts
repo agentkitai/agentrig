@@ -22,8 +22,18 @@ import { fileURLToPath } from "node:url";
 import { snapshotStore } from "./project-store.js";
 
 const projectStores = ["", "packages/cli/", "packages/core/", "packages/memory/", "packages/supervisor/"]
-  .map((base) => fileURLToPath(new URL(`../${base}.agentrig/raw/sessions`, import.meta.url)));
-const before = projectStores.map(snapshotStore);
+  .flatMap((base) => ["raw/sessions", "wiki"].map((store) =>
+    fileURLToPath(new URL(`../${base}.agentrig/${store}`, import.meta.url))));
+const inventory = () => Object.fromEntries(projectStores.map(path => [path, snapshotStore(path)]));
+const before = inventory();
 afterAll(() => {
-  expect(projectStores.map(snapshotStore), "test suite must leave project session stores untouched").toEqual(before);
+  const after = inventory();
+  expect(after, "test suite must leave project session stores and wiki untouched").toEqual(before);
+  for (const snapshot of [before, after]) {
+    for (const [root, entries] of Object.entries(snapshot)) {
+      for (const [path, state] of Object.entries(entries)) {
+        expect(state, `${root}/${path}: removed-during-inventory`).not.toBe("removed-during-inventory");
+      }
+    }
+  }
 });
