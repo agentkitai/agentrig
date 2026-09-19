@@ -14,21 +14,28 @@ function fixture() {
 
 it("inventories absent stores, log creation, snapshots, rewrites and deletion without revealing content", () => {
   const root = join(fixture(), "sessions");
-  expect(snapshotStore(root)).toEqual({});
+  const absent = snapshotStore(root);
+  expect(absent).toEqual({});
   mkdirSync(root);
   const empty = snapshotStore(root);
+  expect(empty).not.toEqual(absent);
+  mkdirSync(join(root, "empty-nested"));
+  const nested = snapshotStore(root);
+  expect(nested).not.toEqual(empty);
   writeFileSync(join(root, "fixture.jsonl"), "SECRET_TASK");
   const log = snapshotStore(root);
-  expect(log).not.toEqual(empty);
+  expect(log).not.toEqual(nested);
   expect(JSON.stringify(log)).not.toContain("SECRET_TASK");
   writeFileSync(join(root, "fixture.snapshot.json"), "snapshot");
   const snapshot = snapshotStore(root);
   expect(snapshot).not.toEqual(log);
   writeFileSync(join(root, "fixture.jsonl"), "SECRET_EDIT"); // same length, different bytes
-  expect(snapshotStore(root)).not.toEqual(snapshot);
+  const rewritten = snapshotStore(root);
+  expect(rewritten).not.toEqual(snapshot);
   rmSync(join(root, "fixture.jsonl"));
-  expect(snapshotStore(root)).not.toEqual(snapshot);
-  expect(snapshotStore(root)).toEqual(snapshotStore(root));
+  const deleted = snapshotStore(root);
+  expect(deleted).not.toEqual(rewritten);
+  expect(deleted["./fixture.jsonl"]).toBeUndefined();
 });
 
 it("includes nested artifacts but does not traverse symlinks outside the store", () => {

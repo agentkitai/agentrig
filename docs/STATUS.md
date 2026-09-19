@@ -26,6 +26,14 @@ writes to guarded stores fail the suite rather than being removed; parallel work
 another file's leak. Existing bytes are inventoried, never modified. Roadmap continuation and
 the current roadmap row above are unchanged: this is an independent test-hygiene follow-up.
 
+Repair round 1/3 (F1): guard regressions now compare empty root/nested directory creation
+and deletion against their immediate prior inventories. A disposable-checkout Vitest probe
+runs the real setup with a clean control and isolated leaks into each of the five stores;
+it proves the fixture body passes and teardown rejects the leak. Directory-entry omission,
+skipped deletion, removed `afterAll`, and all five independently omitted store paths were
+killed (eight mutation probes); production guard behavior is unchanged. Final repair gates
+and handoff are recorded in PR #354.
+
 ## Review-residual test pin sweep — #324, #328, #329, #331, #334
 
 Implemented test-only follow-ups, pending independent review and exact-head hosted CI:
