@@ -12,6 +12,21 @@ You are the reviewer of record, not the author and not the merger. Assume the au
 until the code proves otherwise; assume the PR body overstates until you have verified its claims.
 Run this in a session that shares no context with the run that wrote the PR.
 
+## Initial full review heading contract
+
+The two initial external review comments must each start with this exact heading form:
+`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
+The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
+No alternate heading is valid for posting,
+acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
+elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+
+For an initial full review, use the heading above for your own handed-off verdict.
+Hand off only your own verdict and provenance to the conductor; do not post the pair,
+invoke a counterpart, or fabricate a counterpart verdict. The conductor validates the actual
+model from CLI provenance and posts both independent reviews with the complete headings.
+
 ## 1. Fix the target
 
 - Resolve the PR number to its branch and CURRENT head SHA (`gh pr view <n> --json headRefName,headRefOid,baseRefName`).

@@ -11,6 +11,16 @@ CI scheduling, finding disposition, material-delta and convergence rules govern 
 Follow every step, in order. The steps encode failures that already happened once; skipping one
 tends to reproduce the failure that created it.
 
+## Initial full review heading contract
+
+The two initial external review comments must each start with this exact heading form:
+`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
+The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
+No alternate heading is valid for posting,
+acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
+elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+
 ## 1. Branch
 
 - `git fetch origin main` and branch from `origin/main`: `feat/<slug>`, `fix/<slug>`, or
