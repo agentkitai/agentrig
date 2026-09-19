@@ -3,6 +3,19 @@ H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123�
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
+## Review-residual test pin sweep — #324, #328, #329, #331, #334
+
+Implemented test-only follow-ups, pending independent review and exact-head hosted CI:
+durable provenance selects one child among sibling spawn events and rejects duplicate IDs;
+instruction pins cover initial removal of both reviewer worktrees and `review-base-NN`, distinct
+nonempty cleanup reverts, inflected `reviews`/`reviewer` alternate headings (canonical
+External/Focused headings and literal `## Review disposition` remain accepted), and rerun
+acceptance through `- **Prepare.**`. The scanner comment now describes both canonical forms.
+Only the exact existing evidence-isolation sentence is exempt from the alternative-marker scan
+because its list contains a benign “or”; the rest of the tail remains guarded. All six named
+regressions fail independently, including both provenance mutations; proof receipts and local
+trio results are recorded in the PR body. No skill/product changes or roadmap advancement.
+
 ## Builders work in owned worktrees — issue #338, implemented pending review
 
 Dogfood §1 now requires builders, continuation builders and fixers to use owned worktrees,
@@ -6926,3 +6939,10 @@ Recorded rather than built, each with a working path in the meantime:
 1. Sandboxing: none + allowlists for v1, Docker later
 2. Git-based checkpoint rollback: opt-in or assumed
 3. Dogfood repo after AgentRig itself
+
+### PR #350 — bounded repair round 1/3
+
+- Claude F1: `cleanupWiring` now declares readonly six-string tuple rows, mapped rows use `as const`, and redundant non-null assertions are removed. The already-authorized #329 test is now fully addressed: distinct revert fixtures and malformed-row typing protection; no skill/product or scanner changes.
+- Mutation-only typing proof uses an external scratch tsconfig extending the repository's strict base and explicitly including the CLI contract test with repository Node type roots (package tsconfigs include only `src`). A three-field row compiled before the fix (exit 0), then failed after it with TS2322, “Source has 3 element(s) but target requires 6” (exit 2); mutation restored byte-for-byte, restored typing exit 0. Initial package-tsconfig probe was non-evidentiary (test excluded); an initial scratch-config attempt lacked Node type roots, corrected before the decisive proof.
+- Claude F2: explicit rationale, not scanner expansion. The human task expressly requested reviews/reviewer inflections; enumeration preserves the bounded quoted-H2 scanner rather than promising general English morphology. This deliberately does not reject every synonym or derivative such as `Reviewed by`/`Reviewing report`.
+- Original six mutation proofs, five issue closures, authorization, and external-review receipts remain in PR #350. Repair proof timing, final trio exits, and head receipt are appended there.
