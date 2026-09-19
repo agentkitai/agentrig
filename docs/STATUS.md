@@ -2,6 +2,21 @@
 
 Current roadmap row: user-directed shipping workflow follow-ups row 4 (roadmap backlog hygiene, PR #317), implemented pending review and exact-head CI/landing; final row of this authorized train, no next row authorized here; continuation order remains ROADMAP §5.
 
+## Shadow provenance checker — issue #319, implemented pending review
+
+The core subagent tool exposes immutable parent/child session and spawn-task facts in its
+result and a trusted SDK-only `checkProvenance` method. It binds verification to the actual
+result identity and reads a single narrow JSON receipt from captured GitHub PR-body output,
+comparing IDs and exact repository/PR/run URLs with captured spawn and GitHub evidence.
+Missing, unsupported, cross-repository and mismatched facts are reported together, never
+silently verified. The PR body remains the sole editable receipt ledger; this is advisory,
+not a workflow gate, and does not verify CI success, freshness or review approval. Broader
+receipt rendering/schema integration remains deferred. No skills, permissions or existing
+event fields changed. The simultaneous invented-ID/invented-link regression failed first;
+both shapes-only mutants were killed and restored. Local build/test/typecheck passed (55
+subagent tests; full suite 3,912 passed, six skipped). Review/CI receipts belong to the PR;
+no future review, hosted CI or merge outcome is claimed here.
+
 ## Shipping workflow follow-ups — roadmap backlog hygiene
 
 PR #317 adds 13 evidence-backed delivery-marker suffixes without changing ROADMAP row contracts.

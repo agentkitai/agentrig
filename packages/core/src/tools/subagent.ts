@@ -194,10 +194,98 @@ function poolFor(pools: Map<string, Pool>, sessionId: string): Pool {
   return pool;
 }
 
-export function subagentTool(opts: SubagentOptions): AnyTool {
+/** Runtime facts, never parsed from a child's prose. Also exposed in result.output.spawn. */
+interface SpawnCapture {
+  readonly parentSessionId: string;
+  readonly childSessionId: string;
+  readonly task: string;
+}
+
+interface ProvenanceReport {
+  /** Only a comparison of the supported facts, NOT approval or a delivery gate. */
+  matches: boolean;
+  discrepancies: Array<{ field: string; reason: string }>;
+}
+
+interface SubagentTool extends AnyTool {
+  /**
+   * Trusted SDK shadow seam; not registered as a model tool. Pass the ORIGINAL result of this
+   * tool invocation and stdout captured by the conductor from `gh repo view --json url`,
+   * `gh pr view --json url,body`, and `gh run view --json url` (repository/pullRequest/run).
+   * Never reconstruct these observations from child prose or the receipt being checked.
+   * Missing/invalid observations are unknown, not success. No commands or writes run here.
+   *
+   * The PR body is the sole receipt ledger. This narrow reader requires exactly one fenced
+   * `subagent-provenance` JSON object with parentSessionId, childSessionId, repositoryUrl,
+   * pullRequestUrl and runUrl. Other claims are unsupported, not implicitly verified. Broader
+   * receipt parsing/rendering is deferred. No persisted second ledger or workflow gate exists.
+   * Captured URLs establish identity only, not CI success, freshness, approval or independence.
+   */
+  checkProvenance(result: ToolResult<unknown>, github: unknown): ProvenanceReport;
+}
+
+const GithubCapture = z.object({ url: z.string().min(1), body: z.string().optional() });
+const ReceiptFields = ["parentSessionId", "childSessionId", "repositoryUrl", "pullRequestUrl", "runUrl"] as const;
+
+function parseCapture(text: unknown): z.infer<typeof GithubCapture> | undefined {
+  if (typeof text !== "string") return undefined;
+  try {
+    const parsed = GithubCapture.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : undefined;
+  } catch { return undefined; }
+}
+
+function checkProvenance(spawn: SpawnCapture | undefined, github: unknown): ProvenanceReport {
+  const discrepancies: ProvenanceReport["discrepancies"] = [];
+  const flag = (field: string, reason: string): void => { discrepancies.push({ field, reason }); };
+  const inputs = z.object({ repository: z.unknown(), pullRequest: z.unknown(), run: z.unknown() }).safeParse(github);
+  const repository = parseCapture(inputs.success ? inputs.data.repository : undefined);
+  const pr = parseCapture(inputs.success ? inputs.data.pullRequest : undefined);
+  const run = parseCapture(inputs.success ? inputs.data.run : undefined);
+  if (spawn === undefined) flag("spawn", "missing actual result from this tool invocation; copied or reconstructed results are unsupported");
+  const repositoryUrl = repository?.url;
+  const repositoryValid = repositoryUrl !== undefined && /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repositoryUrl);
+  if (!repositoryValid) flag("repositoryUrl", "missing or unsupported captured repository URL");
+  for (const [field, url, suffix] of [
+    ["pullRequestUrl", pr?.url, /^pull\/[1-9][0-9]*$/],
+    ["runUrl", run?.url, /^actions\/runs\/[1-9][0-9]*$/],
+  ] as const) {
+    const prefix = `${repositoryUrl}/`;
+    if (!repositoryValid || url === undefined || !url.startsWith(prefix) || !suffix.test(url.slice(prefix.length)))
+      flag(field, "missing or unsupported captured URL, or repository differs from captured repository");
+  }
+  // Deliberately no free-form prose heuristics or fallback to a second editable receipt file.
+  const blocks = [...(pr?.body ?? "").matchAll(/^```subagent-provenance\r?\n([\s\S]*?)^```[ \t]*\r?$/gm)];
+  let receipt: Record<string, unknown> | undefined;
+  if (blocks.length === 1) {
+    try {
+      const parsed = z.record(z.unknown()).safeParse(JSON.parse(blocks[0]![1]!));
+      if (parsed.success) receipt = parsed.data;
+    } catch { /* malformed is reported below, never accepted */ }
+  }
+  if (receipt === undefined) flag("receipt", "PR body must contain exactly one supported subagent-provenance JSON object");
+  else {
+    for (const field of Object.keys(receipt)) {
+      if (!(ReceiptFields as readonly string[]).includes(field)) flag(field, "unsupported receipt claim");
+    }
+    const expected = { parentSessionId: spawn?.parentSessionId, childSessionId: spawn?.childSessionId,
+      repositoryUrl, pullRequestUrl: pr?.url, runUrl: run?.url };
+    for (const field of ReceiptFields) {
+      const claimed = receipt[field];
+      if (typeof claimed !== "string" || claimed.length === 0) flag(field, "missing or unsupported receipt value");
+      else if (expected[field] === undefined) flag(field, "no captured evidence for receipt value");
+      else if (claimed !== expected[field]) flag(field, "receipt differs from captured evidence");
+    }
+  }
+  return { matches: discrepancies.length === 0, discrepancies };
+}
+
+export function subagentTool(opts: SubagentOptions): SubagentTool {
   return buildSubagentTool(opts);
 }
-function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly string[]; maxTurns: number }): AnyTool {
+function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly string[]; maxTurns: number }): SubagentTool {
+  // Weak identity binding: caller edits to exposed fields cannot rewrite the captured facts.
+  const captures = new WeakMap<ToolResult<unknown>, SpawnCapture>();
   const roles = snapshotAgentRoles(opts.roles ?? []);
   opts = { ...opts, roles, ...(opts.modelRoles === undefined ? {} : { modelRoles: Object.freeze({ ...opts.modelRoles }) }) };
   const depth = opts.depth ?? 0;
@@ -218,7 +306,8 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
     isError: true,
   });
 
-  const tool: AnyTool = {
+  const tool: SubagentTool = {
+    checkProvenance: (result, github) => checkProvenance(captures.get(result), github),
     name: SUBAGENT_TOOL,
     sandbox: "compatible",
     description:
@@ -378,6 +467,13 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
             modelRole: role["model-role"], delegable: role.delegable && (allowlist?.includes(SUBAGENT_TOOL) ?? false) && depth + 1 < maxDepth,
             maxTurns: effectiveTurns } }) });
         spawned = true;
+        const capture: SpawnCapture = Object.freeze({ parentSessionId: ctx.sessionId,
+          childSessionId: id, task: input.label ?? input.task });
+        const capturedResult = (result: ToolResult<object>): ToolResult<unknown> => {
+          const exposed = { ...result, output: { ...result.output, spawn: capture } };
+          captures.set(exposed, capture);
+          return exposed;
+        };
 
         // the child's own log names its parent, so a spawn record elsewhere can be checked against it
         const runOptions = { cwd: worktree?.cwd ?? ctx.cwd, id, parent: ctx.sessionId };
@@ -485,18 +581,18 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         const sessionLine = `subagent session ${session.id}`
             + (ignoredGrantRegistry ? "\nnote: the configured child permission-grant registry was ignored — this parent session has no live grant registry to derive a child view from, so the child ran with no standing grants" : "");
           if (summary.reason !== "done") {
-            return {
+            return capturedResult({
               output: summary,
               display: `${sessionLine}\nsubagent ${summary.reason} after ${summary.turns} turn(s)${answerText === "" ? "" : `:\n${answerText}`}${worktree ? `\nWorktree retained without an integration candidate: ${worktree.artifact}` : ""}`,
               isError: true,
-            };
+            });
           }
           if (worktree && childTools.some(tool => tool.hasBackgroundWork?.())) throw new Error("child has background work; no integration candidate can be captured");
           const candidate = await worktree?.finish(session.id);
-          return {
+          return capturedResult({
             output: candidate === undefined ? summary : { summary, candidate },
             display: `${sessionLine}\n${answerText === "" ? "(the subagent finished without a final message)" : answerText}${candidate ? `\nRetained patch candidate (not applied): ${candidate.patchPath}\nManifest: ${worktree!.artifact}/candidate.json\nInspect and recheck before separately authorized parent application.` : ""}`,
-          };
+          });
         } finally {
           // a throw anywhere above must still release the reservation, or one failed spawn would
           // leave a pool permanently `live` (never evictable) and permanently charged
@@ -514,6 +610,7 @@ function buildSubagentTool(opts: SubagentOptions, inherited?: { tools: readonly 
         if (spawned && !childEnded) ctx.emit({ type: "subagent.end", id, reason: ctx.signal.aborted ? "aborted" : "error" });
       }
     },
-  } as AnyTool;
-  return opts.isolation === "worktree" ? markIsolatedTool(tool) : tool;
+  } as SubagentTool;
+  if (opts.isolation === "worktree") markIsolatedTool(tool);
+  return tool;
 }
