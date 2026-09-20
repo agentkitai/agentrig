@@ -25,7 +25,7 @@ const sectionFrom = (s: string, start: string) => {
  return next < 0 ? tail : tail.slice(0, next);
 };
 for (const [id,path,start,phrases] of checks) {
- const check = (s: string) => { const part=sectionFrom(s,start).replace(/\s+/g," "); for(const phrase of phrases) expect(part).toContain(phrase); };
+ const check = (s: string) => { const part=(id === "M-land-persistence" ? landWindow(s, path === skill("ship") ? "ship" : "topic") : sectionFrom(s,start)).replace(/\s+/g," "); for(const phrase of phrases) expect(part).toContain(phrase); };
  it(`${id} ${path}`,()=>check(read(path)));
  for (const phrase of phrases) it(`${id} deletion mutant: ${path} ${phrase}`,()=>{
   const s=read(path); check(s);
@@ -33,7 +33,8 @@ for (const [id,path,start,phrases] of checks) {
   expect(()=>check(s.replace(pattern,"REMOVED"))).toThrow();
  });
 }
-const landGate = (s: string, name: string) => {
+// All persistence requirements must execute before dispatch, not merely in the same section.
+const landWindow = (s: string, name: string) => {
  const section = sectionFrom(s, name === "ship" ? "## 3." : "## 4.");
  const anchor = "Before invoking land";
  const start = section.indexOf(anchor);
@@ -41,11 +42,16 @@ const landGate = (s: string, name: string) => {
  expect(section.slice(start - 2, start)).toBe("\n\n");
  const spawn = section.indexOf(name === "ship" ? "- When scoped merge authorization" : "Then spawn a land subagent");
  expect(spawn).toBeGreaterThan(start);
- expect(section.slice(start, spawn)).toContain("Persist edits then read back again if anything changes.");
+ return section.slice(start, spawn);
+};
+const landGate = (s: string, name: string) => {
+ const window = landWindow(s, name).replace(/\s+/g, " ");
+ const phrases = checks.find(([id, path]) => id === "M-land-persistence" && path === skill(name))![3];
+ for (const phrase of phrases) expect(window).toContain(phrase);
 };
 for (const name of ["ship", "topic"]) {
  it(`M-land-placement ${name} standalone gate before spawn in section`, () => landGate(read(skill(name)), name));
- for (const mutation of ["EOF", "after-spawn", "lazy-continuation"]) it(`M-land-placement ${name} ${mutation} mutant`, () => {
+ for (const mutation of ["EOF", "after-spawn", "split-paragraph", "lazy-continuation"]) it(`M-land-placement ${name} ${mutation} mutant`, () => {
   const s = read(skill(name)); landGate(s, name);
   const gate = s.match(/Before invoking land[\s\S]*?Persist edits then read back again if anything changes\./)![0];
   let mutant = s.replace(gate, "");
@@ -53,6 +59,12 @@ for (const name of ["ship", "topic"]) {
   else if (mutation === "after-spawn") {
    const next = name === "ship" ? "## 4. Budget" : "## 5. Halt";
    mutant = mutant.replace(next, `${gate}\n\n${next}`);
+  } else if (mutation === "split-paragraph") {
+   const opening = gate.slice(0, gate.indexOf("\n"));
+   const sentinel = "Persist edits then read back again if anything changes.";
+   const middle = gate.slice(opening.length, gate.indexOf(sentinel)).trim();
+   const next = name === "ship" ? "## 4. Budget" : "## 5. Halt";
+   mutant = s.replace(gate, `${opening}\n${sentinel}`).replace(next, `${middle}\n\n${next}`);
   } else mutant = s.replace(`\n\n${gate}`, `\n${gate}`);
   expect(() => landGate(mutant, name)).toThrow();
  });

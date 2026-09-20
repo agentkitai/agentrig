@@ -2,6 +2,15 @@
 
 ## Review-gate residuals (#384–#387)
 
+PR #394 repair round 1/3 (C1): every M-land-persistence phrase is now checked inside
+ship/topic's anchor-before-spawn window, shared with the placement checks. Named
+`M-land-placement ship split-paragraph mutant` and `M-land-placement topic split-paragraph mutant`
+leave the opening/final sentinel before spawn but move the middle requirements after
+spawn: fail-first was 2 failed / 135 passed; the repaired focused suite passes all 137.
+Existing deletion, relocation, lazy-continuation, and grammar controls are preserved.
+Both topic validators also receive the agreed double-space-only normalization. C1
+remains pending independent closure; no other advisory repair or roadmap advancement.
+
 - Topic §4 repeats ship §3’s full pre-land body/comment persistence gate before land-child dispatch: canonical model/head/main headings, all initial/focused dispositions, residuals, blocker closure and current-head delta coverage; missing evidence halts before spawn.
 - Removed both redundant `c.length>40 ||` topic guards. Length rejection is pinned by the `{7,}` → `{7,40}` grammar-reversion probe, not a claimed length-guard mutation kill.
 - Instruction assertions stop at the next section heading; ship/topic placement probes reject EOF relocation, after-spawn relocation and lazy-list continuation. Ship’s gate now starts a standalone paragraph.
