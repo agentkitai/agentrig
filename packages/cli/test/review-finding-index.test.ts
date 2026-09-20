@@ -83,3 +83,14 @@ it.each([
   expect(findingIndex(url, { html_url: url, body: [...headings, prose].join("\n") }))
     .toEqual(headings.map(heading => ({ comment: url, heading })));
 });
+
+it.each([
+  "**F1 — HIGH, blocking** — Real defect",
+  "- **F1** — HIGH — Real defect", "- [P1] Real defect",
+  "1. [P1] Real defect", "2) __[P4]__ Real defect",
+  "* F2 — MEDIUM — Real defect", "+ **[P1]** Real defect",
+  "- F2: HIGH — Real defect", "- [P4] Unknown priority",
+  "- **HIGH:** Real defect", "__F3 — LOW — Real defect__",
+])("R1-F1 unsupported Markdown opening fails closed: %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow("unindexed finding");
+});

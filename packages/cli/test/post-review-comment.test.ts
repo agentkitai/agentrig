@@ -449,7 +449,7 @@ it.each(["blockquote", "inline", "wrapped-inline", "fence", "indent"])("M-bounde
     : form === "wrapped-inline" ? `Contract: \`${wrapped}\``
     : form === "fence" ? `\`\`\`text\n${wrapped}\n\n\`\`\``
     : `    ${phrase}`;
-  const prefix = "VERDICT: FAIL\n### LOW: Citation contract\nFix the missing contract evidence.\n";
+  const prefix = "VERDICT: FAIL\n### LOW: Citation contract\nFix the missing contract evidence.\n\n";
   const body = prefix + citation;
   expect(run(body).posted).toBe(`${heading}\n\n${body}`);
   for (const boundary of ["\nUnrelated summary\n", "## Summary\n", "---\n"]) {
@@ -467,4 +467,27 @@ it.each(["\n", "\r\n", " \t "])("M-normalized-echo: refuses literal whitespace r
     expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
     expect(result.args).toBeUndefined();
   }
+});
+
+it.each(["> ", "    ", "\t", "`", "```text\n"])("R1-F2 blank lines preserve finding section citation: %j", marker => {
+  const citation = marker + echoPhrases[0] + (marker === "`" ? "`" : marker.startsWith("```") ? "\n```" : "");
+  const body = `### LOW: Evidence\n\nScenario and proposed fix.\n\n${citation}\n`;
+  const result = run(body);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${body}`);
+});
+it.each(["    ", "\t"])("R1-F3 lazy indented prose is not code: %j", indent => {
+  for (const paragraph of ["Scenario prose.", "- List paragraph.", "1. Ordered paragraph."]) {
+    const result = run(`### LOW: Evidence\n${paragraph}\n${indent}${echoPhrases[0]}\n`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("echoes instructions");
+    expect(result.args).toBeUndefined();
+  }
+  const body = `### LOW: Evidence\n${indent}${echoPhrases[0]}\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+});
+it.each(["Summary:", "Unrelated summary", "**Summary**", "## Evidence", "---"])("R1-F2 explicit section boundary revokes citation: %s", boundary => {
+  const result = run(`### LOW: Evidence\n\nFinding prose.\n\n${boundary}\n\n> ${echoPhrases[0]}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.args).toBeUndefined();
 });

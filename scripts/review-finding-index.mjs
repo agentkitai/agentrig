@@ -56,16 +56,23 @@ export function assertReviewerVerdict(body) {
       if (!fenceQuoted) unquoted.push(line);
       continue;
     }
-    // A blank line, thematic break or new heading ends quotation permission.
-    // Fences above own their internal blank lines; a finding starts a fresh scope.
-    if (!line.trim() || /^ {0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$/.test(line) ||
-        /^ {0,3}#{1,6}\s/.test(line) || headings.has(line)) {
+    // Paragraph breaks end inline spans, not the finding SECTION. Fences own
+    // their internal breaks. Explicit summary labels, headings and thematic
+    // breaks revoke permission; ordinary spaced finding prose does not.
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    if (/^ {0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$/.test(line) ||
+        /^ {0,3}#{1,6}\s/.test(line) || headings.has(line) ||
+        /^ {0,3}(?:\*\*|__)?(?:unrelated summary|summary)(?:(?:\*\*|__)?\s*:|(?:\*\*|__)?\s*$)/i.test(line)) {
       flush();
       inFinding = headings.has(line);
       unquoted.push(line);
       continue;
     }
-    if (inFinding && (/^(?: {4}|\t)/.test(line) || /^ {0,3}>/.test(line))) {
+    // Indented code cannot interrupt a prose/list paragraph (CommonMark).
+    if (inFinding && ((prose.length === 0 && /^(?: {4}|\t)/.test(line)) || /^ {0,3}>/.test(line))) {
       flush();
       continue;
     }
@@ -117,7 +124,7 @@ function findingHeadings(body, unsupported = () => {}) {
       && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push(line);
-    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^\s*(?:#{1,6}\s+)?(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:#{1,6}\s+)?(?:\*{1,2}|_{1,2})?(?:F\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       unsupported(line);
     }
   }

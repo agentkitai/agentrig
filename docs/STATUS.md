@@ -4,12 +4,14 @@
 
 - Anchored unsupported F-number/priority detection to finding openings: inline grammar examples
   in ordinary prose, including the live #446 `- **#444**` paragraph, no longer halt fallback.
-  Real delimiterless ALL-CAPS ATX finding attempts still fail closed; heading bytes stay exact.
+  Real delimiterless ALL-CAPS ATX finding attempts and unsupported list/emphasis openings
+  still fail closed; heading bytes stay exact. Repair round 1 addresses ledger F1–F3 only.
 - Made missing-override diagnostic assertions separator-portable and simulated Windows-style
   relative paths with host filesystem lookups, preserving both missing-file and root checks.
 - The posting helper's shared literal-echo guard permits blockquote, inline-code (including
-  wrapped), fenced and indented citations only in a finding's bounded paragraph. Blank lines,
-  thematic breaks and new headings end that permission; fences own internal blank lines.
+  wrapped), fenced and actual indented-code citations within a finding section. Blank lines
+  separate paragraphs without ending the section; thematic breaks, new headings and explicit
+  summary labels end permission. Lazy indented prose/list continuations remain echo-checked.
   Literal echoes outside that scope remain refused after LF/CRLF/space/tab normalization.
 - Tests/helper script only; no product or skill text changes. Fail-first cases and seven named
   killed mutants are recorded in the PR, alongside exact-head declared checks and external
