@@ -196,7 +196,7 @@ For each recorded row, in order:
      Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`. If integration advances HEAD or
      conflicts, stop, update the PR and re-prove its new head; never review a scratch integration SHA.
      A conflict-stopped initial pass restarts as full, not delta. Keep unique base refs and an OUT
-     directory outside all trees. Create one independent TMPDIR outside Git ancestry per job.
+     directory outside all trees; never write review artifacts inside either tree. Create one independent TMPDIR outside Git ancestry per job.
      For nonempty steps the conductor runs declared bootstrap and optional preflight separately
      in every reviewer tree (separate calls with timeoutMs at least 600000). Require each command's
      exit code zero in each reviewer tree before launching any reviewer job. A separate proof tree
@@ -230,7 +230,7 @@ For each recorded row, in order:
      Poll using bash_job, not sleep loops. Kill a still-running job after 60 minutes; join every
      subprocess. Failed, empty, truncated or wrong-model runs get ONE retry with a fresh prefix;
      a second incomplete run halts. Never weaken permissions to rescue a review.
-   - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, stale output is not a current-head
+   - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, do not call the new head reviewed; stale output is not a current-head
      review: retain its historical provenance and cover the delta or restart as required by §3.
      Reject 41-or-more hex tokens, stale `head_sha:` and stale `Reviewed at` claims. The validator
      fails closed on a prior `reviewed commit <stale>` discussion mention. Do not relabel stale text.
@@ -238,12 +238,12 @@ For each recorded row, in order:
      never edit the validator source or guess the model from the verdict. Never globally replace
      HEAD/MAIN in the node program: its literal HEAD rejection must survive. Run this gate:
      ```sh
-# Slot posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
-[ -s "<OUT>/checks.md" ] || exit 2
-[ -s "<PREFIX>.provenance.json" ] || exit 2
-cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
-node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json'
+     # Slot posting gate
+     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
+     [ -s "<OUT>/checks.md" ] || exit 2
+     [ -s "<PREFIX>.provenance.json" ] || exit 2
+     cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
+     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json'
      ```
      Persist the complete verdict, adapter provenance and check receipts in linked PR comments.
      Large payloads use the helper's canonical bounded chunks and durable posting receipt; never

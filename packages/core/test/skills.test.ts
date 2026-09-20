@@ -386,15 +386,16 @@ describe("skillTool", () => {
     expect(body).toContain("Report the exact head SHA you reviewed");
     expect(body).toContain("Record the session id printed by the `subagent` tool result immediately");
     expect(body).toContain("restate it in your own reply text in that same turn");
-    // R3.5b: the review is two external CLIs the conductor runs, never a child and never itself
-    expect(body).toContain("two reviewers that share nothing with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned worktrees you prepare");
-    expect(body).toContain("--model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
-    expect(body).toContain("--output-format json --no-session-persistence");
-    expect(body).toContain("not claude-opus-5");
-    expect(body).toContain("codex review --base review-base");
-    expect(body).toContain("both reviewers dead on the same head halts the train");
-    expect(body).toContain("gh pr comment");
-    expect(body).toContain("## External review —");
+    // Slot count changes review preparation, not authorization or stop gates.
+    expect(body).toContain("Launch each slot through its adapter");
+    expect(body).toContain("node <REPO>/scripts/reviewer-adapters.mjs");
+    expect(body).toContain("one exclusive reviewer-owned tree per slot");
+    expect(body).toContain("Zero slots: persist `External review: none declared`, skip all reviewer preparation/dispatch");
+    expect(body).toContain("One slot: only one tree, job and heading");
+    expect(body).toContain("With two slots launch both independently");
+    expect(body).toContain("a second incomplete run halts");
+    expect(body).toContain("Never weaken permissions to rescue a review");
+    expect(body).toContain("## External review — <slot> (<model>)");
     expect(body).toContain("runs on the main entry, never the child default");
     expect(body).toContain("Material deltas require ONE independent focused reviewer");
     expect(body).toContain("never write review artifacts inside");
@@ -405,13 +406,12 @@ describe("skillTool", () => {
     expect(body).toContain("do not run the pass again");
     expect(body).toContain("carrying verbatim blocker texts or review URLs/finding IDs");
     // R3.5b final-review fixes: bash has no cwd field, file-backed jobs, per-pass base branch
-    expect(body).toContain("env -u CLAUDECODE");
-    expect(body).toContain("< /dev/null");
-    expect(body).toContain('[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ]');
+    expect(body).toContain("Preserve inherited environment constraints");
+    expect(body).toContain("assert each tree HEAD equals current PR HEAD and is clean");
     expect(body).toContain("gh pr view NN --json headRefOid");
-    expect(body).toContain("head HEAD — merged with origin/main MAIN — full");
-    expect(body).toContain("one surviving review is not a pass");
-    expect(body).toContain("is a full pass on the new head, never a delta");
+    expect(body).toContain("head <SHA> — merged with origin/main <MAIN> — full");
+    expect(body).toContain("First check whether it already ran: if the PR carries every declared slot's comment");
+    expect(body).toContain("A conflict-stopped initial pass restarts as full, not delta");
 
     const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
@@ -441,7 +441,7 @@ describe("skillTool", () => {
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");
-    expect(dogfood.body).toContain("the conductor runs the same two external reviews itself");
+    expect(dogfood.body).toContain("the conductor runs every declared reviewer slot itself");
     expect(dogfood.body).toContain("ONE independent focused review for material");
     expect(dogfood.body).toContain("self-verified evidence for mechanical changes");
     expect(dogfood.body).toContain("Deferred non-blocking defects require issues");

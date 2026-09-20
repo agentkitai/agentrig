@@ -7,8 +7,9 @@
 - Conductor independent same-head declared checks gate code-only reviewers; hosted CI overlaps
   review and gates landing. Canonical comments and land compare declared slot pins; zero slots
   skip external review and one slot also handles focused material deltas.
-- Full-suite readiness is blocked by legacy vendor/fixed-pair instruction tests in core,
-  outside this task’s authorized scope; the PR records the exact failures rather than changing them.
+- Operator-authorized legacy instruction tests now assert slot-driven adapters and dynamic
+  preparation while preserving authorization, isolation and stop gates. Topic posting prose and
+  fences retain enclosing list indentation (#413). Exact-head proof is recorded in the PR.
 
 ## Declared project checks (#395)
 

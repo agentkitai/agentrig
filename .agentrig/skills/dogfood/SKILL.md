@@ -244,7 +244,7 @@ before reporting it, and report file:line + severity + a concrete failure scenar
 
 **Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
 the PR (§7) and does NOT run external reviews:
-the conductor runs the same two external reviews itself, in separate reviewer-owned worktrees, against the PR head
+the conductor runs every declared reviewer slot itself, in separate reviewer-owned worktrees, against the PR head
 (`topic` §2 step 4). Children may run on a local model and the review must never share the
 builder's model; a child running the pair too would double every pass for no extra eyes. Your
 task text says when you are a child. Standalone dogfood keeps both reviews because nothing else

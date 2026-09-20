@@ -71,3 +71,19 @@ it("M-vendor-literal and M-pin-gate are rejected instruction mutants", () => {
   expect(() => check(text + "\nUse Codex instead")).toThrow();
   expect(() => check(text.replace("initial heading model must equal the slot's pinned model", "any model satisfies review"))).toThrow();
 });
+
+it("keeps topic posting continuations and adapter fences inside the enclosing CommonMark list", () => {
+  const text = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+  const start = text.indexOf("   - **Launch each slot through its adapter**");
+  const end = text.indexOf("   - **Combine.**", start);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  const lines = text.slice(start, end).split("\n");
+  // Three spaces for the numbered item, two for its nested bullet. Blank lines
+  // terminate lazy continuation: prose AND opening fences must retain all five.
+  for (const line of lines.filter(line => line.trim() && !line.startsWith("   - "))) {
+    expect(line, "posting continuation escaped enclosing list").toMatch(/^ {5}\S|^ {5}\s/);
+  }
+  expect(lines.filter(line => line === "     ```sh")).toHaveLength(2);
+  expect(lines.filter(line => line === "     ```")).toHaveLength(2);
+});
