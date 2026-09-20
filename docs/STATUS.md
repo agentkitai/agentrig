@@ -32,6 +32,30 @@ exact-head hosted CI remain conductor-owned. Repair round: 0/3.
 H5b/H5c marker attribution clarified for issue #318: H5b spans merged PRs #123–#124 and H5c spans merged PRs #125–#130; contracts and completion status are unchanged.
 This maintenance task does not advance ROADMAP §5.
 
+## Corpus-defined instruction guards (#359–#362)
+
+Test-only maintenance; no roadmap advancement, skill text or product changes.
+Prescription/prohibition share explicit accepted/rejected branch sentences;
+carve-out and premature-cleanup have their own corpora. These retain PR #358's
+fixtures and seed its review probes plus the issue sentences. The same classifier
+checks guarded sentences extracted from real skills. The test header defines
+unknown phrasing as a coverage addition, not a regression, provided every listed
+sentence still classifies correctly. This deliberately narrow contract supersedes
+the broad heuristic-coverage descriptions in the historical sweep below.
+
+Fail-first reporting convention (#361): distinguish the initial discovery run
+from replay of the **committed final fixtures** against prior guards, with totals
+and exits. Here the initial run was **52 failed / 413 passed (465), exit 1**;
+the final-fixture replay was **64 failed / 599 passed (663), exit 1**. The restored
+final test passed **663/663, exit 0**. Separate PR proof logs preserve both counts;
+an intermediate count is not evidence for the final committed fixture set.
+
+Four mutants drop one corpus decision each (prescription, prohibition, carve-out,
+premature cleanup): each yielded **5 failed / 658 passed, exit 1**, followed by
+restored **663 passed, exit 0**. Full-trio receipts belong in the PR ledger.
+Repair round: 0/3. Independent review and exact-head CI remain conductor-owned;
+the ship child does not run external reviews or merge.
+
 ## Instruction-contract guard sweep (#344–#347)
 
 Test-only guard repair: builder-worktree contract fixtures distinguish quoted branch
