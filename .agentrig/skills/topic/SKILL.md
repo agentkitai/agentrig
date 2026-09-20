@@ -200,7 +200,7 @@ For each recorded row, in order:
      command-local `TMPDIR` below. Record these paths and the post-merge review SHA BEFORE
      installing dependencies. Here “post-merge” means the actual PR head after any required
      main integration was pushed to the PR and re-proved, never a scratch integration SHA. For non-empty steps, the conductor executes the project's declared bootstrap and optional preflight separately in `WT` and in `CODEX_WT`,
-     each command in its own call with `timeoutMs` at least 600000.
+     in separate calls, each with `timeoutMs` at least 600000.
      Require each command's exit code zero in each reviewer tree before launching either reviewer job.
      If any preparation command fails, halt before either launch; persist the failure receipt,
      join all owned jobs and remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
