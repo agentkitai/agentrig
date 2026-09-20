@@ -80,9 +80,26 @@ the final-fixture replay was **64 failed / 599 passed (663), exit 1**. The resto
 final test passed **663/663, exit 0**. Separate PR proof logs preserve both counts;
 an intermediate count is not evidence for the final committed fixture set.
 
-Four mutants drop one corpus decision each (prescription, prohibition, carve-out,
-premature cleanup): each yielded **5 failed / 658 passed, exit 1**, followed by
-restored **663 passed, exit 0**. Full-trio receipts belong in the PR ledger.
+Four #373 mutants override the classifier result for one sentence each
+(prescription, prohibition, carve-out, premature cleanup), not delete a corpus
+entry: each yielded **5 failed / 658 passed, exit 1**, followed by restored
+**663 passed, exit 0**.
+
+#375 adds an independent manifest: literal distinct-content minimum counts for
+all six accepted/rejected buckets (branch **12/35**, carve-out **6/27**, cleanup
+**12/31**) and literal content assertions for concrete issue/review seeds from
+#359–#362 and the #358 focused reviews. Neither floors nor expected seeds are
+derived from corpus arrays. This protects preservation without broadening the
+classifier or turning unknown prose into regressions; no skill/product changes.
+
+Deletion fail-first on current main: removing `Owned worktrees are optional.`
+left the old generated tests green (**658 passed, exit 0**). The same deletion
+with the manifest yielded **2 failed / 668 passed (670), exit 1** (floor and seed
+membership). Six named deletion mutants, one per bucket, each produced that
+same failure count; six same-size seed replacements each produced **1 failed /
+674 passed (675), exit 1**, proving content rather than just size is protected.
+Restored final tests: **675 passed, exit 0**. Full-trio and timed mutant receipts
+belong in the PR ledger.
 Repair round: 0/3. Independent review and exact-head CI remain conductor-owned;
 the ship child does not run external reviews or merge.
 

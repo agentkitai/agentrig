@@ -174,6 +174,125 @@ const cleanupCorpus: Corpus = {
   ]
 };
 
+// Independent preservation oracle (#375): literal floors and review/issue seeds,
+// never computed from the corpora above. Keep these when extending a corpus;
+// changing this manifest requires an explicit contract change, not regeneration.
+// Distinct-content floors also prevent duplicate entries from padding a bucket.
+const corpusManifest = [
+  {
+    name: "branch accepted", actual: branchCorpus.accepted, minimum: 12,
+    seeds: [
+      // #360; #358 focused F1 / round-2 G4 control.
+      "Never run `git switch -c docs/task`.",
+      "Do not run `git checkout -b docs/task`.",
+      "Never avoid logs and never run `git switch docs/task`.",
+      "Never run `git switch -c docs/task` or `git checkout -b docs/task` in the author checkout.",
+      "Do not run `git switch docs/task` or `git checkout docs/task` in the author checkout."
+    ]
+  },
+  {
+    name: "branch rejected", actual: branchCorpus.rejected, minimum: 35,
+    seeds: [
+      // #359; #358 focused F1, G4 and N4 (expanded concrete probes).
+      "Builders never work on main, so in the author checkout run `git switch -c docs/task`.",
+      "Never run the builder loop before you run `git checkout -b docs/task` in the author checkout.",
+      "Never run the builder loop and then run `git switch docs/task` in the author checkout.",
+      "Do not use the author tree, run `git switch -c docs/task` first.",
+      "Never run `git switch -c forbidden` in the author checkout and run `git switch docs/task` there.",
+      "Builders must never run `git checkout forbidden` and must run `git checkout docs/task` there.",
+      "Never forget to run `git switch -c docs/task`.",
+      "Never refuse to use `git checkout -b docs/task`.",
+      "Avoid failing to run `git switch -c docs/task`.",
+      "Never run the loop, so maintainers run `git switch -c docs/task`.",
+      "Never work on main while builders use `git checkout -b docs/task`.",
+      "Avoid stale trees; in the author checkout run `git switch -c docs/task`.",
+      "Never neglect to run `git switch -c docs/task`.",
+      "Never avoid running `git switch -c docs/task`.",
+      "Do not avoid `git checkout -b docs/task`.",
+      "Never avoid running `git switch docs/task`.",
+      "Do not ever avoid running `git switch docs/task`.",
+      "Never ever avoid `git checkout docs/task`."
+    ]
+  },
+  {
+    name: "carve-out accepted", actual: forceCorpus.accepted, minimum: 6,
+    seeds: [
+      // #360; #358 focused G2 and N2.
+      "These steps do not apply to the conductor.",
+      "These steps do not apply to conductors.",
+      "These steps do not apply to the conductor only.",
+      "Recording the PR body ordering is optional as long as it is present.",
+      "Builders record the path; restating it is optional."
+    ]
+  },
+  {
+    name: "carve-out rejected", actual: forceCorpus.rejected, minimum: 27,
+    seeds: [
+      // #360/#362; #358 focused F2, G3 and N4; #375 deletion repro.
+      "The owned worktree: optional.",
+      "Owned worktrees are optional.",
+      "Owned worktrees are advisory only.",
+      "It is advisory only.",
+      "The rule is optional.",
+      "The requirement does not apply when inconvenient.",
+      "These requirements are advisory only.",
+      "This rule does not apply when inconvenient.",
+      "Those requirements are advisory only.",
+      "The owned worktree is optional.",
+      "These worktree requirements are optional.",
+      "These steps do not apply to conductors and builders.",
+      "They are advisory only.",
+      "That rule is optional."
+    ]
+  },
+  {
+    name: "cleanup accepted", actual: cleanupCorpus.accepted, minimum: 12,
+    seeds: [
+      // #362; #358 focused F3 and N1.
+      "Before handoff, builders must never remove the owned worktree.",
+      "Do not remove the owned worktree before handoff.",
+      "Never remove the owned worktree before the handoff.",
+      "Do not remove the owned worktree prior to handoff.",
+      "Before the handoff, never remove the owned worktree.",
+      "Prior to handoff, do not remove the owned worktree.",
+      "Before handoff, builders must never remove the owned worktree, and after handoff builders remove the proof TMPDIR."
+    ]
+  },
+  {
+    name: "cleanup rejected", actual: cleanupCorpus.rejected, minimum: 31,
+    seeds: [
+      // #362; #358 focused F3, G1 and N4.
+      "Builders finish fast; before handoff, builders remove the owned worktree.",
+      "Builders finish fast; before handoff, they remove the owned worktree.",
+      "Before handoff, each builder must remove the owned worktree and proof TMPDIR.",
+      "Never remove the author checkout: remove the owned worktree before handoff.",
+      "Never remove the author checkout — remove the owned worktree before handoff.",
+      "Never remove the author checkout - remove the owned worktree before handoff.",
+      "Remove the owned worktree before the handoff is recorded in the PR body.",
+      "Remove the owned worktree prior to handoff.",
+      "Prior to the handoff, remove the owned worktree.",
+      "Builders finish fast, before handoff, remove the owned worktree.",
+      "Shortly before handoff, remove the owned worktree.",
+      "The fixer removes the owned worktree before handoff.",
+      "Before handoff, builders should remove the owned worktree.",
+      "Before the handoff, builders remove the owned worktree.",
+      "Before handoff, however, builders remove the owned worktree.",
+      "Before handoff, when the PR is green, remove the owned worktree.",
+      "Before handoff, instead remove the owned worktree.",
+      "Before handoff, remove the owned worktree."
+    ]
+  }
+] as const;
+
+for (const { name, actual, minimum, seeds } of corpusManifest) {
+  it(`corpus manifest: ${name} retains its independent minimum`, () => {
+    expect(new Set(actual).size).toBeGreaterThanOrEqual(minimum);
+  });
+  it(`corpus manifest: ${name} retains literal issue/review seeds`, () => {
+    expect(actual).toEqual(expect.arrayContaining(seeds));
+  });
+}
+
 // Sentence boundaries intentionally do not split scoped semicolon/colon/dash
 // clauses. Whitespace wrapping and a final terminator are not semantic changes.
 const normalize = (sentence: string) => sentence.replace(/\s+/g, " ").trim().replace(/^[-*] /, "").replace(/[.!?]$/, "");
