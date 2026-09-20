@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -43,11 +43,11 @@ for (const { path, start, end, phrases } of requirements) {
 }
 
 it("topic posts conductor provenance with the initial Codex verdict", () => {
-  const posting = section(read(".agentrig/skills/topic/SKILL.md"), "CODEX_MODEL=$(cat", "The conductor posts");
+  const posting = section(read(".agentrig/skills/topic/SKILL.md"), "# Codex posting gate\n", "The conductor posts");
   const guard = '[ -s "<OUT>/codex-trio.md" ] || exit 2';
   expect(posting).toContain(guard);
-  expect(posting.indexOf(guard)).toBeLessThan(posting.indexOf('{ echo "## External review'));
-  expect(posting).toContain('cat "<OUT>/codex-trio.md"');
+  expect(posting.indexOf(guard)).toBeLessThan(posting.indexOf("node scripts/post-review-comment.mjs"));
+  expect(posting).toContain('"<OUT>/codex-comment.md" "<OUT>/codex-trio.md"');
 });
 
 it.each(["missing", "empty", "present"])("topic posting guard handles %s trio evidence", state => {
@@ -57,8 +57,11 @@ it.each(["missing", "empty", "present"])("topic posting guard handles %s trio ev
     writeFileSync(join(out, "codex.md"), "verdict");
     if (state !== "missing") writeFileSync(join(out, "codex-trio.md"), state === "present" ? "independent trio proof" : "");
     const text = read(".agentrig/skills/topic/SKILL.md");
-    const snippet = "CODEX_MODEL=$(cat" + section(text, "CODEX_MODEL=$(cat", "```");
-    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out)], { encoding: "utf8" });
+    const snippet = section(text, "# Codex posting gate\n", "```")
+      .replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${"a".repeat(40)}"`).replaceAll('"MAIN"', `"${"b".repeat(40)}"`);
+    writeFileSync(join(out, "gh"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(out, "gh"), 0o755);
+    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out)], { encoding: "utf8", cwd: new URL("../../../", import.meta.url), env: { ...process.env, PATH: `${out}:${process.env.PATH}` } });
     expect(result.status).toBe(state === "present" ? 0 : 2);
     const comment = join(out, "codex-comment.md");
     expect(existsSync(comment)).toBe(state === "present");

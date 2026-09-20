@@ -258,32 +258,33 @@ For each recorded row, in order:
      policy §3; never silently certify a different head or restart both reviews by default. Before initial posting, validate every reviewed SHA claim against current `HEAD`, including any stripped heading SHA. Reject stale claims and empty or heading-only verdicts; halt without posting on validation failure. Claude still must explicitly claim its own HEAD below; Codex proof cannot substitute for verdict text. Compose each comment body
      with the canonical heading as its FIRST LINE, not a prefix check. Strip leading blanks
      and duplicate leading external-review headings from the reviewer body; retain the verdict.
-     Replace only the shell argument `"HEAD"` and canonical heading spans
-     `head HEAD — merged with origin/main MAIN` with the recorded full SHAs before executing
-     these posting snippets; never globally replace HEAD in the node programs or variable names.
+     Replace only the `"HEAD"` shell argument to each validator and the helper's `"HEAD"`
+     and `"MAIN"` arguments with the recorded full 40-hex SHAs. Never globally replace HEAD
+     inside the node validator source: it is a literal stale-placeholder detection token.
      Claim parsing ignores inline Markdown emphasis/code delimiters, consumes intervening
      SHA/commit/head labels before the claim, rejects literal HEAD placeholders separately
      from hex comparison, and accepts only matching SHA prefixes of 7–40 hex characters.
-     Assert the exact first line with `head -1` BEFORE either `gh pr comment` call:
+     Invoke the repo-shipped helper verbatim below, not inline composition. It reads the model
+     only from the validated model file and asserts the exact first line with `head -1` BEFORE
+     its sole `gh pr comment NN --body-file` call. Nonzero means stop; no manual posting fallback.
+     The heading suffix `head HEAD — merged with origin/main MAIN — full` uses full SHAs,
+     never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
      ```sh
-CLAUDE_HEADING="## External review — Claude Code (claude-opus-5) — head HEAD — merged with origin/main MAIN — full"
+# Claude posting gate
 node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
-{ echo "$CLAUDE_HEADING"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/claude-validated.md"; } > "<OUT>/claude-comment.md"
-[ "$(head -1 "<OUT>/claude-comment.md")" = "$CLAUDE_HEADING" ] || exit 2
+node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
+node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
      ```
-     For Codex, in the posting call read the validated model file (never infer the model from
-     the verdict text). Apply the same targeted substitution described above (only the `"HEAD"` shell argument and canonical heading spans) with the same recorded full SHAs:
-     ```
-CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
+     For Codex, in the posting call append conductor trio evidence only after verdict validation.
+     Apply the same targeted substitution described above (only shell SHA arguments), never
+     edit the validator source or guess the model from the verdict:
+     ```sh
+# Codex posting gate
 node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
-[ -n "$CODEX_MODEL" ] || exit 2
 [ -s "<OUT>/codex-trio.md" ] || exit 2
-{ echo "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full"; echo; node -e 'const fs=require("fs");let s=fs.readFileSync(process.argv[1],"utf8").replace(/^\s*\n/,"");while(/^## External review[^\n]*(?:\n|$)/.test(s)){s=s.replace(/^## External review[^\n]*(?:\n|$)/,"").replace(/^\s*\n/,"")}process.stdout.write(s)' "<OUT>/codex-validated.md"; echo; cat "<OUT>/codex-trio.md"; } > "<OUT>/codex-comment.md"
-[ "$(head -1 "<OUT>/codex-comment.md")" = "## External review — Codex ($CODEX_MODEL) — head HEAD — merged with origin/main MAIN — full" ] || exit 2
+node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
      ```
-     The conductor posts both independently obtained verdicts, not either isolated reviewer:
-     `gh pr comment NN --body-file "<OUT>/claude-comment.md"` and
-     `gh pr comment NN --body-file "<OUT>/codex-comment.md"`, and
+     The conductor posts full outputs through those helper calls (not a rewritten summary), and
      record both comment URLs — they stand in for reviewer session ids. A body over 60,000
      characters is split into numbered comments `(1/2)`, `(2/2)`. Read/combine the verdicts and persist
      their receipts first. Then, subject to **Review scratch cleanup**,
