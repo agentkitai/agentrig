@@ -44,6 +44,7 @@ try {
     try {
       const prior = JSON.parse(saved);
       if (prior.heading !== heading) advice = "receipt heading differs from current review; reconcile prior attempt before reuse";
+      else if (prior.pr !== pr) advice = "receipt PR differs from current review; reconcile prior attempt before reuse";
       else if (prior.status === "complete") advice = "already complete; no retry needed";
       else if (prior.status === "posting" && prior.pending === null && Array.isArray(prior.successful) && prior.successful.length === 0)
         advice = "no posting attempt recorded; inspect receipt before manual recovery";
