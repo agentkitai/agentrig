@@ -1,15 +1,21 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
+function fixtureConfig(dir: string) {
+  mkdirSync(join(dir, ".agentrig"), { recursive: true });
+  writeFileSync(join(dir, ".agentrig/config.json"), JSON.stringify({ reviewers: { Codex: { adapter: "codex-cli", model: "gpt-5.5" }, "Claude Code": { adapter: "claude-cli", model: "claude-opus-5" } } }));
+}
 const helper = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
 const head = "a".repeat(40), main = "b".repeat(40);
 const heading = `## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full`;
-function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex") {
+function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex", reviewers?: object) {
   const dir = mkdtempSync(join(tmpdir(), "post-review-"));
+  fixtureConfig(dir);
+  if (reviewers) writeFileSync(join(dir, ".agentrig/config.json"), JSON.stringify({ reviewers }));
   try {
     writeFileSync(join(dir, "body"), body);
     writeFileSync(join(dir, "model"), model);
@@ -81,7 +87,7 @@ it.each([
 });
 
 it.each([
-  ["M3 model guard", 'if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");', "verdict", "", head, main, false],
+  ["M3 model guard", 'if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model)) throw new Error("empty or invalid model file");', "verdict", "", head, main, false],
   ["M4 head guard", 'if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");', "verdict", "gpt-5.5", "bad", main, false],
   ["M4 main guard", 'if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");', "verdict", "gpt-5.5", head, "bad", false],
   ["M4 empty body guard", 'if (!body.trim()) throw new Error("empty reviewer body");', "", "gpt-5.5", head, main, false],
@@ -90,60 +96,30 @@ it.each([
   const source = readFileSync(helper, "utf8");
   expect(source).toContain(gate);
   expect(run(body, model, sha, base, undefined, damage).args).toBeUndefined();
-  expect(run(body, model, sha, base, source.replace(gate, ""), damage).args).toBeDefined();
+  expect(run(body, model, sha, base, source.replace(gate, "").replace(_name === "M3 model guard" ? 'if (model !== slots[reviewer].model) throw new Error("asserted model differs from slot pin");' : "NEVER", ""), damage).args).toBeDefined();
 });
 
-const calls = [
-  'cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2',
-  'cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2',
-];
-function contract(text: string) {
-  for (const call of calls) expect(text).toContain(call);
+it.each(["topic", "ship", "dogfood"])("M7 %s delegates canonical composition", skill => {
+  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  expect(text).toContain("scripts/post-review-comment.mjs");
   expect(text).not.toContain("CLAUDE_HEADING=");
   expect(text).toContain("head -1");
-}
-it.each(["topic", "ship", "dogfood"])("M7 %s pins helper calls and forbids inline heading composition", skill => {
-  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
-  contract(text);
-  for (const call of calls) expect(() => contract(text.replace(call, ""))).toThrow();
-  expect(() => contract(text + '\nCLAUDE_HEADING="alternate"')).toThrow();
 });
-
-it.each(["claude", "codex"])("M8 %s topic gate blocks stale/empty verdicts before helper posting", reviewer => {
-  const dir = mkdtempSync(join(tmpdir(), "posting-gates-"));
-  try {
-    const text = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
-    const marker = `# ${reviewer === "claude" ? "Claude" : "Codex"} posting gate\n`;
-    const snippet = text.slice(text.indexOf(marker) + marker.length).split("```")[0]!
-      .replaceAll("<OUT>", dir).replaceAll("<WT>", fileURLToPath(new URL("../../../", import.meta.url))).replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`);
-    // Start with the actual CLI artifact, never a fabricated intermediate models file.
-    writeFileSync(join(dir, "claude.json"), JSON.stringify({modelUsage: {"claude-opus-5": {inputTokens: 1}}, result: regression}));
-    const extraction = text.split("**Assert the model and extract the Claude review:**")[1]!.split("```")[1]!
-      .replaceAll("<OUT>", dir);
-    const extracted = spawnSync("/bin/sh", ["-c", extraction], { encoding: "utf8", cwd: dir });
-    expect(extracted.status, extracted.stderr).toBe(0);
-    writeFileSync(join(dir, "codex-model.txt"), "gpt-5.5");
-    writeFileSync(join(dir, "codex-trio.md"), "Conductor trio: all exits 0");
-    writeFileSync(join(dir, "gh"), `#!/bin/sh\ncat "$5" > '${dir}/posted'\n`);
-    chmodSync(join(dir, "gh"), 0o755);
-    const invoke = () => spawnSync("/bin/sh", ["-c", snippet], {
-      cwd: dir, encoding: "utf8",
-      env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
-    });
-    for (const body of ["", "# verdict heading only", "Reviewed head HEAD\nverdict", `Reviewed head ${main}\nverdict`, `## External review — stale — head ${main}\n\nverdict`]) {
-      writeFileSync(join(dir, `${reviewer}.md`), body);
-      expect(invoke().status).not.toBe(0);
-      expect(existsSync(join(dir, "posted"))).toBe(false);
-    }
-    writeFileSync(join(dir, `${reviewer}.md`), regression);
-    const result = invoke();
-    expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(join(dir, "posted"), "utf8").split("\n")[0]).toBe(reviewer === "codex" ? heading : heading.replace("Codex (gpt-5.5)", "Claude Code (claude-opus-5)"));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+it("declared custom slot is accepted; zero slots, undeclared name and pin mismatch fail closed", () => {
+  const custom = { "Peer A": { adapter: "api:existing", model: "gpt-5.5" } };
+  const accepted = run("PASS", "gpt-5.5", head, main, undefined, false, 0, "Peer A", custom);
+  expect(accepted.status, accepted.stderr).toBe(0);
+  expect(accepted.posted).toContain("## External review — Peer A (gpt-5.5)");
+  for (const [slot, model, declaration] of [["Peer A", "wrong", custom], ["Codex", "gpt-5.5", custom], ["Peer A", "gpt-5.5", {}]] as const) {
+    const result = run("PASS", model, head, main, undefined, false, 0, slot, declaration);
+    expect(result.status).not.toBe(0);
+    expect(result.args).toBeUndefined();
+  }
 });
 
 it("B2 splits long review plus proof into bounded lossless canonical comments", () => {
   const dir = mkdtempSync(join(tmpdir(), "review-chunks-"));
+  fixtureConfig(dir);
   try {
     // Six-digit payload length reserves the actual marker width. The first
     // nominal cut is deliberately between the emoji's UTF-16 surrogates.
@@ -176,6 +152,7 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
 
  it("R379 records partial indices and refuses rerun even when gh would now succeed", () => {
   const dir = mkdtempSync(join(tmpdir(), "partial-review-"));
+  fixtureConfig(dir);
   try {
     writeFileSync(join(dir, "body"), "X".repeat(200000));
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -208,6 +185,7 @@ exit 0
 
 it.each(["complete", "unattempted", "interrupted"])("R379 atomic receipt and safe %s refusal", state => {
   const dir = mkdtempSync(join(tmpdir(), "receipt-state-"));
+  fixtureConfig(dir);
   try {
     writeFileSync(join(dir, "body"), "verdict");
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -256,6 +234,7 @@ require('node:module').syncBuiltinESMExports();
 
 it.each(["chunk-write", "head-assertion", "pending-save", "success-save", "failure-save"])("N1 reports known state despite %s failure and preserves durable retry lock", failure => {
   const dir = mkdtempSync(join(tmpdir(), "partial-crash-"));
+  fixtureConfig(dir);
   try {
     writeFileSync(join(dir, "body"), "X".repeat(200000));
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -311,6 +290,7 @@ require('node:module').syncBuiltinESMExports();
 
 it.each(["head", "model"])("R390 refuses a complete receipt for a different %s without current-completion advice", changed => {
   const dir = mkdtempSync(join(tmpdir(), "receipt-heading-"));
+  fixtureConfig(dir);
   try {
     writeFileSync(join(dir, "body"), `Reviewed head ${head}\nOK`);
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -319,7 +299,7 @@ it.each(["head", "model"])("R390 refuses a complete receipt for a different %s w
     const priorHeading = changed === "head" ? heading.replace(head, "c".repeat(40)) : heading.replace("gpt-5.5", "another-model");
     const saved = JSON.stringify({ heading: priorHeading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt heading differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -346,6 +326,7 @@ it("R393 all-publication receipt failure does not claim a partial post", () => {
 
 it("R401 refuses a complete receipt for a different PR with the same canonical heading", () => {
   const dir = mkdtempSync(join(tmpdir(), "receipt-pr-"));
+  fixtureConfig(dir);
   try {
     writeFileSync(join(dir, "body"), `Reviewed head ${head}\nOK`);
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -353,7 +334,7 @@ it("R401 refuses a complete receipt for a different PR with the same canonical h
     chmodSync(join(dir, "gh"), 0o755);
     const saved = JSON.stringify({ pr: "1", heading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt PR differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");

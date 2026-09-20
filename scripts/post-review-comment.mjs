@@ -7,12 +7,23 @@ import { spawnSync } from "node:child_process";
 
 try {
   const args = process.argv.slice(2);
+  const configFlag = args.indexOf("--config");
+  let configFile = ".agentrig/config.json";
+  if (configFlag !== -1) {
+    configFile = args[configFlag + 1];
+    if (!configFile) throw new Error("--config requires a path");
+    args.splice(configFlag, 2);
+  }
   if (args.length !== 7 && args.length !== 8) throw new Error("expected PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]");
   const [pr, reviewer, modelFile, bodyFile, head, main, outputFile, proofFile] = args;
   if (!/^[1-9][0-9]*$/.test(pr)) throw new Error("invalid PR number");
-  if (!["Claude Code", "Codex"].includes(reviewer)) throw new Error("invalid reviewer");
+  if (!reviewer) throw new Error("invalid reviewer");
+  const config = JSON.parse(readFileSync(configFile, "utf8"));
+  const slots = config.reviewers ?? {};
+  if (Object.keys(slots).length > 2 || !Object.hasOwn(slots, reviewer) || !/^[A-Za-z][A-Za-z0-9 _-]{0,63}$/.test(reviewer)) throw new Error("undeclared reviewer slot");
   const model = readFileSync(modelFile, "utf8").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(model)) throw new Error("empty or invalid model file");
+  if (model !== slots[reviewer].model) throw new Error("asserted model differs from slot pin");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model)) throw new Error("empty or invalid model file");
   if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
   const raw = readFileSync(bodyFile, "utf8");
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");

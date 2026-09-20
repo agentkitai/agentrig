@@ -5,8 +5,7 @@ description: Run one authorized roadmap band as a sequential release train - dog
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
-ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+This policy implements shipping policy §3's declared-check ordering. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
 (or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
@@ -27,11 +26,11 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+GREEN BEFORE launching any declared reviewer (and before a focused delta reviewer). Give declared
 reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep the declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 
@@ -50,34 +49,56 @@ Never guess a role name after an unknown-role refusal. Provider routing remains 
 
 ## Initial full review heading contract
 
+Resolve the project's declared reviewer slots from `.agentrig/config.json` at the PR head,
+not home config or runtime provider defaults. Missing `reviewers` or `{}` means zero slots.
+Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
+Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
+Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
+the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
+
+Each declared slot's initial comment must start with:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+The initial heading model must equal the slot's pinned model. A different model makes this a
+missing required initial review, not a receipt. Require the complete heading, not just a prefix
+or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
+reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+(launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
+Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
+empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
+
 For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
 
-The two initial external review comments must each start with this exact heading form:
-`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
-The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
-No alternate heading is valid for posting,
-acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
-elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
-
-The Claude Code initial heading model must equal `claude-opus-5`; any other Claude model is a missing required initial review, not a receipt that satisfies the pair.
+With zero slots skip external reviews and record `External review: none declared` in the ledger:
+builder → declared checks → exact-head CI → land, subject to authorization and all other gates.
+With zero slots use the author’s named check receipts; no conductor-review preparation is required.
+With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
+both independently and use one independent focused-delta reviewer for material repairs.
+Land requires only declared headings, and compares each asserted model against that slot's pin.
+Reviewers share no context with the builder and should differ by vendor or at least model.
+The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
+pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
+Reviewers judge code only; reviewers do NOT run checks, bootstrap or preflight. Optional reviewer-owned
+probes are evidence for a finding, not a substitute for conductor proof. Hosted CI overlaps reviews
+and is required only at landing. Changed heads invalidate prior same-head check receipts.
 
 ## Review scratch cleanup
 
-Human cleanup contract (verbatim):
+Human cleanup contract (generalized to declared slots):
 
-> After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
+> After the initial declared review pass and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to all owned worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
 
-Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
+Operative resource mapping: initial reviews remove one recorded owned tree per declared slot and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-proof tree and conductor-proof temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
 
 Apply this sequence to successful, failed, retried, stale and interrupted passes alike, including every abbreviated cleanup instruction below:
 
 1. Join every job and subprocess, including installs, retries and mutations.
 2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.
 3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.
-4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-trio tree and conductor-trio temporary root, and `OUT`; never the author's tree or old unowned scratch.
+4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-proof tree and conductor-proof temporary root, and `OUT`; never the author's tree or old unowned scratch.
 
-For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`. Also remove any recorded owned conductor-trio tree and conductor-trio temporary root. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
+For a focused pass remove its one worktree and unique `BASE` instead of the initial declared pass and `review-base-NN`. Also remove any recorded owned conductor-proof tree and conductor-proof temporary root. Remove temporary roots outside `OUT` explicitly; roots inside it are removed with it. Record the removed paths and cleanup result. If restoration cannot be verified, preserve the owned evidence and halt rather than force cleanup. Read/combine the verdicts before removing `OUT`.
 
 ## 1. Lock the authorization and train
 
@@ -156,187 +177,82 @@ For each recorded row, in order:
    written" — unless the builder stated the row as written is infeasible, in which case halt for
    the human with both the proposal and the rejection. One arbitration per row; a second
    `DEVIATION REQUESTED` on the same row halts.
-4. Run the **external review pass** on the PR's current head: two reviewers that share nothing
-   with the builder, in parallel with each other AND hosted CI, in separate reviewer-owned
-   worktrees you prepare. Start the CI watch and reviews as soon as the PR is available; green
-   hosted CI is a landing gate, not a review-start gate. First check whether it already ran:
-   if the PR carries two comments with the complete initial full review heading defined above,
-   naming the CURRENT head SHA in the heading, one from Claude Code and one from Codex,
-   do not run the pass again —
-   read those two comments as its result and continue at **Combine**.
+4. Run the **external review pass** for the declared reviewer slots. Start hosted CI monitoring
+   immediately, but gate every reviewer launch on independent conductor proof below.
+   Zero slots: persist `External review: none declared`, skip all reviewer preparation/dispatch,
+   and continue to Combine and the landing gates. One slot: only one tree, job and heading.
+   First check whether it already ran: if the PR carries every declared slot's comment
+   with the complete initial full review heading defined above,
+   naming the CURRENT head SHA in the heading and matching its slot pin, do not run the pass again —
+   read those verdicts and continue from step 5. For a previous head recover the ledger and
+   review history and cover the delta under shipping policy §3, not a redundant full pass.
    The recorded `<MAIN>` is historical provenance: it documents the origin/main merge base
    reviewed by that pass and need not equal current `origin/main`. A moved main uses the existing
    conflict and material-delta rules in shipping policy §3; a clean advance re-verifies exact-head CI
    under shipping policy §1’s CI-staleness rule, not a redundant initial pair.
-   For older heads, recover
-   the review ledger and inspect uncovered deltas under shipping policy §3 instead of restarting
-   the initial pair. An incomplete initial pair still requires both reviews. Never pass the builder's report,
-   reasoning, findings, or claimed evidence to either reviewer; the PR and the repository are their
-   only evidence.
-   - **Prepare.** One `bash` call for preparation, then one call per install. This applies to conductor
-     preparation only, and only when the nonempty declaration requires bootstrap. Every value
-     the preparation call uses is assigned inside it before use:
-     `BRANCH=$(gh pr view NN --json headRefName --jq .headRefName)`;
-     `HEAD=$(gh pr view NN --json headRefOid --jq .headRefOid)`; then
-     `git fetch origin main "$BRANCH"`, `WT=$(mktemp -d)`, `echo "$WT"`, `git worktree add "$WT" "$HEAD"`,
-     `git -C "$WT" branch -f review-base-NN origin/main` (create it inside the worktree so
-     `git -C "$WT"` sees it); assert
-     `[ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD" ] || stop the pass (the worktree is not at the
-     PR head)` (remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before stopping), and record
-     `MAIN=$(git rev-parse origin/main)`. Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`.
-     If main integration would advance HEAD, stop: update the PR branch and re-prove its new head before review.
-     A conflict is a finding to fix in §3, never permission to review an integration-only commit as PR HEAD.
-     Remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
-     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before returning for repair.
-     A pass that stopped on conflict is not complete; its restart is a full pass on the new head, never a delta.
-     `WT` belongs exclusively to Claude. Set `REVHEAD=$(git -C "$WT" rev-parse HEAD)`;
-     require `[ "$REVHEAD" = "$HEAD" ]`; REVHEAD must equal the current PR HEAD.
-     Create Codex's independent tree at that exact commit: `CODEX_WT=$(mktemp -d)`;
-     `echo "$CODEX_WT" "$REVHEAD"`; `git worktree add --detach "$CODEX_WT" "$REVHEAD"`.
-     Assert both trees have the same HEAD and are clean before launching either reviewer.
-     `OUT=$(mktemp -d)`
-     holds every output file; never write review artifacts inside either tree. Create independent
-     temporary roots with `mkdir "$OUT/claude-tmp" "$OUT/codex-tmp"`; pass the corresponding
-     command-local `TMPDIR` below. Record these paths and the post-merge review SHA BEFORE
-     installing dependencies. Here “post-merge” means the actual PR head after any required
-     main integration was pushed to the PR and re-proved, never a scratch integration SHA. For non-empty steps, the conductor executes the project's declared bootstrap and optional preflight separately in `WT` and in `CODEX_WT`,
-     in separate calls, each with `timeoutMs` at least 600000.
-     Require each command's exit code zero in each reviewer tree before launching either reviewer job.
-     If any preparation command fails, halt before either launch; persist the failure receipt,
-     join all owned jobs and remove all recorded owned reviewer trees, any conductor-trio tree and conductor-trio temporary root,
-     `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup** before returning.
-     Empty steps run no commands, including bootstrap and preflight.
-     A separate conductor proof tree does not satisfy either reviewer tree's dependency preparation.
-     Reviewers do not run the declared suite, bootstrap or preflight. Record all paths
-     and REVHEAD before any conductor execution; keep reviewer trees read-only except
-     restored targeted mutation probes. Dependency preparation belongs to the conductor.
-     End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"` so each path is recorded.
-     `bash` has no cwd field and no shell state survives between calls: record all
-     three absolute paths and REVHEAD like job ids, and substitute
-     them literally into every later command. Never share mutable sources, build output or
-     `node_modules` between the reviewers; worktrees are cooperative isolation, not an OS sandbox.
-   - **Independent conductor checks — BEFORE reviewers.** Create a separate fresh tree
-     at PR HEAD, record its path/TMPDIR, resolve the declaration and run bootstrap, optional
-     preflight and ordered named steps under the operative policy. Require GREEN before
-     launching either job below; for empty steps record the explicit none receipt. Record
-     each name, command, exit code, UTC start/end and counts in `<OUT>/codex-trio.md` (legacy
-     artifact name only). Verify restored tracked/index state and unchanged head. Require REVHEAD equals current PR HEAD; otherwise stop and re-prepare/re-prove. Supply the receipts
-     to Claude's brief and Codex's review context before launch; never builder reasoning.
-     Focused reviews use the same pre-launch conductor gate at NEW.
-     Record conductor paths, including any retry, before executing in its tree. Before cleanup
-     verify all Codex attempts and subprocesses have completed, and join conductor jobs too.
-     Persist named receipts before posting; never share an executing reviewer tree.
-   - **Claude job** — `bash` with `background: true`:
-     ```
-     cd <WT> && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION \
-         -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_PID \
-       TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' \
-         --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' \
-         --output-format json --no-session-persistence \
-         "Review PR #NN at head SHA REVHEAD. Read .agentrig/skills/review/SKILL.md and follow it. You exclusively own this isolated review worktree, at the actual PR head containing recorded origin/main, with dependencies installed: skip section 2 and verify that state yourself. Inspect the supplied named exact-head conductor receipts; do not run declared checks. Review code and run only targeted mutation probes here, restore each mutant and join every subprocess before reporting; never touch a sibling or author tree. Do not push, merge, commit, change permission settings, spawn children or invoke auxiliary models. Assume the author is wrong; verify every finding against the code before reporting it; report file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario and a fix. Report the exact head SHA you reviewed." \
-         < /dev/null > "<OUT>/claude.json"
-     ```
-     The `env -u` list matters when this session was itself launched from inside Claude Code
-     (the nesting variables make the child report "not logged in"); `< /dev/null` keeps it from
-     waiting on stdin. `<WT>` and `<OUT>` are the literal absolute paths Prepare echoed, not shell
-     variables — this is a fresh `bash` call and `$WT`/`$OUT` do not exist in it.
-     `dontAsk` denies requests outside the explicit tool allowances instead of prompting; it is
-     not `plan` (which forbids required mutations) or a permission bypass. Bash is already an
-     execution allowance, not a filesystem sandbox. Restrict work to the reviewer-owned tree and
-     temporary root; do not change AgentRig's ask/sandbox/grant defaults or relax a denied check.
-     Direct `git push`/`gh pr merge` denials reinforce the existing no-push/no-merge boundary;
-     they are defense in depth, not containment against alternate spellings, scripts or shared
-     Git metadata. Private-fixture Git operations remain available for required tests. Treat
-     cooperative confinement as a limitation, never a claim that tool patterns sandbox Bash.
-   - **Codex job** — `bash` with `background: true`:
-     ```
-     cd <CODEX_WT> && TMPDIR=<OUT>/codex-tmp codex review --base review-base-NN > "<OUT>/codex.md" 2> "<OUT>/codex.err"
-     ```
-     Codex takes no custom prompt in `--base` mode (its review mode has its own); the adversarial
-     standard is Claude's brief and step 5's disposition. A missing proposed fix does not waive
-     a real blocker or turn an optional suggestion into repair work.
-   - **Wait** with `bash_job` (`action: status`, `waitMs` up to 5 minutes per call; never a sleep
-     loop). Record both job ids from the `bash` results immediately, along with each job's start
-     time beside its id, and restate them in your own reply text on every turn you poll — tool
-     results older than five turns may be elided from context, and a lost id is a dead job you
-     cannot kill or read. A job still running 60 minutes after it started is dead: `bash_job`
-     `action: kill` it. A dead job (killed, non-zero exit, or an empty `<OUT>/codex.md`, or an
-     empty `<OUT>/claude.md` after the extraction step below — `bash_job` showing no output is
-     normal because the jobs write to files) is retried ONCE on the same head; both reviewers dead
-     on the same head halts the train (post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup**; only then halt the train). A pass with
-     one surviving review is not a pass — halt with the surviving review posted (post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees, any conductor-trio tree and conductor-trio temporary root, `review-base-NN`, reviewer temporary roots and `OUT` under **Review scratch cleanup**; only then halt the train); the train never lands on one reviewer.
-   - **Assert the model and extract the Claude review:**
-     ```
-     node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const m=Object.keys(r.modelUsage??{});if(m.length!==1||m[0]!=="claude-opus-5"){console.error("claude review ran on "+(m.join(",")||"unknown")+", not claude-opus-5");process.exit(2)}require("fs").writeFileSync(process.argv[2],JSON.stringify(m));process.stdout.write(String(r.result??""))' "<OUT>/claude.json" "<OUT>/claude-models.json" > "<OUT>/claude.md"
-     ```
-     A non-zero exit here is a dead job under the Wait rule above (retry once, then halt if both
-     are dead), never a review to use.
-   - **Assert the Codex model from stderr:**
-     After the Codex job exits successfully, extract its actual model from the CLI stderr header:
-     ```
-     node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const m=[...s.matchAll(/^model:[ \t]*(.*)$/gm)].map(x=>x[1].trim());if(m.length!==1||!/^gpt-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m[0])){console.error("missing, malformed or ambiguous Codex model");process.exit(2)}process.stdout.write(m[0])' "<OUT>/codex.err" > "<OUT>/codex-model.txt"
-     ```
-     Missing, malformed or ambiguous model provenance halts the pass; never guess or post a placeholder.
-     Require exit zero before composing a comment. Retain stderr as provenance and record the
-     validated model with the job receipt. Join jobs and clean owned trees before halting.
-   - **Provenance.** Join both jobs and their subprocesses, then confirm both reviewer trees have
-     the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta) — always the actual PR head, as defined in Prepare and clean tracked/index state. Any unrestored mutant, changed
-     HEAD or unfinished writer invalidates that review; record it explicitly and use the existing
-     dead-job retry rule, never clean away the evidence and count the pass. The conductor owns
-     cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,
-     including BOTH reviewer trees, any conductor-trio tree and conductor-trio temporary root, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`. Before posting, re-read the PR head (`gh pr view NN --json headRefOid`): if
-     it no longer equals `HEAD`, retain the verdict for the recorded SHA but do not call the new
-     head reviewed. Join/clean up, then classify and cover the uncovered delta under shipping
-     policy §3; never silently certify a different head or restart both reviews by default. Before initial posting, validate every reviewed SHA claim against current `HEAD`, including any stripped heading SHA. Reject stale claims and empty or heading-only verdicts; halt without posting on validation failure. Claude still must explicitly claim its own HEAD below; Codex proof cannot substitute for verdict text. Compose each comment body
-     with the canonical heading as its FIRST LINE, not a prefix check. Strip leading blanks
-     and duplicate leading external-review headings from the reviewer body; retain the verdict.
-     Replace only the `"HEAD"` shell argument to each validator and the helper's `"HEAD"`
-     and `"MAIN"` arguments with the recorded full 40-hex SHAs. Never globally replace HEAD
-     inside the node validator source: it is a literal stale-placeholder detection token.
-     Claim parsing ignores inline Markdown emphasis/code delimiters, consumes intervening
-     SHA/commit/head labels before the claim, rejects literal HEAD placeholders separately
-     from hex comparison, and accepts only matching SHA prefixes of 7–40 hex characters.
-     Bounded claim grammar (case-insensitive, anywhere in verdict): after removing inline
-     Markdown delimiters, recognize head, head_sha (normalized to headsha), or reviewed,
-     followed by zero or more SHA/commit/head/at labels, optional colon/equal, then hex or HEAD.
-     Reject 41-or-more hex tokens, stale `head_sha:` and stale `Reviewed at` claims.
-     This deliberately fails closed on a prior `reviewed commit <stale>` discussion mention;
-     rewrite historical discussion without that claim form before posting. It is not natural-language
-     attribution: other prose is not a SHA claim; Claude still must explicitly name its reviewed HEAD.
-     Invoke the repo-shipped helper verbatim below, not inline composition.
-     `<WT>` is the recorded absolute reviewer-owned reviewed worktree, never the author checkout;
-     the explicit `cd` makes both commands usable from an unrelated cwd. It reads the model
-     only from the validated model file and asserts the exact first line with `head -1` BEFORE
-     each `gh pr comment NN --body-file` call. Nonzero means stop; no manual posting fallback.
-     The heading suffix `head HEAD — merged with origin/main MAIN — full` uses full SHAs,
-     never literal placeholders. Keep these stale SHA/verdict gates before invoking the helper.
+   - **Prepare.** Record PR branch/head and fetched origin/main with full SHAs. Create a separate
+     conductor-owned proof tree at actual PR HEAD, plus one exclusive reviewer-owned tree per slot.
+     Record every owned path before use; assert each tree HEAD equals current PR HEAD and is clean.
+     Require `git merge-base --is-ancestor "$MAIN" "$HEAD"`. If integration advances HEAD or
+     conflicts, stop, update the PR and re-prove its new head; never review a scratch integration SHA.
+     A conflict-stopped initial pass restarts as full, not delta. Keep unique base refs and an OUT
+     directory outside all trees; never write review artifacts inside either tree. Create one independent TMPDIR outside Git ancestry per job.
+     For nonempty steps the conductor runs declared bootstrap and optional preflight separately
+     in every reviewer tree (separate calls with timeoutMs at least 600000). Require each command's
+     exit code zero in each reviewer tree before launching any reviewer job. A separate proof tree
+     does not prepare reviewer dependencies. Empty steps run no commands, including bootstrap/preflight.
+     On any failure halt before launch, persist receipts, join jobs and apply Review scratch cleanup.
+     Persist-before-delete on incomplete review: post any surviving review and persist verdicts,
+     provenance, proof results and failure receipts in the PR; then remove owned reviewer trees,
+     conductor-proof tree and conductor-proof temporary root under **Review scratch cleanup**; only then halt.
+     Never share mutable sources, build output or node_modules. These trees are cooperative
+     isolation, not an OS sandbox. Record literal paths; shell state does not persist across calls.
+   - **Independent conductor checks — BEFORE reviewers.** In the separate fresh proof tree at
+     actual PR HEAD resolve the declaration, run bootstrap, optional preflight and ordered named
+     steps. Require GREEN BEFORE launching any reviewer. Record head, name, command, exit code,
+     UTC start/end, counts, worktree and TMPDIR in `<OUT>/checks.md`. Empty steps receive an explicit
+     none receipt. Restore tracked/index state, join jobs and recheck current PR head before launch.
+     A head change invalidates this proof; re-prepare and re-prove. Supply receipts to every slot.
+   - **Launch each slot through its adapter**, with `bash` `background: true`, in parallel with
+     other slots and hosted CI. Write a fresh prompt file containing the task contract, current
+     head/main, `.agentrig/skills/review/SKILL.md`, named conductor receipts, and ownership boundaries.
+     For an API slot include the diff and relevant complete files as a data bundle (no tools available);
+     if the bundle cannot fit or evidence is insufficient, stop instead of inventing a verdict.
+     Never pass the builder's report, findings or reasoning as evidence. The prompt says:
+     `Report the exact head SHA you reviewed`. It forbids push, merge, commit, permission changes, children and auxiliary models;
+     it asks for file:line, severity, failure scenario, fix and exact reviewed SHA. Do not supply
+     builder reasoning, findings or claimed evidence. Preserve inherited environment constraints.
      ```sh
-# Claude posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/claude.md" "HEAD" > "<OUT>/claude-validated.md" || exit 2
-node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(m.length!==1||m[0]!=="claude-opus-5")process.exit(2);process.stdout.write(m[0])' "<OUT>/claude-models.json" > "<OUT>/claude-model.txt" || exit 2
-cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
+     TMPDIR=<SLOT_TMP> node <REPO>/scripts/reviewer-adapters.mjs <WT>/.agentrig/config.json '<SLOT>' <OUT>/prompt.txt <WT> <PREFIX>
      ```
-     For Codex, in the posting call append conductor declared-check receipts only after verdict validation.
-     Apply the same targeted substitution described above (only shell SHA arguments), never
-     edit the validator source or guess the model from the verdict:
+     Use unique absolute PREFIX per attempt. Adapter provenance must assert the slot's pinned model.
+     Record job ids and UTC start times immediately and restate them on every polling turn.
+     Poll using bash_job, not sleep loops. Kill a still-running job after 60 minutes; join every
+     subprocess. Failed, empty, truncated or wrong-model runs get ONE retry with a fresh prefix;
+     a second incomplete run halts. Never weaken permissions to rescue a review.
+   - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, do not call the new head reviewed; stale output is not a current-head
+     review: retain its historical provenance and cover the delta or restart as required by §3.
+     Reject 41-or-more hex tokens, stale `head_sha:` and stale `Reviewed at` claims. The validator
+     fails closed on a prior `reviewed commit <stale>` discussion mention. Do not relabel stale text.
+     For each successful slot, apply targeted substitution only to shell SHA arguments and paths;
+     never edit the validator source or guess the model from the verdict. Never globally replace
+     HEAD/MAIN in the node program: its literal HEAD rejection must survive. Run this gate:
      ```sh
-# Codex posting gate
-node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
-[ -s "<OUT>/codex-trio.md" ] || exit 2
-cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
+     # Slot posting gate
+     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
+     [ -s "<OUT>/checks.md" ] || exit 2
+     [ -s "<PREFIX>.provenance.json" ] || exit 2
+     cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
+     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.validated.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' || exit 2
      ```
-     The conductor posts full outputs through those helper calls (not a rewritten summary), and
-     record both comment URLs — they stand in for reviewer session ids. A body over 60,000
-     characters is split by the helper into bounded numbered comments `(1/2)`, `(2/2)`
-     below the unchanged canonical first line; concatenate payloads to recover the full output. Read/combine the verdicts and persist
-     their receipts first. Then, subject to **Review scratch cleanup**,
-     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;
-     remove any recorded owned conductor-trio tree and conductor-trio temporary root, the reviewer temporary roots and `OUT` as well.
-   - **Combine.** Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's, if present, so findings are
-     repo-relative. Tag every finding `[claude]` or `[codex]`, collapse duplicates (same file:line
-     and the same scenario), and sort the union under step 5. Claude's review must also name
-     `HEAD` as the SHA it reviewed; Codex echoes no SHA and needs none, because the worktree was
-     asserted to be at `HEAD` (the actual reviewed PR head on a full pass).
+     Persist the complete verdict, adapter provenance and check receipts in linked PR comments.
+     Large payloads use the helper's canonical bounded chunks and durable posting receipt; never
+     truncate or restart a partial post as a new receipt. Read back every posted chunk on GitHub,
+     including ordinal/total order and complete canonical heading (`head -1` alone checks only the first).
+     Link every returned comment URL in the ledger. Restore mutants and tracked/index state, join
+     all jobs, persist evidence, then remove all recorded owned resources under Review scratch cleanup.
+   - **Combine.** Strip each owned tree prefix from locations, tag findings by slot name, collapse
+     duplicates and disposition the union. Zero slots have no external findings to invent.
 5. Record every child session id from its tool result and restate it in your own reply text in that same turn. Bind each verdict to
    its recorded SHA and apply shipping policy §2 to the combined findings. Distinguish verified
    defects from optional suggestions: optional polish is advisory, not a new acceptance criterion or repair
@@ -346,7 +262,7 @@ cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.
 ## 3. Repair blockers — a bounded, converging loop
 
 Follow shipping policy §§2–3: at most THREE repair rounds, retaining the counter on restart.
-Collect both initial verdicts, disposition all findings, and batch only blocking repairs.
+Collect all declared initial verdicts, disposition all findings, and batch only blocking repairs.
 Non-blocking defects get documented issues; optional suggestions do not consume rounds.
 
 A blocker closes only with a fixer delta plus independent focused review, an evidence-backed
@@ -422,15 +338,15 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   For nonempty steps only, the conductor follows the declaration: Install dependencies in a separate call with timeoutMs at least 600000; require exit code zero before launch.
   No install is inferred when the declaration is empty. On failure, join jobs and retain recorded paths for cleanup. Reviewers do not install or preflight.
   Use §2 step 4's selected reviewer's command/tool allowances and model assertion where applicable,
-  with OLD as the diff base. For Claude, brief OLD/NEW, blocker URLs, affected checks/mutations and
-  direct interactions; for Codex use `codex review --base <unique-old-ref>`.
+  with OLD as the diff base. Brief OLD/NEW, blocker URLs, affected checks/mutations and direct interactions.
+  With one slot select that slot; zero slots skip focused external review but retain proof and CI gates.
   Do not hand over the fixer's reasoning as evidence. Record start time/job id and use the same
   timeout, one-retry, restore/join and SHA checks as the initial pass, applied to this one job.
   A dead focused review after retry halts; it is not replaced by self-review.
   Post its verdict as `## Focused review — <reviewer> — head NEW — delta OLD..NEW`.
   Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,
   persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary
-  root, any conductor-trio tree and conductor-trio temporary root, and `OUT`. Re-read the PR head;
+  root, any conductor-proof tree and conductor-proof temporary root, and `OUT`. Re-read the PR head;
   any uncovered delta still needs classification and coverage before landing.
 - **Converge:** each round closes assigned blockers without reopening closed ones. Newly found
   blockers may use another round up to the cap; advisory/non-blocking notes do not. A surviving
@@ -442,14 +358,14 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
 
 Before invoking land in this session or spawning a land child, read `gh pr view NN --json body`.
 Fetch linked review comments too (for example `gh api repos/OWNER/REPO/issues/comments/ID`);
-verify both initial canonical headings in the actual comments, including the pinned Claude model,
+verify all declared initial canonical headings in the actual comments, including each slot's pinned model,
 reviewed head and main provenance. Verify `## Review disposition` contains dispositions for every
-finding from both initial reviews and every focused review, and `## Residuals` has issue links or
+finding from all declared initial reviews and every focused review, and `## Residuals` has issue links or
 explicit `none`. Verify all blocker closures and delta coverage through current head. Missing
 headings, comments, dispositions or residual records halt BEFORE land-child spawning; a URL alone
 or a private summary is not verification. Persist edits then read back again if anything changes.
 
-- After the initial pair and all required delta coverage have resolved blocking findings,
+- After the initial declared pass and all required delta coverage have resolved blocking findings,
   independently confirm CI is green on
   the PR's actual current head SHA. Then spawn a land subagent with the exact band, row, predecessor
   merge SHA, PR number, and: “Land PR #NN following the land skill. The human authorized this row as
@@ -471,7 +387,7 @@ Always report:
 - the fixed band and row list, rows landed with PR/head/merge SHAs and main-CI results, the current
   halted row, and untouched rows;
 - every builder, fixer, arbiter, and lander session id, labeled by row and role, and the
-  PR-comment URL of every external review (Claude Code and Codex, full and delta) with the head
+  PR-comment URL of every external review (declared slots, full and delta) with the head
   SHA it reviewed;
 - every deviation proposed, with the arbiter's verdict block and how the train continued;
 - every finding and whether it was fixed, per repair round, with the convergence count for each

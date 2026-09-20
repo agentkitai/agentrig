@@ -64,9 +64,9 @@ it.each(["ship", "dogfood"])("%s links to the focused review isolation procedure
 
 it("pins the actual initial-pair, mechanical-delta and moved-head gates", async () => {
   const text = await policy();
-  expect(text).toContain("both initial reviews must finish before landing");
+  expect(text).toContain("all declared initial reviews must finish before landing");
   expect(text).toContain("**Mechanical:** only spelling/formatting, broken links, or factual PR/STATUS receipts without changed guarantees");
   const land = await read(".agentrig/skills/land/SKILL.md");
-  expect(land).toContain("Verify both initial external reviews, focused verdicts for every material delta, and recorded evidence for mechanical deltas through the CURRENT head");
+  expect(land).toContain("Verify all declared initial external reviews, focused verdicts for every material delta, and recorded evidence for mechanical deltas through the CURRENT head");
   expect(await read(".agentrig/skills/topic/SKILL.md")).toContain("do not call the new head reviewed");
 });

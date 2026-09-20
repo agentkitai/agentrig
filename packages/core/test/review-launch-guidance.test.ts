@@ -1,35 +1,50 @@
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 
-const skill = (name: string) => readFile(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
+const skill = (name: string) => readFile(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8").then(text => text.replace(/\r\n?/g, "\n"));
 
-it.each(["topic", "dogfood"])("%s permits explicit mutation tools without plan mode or bypass", async name => {
-  const text = await skill(name);
-  const launches = text.split("\n").filter(line => line.includes("claude -p --model"));
-  expect(launches).toHaveLength(1);
-  expect(launches[0]).toContain("--permission-mode dontAsk");
-  expect(launches[0]).toContain("--allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
-  expect(launches[0]).toContain("--model claude-opus-5");
-  expect(launches[0]).not.toMatch(/bypassPermissions|dangerously-skip-permissions/);
-  expect(text).toContain("--disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)'");
+it("dogfood delegates launch permissions to the canonical adapter", async () => {
+  const text = await skill("dogfood");
+  const initial = text.split("## 8.")[1]!.split("## 9.")[0]!;
+  expect(initial).toContain("topic §2 step 4");
+  expect(initial).toContain("scripts/reviewer-adapters.mjs");
+  expect(initial).not.toMatch(/claude -p|codex exec|bypassPermissions|dangerously-skip-permissions/);
+});
+
+it("topic permits explicit mutation tools without plan mode or bypass", async () => {
+  const text = await skill("topic");
+  const adapters = await readFile(new URL("../../../scripts/reviewer-adapters.mjs", import.meta.url), "utf8");
+  expect(text).toContain("Launch each slot through its adapter");
+  expect(text).toContain("node <REPO>/scripts/reviewer-adapters.mjs");
+  expect(adapters).toContain('"--permission-mode", "dontAsk"');
+  expect(adapters).toContain('"--allowedTools", "Bash,Read,Glob,Grep,Edit,Write"');
+  expect(adapters).toContain('"--sandbox", "workspace-write"');
+  expect(adapters).toContain('"--disallowedTools", "Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)"');
+  expect(text).toContain("It forbids push, merge, commit, permission changes, children and auxiliary models");
+  expect(text + adapters).not.toMatch(/--permission-mode[" ,]+plan|--dangerously-skip-permissions|--dangerously-bypass-approvals-and-sandbox/);
 });
 
 it("topic launches the initial pair in separate trees and temp roots", async () => {
   const text = await skill("topic");
-  expect(text).toContain('REVHEAD=$(git -C "$WT" rev-parse HEAD)');
-  expect(text).toContain('git worktree add --detach "$CODEX_WT" "$REVHEAD"');
-  expect(text).toContain("cd <CODEX_WT> && TMPDIR=<OUT>/codex-tmp codex review");
-  expect(text).toContain("TMPDIR=<OUT>/claude-tmp claude -p");
-  expect(text).not.toContain("cd <WT> && codex review");
-  expect(text).toContain("m.length!==1||m[0]!==\"claude-opus-5\"");
-  expect(text).toContain('End preparation with `echo "$WT" "$CODEX_WT" "$OUT" "$REVHEAD"`');
-  expect(text).toContain("the recorded `<REVHEAD>` (post-merge on a full pass; NEW on a delta)");
-  expect(text).toContain("One `bash` call for preparation, then one call per install.");
-  expect(text.replace(/\s+/g, " ")).toContain("Record these paths and the post-merge review SHA BEFORE installing dependencies.");
-  expect(text).toContain("in separate calls, each with `timeoutMs` at least 600000");
-  expect(text).toContain("Strip `<CODEX_WT>/` from Codex file:line locations and `<WT>/` from Claude's");
+  const initial = text.slice(text.indexOf("4. Run the **external review pass**"), text.indexOf("5. Record")).replace(/\s+/g, " ");
+  expect(initial).toContain("Zero slots: persist `External review: none declared`, skip all reviewer preparation/dispatch");
+  expect(initial).toContain("One slot: only one tree, job and heading");
+  expect(initial).toContain("one exclusive reviewer-owned tree per slot");
+  expect(initial).toContain("Create one independent TMPDIR outside Git ancestry per job");
+  expect(initial).toContain("Never share mutable sources, build output or node_modules");
+  expect(initial).toContain("assert each tree HEAD equals current PR HEAD and is clean");
+  expect(initial).toContain('git merge-base --is-ancestor "$MAIN" "$HEAD"');
+  expect(initial).toContain("Require each command's exit code zero in each reviewer tree before launching any reviewer job");
+  expect(initial).toContain("Empty steps run no commands, including bootstrap/preflight");
+  expect(initial).toContain("On any failure halt before launch");
+  expect(initial.indexOf("Require GREEN BEFORE launching any reviewer")).toBeGreaterThan(-1);
+  expect(initial.indexOf("node <REPO>/scripts/reviewer-adapters.mjs")).toBeGreaterThan(initial.indexOf("Require GREEN BEFORE launching any reviewer"));
+  expect(initial).toContain("TMPDIR=<SLOT_TMP>");
+  expect(initial).toContain("Never pass the builder's report, findings or reasoning as evidence");
+  expect(initial).toContain("A conflict-stopped initial pass restarts as full, not delta");
+  expect(text).toContain("With two slots launch\nboth independently");
+  expect(text).toContain("that same slot is the focused-delta reviewer");
 });
-
 /**
  * §3's delta bullet only. The full-pass preparation in §2 step 4 says the same things in different
  * words, so a delta assertion written against the whole file passes even after the delta paragraph
@@ -69,5 +84,6 @@ it("delta dependencies install separately with a deadline and a successful exit 
 
 it("ship and standalone dogfood preserve separate trees and explicit launch locations", async () => {
   expect(await skill("ship")).toContain("in parallel in separate reviewer-owned worktrees you prepare");
-  expect(await skill("dogfood")).toContain("cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p");
+  expect(await skill("dogfood")).toContain("create a detached worktree per slot");
+  expect(await skill("dogfood")).toContain("outside the removed builder tree");
 });

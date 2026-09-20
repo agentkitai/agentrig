@@ -15,7 +15,10 @@ acceptance or rerun detection. Require the complete heading, not just its prefix
 elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.`;
 
 function assertHeadingContract(text: string): void {
-  expect(text).toContain(rule);
+  if (text.includes("declared reviewer slots")) {
+    expect(text).toContain(heading.replace("<reviewer>", "<slot>"));
+    expect(text).toContain("Require the complete heading, not just a prefix");
+  } else expect(text).toContain(rule);
   // Bounded quoted-H2 vocabulary: review/reviews/reviewer/reviewers, not general
   // English morphology. Alternate inflected forms (Independent reviews, Reviewer
   // verdict, Reviewers notes) are rejected; Reviewed by / Reviewing report and
@@ -30,7 +33,7 @@ function assertHeadingContract(text: string): void {
     if (ledgerHeadings.includes(literal)) continue;
     // The separate delta-review protocol is outside the initial full-pair contract.
     if (literal === "## Focused review — <reviewer> — head NEW — delta OLD..NEW") continue;
-    expect(literal).toMatch(/^## External review — (?:<reviewer>|Claude Code|Codex) \((?:<model>|[\w.-]+|\$CODEX_MODEL)\) — head (?:<SHA>|HEAD) — merged with origin\/main (?:<MAIN>|MAIN) — full$/);
+    expect(literal).toMatch(/^## External review — (?:<reviewer>|<slot>|Claude Code|Codex) \((?:<model>|[\w.-]+|\$CODEX_MODEL)\) — head (?:<SHA>|HEAD) — merged with origin\/main (?:<MAIN>|MAIN) — full$/);
   }
   expect(text).not.toMatch(/heading starts with|whose body\s+names the CURRENT head SHA/);
 }
@@ -86,7 +89,7 @@ function assertRerun(text: string): void {
 
 it("topic rerun acceptance requires the complete heading and CURRENT SHA within that heading", () => {
   assertRerun(topic);
-  const mutant = topic.replace(/if the PR carries two comments[\s\S]*?do not run the pass again —/, `if the PR carries two comments whose heading begins with the external review prefix and
+  const mutant = topic.replace(/if the PR carries every declared slot's comment[\s\S]*?do not run the pass again —/, `if the PR carries two comments whose heading begins with the external review prefix and
    which identify the CURRENT head SHA anywhere in the comment, one from Claude Code and one
    from Codex, do not run the pass again —`);
   expect(mutant).not.toBe(topic);
@@ -155,61 +158,24 @@ it.each([
   expect(() => assertHistoricalMain(`${mutant}\n${historicalMainRule}`)).toThrow();
 });
 
-it("topic captures and validates Codex stderr provenance before its concrete canonical posting template", () => {
-  const slice = topic.split("**Assert the Codex model from stderr:**")[1]?.split("**Combine.**")[0];
-  expect(slice).toContain('"<OUT>/codex.err" > "<OUT>/codex-model.txt"');
-  expect(slice).toContain("Missing, malformed or ambiguous model provenance halts the pass; never guess or post a placeholder.");
-  expect(slice).toContain('node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt"');
-  expect(slice).toContain('"<OUT>/codex-validated.md" "HEAD" "MAIN"');
-  expect(slice).toContain('"<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2');
+it("isolated reviewer hands off only its own verdict", () => {
+  expect(review).toContain("Hand off only your own verdict and provenance to the conductor; do not post other slots,");
+  expect(review).toContain("invoke a counterpart, or fabricate a counterpart verdict.");
 });
 
-it("isolated reviewer hands off only its own verdict; conductor owns the complete pair", () => {
-  const slice = review.split("## Initial full review heading contract")[1]?.split("## 1.")[0];
-  expect(slice).toContain("The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.");
-  expect(slice).toContain("Hand off only your own verdict and provenance to the conductor; do not post the pair,");
-  expect(slice).toContain("invoke a counterpart, or fabricate a counterpart verdict.");
-  expect(slice).not.toContain(";\npost one for Claude Code");
-});
-
-
-it.each([
-  ["model: gpt-5.6-sol\n", 0, "gpt-5.6-sol"],
-  ["OpenAI Codex\nmodel: gpt-5.6\nprovider: openai\n", 0, "gpt-5.6"],
-  ["provider: openai\n", 2, ""],
-  ["model: \n", 2, ""],
-  ["model: <model>\n", 2, ""],
-  ["model: gpt-5.6 extra\n", 2, ""],
-  ["model: gpt-5.6\nmodel: gpt-5.7\n", 2, ""],
-  ["model: gpt-5.6\nmodel: gpt-5.6\n", 2, ""],
-])("Codex provenance command fails closed for stderr %j", (stderr, status, stdout) => {
-  const script = topic.match(/node -e '([^'\n]+)' "<OUT>\/codex\.err"/)?.[1];
-  expect(script).toBeDefined();
-  const dir = mkdtempSync(join(tmpdir(), "heading-provenance-"));
-  try {
-    const path = join(dir, "codex.err");
-    writeFileSync(path, stderr);
-    const result = spawnSync(process.execPath, ["-e", script!, path], { encoding: "utf8" });
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(status);
-    expect(result.stdout).toBe(stdout);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
 
 // These are prose contracts, not evidence of agent compliance or workflow speedup.
-const cleanupRule = "After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.";
-const cleanupMapping = "Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.";
+const cleanupRule = "After the initial declared review pass and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to all owned worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.";
+const cleanupMapping = "Operative resource mapping: initial reviews remove one recorded owned tree per declared slot and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-proof tree and conductor-proof temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.";
 const arbitrationRule = "the topic skill permits one arbitration per row; a conductor that disagrees with a focused reviewer's non-blocking classification records the disagreement in the ledger and either accepts it or halts for the human, without a second arbitration.";
 const cleanupSteps = [
   "1. Join every job and subprocess, including installs, retries and mutations.",
   "2. Verify recorded HEADs and restored tracked/index state; an unrestored mutation or unfinished writer blocks removal and invalidates the review, never erases evidence.",
   "3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.",
-  "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-trio tree and conductor-trio temporary root, and `OUT`; never the author's tree or old unowned scratch.",
+  "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-proof tree and conductor-proof temporary root, and `OUT`; never the author's tree or old unowned scratch.",
 ];
 function assertCleanup(text: string): void {
-  expect(text).toContain(`Human cleanup contract (verbatim):\n\n> ${cleanupRule}`);
+  expect(text).toContain(`Human cleanup contract (generalized to declared slots):\n\n> ${cleanupRule}`);
   expect(text).toContain(cleanupMapping);
 }
 function assertCleanupOrder(text: string): void {
@@ -220,16 +186,16 @@ function assertCleanupOrder(text: string): void {
     expect(position).toBeGreaterThan(previous);
     previous = position;
   }
-  expect(section).toContain("For a focused pass remove its one worktree and unique `BASE` instead of the initial pair and `review-base-NN`.");
+  expect(section).toContain("For a focused pass remove its one worktree and unique `BASE` instead of the initial declared pass and `review-base-NN`.");
 }
 for (const skill of ["topic", "ship", "dogfood"]) {
   const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   it(`${skill} binds cleanup ownership, evidence and order for initial and focused reviews`, () => {
     assertCleanup(text);
-    const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`");
+    const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove one recorded owned tree per declared slot and `review-base-NN`");
     expect(wrongPass).not.toBe(text);
     expect(() => assertCleanup(wrongPass)).toThrow();
-    for (const phrase of ["conductor-trio tree", "conductor-trio temporary root", cleanupMapping, "initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`", "only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted"]) {
+    for (const phrase of ["conductor-proof tree", "conductor-proof temporary root", cleanupMapping, "initial reviews remove one recorded owned tree per declared slot and `review-base-NN`", "only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted"]) {
       expect(() => assertCleanup(text.replace(phrase, ""))).toThrow();
     }
     for (const phrase of ["the review output directory (`OUT`) and ", "the reviewer temporary roots in addition to ", "after recording its results in the PR body", "only after joining every job and verifying restored tracked/index state", "never touches the author's tree"]) {
@@ -247,16 +213,13 @@ it("topic cleanup procedure orders join, restoration and persisted evidence befo
   expect(() => assertCleanupOrder(topic.replace("never the author's tree or old unowned scratch", "including the author's tree and old scratch"))).toThrow();
 });
 // Pin the operative procedure points, not just the shared declaration above.
-const initialCleanup = "cleanup: every removal below and in retry/staleness paths follows **Review scratch cleanup**,\n     including BOTH reviewer trees, any conductor-trio tree and conductor-trio temporary root, the shared `review-base-NN` ref, reviewer temporary roots and `OUT`.";
-const initialRemoval = "Then, subject to **Review scratch cleanup**,\n     `git worktree remove --force <WT>`, `git worktree remove --force <CODEX_WT>` and `git branch -D review-base-NN`;\n     remove any recorded owned conductor-trio tree and conductor-trio temporary root, the reviewer temporary roots and `OUT` as well.";
-const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root, any conductor-trio tree and conductor-trio temporary root, and `OUT`.";
+const initialCleanup = "Link every returned comment URL in the ledger. Restore mutants and tracked/index state, join\n     all jobs, persist evidence, then remove all recorded owned resources under Review scratch cleanup.";
+const focusedCleanup = "Follow **Review scratch cleanup**: join subprocesses, verify restored tracked/index state,\n  persist the verdict/receipts, then remove this pass's worktree, unique `BASE`, reviewer temporary\n  root, any conductor-proof tree and conductor-proof temporary root, and `OUT`.";
 const cleanupPointer = "Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.";
 
 const cleanupWiring: ReadonlyArray<readonly [string, string, string, string, string, string]> = [
-  ["topic initial provenance", topic, "**Provenance.**", "**Combine.**", initialCleanup,
-    "cleanup: every removal below and in retry/staleness paths means BOTH reviewer trees, only after jobs are joined, plus the shared `review-base-NN` ref."],
-  ["topic initial removal", topic, "**Provenance.**", "**Combine.**", initialRemoval,
-    "Then `git worktree remove --force <WT>`."],
+  ["topic initial cleanup", topic, "   - **Validate and post.", "   - **Combine.", initialCleanup,
+    "Remove scratch before persisting receipts."],
   ["topic focused delta", topic, "- **Cover the delta**", "- **Converge:**", focusedCleanup,
     "Join subprocesses and verify restored tracked/index state before cleanup."],
   ...["ship", "dogfood"].map(skill => [
@@ -273,7 +236,7 @@ for (const [name, text, start, end, passage, reverted] of cleanupWiring) {
   it(`${name} uses a distinct nonempty cleanup revert`, () => {
     expect(reverted.trim()).not.toBe("");
     expect(reverted).not.toBe(passage);
-    expect(reverted).not.toBe(passage.replace("**Review scratch cleanup**", "the cleanup guidance"));
+    expect(reverted).not.toBe(passage.replace("Review scratch cleanup", "the cleanup guidance"));
   });
   it(`${name} pins the operative cleanup wiring`, () => {
     assertWiring(text);
@@ -281,7 +244,7 @@ for (const [name, text, start, end, passage, reverted] of cleanupWiring) {
   it.each([
     ["generic cleanup revert", reverted],
     ["removed passage", ""],
-    ["reworded reference", passage.replace("**Review scratch cleanup**", "the cleanup guidance")],
+    ["reworded reference", passage.replace("Review scratch cleanup", "the cleanup guidance")],
   ])(`${name} rejects %s even if the passage survives elsewhere`, (_label, replacement) => {
     assertWiring(text);
     const mutant = text.replace(passage, replacement);
