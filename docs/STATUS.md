@@ -1,5 +1,15 @@
 # Status
 
+## Declared reviewer slots (#396)
+
+- Project-only zero, one or two named adapter/model declarations; CLI adapters live in scripts,
+  API bindings reuse existing named providers. No core workflow or event changes.
+- Conductor independent same-head declared checks gate code-only reviewers; hosted CI overlaps
+  review and gates landing. Canonical comments and land compare declared slot pins; zero slots
+  skip external review and one slot also handles focused material deltas.
+- Full-suite readiness is blocked by legacy vendor/fixed-pair instruction tests in core,
+  outside this task’s authorized scope; the PR records the exact failures rather than changing them.
+
 ## Declared project checks (#395)
 
 Project config now validates ordered named checks, required bootstrap, optional preflight and

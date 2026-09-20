@@ -1,32 +1,13 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const section = (text: string, start: string, end: string) => text.split(start)[1]?.split(end)[0] ?? "";
 const requirements = [
-  {
-    path: ".agentrig/skills/topic/SKILL.md", start: "   - **Independent conductor checks", end: "   - **Claude job**",
-    phrases: ["BEFORE reviewers", "PR HEAD", "ordered named steps", "Require GREEN before", "launching either job", "empty steps", "name, command, exit code, UTC start/end and counts", "restored tracked/index state", "unchanged head", "receipts", "before launch", "NEW"],
-  },
-  {
-    path: "docs/SHIPPING-WORKFLOW.md", start: "## 3.", end: "## 4.",
-    phrases: ["runs independently of the author on the same reviewed head", "conductor trio is the Codex trio evidence", "docs/TESTING.md", "denied sockets", "npm cache", "GitHub", "environment limitation", "author's trio", "exact-head CI", "Never halt solely because Codex cannot run the suite", "does not erase", "Real test failures"],
-  },
-  {
-    path: ".agentrig/skills/land/SKILL.md", start: "## 1.", end: "## 2.",
-    phrases: ["runs independently of the author on the same reviewed head", "conductor trio is the Codex trio evidence", "shipping policy §3", "docs/TESTING.md", "denied sockets", "npm cache", "GitHub", "environment limitation", "author's trio", "exact-head CI", "Never halt solely because Codex cannot run the suite", "does not erase", "Real test failures"],
-  },
-  ...["ship"].map(skill => ({
-    path: `.agentrig/skills/${skill}/SKILL.md`, start: skill === "ship" ? "## 2." : "## 8.", end: skill === "ship" ? "## 3." : "## 9.",
-    phrases: ["author-tree proof is not independent evidence", "the independent trio", "topic §2 step 4's conductor trio", "shipping policy §3", "Codex trio evidence", "environment limitation", "Never halt solely because Codex cannot run the suite"],
-  })),
-  {
-    path: ".agentrig/skills/dogfood/SKILL.md", start: "## 8.", end: "## 9.",
-    phrases: ["author-tree proof is not independent evidence", "the independent declared checks", "pre-launch conductor checks", "overriding shipping policy §3", "named checks evidence", "environment limitation"],
-  },
+  { path: ".agentrig/skills/topic/SKILL.md", start: "   - **Independent conductor checks", end: "   - **Launch each slot", phrases: ["BEFORE reviewers", "PR HEAD", "ordered named steps", "Require GREEN BEFORE launching any reviewer", "Empty steps", "name, command, exit code", "UTC start/end, counts", "Restore tracked/index state", "recheck current PR head before launch", "Supply receipts to every slot"] },
+  { path: "docs/SHIPPING-WORKFLOW.md", start: "## 3.", end: "## 4.", phrases: ["GREEN BEFORE launching any reviewer", "reviewers do NOT run checks", "Hosted CI overlaps review", "exact current head", "Missing independent proof", "Empty steps", "One slot is also the focused-delta reviewer"] },
+  { path: ".agentrig/skills/land/SKILL.md", start: "## 1.", end: "## 2.", phrases: ["GREEN BEFORE launching any reviewer", "reviewers do NOT run checks", "shipping policy §3", "exact-head hosted CI", "Missing/failed proof blocks landing", "explicit none receipt"] },
+  { path: ".agentrig/skills/ship/SKILL.md", start: "## 2.", end: "## 3.", phrases: ["independent conductor tree", "GREEN BEFORE launching any reviewer", "topic §2 step 4", "Reviewers judge code only", "reviewers do NOT run checks", "empty steps run no commands"] },
 ];
 
 for (const { path, start, end, phrases } of requirements) {
@@ -46,36 +27,11 @@ for (const { path, start, end, phrases } of requirements) {
   });
 }
 
-it("topic posts conductor provenance with the initial Codex verdict", () => {
-  const posting = section(read(".agentrig/skills/topic/SKILL.md"), "# Codex posting gate\n", "The conductor posts");
-  const guard = '[ -s "<OUT>/codex-trio.md" ] || exit 2';
+it("topic gates posting on check receipts for every slot", () => {
+  const posting = section(read(".agentrig/skills/topic/SKILL.md"), "# Slot posting gate\n", "```");
+  const guard = '[ -s "<OUT>/checks.md" ] || exit 2';
   expect(posting).toContain(guard);
-  expect(posting.indexOf(guard)).toBeLessThan(posting.indexOf("node scripts/post-review-comment.mjs"));
-  expect(posting).toContain('"<OUT>/codex-comment.md" "<OUT>/codex-trio.md"');
-});
-
-it.each(["missing", "empty", "present"])("topic posting guard handles %s trio evidence", state => {
-  const out = mkdtempSync(join(tmpdir(), "initial-trio-"));
-  try {
-    writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-    writeFileSync(join(out, "codex.md"), "verdict");
-    if (state !== "missing") writeFileSync(join(out, "codex-trio.md"), state === "present" ? "independent trio proof" : "");
-    const text = read(".agentrig/skills/topic/SKILL.md");
-    const snippet = section(text, "# Codex posting gate\n", "```")
-      .replace('mjs NN', 'mjs 372').replaceAll('"HEAD"', `"${"a".repeat(40)}"`).replaceAll('"MAIN"', `"${"b".repeat(40)}"`);
-    writeFileSync(join(out, "gh"), "#!/bin/sh\nexit 0\n");
-    chmodSync(join(out, "gh"), 0o755);
-    const result = spawnSync("/bin/sh", ["-c", snippet.replaceAll("<OUT>", out).replaceAll("<WT>", new URL("../../../", import.meta.url).pathname)], { encoding: "utf8", cwd: new URL("../../../", import.meta.url), env: { ...process.env, PATH: `${out}:${process.env.PATH}` } });
-    expect(result.status).toBe(state === "present" ? 0 : 2);
-    const comment = join(out, "codex-comment.md");
-    expect(existsSync(comment)).toBe(state === "present");
-    if (state === "present") {
-      expect(readFileSync(comment, "utf8")).toContain("verdict\nindependent trio proof");
-      expect(readFileSync(comment, "utf8")).toMatch(/^## External review — Codex/);
-    }
-  } finally {
-    rmSync(out, { recursive: true, force: true });
-  }
+  expect(posting.indexOf(guard)).toBeLessThan(posting.indexOf("node <REPO>/scripts/post-review-comment.mjs"));
 });
 
 const completeness = "For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.";

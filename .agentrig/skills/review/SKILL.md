@@ -5,8 +5,7 @@ description: Independent adversarial code review on the final head using conduct
 
 ## Operative declared-checks policy (issue #395)
 
-This policy supersedes shipping policy §3's reviewer-trio rule and conflicting inherited
-ship/land check instructions for this task. Workflow decisions stay in skills, never core or
+This policy implements shipping policy §3's declared-check ordering. Workflow decisions stay in skills, never core or
 a CLI workflow runner. Resolve the explicit repository's `.agentrig/config.json` checks and
 selected project profile with `packages/cli/dist/project-checks.js` → `resolveProjectChecks(root, profile)`
 (or inspect that documented JSON boundary); see docs/TESTING.md. Missing declaration is not
@@ -27,11 +26,11 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
+GREEN BEFORE launching any declared reviewer (and before a focused delta reviewer). Give declared
 reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep the declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 
@@ -47,18 +46,42 @@ Run this in a session that shares no context with the run that wrote the PR.
 
 ## Initial full review heading contract
 
-The two initial external review comments must each start with this exact heading form:
-`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
-The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
-No alternate heading is valid for posting,
-acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
-elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+Resolve the project's declared reviewer slots from `.agentrig/config.json` at the PR head,
+not home config or runtime provider defaults. Missing `reviewers` or `{}` means zero slots.
+Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
+Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
+Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
+the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
 
-For an initial full review, use the heading above for your own handed-off verdict.
-Hand off only your own verdict and provenance to the conductor; do not post the pair,
-invoke a counterpart, or fabricate a counterpart verdict. The conductor validates the actual
-model from CLI provenance and posts both independent reviews with the complete headings.
+Each declared slot's initial comment must start with:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+The initial heading model must equal the slot's pinned model. A different model makes this a
+missing required initial review, not a receipt. Require the complete heading, not just a prefix
+or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
+reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+(launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
+Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
+empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
+
+For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
+
+Hand off only your own verdict and provenance to the conductor; do not post other slots,
+invoke a counterpart, or fabricate a counterpart verdict.
+
+With zero slots skip external reviews and record `External review: none declared` in the ledger:
+builder → declared checks → exact-head CI → land, subject to authorization and all other gates.
+With zero slots use the author’s named check receipts; no conductor-review preparation is required.
+With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
+both independently and use one independent focused-delta reviewer for material repairs.
+Land requires only declared headings, and compares each asserted model against that slot's pin.
+Reviewers share no context with the builder and should differ by vendor or at least model.
+The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
+pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
+Reviewers judge code only; reviewers do NOT run checks, bootstrap or preflight. Optional reviewer-owned
+probes are evidence for a finding, not a substitute for conductor proof. Hosted CI overlaps reviews
+and is required only at landing. Changed heads invalidate prior same-head check receipts.
 
 ## 1. Fix the target
 
@@ -86,8 +109,7 @@ integration-only commit as the PR head in a review heading.
 
 Check the conductor's head against the review head, all declared step names and order,
 individual exit codes, times and counts; missing or failed proof means stop and return to the conductor. Accept the explicit empty declaration receipt,
-not a guessed toolchain. Apply the operative policy above instead of the inherited reviewer
-trio requirement. A targeted mutation test is allowed; the full declared checks are not.
+not a guessed toolchain. Apply the declared-check policy above. A targeted mutation test is allowed; the full declared checks are not.
 
 ## 4. Read the whole diff against the repo's invariants
 
@@ -120,15 +142,15 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
 
 - Check the new tests would actually fail against the unfixed code: vacuous assertions (asserting
   a string absent that was never present), assertions satisfied by the wrong mechanism, races.
-- Pick the load-bearing lines (the condition that makes the change safe, not just correct) and
-  run 2-4 mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
+- Optionally probe the load-bearing lines (the condition that makes the change safe, not just correct) and
+  with reviewer-owned mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
   the project's targeted test invocation (not the full declared check command), restore, and only then run the next mutant — never overlap runs
   in one worktree. A surviving mutant on a security line is a finding even when every test passes.
 - Restore exact original bytes even when the check fails, and join its subprocesses before the
   next mutant. Record the original HEAD and verify unchanged HEAD plus clean tracked/index state
   at the end. Do not discard unfamiliar edits; an unrestored mutation is an incomplete review.
-- Where the PR claims "verified fail-first" or "mutant killed", re-run at least one of those
-  claims yourself.
+- Judge claimed fail-first and mutant receipts critically; optionally replay a narrow claim when
+  it helps resolve a finding. Do not turn optional probes into required project checks.
 
 ## 6. Verdict
 

@@ -7,24 +7,25 @@ are model-facing instructions, not a runtime enforcement mechanism.
 
 ## 1. CI and review are independent tracks
 
-Builders and fixers run the local green trio, fail-first regressions, and meaningful
+Builders and fixers run the local green declared checks, fail-first regressions, and meaningful
 mutations before pushing. After opening/updating the PR, report its head and current
 CI state immediately; do not wait for hosted CI or run private external reviews.
-The conductor (or standalone dogfood author) starts the initial Claude Code and
-Codex reviews in separate owned worktrees while hosted CI runs. Record both review
-job IDs, the reviewed SHA, and the CI run IDs; monitor all three tracks together.
+The conductor (or standalone dogfood author) first proves independent same-head declared checks green, then launches each declared reviewer
+slot in a separate owned worktree while hosted CI runs. Record all declared review job IDs,
+the reviewed SHA and CI run IDs; monitor these independent tracks together. Zero slots skip
+external review only, recording `External review: none declared`.
 
 Reviewers report pending CI as pending and return their code verdict without waiting
 for CI. A code-review pass is not permission to merge. Only the lander joins the
 gates: resolved reviews AND successful required checks on the actual current head.
 Missing, pending, cancelled, stale, or failed checks never count as green. Local
 test failures are not excused by a green hosted run. Follow docs/TESTING.md for
-environment-limited checks, explicitly preserving each reviewer's limitations.
+environment-limited checks, preserving environment evidence for conductor checks.
 
 Freeze the author branch during a review batch. If it changes anyway, retain the
 old review as evidence for its SHA, inspect OLD..NEW, and apply §3; do not discard
 valid reviews and restart the whole pair solely because the head moved. An aborted
-initial pass is incomplete: both initial reviews must finish before landing.
+initial pass is incomplete: all declared initial reviews must finish before landing.
 
 ## 2. Disposition every finding once
 
@@ -88,9 +89,9 @@ Require successful edit and read-back of that receipt before dispatch and quote 
 Land checks the same persisted receipt against the handoff and requires its timestamp before
 dispatch; private notes or retroactive receipt creation do not satisfy the gate.
 
-Collect both initial verdicts before one repair batch. Give the fixer all blocking
+Collect all declared initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
-Re-run the local trio after repairs, retain fail-first and mutation evidence, push,
+Re-run the declared checks after repairs, retain fail-first and mutation evidence, push,
 then return immediately so CI overlaps any necessary focused review.
 
 Classify the complete delta since the last reviewed SHA, including CI/conflict fixes:
@@ -114,19 +115,50 @@ rewritten head, preserving the repair counter rather than certifying a false del
 A focused reviewer verifies closure of the assigned blockers, tests the changed
 behavior and relevant mutations, and checks direct regressions. Do not re-audit
 unchanged code or demand optional cleanup. Newly discovered real blockers still
-count; non-blocking observations go to §2, not another repair batch. Initial full
-reviews keep the green trio; focused reviews run the affected checks and mutations,
-with the author's full trio and exact-head hosted CI still required for landing.
+count; non-blocking observations go to §2, not another repair batch. Initial and focused reviewers judge code using conductor receipts; optional reviewer-owned probes
+may support findings. The author and conductor run declared checks; exact-head hosted CI remains
+required for landing.
 
-The conductor trio is the Codex trio evidence for the initial full pass, provided it
-runs independently of the author on the same reviewed head using topic §2 step 4's
-install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
-limitations such as denied sockets, npm cache or GitHub access are an environment limitation
-per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
-and exact-head CI are green. Never halt solely because Codex cannot run the suite.
-This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
-keep that limitation alongside the conductor's results. Real test failures, missing independent
-proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+### Declared reviewer slots and check ordering
+
+The repository's `.agentrig/config.json` may declare `reviewers`: 0, 1 or 2 named slots.
+Missing `reviewers` or `{}` means none; profile/home values do not silently supply reviewers.
+Each slot declares only `adapter` and pinned `model`. CLI adapter definitions and launch commands
+live in `scripts/reviewer-adapters.mjs`; `api:<name>` binds an existing named `providers` entry
+whose model equals the slot pin. API entries retain their existing provider, endpoint, credential
+and routing behavior; do not duplicate that configuration in reviewer slots.
+
+Ordering is mandatory:
+1. The author runs the declared checks green before push.
+2. The conductor independently runs the same declared checks in its own tree at actual PR head:
+   GREEN BEFORE launching any reviewer, including focused-delta review. Record bootstrap,
+   preflight and named step commands, exit codes, UTC start/end, counts, head, worktree and TMPDIR.
+   Empty steps mean no bootstrap/preflight and an explicit `declared checks: none` receipt.
+3. Launch the declared reviewer slots with these receipts as inputs, never author reasoning.
+   Reviewers judge code only; reviewers do NOT run checks. Optional reviewer-owned probes
+   are evidence for findings, not a substitute for conductor proof. Dependency preparation in
+   reviewer trees belongs to the conductor and must finish successfully before launch.
+4. Hosted CI overlaps review and is required only at landing on the exact current head.
+   Missing independent proof, failed checks, blockers or non-green exact-head CI prevent landing.
+
+Zero slots skip external review entirely: ledger `External review: none declared`, flow
+builder → declared checks → exact-head CI → land, using author check receipts without conductor-review
+preparation. One slot is also the focused-delta reviewer.
+Two slots run independently, sharing no builder context, preferably a different vendor or model.
+Land requires only declared headings; never halt for an undeclared second slot. An incomplete
+required slot gets one retry then halts. A missing/pin-mismatched required review is not a pass.
+
+Canonical initial heading:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Keep full head/main provenance, asserted model source, adapter launch/provider entry, times,
+exit and worktree in each linked review receipt. Land compares the model with the slot's pinned
+model at the reviewed head; declaration changes are material and require newly declared slot
+coverage, not retroactive relabeling. API adapter model provenance is the constructed provider's
+model field, not a claim of wire-response attestation. Supply API reviewers the complete relevant
+source/diff bundle with receipts; insufficient context is an incomplete review, never a clean verdict.
+
+Pair and focused-review references mean only the declared slots; with zero slots skip external
+reviewers, not check receipts, delta self-verification, CI or human authorization.
 
 Per PR, at most THREE repair rounds, not a target. Normally there is one batched fix
 and at most one focused review. Each round must close its assigned blockers without

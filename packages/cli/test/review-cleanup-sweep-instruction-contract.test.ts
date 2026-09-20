@@ -14,17 +14,12 @@ const section = (text: string, start: string, end: string) => {
 const contracts = [
   ...[
     ["Operative resource mapping:", "Apply this sequence"],
-    ["PR head)` (remove", "conflict is a finding"],
-    ["conflict is a finding", "A pass that stopped"],
     ["  persist the verdict/receipts", "- **Converge:**"],
     ["4. Remove only", "For a focused pass"],
     ["For a focused pass", "## 1."],
-    ["normal because the jobs", "A pass with"],
-    ["one surviving review is not", "   - **Assert the model"],
-    ["   - **Provenance.", "Compose each comment body"],
-    ["their receipts first.", "   - **Combine."],
-  ].map(([start, end]) => ({ skill: "topic", start: start!, end: end!, issue: 341, phrases: ["conductor-trio tree", "conductor-trio temporary root"] })),
-  { skill: "topic", start: "   - **Independent conductor checks", end: "   - **Claude job**", issue: 342, phrases: ["including any retry", "before executing in its tree", "before posting", "all Codex attempts and subprocesses have completed"] },
+    ["Persist-before-delete on incomplete review:", "Never share mutable"],
+  ].map(([start, end]) => ({ skill: "topic", start: start!, end: end!, issue: 341, phrases: ["conductor-proof tree", "conductor-proof temporary root"] })),
+  { skill: "topic", start: "   - **Independent conductor checks", end: "   - **Launch each slot", issue: 342, phrases: ["Require GREEN BEFORE launching any reviewer", "Restore tracked/index state", "join jobs", "recheck current PR head before launch"] },
   ...["dogfood", "ship"].map(skill => ({ skill, start: "## 1.", end: "## 2.", issue: 348, phrases: ["git worktree remove <path>", "then `git worktree prune`", "Never use bare directory deletion"] })),
   ...[
     ["## 7.", "## 8.", ["record the phase handoff in the PR body", "remove the owned builder worktree and proof TMPDIR", "before starting §8"]],
@@ -72,14 +67,14 @@ for (const skill of ["ship", "topic"]) {
 }
 
 // Canonical composition/posting and #365 regressions live in post-review-comment.test.ts.
-const validator = (reviewer: string) => section(read("topic"), `# ${reviewer === "claude" ? "Claude" : "Codex"} posting gate\n`, "\n");
+const validator = (_reviewer: string) => section(read("topic"), "# Slot posting gate\n", "\n");
 
 // #368: enforce order in each local halt path, not by a distant delegation.
-for (const start of ["both reviewers dead\n", "one surviving review is not"]) {
+for (const start of ["Persist-before-delete on incomplete review:"]) {
   const check = (text: string) => {
-    const local = section(text, start, "halt the train)").replace(/\s+/g, " ");
+    const local = section(text, start, "Never share mutable").replace(/\s+/g, " ");
     const post = local.indexOf("post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR");
-    const clean = local.indexOf("then remove both reviewer trees");
+    const clean = local.indexOf("then remove owned reviewer trees");
     expect(post).toBeGreaterThanOrEqual(0);
     expect(clean).toBeGreaterThan(post);
     expect(local).toContain("under **Review scratch cleanup**; only then");
@@ -87,7 +82,7 @@ for (const start of ["both reviewers dead\n", "one surviving review is not"]) {
   it(`#368 local persist-before-delete ${start}`, () => {
     const text = read("topic");
     check(text);
-    const mutant = text.replaceAll("post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR; then remove both reviewer trees", "then remove both reviewer trees; post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR");
+    const mutant = text.replace(/post any surviving review and persist verdicts,\s+provenance, proof results and failure receipts in the PR; then remove owned reviewer trees/g, "then remove owned reviewer trees; post any surviving review and persist verdicts, provenance, proof results and failure receipts in the PR");
     expect(mutant).not.toBe(text);
     expect(() => check(mutant)).toThrow();
   });
@@ -100,7 +95,7 @@ for (const reviewer of ["claude", "codex"]) {
       writeFileSync(join(out, "codex-model.txt"), "gpt-test");
       writeFileSync(join(out, "codex-trio.md"), "proof cannot substitute for verdict");
       const source = validator(reviewer);
-      let snippet = source.replaceAll("<OUT>", out).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
+      let snippet = source.replaceAll("<PREFIX>", join(out, reviewer)).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
       // Substitute only shell arguments, never node program text.
       expect(snippet.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
       if (mutate === "heading-only") {
@@ -110,11 +105,11 @@ for (const reviewer of ["claude", "codex"]) {
       }
       if (mutate === "bypass") {
         const original = snippet;
-        snippet = snippet.replace(/node -e '[^']+' "[^"\n]+\.md" "a{40}" > "[^"\n]+" \|\| exit 2/, `cat "${out}/${reviewer}.md" > "${out}/${reviewer}-validated.md"`);
+        snippet = snippet.replace(/node -e '[^']+' "[^"\n]+\.md" "a{40}" > "[^"\n]+" \|\| exit 2/, `cat "${out}/${reviewer}.md" > "${out}/${reviewer}.validated.md"`);
         expect(snippet).not.toBe(original);
       }
       const result = spawnSync("/bin/sh", ["-c", snippet], { encoding: "utf8" });
-      return { status: result.status, comment: result.status === 0 ? readFileSync(join(out, `${reviewer}-validated.md`), "utf8") : "" };
+      return { status: result.status, comment: result.status === 0 ? readFileSync(join(out, `${reviewer}.validated.md`), "utf8") : "" };
     } finally { rmSync(out, { recursive: true, force: true }); }
   };
   const heading = (sha: string) => `## External review — duplicate — head ${sha} — merged with origin/main ${"b".repeat(40)} — full`;
@@ -158,21 +153,11 @@ for (const reviewer of ["claude", "codex"]) {
   });
 }
 
-// D1: the local Codex lead-in must not override the shared targeted-substitution rule.
-const codexSubstitutionRule = "Apply the same targeted substitution described above (only shell SHA arguments), never edit the validator source or guess the model from the verdict:";
-const staleCodexSubstitutionRule = "Replace HEAD and MAIN below with the same recorded full SHAs:";
-const checkCodexSubstitution = (text: string) => {
-  const lead = section(text, "For Codex, in the posting call", "```sh\n# Codex posting gate").replace(/\s+/g, " ");
-  expect(lead).toContain(codexSubstitutionRule);
-  expect(lead).not.toContain(staleCodexSubstitutionRule);
-};
-it("D1 Codex operative lead-in delegates only targeted substitution", () => checkCodexSubstitution(read("topic")));
-it("D1-stale-Codex-lead-in mutant rejects conflicting prose even with appended correction", () => {
-  const text = read("topic");
-  checkCodexSubstitution(text);
-  const mutant = text.replace(/Apply the same targeted substitution described above[^:]+:/, staleCodexSubstitutionRule);
-  expect(mutant).not.toBe(text);
-  expect(() => checkCodexSubstitution(mutant + `\n${codexSubstitutionRule}`)).toThrow();
+// D1: the slot lead-in forbids global source substitution.
+it("D1 slot lead-in prescribes only targeted shell substitution", () => {
+  const lead = section(read("topic"), "For each successful slot,", "# Slot posting gate");
+  expect(lead).toContain("only to shell SHA arguments and paths");
+  expect(lead).toContain("never edit the validator source");
 });
 it("D1 global substitution corrupts Codex validation; targeted substitution rejects literal Reviewed head HEAD", () => {
   const out = mkdtempSync(join(tmpdir(), "codex-substitution-"));
@@ -181,8 +166,8 @@ it("D1 global substitution corrupts Codex validation; targeted substitution reje
     writeFileSync(join(out, "codex-trio.md"), "independent proof");
     const source = validator("codex");
     const head = "a".repeat(40), main = "b".repeat(40);
-    const targeted = source.replaceAll("<OUT>", out).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${head} — merged with origin/main ${main} — full`).replace('"HEAD" >', `"${head}" >`);
-    const global = source.replaceAll("<OUT>", out).replaceAll("HEAD", head).replaceAll("MAIN", main);
+    const targeted = source.replaceAll("<PREFIX>", join(out, "codex")).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${head} — merged with origin/main ${main} — full`).replace('"HEAD" >', `"${head}" >`);
+    const global = source.replaceAll("<PREFIX>", join(out, "codex")).replaceAll("HEAD", head).replaceAll("MAIN", main);
     expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
     expect(global.match(/node -e '[^']*'/g)).not.toEqual(source.match(/node -e '[^']*'/g));
     for (const [claim, expected] of [[head, 0], ["HEAD", 2]] as const) {
@@ -190,6 +175,6 @@ it("D1 global substitution corrupts Codex validation; targeted substitution reje
       expect(spawnSync("/bin/sh", ["-c", targeted]).status).toBe(expected);
     }
     expect(spawnSync("/bin/sh", ["-c", global]).status).toBe(0);
-    expect(readFileSync(join(out, "codex-validated.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
+    expect(readFileSync(join(out, "codex.validated.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
   } finally { rmSync(out, { recursive: true, force: true }); }
 });

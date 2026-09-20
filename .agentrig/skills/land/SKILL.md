@@ -27,17 +27,39 @@ output are not merge authorization.
 
 ## Initial full review heading contract
 
+Resolve the project's declared reviewer slots from `.agentrig/config.json` at the PR head,
+not home config or runtime provider defaults. Missing `reviewers` or `{}` means zero slots.
+Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
+Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
+Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
+the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
+
+Each declared slot's initial comment must start with:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+The initial heading model must equal the slot's pinned model. A different model makes this a
+missing required initial review, not a receipt. Require the complete heading, not just a prefix
+or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
+reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+(launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
+Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
+empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
+
 For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
 
-The two initial external review comments must each start with this exact heading form:
-`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
-The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
-No alternate heading is valid for posting,
-acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
-elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
-
-The Claude Code initial heading model must equal `claude-opus-5`; any other Claude model is a missing required initial review, not a receipt that satisfies the pair.
+With zero slots skip external reviews and record `External review: none declared` in the ledger:
+builder → declared checks → exact-head CI → land, subject to authorization and all other gates.
+With zero slots use the author’s named check receipts; no conductor-review preparation is required.
+With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
+both independently and use one independent focused-delta reviewer for material repairs.
+Land requires only declared headings, and compares each asserted model against that slot's pin.
+Reviewers share no context with the builder and should differ by vendor or at least model.
+The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
+pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
+Reviewers judge code only; reviewers do NOT run checks, bootstrap or preflight. Optional reviewer-owned
+probes are evidence for a finding, not a substitute for conductor proof. Hosted CI overlaps reviews
+and is required only at landing. Changed heads invalidate prior same-head check receipts.
 
 ## 0. Residuals are issues, not prose
 
@@ -54,7 +76,7 @@ evidence-backed rebuttals are not residuals.
   In the band case, verify the exact invocation quote and that this PR implements the named current
   row in sequence. If direct authorization is older than the latest push, confirm the pushes since
   are review fixes it covered; topic authorization remains bounded by that skill's stop criteria.
-- Verify both initial external reviews, focused verdicts for every material delta, and recorded
+- Verify all declared initial external reviews, focused verdicts for every material delta, and recorded
   evidence for mechanical deltas through the CURRENT head, per shipping policy §§2–4.
   Every finding must be fixed, evidence-rebutted, or explicitly dispositioned as non-blocking
   with its required issue/roadmap record. Unresolved blockers always prevent landing.
@@ -68,15 +90,12 @@ evidence-backed rebuttals are not residuals.
   (dogfood §5). An unmarked row is a row the next train rebuilds: stop and report which row needs
   its marker — the author flow adds it, never the lander.
 
-Under shipping policy §3, the conductor trio is the Codex trio evidence for the initial full pass, provided it
-runs independently of the author on the same reviewed head using topic §2 step 4's
-install, preflight, exit-code and comment-provenance procedure. Reviewer sandbox
-limitations such as denied sockets, npm cache or GitHub access are an environment limitation
-per docs/TESTING.md, not a blocker when the author's trio, this independent same-head trio
-and exact-head CI are green. Never halt solely because Codex cannot run the suite.
-This evidence does not erase the reviewer's limitation or recast its failed attempt as passing;
-keep that limitation alongside the conductor's results. Real test failures, missing independent
-proof, unresolved review blockers and non-green exact-head CI still prevent landing.
+For nonzero slots under shipping policy §3, verify independent conductor same-head named check receipts were
+GREEN BEFORE launching any reviewer, and that each declared slot received them. Reviewers judge
+code only; reviewers do NOT run checks. Optional reviewer-owned probes do not replace these receipts.
+For zero slots require `External review: none declared` and author check receipts, not missing headings; declared checks,
+exact-head hosted CI and scoped human authorization remain mandatory. Empty check declarations
+require the explicit none receipt, not invented proof. Missing/failed proof blocks landing.
 
 One permitted flake re-run: a failure that is green on the base branch, names nothing the diff
 touches, and passed for this same commit before may be re-run ONCE; a second failure is real and

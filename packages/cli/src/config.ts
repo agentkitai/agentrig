@@ -180,10 +180,30 @@ const ConfigValuesSchema = z
 
 export type ConfigValues = z.output<typeof ConfigValuesSchema>;
 
+/** Workflow declarations only; execution and policy stay in skill-side adapters. */
+export const ReviewerSlotSchema = z.object({
+  adapter: z.string().regex(/^(claude-cli|codex-cli|api:[a-z][a-z0-9-]*)$/),
+  model: providerModelName.refine(value => /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(value), "must be a pinned model identifier"),
+}).strict();
+export const ReviewersSchema = z.record(ReviewerSlotSchema).superRefine((slots, ctx) => {
+  if (Object.keys(slots).length > 2) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "reviewers accepts 0, 1 or 2 named slots" });
+  for (const name of Object.keys(slots)) {
+    if (!/^[A-Za-z][A-Za-z0-9 _-]{0,63}$/.test(name)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: "invalid reviewer slot name" });
+  }
+});
+export type ReviewerSlot = z.output<typeof ReviewerSlotSchema>;
+
 // Declarations are file metadata, not runtime launch/evaluation settings.
 const ConfigDeclarationSchema = ConfigValuesSchema.extend({ checks: ProjectChecksSchema.optional() });
 const ConfigFileSchema = ConfigDeclarationSchema.extend({
   profiles: z.record(ConfigDeclarationSchema).optional(),
+  reviewers: ReviewersSchema.optional(),
+}).superRefine((data, ctx) => {
+  for (const [slot, binding] of Object.entries(data.reviewers ?? {})) {
+    if (!binding.adapter.startsWith("api:")) continue;
+    const entry = data.providers?.[binding.adapter.slice(4)];
+    if (!entry || entry.model !== binding.model) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reviewers", slot], message: "API adapter must reference an existing providers entry with the same pinned model" });
+  }
 });
 export type ConfigFile = z.output<typeof ConfigFileSchema>;
 
@@ -289,7 +309,7 @@ export interface ResolveConfigInput<T extends Record<string, unknown>> {
 
 function withoutProfiles(file: ConfigFile | undefined): ConfigValues {
   if (file === undefined) return {};
-  const { profiles: _profiles, checks: _checks, ...values } = file;
+  const { profiles: _profiles, checks: _checks, reviewers: _reviewers, ...values } = file;
   return values;
 }
 
