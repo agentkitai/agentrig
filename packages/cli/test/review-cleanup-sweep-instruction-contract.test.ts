@@ -136,7 +136,7 @@ for (const start of ["both reviewers dead\n", "one surviving review is not"]) {
   });
 }
 for (const reviewer of ["claude", "codex"]) {
-  const run = (body: string, mutate = false) => {
+  const run = (body: string, mutate: "bypass" | "heading-only" | undefined = undefined) => {
     const out = mkdtempSync(join(tmpdir(), "review-validation-"));
     try {
       writeFileSync(join(out, `${reviewer}.md`), body);
@@ -144,8 +144,16 @@ for (const reviewer of ["claude", "codex"]) {
       writeFileSync(join(out, "codex-trio.md"), "proof cannot substitute for verdict");
       const prefix = reviewer === "claude" ? "CLAUDE_HEADING=" : "CODEX_MODEL=$(cat";
       const fence = reviewer === "claude" ? "```sh\n" : "```\n";
-      let snippet = (prefix + section(read("topic"), fence + prefix, "```")).replaceAll("<OUT>", out).replaceAll("HEAD", "a".repeat(40)).replaceAll("MAIN", "b".repeat(40));
-      if (mutate) {
+      let snippet = (prefix + section(read("topic"), fence + prefix, "```")).replaceAll("<OUT>", out).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${"a".repeat(40)} — merged with origin/main ${"b".repeat(40)} — full`).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
+      // Substitute only shell argument/heading placeholders, never node program text or variable names.
+      const source = prefix + section(read("topic"), fence + prefix, "```");
+      expect(snippet.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
+      if (mutate === "heading-only") {
+        const clause = String.raw` || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))`;
+        expect(snippet.split(clause)).toHaveLength(2);
+        snippet = snippet.replace(clause, "");
+      }
+      if (mutate === "bypass") {
         const original = snippet;
         snippet = snippet.replace(/node -e '[^']+' "[^"\n]+\.md" "a{40}" > "[^"\n]+" \|\| exit 2/, `cat "${out}/${reviewer}.md" > "${out}/${reviewer}-validated.md"`);
         expect(snippet).not.toBe(original);
@@ -158,6 +166,32 @@ for (const reviewer of ["claude", "codex"]) {
   it.each(["", " \n\t", heading("a".repeat(40)), `${heading("c".repeat(40))}\nverdict`, `${heading("a".repeat(40))}\n${heading("c".repeat(40))}\nverdict`, `Reviewed SHA: ${"c".repeat(40)}\nverdict`])(`#369 ${reviewer} rejects invalid verdict %j`, body => {
     expect(run(body).status).toBe(2);
   });
+  it.each([
+    "Reviewed head", "reviewed head:", "Reviewed HEAD", "head", "Exact head reviewed:", "Reviewed SHA:",
+  ])(`#369 C1 ${reviewer} accepts current claim after %s`, label => {
+    expect(run(`${label} ${"a".repeat(40)}\nverdict`).status).toBe(0);
+  });
+  it.each([7, 12, 39, 40])(`#369 C2 ${reviewer} matches SHA prefix of length %i`, length => {
+    expect(run(`Reviewed SHA: ${"A".repeat(length)}\nverdict`).status).toBe(0);
+    expect(run(`Reviewed SHA: ${"a".repeat(length - 1)}c\nverdict`).status).toBe(2);
+  });
+  it.each(["Reviewed SHA: HEAD", "head HEAD", "Reviewed HEAD"])(`#369 C3 ${reviewer} rejects literal placeholder %s`, claim => {
+    expect(run(`${claim}\nverdict`).status).toBe(2);
+  });
+  it.each([
+    "# Verdict\n## Findings\n### Summary",
+    `${heading("a".repeat(40))}\n## Findings`,
+  ])(`#369 C4 ${reviewer} heading-only clause-deletion mutant: %j`, body => {
+    expect(run(body).status).toBe(2);
+    expect(run(body, "heading-only").status).toBe(0);
+  });
+  it.each(["**", "__", "`"])(`#369 X1 ${reviewer} checks Markdown %s claims before stripping`, mark => {
+    for (const sha of ["a".repeat(40), "c".repeat(40)]) {
+      for (const claim of [`Reviewed SHA: ${mark}${sha}${mark}`, heading(`${mark}${sha}${mark}`)]) {
+        expect(run(`${claim}\nverdict`).status).toBe(sha.startsWith("a") ? 0 : 2);
+      }
+    }
+  });
   it(`#369 ${reviewer} accepts matching SHA preserving canonical heading`, () => {
     const result = run(`${heading("a".repeat(40))}\n\nverdict\n`);
     expect(result.status).toBe(0);
@@ -165,6 +199,6 @@ for (const reviewer of ["claude", "codex"]) {
     expect(result.comment.match(/^## External review/gm)).toHaveLength(1);
   });
   it(`#369 ${reviewer} validation-bypass mutant exposes stale and empty acceptance`, () => {
-    for (const body of ["", `${heading("c".repeat(40))}\nverdict`]) expect(run(body, true).status).toBe(0);
+    for (const body of ["", `${heading("c".repeat(40))}\nverdict`]) expect(run(body, "bypass").status).toBe(0);
   });
 }

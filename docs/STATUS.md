@@ -10,6 +10,16 @@ rejects empty/heading-only verdicts before normalization, preserving the canonic
 heading. Shared deletion mutations and executable stale/empty-body probes pin these
 contracts. No runtime or roadmap changes.
 
+PR #376 repair round 1/3 addresses C1–C4/X1 only: reviewed-head labels no longer
+consume the SHA as a keyword; case-insensitive 7–40-character prefixes match the
+current full head, literal HEAD placeholders fail closed, and Markdown-wrapped
+claims are checked before normalization. Tests substitute only shell placeholders
+(not operative JavaScript), cover both reviewers' heading-only clause deletion,
+and retain canonical heading, nonempty verdict and cleanup/order guards. Final
+fixtures fail on OLD (16 failed / 111 passed); four named mutants are killed
+(C1 label backtrack, C2 full equality, X1 Markdown bypass, C4 heading-only clause).
+Independent delta review and exact-head CI remain conductor-owned; C5 stays deferred.
+
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 
