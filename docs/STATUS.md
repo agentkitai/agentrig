@@ -16,6 +16,12 @@ contract. The posting helper has no duplicate claim regex and remains unchanged.
 No runtime code or separate #412 defects are included; roadmap continuation remains
 unchanged. Independent review and exact-head CI remain required before landing.
 
+C1 repair (#425): the shared topic reviewer prompt explicitly requires the own first
+line `Reviewed head: <actual review SHA>` with the full reviewed SHA, before any
+heading or formatting. Fail-first instruction coverage pins propagation before
+adapter dispatch and rejects deletion. The first-line validator is unchanged; C2
+remains deferred to #426.
+
 ## Declared reviewer slots (#396)
 
 PR #414 repair round 2: CLI reviewer children strip Claude nesting variables while preserving the inherited environment; standalone dogfood follows declared-slot launch/post/cleanup; cleanup tests inspect actual skill text; topic posts validated verdicts with a fail-closed helper gate and executable regression coverage. Arbiter #415 and deferred findings #416–421 remain outside this repair.

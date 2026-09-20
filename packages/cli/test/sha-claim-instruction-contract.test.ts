@@ -39,3 +39,24 @@ it("requires a review-owned first line even when later prose names current head"
 it("accepts abbreviated uppercase first-line SHA", () => expect(run(`Reviewed head: ${head.slice(0, 7).toUpperCase()}\nPASS`)).toBe(0));
 
 it.each(["", `Reviewed head: ${head}\n`])("preserves heading-only rejection: %s", extra => expect(run(first + extra)).toBe(2));
+
+// Inspect the shared prompt instruction before adapter dispatch, not the later validator.
+const topic = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+const firstLineInstruction = "Start your review with the exact own first line Reviewed head: <actual review SHA>, replacing <actual review SHA> with the full 40-hex SHA you actually reviewed. No heading, blank line, quote or code fence may precede or wrap that line.";
+function checkPromptPropagation(text: string) {
+  const launch = text.split("**Launch each slot through its adapter**")[1]!.split("```sh")[0]!;
+  const prompt = launch.split("The prompt says:")[1]!;
+  expect(prompt.replace(/\s+/g, " ")).toContain(firstLineInstruction);
+  expect(launch).toContain("Write a fresh prompt file");
+  expect(text).toContain("'<SLOT>' <OUT>/prompt.txt <WT> <PREFIX>");
+}
+it("propagates the own-first-line contract into every slot's dispatched prompt", () => {
+  checkPromptPropagation(topic);
+  expect(run(first + "VERDICT: PASS")).toBe(0);
+});
+it("kills deletion of the prompt requirement even while the posting gate retains it", () => {
+  checkPromptPropagation(topic);
+  const mutant = topic.replace(firstLineInstruction, "Report the exact head SHA you reviewed");
+  expect(mutant).not.toBe(topic);
+  expect(() => checkPromptPropagation(mutant)).toThrow();
+});

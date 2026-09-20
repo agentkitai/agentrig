@@ -219,7 +219,7 @@ For each recorded row, in order:
      For an API slot include the diff and relevant complete files as a data bundle (no tools available);
      if the bundle cannot fit or evidence is insufficient, stop instead of inventing a verdict.
      Never pass the builder's report, findings or reasoning as evidence. The prompt says:
-     `Report the exact head SHA you reviewed`. It forbids push, merge, commit, permission changes, children and auxiliary models;
+     `Start your review with the exact own first line Reviewed head: <actual review SHA>, replacing <actual review SHA> with the full 40-hex SHA you actually reviewed. No heading, blank line, quote or code fence may precede or wrap that line.` It forbids push, merge, commit, permission changes, children and auxiliary models;
      it asks for file:line, severity, failure scenario, fix and exact reviewed SHA. Do not supply
      builder reasoning, findings or claimed evidence. Preserve inherited environment constraints.
      ```sh
