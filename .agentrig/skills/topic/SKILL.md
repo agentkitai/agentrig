@@ -348,6 +348,12 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
    notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
    again before dispatch. Missing or mismatched persistence halts; never delegate its creation.
+3. Persist the verified read-back receipt in the GitHub PR body BEFORE dispatch:
+   `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+   Fill it from step 2's actual read-back, with its UTC timestamp; retain earlier rounds' receipts.
+   Require edit success and read back the receipt with `gh pr view NN --json body`;
+   verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
+   Quote this persisted receipt in the handoff alongside the round and blockers.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
@@ -361,8 +367,18 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   reviewer; mechanical deltas require explicit self-verification evidence, not another review.
   For a focused review, prepare one fresh reviewer-owned worktree at NEW and a unique base ref
   at OLD. Record paths/SHAs before install; use an independent install and preflighted TMPDIR.
-  First require `OLD != NEW` using `[ "$OLD" != "$NEW" ]` and require OLD ancestor of NEW
-  using `git merge-base --is-ancestor "$OLD" "$NEW"`, both exit zero before launch.
+  First resolve both endpoints to full commit IDs, then require unequal commits and OLD
+  ancestor of NEW. Run this gate successfully before worktree creation or reviewer launch;
+  retain the resolved OLD/NEW for preparation, review provenance and coverage records.
+
+  ```sh
+  # Focused delta gate
+  OLD=$(git rev-parse --verify "$OLD^{commit}") || exit 1
+  NEW=$(git rev-parse --verify "$NEW^{commit}") || exit 1
+  [ "$OLD" != "$NEW" ] || exit 1
+  git merge-base --is-ancestor "$OLD" "$NEW" || exit 1
+  ```
+
   A same-head re-read is not a focused delta review and cannot close a blocker.
   Apply shipping policy §3's history-rewrite rule for non-ancestry.
   Derive BRANCH, OLD, NEW and a unique BASE inside the preparation call; fetch the PR branch.

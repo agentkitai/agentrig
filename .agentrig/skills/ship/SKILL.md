@@ -120,6 +120,12 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    Dispatch only ledger-blocking findings. Nonblocking defects go to residual issues; advisory
    notes are not repairs. Record any reclassification in the ledger first with its rationale, then edit and read back
    again before dispatch. Missing or mismatched persistence halts; never delegate its creation.
+3. Persist the verified read-back receipt in the GitHub PR body BEFORE dispatch:
+   `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+   Fill it from step 2's actual read-back, with its UTC timestamp; retain earlier rounds' receipts.
+   Require edit success and read back the receipt with `gh pr view NN --json body`;
+   verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
+   Quote this persisted receipt in the handoff alongside the round and blockers.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and

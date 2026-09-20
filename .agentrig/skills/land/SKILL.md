@@ -84,6 +84,12 @@ For every dispatched fixer, require the persisted handoff to quote `Repair round
 ledger blocker IDs, with a conductor `gh pr view NN --json body` read-back receipt BEFORE the
 subagent call. Reject a missing quote, missing read-back receipt, or advisory-only dispatch as a
 contract violation; a counter repaired by the fixer afterwards cannot retroactively satisfy it.
+Require the same receipt in the GitHub PR body BEFORE dispatch:
+`Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+Read the PR body and match that line against the round, OLD and assigned blockers in the
+persisted handoff; verify its timestamp precedes the dispatch. Private session notes do not
+substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
+a receipt added after dispatch cannot retroactively authorize that dispatch.
 
 ## 2. Merge
 

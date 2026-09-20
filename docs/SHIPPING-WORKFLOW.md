@@ -69,9 +69,24 @@ A blocker closes only with a fixer delta plus independent focused review, an evi
 ledger rebuttal quoting a reproducible command and its result, or an arbiter verdict within the
 existing arbitration allowance. Explicitly prohibit re-prompting the raising reviewer under the
 conductor’s contract reading as closure; that is not independent delta coverage or a rebuttal.
-Before launching a focused reviewer require `OLD != NEW` with `[ "$OLD" != "$NEW" ]`
-and OLD ancestor of NEW with `git merge-base --is-ancestor "$OLD" "$NEW"`, both exit zero.
+Before launching a focused reviewer, resolve OLD and NEW to full commit IDs and require
+strict forward ancestry using this executable gate. Retain the resolved IDs for preparation,
+review provenance and coverage records; textual ref/abbreviation inequality is not a delta.
+
+```sh
+# Focused delta gate
+OLD=$(git rev-parse --verify "$OLD^{commit}") || exit 1
+NEW=$(git rev-parse --verify "$NEW^{commit}") || exit 1
+[ "$OLD" != "$NEW" ] || exit 1
+git merge-base --is-ancestor "$OLD" "$NEW" || exit 1
+```
 A same-head re-read is not delta coverage and cannot close a blocker.
+
+Before fixer dispatch, ship/topic must persist the verified PR-body read-back receipt in the
+GitHub PR body: `Pre-dispatch read-back: Repair round: N/3; blockers <IDs>; OLD <SHA>; verified <ISO ts>`.
+Require successful edit and read-back of that receipt before dispatch and quote it in the handoff.
+Land checks the same persisted receipt against the handoff and requires its timestamp before
+dispatch; private notes or retroactive receipt creation do not satisfy the gate.
 
 Collect both initial verdicts before one repair batch. Give the fixer all blocking
 finding texts/URLs, not the advisory list as new requirements. Keep the same PR.
