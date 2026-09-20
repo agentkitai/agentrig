@@ -144,7 +144,10 @@ it.each(["claude", "codex"])("M8 %s topic gate blocks stale/empty verdicts befor
 it("B2 splits long review plus proof into bounded lossless canonical comments", () => {
   const dir = mkdtempSync(join(tmpdir(), "review-chunks-"));
   try {
-    const body = "VERDICT: PASS\n" + "😀long line".repeat(15000);
+    // Six-digit payload length reserves the actual marker width. The first
+    // nominal cut is deliberately between the emoji's UTF-16 surrogates.
+    const capacity = 60000 - heading.length - 2 - (2 * 6 + 7);
+    const body = "X".repeat(capacity - 1) + "😀".repeat(5000) + "Y".repeat(200000);
     const proof = "PROOF\n" + "evidence\n".repeat(9000);
     writeFileSync(join(dir, "body"), body);
     writeFileSync(join(dir, "proof"), proof);
@@ -161,6 +164,38 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
       expect(post.startsWith(prefix)).toBe(true);
       return post.slice(prefix.length);
     }).join("");
+    expect(restored).not.toContain("\uFFFD");
     expect(restored).toBe(`${body}\n${proof}`);
   } finally { rmSync(dir,{recursive:true,force:true}); }
+});
+
+ it("R379 records partial indices and refuses rerun even when gh would now succeed", () => {
+  const dir = mkdtempSync(join(tmpdir(), "partial-review-"));
+  try {
+    writeFileSync(join(dir, "body"), "X".repeat(200000));
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh
+printf '%s\\n' "$5" >> '${dir}/attempts'
+case "$5" in *.2) exit 7;; esac
+exit 0
+`);
+    chmodSync(join(dir, "gh"), 0o755);
+    const invoke = () => spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    const first = invoke();
+    expect(first.status).toBe(7);
+    expect(first.stderr).toContain("partial post: 1/4; successful chunk indices [1]");
+    const receiptPath = join(dir, "comment.receipt.json");
+    const receipt = readFileSync(receiptPath, "utf8");
+    expect(JSON.parse(receipt)).toMatchObject({ pr: "372", heading, total: 4, successful: [1], pending: 2, status: "failed" });
+    const attempts = readFileSync(join(dir, "attempts"), "utf8");
+    expect(attempts.trim().split("\n")).toEqual([join(dir,"comment.1"), join(dir,"comment.2")]);
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\nprintf 'unexpected retry' >> '${dir}/attempts'\nexit 0\n`);
+    const retry = invoke();
+    expect(retry.status).not.toBe(0);
+    expect(retry.stderr).toContain("refusing rerun");
+    expect(retry.stderr).toContain(receiptPath);
+    expect(retry.stderr).toContain(receipt.trim());
+    expect(readFileSync(receiptPath, "utf8")).toBe(receipt);
+    expect(readFileSync(join(dir,"attempts"),"utf8")).toBe(attempts);
+  } finally { rmSync(dir, {recursive:true, force:true}); }
 });

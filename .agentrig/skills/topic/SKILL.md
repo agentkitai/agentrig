@@ -17,6 +17,8 @@ Never guess a role name after an unknown-role refusal. Provider routing remains 
 
 ## Initial full review heading contract
 
+For acceptance or rerun detection, an initial review is present only when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
+
 The two initial external review comments must each start with this exact heading form:
 `## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
 Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.

@@ -1,5 +1,15 @@
 # Status
 
+## Review-posting helper residuals (#379, #380)
+
+The posting helper records successful chunk indices and failed/uncertain pending chunks in
+an OUT-adjacent JSON receipt and reports partial progress on stderr. Existing receipts
+refuse reruns rather than duplicate comments; operators must reconcile the attempt first.
+Topic/ship/land accept only complete numbered chunk sets. A boundary-padded astral fixture
+pins lossless UTF-16 splitting and rejects replacement characters. Fail-first regressions
+and named receipt/refusal/completeness/surrogate mutants pin these narrow changes.
+Repair round: 0/3. Independent review and exact-head CI/landing remain parent-owned.
+
 ## Review-gate contracts (#374, #377, #382)
 
 Instruction-only tightening: pinned Claude initial headings, non-empty ancestral focused deltas,

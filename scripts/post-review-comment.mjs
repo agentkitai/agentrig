@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // The caller must run the existing verdict/stale-head gates before handing us BODY_FILE.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 try {
@@ -34,6 +34,13 @@ try {
       start = end;
     }
   }
+  // A receipt is an exclusive attempt lock as well as durable evidence. Refuse
+  // every rerun (including uncertain/crashed attempts) rather than duplicate posts.
+  const receiptPath = `${outputFile}.receipt.json`;
+  if (existsSync(receiptPath)) throw new Error(`refusing rerun; reconcile prior attempt using ${receiptPath}:\n${readFileSync(receiptPath, "utf8")}`);
+  const receipt = { pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
+  const save = () => writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n");
+  writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
   for (const [index, piece] of pieces.entries()) {
     const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;
     const marker = pieces.length === 1 ? "" : `(${index + 1}/${pieces.length})\n\n`;
@@ -43,9 +50,21 @@ try {
     // Assert the exact first line of EVERY emitted body immediately before posting.
     const first = spawnSync("head", ["-1", path], { encoding: "utf8" });
     if (first.status !== 0 || first.stdout !== `${heading}\n`) throw new Error("canonical first-line assertion failed");
+    receipt.pending = index + 1;
+    save();
     const posted = spawnSync("gh", ["pr", "comment", pr, "--body-file", path], { stdio: "inherit" });
-    if (posted.error) throw posted.error;
-    if (posted.status !== 0) { process.exitCode = posted.status ?? 2; break; }
+    if (posted.error || posted.status !== 0) {
+      receipt.status = "failed";
+      save();
+      console.error(`partial post: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
+      if (posted.error) console.error(posted.error.message);
+      process.exitCode = posted.status || 2;
+      break;
+    }
+    receipt.successful.push(index + 1);
+    receipt.pending = null;
+    receipt.status = receipt.successful.length === receipt.total ? "complete" : "posting";
+    save();
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

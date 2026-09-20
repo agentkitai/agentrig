@@ -73,3 +73,11 @@ it.each(["missing", "empty", "present"])("topic posting guard handles %s trio ev
     rmSync(out, { recursive: true, force: true });
   }
 });
+
+const completeness = "For acceptance or rerun detection, an initial review is present only when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.";
+it.each(["topic", "ship", "land"])("R379 %s requires all chunks and kills completeness deletion", skill => {
+  const check = (text: string) => expect(section(text, "## Initial full review heading contract", "## Review scratch cleanup")).toContain(completeness);
+  const text = read(`.agentrig/skills/${skill}/SKILL.md`);
+  check(text);
+  expect(() => check(text.replace(completeness, ""))).toThrow();
+});
