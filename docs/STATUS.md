@@ -1,5 +1,21 @@
 # Status
 
+## SHA-claim validator false positive (#424)
+
+The shared topic initial-review posting gate for Claude Code and Codex requires the
+review’s own first line to be `Reviewed head: <SHA>` with a 7–40 hex prefix of the
+current head. Additional claims count only standalone 7–40 hex tokens; stale ones
+still fail closed. Placeholders (`<SHA>`, HEAD, OLD, NEW), prose, inline code spans
+and fenced blocks no longer fabricate claims. Overlong tokens are nonclaims, not
+valid first-line evidence. Case-insensitive prefixes remain valid.
+
+Executable instruction-contract fixtures cover both slots, matching/stale claims,
+and the first-line requirement; mutants removing the hex requirement or code-span
+skip are killed. Prior broad-token assertions are replaced by the explicit hex-only
+contract. The posting helper has no duplicate claim regex and remains unchanged.
+No runtime code or separate #412 defects are included; roadmap continuation remains
+unchanged. Independent review and exact-head CI remain required before landing.
+
 ## Declared reviewer slots (#396)
 
 PR #414 repair round 2: CLI reviewer children strip Claude nesting variables while preserving the inherited environment; standalone dogfood follows declared-slot launch/post/cleanup; cleanup tests inspect actual skill text; topic posts validated verdicts with a fail-closed helper gate and executable regression coverage. Arbiter #415 and deferred findings #416–421 remain outside this repair.

@@ -1,7 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
 const read = (skill: string) => readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
@@ -87,71 +84,7 @@ for (const start of ["Persist-before-delete on incomplete review:"]) {
     expect(() => check(mutant)).toThrow();
   });
 }
-for (const reviewer of ["claude", "codex"]) {
-  const run = (body: string, mutate: "bypass" | "heading-only" | undefined = undefined) => {
-    const out = mkdtempSync(join(tmpdir(), "review-validation-"));
-    try {
-      writeFileSync(join(out, `${reviewer}.md`), body);
-      writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-      writeFileSync(join(out, "codex-trio.md"), "proof cannot substitute for verdict");
-      const source = validator(reviewer);
-      let snippet = source.replaceAll("<PREFIX>", join(out, reviewer)).replace('"HEAD" >', `"${"a".repeat(40)}" >`);
-      // Substitute only shell arguments, never node program text.
-      expect(snippet.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
-      if (mutate === "heading-only") {
-        const clause = String.raw` || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))`;
-        expect(snippet.split(clause)).toHaveLength(2);
-        snippet = snippet.replace(clause, "");
-      }
-      if (mutate === "bypass") {
-        const original = snippet;
-        snippet = snippet.replace(/node -e '[^']+' "[^"\n]+\.md" "a{40}" > "[^"\n]+" \|\| exit 2/, `cat "${out}/${reviewer}.md" > "${out}/${reviewer}.validated.md"`);
-        expect(snippet).not.toBe(original);
-      }
-      const result = spawnSync("/bin/sh", ["-c", snippet], { encoding: "utf8" });
-      return { status: result.status, comment: result.status === 0 ? readFileSync(join(out, `${reviewer}.validated.md`), "utf8") : "" };
-    } finally { rmSync(out, { recursive: true, force: true }); }
-  };
-  const heading = (sha: string) => `## External review — duplicate — head ${sha} — merged with origin/main ${"b".repeat(40)} — full`;
-  it.each(["", " \n\t", heading("a".repeat(40)), `${heading("c".repeat(40))}\nverdict`, `${heading("a".repeat(40))}\n${heading("c".repeat(40))}\nverdict`, `Reviewed SHA: ${"c".repeat(40)}\nverdict`])(`#369 ${reviewer} rejects invalid verdict %j`, body => {
-    expect(run(body).status).toBe(2);
-  });
-  it.each([
-    "Reviewed head", "reviewed head:", "Reviewed HEAD", "head", "Exact head reviewed:", "Reviewed SHA:",
-  ])(`#369 C1 ${reviewer} accepts current claim after %s`, label => {
-    expect(run(`${label} ${"a".repeat(40)}\nverdict`).status).toBe(0);
-  });
-  it.each([7, 12, 39, 40])(`#369 C2 ${reviewer} matches SHA prefix of length %i`, length => {
-    expect(run(`Reviewed SHA: ${"A".repeat(length)}\nverdict`).status).toBe(0);
-    expect(run(`Reviewed SHA: ${"a".repeat(length - 1)}c\nverdict`).status).toBe(2);
-  });
-  it.each(["Reviewed SHA: HEAD", "head HEAD", "Reviewed HEAD"])(`#369 C3 ${reviewer} rejects literal placeholder %s`, claim => {
-    expect(run(`${claim}\nverdict`).status).toBe(2);
-  });
-  it.each([
-    "# Verdict\n## Findings\n### Summary",
-    `${heading("a".repeat(40))}\n## Findings`,
-  ])(`#369 C4 ${reviewer} heading-only clause-deletion mutant: %j`, body => {
-    expect(run(body).status).toBe(2);
-    expect(run(body, "heading-only").status).toBe(0);
-  });
-  it.each(["**", "__", "`"])(`#369 X1 ${reviewer} checks Markdown %s claims before stripping`, mark => {
-    for (const sha of ["a".repeat(40), "c".repeat(40)]) {
-      for (const claim of [`Reviewed SHA: ${mark}${sha}${mark}`, heading(`${mark}${sha}${mark}`)]) {
-        expect(run(`${claim}\nverdict`).status).toBe(sha.startsWith("a") ? 0 : 2);
-      }
-    }
-  });
-  it(`#369 ${reviewer} accepts matching SHA preserving raw verdict for helper`, () => {
-    const result = run(`${heading("a".repeat(40))}\n\nverdict\n`);
-    expect(result.status).toBe(0);
-    expect(result.comment).toBe(`${heading("a".repeat(40))}\n\nverdict\n`);
-    expect(result.comment.match(/^## External review/gm)).toHaveLength(1);
-  });
-  it(`#369 ${reviewer} validation-bypass mutant exposes stale and empty acceptance`, () => {
-    for (const body of ["", `${heading("c".repeat(40))}\nverdict`]) expect(run(body, "bypass").status).toBe(0);
-  });
-}
+// Shared Claude/Codex posting gate is executed by sha-claim-instruction-contract.test.ts.
 
 // D1: the slot lead-in forbids global source substitution.
 it("D1 slot lead-in prescribes only targeted shell substitution", () => {
@@ -159,22 +92,8 @@ it("D1 slot lead-in prescribes only targeted shell substitution", () => {
   expect(lead).toContain("only to shell SHA arguments and paths");
   expect(lead).toContain("never edit the validator source");
 });
-it("D1 global substitution corrupts Codex validation; targeted substitution rejects literal Reviewed head HEAD", () => {
-  const out = mkdtempSync(join(tmpdir(), "codex-substitution-"));
-  try {
-    writeFileSync(join(out, "codex-model.txt"), "gpt-test");
-    writeFileSync(join(out, "codex-trio.md"), "independent proof");
-    const source = validator("codex");
-    const head = "a".repeat(40), main = "b".repeat(40);
-    const targeted = source.replaceAll("<PREFIX>", join(out, "codex")).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${head} — merged with origin/main ${main} — full`).replace('"HEAD" >', `"${head}" >`);
-    const global = source.replaceAll("<PREFIX>", join(out, "codex")).replaceAll("HEAD", head).replaceAll("MAIN", main);
-    expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
-    expect(global.match(/node -e '[^']*'/g)).not.toEqual(source.match(/node -e '[^']*'/g));
-    for (const [claim, expected] of [[head, 0], ["HEAD", 2]] as const) {
-      writeFileSync(join(out, "codex.md"), `Reviewed head ${claim}\nverdict\n`);
-      expect(spawnSync("/bin/sh", ["-c", targeted]).status).toBe(expected);
-    }
-    expect(spawnSync("/bin/sh", ["-c", global]).status).toBe(0);
-    expect(readFileSync(join(out, "codex.validated.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
-  } finally { rmSync(out, { recursive: true, force: true }); }
+it("D1 substitution touches only shell paths and expected head", () => {
+  const source = validator("codex");
+  const targeted = source.replaceAll("<PREFIX>", "/tmp/owned/codex").replace('"HEAD" >', `"${"a".repeat(40)}" >`);
+  expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
 });

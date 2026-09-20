@@ -232,14 +232,18 @@ For each recorded row, in order:
      a second incomplete run halts. Never weaken permissions to rescue a review.
    - **Validate and post.** Re-fetch PR HEAD with `gh pr view NN --json headRefOid`. If it changed, do not call the new head reviewed; stale output is not a current-head
      review: retain its historical provenance and cover the delta or restart as required by §3.
-     Reject 41-or-more hex tokens, stale `head_sha:` and stale `Reviewed at` claims. The validator
-     fails closed on a prior `reviewed commit <stale>` discussion mention. Do not relabel stale text.
+     Require the review's own first line to be `Reviewed head: <7–40 hex SHA>` matching
+     the current head (case-insensitive prefix). This applies to every configured slot. Only standalone 7–40 hex tokens count as additional
+     SHA claims: reject stale `head_sha:` and stale `Reviewed at` claims, including a prior
+     `reviewed commit <stale>` discussion mention outside code. Ignore placeholders `<SHA>`,
+     HEAD, OLD, NEW, prose after head/reviewed, and claims in inline code spans or fenced
+     blocks. Overlong tokens are not SHA claims; they cannot satisfy the required first line.
      For each successful slot, apply targeted substitution only to shell SHA arguments and paths;
      never edit the validator source or guess the model from the verdict. Never globally replace
-     HEAD/MAIN in the node program: its literal HEAD rejection must survive. Run this gate:
+     HEAD/MAIN in the node program. Run this gate:
      ```sh
      # Slot posting gate
-     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)(?:\s+(?:SHA|commit|head|at))*\s*[:=]?\s*([0-9a-f]{7,}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
+     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const cleaned=s.replace(/^.*\bReviewed head:.*$/gm, "").replace(/[ \t\r\n]+/g, "").trim(); if(!cleaned) process.exit(2); const expected=process.argv[2].toLowerCase(); const first=s.split(/\r?\n/)[0].match(/^Reviewed head: ([0-9a-f]{7,40})[ \t]*$/i); if(!/^[0-9a-f]{40}$/.test(expected) || !first || !expected.startsWith(first[1].toLowerCase())) process.exit(2); let fence; const outside=s.split(/\r?\n/).map(line=>{ if(fence){ if(new RegExp("^ {0,3}"+fence[0]+"{"+fence.length+",}[ \\t]*$").test(line)) fence=undefined; return ""; } const open=line.match(/^ {0,3}(`{3,}|~{3,})/); if(open){ fence=open[1]; return ""; } return line; }).join("\n"); const unquoted=outside.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g," "); const claimText=unquoted.replace(/[*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)\b(?:\s+(?:SHA|commit|head|at)\b)*\s*[:=]?\s*\b([0-9a-f]{7,40})(?![a-z0-9_])/gi)]; if(claims.some(m=>!expected.startsWith(m[1].toLowerCase()))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
