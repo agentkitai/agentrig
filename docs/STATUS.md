@@ -1,5 +1,19 @@
 # Status
 
+## Windows evalset hook budget (#405)
+
+Current roadmap row: user-directed Windows evalset hook timeout repair (#405),
+implemented pending review and exact-head CI. No next row authorized; continuation
+order remains ROADMAP §5.
+
+The Windows include-list config gives hooks the same bounded 30-second default as
+tests. Run [35497704578, attempt 1](https://github.com/agentkitai/agentrig/actions/runs/35497704578)
+failed evalset setup and teardown at the inherited 10-second hook limit. Test bodies,
+assertions, dependency-copy ownership, explicit deadlines, and Linux/macOS defaults
+are unchanged. Local timeout discrimination and full-trio proof are recorded in the
+task PR; independent review and exact-head Windows CI remain conductor-owned.
+No product changes or roadmap advancement.
+
 ## Posting receipt and abort-test residuals (#401, #403)
 
 Receipt reuse checks PR identity as well as the canonical heading before completion

@@ -208,6 +208,6 @@ export const windowsCoverage = [
 // Not `mergeConfig`: it concatenates arrays, so the base glob would pull the whole suite back in.
 export default defineConfig({ ...base, test: { ...base.test, include: windowsCoverage,
   // Integration fixtures start real Git/Node trees. Bound competing file workers and give
-  // them an explicit test budget; product deadlines and per-test timeout overrides remain.
-  maxWorkers: 2, testTimeout: 30_000,
+  // them explicit test and hook budgets; product deadlines and per-test timeout overrides remain.
+  maxWorkers: 2, testTimeout: 30_000, hookTimeout: 30_000,
 } });
