@@ -82,3 +82,8 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(readFileSync(`${failed}.stdout`, "utf8")).toBe("partial");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+it("M-cap-bypass: capped API entries fail before provider construction with an actionable diagnostic", async () => {
+  let constructed = false;
+  await expect(runApi({ providers: { capped: { model: "pinned", dailyCap: 1 } } }, { adapter: "api:capped", model: "pinned" }, "bundle", () => { constructed = true; throw new Error("factory reached"); })).rejects.toThrow(/dailyCap.*not supported.*uncapped/i);
+  expect(constructed).toBe(false);
+});

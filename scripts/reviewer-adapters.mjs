@@ -42,6 +42,7 @@ export async function runApi(config, binding, prompt, buildRoleProvider) {
   const name = binding.adapter.slice(4);
   const entry = config.providers?.[name];
   if (!entry || entry.model !== binding.model) throw new Error("missing/mismatched API binding");
+  if (entry.dailyCap !== undefined) throw new Error(`providers.${name}.dailyCap is not supported by the review adapter: no spend ledger is wired; choose an explicitly uncapped provider entry or a CLI slot (never silently remove the cap)`);
   const provider = buildRoleProvider({ ...config, roles: { ...config.roles, main: name } }, "main");
   let text = "", stop;
   const events = [];

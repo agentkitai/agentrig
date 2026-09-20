@@ -147,6 +147,18 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    Require edit success and read back the receipt with `gh pr view NN --json body`;
    verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
    Quote this persisted receipt in the handoff alongside the round and blockers.
+   For each assigned ID, copy the exact verbatim finding heading and comment URL/anchor from
+   the live posted review into the ledger, pre-dispatch receipt and fixer task. Keep conductor
+   paraphrases in a separate rationale field, never as finding identity. Generate the index with
+   `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` after reading the posted review;
+   retain its comment anchor and exact heading per finding, including collapsed duplicates.
+   Fetch every source comment live again and compare its heading with all three copies before
+   dispatch. Missing, edited or mismatched headings halt; never silently relabel or substitute a
+   different defect. Record the fetched comment identity and verification time in the receipt.
+   Fixer precondition (include verbatim in every fixer task): Before editing, fetch the linked
+   live comments and PR body; compare each assigned verbatim finding heading and comment anchor
+   against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
+   return the conflicting texts without changes; do not repair the receipt yourself.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - Spawn the fixer on the same branch with exact blocker texts/URLs. After its local proof and

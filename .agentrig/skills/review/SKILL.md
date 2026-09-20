@@ -142,7 +142,7 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
 
 - Check the new tests would actually fail against the unfixed code: vacuous assertions (asserting
   a string absent that was never present), assertions satisfied by the wrong mechanism, races.
-- Optionally probe the load-bearing lines (the condition that makes the change safe, not just correct) and
+- Optionally probe the load-bearing lines (the condition that makes the change safe, not just correct)
   with reviewer-owned mutants: copy the file aside, apply the mutant, run the RELEVANT test file with
   the project's targeted test invocation (not the full declared check command), restore, and only then run the next mutant — never overlap runs
   in one worktree. A surviving mutant on a security line is a finding even when every test passes.
@@ -154,6 +154,9 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
 
 ## 6. Verdict
 
+- Give every finding its own severity-prefixed Markdown heading (`### HIGH: Exact finding title`,
+  `### MEDIUM: Exact finding title` or `### LOW: Exact finding title`);
+  preserve that heading verbatim in handoffs and indexes.
 - Findings: file:line, severity (HIGH/MEDIUM/LOW), a concrete failure scenario, a proposed fix.
   Classify blocking/non-blocking with the scenario and shipping policy §2 rationale. Distinguish
   unmet acceptance or safety gates from minor deferrable defects and advisory polish. Uncertain
@@ -168,6 +171,8 @@ verify assigned blocker closure and new direct regressions, not optional cleanup
   human, or to the `topic` conductor executing the human's already-authorized fixed band; landing is
   a separate flow under the `land` skill either way. The reviewer never treats its own verdict as
   merge authorization.
+- Shared review-base refs belong to the conductor: reviewers never create, modify or delete them.
+  A standalone reviewer uses a unique owned base ref and removes only that ref after restore/join.
 - When a conductor supplied the tree, leave its cleanup to the conductor after reporting the
   restored/joined state. Otherwise remove your own worktree when done. Leave the main working
   tree and every sibling reviewer tree exactly as you found them.

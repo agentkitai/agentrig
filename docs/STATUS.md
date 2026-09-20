@@ -22,6 +22,20 @@ heading or formatting. Fail-first instruction coverage pins propagation before
 adapter dispatch and rejects deletion. The first-line validator is unchanged; C2
 remains deferred to #426.
 
+## Reviewer-slot residuals (#415–422, #426–427) — implemented, pending review
+
+- Arbiter now preserves declared zero/one/two slots and same-head check receipts. Topic defines
+  the exact-head built adapter checkout and explicitly repeats the first-line claim in focused
+  dispatch; inline SHA masking cannot cross blank paragraphs.
+- Raw reviewer `__proto__` is rejected before zod normalization. API dailyCap fails explicitly
+  before provider construction rather than bypassing accounting. Removed obsolete test
+  ternaries/duplicate validator runs and corrected review grammar/base-ref ownership.
+- Ship/topic ledger, receipt and fixer tasks retain verbatim finding headings and comment
+  anchors; dispatch, fixer precondition and land fetch live comments and halt on mismatch.
+  A live-comment finding-index helper preserves headings, including PR #414's numbered form.
+- Explicit issue-batch follow-up, not a newly assigned ROADMAP row. No event schema changes.
+  Fail-first tests, named mutants and exact-head declared-check receipts are in the PR body.
+
 ## Declared reviewer slots (#396)
 
 PR #414 repair round 2: CLI reviewer children strip Claude nesting variables while preserving the inherited environment; standalone dogfood follows declared-slot launch/post/cleanup; cleanup tests inspect actual skill text; topic posts validated verdicts with a fail-closed helper gate and executable regression coverage. Arbiter #415 and deferred findings #416–421 remain outside this repair.

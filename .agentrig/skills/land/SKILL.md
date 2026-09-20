@@ -111,6 +111,11 @@ Read the PR body and match that line against the round, OLD and assigned blocker
 persisted handoff; verify its timestamp precedes the dispatch. Private session notes do not
 substitute for this GitHub-visible receipt. Missing or mismatched evidence blocks landing;
 a receipt added after dispatch cannot retroactively authorize that dispatch.
+Fetch every assigned source comment live. Compare its exact verbatim finding heading and
+comment URL/anchor against the ledger, pre-dispatch receipt and persisted fixer task, not the
+conductor's paraphrase. Require the fixer's recorded precondition comparison before editing.
+A missing, edited or mismatched heading/anchor blocks landing even when the local finding ID
+matches; preserve conflicting texts and halt, never retroactively rewrite the assignment.
 
 ## 2. Merge
 

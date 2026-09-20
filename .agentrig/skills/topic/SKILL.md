@@ -213,6 +213,13 @@ For each recorded row, in order:
      UTC start/end, counts, worktree and TMPDIR in `<OUT>/checks.md`. Empty steps receive an explicit
      none receipt. Restore tracked/index state, join jobs and recheck current PR head before launch.
      A head change invalidates this proof; re-prepare and re-prove. Supply receipts to every slot.
+   - **Adapter checkout boundary.** `<REPO>` is an absolute path to a clean checkout at the exact
+     PR HEAD containing these helper sources and, for nonempty declared checks, the successful
+     declared build output at that same head (`packages/cli/dist/config.js` and `provider.js`).
+     Resolve and record its literal path, HEAD and build receipt before launch; an existing
+     conductor-proof tree may supply it while retained until all adapter jobs join. Never use
+     the author tree, stale main dist, or infer preparation from another worktree. Empty checks
+     authorize no build: if required dist is unavailable, halt rather than run undeclared checks.
    - **Launch each slot through its adapter**, with `bash` `background: true`, in parallel with
      other slots and hosted CI. Write a fresh prompt file containing the task contract, current
      head/main, `.agentrig/skills/review/SKILL.md`, named conductor receipts, and ownership boundaries.
@@ -243,7 +250,7 @@ For each recorded row, in order:
      HEAD/MAIN in the node program. Run this gate:
      ```sh
      # Slot posting gate
-     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const cleaned=s.replace(/^.*\bReviewed head:.*$/gm, "").replace(/[ \t\r\n]+/g, "").trim(); if(!cleaned) process.exit(2); const expected=process.argv[2].toLowerCase(); const first=s.split(/\r?\n/)[0].match(/^Reviewed head: ([0-9a-f]{7,40})[ \t]*$/i); if(!/^[0-9a-f]{40}$/.test(expected) || !first || !expected.startsWith(first[1].toLowerCase())) process.exit(2); let fence; const outside=s.split(/\r?\n/).map(line=>{ if(fence){ if(new RegExp("^ {0,3}"+fence[0]+"{"+fence.length+",}[ \\t]*$").test(line)) fence=undefined; return ""; } const open=line.match(/^ {0,3}(`{3,}|~{3,})/); if(open){ fence=open[1]; return ""; } return line; }).join("\n"); const unquoted=outside.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g," "); const claimText=unquoted.replace(/[*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)\b(?:\s+(?:SHA|commit|head|at)\b)*\s*[:=]?\s*\b([0-9a-f]{7,40})(?![a-z0-9_])/gi)]; if(claims.some(m=>!expected.startsWith(m[1].toLowerCase()))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
+     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const cleaned=s.replace(/^.*\bReviewed head:.*$/gm, "").replace(/[ \t\r\n]+/g, "").trim(); if(!cleaned) process.exit(2); const expected=process.argv[2].toLowerCase(); const first=s.split(/\r?\n/)[0].match(/^Reviewed head: ([0-9a-f]{7,40})[ \t]*$/i); if(!/^[0-9a-f]{40}$/.test(expected) || !first || !expected.startsWith(first[1].toLowerCase())) process.exit(2); let fence; const outside=s.split(/\r?\n/).map(line=>{ if(fence){ if(new RegExp("^ {0,3}"+fence[0]+"{"+fence.length+",}[ \\t]*$").test(line)) fence=undefined; return ""; } const open=line.match(/^ {0,3}(`{3,}|~{3,})/); if(open){ fence=open[1]; return ""; } return line; }).join("\n"); const unquoted=outside.split(/\n[ \t]*\n/).map(paragraph=>paragraph.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g," ")).join("\n\n"); const claimText=unquoted.replace(/[*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)\b(?:\s+(?:SHA|commit|head|at)\b)*\s*[:=]?\s*\b([0-9a-f]{7,40})(?![a-z0-9_])/gi)]; if(claims.some(m=>!expected.startsWith(m[1].toLowerCase()))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
@@ -304,6 +311,18 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
    Require edit success and read back the receipt with `gh pr view NN --json body`;
    verify the receipt, round, OLD and assigned IDs still match. Any mismatch halts dispatch.
    Quote this persisted receipt in the handoff alongside the round and blockers.
+   For each assigned ID, copy the exact verbatim finding heading and comment URL/anchor from
+   the live posted review into the ledger, pre-dispatch receipt and fixer task. Keep conductor
+   paraphrases in a separate rationale field, never as finding identity. Generate the index with
+   `node <REPO>/scripts/review-finding-index.mjs <comment-URL>` after reading the posted review;
+   retain its comment anchor and exact heading per finding, including collapsed duplicates.
+   Fetch every source comment live again and compare its heading with all three copies before
+   dispatch. Missing, edited or mismatched headings halt; never silently relabel or substitute a
+   different defect. Record the fetched comment identity and verification time in the receipt.
+   Fixer precondition (include verbatim in every fixer task): Before editing, fetch the linked
+   live comments and PR body; compare each assigned verbatim finding heading and comment anchor
+   against the ledger, pre-dispatch receipt and task. On any mismatch refuse the assignment and
+   return the conflicting texts without changes; do not repair the receipt yourself.
    Only then call the fixer described below, carrying that persisted ledger and counter.
 
 - **Fix** with one subagent on the same PR branch, carrying verbatim blocker texts or review
@@ -343,6 +362,8 @@ Before calling a fixer, perform this ordered persistence gate (including on resu
   No install is inferred when the declaration is empty. On failure, join jobs and retain recorded paths for cleanup. Reviewers do not install or preflight.
   Use §2 step 4's selected reviewer's command/tool allowances and model assertion where applicable,
   with OLD as the diff base. Brief OLD/NEW, blocker URLs, affected checks/mutations and direct interactions.
+  The focused prompt explicitly says: `Start your review with the exact own first line Reviewed head: <actual review SHA>, replacing <actual review SHA> with the full 40-hex SHA you actually reviewed. No heading, blank line, quote or code fence may precede or wrap that line.`
+  Apply the initial own-first-line and stale-claim gate to NEW before posting the focused verdict.
   With one slot select that slot; zero slots skip focused external review but retain proof and CI gates.
   Do not hand over the fixer's reasoning as evidence. Record start time/job id and use the same
   timeout, one-retry, restore/join and SHA checks as the initial pass, applied to this one job.
