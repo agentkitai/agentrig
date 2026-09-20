@@ -127,6 +127,17 @@ heading. Preserve older full reviews and focused delta coverage through the curr
 main advance re-verifies CI, not a redundant initial pass. Never duplicate a completed review just
 to improve its verdict. Failure/staleness/retry cleanup follows topic's Review scratch cleanup.
 
+Before posting, use the current adapter verdict artifact (last-message file or structured result),
+not prompt/tool logs. The shared finding-index helper extracts supported legacy artifacts and rejects
+literal review-contract echoes with `reviewer body echoes instructions; not a verdict`.
+A legitimate contract quotation may appear as a Markdown blockquote inside an indexed finding;
+keep its scenario and fix unquoted. Markerless Full review comments preserve preceding verdict/head
+provenance; a standalone adapter role-name line inside the verdict is not an extraction boundary.
+Above 40 KiB of reviewer-body UTF-8 bytes, first record a nonempty size explanation in the conductor
+ledger and export `REVIEW_LARGE_BODY_LEDGER` to that ledger file before posting. The posting receipt
+retains the explanation; preserve lossless genuine multi-chunk reviews, never summarize to fit.
+Apply topic §2’s shared extraction and slot posting gate with the configured adapter id before invoking `post-review-comment.mjs`.
+
 ## 3. Resolve the verdict, then honor the merge decision
 
 - Present the verdict verbatim-in-substance: every finding with its severity, or the pass with

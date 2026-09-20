@@ -5,6 +5,8 @@ import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "nod
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
+import { reviewerVerdict, assertReviewerVerdict } from "./review-finding-index.mjs";
+
 try {
   const args = process.argv.slice(2);
   const configFlag = args.indexOf("--config");
@@ -25,9 +27,17 @@ try {
   if (model !== slots[reviewer].model) throw new Error("asserted model differs from slot pin");
   if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model)) throw new Error("empty or invalid model file");
   if (![head, main].every(sha => sha.length === 40 && /^[a-fA-F0-9]{40}$/.test(sha))) throw new Error("HEAD and MAIN must be unquoted 40-hex SHAs");
-  const raw = readFileSync(bodyFile, "utf8");
+  const raw = reviewerVerdict(readFileSync(bodyFile, "utf8"), slots[reviewer].adapter);
   const body = raw.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, "");
   if (!body.trim()) throw new Error("empty reviewer body");
+  assertReviewerVerdict(body);
+  let sizeExplanation;
+  if (Buffer.byteLength(body, "utf8") > 40 * 1024) {
+    const ledger = process.env.REVIEW_LARGE_BODY_LEDGER;
+    if (!ledger || !existsSync(ledger) || !(sizeExplanation = readFileSync(ledger, "utf8").trim())) {
+      throw new Error("reviewer body exceeds 40 KiB; conductor ledger size explanation required before posting");
+    }
+  }
   const proof = proofFile === undefined ? "" : readFileSync(proofFile, "utf8");
   if (proofFile !== undefined && !proof.trim()) throw new Error("empty proof file");
   const heading = `## External review — ${reviewer} (${model}) — head ${head} — merged with origin/main ${main} — full`;
@@ -67,7 +77,7 @@ try {
     } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
     throw new Error(`refusing rerun; ${advice}; receipt ${receiptPath}:\n${saved}`);
   }
-  const receipt = { pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
+  const receipt = { ...(sizeExplanation === undefined ? {} : { sizeExplanation }), pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
   const save = () => {
     // Same-directory rename preserves the last complete receipt on failed writes.
     const temporary = `${receiptPath}.${randomUUID()}.tmp`;

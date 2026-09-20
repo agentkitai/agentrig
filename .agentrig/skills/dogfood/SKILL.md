@@ -163,6 +163,12 @@ dropped acceptance criterion, a wider scope), you may propose a change but never
 
 ## 3. Prove declared checks green
 
+Test fixture guidance: keep new tests network-free. Use a fake `ModelProvider` for provider
+behavior and an injected `fetchFn` for HTTP boundaries; never require live provider credentials
+or network access. On macOS, canonicalize `tmpdir()` fixtures with `realpath` before comparing
+paths or asserting containment (`/var` and `/private/var` may name the same directory). Follow
+`docs/TESTING.md` and keep check scratch outside the worktree under an external `TMPDIR`.
+
 Apply the operative policy above: run bootstrap, optional preflight and ordered named steps
 with individual exit-code receipts. Never pipe away a failing exit. Run full suites in a
 background job with command-local TMPDIR outside Git ancestry; join all jobs before cleanup.

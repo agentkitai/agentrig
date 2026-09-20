@@ -58,7 +58,7 @@ it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-pro
   try {
     const head = "a".repeat(40), main = "b".repeat(40), prefix = join(dir, "slot");
     const repo = fileURLToPath(new URL("../../../", import.meta.url));
-    const gate = section(read(".agentrig/skills/topic/SKILL.md"), "# Slot posting gate\n", "```");
+    const gate = section(read(".agentrig/skills/topic/SKILL.md"), "# Extract with the slot's configured adapter id (including api:<name>).\n", "```");
     expect(gate).toContain("'<PREFIX>.validated.md'");
     expect(gate.trim()).toMatch(/\|\| exit 2$/);
     writeFileSync(join(dir, "gh"), `#!/bin/sh\necho posted >> '${dir}/posted'\n${mode === "helper-failure" ? "exit 1" : "echo https://example.test/comment"}\n`);
@@ -69,7 +69,7 @@ it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-pro
     writeFileSync(`${prefix}.md`, body);
     if (mode !== "missing-checks") writeFileSync(join(dir, "checks.md"), "green checks");
     if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, "{}");
-    const command = gate.replaceAll("<REPO>", repo).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", prefix).replaceAll("<WT>/.agentrig/config.json", join(dir, "config.json")).replaceAll("'<SLOT>'", "'Custom'").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`).replace(".mjs NN ", ".mjs 414 ");
+    const command = gate.replaceAll("<ADAPTER>", "api:peer").replaceAll("<REPO>", repo).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", prefix).replaceAll("<WT>/.agentrig/config.json", join(dir, "config.json")).replaceAll("'<SLOT>'", "'Custom'").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`).replace(".mjs NN ", ".mjs 414 ");
     const run = spawnSync("/bin/sh", ["-c", `${command}\nprintf gate-complete`], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
     expect(run.status, run.stderr).toBe(mode === "valid" ? 0 : 2);
     expect(run.stdout.includes("gate-complete")).toBe(mode === "valid");

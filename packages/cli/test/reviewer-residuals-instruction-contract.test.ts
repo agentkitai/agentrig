@@ -23,7 +23,7 @@ for (const [skill, mutant, phrase] of contracts) {
     const text = read(skill).replace(/\s+/g, " ");
     const check = (value: string) => expect(value).toContain(phrase);
     check(text);
-    expect(() => check(text.replace(phrase, "REMOVED"))).toThrow();
+    expect(() => check(text.replaceAll(phrase, "REMOVED"))).toThrow();
   });
 }
 it("arbiter has no fixed pair and review has no dangling conjunction", () => {
