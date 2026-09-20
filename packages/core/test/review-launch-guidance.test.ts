@@ -3,15 +3,12 @@ import { expect, it } from "vitest";
 
 const skill = (name: string) => readFile(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
 
-it.each(["dogfood"])("%s permits explicit mutation tools without plan mode or bypass", async name => {
-  const text = await skill(name);
-  const launches = text.split("\n").filter(line => line.includes("claude -p --model"));
-  expect(launches).toHaveLength(1);
-  expect(launches[0]).toContain("--permission-mode dontAsk");
-  expect(launches[0]).toContain("--allowedTools 'Read,Grep,Glob,Bash,Edit,Write'");
-  expect(launches[0]).toContain("--model claude-opus-5");
-  expect(launches[0]).not.toMatch(/bypassPermissions|dangerously-skip-permissions/);
-  expect(text).toContain("--disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)'");
+it("dogfood delegates launch permissions to the canonical adapter", async () => {
+  const text = await skill("dogfood");
+  const initial = text.split("## 8.")[1]!.split("## 9.")[0]!;
+  expect(initial).toContain("topic §2 step 4");
+  expect(initial).toContain("scripts/reviewer-adapters.mjs");
+  expect(initial).not.toMatch(/claude -p|codex exec|bypassPermissions|dangerously-skip-permissions/);
 });
 
 it("topic permits explicit mutation tools without plan mode or bypass", async () => {
@@ -87,5 +84,6 @@ it("delta dependencies install separately with a deadline and a successful exit 
 
 it("ship and standalone dogfood preserve separate trees and explicit launch locations", async () => {
   expect(await skill("ship")).toContain("in parallel in separate reviewer-owned worktrees you prepare");
-  expect(await skill("dogfood")).toContain("cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p");
+  expect(await skill("dogfood")).toContain("create a detached worktree per slot");
+  expect(await skill("dogfood")).toContain("outside the removed builder tree");
 });
