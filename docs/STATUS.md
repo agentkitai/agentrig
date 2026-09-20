@@ -1,5 +1,20 @@
 # Status
 
+## Finding-index prose and path-separator residuals (#450, #451, #453, #454)
+
+- Anchored unsupported F-number/priority detection to finding openings: inline grammar examples
+  in ordinary prose, including the live #446 `- **#444**` paragraph, no longer halt fallback.
+  Real delimiterless ALL-CAPS ATX finding attempts still fail closed; heading bytes stay exact.
+- Made missing-override diagnostic assertions separator-portable and simulated Windows-style
+  relative paths with host filesystem lookups, preserving both missing-file and root checks.
+- The posting helper's shared literal-echo guard permits blockquote, inline-code (including
+  wrapped), fenced and indented citations only in a finding's bounded paragraph. Blank lines,
+  thematic breaks and new headings end that permission; fences own internal blank lines.
+  Literal echoes outside that scope remain refused after LF/CRLF/space/tab normalization.
+- Tests/helper script only; no product or skill text changes. Fail-first cases and seven named
+  killed mutants are recorded in the PR, alongside exact-head declared checks and external
+  CRLF-copy loader-override proof. Independent review/landing remains the conductor's work.
+
 ## Reviewer-slot residuals, third batch (#441–445) — implemented, pending review
 
 Testing policy positively pins current declared-slot wording with the actual stale

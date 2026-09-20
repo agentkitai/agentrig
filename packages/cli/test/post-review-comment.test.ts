@@ -440,3 +440,31 @@ it.each([
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
   expect(run(body + citation).posted).toBe(`${heading}\n\n${body}${citation}`);
 });
+
+it.each(["blockquote", "inline", "wrapped-inline", "fence", "indent"])("M-bounded-quote: posts %s citations only inside a finding", form => {
+  const phrase = echoPhrases[1];
+  const wrapped = phrase.replace("probed and", "probed\n and");
+  const citation = form === "blockquote" ? wrapped.split("\n").map(line => `> ${line}`).join("\n")
+    : form === "inline" ? `Contract: \`${phrase}\``
+    : form === "wrapped-inline" ? `Contract: \`${wrapped}\``
+    : form === "fence" ? `\`\`\`text\n${wrapped}\n\n\`\`\``
+    : `    ${phrase}`;
+  const prefix = "VERDICT: FAIL\n### LOW: Citation contract\nFix the missing contract evidence.\n";
+  const body = prefix + citation;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  for (const boundary of ["\nUnrelated summary\n", "## Summary\n", "---\n"]) {
+    const refused = run(prefix + boundary + citation);
+    expect(refused.status).not.toBe(0);
+    expect(refused.args).toBeUndefined();
+  }
+  expect(run(`VERDICT: PASS\n${citation}`).args).toBeUndefined();
+});
+it.each(["\n", "\r\n", " \t "])("M-normalized-echo: refuses literal whitespace reflow %j", whitespace => {
+  for (const phrase of echoPhrases) {
+    const body = "VERDICT: PASS\n" + phrase.split(" ").join(whitespace);
+    const result = run(body);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+    expect(result.args).toBeUndefined();
+  }
+});
