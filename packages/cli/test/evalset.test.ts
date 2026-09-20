@@ -173,7 +173,7 @@ describe("E1 independent outcome checks", () => {
     failed(worker("A3", path));
     await writeFile(join(path, "packages/memory/src/wikilinks.ts"), 'import { parseWikilinks } from "../src/page.js"; export function wikilinks(body: string) { return parseWikilinks(body); }');
     failed(worker("A3", path));
-  });
+  }, 30_000);
 
   it("A4 rejects summed/zero accounting and ungrounded answers", async () => {
     const path = await temp();

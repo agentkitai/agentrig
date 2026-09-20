@@ -163,3 +163,11 @@ for (const path of [skill("topic"), "docs/SHIPPING-WORKFLOW.md"]) {
  it(`C2 ${path} permits forward delta`, () => expect(probe("forward")).toBe(0));
  for (const form of ["abbreviated", "ref"]) it(`C2 ${path} resolution-removal mutant admits ${form}`, () => expect(probe(form, true)).toBe(0));
 }
+
+for (const name of ["ship", "topic"]) it(`M-fixer-missing-dispatch ${name} renamed spawn anchor mutant`, () => {
+ const row = checks.find(([id, path]) => id === "M-fixer-readback" && path === skill(name))!;
+ const s = read(row[1]); checkRow(s, row);
+ const anchor = name === "ship" ? "- Spawn the fixer" : "- **Fix** with one subagent";
+ expect(s).toContain(anchor);
+ expect(() => checkRow(s.replace(anchor, "- RENAMED dispatch anchor"), row)).toThrow();
+});

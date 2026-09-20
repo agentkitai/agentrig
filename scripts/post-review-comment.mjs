@@ -43,7 +43,8 @@ try {
     let advice = "reconcile prior attempt (including pending/uncertain chunks) before manual recovery";
     try {
       const prior = JSON.parse(saved);
-      if (prior.status === "complete") advice = "already complete; no retry needed";
+      if (prior.heading !== heading) advice = "receipt heading differs from current review; reconcile prior attempt before reuse";
+      else if (prior.status === "complete") advice = "already complete; no retry needed";
       else if (prior.status === "posting" && prior.pending === null && Array.isArray(prior.successful) && prior.successful.length === 0)
         advice = "no posting attempt recorded; inspect receipt before manual recovery";
     } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
@@ -63,8 +64,11 @@ try {
   writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
   // Reporting must not depend on another successful filesystem write. The
   // durable lock can conservatively lag a known gh result when save() fails.
-  const reportPartial = () => {
-    console.error(`partial post: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
+  const reportPublication = () => {
+    const headline = receipt.successful.length === 0 ? "no confirmed posts"
+      : receipt.successful.length === receipt.total ? "all posts confirmed, receipt finalization failed"
+      : "partial post";
+    console.error(`${headline}: ${receipt.successful.length}/${receipt.total}; successful chunk indices ${JSON.stringify(receipt.successful)}; receipt ${receiptPath}; failed/uncertain chunk ${receipt.pending}; refusing automatic retry`);
     console.error(`in-memory receipt (durable receipt may lag): ${JSON.stringify(receipt)}`);
   };
   try {
@@ -83,7 +87,7 @@ try {
       if (posted.error || posted.status !== 0) {
         receipt.status = "failed";
         save();
-        reportPartial();
+        reportPublication();
         if (posted.error) console.error(posted.error.message);
         process.exitCode = posted.status || 2;
         break;
@@ -94,7 +98,7 @@ try {
       save();
     }
   } catch (error) {
-    reportPartial();
+    reportPublication();
     throw error;
   }
 } catch (error) {
