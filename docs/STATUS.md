@@ -20,6 +20,15 @@ fixtures fail on OLD (16 failed / 111 passed); four named mutants are killed
 (C1 label backtrack, C2 full equality, X1 Markdown bypass, C4 heading-only clause).
 Independent delta review and exact-head CI remain conductor-owned; C5 stays deferred.
 
+PR #376 repair round 2/3 addresses D1 only: the operative Codex posting lead-in
+now delegates to the shared targeted-substitution rule, rather than prescribing
+global HEAD/MAIN replacement. Local prose/deletion regression and a named stale
+lead-in mutant pin that delegation; executable fixtures show targeted substitution
+rejects `Reviewed head HEAD` while global substitution corrupts the regex and
+accepts it. OLD fails first (2 failed / 128 passed). C1–C4/X1 stay independently
+closed; D2 (#377), D3 and C5 remain deferred. Focused delta review and exact-head
+CI remain conductor-owned.
+
 
 Current roadmap row: user-directed shadow provenance checker (issue #319, PR #323), repair round 1 implemented pending focused review and exact-head CI/landing. No next row authorized here; continuation order remains ROADMAP §5.
 

@@ -202,3 +202,39 @@ for (const reviewer of ["claude", "codex"]) {
     for (const body of ["", `${heading("c".repeat(40))}\nverdict`]) expect(run(body, "bypass").status).toBe(0);
   });
 }
+
+// D1: the local Codex lead-in must not override the shared targeted-substitution rule.
+const codexSubstitutionRule = 'Apply the same targeted substitution described above (only the `"HEAD"` shell argument and canonical heading spans) with the same recorded full SHAs:';
+const staleCodexSubstitutionRule = "Replace HEAD and MAIN below with the same recorded full SHAs:";
+const checkCodexSubstitution = (text: string) => {
+  const lead = section(text, "For Codex, in the posting call", "```\nCODEX_MODEL=").replace(/\s+/g, " ");
+  expect(lead).toContain(codexSubstitutionRule);
+  expect(lead).not.toContain(staleCodexSubstitutionRule);
+};
+it("D1 Codex operative lead-in delegates only targeted substitution", () => checkCodexSubstitution(read("topic")));
+it("D1-stale-Codex-lead-in mutant rejects conflicting prose even with appended correction", () => {
+  const text = read("topic");
+  checkCodexSubstitution(text);
+  const mutant = text.replace(codexSubstitutionRule, staleCodexSubstitutionRule);
+  expect(mutant).not.toBe(text);
+  expect(() => checkCodexSubstitution(mutant + `\n${codexSubstitutionRule}`)).toThrow();
+});
+it("D1 global substitution corrupts Codex validation; targeted substitution rejects literal Reviewed head HEAD", () => {
+  const out = mkdtempSync(join(tmpdir(), "codex-substitution-"));
+  try {
+    writeFileSync(join(out, "codex-model.txt"), "gpt-test");
+    writeFileSync(join(out, "codex-trio.md"), "independent proof");
+    const source = "CODEX_MODEL=$(cat" + section(read("topic"), "```\nCODEX_MODEL=$(cat", "```");
+    const head = "a".repeat(40), main = "b".repeat(40);
+    const targeted = source.replaceAll("<OUT>", out).replaceAll("— head HEAD — merged with origin/main MAIN — full", `— head ${head} — merged with origin/main ${main} — full`).replace('"HEAD" >', `"${head}" >`);
+    const global = source.replaceAll("<OUT>", out).replaceAll("HEAD", head).replaceAll("MAIN", main);
+    expect(targeted.match(/node -e '[^']*'/g)).toEqual(source.match(/node -e '[^']*'/g));
+    expect(global.match(/node -e '[^']*'/g)).not.toEqual(source.match(/node -e '[^']*'/g));
+    for (const [claim, expected] of [[head, 0], ["HEAD", 2]] as const) {
+      writeFileSync(join(out, "codex.md"), `Reviewed head ${claim}\nverdict\n`);
+      expect(spawnSync("/bin/sh", ["-c", targeted]).status).toBe(expected);
+    }
+    expect(spawnSync("/bin/sh", ["-c", global]).status).toBe(0);
+    expect(readFileSync(join(out, "codex-comment.md"), "utf8")).toContain("Reviewed head HEAD\nverdict");
+  } finally { rmSync(out, { recursive: true, force: true }); }
+});

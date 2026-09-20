@@ -272,7 +272,7 @@ node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"u
 [ "$(head -1 "<OUT>/claude-comment.md")" = "$CLAUDE_HEADING" ] || exit 2
      ```
      For Codex, in the posting call read the validated model file (never infer the model from
-     the verdict text). Replace HEAD and MAIN below with the same recorded full SHAs:
+     the verdict text). Apply the same targeted substitution described above (only the `"HEAD"` shell argument and canonical heading spans) with the same recorded full SHAs:
      ```
 CODEX_MODEL=$(cat "<OUT>/codex-model.txt")
 node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const expected=process.argv[2]; const claimText=s.replace(/[`*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:head|reviewed)(?:\s+(?:SHA|commit|head))*\s*[:=]?\s*([0-9a-f]{7,40}|HEAD)\b/gi)]; if(claims.some(m=>{const c=m[1].toLowerCase(); return c==="head" || c.length<7 || !expected.toLowerCase().startsWith(c);})) process.exit(2); const body=s.replace(/^(?:[ \t]*\r?\n|## External review[^\n]*(?:\n|$))*/, ""); if(!body.trim() || body.trim().split(/\r?\n/).every(l=>!l.trim() || /^#+(?:\s|$)/.test(l))) process.exit(2); process.stdout.write(s);' "<OUT>/codex.md" "HEAD" > "<OUT>/codex-validated.md" || exit 2
