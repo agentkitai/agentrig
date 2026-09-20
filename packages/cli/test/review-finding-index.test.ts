@@ -47,3 +47,19 @@ it.each(["## High-level summary", "## Low-risk observations", "### P1 planning n
 it.each([" ### HIGH: Actual", "  ### F1 — HIGH — Actual", "   ### [P1] Actual", "### **LOW**: Actual", "# CRITICAL: Actual"])("retains real and indented ATX bytes %s", heading => {
   expect(findingIndex(url, { html_url: url, body: heading })).toEqual([{ comment: url, heading }]);
 });
+
+// Unsupported severity openings must not vanish from the disposition ledger.
+it.each([
+  "### HIGH Something", "### MEDIUM Something else", "## LOW Vacuous assertion",
+  "HIGH", "### LOW", "### CRITICAL", "### P1", "P1 Unsanitized tool emit",
+  "### P1 prose following", "   ### **HIGH** Unsupported", "### HIGH: indexed\n### LOW Missing delimiter",
+])("C1 fails closed on unsupported severity opening %s", body => {
+  expect(() => findingIndex(url, { html_url: url, body })).toThrow(/unindexed finding/);
+});
+it.each([
+  "### High-level summary of HIGH findings", "### HIGHLIGHTS: summary", "### LOWER: summary",
+  "### P1 planning notes", "### P1 planning notes for release",
+  "> ### HIGH Unsupported", "```md\n### HIGH Unsupported\n```",
+])("C1 preserves ordinary prose and example exclusion %s", body => {
+  expect(findingIndex(url, { html_url: url, body })).toEqual([]);
+});

@@ -26,9 +26,13 @@ export function findingIndex(url, comment) {
     // Strip only Markdown's permitted ATX indentation; preserve original bytes.
     const candidate = line.replace(/^ {0,3}#{1,6} +/, '');
     const finding = /^(?:[A-Z]\d+\s+[—–-]\s+)?(?:\*\*)?(?:(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])(?:\*\*)?\s*(?::|—|–|-(?=\s)|,\s*(?:blocking|non-blocking)\s*—)|\[(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\](?:\*\*)?\s+\S)/i.test(candidate);
+    // ALL-CAPS openings are finding attempts even without a supported delimiter.
+    // Priority planning sections are the explicit prose exception, not all P1 prose.
+    const unsupportedOpening = /^(?:\*\*)?(?:HIGH|MEDIUM|LOW|CRITICAL|P[0-3])\b/.test(candidate)
+      && !/^P[0-3] planning notes(?:\s|$)/.test(candidate);
     if (finding) {
       findings.push({ comment: url, heading: line });
-    } else if (!/^\s*>/.test(line) && /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line)) {
+    } else if (!/^\s*>/.test(line) && (unsupportedOpening || /(?:\bF\d+\b.*\b(?:HIGH|MEDIUM|LOW|CRITICAL)\b|\[P\d+\]|^\s*(?:#{1,6}\s+)?(?:HIGH|MEDIUM|LOW|CRITICAL)\s*[:—])/i.test(line))) {
       throw new Error(`unindexed finding in ${url}: ${line}`);
     }
   }
