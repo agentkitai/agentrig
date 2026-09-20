@@ -10,14 +10,16 @@ import { findingIndex } from "../../../scripts/review-finding-index.mjs";
 
 function fixtureConfig(dir: string) {
   mkdirSync(join(dir, ".agentrig"), { recursive: true });
+  writeFileSync(join(dir, "large-ledger"), "Conductor ledger: lossless Unicode and multi-chunk fixture evidence requires this size.");
   writeFileSync(join(dir, ".agentrig/config.json"), JSON.stringify({ reviewers: { Codex: { adapter: "codex-cli", model: "gpt-5.5" }, "Claude Code": { adapter: "claude-cli", model: "claude-opus-5" } } }));
 }
 const helper = fileURLToPath(new URL("../../../scripts/post-review-comment.mjs", import.meta.url));
 const head = "a".repeat(40), main = "b".repeat(40);
 const heading = `## External review — Codex (gpt-5.5) — head ${head} — merged with origin/main ${main} — full`;
-function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex", reviewers?: object) {
+function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?: string, damage = false, ghExit = 0, reviewer = "Codex", reviewers?: object, sizeReason?: string) {
   const dir = mkdtempSync(join(tmpdir(), "post-review-"));
   fixtureConfig(dir);
+  if (sizeReason !== undefined) writeFileSync(join(dir, "size-ledger"), sizeReason);
   if (reviewers) writeFileSync(join(dir, ".agentrig/config.json"), JSON.stringify({ reviewers }));
   try {
     writeFileSync(join(dir, "body"), body);
@@ -28,9 +30,9 @@ function run(body: string, model = "gpt-5.5\n", sha = head, base = main, source?
       writeFileSync(join(dir, "head"), "#!/bin/sh\nprintf 'damaged\\n'\n");
       chmodSync(join(dir, "head"), 0o755);
     }
-    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source);
+    if (source !== undefined) writeFileSync(join(dir, "helper.mjs"), source.replaceAll('"./review-finding-index.mjs"', JSON.stringify(new URL("../../../scripts/review-finding-index.mjs", import.meta.url).href)));
     const result = spawnSync(process.execPath, [source === undefined ? helper : join(dir, "helper.mjs"), "372", reviewer, join(dir, "model"), join(dir, "body"), sha, base, join(dir, "comment")], {
-      cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+      cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: sizeReason === undefined ? "" : join(dir, "size-ledger"), PATH: `${dir}:${process.env.PATH}` },
     });
     return { status: result.status, stderr: result.stderr,
       posts: Array.from({ length: 20 }, (_, i) => join(dir, `comment.${i + 1}`)).filter(existsSync).map(p => readFileSync(p, "utf8")),
@@ -138,7 +140,7 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
     writeFileSync(join(dir, "model"), "gpt-5.5");
     writeFileSync(join(dir, "gh"), `#!/bin/sh\nnode -e 'const fs=require("fs");fs.appendFileSync("${dir}/posts",JSON.stringify(fs.readFileSync(process.argv[1],"utf8"))+"\\n")' "$5"\n`);
     chmodSync(join(dir, "gh"), 0o755);
-    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment"), join(dir,"proof")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    const result = spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment"), join(dir,"proof")], {cwd: dir, encoding:"utf8", env:{...process.env, REVIEW_LARGE_BODY_LEDGER:join(dir,"large-ledger"), PATH:`${dir}:${process.env.PATH}`}});
     expect(result.status, result.stderr).toBe(0);
     const posts = readFileSync(join(dir,"posts"),"utf8").trim().split("\n").map(s => JSON.parse(s) as string);
     expect(posts.length).toBeGreaterThan(1);
@@ -166,7 +168,7 @@ case "$5" in *.2) exit 7;; esac
 exit 0
 `);
     chmodSync(join(dir, "gh"), 0o755);
-    const invoke = () => spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment")], {cwd: dir, encoding:"utf8", env:{...process.env, PATH:`${dir}:${process.env.PATH}`}});
+    const invoke = () => spawnSync(process.execPath, [helper, "372", "Codex", join(dir,"model"), join(dir,"body"), head, main, join(dir,"comment")], {cwd: dir, encoding:"utf8", env:{...process.env, REVIEW_LARGE_BODY_LEDGER:join(dir,"large-ledger"), PATH:`${dir}:${process.env.PATH}`}});
     const first = invoke();
     expect(first.status).toBe(7);
     expect(first.stderr).toContain("partial post: 1/4; successful chunk indices [1]");
@@ -216,7 +218,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(state === "interrupted");
     expect(first.status).toBe(state === "complete" ? 0 : 2);
     const receiptPath = join(dir, "comment.receipt.json");
@@ -269,7 +271,7 @@ require('node:module').syncBuiltinESMExports();
 `);
     const invoke = (interrupt = false) => spawnSync(process.execPath,
       [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
-      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+      { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     const first = invoke(true);
     expect(first.status).toBe(2);
     expect(first.stderr).toContain(failure === "head-assertion" ? "canonical first-line assertion failed" : `injected ${failure}`);
@@ -303,7 +305,7 @@ it.each(["head", "model"])("R390 refuses a complete receipt for a different %s w
     const priorHeading = changed === "head" ? heading.replace(head, "c".repeat(40)) : heading.replace("gpt-5.5", "another-model");
     const saved = JSON.stringify({ heading: priorHeading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt heading differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -338,7 +340,7 @@ it("R401 refuses a complete receipt for a different PR with the same canonical h
     chmodSync(join(dir, "gh"), 0o755);
     const saved = JSON.stringify({ pr: "1", heading, status: "complete", successful: [1], pending: null, total: 1 });
     writeFileSync(join(dir, "comment.receipt.json"), saved);
-    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const r = spawnSync(process.execPath, [helper, "2", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")], { cwd: dir, encoding: "utf8", env: { ...process.env, REVIEW_LARGE_BODY_LEDGER: join(dir, "large-ledger"), PATH: `${dir}:${process.env.PATH}` } });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("receipt PR differs from current review");
     expect(r.stderr).not.toContain("already complete; no retry needed");
@@ -351,7 +353,7 @@ it("keeps boundary findings whole and indexed in oversized posts", () => {
   const capacity = 60000 - heading.length - 2 - (2 * 5 + 7);
   const finding = "### HIGH: Boundary finding";
   const body = "x\n".repeat(Math.floor((capacity - 10) / 2)) + finding + "\n" + "tail\n".repeat(100);
-  const result = run(body);
+  const result = run(body, undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, "Conductor ledger: boundary probe fixture is deliberately large.");
   expect(result.status, result.stderr).toBe(0);
   const indexed = result.posts.flatMap((body, i) => {
     const url = `https://github.com/agentkitai/agentrig/pull/1#issuecomment-${i + 1}`;
@@ -360,4 +362,57 @@ it("keeps boundary findings whole and indexed in oversized posts", () => {
   });
   expect(indexed.map((f: { heading: string }) => f.heading)).toEqual([finding]);
   expect(result.posts.map((p, i) => p.slice(`${heading}\n\n(${i + 1}/${result.posts.length})\n\n`.length)).join("")).toBe(body);
+});
+
+const echoPhrases = [
+  "You are the reviewer of record, not the author and not the merger.",
+  "A pass verdict lists what you probed and which mutants you ran",
+  "Report which of the PR body's claims you verified, and any you could not.",
+];
+it("M-contract-drift: pins literal echo phrases to current review skill", () => {
+  const contract = readSkillText(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url));
+  for (const phrase of echoPhrases) expect(contract).toContain(phrase);
+});
+it.each(echoPhrases)("M-echo-gate: rejects instruction echo before gh: %s", phrase => {
+  const result = run(`VERDICT: PASS\nReviewed head ${head}\n${phrase}\n`);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("reviewer body echoes instructions; not a verdict");
+  expect(result.args).toBeUndefined();
+});
+it("M-quoted-contract: allows explicit contract quotation inside a real finding only", () => {
+  const body = `VERDICT: FAIL\nReviewed head ${head}\n### LOW: Missing evidence\nscripts/post-review-comment.mjs:30 lacks evidence; fix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+  expect(run(`VERDICT: PASS\n> ${echoPhrases[1]}\n`).args).toBeUndefined();
+  expect(run(body + echoPhrases[0]).args).toBeUndefined();
+});
+it("M-size-gate: large genuine review requires nonempty conductor ledger before gh", () => {
+  const body = `VERDICT: PASS\nReviewed head ${head}\n` + "Evidence from targeted probe.\n".repeat(2000);
+  for (const reason of [undefined, " \n"]) {
+    const result = run(body, undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, reason);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("conductor ledger size explanation");
+    expect(result.args).toBeUndefined();
+  }
+  const result = run(body, undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, "Conductor ledger: 2000 targeted probe results justify size.");
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posts.map(post => post.replace(/^## External review[^\n]*\n\n(?:\(\d+\/\d+\)\n\n)?/, "")).join("")).toBe(body);
+});
+it("M-markerless-provenance: preserves Full review comments prefix verdict and stale-head evidence", () => {
+  const body = `VERDICT: FAIL\nReviewed head ${"c".repeat(40)}\nFull review comments:\n### HIGH: Broken gate\ncodex\nTail finding evidence.\n`;
+  expect(run(body).posted).toBe(`${heading}\n\n${body}`);
+});
+it("M-codex-tail: extracts transcript verdict without truncating standalone codex within it", () => {
+  const verdict = `VERDICT: PASS\nReviewed head ${head}\ncodex\nFinal evidence.\n`;
+  const result = run(`OpenAI Codex\nuser\n${echoPhrases[0]}\nthinking\nprobe\ncodex\n${verdict}`);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.posted).toBe(`${heading}\n\n${verdict}`);
+});
+it("counts UTF-8 bytes at the 40 KiB body boundary and records the size rationale", () => {
+  const body = "x".repeat(40 * 1024);
+  expect(run(body).status).toBe(0);
+  expect(run(body + "x").stderr).toContain("conductor ledger size explanation");
+  expect(run("😀".repeat(11000)).stderr).toContain("conductor ledger size explanation");
+  const result = run(body + "x", undefined, undefined, undefined, undefined, false, 0, "Codex", undefined, "Conductor ledger: intentional 40 KiB boundary fixture.");
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(result.receipt!).sizeExplanation).toBe("Conductor ledger: intentional 40 KiB boundary fixture.");
 });

@@ -253,9 +253,22 @@ For each recorded row, in order:
      For each successful slot, apply targeted substitution only to shell SHA arguments and paths;
      never edit the validator source or guess the model from the verdict. Never globally replace
      HEAD/MAIN in the node program. Run this gate:
+     Before posting, use the current adapter verdict artifact (last-message file or structured result),
+     not prompt/tool logs. The shared finding-index helper extracts supported legacy artifacts and rejects
+     literal review-contract echoes with `reviewer body echoes instructions; not a verdict`.
+     A legitimate contract quotation may appear as a Markdown blockquote inside an indexed finding;
+     keep its scenario and fix unquoted. Markerless Full review comments preserve preceding verdict/head
+     provenance; a standalone adapter role-name line inside the verdict is not an extraction boundary.
+     Above 40 KiB of reviewer-body UTF-8 bytes, first record a nonempty size explanation in the conductor
+     ledger and export `REVIEW_LARGE_BODY_LEDGER` to that ledger file before posting. The posting receipt
+     retains the explanation; preserve lossless genuine multi-chunk reviews, never summarize to fit.
+
+
      ```sh
+     # Extract with the slot's configured adapter id (including api:<name>).
+     node <REPO>/scripts/review-finding-index.mjs --extract '<ADAPTER>' '<PREFIX>.md' '<PREFIX>.verdict.md' || exit 2
      # Slot posting gate
-     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const cleaned=s.replace(/^.*\bReviewed head:.*$/gm, "").replace(/[ \t\r\n]+/g, "").trim(); if(!cleaned) process.exit(2); const expected=process.argv[2].toLowerCase(); const first=s.split(/\r?\n/)[0].match(/^Reviewed head: ([0-9a-f]{7,40})[ \t]*$/i); if(!/^[0-9a-f]{40}$/.test(expected) || !first || !expected.startsWith(first[1].toLowerCase())) process.exit(2); let fence; const outside=s.split(/\r?\n/).map(line=>{ if(fence){ if(new RegExp("^ {0,3}"+fence[0]+"{"+fence.length+",}[ \\t]*$").test(line)) fence=undefined; return ""; } const open=line.match(/^ {0,3}(`{3,}|~{3,})/); if(open){ fence=open[1]; return ""; } return line; }).join("\n"); const unquoted=outside.split(/\n[ \t]*\n/).map(paragraph=>paragraph.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g," ")).join("\n\n"); const claimText=unquoted.replace(/[*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)\b(?:\s+(?:SHA|commit|head|at)\b)*\s*[:=]?\s*\b([0-9a-f]{7,40})(?![a-z0-9_])/gi)]; if(claims.some(m=>!expected.startsWith(m[1].toLowerCase()))) process.exit(2); process.stdout.write(s);' "<PREFIX>.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
+     node -e 'const fs=require("node:fs"); const s=fs.readFileSync(process.argv[1],"utf8"); const cleaned=s.replace(/^.*\bReviewed head:.*$/gm, "").replace(/[ \t\r\n]+/g, "").trim(); if(!cleaned) process.exit(2); const expected=process.argv[2].toLowerCase(); const first=s.split(/\r?\n/)[0].match(/^Reviewed head: ([0-9a-f]{7,40})[ \t]*$/i); if(!/^[0-9a-f]{40}$/.test(expected) || !first || !expected.startsWith(first[1].toLowerCase())) process.exit(2); let fence; const outside=s.split(/\r?\n/).map(line=>{ if(fence){ if(new RegExp("^ {0,3}"+fence[0]+"{"+fence.length+",}[ \\t]*$").test(line)) fence=undefined; return ""; } const open=line.match(/^ {0,3}(`{3,}|~{3,})/); if(open){ fence=open[1]; return ""; } return line; }).join("\n"); const unquoted=outside.split(/\n[ \t]*\n/).map(paragraph=>paragraph.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g," ")).join("\n\n"); const claimText=unquoted.replace(/[*_]/g, ""); const claims=[...claimText.matchAll(/\b(?:headsha|head|reviewed)\b(?:\s+(?:SHA|commit|head|at)\b)*\s*[:=]?\s*\b([0-9a-f]{7,40})(?![a-z0-9_])/gi)]; if(claims.some(m=>!expected.startsWith(m[1].toLowerCase()))) process.exit(2); process.stdout.write(s);' "<PREFIX>.verdict.md" "HEAD" > "<PREFIX>.validated.md" || exit 2
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
