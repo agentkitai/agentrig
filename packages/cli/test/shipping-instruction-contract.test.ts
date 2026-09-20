@@ -174,11 +174,7 @@ const cleanupSteps = [
   "3. Persist verdicts, provenance, proof results and failure receipts in the PR before deleting their only local copies.",
   "4. Remove only this pass's recorded owned worktrees, base ref, reviewer temporary roots, any conductor-proof tree and conductor-proof temporary root, and `OUT`; never the author's tree or old unowned scratch.",
 ];
-function normalizeLegacyCleanup(text: string): string {
-  return text.replaceAll("Human cleanup contract (verbatim):", "Human cleanup contract (generalized to declared slots):").replaceAll("conductor-trio", "conductor-proof").replaceAll("the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`", "one recorded owned tree per declared slot and `review-base-NN`").replaceAll("After the initial review pair", "After the initial declared review pass").replaceAll("in addition to both worktrees", "in addition to all owned worktrees").replaceAll("instead of the initial pair", "instead of the initial declared pass");
-}
 function assertCleanup(text: string): void {
-  text = normalizeLegacyCleanup(text);
   expect(text).toContain(`Human cleanup contract (generalized to declared slots):\n\n> ${cleanupRule}`);
   expect(text).toContain(cleanupMapping);
 }
@@ -193,7 +189,7 @@ function assertCleanupOrder(text: string): void {
   expect(section).toContain("For a focused pass remove its one worktree and unique `BASE` instead of the initial declared pass and `review-base-NN`.");
 }
 for (const skill of ["topic", "ship", "dogfood"]) {
-  const text = normalizeLegacyCleanup(readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"));
+  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   it(`${skill} binds cleanup ownership, evidence and order for initial and focused reviews`, () => {
     assertCleanup(text);
     const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove one recorded owned tree per declared slot and `review-base-NN`");

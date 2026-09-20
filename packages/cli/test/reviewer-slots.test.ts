@@ -23,7 +23,7 @@ it("accepts named CLI bindings and absent declaration", () => {
   expect(parse({})).not.toHaveProperty("reviewers");
 });
 const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
-for (const skill of ["topic", "ship", "review", "land"]) {
+for (const skill of ["topic", "ship", "review", "land", "dogfood"]) {
   it(`${skill} uses declared slots and no vendor literals`, () => {
     const text = read(`.agentrig/skills/${skill}/SKILL.md`);
     expect(text).not.toMatch(/claude|codex|opus|gpt-\d/i);
@@ -86,4 +86,11 @@ it("keeps topic posting continuations and adapter fences inside the enclosing Co
   }
   expect(lines.filter(line => line === "     ```sh")).toHaveLength(2);
   expect(lines.filter(line => line === "     ```")).toHaveLength(2);
+});
+
+it("standalone dogfood delegates the entire slot lifecycle without fixed launch/post/cleanup", () => {
+  const text = read(".agentrig/skills/dogfood/SKILL.md");
+  const flow = text.split("## 8.")[1]!.split("## 9.")[0]!;
+  for (const phrase of ["Zero slots", "One slot", "Two slots", "API", "topic §2 step 4", "validated", "Review scratch cleanup"]) expect(flow).toContain(phrase);
+  expect(text).not.toMatch(/review pair|initial pair|both reviews|both trees|CODEX_WT|conductor-trio/);
 });

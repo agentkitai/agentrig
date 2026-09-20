@@ -243,7 +243,7 @@ For each recorded row, in order:
      [ -s "<OUT>/checks.md" ] || exit 2
      [ -s "<PREFIX>.provenance.json" ] || exit 2
      cat "<OUT>/checks.md" "<PREFIX>.provenance.json" > "<PREFIX>.proof.md" || exit 2
-     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json'
+     node <REPO>/scripts/post-review-comment.mjs NN '<SLOT>' '<PREFIX>.model.txt' '<PREFIX>.validated.md' "HEAD" "MAIN" '<PREFIX>.comment.md' '<PREFIX>.proof.md' --config '<WT>/.agentrig/config.json' || exit 2
      ```
      Persist the complete verdict, adapter provenance and check receipts in linked PR comments.
      Large payloads use the helper's canonical bounded chunks and durable posting receipt; never

@@ -57,16 +57,19 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
   try {
     const command = adapter === "claude-cli" ? "claude" : "codex";
     const binary = join(dir, command);
-    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:'VERDICT: PASS'}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], 'VERDICT: PASS');`}\n`);
+    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:'VERDICT: PASS'}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], 'VERDICT: PASS');`}\n`);
     chmodSync(binary, 0o755);
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
     const prompt = join(dir, "prompt"); writeFileSync(prompt, "source bundle; checks green");
-    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}` } });
+    const invoke = (prefix: string) => spawnSync(process.execPath, [runner, config, "custom", prompt, dir, prefix], { encoding: "utf8", env: { ...process.env, PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "parent", TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" } });
     const prefix = join(dir, "out");
     const run = invoke(prefix);
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "argv"), "utf8"))).toEqual(cliAdapters[adapter].template.map((value: string) => value.replace("{model}", "pinned").replace("{lastMessage}", `${prefix}.last`)));
+    const childEnv = JSON.parse(readFileSync(join(dir, "env"), "utf8"));
+    for (const name of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"]) expect(childEnv).not.toHaveProperty(name);
+    expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
     expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
     expect(Date.parse(provenance.finished)).toBeGreaterThanOrEqual(Date.parse(provenance.started));

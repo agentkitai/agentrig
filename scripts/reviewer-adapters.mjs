@@ -78,7 +78,9 @@ export async function main(args) {
     const adapter = cliAdapters[binding.adapter];
     const argv = adapter.template.map(value => value.replace("{model}", binding.model).replace("{lastMessage}", `${prefix}.last`));
     launch = [adapter.command, ...argv];
-    const run = spawnSync(adapter.command, argv, { cwd, input: prompt, encoding: "utf8", env: process.env, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 });
+    const env = { ...process.env };
+    for (const key of ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"]) delete env[key];
+    const run = spawnSync(adapter.command, argv, { cwd, input: prompt, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 });
     writeFileSync(`${prefix}.stdout`, run.stdout ?? "");
     writeFileSync(`${prefix}.stderr`, run.stderr ?? "");
     if (run.error || run.status !== 0) throw new Error(`review adapter failed: ${run.error?.message ?? run.status}`);

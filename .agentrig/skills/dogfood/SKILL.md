@@ -27,11 +27,11 @@ Record `declared checks: none`; land fallback is exact-head CI plus human merge 
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
 
 The independent conductor runs declared checks on the exact review head and must be
-GREEN BEFORE launching the review pair (and before a focused delta reviewer). Give both
-reviewers the named same-head receipts, not builder reasoning. Reviewers inspect code,
+GREEN BEFORE launching the declared slots (and before a focused delta reviewer). Give every declared reviewer
+the named same-head receipts, not builder reasoning. Reviewers inspect code,
 contracts and targeted mutation probes; reviewers do NOT run checks, bootstrap or preflight.
 They may run narrow tests for a specific finding/mutant, never repeat the full declared suite.
-For empty steps give reviewers the explicit none receipt. Keep the two independent code
+For empty steps give reviewers the explicit none receipt. Keep the declared independent code
 reviews and exact-head hosted CI requirements; local conductor proof is not hosted CI.
 
 
@@ -46,23 +46,47 @@ tends to reproduce the failure that created it.
 
 ## Initial full review heading contract
 
-The two initial external review comments must each start with this exact heading form:
-`## External review — <reviewer> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
-Substitute the actual reviewer, model, full reviewed PR head SHA and full origin/main SHA.
-The conductor (or standalone dogfood author) posts one for Claude Code and one for Codex.
-No alternate heading is valid for posting,
-acceptance or rerun detection. Require the complete heading, not just its prefix or a SHA
-elsewhere in the body. This form is for the initial full pair, not focused delta verdicts.
+Resolve the project's declared reviewer slots from `.agentrig/config.json` at the PR head,
+not home config or runtime provider defaults. Missing `reviewers` or `{}` means zero slots.
+Config declares 0, 1 or 2 named slots, each with an adapter id and a pinned model; no check capability flag.
+Validate config before dispatch with `parseConfigText`; never replace project pins from local preferences.
+Use `scripts/reviewer-adapters.mjs` for CLI command templates, model extraction and failed/empty-run detection.
+An `api:<name>` adapter references the existing `providers.<name>` entry, whose model must equal
+the slot's pinned model; it duplicates no endpoints, credentials or routing. See shipping policy §3.
+
+Each declared slot's initial comment must start with:
+`## External review — <slot> (<model>) — head <SHA> — merged with origin/main <MAIN> — full`
+Substitute the slot name, asserted model, full reviewed PR head SHA and full origin/main SHA.
+The initial heading model must equal the slot's pinned model. A different model makes this a
+missing required initial review, not a receipt. Require the complete heading, not just a prefix
+or SHA in the body. Post with `scripts/post-review-comment.mjs` using the slot name and the
+reviewed config path; never compose an alternate heading inline. Persist per-adapter provenance
+(launch/provider entry, model assertion source, start/end, exit, head/main and worktree) with the verdict.
+Never infer the asserted model from reviewer prose. Truncation, failed runs, ambiguous assertion,
+empty output or pin mismatch are not completed reviews. Retry once with fresh artifacts, then halt.
 
 For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.
 
+With zero slots skip external reviews and record `External review: none declared` in the ledger:
+builder → declared checks → exact-head CI → land, subject to authorization and all other gates.
+With zero slots use the author’s named check receipts; no conductor-review preparation is required.
+With one slot launch only it; that same slot is the focused-delta reviewer. With two slots launch
+both independently and use one independent focused-delta reviewer for material repairs.
+Land requires only declared headings, and compares each asserted model against that slot's pin.
+Reviewers share no context with the builder and should differ by vendor or at least model.
+The independent conductor's same-head declared checks must be GREEN BEFORE launching any reviewer;
+pass named receipts as inputs, never builder reasoning. For empty steps pass the explicit none receipt.
+Reviewers judge code only; reviewers do NOT run checks, bootstrap or preflight. Optional reviewer-owned
+probes are evidence for a finding, not a substitute for conductor proof. Hosted CI overlaps reviews
+and is required only at landing. Changed heads invalidate prior same-head check receipts.
+
 ## Review scratch cleanup
 
-Human cleanup contract (verbatim):
+Human cleanup contract (generalized to declared slots):
 
-> After the initial review pair and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to both worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
+> After the initial declared review pass and after any focused delta review, the conductor removes the review output directory (`OUT`) and the reviewer temporary roots in addition to all owned worktrees and the `review-base-NN` branch; builders and fixers remove their own proof TMPDIR after recording its results in the PR body. Removal happens only after joining every job and verifying restored tracked/index state, and never touches the author's tree.
 
-Operative resource mapping: initial reviews remove the pass’s recorded owned `WT`, `CODEX_WT` and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-trio tree and conductor-trio temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
+Operative resource mapping: initial reviews remove one recorded owned tree per declared slot and `review-base-NN`; focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`. Both also remove any recorded owned conductor-proof tree and conductor-proof temporary root (including extra exact-head proof trees). Both remove their recorded owned `OUT` and reviewer temporary roots only after all jobs are joined, tracked/index restoration is verified, and evidence is persisted.
 
 Use topic's **Review scratch cleanup** sequence for every initial and focused pass, including failure/retry/staleness paths. The standalone dogfood author assumes conductor cleanup duties for its reviews. Builders/fixers record command exit codes, test counts, fail-first/mutation results and times in the PR body, join every proof job, verify restored tracked/index state, then, after the branch is pushed and handoff is recorded in the PR body, remove their recorded owned worktree and proof TMPDIR under dogfood §1; do not wait for hosted CI. Keep proof TMPDIR outside Git ancestry per docs/TESTING.md.
 
@@ -182,73 +206,31 @@ wait for hosted CI. Standalone authors record the phase handoff in the PR body, 
 remove the owned builder worktree and proof TMPDIR under §1 before starting §8
 while CI runs; join the gates at landing.
 
-## 8. Two external reviews, in parallel, as background jobs
+## 8. Independent reviews — standalone only
 
-**Under `ship` or `topic`, skip this section entirely** — as a builder, a continuation builder,
-or a fixer. The conductor runs the external review pass (`topic` §2 step 4) after you stop; that
-review is the one that counts. Running your own here doubles the spend and, worse, turns your fix
-into a private review loop the conductor cannot see: the R4a fixer spent thirty of its fifty-four
-minutes waiting on three rounds of self-arranged reviews and widened its diff on their findings,
-with the train's own external review pass still to come. A topic child's job ends at the push and the report.
+If this is a child run, **skip this step** and hand off to the conductor at step 10.
+Standalone runs use the **declared reviewer slots** in `.agentrig/config.json` as the
+sole selection authority; never infer reviewers from CLI names or credentials.
+Zero slots: record the no-review outcome and launch/post/clean no reviewer artifacts.
+One slot: run exactly that slot. Two slots: run exactly those slots concurrently.
+Run every declared slot independently, including
+custom API slots. Resolve each slot's adapter and pinned model; unknown adapters fail
+closed. No undeclared fallback reviewer may be substituted.
 
-Follow topic §2 step 4's pre-launch conductor checks and this operative policy (overriding shipping policy §3): the independently run,
-same-head conductor checks supply the named checks evidence in the initial comment provenance.
+Follow **topic §2 step 4** verbatim for the whole per-slot lifecycle: freeze HEAD/MAIN,
+create a detached worktree per slot, build its fresh-context prompt with the exact-head
+receipt, launch through `scripts/reviewer-adapters.mjs`, wait for all declared jobs,
+validate each verdict into `<PREFIX>.validated.md`, then post **that validated file**
+through `scripts/post-review-comment.mjs` with provenance and receipt attachments.
+Every validation or posting failure exits 2 before any success or merge gate.
+Use each returned slot-specific comment URL; never fabricate a fixed pair of URLs.
+Apply the shared Review scratch cleanup contract below to all declared slots only,
+including API jobs and scratch artifacts. For zero slots record cleanup as not applicable.
 
-For initial posting, preserve topic's stale SHA/verdict validation gates and validated model
-files, then invoke these helper commands verbatim (replace only shell arguments NN, HEAD,
-MAIN, <WT> and <OUT> with the recorded values; never globally substitute validator source):
-```sh
-cd "<WT>" && node scripts/post-review-comment.mjs NN "Claude Code" "<OUT>/claude-model.txt" "<OUT>/claude-validated.md" "HEAD" "MAIN" "<OUT>/claude-comment.md" || exit 2
-cd "<WT>" && node scripts/post-review-comment.mjs NN "Codex" "<OUT>/codex-model.txt" "<OUT>/codex-validated.md" "HEAD" "MAIN" "<OUT>/codex-comment.md" "<OUT>/codex-trio.md" || exit 2
-```
-<WT> is the recorded absolute reviewer-owned reviewed worktree, never the author checkout.
-These commands work from an unrelated cwd. Do not compose headings inline or post manually. The helper's exact `head -1` acceptance
-runs before `gh pr comment NN --body-file`; nonzero stops posting. Land gate unchanged.
-
-The standalone dogfood author assumes the conductor role in fresh reviewer-owned trees;
-its author-tree proof is not independent evidence. Preserve each reviewer environment limitation
-and require the author's declared checks, the independent declared checks and exact-head CI green for landing.
-Never halt solely because Codex cannot run the suite; actual failures and missing proof
-still follow the shared landing gates.
-
-After §7's persisted phase handoff and builder cleanup, conduct reviews from
-outside the removed builder tree using fresh reviewer-owned worktrees.
-
-Start both with `bash` `background: true` and poll with `bash_job` using `waitMs` (never a sleep
-loop, never a foreground command that a timeout can kill):
-
-Prepare separate reviewer-owned worktrees at the recorded PR head, with conductor-prepared dependencies,
-build outputs and command-local TMPDIRs, as in topic §2 step 4. Never run a mutation probe in
-the author's tree or a tree another reviewer is reading. Keep outputs outside both trees;
-join both jobs and their subprocesses and verify unchanged HEADs and restored tracked/index
-state before accepting verdicts. The conductor owns removal of both trees after joining.
-
-- `codex review` over the full diff against `origin/main`.
-- A `claude` review of the same diff, pinned to Opus and given the tools to VERIFY, not just read:
-  `cd <WT> && TMPDIR=<OUT>/claude-tmp claude -p --model claude-opus-5 --permission-mode dontAsk --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --disallowedTools 'Bash(git push),Bash(git push *),Bash(gh pr merge),Bash(gh pr merge *)' --output-format json --no-session-persistence "…"`.
-  Opus is strong enough for adversarial code review at a fraction of the cost, and the pin keeps
-  review spend independent of whatever model the main session happens to be running. Without
-  `--allowedTools` including Bash the reviewer cannot run vitest or probe built output, and its
-  first line becomes "I could not execute the test suite" — a read-only review that verifies
-  nothing, which the brief below explicitly forbids. `dontAsk` denies unallowed requests without
-  prompting; unlike plan mode it permits the authorized tests and mutations. Never use a
-  permission bypass, change permission settings, or relax required checks after a denial.
-  Bash is not a filesystem sandbox: confine work to the owned review tree and temporary root.
-  Direct push/merge denials are defense in depth, not containment against scripts, alternate
-  spellings or shared Git metadata; private-fixture Git operations remain available for tests.
-  Require no children/auxiliary models and assert sole `claude-opus-5` modelUsage using topic's
-  extraction command before accepting the result; record the complete reviewed SHA.
-
-Brief each reviewer to: assume the author is wrong, verify every finding against the actual code
-before reporting it, and report file:line + severity + a concrete failure scenario + a fix.
-
-**Under `ship` or `topic`, skip this section.** A builder spawned by either conductor stops at
-the PR (§7) and does NOT run external reviews:
-the conductor runs every declared reviewer slot itself, in separate reviewer-owned worktrees, against the PR head
-(`topic` §2 step 4). Children may run on a local model and the review must never share the
-builder's model; a child running the pair too would double every pass for no extra eyes. Your
-task text says when you are a child. Standalone dogfood keeps both reviews because nothing else
-reviews it.
+Reviewers never run full declared checks or edit the author's worktree. A reviewer that
+finds a missing proof returns to the author for a new receipt. If any declared review
+finds a genuine bug, repair it, refresh the exact-head receipt, and refresh those reviews;
+all declared reviews must be resolved before the next step.
 
 ## 9. Disposition findings and repair blockers
 
@@ -265,7 +247,7 @@ standalone author) classifies the whole delta: ONE independent focused review fo
 changes, self-verified evidence for mechanical changes. No per-commit full/dual review loop.
 Use topic §3's **Cover the delta** procedure for isolated preparation, conductor proof, launch,
 provenance and cleanup; the standalone author owns that procedure without becoming a topic train.
-Carry the initial pair and subsequent delta evidence through the current head. At most three
+Carry the initial declared slots and subsequent delta evidence through the current head. At most three
 repair rounds; unresolved blockers halt, never become landable just by filing issues.
 Deferred non-blocking defects require issues; advisory suggestions do not.
 

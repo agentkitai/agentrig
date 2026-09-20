@@ -46,3 +46,33 @@ it.each(["topic", "ship", "land", "dogfood"])("R379 %s requires all chunks and k
   // R379-out-of-section-copy: an appendix cannot satisfy the operative gate.
   expect(() => check(text.replace(completeness, "") + `\n${completeness}`)).toThrow();
 });
+
+import { chmodSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+it.each(["valid", "stale", "overlong", "heading", "missing-checks", "missing-provenance", "helper-failure"])("executes actual topic posting gate and helper: %s", mode => {
+  const dir = mkdtempSync(join(tmpdir(), "slot-gate-"));
+  try {
+    const head = "a".repeat(40), main = "b".repeat(40), prefix = join(dir, "slot");
+    const repo = fileURLToPath(new URL("../../../", import.meta.url));
+    const gate = section(read(".agentrig/skills/topic/SKILL.md"), "# Slot posting gate\n", "```");
+    expect(gate).toContain("'<PREFIX>.validated.md'");
+    expect(gate.trim()).toMatch(/\|\| exit 2$/);
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\necho posted >> '${dir}/posted'\n${mode === "helper-failure" ? "exit 1" : "echo https://example.test/comment"}\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ reviewers: { Custom: { adapter: "api:peer", model: "pin" } } }));
+    writeFileSync(`${prefix}.model.txt`, "pin");
+    const body = mode === "stale" ? `Reviewed at ${main}` : mode === "overlong" ? `head ${head}a` : mode === "heading" ? "## title\n" : `Reviewed at ${head}\nVERDICT: PASS\n`;
+    writeFileSync(`${prefix}.md`, body);
+    if (mode !== "missing-checks") writeFileSync(join(dir, "checks.md"), "green checks");
+    if (mode !== "missing-provenance") writeFileSync(`${prefix}.provenance.json`, "{}");
+    const command = gate.replaceAll("<REPO>", repo).replaceAll("<OUT>", dir).replaceAll("<PREFIX>", prefix).replaceAll("<WT>/.agentrig/config.json", join(dir, "config.json")).replaceAll("'<SLOT>'", "'Custom'").replaceAll('"HEAD"', `"${head}"`).replaceAll('"MAIN"', `"${main}"`).replace(".mjs NN ", ".mjs 414 ");
+    const run = spawnSync("/bin/sh", ["-c", `${command}\nprintf gate-complete`], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    expect(run.status, run.stderr).toBe(mode === "valid" ? 0 : 2);
+    expect(run.stdout.includes("gate-complete")).toBe(mode === "valid");
+    expect(existsSync(join(dir, "posted"))).toBe(mode === "valid" || mode === "helper-failure");
+    if (mode === "valid") expect(readFileSync(`${prefix}.comment.md`, "utf8")).toContain(body.trim());
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

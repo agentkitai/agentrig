@@ -2,6 +2,8 @@
 
 ## Declared reviewer slots (#396)
 
+PR #414 repair round 2: CLI reviewer children strip Claude nesting variables while preserving the inherited environment; standalone dogfood follows declared-slot launch/post/cleanup; cleanup tests inspect actual skill text; topic posts validated verdicts with a fail-closed helper gate and executable regression coverage. Arbiter #415 and deferred findings #416–421 remain outside this repair.
+
 - Project-only zero, one or two named adapter/model declarations; CLI adapters live in scripts,
   API bindings reuse existing named providers. No core workflow or event changes.
 - Conductor independent same-head declared checks gate code-only reviewers; hosted CI overlaps
