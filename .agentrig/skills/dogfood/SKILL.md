@@ -22,6 +22,7 @@ runner/worktree and TMPDIR for bootstrap, preflight and every step. Optional cou
 metadata never overrides the exit code. Receipts, conductor reports and fixer handoffs list
 steps by name, not a hard-coded trio. A changed head invalidates prior same-head receipts.
 
+Zero, one or many named steps are supported; receipts follow the resolved declaration.
 Empty steps means NO local checks, including bootstrap and preflight: do not execute either.
 Record `declared checks: none`; land fallback is exact-head CI plus human merge authorization,
 not a fabricated local pass. Missing CI or authorization cannot be waved through.
@@ -196,7 +197,7 @@ Never skip, disable or quarantine tests to get green.
 
 ## 6. Commit and push
 
-- Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared-check trio in the PR.
+- Before every push, builders and fixers must rerun all touched instruction-contract and skill-text test files against a CRLF copy of the entire `.agentrig/skills` tree (normalize LF before converting to CRLF), point `AGENTRIG_TEST_SKILLS_ROOT` at that copy under the proof `TMPDIR` outside Git ancestry, and record start/end times, exact commands, exits and test counts next to the declared check receipts in the PR.
 
 - Clear message: what changed, why, anything surprising. No model identifiers in commits, PR
   titles/bodies, or code comments.

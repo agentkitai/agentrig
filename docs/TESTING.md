@@ -171,6 +171,7 @@ not an empty success. A missing file returns undefined even with a selected prof
 not permission to execute it: display source/root, selected profile and commands and retain
 normal project trust, permission prompts and sandbox checks.
 
+Zero, one or many named steps are supported; receipts follow the resolved declaration.
 An explicit `steps: []` is valid and means **NO local checks**, including bootstrap and
 preflight, even if declared. Consumers must branch on empty steps **before** executing anything
 (the resolver returns bootstrap and preflight unchanged as inert declaration data).
@@ -213,5 +214,5 @@ copy when rerunning every touched instruction-contract/skill-text test file. The
 loader treats a present-empty override as an error and validates that every repository skills
 file exists in the override tree before reading. Missing or incomplete overrides fail closed
 without checkout fallback. Record start/end timestamps,
-exact commands, exits and test counts beside the declared-check trio in the PR.
+exact commands, exits and test counts beside the declared check receipts in the PR.
 Remove only the owned proof copy after the pushed handoff is recorded.

@@ -429,7 +429,12 @@ it.each([
   expect(result.args).toBeDefined();
   expect(result.stderr).not.toContain("pull/1#issuecomment-1");
   const url = "https://github.com/agentkitai/agentrig/pull/452#issuecomment-5752094526";
-  expect(() => findingIndex(url, { html_url: url, body })).toThrow(`unindexed finding in ${url}: ${prose}`);
+  expect(() => findingIndex(url, { html_url: url, body })).not.toThrow();
+  expect(findingIndex(url, { html_url: url, body })).toEqual([]);
+  const atx = `### ${prose.replace(/^(LOW|P1|MEDIUM) /, "$1: ")}`;
+  expect(findingIndex(url, { html_url: url, body: `${body}${atx}\n` })).toEqual([
+    { comment: url, heading: atx },
+  ]);
   // Prose must neither disable the echo guard nor discard a supported finding's escape.
   expect(run(body + echoPhrases[0]).stderr).toContain("reviewer body echoes instructions; not a verdict");
   const citation = `### LOW: Missing evidence\nFix the receipt. Contract quotation:\n> ${echoPhrases[1]}\n`;
