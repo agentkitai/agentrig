@@ -149,6 +149,9 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
     const capacity = 60000 - heading.length - 2 - (2 * 6 + 7);
     const body = "X".repeat(capacity - 1) + "😀".repeat(5000) + "Y".repeat(200000);
     const proof = "PROOF\n" + "evidence\n".repeat(9000);
+    expect(String(`${body}\n${proof}`.length).length).toBe(6);
+    expect(/[\uD800-\uDBFF]/.test(body[capacity - 1]!)).toBe(true);
+    expect(/[\uDC00-\uDFFF]/.test(body[capacity]!)).toBe(true);
     writeFileSync(join(dir, "body"), body);
     writeFileSync(join(dir, "proof"), proof);
     writeFileSync(join(dir, "model"), "gpt-5.5");
@@ -162,6 +165,7 @@ it("B2 splits long review plus proof into bounded lossless canonical comments", 
       expect(post.length).toBeLessThanOrEqual(60000);
       const prefix = `${heading}\n\n(${i+1}/${posts.length})\n\n`;
       expect(post.startsWith(prefix)).toBe(true);
+      if (i === 0) expect(post.length - prefix.length).toBe(capacity - 1);
       return post.slice(prefix.length);
     }).join("");
     expect(restored).not.toContain("\uFFFD");
@@ -198,4 +202,53 @@ exit 0
     expect(readFileSync(receiptPath, "utf8")).toBe(receipt);
     expect(readFileSync(join(dir,"attempts"),"utf8")).toBe(attempts);
   } finally { rmSync(dir, {recursive:true, force:true}); }
+});
+
+
+it.each(["complete", "unattempted", "interrupted"])("R379 atomic receipt and safe %s refusal", state => {
+  const dir = mkdtempSync(join(tmpdir(), "receipt-state-"));
+  try {
+    writeFileSync(join(dir, "body"), "verdict");
+    writeFileSync(join(dir, "model"), "gpt-5.5");
+    writeFileSync(join(dir, "gh"), `#!/bin/sh\nprintf 'post\\n' >> '${dir}/attempts'\n`);
+    chmodSync(join(dir, "gh"), 0o755);
+    if (state === "unattempted") {
+      writeFileSync(join(dir, "head"), "#!/bin/sh\nexit 1\n");
+      chmodSync(join(dir, "head"), 0o755);
+    }
+    // Interrupt the successful-result save after truncating its write target.
+    // R379-nonatomic-save loses the receipt; atomic replacement retains pending=1.
+    writeFileSync(join(dir, "interrupt.cjs"), `
+const fs = require('node:fs');
+const original = fs.writeFileSync;
+let writes = 0;
+fs.writeFileSync = function(path, ...args) {
+  if (String(path).includes('receipt.json') && ++writes === 3) {
+    original(path, '{');
+    throw new Error('injected interrupted receipt write');
+  }
+  return original(path, ...args);
+};
+require('node:module').syncBuiltinESMExports();
+`);
+    const invoke = (interrupt = false) => spawnSync(process.execPath,
+      [...(interrupt ? ["--require", join(dir, "interrupt.cjs")] : []), helper, "372", "Codex", join(dir, "model"), join(dir, "body"), head, main, join(dir, "comment")],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } });
+    const first = invoke(state === "interrupted");
+    expect(first.status).toBe(state === "complete" ? 0 : 2);
+    const receiptPath = join(dir, "comment.receipt.json");
+    const saved = readFileSync(receiptPath, "utf8");
+    expect(JSON.parse(saved)).toMatchObject(state === "complete"
+      ? { status: "complete", successful: [1], pending: null }
+      : { status: "posting", successful: [], pending: state === "interrupted" ? 1 : null });
+    const attempts = existsSync(join(dir, "attempts")) ? readFileSync(join(dir, "attempts"), "utf8") : undefined;
+    const retry = invoke();
+    expect(retry.status).toBe(2);
+    expect(retry.stderr).toContain("refusing rerun");
+    expect(retry.stderr).toContain(state === "complete" ? "already complete; no retry needed"
+      : state === "unattempted" ? "no posting attempt recorded; inspect receipt before manual recovery"
+      : "reconcile prior attempt");
+    expect(readFileSync(receiptPath, "utf8")).toBe(saved);
+    expect(existsSync(join(dir, "attempts")) ? readFileSync(join(dir, "attempts"), "utf8") : undefined).toBe(attempts);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

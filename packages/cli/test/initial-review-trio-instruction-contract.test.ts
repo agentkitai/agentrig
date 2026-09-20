@@ -74,10 +74,13 @@ it.each(["missing", "empty", "present"])("topic posting guard handles %s trio ev
   }
 });
 
-const completeness = "For acceptance or rerun detection, an initial review is present only when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.";
+const completeness = "For acceptance or rerun detection, an initial review is present as a complete unnumbered single-comment review with the complete canonical heading, or when every numbered chunk (k/N), k=1..N, exists on the PR with the same complete canonical heading and consistent N; a heading alone or a partial set is missing review evidence. A nonzero helper exit may leave partial comments: preserve the OUT/*.receipt.json receipt, reconcile and remove all comments from that attempt before removing its receipt and retrying; never certify a partial review as complete.";
 it.each(["topic", "ship", "land"])("R379 %s requires all chunks and kills completeness deletion", skill => {
-  const check = (text: string) => expect(section(text, "## Initial full review heading contract", "## Review scratch cleanup")).toContain(completeness);
+  const end = skill === "land" ? "## 0." : "## Review scratch cleanup";
+  const check = (text: string) => expect(section(text, "## Initial full review heading contract", end)).toContain(completeness);
   const text = read(`.agentrig/skills/${skill}/SKILL.md`);
   check(text);
   expect(() => check(text.replace(completeness, ""))).toThrow();
+  // R379-out-of-section-copy: an appendix cannot satisfy the operative gate.
+  expect(() => check(text.replace(completeness, "") + `\n${completeness}`)).toThrow();
 });

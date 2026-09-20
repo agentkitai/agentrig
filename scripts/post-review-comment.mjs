@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Usage: node scripts/post-review-comment.mjs PR REVIEWER MODEL_FILE BODY_FILE HEAD MAIN OUTPUT_FILE [PROOF_FILE]
 // The caller must run the existing verdict/stale-head gates before handing us BODY_FILE.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 try {
@@ -37,9 +38,28 @@ try {
   // A receipt is an exclusive attempt lock as well as durable evidence. Refuse
   // every rerun (including uncertain/crashed attempts) rather than duplicate posts.
   const receiptPath = `${outputFile}.receipt.json`;
-  if (existsSync(receiptPath)) throw new Error(`refusing rerun; reconcile prior attempt using ${receiptPath}:\n${readFileSync(receiptPath, "utf8")}`);
+  if (existsSync(receiptPath)) {
+    const saved = readFileSync(receiptPath, "utf8");
+    let advice = "reconcile prior attempt (including pending/uncertain chunks) before manual recovery";
+    try {
+      const prior = JSON.parse(saved);
+      if (prior.status === "complete") advice = "already complete; no retry needed";
+      else if (prior.status === "posting" && prior.pending === null && Array.isArray(prior.successful) && prior.successful.length === 0)
+        advice = "no posting attempt recorded; inspect receipt before manual recovery";
+    } catch { /* Invalid receipts still refuse; never infer permission to retry. */ }
+    throw new Error(`refusing rerun; ${advice}; receipt ${receiptPath}:\n${saved}`);
+  }
   const receipt = { pr, heading, total: pieces.length, successful: [], pending: null, status: "posting" };
-  const save = () => writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n");
+  const save = () => {
+    // Same-directory rename preserves the last complete receipt on failed writes.
+    const temporary = `${receiptPath}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
+      renameSync(temporary, receiptPath);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  };
   writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
   for (const [index, piece] of pieces.entries()) {
     const path = pieces.length === 1 ? outputFile : `${outputFile}.${index + 1}`;

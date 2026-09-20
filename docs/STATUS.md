@@ -5,10 +5,15 @@
 The posting helper records successful chunk indices and failed/uncertain pending chunks in
 an OUT-adjacent JSON receipt and reports partial progress on stderr. Existing receipts
 refuse reruns rather than duplicate comments; operators must reconcile the attempt first.
-Topic/ship/land accept only complete numbered chunk sets. A boundary-padded astral fixture
-pins lossless UTF-16 splitting and rejects replacement characters. Fail-first regressions
-and named receipt/refusal/completeness/surrogate mutants pin these narrow changes.
-Repair round: 0/3. Independent review and exact-head CI/landing remain parent-owned.
+Topic/ship/land accept complete unnumbered single reviews or all numbered chunks.
+Repair round: 1/3. Receipt updates atomically replace via same-directory temporary files,
+retaining the exclusive initial lock and fail-safe refusal; complete/unattempted diagnostics
+are state-specific. An interrupted-write regression preserves the prior pending receipt.
+The astral fixture asserts digit count, high/low surrogate alignment and first payload length;
+shifted-padding and surrogate-guard mutants fail. Land's gate uses its own next-section anchor;
+an out-of-section duplicate probe kills an unbounded scan. All restored focused tests pass.
+Dogfood is unchanged: the assigned acceptance-sentence scope is topic/ship/land, and land
+covers standalone final landing. Independent review and exact-head CI/landing remain parent-owned.
 
 ## Review-gate contracts (#374, #377, #382)
 
