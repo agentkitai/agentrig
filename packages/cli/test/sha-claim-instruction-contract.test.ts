@@ -1,9 +1,10 @@
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readSkillText } from "../../../test/skill-text.js";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
-const source = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8").split("# Slot posting gate\n")[1]!.split("\n")[0]!.match(/node -e '([^']+)'/)![1]!;
+const source = readSkillText(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8").split("# Slot posting gate\n")[1]!.split("\n")[0]!.match(/node -e '([^']+)'/)![1]!;
 const head = "a".repeat(40), stale = "c".repeat(40);
 const first = `Reviewed head: ${head}\n`;
 function run(body: string, program = source) {
@@ -42,7 +43,7 @@ it("accepts abbreviated uppercase first-line SHA", () => expect(run(`Reviewed he
 it.each(["", `Reviewed head: ${head}\n`])("preserves heading-only rejection: %s", extra => expect(run(first + extra)).toBe(2));
 
 // Inspect the shared prompt instruction before adapter dispatch, not the later validator.
-const topic = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+const topic = readSkillText(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
 const firstLineInstruction = "Start your review with the exact own first line Reviewed head: <actual review SHA>, replacing <actual review SHA> with the full 40-hex SHA you actually reviewed. No heading, blank line, quote or code fence may precede or wrap that line.";
 function checkPromptPropagation(text: string) {
   const launch = text.split("**Launch each slot through its adapter**")[1]!.split("```sh")[0]!;

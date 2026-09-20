@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readSkillText } from "../../../test/skill-text.js";
 import { expect, it } from "vitest";
 
 // Instruction-contract checks, not proof that a model obeys the shipping workflow.
-const read = async (path: string) => (await readFile(new URL(`../../../${path}`, import.meta.url), "utf8")).replace(/\s+/g, " ");
+const read = async (path: string) => (await readSkillText(new URL(`../../../${path}`, import.meta.url), "utf8")).replace(/\s+/g, " ");
 const policy = () => read("docs/SHIPPING-WORKFLOW.md");
 
 it.each(["dogfood", "ship", "topic", "review", "land"])("%s uses the same review/repair policy", async name => {
@@ -10,7 +10,7 @@ it.each(["dogfood", "ship", "topic", "review", "land"])("%s uses the same review
   const text = await read(path);
   expect(text).toContain("Read [shipping policy](../../../docs/SHIPPING-WORKFLOW.md)");
   const target = new URL("../../../docs/SHIPPING-WORKFLOW.md", new URL(`../../../${path}`, import.meta.url));
-  expect((await readFile(target, "utf8")).replace(/\s+/g, " ")).toBe(await policy());
+  expect((await readSkillText(target, "utf8")).replace(/\s+/g, " ")).toBe(await policy());
 });
 
 it("starts reviews before hosted CI completes but joins both gates at landing", async () => {

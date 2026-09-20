@@ -706,54 +706,91 @@ describe("a subagent cannot run away", () => {
   });
 
   it("a child's session_end hooks run on the parent's abort, and are cut at the child's grace (#88, #86)", async () => {
-    // the child's end hooks would otherwise outlive the parent's grace with nothing able to stop
-    // them: the parent's signal fires once, and that once is the child's FIRST abort
+    // Real I/O can finish between lifecycle phases, not within a loaded CI
+    // machine's 50ms wall-clock margin. Preserve the 200ms parent / 100ms child
+    // graces and assert the hook is cut at 150ms before advancing to the parent.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    let toolStarted!: () => void;
+    const started = new Promise<void>(resolve => { toolStarted = resolve; });
+    let hookEntered!: () => void;
+    const entered = new Promise<void>(resolve => { hookEntered = resolve; });
+    let hookCompleted!: () => void;
+    const completed = new Promise<void>(resolve => { hookCompleted = resolve; });
+    let child: Session | undefined;
     let hookOutcome = "not run";
     let hookReason: string | undefined;
-    let abortedAt = 0;
     let cutAt = 0;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
     const provider = new ScriptedProvider([
       spawn("long job"),
-      ...Array.from({ length: 20 }, () => [
-        { type: "tool_use" as const, id: "c", name: "echo", input: { text: "x" } },
-        usage(1, 1),
-        stop("tool_use"),
-      ]),
+      [{ type: "tool_use", id: "c", name: "wait", input: {} }, usage(1, 1), stop("tool_use")],
     ]);
     const session = harness(provider, {
-      slow: true,
-      // the parent's real grace, so its orphan note (or its absence) can be asserted
+      onChild: value => { child = value; },
+      childExtraTools: [{
+        name: "wait", description: "wait for the parent's abort", permission: "read",
+        inputSchema: z.object({}),
+        execute: async (_input, ctx) => {
+          toolStarted();
+          await new Promise<void>(resolve => ctx.signal.addEventListener("abort", () => resolve(), { once: true }));
+          ctx.signal.throwIfAborted();
+          return { output: "unreachable" };
+        },
+      }],
       parent: { abortGraceMs: 200 },
       childExtra: {
         abortGraceMs: 200,
         hooks: [{
           point: "session_end",
-          handler: (ctx) =>
-            new Promise((resolve) => {
-              hookReason = (ctx.summary as { reason: string }).reason;
-              hookOutcome = "running";
-              ctx.signal.addEventListener("abort", () => { hookOutcome = "cut"; cutAt = Date.now(); resolve({ action: "continue" }); }, { once: true });
-              setTimeout(() => { if (hookOutcome === "running") { hookOutcome = "finished"; resolve({ action: "continue" }); } }, 5_000);
-            }),
+          handler: ctx => new Promise(resolve => {
+            hookReason = (ctx.summary as { reason: string }).reason;
+            hookOutcome = "running";
+            ctx.signal.addEventListener("abort", () => {
+              hookOutcome = "cut";
+              cutAt = Date.now();
+              clearTimeout(fallback);
+              resolve({ action: "continue" });
+              hookCompleted();
+            }, { once: true });
+            fallback = setTimeout(() => {
+              hookOutcome = "finished";
+              resolve({ action: "continue" });
+              hookCompleted();
+            }, 5_000);
+            hookEntered();
+          }),
         }],
       },
     }).run("do it", { cwd: root });
-    setTimeout(() => { abortedAt = Date.now(); session.control.abort(); }, 80);
-    const events = await collect(session);
-    const summary = await session.done;
-    expect(summary.reason).toBe("aborted");
-    // the child's hook ran (it used to be skipped outright), saw the abort, and was cut before
-    // the parent's grace (200ms here: the child's is 100, the cut lands at 150) rather than
-    // running its five seconds
-    await new Promise((r) => setTimeout(r, 300));
-    expect(hookReason).toBe("aborted");
-    expect(hookOutcome).toBe("cut");
-    expect(cutAt - abortedAt).toBeLessThan(200);
-    // and the parent never had to report the child as still running
-    expect(events.some((e) => e.type === "error" && /orphaned work still running/.test((e as { message: string }).message))).toBe(false);
-    const spawned = events.find((e) => e.type === "subagent.spawn") as { id: string };
-    const childEvents = await new SessionStore({ root }).readAll(spawned.id);
-    expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+    const collected = collect(session);
+    try {
+      await started;
+      const abortedAt = Date.now();
+      session.control.abort();
+      await entered;
+      await vi.advanceTimersByTimeAsync(150);
+      await completed; // assertion waits for the hook's own completion signal
+      await child!.done;
+      const events = await collected;
+      const summary = await session.done;
+      expect(summary.reason).toBe("aborted");
+      expect(hookReason).toBe("aborted");
+      expect(hookOutcome).toBe("cut");
+      expect(cutAt - abortedAt).toBeLessThan(200);
+      expect(events.some(e => e.type === "error" && /orphaned work still running/.test((e as { message: string }).message))).toBe(false);
+      const spawned = events.find(e => e.type === "subagent.spawn") as { id: string };
+      const childEvents = await new SessionStore({ root }).readAll(spawned.id);
+      expect((childEvents.at(-1) as { type: string }).type).toBe("session.end");
+    } finally {
+      session.control.abort();
+      child?.control.abort();
+      await vi.runAllTimersAsync();
+      await child?.done;
+      await session.done;
+      await collected;
+      clearTimeout(fallback);
+      vi.useRealTimers();
+    }
   });
 
   it.each([0, 150])("a child still inside a tool that ignores the abort keeps its session_end hooks (snapshot delay %ims)", async (snapshotDelay) => {

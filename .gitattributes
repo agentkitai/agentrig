@@ -1,2 +1,5 @@
 # E1 verifies these vendored upstream blobs byte-for-byte on every platform.
 eval/fixtures/is-number/* text eol=lf
+
+# Keep instruction source consistent; the test loader also covers CRLF copies.
+.agentrig/skills/** text eol=lf

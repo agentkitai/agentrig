@@ -1,7 +1,8 @@
+import { readSkillText } from "../../../test/skill-text.js";
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 
-const skill = (name: string) => readFile(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8").then(text => text.replace(/\r\n?/g, "\n"));
+const skill = (name: string) => readSkillText(new URL(`../../../.agentrig/skills/${name}/SKILL.md`, import.meta.url), "utf8");
 
 it("dogfood delegates launch permissions to the canonical adapter", async () => {
   const text = await skill("dogfood");

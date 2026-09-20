@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { readSkillText } from "../../../test/skill-text.js";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -355,7 +356,7 @@ describe("skillTool", () => {
   });
 
   it("pins the topic release train's authorization and stop contract", async () => {
-    const text = await readFile(".agentrig/skills/topic/SKILL.md", "utf8");
+    const text = await readSkillText(".agentrig/skills/topic/SKILL.md", "utf8");
     const rawDescription = text.match(/^description: (.*)$/m)?.[1];
     const found = await discoverSkills({ roots: [".agentrig/skills"] });
     const topic = found.find((candidate) => candidate.name === "topic");
@@ -413,20 +414,20 @@ describe("skillTool", () => {
     expect(body).toContain("First check whether it already ran: if the PR carries every declared slot's comment");
     expect(body).toContain("A conflict-stopped initial pass restarts as full, not delta");
 
-    const landText = await readFile(".agentrig/skills/land/SKILL.md", "utf8");
+    const landText = await readSkillText(".agentrig/skills/land/SKILL.md", "utf8");
     const land = parseSkill(landText, ".agentrig/skills/land/SKILL.md");
     expect(land.body).toContain("authorized its fixed roadmap band by invoking `topic`");
     expect(land.body).toContain("include the human's exact authorization quote");
     expect(land.body).toContain("Residuals are issues, not prose");
     expect(land.body).toContain("An unmarked row is a row the next train rebuilds");
 
-    const reviewText = await readFile(".agentrig/skills/review/SKILL.md", "utf8");
+    const reviewText = await readSkillText(".agentrig/skills/review/SKILL.md", "utf8");
     const review = parseSkill(reviewText, ".agentrig/skills/review/SKILL.md");
     expect(review.body).toContain("`topic` conductor executing the human's already-authorized fixed band");
     expect(review.body).toContain("A deviation without that record is a HIGH finding");
     // R3.5b: ship delegates the review pass to topic; dogfood children still skip it; review knows a prepared worktree
     expect(review.body).toContain("Skip this section when the brief says a conductor prepared the worktree");
-    const shipText = await readFile(".agentrig/skills/ship/SKILL.md", "utf8");
+    const shipText = await readSkillText(".agentrig/skills/ship/SKILL.md", "utf8");
     const ship = parseSkill(shipText, ".agentrig/skills/ship/SKILL.md");
     expect(ship.body).toContain("exactly as `topic` §2 step 4 prescribes");
     expect(ship.body).toContain("Never review in this session");
@@ -437,7 +438,7 @@ describe("skillTool", () => {
     expect(arbiter?.body).toContain("VERDICT: APPROVE");
     expect(arbiter?.body).toContain("Your approval never extends the human's authorization");
 
-    const dogfoodText = await readFile(".agentrig/skills/dogfood/SKILL.md", "utf8");
+    const dogfoodText = await readSkillText(".agentrig/skills/dogfood/SKILL.md", "utf8");
     const dogfood = parseSkill(dogfoodText, ".agentrig/skills/dogfood/SKILL.md");
     expect(dogfood.body).toContain("Never edit the row you are implementing without");
     expect(dogfood.body).toContain("`DEVIATION REQUESTED` heading");

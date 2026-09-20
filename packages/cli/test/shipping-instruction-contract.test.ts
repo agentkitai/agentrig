@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readSkillText } from "../../../test/skill-text.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,7 +40,7 @@ function assertHeadingContract(text: string): void {
 }
 
 for (const skill of skills) {
-  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  const text = readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   it(`${skill} prescribes and accepts only the complete initial review heading`, () => {
     assertHeadingContract(text);
   });
@@ -71,8 +72,8 @@ for (const skill of skills) {
   });
 }
 
-const topic = readFileSync(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
-const review = readFileSync(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url), "utf8");
+const topic = readSkillText(new URL("../../../.agentrig/skills/topic/SKILL.md", import.meta.url), "utf8");
+const review = readSkillText(new URL("../../../.agentrig/skills/review/SKILL.md", import.meta.url), "utf8");
 
 function assertRerun(text: string): void {
   const slice = text.split("First check whether it already ran:")[1]?.split("- **Prepare.**")[0];
@@ -189,7 +190,7 @@ function assertCleanupOrder(text: string): void {
   expect(section).toContain("For a focused pass remove its one worktree and unique `BASE` instead of the initial declared pass and `review-base-NN`.");
 }
 for (const skill of ["topic", "ship", "dogfood"]) {
-  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  const text = readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   it(`${skill} binds cleanup ownership, evidence and order for initial and focused reviews`, () => {
     assertCleanup(text);
     const wrongPass = text.replace("focused reviews remove the pass’s recorded owned single `WT` and unique `BASE`", "focused reviews remove one recorded owned tree per declared slot and `review-base-NN`");
@@ -224,7 +225,7 @@ const cleanupWiring: ReadonlyArray<readonly [string, string, string, string, str
     "Join subprocesses and verify restored tracked/index state before cleanup."],
   ...["ship", "dogfood"].map(skill => [
     `${skill} pointer`,
-    readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"),
+    readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8"),
     "## Review scratch cleanup", "## 1.", cleanupPointer, "Use topic's cleanup sequence for every pass.",
   ] as const),
 ];

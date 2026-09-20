@@ -184,3 +184,23 @@ supersede shipping policy §3's reviewer-trio rule; ship/land and shipping polic
 
 `packages/cli/test/project-checks.test.ts` executes a tiny generated external fixture using
 this resolver in the test itself. There is no CLI workflow runner.
+
+## Skill-text instruction contracts
+
+All tests under `packages/core/test` and `packages/cli/test` reading repository
+`SKILL.md` instructions use `test/skill-text.ts` (`readSkillText`). It normalizes
+CRLF (and lone CR) to LF before substring/regex contracts run. Non-skill linked
+documents are read unchanged. The enforcement instruction-contract test scans
+both test trees for direct filesystem skill reads, including generic wrappers.
+
+`.gitattributes` pins `.agentrig/skills/**` to `text eol=lf` to make normal checkouts
+consistent. This is defense in depth, not a substitute for loader normalization:
+external copies and existing checkouts may still contain CRLF.
+
+Before every push touching instruction-contract or skill-text tests, copy the
+**entire** `.agentrig/skills` tree beneath the proof `TMPDIR` outside Git ancestry,
+normalize LF then convert text to CRLF, and set `AGENTRIG_TEST_SKILLS_ROOT` to that
+copy when rerunning every touched instruction-contract/skill-text test file. The
+loader uses the override without checkout fallback. Record start/end timestamps,
+exact commands, exits and test counts beside the declared-check trio in the PR.
+Remove only the owned proof copy after the pushed handoff is recorded.

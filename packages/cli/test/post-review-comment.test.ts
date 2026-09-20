@@ -1,3 +1,4 @@
+import { readSkillText } from "../../../test/skill-text.js";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -100,7 +101,7 @@ it.each([
 });
 
 it.each(["topic", "ship", "dogfood"])("M7 %s delegates canonical composition", skill => {
-  const text = readFileSync(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
+  const text = readSkillText(new URL(`../../../.agentrig/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
   expect(text).toContain("scripts/post-review-comment.mjs");
   expect(text).not.toContain("CLAUDE_HEADING=");
   expect(text).toContain("head -1");
