@@ -1,5 +1,17 @@
 # Status
 
+## Review-posting receipt residuals (#390–#393, #397–#399)
+
+Receipt reuse checks the current canonical heading before completion advice; publication
+error headlines distinguish zero, partial and all confirmed posts while retaining receipt
+diagnostics. Completeness checks normalize whitespace on both operands, retain deletion
+and out-of-section mutants, and accept wrapped prose. The A3 compiledMechanics worker
+has the adjacent test’s bounded 30s deadline with unchanged assertions. Named missing-
+dispatch anchor mutants pin the fixer-window guard. #392 needs no new implementation or
+test: landed fault probes already pin `successful:[1], pending:null, status:"posting"`
+and generic reconciliation advice; dropping the empty-success advice guard kills 3 tests,
+and unconditionally recording completion kills 5. No roadmap advancement or skill changes.
+
 ## Review-gate residuals (#384–#387)
 
 PR #394 repair round 2/3 (F1 only, arbiter session `6c087e6b`): instruction rows now
@@ -11,7 +23,7 @@ section bound (F2 proof, not a separate dispatched blocker). Existing land gate 
 remain intact. Fail-first: 21 failed / 138 passed; repaired focused suite: 159 passed;
 section-bound removal: 2 failed / 157 passed. Full trio and exact OLD..NEW handoff belong
 to the PR body; independent delta review and closure remain conductor-owned. Deferred
-#397/#398 and other advisories are unchanged; no runtime or roadmap advancement.
+#397/#398 were deferred at that historical head and are addressed above; other advisories are unchanged; no runtime or roadmap advancement.
 
 PR #394 repair round 1/3 (C1): every M-land-persistence phrase is now checked inside
 ship/topic's anchor-before-spawn window, shared with the placement checks. Named
@@ -19,13 +31,13 @@ ship/topic's anchor-before-spawn window, shared with the placement checks. Named
 leave the opening/final sentinel before spawn but move the middle requirements after
 spawn: fail-first was 2 failed / 135 passed; the repaired focused suite passes all 137.
 Existing deletion, relocation, lazy-continuation, and grammar controls are preserved.
-Both topic validators also receive the agreed double-space-only normalization. C1
+C1
 remains pending independent closure; no other advisory repair or roadmap advancement.
 
 - Topic §4 repeats ship §3’s full pre-land body/comment persistence gate before land-child dispatch: canonical model/head/main headings, all initial/focused dispositions, residuals, blocker closure and current-head delta coverage; missing evidence halts before spawn.
 - Removed both redundant `c.length>40 ||` topic guards. Length rejection is pinned by the `{7,}` → `{7,40}` grammar-reversion probe, not a claimed length-guard mutation kill.
 - Instruction assertions stop at the next section heading; ship/topic placement probes reject EOF relocation, after-spawn relocation and lazy-list continuation. Ship’s gate now starts a standalone paragraph.
-- Fail-first focused run: 22 failed / 113 passed; fixed run: 135 passed, including named deletion, relocation and isolated grammar mutants. Full build/test/typecheck verification belongs to the task PR; independent review and landing remain conductor-owned. No runtime or roadmap advancement.
+- Fail-first focused run: 22 failed / 113 passed; historical initial fixed run: 135 passed (subsequent round-1 suite: 137), including named deletion, relocation and isolated grammar mutants. Full build/test/typecheck verification belongs to the task PR; independent review and landing remain conductor-owned. No runtime or roadmap advancement.
 
 ## Review-posting helper residuals (#379, #380)
 
@@ -37,7 +49,8 @@ pending save, known-success save and failed-post save; each pins the durable rec
 and verifies a retry makes no additional post. All five failed on the old helper;
 removing exception reporting/success recording or moving pending assignment past save
 also fails these probes. The probes necessarily cover part of N2's current-state gap,
-but #392 remains a nonblocking follow-up; N3/#390 and N4/#391 are unchanged.
+but #392 was then a nonblocking follow-up; N3/#390 and N4/#391 were unchanged at that head.
+Those follow-ups are addressed in the receipt-residuals section above.
 Repair proof and OLD..NEW handoff are appended to the PR body; independent delta
 review, blocker-ledger closure and landing remain conductor-owned.
 
