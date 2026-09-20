@@ -1,5 +1,17 @@
 # Status
 
+## Review-posting helper residuals (#379, #380)
+
+The helper records successful indices and uncertain pending chunks in OUT/*.receipt.json,
+reports partial publication on stderr, and refuses retries with the existing receipt.
+Atomic replacement retains the last parseable receipt if saving is interrupted.
+Topic/ship/land and standalone dogfood require a complete unnumbered single review or
+every numbered chunk with the same canonical heading and consistent total.
+Boundary-aligned astral coverage pins lossless reassembly and absence of replacement
+characters. Fresh fail-first, mutation and trio evidence belongs to the new task PR;
+no evidence or review ledger from closed PR #388 is reused. Independent review and
+exact-head CI/landing remain parent-owned. No roadmap advancement or event/provider changes.
+
 ## Review-gate contracts (#374, #377, #382)
 
 Instruction-only tightening: pinned Claude initial headings, non-empty ancestral focused deltas,
