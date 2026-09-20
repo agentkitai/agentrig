@@ -1,7 +1,7 @@
 import { parseConfigText } from "../src/config.js";
 import { expect, it } from "vitest";
 // @ts-expect-error skill-side ESM adapter, intentionally outside the compiled CLI
-import { cliAdapters, validateResult, runApi } from "../../../scripts/reviewer-adapters.mjs";
+import { cliAdapters, validateResult, runApi, normalizeReviewerHead } from "../../../scripts/reviewer-adapters.mjs";
 const cli = { adapter: "claude-cli", model: "pinned" };
 it("CLI templates pin models and assertion sources", () => {
   for (const adapter of Object.values(cliAdapters) as Array<{template: string[]; modelSource: string}>) {
@@ -58,7 +58,7 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
   try {
     const command = adapter === "claude-cli" ? "claude" : "codex";
     const binary = join(dir, command);
-    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:'VERDICT: PASS'}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], 'VERDICT: PASS');`}\n`);
+    writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'); fs.writeFileSync('${dir}/argv',JSON.stringify(process.argv.slice(2))); fs.writeFileSync('${dir}/env',JSON.stringify(process.env)); const prompt=fs.readFileSync(0,'utf8'); if(!prompt.includes('checks green')) process.exit(3); ${command === "claude" ? `console.log(JSON.stringify({subtype:'success',modelUsage:{pinned:{}},result:${JSON.stringify(preservedReviews[1])}}));` : `console.error('model: pinned'); fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message')+1], ${JSON.stringify(preservedReviews[1])});`}\n`);
     chmodSync(binary, 0o755);
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ reviewers: { custom: { adapter, model: "pinned" } } }));
@@ -73,6 +73,9 @@ it.each(["claude-cli", "codex-cli"])("%s launch template, raw provenance and sta
     expect(childEnv).toMatchObject({ PATH: `${dirname(process.execPath)}:${dir}:${process.env.PATH}`, TMPDIR: dir, GIT_TRACE2_EVENT: "0", KEEP_REVIEW_ENV: "kept" });
     const provenance = JSON.parse(readFileSync(`${prefix}.provenance.json`, "utf8"));
     expect(provenance).toMatchObject({ slot: "custom", adapter, model: "pinned", modelSource: cliAdapters[adapter].modelSource, cwd: dir, exit: 0 });
+    expect(provenance.headExtraction.tolerances).toEqual(["leading-cleanup-status"]);
+    expect(readFileSync(`${prefix}.md`, "utf8")).toBe(normalizeReviewerHead(preservedReviews[1]).text);
+    expect(adapter === "claude-cli" ? JSON.parse(readFileSync(`${prefix}.stdout`, "utf8")).result : readFileSync(`${prefix}.last`, "utf8")).toBe(preservedReviews[1]);
     expect(Date.parse(provenance.finished)).toBeGreaterThanOrEqual(Date.parse(provenance.started));
     expect(invoke(prefix).status).not.toBe(0);
     writeFileSync(binary, `#!${process.execPath}\nprocess.stdout.write('partial'); process.exit(1);\n`);
@@ -88,4 +91,34 @@ it("M-cap-bypass: capped API entries fail before provider construction with an a
   const config = parseConfigText("fixture", JSON.stringify({ dailyCap: "5", providers: { capped: { provider: "openai", model: "pinned" } } }));
   await expect(runApi(config, { adapter: "api:capped", model: "pinned" }, "bundle", () => { constructed = true; throw new Error("factory reached"); })).rejects.toThrow(/dailyCap.*not supported.*uncapped/i);
   expect(constructed).toBe(false);
+});
+
+// Preserved PR455 outputs are replayed verbatim; neither expected head nor prompts
+// are supplied to the normalizer, so it cannot manufacture a binding.
+import { preservedReviews } from "./preserved-review-455.js";
+// @ts-expect-error standalone ESM tooling
+import { reviewerVerdict } from "../../../scripts/review-finding-index.mjs";
+it.each(["LF", "CRLF"])("preserved PR455 extraction, lossless suffix and provenance (%s)", eol => {
+  for (const [i, original] of preservedReviews.entries()) {
+    const raw = eol === "CRLF" ? original.replaceAll("\n", "\r\n") : original;
+    const normalized = normalizeReviewerHead(raw);
+    expect(normalized.text.split(/\r?\n/)[0]).toBe("Reviewed head: a45dc1f93db4a581371d0b94f0e7e518347fd890");
+    expect(normalized.tolerances).toEqual([i ? "leading-cleanup-status" : "missing-head-colon"]);
+    const start = raw.indexOf("Reviewed head");
+    expect(normalized.text.slice(normalized.text.indexOf("\n"))).toBe(raw.slice(raw.indexOf("\n", start)));
+    expect(reviewerVerdict(JSON.stringify({ type: "result", subtype: "success", modelUsage: { pinned: {} }, result: raw }), "claude-cli")).toBe(normalized.text);
+  }
+});
+it.each([
+  `Status commit ${"a".repeat(40)}\n`,
+  `Reviewed at ${"b".repeat(40)}\n`,
+  "# Review\n", "> ", "```text\n", "\n",
+  "Review completeX Tree restored to the exact reviewed head with a clean tracked/index state, no background jobs outstanding.\n",
+])("M-skip-first-sha: never skip arbitrary prefix %s", prefix => {
+  const raw = `${prefix}Reviewed head: ${"a".repeat(40)}\nVERDICT: PASS\n`;
+  expect(normalizeReviewerHead(raw)).toEqual({ text: raw, tolerances: [] });
+});
+it("M-overlong-head: no partial-token normalization", () => {
+  const raw = `Reviewed head ${"a".repeat(41)}\nVERDICT: PASS\n`;
+  expect(normalizeReviewerHead(raw)).toEqual({ text: raw, tolerances: [] });
 });

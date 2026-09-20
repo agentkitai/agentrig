@@ -1,5 +1,18 @@
 # Status
 
+## Reviewer first-line robustness and arbiter citation (#456, #458)
+
+Extraction now canonicalizes only a missing `Reviewed head` colon and the exact
+cleanup/status prefix preserved in PR455's halt receipt (including its blank lines
+and `---`). It never skips arbitrary SHA-bearing prose; the existing current-head,
+additional stale-claim, code-span and nonempty-verdict gates remain unchanged.
+Adapter raw output is retained and adapter/extraction JSON records tolerance use.
+The full two preserved verdicts are regression fixtures, exercised through both
+posting paths. Prompt repetition and a weaker review-skill rule were rejected as
+unnecessary: extraction alone handles both witnessed outputs. Arbiter now cites
+shipping §3's declared reviewer-slot rule, matching dogfood's PR457 correction.
+LF/CRLF instruction proof and named mutation receipts accompany the PR.
+
 ## Dogfood policy references (#423) — implemented, pending review
 
 Corrected the dogfood introduction to cite shipping policy §3’s existing declared

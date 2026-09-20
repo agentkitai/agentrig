@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Index live GitHub review comments, never a conductor-authored summary.
-import { cliAdapters } from "./reviewer-adapters.mjs";
+import { cliAdapters, normalizeReviewerHead } from "./reviewer-adapters.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -12,6 +12,10 @@ const { lexer } = createRequire(new URL('../packages/cli/package.json', import.m
 // Current adapters already return verdict-only text (.last for Codex, .result for Claude).
 // Also support old transcript artifacts without cutting a markerless verdict's provenance.
 export function reviewerVerdict(raw, adapter) {
+  return normalizeReviewerHead(rawReviewerVerdict(raw, adapter)).text;
+}
+
+function rawReviewerVerdict(raw, adapter) {
   if (adapter === "claude-cli" && raw.trimStart().startsWith("{")) {
     const { text } = cliAdapters[adapter].extract(raw);
     if (typeof text !== "string" || !text.trim()) throw new Error("empty review");
@@ -116,10 +120,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.argv[2] === "--extract") {
       const [, , , adapter, input, output] = process.argv;
       if (process.argv.length !== 6) throw new Error("usage: review-finding-index.mjs --extract ADAPTER INPUT OUTPUT");
-      const body = reviewerVerdict(readFileSync(input, "utf8"), adapter);
+      const extracted = normalizeReviewerHead(rawReviewerVerdict(readFileSync(input, "utf8"), adapter));
+      const body = extracted.text;
       if (!body.trim()) throw new Error("empty review");
       assertReviewerVerdict(body);
       writeFileSync(output, body);
+      writeFileSync(`${output}.provenance.json`, JSON.stringify({ input, adapter, headExtraction: { tolerances: extracted.tolerances } }, null, 2) + "\n");
     } else {
       const url = process.argv[2];
       const source = commentSource(url);

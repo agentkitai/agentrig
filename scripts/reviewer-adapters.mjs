@@ -5,6 +5,21 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+// Presentation tolerance only, before the conductor's unchanged head/stale-claim gate.
+// Never search for a later head line or discard arbitrary SHA-bearing prose.
+export function normalizeReviewerHead(text) {
+  const status = "Review complete. Tree restored to the exact reviewed head with a clean tracked/index state, no background jobs outstanding.";
+  const afterStatus = text.slice(status.length);
+  const separators = text.startsWith(status) ? /^(?:\r?\n)(?:[ \t]*\r?\n|---[ \t]*\r?\n)*/.exec(afterStatus) : null;
+  const offset = separators ? status.length + separators[0].length : 0;
+  const first = /^(Reviewed head)(:?) ([0-9a-f]{7,40})[ \t]*(?=\r?\n|$)/i.exec(text.slice(offset));
+  if (!first) return { text, tolerances: [] };
+  const tolerances = [];
+  if (offset) tolerances.push("leading-cleanup-status");
+  if (!first[2]) tolerances.push("missing-head-colon");
+  return { text: `Reviewed head: ${first[3]}` + text.slice(offset + first[0].length), tolerances };
+}
+
 export const cliAdapters = {
   "claude-cli": {
     command: "claude",
@@ -88,8 +103,9 @@ export async function main(args) {
     result = validateResult(binding, adapter.extract(run.stdout, run.stderr, existsSync(`${prefix}.last`) ? readFileSync(`${prefix}.last`, "utf8") : ""), run.status);
     result.modelSource = adapter.modelSource;
   }
-  writeFileSync(`${prefix}.md`, result.text);
+  const normalized = normalizeReviewerHead(result.text);
+  writeFileSync(`${prefix}.md`, normalized.text);
   writeFileSync(`${prefix}.model.txt`, result.model + "\n");
-  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ slot, adapter: binding.adapter, model: result.model, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
+  writeFileSync(`${prefix}.provenance.json`, JSON.stringify({ headExtraction: { tolerances: normalized.tolerances }, slot, adapter: binding.adapter, model: result.model, modelSource: result.modelSource, launch, cwd, promptPath, started, finished: new Date().toISOString(), exit: 0 }, null, 2) + "\n");
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 2; });
